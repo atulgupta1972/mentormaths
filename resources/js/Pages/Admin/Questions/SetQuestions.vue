@@ -1,6 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 defineProps({
     practiceSet: Object,
@@ -8,6 +10,8 @@ defineProps({
     questions: Array,
     isChapterTest: { type: Boolean, default: false },
 });
+
+const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 </script>
 
 <template>
@@ -37,14 +41,14 @@ defineProps({
                     </div>
                 </div>
                 <Link
-                    v-if="isChapterTest && topic"
+                    v-if="isAdmin && isChapterTest && topic"
                     :href="route('admin.practice-sets.chapters.show', topic.chapter_id)"
                     class="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-800 hover:bg-sky-100"
                 >
                     Chapter tests & assign
                 </Link>
                 <Link
-                    v-else-if="topic?.id"
+                    v-else-if="isAdmin && topic?.id"
                     :href="route('admin.practice-sets.topics.show', topic.id)"
                     class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                 >
@@ -55,6 +59,7 @@ defineProps({
 
         <div class="py-12">
             <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
+                <BrowseModeNotice />
                 <p class="text-sm text-gray-600">{{ practiceSet.tier_tagline }}</p>
 
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
@@ -64,7 +69,7 @@ defineProps({
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">#</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Question</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Difficulty</th>
-                                <th class="px-4 py-3"></th>
+                                <th v-if="isAdmin" class="px-4 py-3"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200">
@@ -75,14 +80,14 @@ defineProps({
                                     <p class="mt-1 text-xs text-gray-500">{{ q.options_count }} options</p>
                                 </td>
                                 <td class="px-4 py-3">{{ q.difficulty || '—' }}</td>
-                                <td class="px-4 py-3 text-right">
+                                <td v-if="isAdmin" class="px-4 py-3 text-right">
                                     <Link :href="route('admin.questions.edit', q.id)" class="text-indigo-600 hover:text-indigo-800">
                                         Edit
                                     </Link>
                                 </td>
                             </tr>
                             <tr v-if="questions.length === 0">
-                                <td colspan="4" class="px-4 py-8 text-center text-gray-500">No questions in this set.</td>
+                                <td :colspan="isAdmin ? 4 : 3" class="px-4 py-8 text-center text-gray-500">No questions in this set.</td>
                             </tr>
                         </tbody>
                     </table>

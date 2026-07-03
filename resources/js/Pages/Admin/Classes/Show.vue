@@ -1,7 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import InputLabel from '@/Components/InputLabel.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -23,6 +24,7 @@ const chapterFilter = ref(props.selectedChapterId || '');
 const topicFilter = ref(props.selectedTopicId || '');
 
 const isChapterView = computed(() => viewMode.value === 'chapter');
+const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 
 const reload = () => {
     const params = {
@@ -86,6 +88,7 @@ watch(topicFilter, (id, oldId) => {
                         Questions
                     </Link>
                     <Link
+                        v-if="isAdmin"
                         :href="route('admin.practice-sets.index')"
                         class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                     >
@@ -97,6 +100,7 @@ watch(topicFilter, (id, oldId) => {
 
         <div class="py-12">
             <div class="mx-auto max-w-6xl space-y-6 sm:px-6 lg:px-8">
+                <BrowseModeNotice />
                 <div class="grid gap-4 sm:grid-cols-4">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.students_count }}</p>
@@ -205,6 +209,7 @@ watch(topicFilter, (id, oldId) => {
                                         Question bank
                                     </Link>
                                     <Link
+                                        v-if="isAdmin"
                                         :href="route('admin.practice-sets.chapters.show', chapter.id)"
                                         class="text-indigo-600 hover:underline"
                                     >
@@ -241,20 +246,28 @@ watch(topicFilter, (id, oldId) => {
                                 <td class="px-4 py-3">{{ topic.practice_sets_count }}</td>
                                 <td class="px-4 py-3 text-right space-x-3">
                                     <Link
-                                        :href="route('admin.questions.create', {
-                                            syllabus_chapter_id: topic.chapter_id,
-                                            syllabus_topic_id: topic.id,
-                                        })"
+                                        :href="route('admin.questions.topics.show', topic.id)"
                                         class="text-indigo-600 hover:underline"
                                     >
-                                        Add MCQs
+                                        View bank
                                     </Link>
-                                    <Link
-                                        :href="route('admin.practice-sets.topics.show', topic.id)"
-                                        class="text-indigo-600 hover:underline"
-                                    >
-                                        Sets & assign
-                                    </Link>
+                                    <template v-if="isAdmin">
+                                        <Link
+                                            :href="route('admin.questions.create', {
+                                                syllabus_chapter_id: topic.chapter_id,
+                                                syllabus_topic_id: topic.id,
+                                            })"
+                                            class="text-indigo-600 hover:underline"
+                                        >
+                                            Add MCQs
+                                        </Link>
+                                        <Link
+                                            :href="route('admin.practice-sets.topics.show', topic.id)"
+                                            class="text-indigo-600 hover:underline"
+                                        >
+                                            Sets & assign
+                                        </Link>
+                                    </template>
                                 </td>
                             </tr>
                             <tr v-if="topics.length === 0">

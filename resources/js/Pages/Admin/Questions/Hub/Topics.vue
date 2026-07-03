@@ -1,6 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps({
     chapter: Object,
@@ -11,6 +13,8 @@ const props = defineProps({
     chapterTests: Array,
     stats: Object,
 });
+
+const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 
 const tierColor = (tier, type) => {
     if (type === 'chapter_test') return 'border-sky-300 bg-sky-50 hover:border-sky-500';
@@ -54,12 +58,14 @@ const packageAsSet = (card) => {
             </div>
             <div class="flex flex-wrap gap-2">
                 <Link
+                    v-if="isAdmin"
                     :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })"
                     class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                 >
                     Add MCQs
                 </Link>
                 <Link
+                    v-if="isAdmin"
                     :href="route('admin.practice-sets.chapters.show', chapter.id)"
                     class="rounded-md border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100"
                 >
@@ -71,6 +77,7 @@ const packageAsSet = (card) => {
 
         <div class="py-12">
             <div class="mx-auto max-w-6xl space-y-6 sm:px-6 lg:px-8">
+                <BrowseModeNotice />
                 <div class="grid gap-4 sm:grid-cols-4">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-sky-600">{{ stats.chapter_tests_count || 0 }}</p>
@@ -128,7 +135,7 @@ const packageAsSet = (card) => {
                             <p class="mt-2 text-sm text-gray-700">{{ card.questions_count }} questions</p>
                         </Link>
 
-                        <p v-if="card.type === 'bank'" class="mt-3 border-t border-emerald-200 pt-3 text-xs text-emerald-800">
+                        <p v-if="isAdmin && card.type === 'bank'" class="mt-3 border-t border-emerald-200 pt-3 text-xs text-emerald-800">
                             Questions saved — not packaged yet.
                             <button
                                 type="button"
@@ -138,6 +145,9 @@ const packageAsSet = (card) => {
                                 Package as {{ card.set_code }}
                             </button>
                         </p>
+                        <p v-else-if="!isAdmin && card.type === 'bank'" class="mt-3 border-t border-emerald-200 pt-3 text-xs text-emerald-800">
+                            Topic question bank — tap to browse questions.
+                        </p>
                         <p v-else-if="card.status === 'draft'" class="mt-2 text-xs text-amber-700">Draft</p>
                     </div>
                     </div>
@@ -145,7 +155,7 @@ const packageAsSet = (card) => {
 
                 <div v-if="!setCards.length && !chapterTests?.length" class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
                     No questions or sets in this chapter yet.
-                    <Link :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })" class="text-indigo-600 hover:underline">Add MCQs</Link>
+                    <Link v-if="isAdmin" :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })" class="text-indigo-600 hover:underline">Add MCQs</Link>
                 </div>
             </div>
         </div>

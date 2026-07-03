@@ -1,12 +1,16 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps({
     topic: Object,
     questions: Object,
     filters: Object,
 });
+
+const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 
 const applySearch = (event) => {
     const form = event.target;
@@ -35,6 +39,7 @@ const applySearch = (event) => {
                     <h2 class="text-xl font-semibold text-gray-800">{{ topic.name }}</h2>
                 </div>
                 <Link
+                    v-if="isAdmin"
                     :href="route('admin.questions.create', { syllabus_topic_id: topic.id })"
                     class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                 >
@@ -45,6 +50,7 @@ const applySearch = (event) => {
 
         <div class="py-12">
             <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
+                <BrowseModeNotice />
                 <form class="flex gap-3 rounded-lg bg-white p-4 shadow-sm" @submit.prevent="applySearch">
                     <input
                         name="search"
@@ -63,7 +69,7 @@ const applySearch = (event) => {
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Question</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Difficulty</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Source</th>
-                                <th class="px-4 py-3"></th>
+                                <th v-if="isAdmin" class="px-4 py-3"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200">
@@ -74,16 +80,17 @@ const applySearch = (event) => {
                                 </td>
                                 <td class="px-4 py-3">{{ q.difficulty || '—' }}</td>
                                 <td class="px-4 py-3 capitalize">{{ q.source }}</td>
-                                <td class="px-4 py-3 text-right">
+                                <td v-if="isAdmin" class="px-4 py-3 text-right">
                                     <Link :href="route('admin.questions.edit', q.id)" class="text-indigo-600 hover:text-indigo-800">
                                         Edit
                                     </Link>
                                 </td>
                             </tr>
                             <tr v-if="questions.data.length === 0">
-                                <td colspan="4" class="px-4 py-8 text-center text-gray-500">
+                                <td :colspan="isAdmin ? 4 : 3" class="px-4 py-8 text-center text-gray-500">
                                     No questions for this topic yet.
                                     <Link
+                                        v-if="isAdmin"
                                         :href="route('admin.questions.create', { syllabus_topic_id: topic.id })"
                                         class="text-indigo-600"
                                     >

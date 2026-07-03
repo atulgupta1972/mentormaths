@@ -37,6 +37,19 @@ Route::get('/dashboard', DashboardController::class)
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
+Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/classes', [ClassHubController::class, 'index'])->name('classes.index');
+    Route::get('/classes/{gradeLevel}', [ClassHubController::class, 'show'])->name('classes.show');
+
+    Route::get('/syllabus/{syllabusVersion}', [SyllabusVersionController::class, 'show'])->name('syllabus.show');
+
+    Route::get('/questions', [QuestionHubController::class, 'classes'])->name('questions.index');
+    Route::get('/questions/classes/{gradeLevel}', [QuestionHubController::class, 'chapters'])->name('questions.classes.show');
+    Route::get('/questions/chapters/{chapter}', [QuestionHubController::class, 'topics'])->name('questions.chapters.show');
+    Route::get('/questions/sets/{worksheet}', [QuestionHubController::class, 'setQuestions'])->name('questions.sets.show');
+    Route::get('/questions/topics/{topic}', [QuestionController::class, 'topicIndex'])->name('questions.topics.show');
+});
+
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/registration-requests', [AdminRegistrationRequestController::class, 'index'])
         ->name('registration-requests.index');
@@ -64,11 +77,6 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/grade-context', [GradeContextController::class, 'update'])
         ->name('grade-context.update');
 
-    Route::get('/classes', [ClassHubController::class, 'index'])
-        ->name('classes.index');
-    Route::get('/classes/{gradeLevel}', [ClassHubController::class, 'show'])
-        ->name('classes.show');
-
     Route::get('/academic-years', [AcademicYearController::class, 'index'])
         ->name('academic-years.index');
     Route::post('/academic-years', [AcademicYearController::class, 'store'])
@@ -91,18 +99,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('syllabus.index');
     Route::post('/syllabus/import', [SyllabusVersionController::class, 'import'])
         ->name('syllabus.import');
-    Route::get('/syllabus/{syllabusVersion}', [SyllabusVersionController::class, 'show'])
-        ->name('syllabus.show');
     Route::put('/syllabus/{syllabusVersion}/rows', [SyllabusVersionController::class, 'updateRows'])
         ->name('syllabus.rows.update');
     Route::post('/syllabus/{syllabusVersion}/carry-forward', [SyllabusVersionController::class, 'carryForward'])
         ->name('syllabus.carry-forward');
 
-    Route::get('/questions', [QuestionHubController::class, 'classes'])->name('questions.index');
-    Route::get('/questions/classes/{gradeLevel}', [QuestionHubController::class, 'chapters'])->name('questions.classes.show');
-    Route::get('/questions/chapters/{chapter}', [QuestionHubController::class, 'topics'])->name('questions.chapters.show');
-    Route::get('/questions/sets/{worksheet}', [QuestionHubController::class, 'setQuestions'])->name('questions.sets.show');
-    Route::get('/questions/topics/{topic}', [QuestionController::class, 'topicIndex'])->name('questions.topics.show');
     Route::get('/questions/create', [QuestionController::class, 'create'])->name('questions.create');
     Route::post('/questions/preview-import', [QuestionController::class, 'previewImport'])->name('questions.preview-import');
     Route::post('/questions/extract-pdf', [QuestionController::class, 'extractPdf'])->name('questions.extract-pdf');

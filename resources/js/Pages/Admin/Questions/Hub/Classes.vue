@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import { Head, Link } from '@inertiajs/vue3';
 
 defineProps({
@@ -21,6 +22,7 @@ defineProps({
 
         <div class="py-12">
             <div class="mx-auto max-w-6xl sm:px-6 lg:px-8">
+                <BrowseModeNotice class="mb-6" />
                 <p class="mb-6 text-sm text-gray-600">
                     Class → Chapter → Topic → Questions. Start by choosing a class.
                 </p>

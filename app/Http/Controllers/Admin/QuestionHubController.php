@@ -133,10 +133,12 @@ class QuestionHubController extends Controller
         }
 
         $codeService = app(PracticeSetCodeService::class);
+        $browseOnly = ! $request->user()?->isAdmin();
 
         $chapterTests = Worksheet::query()
             ->where('scope', PracticeSetScope::CHAPTER)
             ->where('syllabus_chapter_id', $chapter->id)
+            ->when($browseOnly, fn ($q) => $q->where('status', Worksheet::STATUS_PUBLISHED))
             ->withCount('questions')
             ->orderBy('set_number')
             ->get()
@@ -152,7 +154,10 @@ class QuestionHubController extends Controller
 
         $topicModels = $chapter->topics()
             ->withCount('questions')
-            ->with(['practiceSets' => fn ($q) => $q->withCount('questions')->orderBy('set_number')])
+            ->with(['practiceSets' => fn ($q) => $q
+                ->when($browseOnly, fn ($inner) => $inner->where('status', Worksheet::STATUS_PUBLISHED))
+                ->withCount('questions')
+                ->orderBy('set_number')])
             ->orderBy('sort_order')
             ->get();
 
@@ -209,6 +214,10 @@ class QuestionHubController extends Controller
 
     public function setQuestions(Request $request, Worksheet $worksheet): Response
     {
+        if (! $request->user()?->isAdmin() && $worksheet->status !== Worksheet::STATUS_PUBLISHED) {
+            abort(403, 'This practice set is not available for preview.');
+        }
+
         $worksheet->load([
             'topic.chapter.syllabusVersion.board',
             'topic.chapter.syllabusVersion.gradeLevel',

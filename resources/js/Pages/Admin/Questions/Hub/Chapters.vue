@@ -1,6 +1,9 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import { Head, Link } from '@inertiajs/vue3';
+import { usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 defineProps({
     gradeLevel: Object,
@@ -9,6 +12,8 @@ defineProps({
     chapters: Array,
     stats: Object,
 });
+
+const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 </script>
 
 <template>
@@ -27,6 +32,7 @@ defineProps({
 
         <div class="py-12">
             <div class="mx-auto max-w-6xl space-y-6 sm:px-6 lg:px-8">
+                <BrowseModeNotice />
                 <div class="grid gap-4 sm:grid-cols-3">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.chapters_count }}</p>
@@ -43,8 +49,8 @@ defineProps({
                 </div>
 
                 <div v-if="!syllabusVersion" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    No syllabus for {{ gradeLevel.name }}.
-                    <Link :href="route('admin.syllabus.index')" class="font-medium text-indigo-600">Import syllabus</Link>
+                    No syllabus for {{ gradeLevel.name }} yet.
+                    <Link v-if="isAdmin" :href="route('admin.syllabus.index')" class="font-medium text-indigo-600">Import syllabus</Link>
                 </div>
 
                 <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

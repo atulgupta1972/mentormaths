@@ -1,10 +1,11 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref } from 'vue';
 
 const props = defineProps({
@@ -14,6 +15,13 @@ const props = defineProps({
 });
 
 const search = ref('');
+const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
+
+const readOnlyFilteredRows = computed(() => {
+    const query = search.value.trim().toLowerCase();
+
+    return props.rows.filter((row) => query === '' || rowMatchesSearch(row, query));
+});
 
 const form = useForm({
     rows: props.rows.length
@@ -115,7 +123,12 @@ const submitCarryForward = () => {
                 <h2 class="text-xl font-semibold text-gray-800">
                     {{ version.board.code }} {{ version.grade_level.name }} — {{ version.subject.name }}
                 </h2>
-                <Link :href="route('admin.syllabus.index')" class="text-sm text-indigo-600">Back</Link>
+                <Link
+                    :href="isAdmin ? route('admin.syllabus.index') : route('admin.classes.show', version.grade_level.id)"
+                    class="text-sm text-indigo-600"
+                >
+                    Back
+                </Link>
             </div>
         </template>
 
@@ -128,15 +141,17 @@ const submitCarryForward = () => {
                     {{ $page.props.flash.success }}
                 </div>
 
+                <BrowseModeNotice />
+
                 <div class="rounded-lg bg-white p-4 shadow-sm">
                     <p class="text-sm text-gray-600">
                         Academic year: <strong>{{ version.academic_year.name }}</strong>
                         · Status: <strong class="capitalize">{{ version.status }}</strong>
-                        · Rows: <strong>{{ form.rows.length }}</strong>
+                        · Rows: <strong>{{ isAdmin ? form.rows.length : rows.length }}</strong>
                     </p>
                 </div>
 
-                <div class="overflow-hidden rounded-lg bg-white shadow-sm">
+                <div v-if="isAdmin" class="overflow-hidden rounded-lg bg-white shadow-sm">
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
                         <h3 class="font-medium text-gray-900">Syllabus table</h3>
                         <div class="flex gap-2">
@@ -270,7 +285,48 @@ const submitCarryForward = () => {
                     </div>
                 </div>
 
-                <div class="rounded-lg bg-white p-6 shadow-sm">
+                <div v-else class="overflow-hidden rounded-lg bg-white shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+                        <h3 class="font-medium text-gray-900">Syllabus (read only)</h3>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3 border-b bg-gray-50 px-4 py-3">
+                        <div class="relative min-w-[220px] flex-1">
+                            <input
+                                v-model="search"
+                                type="search"
+                                placeholder="Search chapter, topic, concepts..."
+                                class="w-full rounded-md border-gray-300 py-2 pl-3 pr-9 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            />
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Ch</th>
+                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter</th>
+                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Topic</th>
+                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Key concepts</th>
+                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Difficulty</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200 bg-white">
+                                <tr v-for="(row, index) in readOnlyFilteredRows" :key="index">
+                                    <td class="px-3 py-2">{{ row.chapter_number || '—' }}</td>
+                                    <td class="px-3 py-2">{{ row.chapter_name || '—' }}</td>
+                                    <td class="px-3 py-2 font-medium text-gray-900">{{ row.topic_name || '—' }}</td>
+                                    <td class="px-3 py-2 whitespace-pre-wrap text-gray-600">{{ row.learning_outcomes || '—' }}</td>
+                                    <td class="px-3 py-2">{{ row.difficulty || '—' }}</td>
+                                </tr>
+                                <tr v-if="readOnlyFilteredRows.length === 0">
+                                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">No syllabus rows to show.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div v-if="isAdmin" class="rounded-lg bg-white p-6 shadow-sm">
                     <h3 class="font-medium">Carry forward to next year</h3>
                     <p class="mt-1 text-sm text-gray-600">Clone this syllabus as a draft for a new academic year, then edit changes.</p>
                     <form class="mt-4 flex flex-wrap items-end gap-3" @submit.prevent="submitCarryForward">

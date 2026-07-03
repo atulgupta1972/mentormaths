@@ -1,11 +1,16 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import { Head, Link } from '@inertiajs/vue3';
+import { usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 defineProps({
     classes: Array,
     activeYear: Object,
 });
+
+const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 </script>
 
 <template>
@@ -21,8 +26,14 @@ defineProps({
 
         <div class="py-12">
             <div class="mx-auto max-w-6xl sm:px-6 lg:px-8">
+                <BrowseModeNotice class="mb-6" />
                 <p class="mb-6 text-sm text-gray-600">
-                    Select a class to manage syllabus topics, question bank, practice sets, and student assignments.
+                    <template v-if="isAdmin">
+                        Select a class to manage syllabus topics, question bank, practice sets, and student assignments.
+                    </template>
+                    <template v-else>
+                        Browse all classes — see syllabus coverage, topics, questions, and practice sets available on the platform.
+                    </template>
                 </p>
 
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
