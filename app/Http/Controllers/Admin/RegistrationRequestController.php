@@ -7,6 +7,7 @@ use App\Models\RegistrationRequest;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Models\User;
+use App\Services\UserGroupService;
 use App\Support\RegistrationMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,10 @@ use Inertia\Response;
 
 class RegistrationRequestController extends Controller
 {
+    public function __construct(
+        private UserGroupService $userGroupService,
+    ) {}
+
     public function index(Request $request): Response
     {
         $status = $request->string('status')->toString();
@@ -51,6 +56,10 @@ class RegistrationRequestController extends Controller
 
         return Inertia::render('Admin/RegistrationRequests/Show', [
             'registrationRequest' => $registrationRequest,
+            'shareLinks' => [
+                'login' => route('login'),
+                'dashboard' => route('dashboard'),
+            ],
         ]);
     }
 
@@ -78,6 +87,9 @@ class RegistrationRequestController extends Controller
                 'parent2_mobile' => $registrationRequest->parent2_mobile,
                 'school_name' => $registrationRequest->school_name,
                 'email' => $registrationRequest->email,
+                'notify_student_mobile' => $registrationRequest->notify_student_mobile,
+                'notify_parent1_mobile' => $registrationRequest->notify_parent1_mobile,
+                'notify_parent2_mobile' => $registrationRequest->notify_parent2_mobile,
             ]);
 
             StudentEnrollment::create([
@@ -105,6 +117,8 @@ class RegistrationRequestController extends Controller
             ]);
 
             $student->update(['user_id' => $user->id]);
+
+            $this->userGroupService->attachGroupByCode($user, User::ROLE_STUDENT);
 
             $registrationRequest->update([
                 'status' => RegistrationRequest::STATUS_APPROVED,
@@ -151,5 +165,25 @@ class RegistrationRequestController extends Controller
         return redirect()
             ->route('admin.registration-requests.index')
             ->with('success', 'Registration request rejected.');
+    }
+
+    public function updateContacts(Request $request, RegistrationRequest $registrationRequest): RedirectResponse
+    {
+        $validated = $request->validate([
+            'student_mobile' => ['nullable', 'string', 'max:15'],
+            'parent1_mobile' => ['nullable', 'string', 'max:15'],
+            'parent2_mobile' => ['nullable', 'string', 'max:15'],
+            'notify_student_mobile' => ['sometimes', 'boolean'],
+            'notify_parent1_mobile' => ['sometimes', 'boolean'],
+            'notify_parent2_mobile' => ['sometimes', 'boolean'],
+        ]);
+
+        $registrationRequest->update($validated);
+
+        if ($registrationRequest->student_id) {
+            $registrationRequest->student?->update($validated);
+        }
+
+        return back()->with('success', 'Contact and notification settings saved.');
     }
 }

@@ -7,11 +7,12 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password', 'role', 'mobile'])]
+#[Fillable(['name', 'email', 'password', 'role', 'mobile', 'is_active'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -31,6 +32,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -39,13 +41,42 @@ class User extends Authenticatable
         return $this->hasOne(Student::class);
     }
 
+    public function groups(): BelongsToMany
+    {
+        return $this->belongsToMany(Group::class)->withTimestamps();
+    }
+
+    public function inGroup(string $code): bool
+    {
+        if ($this->relationLoaded('groups')) {
+            return $this->groups->contains('code', $code);
+        }
+
+        return $this->groups()->where('code', $code)->exists();
+    }
+
     public function isAdmin(): bool
     {
-        return $this->role === self::ROLE_ADMIN;
+        return $this->inGroup(self::ROLE_ADMIN) || $this->role === self::ROLE_ADMIN;
     }
 
     public function isStudent(): bool
     {
-        return $this->role === self::ROLE_STUDENT;
+        return $this->inGroup(self::ROLE_STUDENT) || $this->role === self::ROLE_STUDENT;
+    }
+
+    public function isTeacher(): bool
+    {
+        return $this->inGroup(self::ROLE_TEACHER) || $this->role === self::ROLE_TEACHER;
+    }
+
+    public function isParent(): bool
+    {
+        return $this->inGroup(self::ROLE_PARENT) || $this->role === self::ROLE_PARENT;
+    }
+
+    public function isActiveAccount(): bool
+    {
+        return $this->is_active !== false;
     }
 }

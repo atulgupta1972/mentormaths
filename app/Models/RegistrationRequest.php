@@ -27,6 +27,9 @@ class RegistrationRequest extends Model
         'school_name',
         'email',
         'notes',
+        'notify_student_mobile',
+        'notify_parent1_mobile',
+        'notify_parent2_mobile',
         'status',
         'admin_notes',
         'reviewed_by',
@@ -39,6 +42,9 @@ class RegistrationRequest extends Model
         return [
             'date_of_birth' => 'date',
             'reviewed_at' => 'datetime',
+            'notify_student_mobile' => 'boolean',
+            'notify_parent1_mobile' => 'boolean',
+            'notify_parent2_mobile' => 'boolean',
         ];
     }
 

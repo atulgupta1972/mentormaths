@@ -65,6 +65,10 @@ class StudentController extends Controller
             'academicYears' => AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'name', 'is_active']),
             'gradeLevels' => GradeLevel::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name']),
             'boards' => Board::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
+            'shareLinks' => [
+                'login' => route('login'),
+                'dashboard' => route('dashboard'),
+            ],
         ]);
     }
 
@@ -121,5 +125,25 @@ class StudentController extends Controller
         return back()
             ->with('success', $message)
             ->with('promotion_errors', $result['errors']);
+    }
+
+    public function updateContacts(Request $request, Student $student): RedirectResponse
+    {
+        $validated = $request->validate([
+            'student_mobile' => ['nullable', 'string', 'max:15'],
+            'parent1_mobile' => ['nullable', 'string', 'max:15'],
+            'parent2_mobile' => ['nullable', 'string', 'max:15'],
+            'notify_student_mobile' => ['sometimes', 'boolean'],
+            'notify_parent1_mobile' => ['sometimes', 'boolean'],
+            'notify_parent2_mobile' => ['sometimes', 'boolean'],
+        ]);
+
+        $student->update($validated);
+
+        if ($student->user && array_key_exists('student_mobile', $validated)) {
+            $student->user->update(['mobile' => $validated['student_mobile']]);
+        }
+
+        return back()->with('success', 'Contact and notification settings saved.');
     }
 }

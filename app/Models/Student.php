@@ -19,12 +19,18 @@ class Student extends Model
         'parent2_mobile',
         'school_name',
         'email',
+        'notify_student_mobile',
+        'notify_parent1_mobile',
+        'notify_parent2_mobile',
     ];
 
     protected function casts(): array
     {
         return [
             'date_of_birth' => 'date',
+            'notify_student_mobile' => 'boolean',
+            'notify_parent1_mobile' => 'boolean',
+            'notify_parent2_mobile' => 'boolean',
         ];
     }
 

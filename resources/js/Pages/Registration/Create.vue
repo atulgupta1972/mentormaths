@@ -59,7 +59,7 @@ const submit = () => {
 
             <div>
                 <InputLabel for="student_mobile" value="Student mobile (optional)" />
-                <TextInput id="student_mobile" v-model="form.student_mobile" class="mt-1 block w-full" />
+                <TextInput id="student_mobile" v-model="form.student_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" />
                 <InputError class="mt-1" :message="form.errors.student_mobile" />
             </div>
 
@@ -71,7 +71,7 @@ const submit = () => {
 
             <div>
                 <InputLabel for="parent1_mobile" value="Parent 1 mobile *" />
-                <TextInput id="parent1_mobile" v-model="form.parent1_mobile" class="mt-1 block w-full" required />
+                <TextInput id="parent1_mobile" v-model="form.parent1_mobile" type="tel" class="mt-1 block w-full" required placeholder="10-digit mobile" />
                 <InputError class="mt-1" :message="form.errors.parent1_mobile" />
             </div>
 
@@ -83,7 +83,7 @@ const submit = () => {
 
             <div>
                 <InputLabel for="parent2_mobile" value="Parent 2 mobile" />
-                <TextInput id="parent2_mobile" v-model="form.parent2_mobile" class="mt-1 block w-full" />
+                <TextInput id="parent2_mobile" v-model="form.parent2_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" />
                 <InputError class="mt-1" :message="form.errors.parent2_mobile" />
             </div>
 

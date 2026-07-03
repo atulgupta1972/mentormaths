@@ -4,14 +4,16 @@ use App\Http\Controllers\Admin\AcademicYearController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
 use App\Http\Controllers\Admin\ClassHubController;
 use App\Http\Controllers\Admin\GradeContextController;
-use App\Http\Controllers\Admin\QuestionHubController;
+use App\Http\Controllers\Admin\GroupController;
 use App\Http\Controllers\Admin\PracticeSetController;
 use App\Http\Controllers\Admin\PracticeSetTopicController;
 use App\Http\Controllers\Admin\QuestionController;
+use App\Http\Controllers\Admin\QuestionHubController;
 use App\Http\Controllers\Admin\RegistrationRequestController as AdminRegistrationRequestController;
 use App\Http\Controllers\Admin\SetAssignmentController;
 use App\Http\Controllers\Admin\StudentController;
 use App\Http\Controllers\Admin\SyllabusVersionController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
@@ -43,6 +45,20 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('registration-requests.approve');
     Route::post('/registration-requests/{registrationRequest}/reject', [AdminRegistrationRequestController::class, 'reject'])
         ->name('registration-requests.reject');
+    Route::patch('/registration-requests/{registrationRequest}/contacts', [AdminRegistrationRequestController::class, 'updateContacts'])
+        ->name('registration-requests.contacts.update');
+
+    Route::get('/users', [UserController::class, 'index'])->name('users.index');
+    Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
+    Route::post('/users', [UserController::class, 'store'])->name('users.store');
+    Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
+    Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::post('/users/{user}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggle-active');
+
+    Route::get('/groups', [GroupController::class, 'index'])->name('groups.index');
+    Route::post('/groups', [GroupController::class, 'store'])->name('groups.store');
+    Route::put('/groups/{group}', [GroupController::class, 'update'])->name('groups.update');
+    Route::delete('/groups/{group}', [GroupController::class, 'destroy'])->name('groups.destroy');
 
     Route::post('/grade-context', [GradeContextController::class, 'update'])
         ->name('grade-context.update');
@@ -63,6 +79,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('students.index');
     Route::get('/students/{student}', [StudentController::class, 'show'])
         ->name('students.show');
+    Route::patch('/students/{student}/contacts', [StudentController::class, 'updateContacts'])
+        ->name('students.contacts.update');
     Route::post('/students/{student}/promote', [StudentController::class, 'promote'])
         ->name('students.promote');
     Route::post('/students/bulk-promote', [StudentController::class, 'bulkPromote'])

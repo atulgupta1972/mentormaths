@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ContactNumbersPanel from '@/Components/ContactNumbersPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -14,7 +15,38 @@ const props = defineProps({
     academicYears: Array,
     gradeLevels: Array,
     boards: Array,
+    shareLinks: Object,
 });
+
+const contactFields = computed(() => [
+    {
+        key: 'student',
+        field: 'student_mobile',
+        notifyField: 'notify_student_mobile',
+        label: 'Student mobile',
+        mobile: props.student.student_mobile,
+        notify: props.student.notify_student_mobile,
+    },
+    {
+        key: 'parent1',
+        field: 'parent1_mobile',
+        notifyField: 'notify_parent1_mobile',
+        label: 'Parent 1 mobile',
+        name: props.student.parent1_name,
+        mobile: props.student.parent1_mobile,
+        notify: props.student.notify_parent1_mobile ?? true,
+        required: true,
+    },
+    {
+        key: 'parent2',
+        field: 'parent2_mobile',
+        notifyField: 'notify_parent2_mobile',
+        label: 'Parent 2 mobile',
+        name: props.student.parent2_name || null,
+        mobile: props.student.parent2_mobile,
+        notify: props.student.notify_parent2_mobile,
+    },
+]);
 
 const defaultYear = computed(() => props.academicYears.find((y) => !y.is_active) || props.academicYears[0]);
 
@@ -54,6 +86,13 @@ const submit = () => {
                     Profile stays one record. Each academic year gets its own enrollment row
                     (class, board, school). Past years are kept for history.
                 </div>
+
+                <ContactNumbersPanel
+                    :student-name="student.name"
+                    :contacts="contactFields"
+                    :save-url="route('admin.students.contacts.update', student.id)"
+                    :share-links="shareLinks"
+                />
 
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                     <div class="border-b px-6 py-4">

@@ -163,13 +163,15 @@ class ClassHubController extends Controller
             ))
             ->when($chapterId, fn ($q) => $q->where('syllabus_chapter_id', $chapterId))
             ->when($topicId, fn ($q) => $q->whereKey($topicId))
-            ->withCount(['questions', 'practiceSets'])
-            ->join('syllabus_chapters', 'syllabus_chapters.id', '=', 'syllabus_topics.syllabus_chapter_id')
-            ->orderBy('syllabus_chapters.sort_order')
-            ->orderBy('syllabus_topics.sort_order')
-            ->select('syllabus_topics.*');
+            ->withCount(['questions', 'practiceSets']);
 
-        $topics = $topicsQuery->get()->map(fn ($topic) => [
+        $topics = $topicsQuery->get()
+            ->sortBy(fn (SyllabusTopic $topic) => [
+                $topic->chapter?->sort_order ?? 0,
+                $topic->sort_order ?? 0,
+            ])
+            ->values()
+            ->map(fn ($topic) => [
             'id' => $topic->id,
             'name' => $topic->name,
             'chapter_id' => $topic->syllabus_chapter_id,

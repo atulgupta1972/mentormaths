@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ContactNumbersPanel from '@/Components/ContactNumbersPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
@@ -8,6 +9,7 @@ import { computed } from 'vue';
 
 const props = defineProps({
     registrationRequest: Object,
+    shareLinks: Object,
 });
 
 const page = usePage();
@@ -17,6 +19,36 @@ const form = useForm({
 });
 
 const isPending = computed(() => props.registrationRequest.status === 'pending');
+
+const contactFields = computed(() => [
+    {
+        key: 'student',
+        field: 'student_mobile',
+        notifyField: 'notify_student_mobile',
+        label: 'Student mobile',
+        mobile: props.registrationRequest.student_mobile,
+        notify: props.registrationRequest.notify_student_mobile,
+    },
+    {
+        key: 'parent1',
+        field: 'parent1_mobile',
+        notifyField: 'notify_parent1_mobile',
+        label: 'Parent 1 mobile',
+        name: props.registrationRequest.parent1_name,
+        mobile: props.registrationRequest.parent1_mobile,
+        notify: props.registrationRequest.notify_parent1_mobile ?? true,
+        required: true,
+    },
+    {
+        key: 'parent2',
+        field: 'parent2_mobile',
+        notifyField: 'notify_parent2_mobile',
+        label: 'Parent 2 mobile',
+        name: props.registrationRequest.parent2_name || null,
+        mobile: props.registrationRequest.parent2_mobile,
+        notify: props.registrationRequest.notify_parent2_mobile,
+    },
+]);
 
 const approve = () => {
     form.post(route('admin.registration-requests.approve', props.registrationRequest.id));
@@ -100,24 +132,16 @@ const generatedLogin = computed(() => page.props.flash?.generated_login);
                             <p class="mt-1">{{ registrationRequest.date_of_birth || '—' }}</p>
                         </div>
                         <div>
-                            <p class="text-xs uppercase text-gray-500">Student mobile</p>
-                            <p class="mt-1">{{ registrationRequest.student_mobile || '—' }}</p>
-                        </div>
-                        <div>
                             <p class="text-xs uppercase text-gray-500">Email</p>
                             <p class="mt-1">{{ registrationRequest.email || '—' }}</p>
                         </div>
                         <div>
                             <p class="text-xs uppercase text-gray-500">Parent 1</p>
                             <p class="mt-1">{{ registrationRequest.parent1_name }}</p>
-                            <p class="text-sm text-gray-500">{{ registrationRequest.parent1_mobile }}</p>
                         </div>
                         <div>
                             <p class="text-xs uppercase text-gray-500">Parent 2</p>
                             <p class="mt-1">{{ registrationRequest.parent2_name || '—' }}</p>
-                            <p v-if="registrationRequest.parent2_mobile" class="text-sm text-gray-500">
-                                {{ registrationRequest.parent2_mobile }}
-                            </p>
                         </div>
                         <div class="sm:col-span-2">
                             <p class="text-xs uppercase text-gray-500">Notes</p>
@@ -125,6 +149,13 @@ const generatedLogin = computed(() => page.props.flash?.generated_login);
                         </div>
                     </div>
                 </div>
+
+                <ContactNumbersPanel
+                    :student-name="registrationRequest.student_name"
+                    :contacts="contactFields"
+                    :save-url="route('admin.registration-requests.contacts.update', registrationRequest.id)"
+                    :share-links="shareLinks"
+                />
 
                 <div v-if="isPending" class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                     <form class="space-y-4 p-6" @submit.prevent="approve">
