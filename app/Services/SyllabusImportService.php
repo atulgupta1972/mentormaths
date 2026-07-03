@@ -134,7 +134,7 @@ class SyllabusImportService
 
     public function flattenToRows(SyllabusVersion $version): Collection
     {
-        $version->load(['chapters.topics']);
+        $version->load(['chapters.topics', 'chapters.chapterHead']);
 
         return $version->chapters->flatMap(function (SyllabusChapter $chapter) {
             return $chapter->topics->map(fn (SyllabusTopic $topic) => [
@@ -142,6 +142,8 @@ class SyllabusImportService
                 'chapter_id' => $chapter->id,
                 'chapter_number' => $chapter->chapter_number,
                 'chapter_name' => $chapter->name,
+                'chapter_head_id' => $chapter->chapter_head_id,
+                'chapter_head_name' => $chapter->chapterHead?->name ?? '',
                 'topic_name' => $topic->name,
                 'learning_outcomes' => $topic->learning_outcomes ?? '',
                 'difficulty' => $topic->difficulty ?? '',
@@ -298,6 +300,7 @@ class SyllabusImportService
                 'chapter_number' => $this->cleanChapterNumber($row['chapter_number'] ?? '') ?: $chapter->chapter_number,
                 'name' => trim((string) ($row['chapter_name'] ?? '')) ?: $chapter->name,
                 'sort_order' => $sortOrder,
+                'chapter_head_id' => ! empty($row['chapter_head_id']) ? (int) $row['chapter_head_id'] : null,
             ]);
 
             $chapterCache[$cacheKey] = $chapter;
@@ -316,6 +319,7 @@ class SyllabusImportService
 
         $chapter = SyllabusChapter::create([
             'syllabus_version_id' => $version->id,
+            'chapter_head_id' => $row['chapter_head_id'] ?? null,
             'chapter_number' => $number ?: (string) $sortOrder,
             'name' => $name ?: 'Chapter '.$sortOrder,
             'sort_order' => $sortOrder,

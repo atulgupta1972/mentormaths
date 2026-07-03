@@ -74,6 +74,13 @@ const showingNavigationDropdown = ref(false);
                                 </NavLink>
                                 <NavLink
                                     v-if="$page.props.auth.isAdmin"
+                                    :href="route('admin.chapter-heads.index')"
+                                    :active="route().current('admin.chapter-heads.*')"
+                                >
+                                    Chapter heads
+                                </NavLink>
+                                <NavLink
+                                    v-if="$page.props.auth.isAdmin"
                                     :href="route('admin.syllabus.index')"
                                     :active="route().current('admin.syllabus.*')"
                                 >
@@ -233,6 +240,13 @@ const showingNavigationDropdown = ref(false);
                             :active="route().current('admin.questions.*')"
                         >
                             Questions
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            v-if="$page.props.auth.isAdmin"
+                            :href="route('admin.chapter-heads.index')"
+                            :active="route().current('admin.chapter-heads.*')"
+                        >
+                            Chapter heads
                         </ResponsiveNavLink>
                         <ResponsiveNavLink
                             v-if="$page.props.auth.isAdmin"

@@ -46,15 +46,7 @@ class ChapterPracticeSetController extends Controller
         $activeYear = AcademicYear::active();
         $selectedStudentId = $request->integer('student_id') ?: null;
 
-        $students = Student::query()
-            ->when($activeYear, function ($q) use ($activeYear, $gradeLevel) {
-                $q->whereHas('enrollments', fn ($eq) => $eq
-                    ->where('academic_year_id', $activeYear->id)
-                    ->where('status', 'active')
-                    ->when($gradeLevel, fn ($en) => $en->where('grade_level_id', $gradeLevel->id)));
-            })
-            ->orderBy('name')
-            ->get(['id', 'name']);
+        $students = $this->assignmentService->activeStudentsForAssignment($activeYear?->id);
 
         $studentProgress = [];
 

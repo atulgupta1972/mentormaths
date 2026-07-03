@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\Board;
+use App\Models\ChapterHead;
 use App\Models\GradeLevel;
 use App\Models\Subject;
 use App\Models\SyllabusVersion;
@@ -60,7 +61,34 @@ class SyllabusVersionController extends Controller
             'version' => $syllabusVersion,
             'rows' => $this->importService->flattenToRows($syllabusVersion),
             'academicYears' => AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'name']),
+            'chapterHeads' => ChapterHead::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
         ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'board_id' => ['required', 'exists:boards,id'],
+            'grade_level_id' => ['required', 'exists:grade_levels,id'],
+            'subject_id' => ['required', 'exists:subjects,id'],
+            'academic_year_id' => ['required', 'exists:academic_years,id'],
+        ]);
+
+        $version = SyllabusVersion::firstOrCreate(
+            [
+                'board_id' => $validated['board_id'],
+                'grade_level_id' => $validated['grade_level_id'],
+                'subject_id' => $validated['subject_id'],
+                'academic_year_id' => $validated['academic_year_id'],
+            ],
+            ['status' => SyllabusVersion::STATUS_DRAFT],
+        );
+
+        return redirect()
+            ->route('admin.syllabus.show', $version)
+            ->with('success', $version->wasRecentlyCreated
+                ? 'Syllabus created. Add chapters and topics below.'
+                : 'Syllabus already exists — continue editing below.');
     }
 
     public function updateRows(Request $request, SyllabusVersion $syllabusVersion): RedirectResponse
@@ -71,6 +99,7 @@ class SyllabusVersionController extends Controller
             'rows.*.chapter_id' => ['nullable', 'integer'],
             'rows.*.chapter_number' => ['nullable', 'string', 'max:20'],
             'rows.*.chapter_name' => ['nullable', 'string', 'max:255'],
+            'rows.*.chapter_head_id' => ['nullable', 'integer', 'exists:chapter_heads,id'],
             'rows.*.topic_name' => ['nullable', 'string', 'max:255'],
             'rows.*.learning_outcomes' => ['nullable', 'string'],
             'rows.*.difficulty' => ['nullable', 'string', 'max:20'],

@@ -11,10 +11,16 @@ class SyllabusChapter extends Model
 {
     protected $fillable = [
         'syllabus_version_id',
+        'chapter_head_id',
         'chapter_number',
         'name',
         'sort_order',
     ];
+
+    public function chapterHead(): BelongsTo
+    {
+        return $this->belongsTo(ChapterHead::class);
+    }
 
     public function syllabusVersion(): BelongsTo
     {

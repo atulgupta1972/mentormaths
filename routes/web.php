@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AcademicYearController;
+use App\Http\Controllers\Admin\ChapterHeadController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
 use App\Http\Controllers\Admin\ClassHubController;
 use App\Http\Controllers\Admin\GradeContextController;
@@ -97,12 +98,20 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/syllabus', [SyllabusVersionController::class, 'index'])
         ->name('syllabus.index');
+    Route::post('/syllabus', [SyllabusVersionController::class, 'store'])
+        ->name('syllabus.store');
     Route::post('/syllabus/import', [SyllabusVersionController::class, 'import'])
         ->name('syllabus.import');
     Route::put('/syllabus/{syllabusVersion}/rows', [SyllabusVersionController::class, 'updateRows'])
         ->name('syllabus.rows.update');
     Route::post('/syllabus/{syllabusVersion}/carry-forward', [SyllabusVersionController::class, 'carryForward'])
         ->name('syllabus.carry-forward');
+
+    Route::get('/chapter-heads', [ChapterHeadController::class, 'index'])->name('chapter-heads.index');
+    Route::post('/chapter-heads', [ChapterHeadController::class, 'store'])->name('chapter-heads.store');
+    Route::get('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'show'])->name('chapter-heads.show');
+    Route::put('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'update'])->name('chapter-heads.update');
+    Route::delete('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'destroy'])->name('chapter-heads.destroy');
 
     Route::get('/questions/create', [QuestionController::class, 'create'])->name('questions.create');
     Route::post('/questions/preview-import', [QuestionController::class, 'previewImport'])->name('questions.preview-import');

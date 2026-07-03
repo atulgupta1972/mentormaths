@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AcademicYear;
 use App\Models\SetAssignment;
+use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Models\User;
 use App\Models\Worksheet;
@@ -160,6 +161,40 @@ class SetAssignmentService
                 return AssignmentProgress::formatAssignmentSummary($assignment, $latest);
             })
             ->sortBy(fn (array $row) => $row['set_number'])
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, array{id: int, name: string, class_name: string, label: string}>
+     */
+    public function activeStudentsForAssignment(?int $academicYearId = null): Collection
+    {
+        $yearId = $academicYearId ?? AcademicYear::active()?->id;
+
+        if (! $yearId) {
+            return collect();
+        }
+
+        return Student::query()
+            ->whereHas('enrollments', fn ($q) => $q
+                ->where('academic_year_id', $yearId)
+                ->where('status', StudentEnrollment::STATUS_ACTIVE))
+            ->with(['enrollments' => fn ($q) => $q
+                ->where('academic_year_id', $yearId)
+                ->where('status', StudentEnrollment::STATUS_ACTIVE)
+                ->with('gradeLevel:id,name,sort_order')])
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(function (Student $student) {
+                $className = $student->enrollments->first()?->gradeLevel?->name ?? '—';
+
+                return [
+                    'id' => $student->id,
+                    'name' => $student->name,
+                    'class_name' => $className,
+                    'label' => "{$student->name} ({$className})",
+                ];
+            })
             ->values();
     }
 }

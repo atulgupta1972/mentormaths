@@ -184,7 +184,7 @@ const progressLabel = (p) => {
                                         <InputLabel value="Student" class="!text-xs" />
                                         <select v-model="assignStudentId" class="mt-1 rounded-md border-gray-300 text-sm">
                                             <option value="">Select</option>
-                                            <option v-for="s in students" :key="s.id" :value="s.id">{{ s.name }}</option>
+                                            <option v-for="s in students" :key="s.id" :value="s.id">{{ s.label || s.name }}</option>
                                         </select>
                                     </div>
                                     <div>
@@ -226,7 +226,7 @@ const progressLabel = (p) => {
                             <h3 class="font-semibold text-gray-800">Track student</h3>
                             <select v-model="selectedStudent" class="mt-2 w-full rounded-md border-gray-300 text-sm" @change="onStudentChange">
                                 <option value="">—</option>
-                                <option v-for="s in students" :key="s.id" :value="s.id">{{ s.name }}</option>
+                                <option v-for="s in students" :key="s.id" :value="s.id">{{ s.label || s.name }}</option>
                             </select>
                         </div>
                     </div>

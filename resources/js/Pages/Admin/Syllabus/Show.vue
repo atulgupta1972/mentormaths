@@ -12,6 +12,7 @@ const props = defineProps({
     version: Object,
     rows: Array,
     academicYears: Array,
+    chapterHeads: Array,
 });
 
 const search = ref('');
@@ -39,6 +40,7 @@ function emptyRow() {
         chapter_id: null,
         chapter_number: '',
         chapter_name: '',
+        chapter_head_id: '',
         topic_name: '',
         learning_outcomes: '',
         difficulty: '',
@@ -54,6 +56,7 @@ const addRow = () => {
         chapter_number: last?.chapter_number || '',
         chapter_name: last?.chapter_name || '',
         chapter_id: last?.chapter_id || null,
+        chapter_head_id: last?.chapter_head_id || '',
     });
 };
 
@@ -65,6 +68,7 @@ const rowMatchesSearch = (row, query) => {
     const fields = [
         row.chapter_number,
         row.chapter_name,
+        row.chapter_head_name,
         row.topic_name,
         row.learning_outcomes,
         row.difficulty,
@@ -149,6 +153,10 @@ const submitCarryForward = () => {
                         · Status: <strong class="capitalize">{{ version.status }}</strong>
                         · Rows: <strong>{{ isAdmin ? form.rows.length : rows.length }}</strong>
                     </p>
+                    <p v-if="isAdmin" class="mt-2 text-xs text-gray-500">
+                        Tag each chapter with a <Link :href="route('admin.chapter-heads.index')" class="text-indigo-600">chapter head</Link>
+                        (e.g. Integers) to browse topics across all classes.
+                    </p>
                 </div>
 
                 <div v-if="isAdmin" class="overflow-hidden rounded-lg bg-white shadow-sm">
@@ -195,8 +203,9 @@ const submitCarryForward = () => {
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th class="px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Ch No.</th>
-                                    <th class="min-w-[160px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Main Topic</th>
-                                    <th class="min-w-[180px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Sub-Topic</th>
+                                    <th class="min-w-[140px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter head</th>
+                                    <th class="min-w-[160px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter name</th>
+                                    <th class="min-w-[180px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Topic</th>
                                     <th class="min-w-[260px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Key Concepts</th>
                                     <th class="px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Difficulty</th>
                                     <th class="px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Periods</th>
@@ -215,11 +224,17 @@ const submitCarryForward = () => {
                                         />
                                     </td>
                                     <td class="align-top px-2 py-2">
+                                        <select v-model="row.chapter_head_id" class="w-full min-w-[130px] rounded-md border-gray-300 text-sm">
+                                            <option value="">—</option>
+                                            <option v-for="head in chapterHeads" :key="head.id" :value="head.id">{{ head.name }}</option>
+                                        </select>
+                                    </td>
+                                    <td class="align-top px-2 py-2">
                                         <textarea
                                             v-model="row.chapter_name"
                                             rows="2"
                                             class="syllabus-field w-full min-w-[150px] rounded-md border-gray-300 text-sm"
-                                            placeholder="Integers"
+                                            placeholder="Chapter title in book"
                                             @input="autoResize"
                                         />
                                     </td>
@@ -271,12 +286,12 @@ const submitCarryForward = () => {
                                     </td>
                                 </tr>
                                 <tr v-if="form.rows.length === 0">
-                                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">
-                                        No rows yet. Click "Add row" or re-import from Excel.
+                                    <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                                        No rows yet. Click "Add row" to enter chapters and topics.
                                     </td>
                                 </tr>
                                 <tr v-else-if="filteredRows.length === 0">
-                                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                                    <td colspan="9" class="px-4 py-8 text-center text-gray-500">
                                         No rows match "{{ search }}". <button type="button" class="text-indigo-600 hover:underline" @click="clearSearch">Clear search</button>
                                     </td>
                                 </tr>
@@ -304,6 +319,7 @@ const submitCarryForward = () => {
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Ch</th>
+                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Head</th>
                                     <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter</th>
                                     <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Topic</th>
                                     <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Key concepts</th>
@@ -313,13 +329,14 @@ const submitCarryForward = () => {
                             <tbody class="divide-y divide-gray-200 bg-white">
                                 <tr v-for="(row, index) in readOnlyFilteredRows" :key="index">
                                     <td class="px-3 py-2">{{ row.chapter_number || '—' }}</td>
+                                    <td class="px-3 py-2">{{ row.chapter_head_name || '—' }}</td>
                                     <td class="px-3 py-2">{{ row.chapter_name || '—' }}</td>
                                     <td class="px-3 py-2 font-medium text-gray-900">{{ row.topic_name || '—' }}</td>
                                     <td class="px-3 py-2 whitespace-pre-wrap text-gray-600">{{ row.learning_outcomes || '—' }}</td>
                                     <td class="px-3 py-2">{{ row.difficulty || '—' }}</td>
                                 </tr>
                                 <tr v-if="readOnlyFilteredRows.length === 0">
-                                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">No syllabus rows to show.</td>
+                                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">No syllabus rows to show.</td>
                                 </tr>
                             </tbody>
                         </table>

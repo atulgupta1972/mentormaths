@@ -40,6 +40,7 @@ class SyllabusCarryForwardService
             foreach ($source->chapters as $chapter) {
                 $newChapter = SyllabusChapter::create([
                     'syllabus_version_id' => $newVersion->id,
+                    'chapter_head_id' => $chapter->chapter_head_id,
                     'chapter_number' => $chapter->chapter_number,
                     'name' => $chapter->name,
                     'sort_order' => $chapter->sort_order,
