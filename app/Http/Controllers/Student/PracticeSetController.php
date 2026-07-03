@@ -20,12 +20,12 @@ class PracticeSetController extends Controller
         $this->authorizeAssignment($request, $assignment);
 
         $assignment->load([
-            'practiceSet.topic.chapter',
             'practiceSet' => fn ($q) => $q->withCount('questions'),
             'attempts' => fn ($q) => $q->orderByDesc('attempt_number'),
         ]);
 
         $inProgress = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_IN_PROGRESS);
+        $practiceSet = $assignment->practiceSet;
 
         return Inertia::render('Student/PracticeSets/Assignment', [
             'assignment' => [
@@ -34,7 +34,11 @@ class PracticeSetController extends Controller
                 'notes' => $assignment->notes,
                 'target_date' => $assignment->due_date?->toDateString(),
                 'is_overdue' => $assignment->isOverdue(),
-                'practice_set' => $assignment->practiceSet,
+                'practice_set' => [
+                    'set_code' => $practiceSet->set_code,
+                    'set_number' => $practiceSet->set_number,
+                    'kind_label' => $practiceSet->isChapterScope() ? 'Test' : 'Practice',
+                ],
                 'attempts' => $assignment->attempts->map(fn ($a) => [
                     'id' => $a->id,
                     'attempt_number' => $a->attempt_number,
@@ -71,7 +75,6 @@ class PracticeSetController extends Controller
     {
         $assignment = $attempt->assignment()->with([
             'practiceSet.questions.options',
-            'practiceSet.topic',
         ])->first();
 
         $this->authorizeAssignment($request, $assignment);
@@ -80,15 +83,19 @@ class PracticeSetController extends Controller
             return redirect()->route('student.attempts.result', $attempt);
         }
 
-        $questions = $assignment->practiceSet->questions->map(fn ($q) => [
-            'id' => $q->id,
-            'question_text' => $q->question_text,
-            'diagram_url' => $q->diagram_url,
-            'options' => $q->options->map(fn ($o) => [
-                'id' => $o->id,
-                'option_text' => $o->option_text,
-            ]),
-        ]);
+        $practiceSet = $assignment->practiceSet;
+        $questions = $practiceSet->questions->values()->map(function ($q, $index) {
+            return [
+                'id' => $q->id,
+                'number' => $index + 1,
+                'options' => $q->options->values()->map(function ($o, $optionIndex) {
+                    return [
+                        'id' => $o->id,
+                        'letter' => chr(65 + $optionIndex),
+                    ];
+                }),
+            ];
+        });
 
         return Inertia::render('Student/PracticeSets/Attempt', [
             'attempt' => [
@@ -96,11 +103,11 @@ class PracticeSetController extends Controller
                 'started_at' => $attempt->started_at->toIso8601String(),
             ],
             'practiceSet' => [
-                'display_title' => $assignment->practiceSet->display_title,
-                'tier_label' => $assignment->practiceSet->tier_label,
-                'topic_name' => $assignment->practiceSet->topic?->name,
+                'set_code' => $practiceSet->set_code,
+                'set_number' => $practiceSet->set_number,
+                'kind_label' => $practiceSet->isChapterScope() ? 'Test' : 'Practice',
             ],
-            'referencePdfUrl' => $assignment->practiceSet->topic?->reference_pdf_url,
+            'referencePdfUrl' => $this->referencePdfUrlFor($assignment),
             'questions' => $questions,
         ]);
     }
@@ -129,30 +136,20 @@ class PracticeSetController extends Controller
     public function result(Request $request, SetAttempt $attempt): Response
     {
         $assignment = $attempt->assignment()->with([
-            'practiceSet.topic',
-            'practiceSet.questions.options',
+            'practiceSet.questions',
         ])->first();
 
         $this->authorizeAssignment($request, $assignment);
 
         $attempt->load('answers');
 
-        $questions = $assignment->practiceSet->questions->map(function ($q) use ($attempt) {
+        $practiceSet = $assignment->practiceSet;
+        $questions = $practiceSet->questions->values()->map(function ($q, $index) use ($attempt) {
             $answer = $attempt->answers->firstWhere('question_id', $q->id);
-            $correct = $q->options->firstWhere('is_correct', true);
 
             return [
-                'question_text' => $q->question_text,
-                'diagram_url' => $q->diagram_url,
-                'explanation' => $q->explanation,
+                'number' => $index + 1,
                 'is_correct' => $answer?->is_correct ?? false,
-                'selected_option_id' => $answer?->question_option_id,
-                'correct_option_id' => $correct?->id,
-                'options' => $q->options->map(fn ($o) => [
-                    'id' => $o->id,
-                    'option_text' => $o->option_text,
-                    'is_correct' => $o->is_correct,
-                ]),
             ];
         });
 
@@ -170,10 +167,11 @@ class PracticeSetController extends Controller
                 'target_date' => $assignment->due_date?->toDateString(),
             ],
             'practiceSet' => [
-                'display_title' => $assignment->practiceSet->display_title,
-                'topic_name' => $assignment->practiceSet->topic?->name,
+                'set_code' => $practiceSet->set_code,
+                'set_number' => $practiceSet->set_number,
+                'kind_label' => $practiceSet->isChapterScope() ? 'Test' : 'Practice',
             ],
-            'referencePdfUrl' => $assignment->practiceSet->topic?->reference_pdf_url,
+            'referencePdfUrl' => $this->referencePdfUrlFor($assignment),
             'questions' => $questions,
         ]);
     }
@@ -185,5 +183,12 @@ class PracticeSetController extends Controller
         if (! $enrollment || $assignment->student_enrollment_id !== $enrollment->id) {
             abort(403);
         }
+    }
+
+    private function referencePdfUrlFor(SetAssignment $assignment): ?string
+    {
+        $assignment->loadMissing('practiceSet.topic');
+
+        return $assignment->practiceSet->topic?->reference_pdf_url;
     }
 }

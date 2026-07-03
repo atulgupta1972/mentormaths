@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\ChapterHead;
 use App\Models\SyllabusTopic;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -57,6 +58,24 @@ class ChapterHeadController extends Controller
         ]);
 
         return back()->with('success', 'Chapter head added.');
+    }
+
+    public function storeQuick(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:chapter_heads,name'],
+        ]);
+
+        $sortOrder = (int) ChapterHead::query()->max('sort_order') + 1;
+
+        $head = ChapterHead::create([
+            'name' => trim($validated['name']),
+            'sort_order' => $sortOrder,
+        ]);
+
+        return response()->json([
+            'chapterHead' => $head->only(['id', 'name']),
+        ]);
     }
 
     public function show(ChapterHead $chapterHead): Response

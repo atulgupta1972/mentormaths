@@ -27,21 +27,9 @@ class DashboardController extends Controller
             ? $this->attemptService->dashboardForEnrollment($enrollment)
             : [];
 
-        $byTopic = collect($assignments)->groupBy('topic_id')->map(function ($items, $topicId) {
-            $first = $items->first();
-
-            return [
-                'topic_id' => $topicId,
-                'topic_name' => $first['topic_name'],
-                'chapter_name' => $first['chapter_name'],
-                'sets' => $items->values()->all(),
-            ];
-        })->values()->all();
-
         return Inertia::render('Dashboard', [
             'isAdmin' => false,
             'assignments' => $assignments,
-            'topics' => $byTopic,
             'activeYear' => AcademicYear::active()?->only(['id', 'name']),
         ]);
     }

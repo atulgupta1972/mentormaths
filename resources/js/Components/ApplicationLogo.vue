@@ -2,7 +2,7 @@
 import MentorMathsLogo from '@/Components/MentorMathsLogo.vue';
 
 defineProps({
-    class: {
+    sizeClass: {
         type: String,
         default: 'block h-9 w-9 shrink-0',
     },
@@ -10,5 +10,5 @@ defineProps({
 </script>
 
 <template>
-    <MentorMathsLogo variant="mark" :class="class" />
+    <MentorMathsLogo variant="mark" :size-class="sizeClass" />
 </template>

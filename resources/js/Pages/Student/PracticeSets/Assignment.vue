@@ -9,6 +9,12 @@ const props = defineProps({
 
 const startForm = useForm({});
 
+const setLabel = () =>
+    props.assignment.practice_set.set_code
+    || `Set ${props.assignment.practice_set.set_number}`;
+
+const kindLabel = () => props.assignment.practice_set.kind_label || 'Practice';
+
 const startOrContinue = () => {
     if (props.assignment.in_progress_attempt_id) {
         window.location.href = route('student.attempts.show', props.assignment.in_progress_attempt_id);
@@ -28,17 +34,28 @@ const formatDate = (d) => {
     if (!d) return '—';
     return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 };
+
+const startLabel = () => {
+    if (props.assignment.in_progress_attempt_id) {
+        return 'Continue';
+    }
+    if (props.assignment.is_overdue) {
+        return `Submit delayed ${kindLabel().toLowerCase()}`;
+    }
+
+    return kindLabel() === 'Test' ? 'Start test' : 'Start practice';
+};
 </script>
 
 <template>
-    <Head :title="assignment.practice_set.set_code || assignment.practice_set.display_title" />
+    <Head :title="setLabel()" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="font-mono text-2xl font-bold text-indigo-600">{{ assignment.practice_set.set_code }}</p>
-                    <p class="text-sm text-gray-500">{{ assignment.practice_set.topic?.name }}</p>
+                    <p class="font-mono text-2xl font-bold text-indigo-600">{{ setLabel() }}</p>
+                    <p class="text-sm text-gray-500">{{ kindLabel() }}</p>
                 </div>
                 <Link :href="route('dashboard')" class="text-sm text-indigo-600">Dashboard</Link>
             </div>
@@ -52,12 +69,14 @@ const formatDate = (d) => {
                             <p class="text-xs text-gray-500">Target date</p>
                             <p class="font-semibold">{{ formatDate(assignment.target_date) }}</p>
                         </div>
-                        <div v-if="assignment.is_overdue" class="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800 self-end">
+                        <div v-if="assignment.is_overdue" class="self-end rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">
                             Past target — you can still submit (will be marked delayed)
                         </div>
                     </div>
 
-                    <p class="mt-4 text-sm text-gray-600">{{ assignment.practice_set.tier_tagline }} · {{ assignment.practice_set.questions_count }} questions</p>
+                    <p class="mt-4 text-sm text-gray-600">
+                        Work on your {{ kindLabel().toLowerCase() }} sheet, then record your answers online.
+                    </p>
                     <p v-if="assignment.notes" class="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">
                         Teacher note: {{ assignment.notes }}
                     </p>
@@ -83,7 +102,7 @@ const formatDate = (d) => {
                         :disabled="startForm.processing"
                         @click="startOrContinue"
                     >
-                        {{ assignment.in_progress_attempt_id ? 'Continue' : assignment.is_overdue ? 'Submit delayed attempt' : 'Start practice set' }}
+                        {{ startLabel() }}
                     </PrimaryButton>
                     <p v-else class="mt-6 text-sm text-gray-600">
                         Completed. Ask your teacher to re-assign for another attempt.

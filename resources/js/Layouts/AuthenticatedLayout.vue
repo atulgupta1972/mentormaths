@@ -1,187 +1,186 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import AdminClassSelector from '@/Components/AdminClassSelector.vue';
-import Dropdown from '@/Components/Dropdown.vue';
-import DropdownLink from '@/Components/DropdownLink.vue';
+import NavDropdown from '@/Components/NavDropdown.vue';
 import NavLink from '@/Components/NavLink.vue';
+import ResponsiveNavGroup from '@/Components/ResponsiveNavGroup.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 
 const showingNavigationDropdown = ref(false);
+const page = usePage();
+const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
+
+const peopleGroup = computed(() => ({
+    label: 'People',
+    active:
+        route().current('admin.users.*')
+        || route().current('admin.groups.*')
+        || route().current('admin.registration-requests.*')
+        || route().current('admin.students.*'),
+    items: [
+        {
+            label: 'Users',
+            href: route('admin.users.index'),
+            active: route().current('admin.users.*') || route().current('admin.groups.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Registrations',
+            href: route('admin.registration-requests.index'),
+            active: route().current('admin.registration-requests.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Students',
+            href: route('admin.students.index'),
+            active: route().current('admin.students.*'),
+            show: isAdmin.value,
+        },
+    ],
+}));
+
+const teachingGroup = computed(() => ({
+    label: 'Teaching',
+    active:
+        route().current('admin.classes.*')
+        || route().current('admin.practice-sets.*'),
+    items: [
+        {
+            label: 'Classes',
+            href: route('admin.classes.index'),
+            active: route().current('admin.classes.*'),
+            show: true,
+        },
+        {
+            label: 'Practice sets',
+            href: route('admin.practice-sets.index'),
+            active: route().current('admin.practice-sets.*'),
+            show: isAdmin.value,
+        },
+    ],
+}));
+
+const contentGroup = computed(() => ({
+    label: 'Question bank',
+    active:
+        route().current('admin.questions.*')
+        || route().current('admin.chapter-heads.*')
+        || route().current('admin.syllabus.*'),
+    items: [
+        {
+            label: 'Questions',
+            href: route('admin.questions.index'),
+            active: route().current('admin.questions.*'),
+            show: true,
+        },
+        {
+            label: 'Chapter heads',
+            href: route('admin.chapter-heads.index'),
+            active: route().current('admin.chapter-heads.*'),
+            show: isAdmin.value && route().has('admin.chapter-heads.index'),
+        },
+        {
+            label: 'Syllabus',
+            href: route('admin.syllabus.index'),
+            active: route().current('admin.syllabus.*'),
+            show: isAdmin.value,
+        },
+    ],
+}));
+
+const setupGroup = computed(() => ({
+    label: 'Setup',
+    active: route().current('admin.academic-years.*'),
+    items: [
+        {
+            label: 'Academic years',
+            href: route('admin.academic-years.index'),
+            active: route().current('admin.academic-years.*'),
+            show: isAdmin.value,
+        },
+    ],
+}));
+
+const navGroups = computed(() =>
+    [peopleGroup.value, teachingGroup.value, contentGroup.value, setupGroup.value].filter(
+        (group) => group.items.some((item) => item.show !== false),
+    ),
+);
 </script>
 
 <template>
     <div>
         <div class="min-h-screen bg-gray-100">
-            <nav
-                class="border-b border-gray-100 bg-white"
-            >
-                <!-- Primary Navigation Menu -->
+            <nav class="border-b border-gray-100 bg-white">
+                <!-- Horizontal bar (desktop) -->
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    <div class="flex h-16 justify-between">
-                        <div class="flex">
-                            <!-- Logo -->
-                            <div class="flex shrink-0 items-center gap-2.5">
-                                <Link :href="route('dashboard')" class="flex items-center gap-2.5">
-                                    <ApplicationLogo />
-                                    <span class="hidden font-semibold text-slate-800 sm:inline">Mentor Maths</span>
-                                </Link>
-                            </div>
+                    <div class="flex h-16 items-center justify-between gap-4">
+                        <div class="flex min-w-0 flex-1 items-center gap-6 lg:gap-8">
+                            <Link :href="route('dashboard')" class="flex shrink-0 items-center gap-2.5">
+                                <ApplicationLogo />
+                                <span class="hidden font-semibold text-slate-800 sm:inline">Mentor Maths</span>
+                            </Link>
 
-                            <!-- Navigation Links -->
-                            <div
-                                class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex"
-                            >
+                            <div class="hidden items-center gap-6 sm:flex lg:gap-8">
                                 <NavLink
                                     :href="route('dashboard')"
                                     :active="route().current('dashboard')"
                                 >
                                     Dashboard
                                 </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth.isAdmin"
-                                    :href="route('admin.users.index')"
-                                    :active="route().current('admin.users.*') || route().current('admin.groups.*')"
-                                >
-                                    Users
-                                </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth.isAdmin"
-                                    :href="route('admin.registration-requests.index')"
-                                    :active="route().current('admin.registration-requests.*')"
-                                >
-                                    Registrations
-                                </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth.isAdmin"
-                                    :href="route('admin.students.index')"
-                                    :active="route().current('admin.students.*')"
-                                >
-                                    Students
-                                </NavLink>
-                                <NavLink
-                                    :href="route('admin.classes.index')"
-                                    :active="route().current('admin.classes.*')"
-                                >
-                                    Classes
-                                </NavLink>
-                                <NavLink
-                                    :href="route('admin.questions.index')"
-                                    :active="route().current('admin.questions.*')"
-                                >
-                                    Questions
-                                </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth.isAdmin"
-                                    :href="route('admin.chapter-heads.index')"
-                                    :active="route().current('admin.chapter-heads.*')"
-                                >
-                                    Chapter heads
-                                </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth.isAdmin"
-                                    :href="route('admin.syllabus.index')"
-                                    :active="route().current('admin.syllabus.*')"
-                                >
-                                    Syllabus
-                                </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth.isAdmin"
-                                    :href="route('admin.practice-sets.index')"
-                                    :active="route().current('admin.practice-sets.*')"
-                                >
-                                    Practice Sets
-                                </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth.isAdmin"
-                                    :href="route('admin.academic-years.index')"
-                                    :active="route().current('admin.academic-years.*')"
-                                >
-                                    Years
-                                </NavLink>
+
+                                <NavDropdown
+                                    v-for="group in navGroups"
+                                    :key="group.label"
+                                    :label="group.label"
+                                    :active="group.active"
+                                    :items="group.items"
+                                />
                             </div>
                         </div>
 
-                        <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-4">
-                            <AdminClassSelector v-if="$page.props.auth.isAdmin" />
-                            <!-- Settings Dropdown -->
-                            <div class="relative ms-3">
-                                <Dropdown align="right" width="48">
-                                    <template #trigger>
-                                        <span class="inline-flex rounded-md">
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
-                                            >
-                                                {{ $page.props.auth.user.name }}
-
-                                                <svg
-                                                    class="-me-0.5 ms-2 h-4 w-4"
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    viewBox="0 0 20 20"
-                                                    fill="currentColor"
-                                                >
-                                                    <path
-                                                        fill-rule="evenodd"
-                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                                                        clip-rule="evenodd"
-                                                    />
-                                                </svg>
-                                            </button>
-                                        </span>
-                                    </template>
-
-                                    <template #content>
-                                        <DropdownLink
-                                            :href="route('profile.edit')"
-                                        >
-                                            Profile
-                                        </DropdownLink>
-                                        <DropdownLink
-                                            :href="route('logout')"
-                                            method="post"
-                                            as="button"
-                                        >
-                                            Log Out
-                                        </DropdownLink>
-                                    </template>
-                                </Dropdown>
-                            </div>
-                        </div>
-
-                        <!-- Hamburger -->
-                        <div class="-me-2 flex items-center sm:hidden">
-                            <button
-                                @click="
-                                    showingNavigationDropdown =
-                                        !showingNavigationDropdown
-                                "
-                                class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-100 hover:text-gray-500 focus:bg-gray-100 focus:text-gray-500 focus:outline-none"
+                        <div class="hidden shrink-0 items-center gap-2 sm:flex sm:gap-3">
+                            <AdminClassSelector v-if="isAdmin" />
+                            <span class="hidden max-w-[7rem] truncate text-sm text-gray-500 lg:inline">
+                                {{ $page.props.auth.user.name }}
+                            </span>
+                            <Link
+                                :href="route('profile.edit')"
+                                class="hidden rounded-md px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 md:inline"
                             >
-                                <svg
-                                    class="h-6 w-6"
-                                    stroke="currentColor"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                >
+                                Profile
+                            </Link>
+                            <Link
+                                :href="route('logout')"
+                                method="post"
+                                as="button"
+                                class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                            >
+                                Log out
+                            </Link>
+                        </div>
+
+                        <!-- Mobile toggle -->
+                        <div class="flex shrink-0 items-center gap-2 sm:hidden">
+                            <AdminClassSelector v-if="isAdmin" />
+                            <button
+                                type="button"
+                                class="inline-flex items-center justify-center rounded-md p-2 text-gray-500 hover:bg-gray-100"
+                                aria-label="Open menu"
+                                @click="showingNavigationDropdown = !showingNavigationDropdown"
+                            >
+                                <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
                                     <path
-                                        :class="{
-                                            hidden: showingNavigationDropdown,
-                                            'inline-flex':
-                                                !showingNavigationDropdown,
-                                        }"
+                                        v-if="!showingNavigationDropdown"
                                         stroke-linecap="round"
                                         stroke-linejoin="round"
                                         stroke-width="2"
                                         d="M4 6h16M4 12h16M4 18h16"
                                     />
                                     <path
-                                        :class="{
-                                            hidden: !showingNavigationDropdown,
-                                            'inline-flex':
-                                                showingNavigationDropdown,
-                                        }"
+                                        v-else
                                         stroke-linecap="round"
                                         stroke-linejoin="round"
                                         stroke-width="2"
@@ -193,101 +192,31 @@ const showingNavigationDropdown = ref(false);
                     </div>
                 </div>
 
-                <!-- Responsive Navigation Menu -->
+                <!-- Vertical menu (mobile) -->
                 <div
-                    :class="{
-                        block: showingNavigationDropdown,
-                        hidden: !showingNavigationDropdown,
-                    }"
-                    class="sm:hidden"
+                    class="border-t border-gray-100 sm:hidden"
+                    :class="showingNavigationDropdown ? 'block' : 'hidden'"
                 >
-                    <div class="space-y-1 pb-3 pt-2">
+                    <div class="mx-auto max-w-7xl px-2 pb-4 pt-2">
                         <ResponsiveNavLink
                             :href="route('dashboard')"
                             :active="route().current('dashboard')"
                         >
                             Dashboard
                         </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            v-if="$page.props.auth.isAdmin"
-                            :href="route('admin.users.index')"
-                            :active="route().current('admin.users.*') || route().current('admin.groups.*')"
-                        >
-                            Users
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            v-if="$page.props.auth.isAdmin"
-                            :href="route('admin.registration-requests.index')"
-                            :active="route().current('admin.registration-requests.*')"
-                        >
-                            Registrations
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            v-if="$page.props.auth.isAdmin"
-                            :href="route('admin.students.index')"
-                            :active="route().current('admin.students.*')"
-                        >
-                            Students
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            :href="route('admin.classes.index')"
-                            :active="route().current('admin.classes.*')"
-                        >
-                            Classes
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            :href="route('admin.questions.index')"
-                            :active="route().current('admin.questions.*')"
-                        >
-                            Questions
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            v-if="$page.props.auth.isAdmin"
-                            :href="route('admin.chapter-heads.index')"
-                            :active="route().current('admin.chapter-heads.*')"
-                        >
-                            Chapter heads
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            v-if="$page.props.auth.isAdmin"
-                            :href="route('admin.syllabus.index')"
-                            :active="route().current('admin.syllabus.*')"
-                        >
-                            Syllabus
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            v-if="$page.props.auth.isAdmin"
-                            :href="route('admin.practice-sets.index')"
-                            :active="route().current('admin.practice-sets.*')"
-                        >
-                            Practice Sets
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            v-if="$page.props.auth.isAdmin"
-                            :href="route('admin.academic-years.index')"
-                            :active="route().current('admin.academic-years.*')"
-                        >
-                            Years
-                        </ResponsiveNavLink>
-                    </div>
 
-                    <!-- Responsive Settings Options -->
-                    <div
-                        class="border-t border-gray-200 pb-1 pt-4"
-                    >
-                        <div class="px-4">
-                            <div
-                                class="text-base font-medium text-gray-800"
-                            >
-                                {{ $page.props.auth.user.name }}
-                            </div>
-                            <div class="text-sm font-medium text-gray-500">
-                                {{ $page.props.auth.user.email }}
-                            </div>
-                        </div>
+                        <ResponsiveNavGroup
+                            v-for="group in navGroups"
+                            :key="`mobile-${group.label}`"
+                            :label="group.label"
+                            :items="group.items"
+                        />
 
-                        <div class="mt-3 space-y-1">
-                            <ResponsiveNavLink :href="route('profile.edit')">
+                        <div class="mt-3 border-t border-gray-200 pt-3">
+                            <p class="px-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Account</p>
+                            <p class="px-4 pt-1 text-sm font-medium text-gray-800">{{ $page.props.auth.user.name }}</p>
+                            <p class="px-4 text-sm text-gray-500">{{ $page.props.auth.user.email }}</p>
+                            <ResponsiveNavLink :href="route('profile.edit')" class="mt-2">
                                 Profile
                             </ResponsiveNavLink>
                             <ResponsiveNavLink
@@ -295,24 +224,19 @@ const showingNavigationDropdown = ref(false);
                                 method="post"
                                 as="button"
                             >
-                                Log Out
+                                Log out
                             </ResponsiveNavLink>
                         </div>
                     </div>
                 </div>
             </nav>
 
-            <!-- Page Heading -->
-            <header
-                class="bg-white shadow"
-                v-if="$slots.header"
-            >
+            <header v-if="$slots.header" class="bg-white shadow">
                 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
                     <slot name="header" />
                 </div>
             </header>
 
-            <!-- Page Content -->
             <main>
                 <slot />
             </main>

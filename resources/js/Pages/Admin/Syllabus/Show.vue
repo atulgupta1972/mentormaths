@@ -16,6 +16,13 @@ const props = defineProps({
 });
 
 const search = ref('');
+const chapterHeadsList = ref([...(props.chapterHeads || [])]);
+const addingHead = ref(false);
+const newHeadName = ref('');
+const addHeadError = ref('');
+const addHeadSaving = ref(false);
+const targetRowIndex = ref(null);
+const newHeadInput = ref(null);
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 
 const readOnlyFilteredRows = computed(() => {
@@ -116,6 +123,54 @@ const saveRows = () => {
 const submitCarryForward = () => {
     carryForm.post(route('admin.syllabus.carry-forward', props.version.id));
 };
+
+const startAddHead = async (rowIndex = null) => {
+    addingHead.value = true;
+    newHeadName.value = '';
+    addHeadError.value = '';
+    targetRowIndex.value = rowIndex;
+    await nextTick();
+    newHeadInput.value?.focus();
+};
+
+const cancelAddHead = () => {
+    addingHead.value = false;
+    newHeadName.value = '';
+    addHeadError.value = '';
+    targetRowIndex.value = null;
+};
+
+const saveNewHead = async () => {
+    const name = newHeadName.value.trim();
+    if (!name) {
+        addHeadError.value = 'Enter a name.';
+        return;
+    }
+
+    addHeadSaving.value = true;
+    addHeadError.value = '';
+
+    try {
+        const { data } = await window.axios.post(route('admin.chapter-heads.quick-store'), { name });
+        const exists = chapterHeadsList.value.some((head) => head.id === data.chapterHead.id);
+        if (!exists) {
+            chapterHeadsList.value.push(data.chapterHead);
+            chapterHeadsList.value.sort((a, b) => a.name.localeCompare(b.name));
+        }
+
+        if (targetRowIndex.value !== null && form.rows[targetRowIndex.value]) {
+            form.rows[targetRowIndex.value].chapter_head_id = data.chapterHead.id;
+        }
+
+        cancelAddHead();
+    } catch (error) {
+        addHeadError.value = error.response?.data?.errors?.name?.[0]
+            || error.response?.data?.message
+            || 'Could not add chapter head.';
+    } finally {
+        addHeadSaving.value = false;
+    }
+};
 </script>
 
 <template>
@@ -154,8 +209,8 @@ const submitCarryForward = () => {
                         · Rows: <strong>{{ isAdmin ? form.rows.length : rows.length }}</strong>
                     </p>
                     <p v-if="isAdmin" class="mt-2 text-xs text-gray-500">
-                        Tag each chapter with a <Link :href="route('admin.chapter-heads.index')" class="text-indigo-600">chapter head</Link>
-                        (e.g. Integers) to browse topics across all classes.
+                        Tag each chapter with a chapter head (e.g. Integers) to browse topics across all classes.
+                        Use <strong>+ Add</strong> in the table to create a new head without leaving this page.
                     </p>
                 </div>
 
@@ -203,7 +258,18 @@ const submitCarryForward = () => {
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th class="px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Ch No.</th>
-                                    <th class="min-w-[140px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter head</th>
+                                    <th class="min-w-[140px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">
+                                        <div class="flex items-center gap-2">
+                                            <span>Chapter head</span>
+                                            <button
+                                                type="button"
+                                                class="normal-case text-indigo-600 hover:underline"
+                                                @click="startAddHead()"
+                                            >
+                                                + Add
+                                            </button>
+                                        </div>
+                                    </th>
                                     <th class="min-w-[160px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter name</th>
                                     <th class="min-w-[180px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Topic</th>
                                     <th class="min-w-[260px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Key Concepts</th>
@@ -214,6 +280,29 @@ const submitCarryForward = () => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200 bg-white">
+                                <tr v-if="addingHead" class="bg-indigo-50">
+                                    <td colspan="9" class="px-4 py-3">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="text-sm font-medium text-indigo-900">New chapter head:</span>
+                                            <input
+                                                ref="newHeadInput"
+                                                v-model="newHeadName"
+                                                type="text"
+                                                class="min-w-[180px] rounded-md border-gray-300 text-sm"
+                                                placeholder="e.g. Integers"
+                                                @keyup.enter="saveNewHead"
+                                                @keyup.esc="cancelAddHead"
+                                            />
+                                            <PrimaryButton type="button" class="!py-1.5 !text-xs" :disabled="addHeadSaving" @click="saveNewHead">
+                                                {{ addHeadSaving ? 'Adding…' : 'Add' }}
+                                            </PrimaryButton>
+                                            <button type="button" class="text-sm text-gray-600 hover:text-gray-900" @click="cancelAddHead">
+                                                Cancel
+                                            </button>
+                                            <span v-if="addHeadError" class="text-sm text-red-600">{{ addHeadError }}</span>
+                                        </div>
+                                    </td>
+                                </tr>
                                 <tr v-for="{ row, index } in filteredRows" :key="index">
                                     <td class="align-top px-2 py-2">
                                         <input
@@ -226,8 +315,15 @@ const submitCarryForward = () => {
                                     <td class="align-top px-2 py-2">
                                         <select v-model="row.chapter_head_id" class="w-full min-w-[130px] rounded-md border-gray-300 text-sm">
                                             <option value="">—</option>
-                                            <option v-for="head in chapterHeads" :key="head.id" :value="head.id">{{ head.name }}</option>
+                                            <option v-for="head in chapterHeadsList" :key="head.id" :value="head.id">{{ head.name }}</option>
                                         </select>
+                                        <button
+                                            type="button"
+                                            class="mt-1 text-xs text-indigo-600 hover:underline"
+                                            @click="startAddHead(index)"
+                                        >
+                                            + Add
+                                        </button>
                                     </td>
                                     <td class="align-top px-2 py-2">
                                         <textarea

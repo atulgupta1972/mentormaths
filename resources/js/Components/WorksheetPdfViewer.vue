@@ -8,6 +8,10 @@ defineProps({
         type: String,
         default: 'Worksheet PDF',
     },
+    helperText: {
+        type: String,
+        default: 'Use your worksheet above, then record answers below.',
+    },
 });
 </script>
 
@@ -22,7 +26,7 @@ defineProps({
             :title="title"
         />
         <p class="border-t px-4 py-2 text-xs text-gray-500">
-            Scroll the PDF above to see all diagrams. Answer the questions below.
+            {{ helperText }}
         </p>
     </div>
 </template>

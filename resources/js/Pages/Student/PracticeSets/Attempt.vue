@@ -1,7 +1,5 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import McqOptionLine from '@/Components/McqOptionLine.vue';
-import QuestionBody from '@/Components/QuestionBody.vue';
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, useForm } from '@inertiajs/vue3';
@@ -21,6 +19,8 @@ let timer = null;
 const form = useForm({
     answers: {},
 });
+
+const setLabel = () => props.practiceSet.set_code || `Set ${props.practiceSet.set_number}`;
 
 onMounted(() => {
     const started = new Date(props.attempt.started_at).getTime();
@@ -54,16 +54,16 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
 </script>
 
 <template>
-    <Head :title="practiceSet.display_title" />
+    <Head :title="setLabel()" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm text-gray-500">{{ practiceSet.topic_name }}</p>
-                    <h2 class="text-xl font-semibold text-gray-800">{{ practiceSet.display_title }}</h2>
+                    <p class="text-sm text-gray-500">{{ practiceSet.kind_label }}</p>
+                    <h2 class="font-mono text-xl font-semibold text-gray-800">{{ setLabel() }}</h2>
                 </div>
-                <span class="rounded-full bg-gray-100 px-3 py-1 text-sm font-mono">{{ formatTime(elapsed) }}</span>
+                <span class="rounded-full bg-gray-100 px-3 py-1 font-mono text-sm">{{ formatTime(elapsed) }}</span>
             </div>
         </template>
 
@@ -74,30 +74,42 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
                     :url="referencePdfUrl"
                 />
 
-                <div
-                    v-for="(q, index) in questions"
-                    :key="q.id"
-                    class="rounded-lg bg-white p-5 shadow-sm"
-                >
-                    <p class="text-sm font-medium text-gray-500">Question {{ index + 1 }}</p>
-                    <QuestionBody class="mt-2" :question-text="q.question_text" :diagram-url="q.diagram_url" />
-                    <div class="mt-4 space-y-2">
-                        <label
-                            v-for="(opt, optIndex) in q.options"
-                            :key="opt.id"
-                            class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition"
-                            :class="answers[q.id] === opt.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'"
+                <div v-else class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-600">
+                    Use your printed or shared worksheet for {{ setLabel() }}.
+                </div>
+
+                <div class="rounded-lg bg-white p-5 shadow-sm">
+                    <h3 class="text-sm font-semibold text-gray-800">Record your answers</h3>
+                    <p class="mt-1 text-xs text-gray-500">
+                        Match each sum on your sheet to the row below. Only option letters are shown here.
+                    </p>
+
+                    <div class="mt-4 space-y-3">
+                        <div
+                            v-for="q in questions"
+                            :key="q.id"
+                            class="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 px-4 py-3"
                         >
-                            <input
-                                type="radio"
-                                :name="`q-${q.id}`"
-                                :value="opt.id"
-                                :checked="answers[q.id] === opt.id"
-                                class="mt-1"
-                                @change="selectOption(q.id, opt.id)"
-                            />
-                            <McqOptionLine class="text-sm text-gray-800" :index="optIndex" :text="opt.option_text" />
-                        </label>
+                            <span class="w-10 text-sm font-semibold text-gray-700">Q{{ q.number }}</span>
+                            <div class="flex flex-wrap gap-2">
+                                <label
+                                    v-for="opt in q.options"
+                                    :key="opt.id"
+                                    class="flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition"
+                                    :class="answers[q.id] === opt.id ? 'border-indigo-500 bg-indigo-50 font-semibold text-indigo-800' : 'border-gray-200 hover:bg-gray-50'"
+                                >
+                                    <input
+                                        type="radio"
+                                        :name="`q-${q.id}`"
+                                        :value="opt.id"
+                                        :checked="answers[q.id] === opt.id"
+                                        class="sr-only"
+                                        @change="selectOption(q.id, opt.id)"
+                                    />
+                                    {{ opt.letter }}
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -106,7 +118,7 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
                         {{ Object.keys(answers).length }} / {{ questions.length }} answered
                     </p>
                     <PrimaryButton :disabled="form.processing || !allAnswered()" @click="submit">
-                        Submit practice set
+                        Submit {{ practiceSet.kind_label === 'Test' ? 'test' : 'practice set' }}
                     </PrimaryButton>
                 </div>
             </div>

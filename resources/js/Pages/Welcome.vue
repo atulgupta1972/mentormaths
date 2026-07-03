@@ -64,7 +64,7 @@ const highlights = [
         <!-- Header -->
         <header class="relative z-10 mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-5">
             <Link href="/" class="transition opacity-90 hover:opacity-100">
-                <MentorMathsLogo class="h-11 w-auto" />
+                <MentorMathsLogo size-class="h-11 w-auto" />
             </Link>
             <div class="flex items-center gap-3">
                 <Link
@@ -201,7 +201,7 @@ const highlights = [
 
             <!-- CTA -->
             <section class="mt-16 overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-blue-700 to-cyan-700 px-8 py-12 text-center text-white shadow-xl shadow-blue-900/20 sm:px-12">
-                <MentorMathsLogo variant="mark" class="mx-auto h-14 w-14 rounded-2xl shadow-lg" />
+                <MentorMathsLogo variant="mark" size-class="mx-auto h-14 w-14 rounded-2xl shadow-lg" />
                 <h3 class="mt-5 text-2xl font-bold sm:text-3xl">Ready to begin with Mentor Maths?</h3>
                 <p class="mx-auto mt-3 max-w-lg text-blue-100">
                     Request access for your child. Your teacher assigns practice sets with target dates —
@@ -221,7 +221,7 @@ const highlights = [
         </main>
 
         <footer class="relative z-10 border-t border-slate-200/60 bg-white/50 py-8 text-center backdrop-blur">
-            <MentorMathsLogo class="mx-auto h-9 w-auto opacity-80" />
+            <MentorMathsLogo size-class="mx-auto h-9 w-auto opacity-80" />
             <p class="mt-3 text-sm text-slate-500">
                 <a href="https://mentormaths.in" class="font-medium text-blue-600 hover:text-blue-800">mentormaths.in</a>
                 · CBSE &amp; ICSE Mathematics

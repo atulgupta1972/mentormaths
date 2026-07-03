@@ -109,6 +109,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/chapter-heads', [ChapterHeadController::class, 'index'])->name('chapter-heads.index');
     Route::post('/chapter-heads', [ChapterHeadController::class, 'store'])->name('chapter-heads.store');
+    Route::post('/chapter-heads/quick', [ChapterHeadController::class, 'storeQuick'])->name('chapter-heads.quick-store');
     Route::get('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'show'])->name('chapter-heads.show');
     Route::put('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'update'])->name('chapter-heads.update');
     Route::delete('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'destroy'])->name('chapter-heads.destroy');

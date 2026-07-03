@@ -104,8 +104,6 @@ class SetAttemptService
     {
         $assignments = SetAssignment::query()
             ->with([
-                'practiceSet.topic.chapter',
-                'practiceSet.chapter',
                 'practiceSet' => fn ($q) => $q->withCount('questions'),
                 'attempts' => fn ($q) => $q->orderByDesc('attempt_number')->limit(1),
             ])
@@ -116,10 +114,9 @@ class SetAttemptService
         return $assignments->map(function (SetAssignment $assignment) {
             $latest = $assignment->attempts->first();
 
-            return AssignmentProgress::formatAssignmentSummary($assignment, $latest);
+            return AssignmentProgress::formatStudentDashboardSummary($assignment, $latest);
         })->sortBy([
-            ['chapter_name', 'asc'],
-            ['topic_name', 'asc'],
+            ['set_code', 'asc'],
             ['set_number', 'asc'],
         ])->values()->all();
     }

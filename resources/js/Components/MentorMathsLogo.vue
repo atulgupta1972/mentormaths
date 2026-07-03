@@ -4,7 +4,7 @@ defineProps({
         type: String,
         default: 'full',
     },
-    class: {
+    sizeClass: {
         type: String,
         default: '',
     },
@@ -61,7 +61,7 @@ defineProps({
         v-else
         viewBox="0 0 220 48"
         xmlns="http://www.w3.org/2000/svg"
-        :class="class"
+        :class="sizeClass"
         role="img"
         aria-label="Mentor Maths"
     >

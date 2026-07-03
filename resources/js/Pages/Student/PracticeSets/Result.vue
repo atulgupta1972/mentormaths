@@ -1,18 +1,18 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import McqOptionLine from '@/Components/McqOptionLine.vue';
-import QuestionBody from '@/Components/QuestionBody.vue';
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, Link } from '@inertiajs/vue3';
 
-defineProps({
+const props = defineProps({
     attempt: Object,
     assignment: Object,
     practiceSet: Object,
     questions: Array,
     referencePdfUrl: { type: String, default: null },
 });
+
+const setLabel = () => props.practiceSet.set_code || `Set ${props.practiceSet.set_number}`;
 
 const formatTime = (seconds) => {
     if (!seconds) return '—';
@@ -22,31 +22,32 @@ const formatTime = (seconds) => {
 };
 
 const percent = (score, max) => (max ? Math.round((score / max) * 100) : 0);
+
+const correctCount = () => props.questions.filter((q) => q.is_correct).length;
 </script>
 
 <template>
-    <Head title="Results" />
+    <Head :title="`Results — ${setLabel()}`" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold text-gray-800">Results — {{ practiceSet.display_title }}</h2>
+                <div>
+                    <p class="text-sm text-gray-500">{{ practiceSet.kind_label }}</p>
+                    <h2 class="font-mono text-xl font-semibold text-gray-800">{{ setLabel() }}</h2>
+                </div>
                 <Link :href="route('dashboard')" class="text-sm text-indigo-600">Dashboard</Link>
             </div>
         </template>
 
         <div class="py-12">
             <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
-                <WorksheetPdfViewer
-                    v-if="referencePdfUrl"
-                    :url="referencePdfUrl"
-                    title="Worksheet PDF"
-                />
-
                 <div class="rounded-lg bg-white p-6 text-center shadow-sm">
                     <p class="text-4xl font-bold text-indigo-600">{{ attempt.score }}/{{ attempt.max_score }}</p>
                     <p class="mt-1 text-lg text-gray-600">{{ percent(attempt.score, attempt.max_score) }}%</p>
-                    <p class="mt-2 text-sm text-gray-500">Time: {{ formatTime(attempt.time_seconds) }} · Attempt {{ attempt.attempt_number }}</p>
+                    <p class="mt-2 text-sm text-gray-500">
+                        Time: {{ formatTime(attempt.time_seconds) }} · Attempt {{ attempt.attempt_number }}
+                    </p>
                     <p
                         v-if="attempt.submission_timing === 'late'"
                         class="mt-3 inline-block rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900"
@@ -59,44 +60,31 @@ const percent = (score, max) => (max ? Math.round((score / max) * 100) : 0);
                     >
                         Submitted on time
                     </p>
-                    <p v-if="assignment?.target_date" class="mt-2 text-xs text-gray-500">
-                        Target: {{ assignment.target_date }} · Submitted: {{ attempt.completed_at?.slice(0, 10) }}
-                    </p>
                 </div>
 
-                <div
-                    v-for="(q, index) in questions"
-                    :key="index"
-                    class="rounded-lg border bg-white p-5 shadow-sm"
-                    :class="q.is_correct ? 'border-green-200' : 'border-red-200'"
-                >
-                    <div class="flex items-center gap-2">
+                <div class="rounded-lg bg-white p-5 shadow-sm">
+                    <h3 class="text-sm font-semibold text-gray-800">Sum-wise result</h3>
+                    <p class="mt-1 text-xs text-gray-500">
+                        {{ correctCount() }} correct · {{ questions.length - correctCount() }} incorrect
+                    </p>
+                    <div class="mt-4 flex flex-wrap gap-2">
                         <span
-                            class="rounded-full px-2 py-0.5 text-xs font-medium"
+                            v-for="q in questions"
+                            :key="q.number"
+                            class="inline-flex h-9 min-w-9 items-center justify-center rounded-md px-2 text-sm font-semibold"
                             :class="q.is_correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
                         >
-                            {{ q.is_correct ? 'Correct' : 'Incorrect' }}
+                            Q{{ q.number }}
                         </span>
-                        <span class="text-sm text-gray-500">Q{{ index + 1 }}</span>
                     </div>
-                    <QuestionBody class="mt-2" :question-text="q.question_text" :diagram-url="q.diagram_url" />
-                    <ul class="mt-3 space-y-1 text-sm">
-                        <li
-                            v-for="(opt, optIndex) in q.options"
-                            :key="opt.id"
-                            :class="{
-                                'font-semibold text-green-700': opt.is_correct,
-                                'text-red-700': q.selected_option_id === opt.id && !opt.is_correct,
-                                'text-gray-700': !opt.is_correct && q.selected_option_id !== opt.id,
-                            }"
-                        >
-                            <McqOptionLine :index="optIndex" :text="opt.option_text" />
-                            <span v-if="opt.is_correct"> ✓</span>
-                            <span v-if="q.selected_option_id === opt.id && !opt.is_correct"> (your answer)</span>
-                        </li>
-                    </ul>
-                    <p v-if="q.explanation" class="mt-3 rounded bg-gray-50 p-3 text-xs text-gray-600">{{ q.explanation }}</p>
                 </div>
+
+                <WorksheetPdfViewer
+                    v-if="referencePdfUrl"
+                    :url="referencePdfUrl"
+                    title="Your worksheet"
+                    helper-text="Refer to your worksheet to review sums. Question text is not shown here."
+                />
 
                 <Link :href="route('dashboard')">
                     <PrimaryButton>Back to dashboard</PrimaryButton>

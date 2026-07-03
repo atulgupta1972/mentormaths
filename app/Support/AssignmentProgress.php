@@ -52,6 +52,7 @@ class AssignmentProgress
                 ? $assignment->practiceSet->chapter?->name
                 : $assignment->practiceSet->topic?->chapter?->name,
             'scope' => $assignment->practiceSet->scope ?? 'topic',
+            'kind_label' => $assignment->practiceSet->isChapterScope() ? 'Test' : 'Practice',
             'question_count' => $assignment->practiceSet->questions_count ?? $assignment->practiceSet->questions()->count(),
             'assignment_status' => $assignment->status,
             'target_date' => $assignment->due_date?->toDateString(),
@@ -83,5 +84,28 @@ class AssignmentProgress
         }
 
         return 'grey';
+    }
+
+    /**
+     * Student-facing summary: set code and assignment status only (no syllabus / bank details).
+     */
+    public static function formatStudentDashboardSummary(SetAssignment $assignment, ?SetAttempt $latest): array
+    {
+        $summary = self::formatAssignmentSummary($assignment, $latest);
+
+        return [
+            'assignment_id' => $summary['assignment_id'],
+            'set_code' => $summary['set_code'],
+            'set_number' => $summary['set_number'],
+            'kind_label' => $summary['kind_label'],
+            'scope' => $summary['scope'],
+            'target_date' => $summary['target_date'],
+            'is_overdue' => $summary['is_overdue'],
+            'latest_score' => $summary['latest_score'],
+            'latest_max_score' => $summary['latest_max_score'],
+            'latest_time_seconds' => $summary['latest_time_seconds'],
+            'submission_timing' => $summary['submission_timing'],
+            'status' => $summary['status'],
+        ];
     }
 }
