@@ -18,7 +18,7 @@ class RegistrationRequestReceived extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Registration request received — Maths Foundation',
+            subject: 'Registration request received — Mentor Maths',
         );
     }
 

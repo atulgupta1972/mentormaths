@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import QuestionBody from '@/Components/QuestionBody.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -76,7 +77,7 @@ const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
                             <tr v-for="(q, index) in questions" :key="q.id">
                                 <td class="px-4 py-3 text-gray-500">{{ index + 1 }}</td>
                                 <td class="px-4 py-3">
-                                    <p class="font-medium text-gray-900">{{ q.question_text }}</p>
+                                    <QuestionBody :question-text="q.question_text" :diagram-url="q.diagram_url" :compact="true" />
                                     <p class="mt-1 text-xs text-gray-500">{{ q.options_count }} options</p>
                                 </td>
                                 <td class="px-4 py-3">{{ q.difficulty || '—' }}</td>

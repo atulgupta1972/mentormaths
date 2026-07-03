@@ -141,6 +141,8 @@ export function rowsFromImportData(importRows) {
         question_text: row.question_text || '',
         explanation: row.explanation || '',
         difficulty: row.difficulty || '',
+        diagram: null,
+        diagramPreview: row.diagram_preview_url || null,
         options: (row.options?.length ? row.options : [
             { option_text: '', is_correct: true, sort_order: 1 },
             { option_text: '', is_correct: false, sort_order: 2 },

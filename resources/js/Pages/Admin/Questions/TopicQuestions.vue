@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import QuestionBody from '@/Components/QuestionBody.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -75,7 +76,7 @@ const applySearch = (event) => {
                         <tbody class="divide-y divide-gray-200">
                             <tr v-for="q in questions.data" :key="q.id">
                                 <td class="px-4 py-3">
-                                    <p class="font-medium text-gray-900">{{ q.question_text }}</p>
+                                    <QuestionBody :question-text="q.question_text" :diagram-url="q.diagram_url" />
                                     <p class="mt-1 text-xs text-gray-500">{{ q.options?.length || 0 }} options</p>
                                 </td>
                                 <td class="px-4 py-3">{{ q.difficulty || '—' }}</td>

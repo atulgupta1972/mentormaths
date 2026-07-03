@@ -18,7 +18,7 @@ class NewRegistrationRequestAdmin extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'New registration request — Maths Foundation',
+            subject: 'New registration request — Mentor Maths',
         );
     }
 

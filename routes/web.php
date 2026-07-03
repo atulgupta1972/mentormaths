@@ -107,6 +107,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/questions/create', [QuestionController::class, 'create'])->name('questions.create');
     Route::post('/questions/preview-import', [QuestionController::class, 'previewImport'])->name('questions.preview-import');
     Route::post('/questions/extract-pdf', [QuestionController::class, 'extractPdf'])->name('questions.extract-pdf');
+    Route::post('/questions/extract-pdf-worksheet', [QuestionController::class, 'extractPdfWorksheet'])->name('questions.extract-pdf-worksheet');
     Route::post('/questions/bulk-store', [QuestionController::class, 'storeBulk'])->name('questions.bulk-store');
     Route::get('/questions/{question}/edit', [QuestionController::class, 'edit'])->name('questions.edit');
     Route::put('/questions/{question}', [QuestionController::class, 'update'])->name('questions.update');

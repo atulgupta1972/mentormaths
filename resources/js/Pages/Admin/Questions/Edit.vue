@@ -3,12 +3,15 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
+import QuestionDiagram from '@/Components/QuestionDiagram.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { nextTick, onMounted } from 'vue';
+import { nextTick, onMounted, ref } from 'vue';
 
 const props = defineProps({
     question: Object,
 });
+
+const diagramPreview = ref(props.question.diagram_url || null);
 
 const form = useForm({
     question_text: props.question.question_text,
@@ -18,6 +21,8 @@ const form = useForm({
         option_text: opt.option_text,
         is_correct: opt.is_correct,
     })),
+    diagram: null,
+    remove_diagram: false,
 });
 
 const autoResize = (event) => {
@@ -44,8 +49,41 @@ const setCorrect = (index) => {
     });
 };
 
+const onDiagramSelected = (event) => {
+    const file = event.target.files?.[0];
+    form.diagram = file || null;
+    form.remove_diagram = false;
+    diagramPreview.value = file ? URL.createObjectURL(file) : null;
+};
+
+const removeDiagram = () => {
+    form.diagram = null;
+    form.remove_diagram = true;
+    diagramPreview.value = null;
+};
+
 const submit = () => {
-    form.put(route('admin.questions.update', props.question.id));
+    form.transform((data) => {
+        const formData = new FormData();
+        formData.append('_method', 'PUT');
+        formData.append('question_text', data.question_text);
+        formData.append('explanation', data.explanation || '');
+        formData.append('difficulty', data.difficulty || '');
+        data.options.forEach((opt, index) => {
+            formData.append(`options[${index}][option_text]`, opt.option_text);
+            formData.append(`options[${index}][is_correct]`, opt.is_correct ? '1' : '0');
+        });
+        if (data.diagram) {
+            formData.append('diagram', data.diagram);
+        }
+        if (data.remove_diagram) {
+            formData.append('remove_diagram', '1');
+        }
+
+        return formData;
+    }).post(route('admin.questions.update', props.question.id), {
+        forceFormData: true,
+    });
 };
 
 const destroy = () => {
@@ -78,6 +116,30 @@ const destroy = () => {
                             required
                             @input="autoResize"
                         />
+                    </div>
+
+                    <div>
+                        <InputLabel value="Diagram (optional)" />
+                        <p class="mt-1 text-xs text-gray-500">
+                            Upload a PNG, JPG, or WebP image for geometry diagrams (lines, angles, shapes). Max 5 MB.
+                        </p>
+                        <QuestionDiagram v-if="diagramPreview" :url="diagramPreview" class="mt-2" />
+                        <div class="mt-2 flex flex-wrap items-center gap-3">
+                            <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                class="text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700"
+                                @change="onDiagramSelected"
+                            />
+                            <button
+                                v-if="diagramPreview"
+                                type="button"
+                                class="text-sm text-red-600 hover:text-red-800"
+                                @click="removeDiagram"
+                            >
+                                Remove diagram
+                            </button>
+                        </div>
                     </div>
 
                     <div>

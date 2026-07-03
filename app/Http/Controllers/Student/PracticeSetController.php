@@ -83,6 +83,7 @@ class PracticeSetController extends Controller
         $questions = $assignment->practiceSet->questions->map(fn ($q) => [
             'id' => $q->id,
             'question_text' => $q->question_text,
+            'diagram_url' => $q->diagram_url,
             'options' => $q->options->map(fn ($o) => [
                 'id' => $o->id,
                 'option_text' => $o->option_text,
@@ -99,6 +100,7 @@ class PracticeSetController extends Controller
                 'tier_label' => $assignment->practiceSet->tier_label,
                 'topic_name' => $assignment->practiceSet->topic?->name,
             ],
+            'referencePdfUrl' => $assignment->practiceSet->topic?->reference_pdf_url,
             'questions' => $questions,
         ]);
     }
@@ -141,6 +143,7 @@ class PracticeSetController extends Controller
 
             return [
                 'question_text' => $q->question_text,
+                'diagram_url' => $q->diagram_url,
                 'explanation' => $q->explanation,
                 'is_correct' => $answer?->is_correct ?? false,
                 'selected_option_id' => $answer?->question_option_id,
@@ -170,6 +173,7 @@ class PracticeSetController extends Controller
                 'display_title' => $assignment->practiceSet->display_title,
                 'topic_name' => $assignment->practiceSet->topic?->name,
             ],
+            'referencePdfUrl' => $assignment->practiceSet->topic?->reference_pdf_url,
             'questions' => $questions,
         ]);
     }

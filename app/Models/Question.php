@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Question extends Model
 {
@@ -21,11 +23,36 @@ class Question extends Model
         'syllabus_topic_id',
         'type',
         'question_text',
+        'diagram_path',
         'explanation',
         'difficulty',
         'source',
         'created_by',
     ];
+
+    protected $hidden = [
+        'diagram_path',
+    ];
+
+    protected $appends = [
+        'diagram_url',
+    ];
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Question $question) {
+            if ($question->diagram_path) {
+                Storage::disk('public')->delete($question->diagram_path);
+            }
+        });
+    }
+
+    protected function diagramUrl(): Attribute
+    {
+        return Attribute::get(fn () => $this->diagram_path
+            ? Storage::disk('public')->url($this->diagram_path)
+            : null);
+    }
 
     public function topic(): BelongsTo
     {

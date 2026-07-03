@@ -402,6 +402,7 @@ class PracticeSetController extends Controller
         return $sets->flatMap(fn (Worksheet $set) => $set->questions->map(fn (Question $q) => [
             'id' => $q->id,
             'question_text' => $q->question_text,
+            'diagram_url' => $q->diagram_url,
             'difficulty' => $q->difficulty,
             'set_code' => $set->set_code,
             'topic_name' => $set->topic?->name,

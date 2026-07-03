@@ -1,6 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
+import QuestionBody from '@/Components/QuestionBody.vue';
+import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, Link } from '@inertiajs/vue3';
 
@@ -9,6 +11,7 @@ defineProps({
     assignment: Object,
     practiceSet: Object,
     questions: Array,
+    referencePdfUrl: { type: String, default: null },
 });
 
 const formatTime = (seconds) => {
@@ -34,6 +37,12 @@ const percent = (score, max) => (max ? Math.round((score / max) * 100) : 0);
 
         <div class="py-12">
             <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
+                <WorksheetPdfViewer
+                    v-if="referencePdfUrl"
+                    :url="referencePdfUrl"
+                    title="Worksheet PDF"
+                />
+
                 <div class="rounded-lg bg-white p-6 text-center shadow-sm">
                     <p class="text-4xl font-bold text-indigo-600">{{ attempt.score }}/{{ attempt.max_score }}</p>
                     <p class="mt-1 text-lg text-gray-600">{{ percent(attempt.score, attempt.max_score) }}%</p>
@@ -70,7 +79,7 @@ const percent = (score, max) => (max ? Math.round((score / max) * 100) : 0);
                         </span>
                         <span class="text-sm text-gray-500">Q{{ index + 1 }}</span>
                     </div>
-                    <p class="mt-2 font-medium">{{ q.question_text }}</p>
+                    <QuestionBody class="mt-2" :question-text="q.question_text" :diagram-url="q.diagram_url" />
                     <ul class="mt-3 space-y-1 text-sm">
                         <li
                             v-for="(opt, optIndex) in q.options"

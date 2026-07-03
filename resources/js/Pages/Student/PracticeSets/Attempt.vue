@@ -1,6 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
+import QuestionBody from '@/Components/QuestionBody.vue';
+import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { onMounted, onUnmounted, ref } from 'vue';
@@ -9,6 +11,7 @@ const props = defineProps({
     attempt: Object,
     practiceSet: Object,
     questions: Array,
+    referencePdfUrl: { type: String, default: null },
 });
 
 const answers = ref({});
@@ -66,13 +69,18 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
 
         <div class="py-12">
             <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
+                <WorksheetPdfViewer
+                    v-if="referencePdfUrl"
+                    :url="referencePdfUrl"
+                />
+
                 <div
                     v-for="(q, index) in questions"
                     :key="q.id"
                     class="rounded-lg bg-white p-5 shadow-sm"
                 >
                     <p class="text-sm font-medium text-gray-500">Question {{ index + 1 }}</p>
-                    <p class="mt-2 font-medium text-gray-900">{{ q.question_text }}</p>
+                    <QuestionBody class="mt-2" :question-text="q.question_text" :diagram-url="q.diagram_url" />
                     <div class="mt-4 space-y-2">
                         <label
                             v-for="(opt, optIndex) in q.options"

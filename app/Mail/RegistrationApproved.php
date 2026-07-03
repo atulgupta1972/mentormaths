@@ -22,7 +22,7 @@ class RegistrationApproved extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your Maths Foundation account is ready',
+            subject: 'Your Mentor Maths account is ready',
         );
     }
 

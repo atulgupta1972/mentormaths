@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Mentor Maths">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#0891B2"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#F97316"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <path d="M128 352V160l56 72 56-72v192" fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M296 352V224c0-44 36-80 80-80" fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round"/>
+  <path d="M296 352h80" fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round"/>
+  <path d="M320 288l48-48" fill="none" stroke="url(#accent)" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="368" cy="240" r="16" fill="url(#accent)"/>
+  <text x="256" y="448" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="56" font-weight="700">À</text>
+</svg>

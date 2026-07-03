@@ -10,10 +10,14 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Services\AdminGradeContext;
 use App\Services\McqImportService;
+use App\Services\PdfPageImageService;
 use App\Services\PdfTextExtractionService;
+use App\Services\PdfWorksheetImportService;
+use App\Services\QuestionDiagramService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -126,6 +130,63 @@ class QuestionController extends Controller
         return $this->renderCreate($request, $overrides);
     }
 
+    public function extractPdfWorksheet(Request $request): Response
+    {
+        $validated = $request->validate([
+            'syllabus_topic_id' => ['required', 'exists:syllabus_topics,id'],
+            'pdf' => ['required', 'file', 'max:20480'],
+        ], [
+            'pdf.required' => 'Choose a PDF file first.',
+            'pdf.max' => 'PDF must be smaller than 20 MB.',
+            'syllabus_topic_id.required' => 'Select a syllabus topic before uploading.',
+        ]);
+
+        if (! $this->isPdfUpload($request->file('pdf'))) {
+            return $this->renderCreate($request, [
+                'error' => 'Please upload a valid PDF file (.pdf).',
+                'importMode' => 'pdf_worksheet',
+                'selectedTopicId' => $validated['syllabus_topic_id'],
+            ]);
+        }
+
+        $topic = SyllabusTopic::with(['chapter.syllabusVersion.board', 'chapter.syllabusVersion.gradeLevel', 'chapter.syllabusVersion.academicYear'])
+            ->findOrFail($validated['syllabus_topic_id']);
+
+        try {
+            $result = app(PdfWorksheetImportService::class)->process($request->file('pdf'));
+        } catch (\InvalidArgumentException $e) {
+            return $this->renderCreate($request, [
+                'error' => $e->getMessage(),
+                'importMode' => 'pdf_worksheet',
+                'selectedTopicId' => $topic->id,
+            ]);
+        }
+
+        $rowsWithPreviews = collect($result['rows'])->map(function (array $row, int $index) use ($result) {
+            $pageIndex = $result['page_assignments'][$index] ?? null;
+            $preview = $pageIndex !== null && isset($result['page_urls'][$pageIndex])
+                ? $result['page_urls'][$pageIndex]
+                : null;
+
+            return array_merge($row, [
+                'diagram_preview_url' => $preview,
+            ]);
+        })->all();
+
+        return $this->renderCreate($request, [
+            'importMode' => 'pdf_worksheet',
+            'selectedTopicId' => $topic->id,
+            'importRows' => $rowsWithPreviews,
+            'pdfFileName' => $request->file('pdf')->getClientOriginalName(),
+            'pdfExtracted' => true,
+            'pdfDirectParsed' => $result['parsed_from_text'],
+            'pdfImportToken' => $result['token'],
+            'referencePdfUrl' => $result['pdf_url'],
+            'pdfPageCount' => $result['page_count'],
+            'pdfImportWarning' => $result['warning'],
+        ]);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
@@ -153,12 +214,12 @@ class QuestionController extends Controller
         ];
 
         $importMode = $overrides['importMode'] ?? $request->string('mode')->toString();
-        if (! in_array($importMode, ['custom', 'pdf_sums', 'pdf_mcq'], true)) {
+        if (! in_array($importMode, ['custom', 'pdf_sums', 'pdf_mcq', 'pdf_worksheet'], true)) {
             $importMode = 'custom';
         }
 
         $activePrompt = $overrides['cursorPrompt'] ?? null;
-        if ($activePrompt === null && $topic) {
+        if ($activePrompt === null && $topic && $importMode !== 'pdf_worksheet') {
             $activePrompt = $this->importService->cursorPrompt($topic, $promptOptions);
         }
 
@@ -183,6 +244,10 @@ class QuestionController extends Controller
             'pdfDirectParsed' => (bool) ($overrides['pdfDirectParsed'] ?? false),
             'initialImportRows' => $overrides['importRows'] ?? null,
             'pageError' => $overrides['error'] ?? null,
+            'pdfImportToken' => $overrides['pdfImportToken'] ?? null,
+            'referencePdfUrl' => $overrides['referencePdfUrl'] ?? null,
+            'pdfPageCount' => $overrides['pdfPageCount'] ?? null,
+            'pdfImportWarning' => $overrides['pdfImportWarning'] ?? null,
         ]);
     }
 
@@ -233,16 +298,50 @@ class QuestionController extends Controller
             'rows.*.options' => ['required', 'array', 'min:2'],
             'rows.*.options.*.option_text' => ['required', 'string'],
             'rows.*.options.*.is_correct' => ['boolean'],
+            'diagrams' => ['nullable', 'array'],
+            'diagrams.*' => ['nullable', 'image', 'max:5120'],
+            'pdf_import_token' => ['nullable', 'uuid'],
         ]);
 
         $topic = SyllabusTopic::findOrFail($validated['syllabus_topic_id']);
+        $diagramService = app(QuestionDiagramService::class);
+        $pageService = app(PdfPageImageService::class);
+        $worksheetImport = app(PdfWorksheetImportService::class);
+        $pdfImport = $request->filled('pdf_import_token')
+            ? $worksheetImport->pullImport($request->string('pdf_import_token')->toString())
+            : null;
 
-        $saved = $this->importService->saveRows(
-            $topic,
-            $validated['rows'],
-            $request->user()->id,
-            Question::SOURCE_AI,
-        );
+        $saved = DB::transaction(function () use ($validated, $request, $topic, $diagramService, $pdfImport, $pageService) {
+            $saved = $this->importService->saveRows(
+                $topic,
+                $validated['rows'],
+                $request->user()->id,
+                Question::SOURCE_AI,
+            );
+
+            foreach ($saved as $index => $question) {
+                if ($request->hasFile("diagrams.{$index}")) {
+                    $diagramService->attach($question, $request->file("diagrams.{$index}"));
+                } elseif ($pdfImport) {
+                    $pageIndex = $pdfImport['page_assignments'][$index] ?? null;
+                    if ($pageIndex !== null && isset($pdfImport['page_paths'][$pageIndex])) {
+                        $diagramService->attachFromPath($question, $pdfImport['page_paths'][$pageIndex]);
+                    }
+                }
+            }
+
+            if ($pdfImport && ! empty($pdfImport['pdf_path'])) {
+                $permanentPath = "topic-pdfs/{$topic->id}/worksheet.pdf";
+                $pageService->copyToPermanent($pdfImport['pdf_path'], $permanentPath);
+                $topic->update(['reference_pdf_path' => $permanentPath]);
+            }
+
+            if ($pdfImport && ! empty($pdfImport['token'])) {
+                $pageService->deleteImportDirectory($pdfImport['token']);
+            }
+
+            return $saved;
+        });
 
         return redirect()
             ->route('admin.questions.topics.show', $topic->id)
@@ -267,9 +366,19 @@ class QuestionController extends Controller
             'options' => ['required', 'array', 'min:2'],
             'options.*.option_text' => ['required', 'string'],
             'options.*.is_correct' => ['boolean'],
+            'diagram' => ['nullable', 'image', 'max:5120'],
+            'remove_diagram' => ['nullable', 'boolean'],
         ]);
 
         $this->importService->syncQuestion($question, $validated);
+
+        $diagramService = app(QuestionDiagramService::class);
+
+        if ($request->boolean('remove_diagram')) {
+            $diagramService->deleteForQuestion($question);
+        } elseif ($request->hasFile('diagram')) {
+            $diagramService->attach($question, $request->file('diagram'));
+        }
 
         return redirect()
             ->route('admin.questions.topics.show', $question->syllabus_topic_id)

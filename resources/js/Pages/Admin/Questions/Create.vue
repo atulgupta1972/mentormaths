@@ -5,6 +5,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
+import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { parseMcqJson, rowsFromImportData } from '@/utils/mcqImport';
@@ -25,6 +26,10 @@ const props = defineProps({
     pdfDirectParsed: { type: Boolean, default: false },
     initialImportRows: Array,
     pageError: String,
+    pdfImportToken: { type: String, default: null },
+    referencePdfUrl: { type: String, default: null },
+    pdfPageCount: { type: Number, default: null },
+    pdfImportWarning: { type: String, default: null },
 });
 
 const page = usePage();
@@ -44,6 +49,7 @@ const promptBox = ref(null);
 const pdfInput = ref(null);
 const pdfResultBox = ref(null);
 const selectedPdfName = ref('');
+const pdfImportToken = ref(props.pdfImportToken || null);
 
 const promptSettings = ref({
     total: props.promptOptions?.total ?? 6,
@@ -57,6 +63,11 @@ const pdfForm = useForm({
     syllabus_topic_id: props.selectedTopicId || '',
     pdf: null,
     pdf_mode: 'sums',
+});
+
+const worksheetPdfForm = useForm({
+    syllabus_topic_id: props.selectedTopicId || '',
+    pdf: null,
 });
 
 const importForm = useForm({
@@ -113,6 +124,11 @@ watch(saveChapterId, (id, oldId) => {
 
 const modes = [
     {
+        id: 'pdf_worksheet',
+        title: 'PDF worksheet (with diagrams)',
+        hint: 'Upload full PDF — diagrams kept automatically',
+    },
+    {
         id: 'custom',
         title: 'Custom prompt',
         hint: 'Set count, difficulty split, and sum types',
@@ -128,6 +144,10 @@ const modes = [
         hint: 'Upload MCQ sheet — auto-parse when possible',
     },
 ];
+
+const autoDiagramImport = computed(() => Boolean(pdfImportToken.value));
+
+const hideManualDiagramColumn = computed(() => autoDiagramImport.value);
 
 const difficultySum = computed(
     () => Number(promptSettings.value.easy) + Number(promptSettings.value.medium) + Number(promptSettings.value.hard),
@@ -146,6 +166,9 @@ const activePrompt = computed(() => {
 });
 
 const modeTitle = computed(() => {
+    if (importMode.value === 'pdf_worksheet') {
+        return 'Upload PDF worksheet';
+    }
     if (importMode.value === 'pdf_sums') {
         return 'Step 1 — PDF sums → Cursor prompt';
     }
@@ -266,6 +289,45 @@ const extractPdf = () => {
     });
 };
 
+const onWorksheetPdfSelected = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    worksheetPdfForm.pdf = file;
+    selectedPdfName.value = file?.name ?? '';
+    worksheetPdfForm.clearErrors();
+};
+
+const extractPdfWorksheet = () => {
+    if (!selectedTopic.value) {
+        worksheetPdfForm.setError('syllabus_topic_id', 'Select a syllabus topic first.');
+        return;
+    }
+
+    if (!worksheetPdfForm.pdf) {
+        worksheetPdfForm.setError('pdf', 'Choose a PDF file first.');
+        return;
+    }
+
+    worksheetPdfForm.syllabus_topic_id = selectedTopic.value;
+    worksheetPdfForm.post(route('admin.questions.extract-pdf-worksheet'), {
+        forceFormData: true,
+        preserveScroll: false,
+        onSuccess: () => {
+            nextTick(() => {
+                step3Ref.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        },
+        onFinish: () => {
+            if (!worksheetPdfForm.hasErrors) {
+                if (pdfInput.value) {
+                    pdfInput.value.value = '';
+                }
+                selectedPdfName.value = '';
+                worksheetPdfForm.reset('pdf');
+            }
+        },
+    });
+};
+
 const loadPreview = () => {
     importForm.clearErrors();
     previewError.value = '';
@@ -353,6 +415,8 @@ const addRow = () => {
         question_text: '',
         explanation: '',
         difficulty: 'Medium',
+        diagram: null,
+        diagramPreview: null,
         options: defaultOptions(),
     });
 };
@@ -367,6 +431,12 @@ const setCorrect = (row, optionIndex) => {
     });
 };
 
+const setRowDiagram = (row, event) => {
+    const file = event.target.files?.[0];
+    row.diagram = file || null;
+    row.diagramPreview = file ? URL.createObjectURL(file) : null;
+};
+
 const saveToBank = () => {
     saveTopicError.value = '';
 
@@ -375,9 +445,30 @@ const saveToBank = () => {
         return;
     }
 
-    saveForm.syllabus_topic_id = saveTopicId.value;
-    saveForm.rows = rows.value;
-    saveForm.post(route('admin.questions.bulk-store'));
+    saveForm.transform(() => {
+        const formData = new FormData();
+        formData.append('syllabus_topic_id', saveTopicId.value);
+        rows.value.forEach((row, index) => {
+            formData.append(`rows[${index}][question_text]`, row.question_text);
+            formData.append(`rows[${index}][explanation]`, row.explanation || '');
+            formData.append(`rows[${index}][difficulty]`, row.difficulty || '');
+            row.options.forEach((opt, optIndex) => {
+                formData.append(`rows[${index}][options][${optIndex}][option_text]`, opt.option_text);
+                formData.append(`rows[${index}][options][${optIndex}][is_correct]`, opt.is_correct ? '1' : '0');
+            });
+            if (row.diagram instanceof File) {
+                formData.append(`diagrams[${index}]`, row.diagram);
+            }
+        });
+        if (pdfImportToken.value) {
+            formData.append('pdf_import_token', pdfImportToken.value);
+        }
+
+        return formData;
+    }).post(route('admin.questions.bulk-store'), {
+        forceFormData: true,
+        preserveScroll: true,
+    });
 };
 
 const autoResize = (event) => {
@@ -397,6 +488,7 @@ const resizeMcqFields = () => {
 };
 
 onMounted(() => {
+    pdfImportToken.value = props.pdfImportToken || pdfImportToken.value;
     applyImportRows(page.props.flash?.import_rows || props.initialImportRows);
     if (props.initialImportRows?.length) {
         saveChapterId.value = props.selectedChapterId || saveChapterId.value;
@@ -405,6 +497,20 @@ onMounted(() => {
     resizeMcqFields();
 });
 watch(rows, resizeMcqFields, { deep: true });
+
+watch(() => props.pdfImportToken, (token) => {
+    if (token) {
+        pdfImportToken.value = token;
+    }
+});
+
+watch(() => props.initialImportRows, (importRows) => {
+    if (importRows?.length && importMode.value === 'pdf_worksheet') {
+        applyImportRows(importRows);
+        saveChapterId.value = props.selectedChapterId || saveChapterId.value;
+        saveTopicId.value = props.selectedTopicId || saveTopicId.value;
+    }
+});
 </script>
 
 <template>
@@ -429,8 +535,17 @@ watch(rows, resizeMcqFields, { deep: true });
                     {{ pageError || $page.props.flash?.error }}
                 </div>
 
+                <div v-if="pdfImportWarning" class="rounded-md bg-amber-50 p-4 text-sm text-amber-900">
+                    {{ pdfImportWarning }}
+                </div>
+
                 <div v-if="pdfExtracted" class="rounded-md bg-green-50 p-4 text-sm text-green-800">
-                    <template v-if="pdfDirectParsed">
+                    <template v-if="importMode === 'pdf_worksheet'">
+                        PDF worksheet loaded{{ pdfPageCount ? ` (${pdfPageCount} page${pdfPageCount === 1 ? '' : 's'})` : '' }}.
+                        MCQs{{ pdfDirectParsed ? ' were parsed from the PDF text' : ' were created from the PDF pages' }} — review in Step 3 and save.
+                        The full PDF will also be shown to students during practice.
+                    </template>
+                    <template v-else-if="pdfDirectParsed">
                         PDF MCQs parsed automatically — review in Step 3 below. You can change chapter/topic before saving.
                     </template>
                     <template v-else>
@@ -460,7 +575,7 @@ watch(rows, resizeMcqFields, { deep: true });
                 </div>
 
                 <div v-if="topic" class="rounded-lg bg-white p-2 shadow-sm">
-                    <div class="grid gap-2 sm:grid-cols-3">
+                    <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                         <button
                             v-for="mode in modes"
                             :key="mode.id"
@@ -475,6 +590,51 @@ watch(rows, resizeMcqFields, { deep: true });
                             <p class="mt-1 text-xs text-gray-500">{{ mode.hint }}</p>
                         </button>
                     </div>
+                </div>
+
+                <div
+                    v-if="topic && importMode === 'pdf_worksheet'"
+                    class="rounded-lg border border-indigo-200 bg-white p-6 shadow-sm"
+                >
+                    <h3 class="font-medium text-gray-900">Upload full PDF worksheet</h3>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Upload your worksheet PDF as-is (with diagrams, lines, angles, shapes).
+                        The system reads MCQs from the text, converts each page to an image for diagrams,
+                        and keeps the full PDF for students to view during practice.
+                    </p>
+
+                    <input
+                        ref="pdfInput"
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        class="mt-4 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700"
+                        @change="onWorksheetPdfSelected"
+                    />
+
+                    <p v-if="selectedPdfName" class="mt-2 text-sm font-medium text-gray-700">
+                        Selected: {{ selectedPdfName }}
+                    </p>
+
+                    <InputError class="mt-2" :message="worksheetPdfForm.errors.pdf" />
+                    <InputError class="mt-1" :message="worksheetPdfForm.errors.syllabus_topic_id" />
+
+                    <p class="mt-2 text-xs text-gray-500">Max 20 MB. Works best with text-based PDFs; scanned PDFs still show the full PDF to students.</p>
+
+                    <PrimaryButton
+                        type="button"
+                        class="mt-4"
+                        :disabled="worksheetPdfForm.processing || !worksheetPdfForm.pdf"
+                        @click="extractPdfWorksheet"
+                    >
+                        {{ worksheetPdfForm.processing ? 'Processing PDF…' : 'Import PDF worksheet' }}
+                    </PrimaryButton>
+
+                    <WorksheetPdfViewer
+                        v-if="referencePdfUrl"
+                        class="mt-6"
+                        :url="referencePdfUrl"
+                        title="Imported worksheet preview"
+                    />
                 </div>
 
                 <div v-if="topic && importMode === 'custom'" class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -607,7 +767,7 @@ watch(rows, resizeMcqFields, { deep: true });
                     </div>
                 </div>
 
-                <div v-if="topic" class="rounded-lg border border-indigo-100 bg-indigo-50 p-6">
+                <div v-if="topic && importMode !== 'pdf_worksheet'" class="rounded-lg border border-indigo-100 bg-indigo-50 p-6">
                     <h3 class="font-medium text-indigo-900">{{ modeTitle }}</h3>
 
                     <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm text-indigo-950">
@@ -643,7 +803,7 @@ watch(rows, resizeMcqFields, { deep: true });
                     </p>
                 </div>
 
-                <div v-if="topic" class="rounded-lg bg-white p-6 shadow-sm">
+                <div v-if="topic && importMode !== 'pdf_worksheet'" class="rounded-lg bg-white p-6 shadow-sm">
                     <h3 class="font-medium text-gray-900">Step 2 — Import JSON (no Cursor needed if you already have JSON)</h3>
                     <p class="mt-1 text-sm text-gray-600">
                         Paste JSON, upload a <strong>.json</strong> file, or paste from Cursor — preview loads automatically.
@@ -713,6 +873,12 @@ watch(rows, resizeMcqFields, { deep: true });
                             </p>
                             <InputError class="mt-2" :message="saveTopicError" />
                         </div>
+
+                        <WorksheetPdfViewer
+                            v-if="referencePdfUrl && autoDiagramImport"
+                            :url="referencePdfUrl"
+                            title="Full worksheet PDF (shown to students during practice)"
+                        />
                     </div>
 
                     <div class="overflow-x-auto">
@@ -720,6 +886,8 @@ watch(rows, resizeMcqFields, { deep: true });
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th class="px-2 py-3 text-left text-xs uppercase text-gray-500">Question</th>
+                                    <th v-if="!hideManualDiagramColumn" class="px-2 py-3 text-left text-xs uppercase text-gray-500">Diagram</th>
+                                    <th v-else class="px-2 py-3 text-left text-xs uppercase text-gray-500">Preview</th>
                                     <th class="min-w-[280px] px-2 py-3 text-left text-xs uppercase text-gray-500">Options (click letter for correct)</th>
                                     <th class="px-2 py-3 text-left text-xs uppercase text-gray-500">Explanation</th>
                                     <th class="px-2 py-3 text-left text-xs uppercase text-gray-500">Difficulty</th>
@@ -735,6 +903,22 @@ watch(rows, resizeMcqFields, { deep: true });
                                             class="mcq-field w-full min-w-[200px] rounded-md border-gray-300 text-sm"
                                             @input="autoResize"
                                         />
+                                    </td>
+                                    <td class="align-top px-2 py-2">
+                                        <img
+                                            v-if="row.diagramPreview"
+                                            :src="row.diagramPreview"
+                                            alt="Diagram preview"
+                                            class="mb-2 max-h-24 max-w-full rounded border border-gray-200 object-contain"
+                                        />
+                                        <input
+                                            v-if="!hideManualDiagramColumn"
+                                            type="file"
+                                            accept="image/png,image/jpeg,image/webp"
+                                            class="block w-full min-w-[120px] text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-indigo-50 file:px-2 file:py-1 file:text-xs file:text-indigo-700"
+                                            @change="setRowDiagram(row, $event)"
+                                        />
+                                        <p v-else-if="!row.diagramPreview" class="text-xs text-gray-400">From PDF</p>
                                     </td>
                                     <td class="align-top px-2 py-2">
                                         <div v-for="(opt, optIndex) in row.options" :key="optIndex" class="mb-2 flex items-start gap-2">

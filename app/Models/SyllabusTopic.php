@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class SyllabusTopic extends Model
 {
@@ -16,7 +18,23 @@ class SyllabusTopic extends Model
         'planned_periods',
         'remarks',
         'sort_order',
+        'reference_pdf_path',
     ];
+
+    protected $hidden = [
+        'reference_pdf_path',
+    ];
+
+    protected $appends = [
+        'reference_pdf_url',
+    ];
+
+    protected function referencePdfUrl(): Attribute
+    {
+        return Attribute::get(fn () => $this->reference_pdf_path
+            ? Storage::disk('public')->url($this->reference_pdf_path)
+            : null);
+    }
 
     public function chapter(): BelongsTo
     {

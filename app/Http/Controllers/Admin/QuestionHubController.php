@@ -267,6 +267,7 @@ class QuestionHubController extends Controller
             'questions' => $worksheet->questions->map(fn ($q) => [
                 'id' => $q->id,
                 'question_text' => $q->question_text,
+                'diagram_url' => $q->diagram_url,
                 'difficulty' => $q->difficulty,
                 'source' => $q->source,
                 'options_count' => $q->options->count(),
