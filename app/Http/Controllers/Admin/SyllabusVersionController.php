@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\ChapterHead;
-use App\Models\GradeLevel;
 use App\Models\Subject;
 use App\Models\SyllabusVersion;
 use App\Services\AdminGradeContext;
@@ -35,6 +34,8 @@ class SyllabusVersionController extends Controller
             ->when($grade, fn ($q) => $q->where('grade_level_id', $grade->id))
             ->latest();
 
+        $activeYear = AcademicYear::active();
+
         return Inertia::render('Admin/Syllabus/Index', [
             'versions' => $versionsQuery->get()->map(fn ($version) => [
                 ...$version->toArray(),
@@ -45,6 +46,12 @@ class SyllabusVersionController extends Controller
             'subjects' => Subject::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'academicYears' => AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'name']),
             'selectedGrade' => $grade?->only(['id', 'name']),
+            'importDefaults' => [
+                'board_id' => Board::query()->where('code', 'CBSE')->value('id'),
+                'grade_level_id' => $grade?->id,
+                'subject_id' => Subject::query()->where('code', 'MATHS')->value('id'),
+                'academic_year_id' => $activeYear?->id,
+            ],
         ]);
     }
 
@@ -121,7 +128,7 @@ class SyllabusVersionController extends Controller
             'grade_level_id' => ['required', 'exists:grade_levels,id'],
             'subject_id' => ['required', 'exists:subjects,id'],
             'academic_year_id' => ['required', 'exists:academic_years,id'],
-            'file' => ['required', 'file', 'mimes:xlsx,xls', 'max:5120'],
+            'file' => ['required', 'file', 'extensions:xlsx,xls', 'max:10240'],
         ]);
 
         $version = SyllabusVersion::firstOrCreate(
@@ -134,7 +141,34 @@ class SyllabusVersionController extends Controller
             ['status' => SyllabusVersion::STATUS_DRAFT],
         );
 
-        $count = $this->importService->import($request->file('file'), $version);
+        return $this->processImport($request, $version);
+    }
+
+    public function importIntoVersion(Request $request, SyllabusVersion $syllabusVersion): RedirectResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'extensions:xlsx,xls', 'max:10240'],
+        ]);
+
+        return $this->processImport($request, $syllabusVersion);
+    }
+
+    private function processImport(Request $request, SyllabusVersion $version): RedirectResponse
+    {
+        try {
+            $count = $this->importService->import($request->file('file'), $version);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not read the Excel file. Use .xlsx with columns: Chapter No., Main Topic, Sub-Topic.');
+        }
+
+        if ($count === 0) {
+            return back()->with(
+                'error',
+                'No topics were imported. Check that row 1 has headers: Chapter No., Main Topic (Chapter), Sub-Topic, etc.',
+            );
+        }
 
         return redirect()
             ->route('admin.syllabus.show', $version)

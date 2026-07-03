@@ -14,6 +14,10 @@ class SyllabusImportService
 {
     public function import(UploadedFile $file, SyllabusVersion $version): int
     {
+        if (! class_exists(\ZipArchive::class)) {
+            throw new \RuntimeException('PHP zip extension is required to read Excel (.xlsx) files.');
+        }
+
         $spreadsheet = IOFactory::load($file->getRealPath());
         $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
 
@@ -195,7 +199,11 @@ class SyllabusImportService
                 $row
             );
 
-            if (in_array('sub-topic', $normalized, true) || in_array('sub topic', $normalized, true)) {
+            $hasSubTopic = in_array('sub-topic', $normalized, true) || in_array('sub topic', $normalized, true);
+            $hasChapterNo = in_array('chapter no.', $normalized, true) || in_array('chapter no', $normalized, true);
+            $hasMainTopic = in_array('main topic (chapter)', $normalized, true) || in_array('main topic', $normalized, true);
+
+            if ($hasSubTopic || ($hasChapterNo && $hasMainTopic)) {
                 return $index;
             }
         }

@@ -2,11 +2,12 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import InputLabel from '@/Components/InputLabel.vue';
+import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
     version: Object,
@@ -40,6 +41,36 @@ const form = useForm({
 const carryForm = useForm({
     academic_year_id: '',
 });
+
+const importForm = useForm({
+    file: null,
+});
+
+watch(
+    () => props.rows,
+    (newRows) => {
+        form.rows = newRows?.length
+            ? newRows.map((row) => ({ ...row }))
+            : [emptyRow()];
+    },
+    { deep: true },
+);
+
+const onImportFileChange = (event) => {
+    importForm.file = event.target.files[0] ?? null;
+};
+
+const submitExcelImport = () => {
+    if (!importForm.file) {
+        importForm.setError('file', 'Choose an Excel file first.');
+        return;
+    }
+
+    importForm.post(route('admin.syllabus.import-into', props.version.id), {
+        forceFormData: true,
+        onSuccess: () => importForm.reset('file'),
+    });
+};
 
 function emptyRow() {
     return {
@@ -199,8 +230,37 @@ const saveNewHead = async () => {
                 >
                     {{ $page.props.flash.success }}
                 </div>
+                <div
+                    v-if="$page.props.flash?.error"
+                    class="rounded-md bg-red-50 p-4 text-sm text-red-800"
+                >
+                    {{ $page.props.flash.error }}
+                </div>
 
                 <BrowseModeNotice />
+
+                <div v-if="isAdmin" class="rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 p-4 shadow-sm">
+                    <h3 class="font-medium text-gray-900">Import from Excel</h3>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Replace this syllabus from a .xlsx file (row 1 headers:
+                        Chapter No., Main Topic (Chapter), Sub-Topic, …).
+                    </p>
+                    <form class="mt-3 flex flex-wrap items-end gap-3" @submit.prevent="submitExcelImport">
+                        <div class="min-w-[240px] flex-1">
+                            <InputLabel value="Excel file (.xlsx)" />
+                            <input
+                                type="file"
+                                accept=".xlsx,.xls"
+                                class="mt-1 block w-full text-sm"
+                                @change="onImportFileChange"
+                            />
+                            <InputError class="mt-1" :message="importForm.errors.file" />
+                        </div>
+                        <SecondaryButton :disabled="importForm.processing">
+                            {{ importForm.processing ? 'Importing…' : 'Import Excel' }}
+                        </SecondaryButton>
+                    </form>
+                </div>
 
                 <div class="rounded-lg bg-white p-4 shadow-sm">
                     <p class="text-sm text-gray-600">

@@ -1,32 +1,37 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputLabel from '@/Components/InputLabel.vue';
+import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
-defineProps({
+const props = defineProps({
     versions: Array,
     boards: Array,
     gradeLevels: Array,
     subjects: Array,
     academicYears: Array,
     selectedGrade: Object,
+    importDefaults: {
+        type: Object,
+        default: () => ({}),
+    },
 });
 
 const createForm = useForm({
-    board_id: '',
-    grade_level_id: '',
-    subject_id: '',
-    academic_year_id: '',
+    board_id: props.importDefaults.board_id || '',
+    grade_level_id: props.importDefaults.grade_level_id || '',
+    subject_id: props.importDefaults.subject_id || '',
+    academic_year_id: props.importDefaults.academic_year_id || '',
 });
 
 const importForm = useForm({
-    board_id: '',
-    grade_level_id: '',
-    subject_id: '',
-    academic_year_id: '',
+    board_id: props.importDefaults.board_id || '',
+    grade_level_id: props.importDefaults.grade_level_id || '',
+    subject_id: props.importDefaults.subject_id || '',
+    academic_year_id: props.importDefaults.academic_year_id || '',
     file: null,
 });
 
@@ -37,10 +42,15 @@ const submitCreate = () => {
 };
 
 const onFileChange = (event) => {
-    importForm.file = event.target.files[0];
+    importForm.file = event.target.files[0] ?? null;
 };
 
 const submitImport = () => {
+    if (!importForm.file) {
+        importForm.setError('file', 'Choose an Excel file first.');
+        return;
+    }
+
     importForm.post(route('admin.syllabus.import'), {
         forceFormData: true,
         onSuccess: () => importForm.reset('file'),
@@ -70,6 +80,13 @@ const submitImport = () => {
 
         <div class="py-12">
             <div class="mx-auto max-w-6xl space-y-6 sm:px-6 lg:px-8">
+                <div v-if="$page.props.flash?.error" class="rounded-md bg-red-50 p-4 text-sm text-red-800">
+                    {{ $page.props.flash.error }}
+                </div>
+                <div v-if="$page.props.flash?.success" class="rounded-md bg-green-50 p-4 text-sm text-green-800">
+                    {{ $page.props.flash.success }}
+                </div>
+
                 <div class="overflow-hidden rounded-lg bg-white p-6 shadow-sm">
                     <h3 class="font-medium text-gray-900">Create syllabus for a class</h3>
                     <p class="mt-1 text-sm text-gray-600">
@@ -156,7 +173,8 @@ const submitImport = () => {
                     </button>
                     <form v-if="showExcelImport" class="border-t bg-white p-6" @submit.prevent="submitImport">
                         <p class="text-sm text-gray-600">
-                            Legacy import — prefer manual entry above. Columns: Chapter No., Main Topic, Sub-Topic, etc.
+                            Upload a .xlsx with headers in row 1:
+                            <strong>Chapter No., Main Topic (Chapter), Sub-Topic</strong>, Key Concepts, Difficulty, Periods, Remarks.
                         </p>
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
                             <div>
@@ -165,6 +183,7 @@ const submitImport = () => {
                                     <option value="" disabled>Select board</option>
                                     <option v-for="board in boards" :key="board.id" :value="board.id">{{ board.name }}</option>
                                 </select>
+                                <InputError class="mt-1" :message="importForm.errors.board_id" />
                             </div>
                             <div>
                                 <InputLabel value="Class" />
@@ -172,6 +191,7 @@ const submitImport = () => {
                                     <option value="" disabled>Select class</option>
                                     <option v-for="grade in gradeLevels" :key="grade.id" :value="grade.id">{{ grade.name }}</option>
                                 </select>
+                                <InputError class="mt-1" :message="importForm.errors.grade_level_id" />
                             </div>
                             <div>
                                 <InputLabel value="Subject" />
@@ -179,6 +199,7 @@ const submitImport = () => {
                                     <option value="" disabled>Select subject</option>
                                     <option v-for="subject in subjects" :key="subject.id" :value="subject.id">{{ subject.name }}</option>
                                 </select>
+                                <InputError class="mt-1" :message="importForm.errors.subject_id" />
                             </div>
                             <div>
                                 <InputLabel value="Academic year" />
@@ -186,10 +207,12 @@ const submitImport = () => {
                                     <option value="" disabled>Select year</option>
                                     <option v-for="year in academicYears" :key="year.id" :value="year.id">{{ year.name }}</option>
                                 </select>
+                                <InputError class="mt-1" :message="importForm.errors.academic_year_id" />
                             </div>
                             <div class="sm:col-span-2">
                                 <InputLabel value="Excel file (.xlsx)" />
                                 <input type="file" accept=".xlsx,.xls" class="mt-1 block w-full" required @change="onFileChange" />
+                                <InputError class="mt-1" :message="importForm.errors.file" />
                             </div>
                             <div class="sm:col-span-2">
                                 <SecondaryButton :disabled="importForm.processing">Import from Excel</SecondaryButton>
