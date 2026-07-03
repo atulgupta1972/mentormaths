@@ -75,8 +75,9 @@ class RegistrationRequestController extends Controller
 
         $generatedPassword = null;
         $loginEmail = null;
+        $userChosePassword = false;
 
-        DB::transaction(function () use ($registrationRequest, $request, $validated, &$generatedPassword, &$loginEmail) {
+        DB::transaction(function () use ($registrationRequest, $request, $validated, &$generatedPassword, &$loginEmail, &$userChosePassword) {
             $student = Student::create([
                 'name' => $registrationRequest->student_name,
                 'date_of_birth' => $registrationRequest->date_of_birth,
@@ -102,15 +103,16 @@ class RegistrationRequestController extends Controller
             ]);
 
             $generatedPassword = Str::password(12);
-            $email = $registrationRequest->email
+            $loginEmail = $registrationRequest->email
                 ?? 'student.'.$student->id.'@mathsfoundation.local';
 
-            $loginEmail = $email;
+            $storedPasswordHash = $registrationRequest->getAttributes()['password'] ?? null;
+            $userChosePassword = filled($storedPasswordHash);
 
             $user = User::create([
                 'name' => $registrationRequest->student_name,
-                'email' => $email,
-                'password' => $generatedPassword,
+                'email' => $loginEmail,
+                'password' => $storedPasswordHash ?? $generatedPassword,
                 'role' => User::ROLE_STUDENT,
                 'mobile' => $registrationRequest->student_mobile ?? $registrationRequest->parent1_mobile,
                 'email_verified_at' => $registrationRequest->email ? now() : null,
@@ -132,7 +134,7 @@ class RegistrationRequestController extends Controller
         $emailSent = RegistrationMailer::sendApproved(
             $registrationRequest->fresh(),
             $loginEmail,
-            $generatedPassword,
+            $userChosePassword ? null : $generatedPassword,
         );
 
         return redirect()
@@ -140,7 +142,8 @@ class RegistrationRequestController extends Controller
             ->with('success', 'Registration approved.')
             ->with('generated_login', [
                 'email' => $loginEmail,
-                'password' => $generatedPassword,
+                'password' => $userChosePassword ? null : $generatedPassword,
+                'user_chose_password' => $userChosePassword,
             ])
             ->with('email_sent', $emailSent);
     }

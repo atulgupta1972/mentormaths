@@ -16,7 +16,7 @@ class RegistrationApproved extends Mailable
     public function __construct(
         public RegistrationRequest $registrationRequest,
         public string $loginEmail,
-        public string $loginPassword,
+        public ?string $loginPassword = null,
     ) {}
 
     public function envelope(): Envelope

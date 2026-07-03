@@ -6,6 +6,7 @@ use App\Mail\NewRegistrationRequestAdmin;
 use App\Mail\RegistrationApproved;
 use App\Mail\RegistrationRequestReceived;
 use App\Models\RegistrationRequest;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -31,9 +32,13 @@ class RegistrationMailer
 
     public static function notifyAdmin(RegistrationRequest $registrationRequest): void
     {
-        $adminEmail = config('mail.registration_notify');
+        $adminEmail = self::resolveAdminNotifyEmail();
 
         if (! $adminEmail) {
+            Log::warning('No admin email configured for registration notifications.', [
+                'registration_request_id' => $registrationRequest->id,
+            ]);
+
             return;
         }
 
@@ -43,6 +48,7 @@ class RegistrationMailer
         } catch (\Throwable $e) {
             Log::error('Failed to send admin registration notification.', [
                 'registration_request_id' => $registrationRequest->id,
+                'admin_email' => $adminEmail,
                 'error' => $e->getMessage(),
             ]);
         }
@@ -51,7 +57,7 @@ class RegistrationMailer
     public static function sendApproved(
         RegistrationRequest $registrationRequest,
         string $loginEmail,
-        string $loginPassword,
+        ?string $loginPassword = null,
     ): bool {
         if (! str_contains($loginEmail, '@') || str_ends_with($loginEmail, '@mathsfoundation.local')) {
             return false;
@@ -71,5 +77,20 @@ class RegistrationMailer
 
             return false;
         }
+    }
+
+    public static function resolveAdminNotifyEmail(): ?string
+    {
+        $configured = config('mail.registration_notify');
+
+        if (filled($configured)) {
+            return $configured;
+        }
+
+        return User::query()
+            ->where('role', User::ROLE_ADMIN)
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->value('email');
     }
 }

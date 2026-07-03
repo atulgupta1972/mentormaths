@@ -7,9 +7,15 @@
 <ul>
     <li><strong>Login page:</strong> <a href="{{ $loginUrl }}">{{ $loginUrl }}</a></li>
     <li><strong>Email:</strong> {{ $loginEmail }}</li>
-    <li><strong>Password:</strong> {{ $loginPassword }}</li>
+    @if ($loginPassword)
+        <li><strong>Password:</strong> {{ $loginPassword }}</li>
+    @else
+        <li><strong>Password:</strong> Use the password you chose when you registered.</li>
+    @endif
 </ul>
 
-<p>Please change the password after your first login.</p>
+@if ($loginPassword)
+    <p>Please change the password after your first login.</p>
+@endif
 
 <p>Thank you,<br>{{ config('app.name') }}</p>

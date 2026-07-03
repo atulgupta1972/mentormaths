@@ -26,6 +26,7 @@ class RegistrationRequest extends Model
         'parent2_mobile',
         'school_name',
         'email',
+        'password',
         'notes',
         'notify_student_mobile',
         'notify_parent1_mobile',
@@ -35,6 +36,10 @@ class RegistrationRequest extends Model
         'reviewed_by',
         'reviewed_at',
         'student_id',
+    ];
+
+    protected $hidden = [
+        'password',
     ];
 
     protected function casts(): array

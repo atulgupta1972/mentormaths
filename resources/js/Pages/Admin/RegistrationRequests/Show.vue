@@ -94,14 +94,17 @@ const generatedLogin = computed(() => page.props.flash?.generated_login);
                     v-if="generatedLogin"
                     class="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
                 >
-                    <p class="font-semibold">Student login created — share these credentials:</p>
+                    <p class="font-semibold">Student login activated:</p>
                     <p class="mt-2"><strong>Email:</strong> {{ generatedLogin.email }}</p>
-                    <p><strong>Password:</strong> {{ generatedLogin.password }}</p>
+                    <p v-if="generatedLogin.user_chose_password" class="mt-2">
+                        <strong>Password:</strong> Chosen by the parent during registration (not shown here).
+                    </p>
+                    <p v-else-if="generatedLogin.password"><strong>Password:</strong> {{ generatedLogin.password }}</p>
                     <p v-if="$page.props.flash?.email_sent" class="mt-2 text-green-800">
-                        Login details were also emailed to the parent/student.
+                        Approval email was sent to the login address.
                     </p>
                     <p v-else-if="!generatedLogin.email.endsWith('@mathsfoundation.local')" class="mt-2 text-red-800">
-                        Email could not be sent — please share these credentials manually.
+                        Email could not be sent — please share login details manually.
                     </p>
                 </div>
 
