@@ -128,7 +128,7 @@ class SyllabusVersionController extends Controller
             'grade_level_id' => ['required', 'exists:grade_levels,id'],
             'subject_id' => ['required', 'exists:subjects,id'],
             'academic_year_id' => ['required', 'exists:academic_years,id'],
-            'file' => ['required', 'file', 'extensions:xlsx,xls', 'max:10240'],
+            'file' => ['required', 'file', 'mimes:xlsx,xls', 'extensions:xlsx,xls', 'max:10240'],
         ]);
 
         $version = SyllabusVersion::firstOrCreate(
@@ -147,7 +147,7 @@ class SyllabusVersionController extends Controller
     public function importIntoVersion(Request $request, SyllabusVersion $syllabusVersion): RedirectResponse
     {
         $request->validate([
-            'file' => ['required', 'file', 'extensions:xlsx,xls', 'max:10240'],
+            'file' => ['required', 'file', 'mimes:xlsx,xls', 'extensions:xlsx,xls', 'max:10240'],
         ]);
 
         return $this->processImport($request, $syllabusVersion);
@@ -160,7 +160,11 @@ class SyllabusVersionController extends Controller
         } catch (\Throwable $e) {
             report($e);
 
-            return back()->with('error', 'Could not read the Excel file. Use .xlsx with columns: Chapter No., Main Topic, Sub-Topic.');
+            $message = str_contains(strtolower($e->getMessage()), 'zip')
+                ? 'Server cannot read .xlsx files (PHP zip extension missing). Ask your host to enable ext-zip.'
+                : 'Could not read the Excel file: '.$e->getMessage();
+
+            return back()->with('error', $message);
         }
 
         if ($count === 0) {

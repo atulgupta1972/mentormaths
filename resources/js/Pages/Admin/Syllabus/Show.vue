@@ -56,19 +56,51 @@ watch(
     { deep: true },
 );
 
+const importFeedback = ref('');
+const importFeedbackType = ref('');
+
 const onImportFileChange = (event) => {
     importForm.file = event.target.files[0] ?? null;
+    importFeedback.value = importForm.file ? `Selected: ${importForm.file.name}` : '';
+    importFeedbackType.value = importForm.file ? 'info' : '';
 };
 
 const submitExcelImport = () => {
+    importFeedback.value = '';
+    importFeedbackType.value = '';
+
     if (!importForm.file) {
         importForm.setError('file', 'Choose an Excel file first.');
+        importFeedback.value = 'Choose an Excel file first.';
+        importFeedbackType.value = 'error';
         return;
     }
 
+    importFeedback.value = 'Uploading and importing… please wait.';
+    importFeedbackType.value = 'info';
+
     importForm.post(route('admin.syllabus.import-into', props.version.id), {
         forceFormData: true,
-        onSuccess: () => importForm.reset('file'),
+        preserveScroll: true,
+        onSuccess: (page) => {
+            importForm.reset('file');
+
+            if (page.props.flash?.error) {
+                importFeedbackType.value = 'error';
+                importFeedback.value = page.props.flash.error;
+                return;
+            }
+
+            importFeedbackType.value = 'success';
+            importFeedback.value = page.props.flash?.success || 'Import completed successfully.';
+        },
+        onError: () => {
+            importFeedbackType.value = 'error';
+            importFeedback.value =
+                importForm.errors.file
+                || Object.values(importForm.errors)[0]
+                || 'Upload failed. Use a .xlsx file under 10 MB.';
+        },
     });
 };
 
@@ -256,10 +288,21 @@ const saveNewHead = async () => {
                             />
                             <InputError class="mt-1" :message="importForm.errors.file" />
                         </div>
-                        <SecondaryButton :disabled="importForm.processing">
+                        <PrimaryButton type="submit" :disabled="importForm.processing">
                             {{ importForm.processing ? 'Importing…' : 'Import Excel' }}
-                        </SecondaryButton>
+                        </PrimaryButton>
                     </form>
+                    <div
+                        v-if="importFeedback"
+                        class="mt-3 rounded-md border px-4 py-3 text-sm"
+                        :class="{
+                            'border-green-300 bg-green-50 text-green-900': importFeedbackType === 'success',
+                            'border-red-300 bg-red-50 text-red-900': importFeedbackType === 'error',
+                            'border-indigo-300 bg-indigo-50 text-indigo-900': importFeedbackType === 'info',
+                        }"
+                    >
+                        {{ importFeedback }}
+                    </div>
                 </div>
 
                 <div class="rounded-lg bg-white p-4 shadow-sm">
