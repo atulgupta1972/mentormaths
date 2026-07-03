@@ -24,7 +24,7 @@ const showingNavigationDropdown = ref(false);
                             <!-- Logo -->
                             <div class="flex shrink-0 items-center gap-2.5">
                                 <Link :href="route('dashboard')" class="flex items-center gap-2.5">
-                                    <ApplicationLogo class="block h-9 w-9" />
+                                    <ApplicationLogo />
                                     <span class="hidden font-semibold text-slate-800 sm:inline">Mentor Maths</span>
                                 </Link>
                             </div>
