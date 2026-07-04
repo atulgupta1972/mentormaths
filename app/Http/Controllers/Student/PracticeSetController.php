@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
+use App\Models\QuestionResolutionItem;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
+use App\Services\GuidedPracticeService;
+use App\Services\QuestionResolutionService;
 use App\Services\SetAttemptService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,7 +16,11 @@ use Inertia\Response;
 
 class PracticeSetController extends Controller
 {
-    public function __construct(private SetAttemptService $attemptService) {}
+    public function __construct(
+        private SetAttemptService $attemptService,
+        private GuidedPracticeService $guidedPractice,
+        private QuestionResolutionService $resolutionService,
+    ) {}
 
     public function showAssignment(Request $request, SetAssignment $assignment): Response|RedirectResponse
     {
@@ -34,6 +41,7 @@ class PracticeSetController extends Controller
                 'notes' => $assignment->notes,
                 'target_date' => $assignment->due_date?->toDateString(),
                 'is_overdue' => $assignment->isOverdue(),
+                'is_guided' => ! $practiceSet->isChapterScope(),
                 'practice_set' => [
                     'set_code' => $practiceSet->set_code,
                     'set_number' => $practiceSet->set_number,
@@ -43,8 +51,12 @@ class PracticeSetController extends Controller
                     'id' => $a->id,
                     'attempt_number' => $a->attempt_number,
                     'status' => $a->status,
+                    'mode' => $a->mode,
                     'score' => $a->score,
                     'max_score' => $a->max_score,
+                    'first_try_correct_count' => $a->first_try_correct_count,
+                    'corrected_after_help_count' => $a->corrected_after_help_count,
+                    'given_up_count' => $a->given_up_count,
                     'time_seconds' => $a->time_seconds,
                     'submission_timing' => $a->submission_timing,
                     'completed_at' => $a->completed_at?->toDateTimeString(),
@@ -73,16 +85,18 @@ class PracticeSetController extends Controller
 
     public function showAttempt(Request $request, SetAttempt $attempt): Response|RedirectResponse
     {
-        $assignment = $attempt->assignment()->with([
-            'practiceSet.questions.options',
-        ])->first();
-
+        $assignment = $attempt->assignment()->with('practiceSet')->first();
         $this->authorizeAssignment($request, $assignment);
 
         if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {
             return redirect()->route('student.attempts.result', $attempt);
         }
 
+        if ($attempt->isGuided()) {
+            return Inertia::render('Student/PracticeSets/GuidedAttempt', $this->guidedPractice->buildPayload($attempt));
+        }
+
+        $assignment->load(['practiceSet.questions.options']);
         $practiceSet = $assignment->practiceSet;
         $questions = $practiceSet->questions->values()->map(function ($q, $index) {
             return [
@@ -115,10 +129,54 @@ class PracticeSetController extends Controller
         ]);
     }
 
+    public function guidedAnswer(Request $request, SetAttempt $attempt): RedirectResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        $validated = $request->validate([
+            'option_id' => ['required', 'integer'],
+        ]);
+
+        try {
+            $payload = $this->guidedPractice->submitAnswer($attempt, $validated['option_id']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($attempt->fresh()->status === SetAttempt::STATUS_SUBMITTED) {
+            return redirect()->route('student.attempts.result', $attempt);
+        }
+
+        return back()->with('guided_feedback', $payload['feedback'] ?? null);
+    }
+
+    public function guidedGiveUp(Request $request, SetAttempt $attempt): RedirectResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        try {
+            $this->guidedPractice->giveUp($attempt);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($attempt->fresh()->status === SetAttempt::STATUS_SUBMITTED) {
+            return redirect()->route('student.attempts.result', $attempt);
+        }
+
+        return back();
+    }
+
     public function submitAttempt(Request $request, SetAttempt $attempt): RedirectResponse
     {
         $assignment = $attempt->assignment;
         $this->authorizeAssignment($request, $assignment);
+
+        if ($attempt->isGuided()) {
+            abort(404);
+        }
 
         $validated = $request->validate([
             'answers' => ['required', 'array'],
@@ -133,7 +191,7 @@ class PracticeSetController extends Controller
 
         return redirect()
             ->route('student.attempts.result', $attempt)
-            ->with('success', 'Practice set submitted!');
+            ->with('success', 'Submitted successfully!');
     }
 
     public function result(Request $request, SetAttempt $attempt): Response
@@ -144,9 +202,34 @@ class PracticeSetController extends Controller
 
         $this->authorizeAssignment($request, $assignment);
 
-        $attempt->load('answers');
+        $attempt->load(['answers', 'guidedQuestions']);
 
         $practiceSet = $assignment->practiceSet;
+
+        if ($attempt->isGuided()) {
+            return Inertia::render('Student/PracticeSets/GuidedResult', [
+                'attempt' => [
+                    'id' => $attempt->id,
+                    'attempt_number' => $attempt->attempt_number,
+                    'completed_at' => $attempt->completed_at?->toDateTimeString(),
+                    'time_seconds' => $attempt->time_seconds,
+                    'submission_timing' => $attempt->submission_timing,
+                    'first_try_correct' => $attempt->first_try_correct_count ?? 0,
+                    'max_score' => $attempt->max_score ?? 0,
+                    'corrected_after_help' => $attempt->corrected_after_help_count ?? 0,
+                    'given_up' => $attempt->given_up_count ?? 0,
+                ],
+                'assignment' => [
+                    'target_date' => $assignment->due_date?->toDateString(),
+                ],
+                'practiceSet' => [
+                    'set_code' => $practiceSet->set_code,
+                    'set_number' => $practiceSet->set_number,
+                    'kind_label' => 'Practice',
+                ],
+            ]);
+        }
+
         $questions = $practiceSet->questions->values()->map(function ($q, $index) use ($attempt) {
             $answer = $attempt->answers->firstWhere('question_id', $q->id);
 
@@ -179,11 +262,54 @@ class PracticeSetController extends Controller
         ]);
     }
 
+    public function showResolution(Request $request, QuestionResolutionItem $item): Response|RedirectResponse
+    {
+        $this->authorizeResolution($request, $item);
+
+        if ($item->status !== QuestionResolutionItem::STATUS_PENDING) {
+            return redirect()->route('dashboard')->with('success', 'This sum is already resolved.');
+        }
+
+        return Inertia::render('Student/PracticeSets/Resolution', [
+            'item' => $this->resolutionService->formatItem($item),
+        ]);
+    }
+
+    public function submitResolution(Request $request, QuestionResolutionItem $item): RedirectResponse
+    {
+        $this->authorizeResolution($request, $item);
+
+        $validated = $request->validate([
+            'option_id' => ['required', 'integer'],
+        ]);
+
+        try {
+            $result = $this->resolutionService->submitAnswer($item, $validated['option_id']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($result['resolved']) {
+            return redirect()->route('dashboard')->with('success', $result['message']);
+        }
+
+        return back()->with('warning', $result['message']);
+    }
+
     private function authorizeAssignment(Request $request, SetAssignment $assignment): void
     {
         $enrollment = $request->user()->student?->currentEnrollment();
 
         if (! $enrollment || $assignment->student_enrollment_id !== $enrollment->id) {
+            abort(403);
+        }
+    }
+
+    private function authorizeResolution(Request $request, QuestionResolutionItem $item): void
+    {
+        $enrollment = $request->user()->student?->currentEnrollment();
+
+        if (! $enrollment || $item->student_enrollment_id !== $enrollment->id) {
             abort(403);
         }
     }

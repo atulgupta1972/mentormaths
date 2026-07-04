@@ -75,7 +75,13 @@ const startLabel = () => {
                     </div>
 
                     <p class="mt-4 text-sm text-gray-600">
-                        Work on your {{ kindLabel().toLowerCase() }} sheet, then record your answers online.
+                        <template v-if="assignment.is_guided">
+                            Guided practice: answer one question at a time. After two wrong tries you will see the method.
+                            You can retry or give up for your teacher to explain later.
+                        </template>
+                        <template v-else>
+                            Answer all questions and submit when finished.
+                        </template>
                     </p>
                     <p v-if="assignment.notes" class="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">
                         Teacher note: {{ assignment.notes }}

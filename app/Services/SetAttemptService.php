@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 class SetAttemptService
 {
+    public function __construct(private GuidedPracticeService $guidedPractice) {}
+
     public function start(SetAssignment $assignment): SetAttempt
     {
         $inProgress = $assignment->attempts()
@@ -27,13 +29,22 @@ class SetAttemptService
 
         $nextNumber = ($assignment->attempts()->max('attempt_number') ?? 0) + 1;
 
+        $assignment->loadMissing('practiceSet');
+
         return DB::transaction(function () use ($assignment, $nextNumber) {
             $attempt = SetAttempt::create([
                 'set_assignment_id' => $assignment->id,
                 'attempt_number' => $nextNumber,
+                'mode' => $assignment->practiceSet->isChapterScope()
+                    ? SetAttempt::MODE_BATCH
+                    : SetAttempt::MODE_GUIDED,
                 'started_at' => now(),
                 'status' => SetAttempt::STATUS_IN_PROGRESS,
             ]);
+
+            if ($attempt->isGuided()) {
+                $this->guidedPractice->initialize($attempt);
+            }
 
             if ($assignment->status === SetAssignment::STATUS_ASSIGNED) {
                 $assignment->update(['status' => SetAssignment::STATUS_IN_PROGRESS]);

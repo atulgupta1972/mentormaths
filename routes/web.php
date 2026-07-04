@@ -163,8 +163,12 @@ Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->gr
     Route::get('/assignments/{assignment}', [StudentPracticeSetController::class, 'showAssignment'])->name('assignments.show');
     Route::post('/assignments/{assignment}/start', [StudentPracticeSetController::class, 'startAttempt'])->name('assignments.start');
     Route::get('/attempts/{attempt}', [StudentPracticeSetController::class, 'showAttempt'])->name('attempts.show');
+    Route::post('/attempts/{attempt}/guided/answer', [StudentPracticeSetController::class, 'guidedAnswer'])->name('attempts.guided.answer');
+    Route::post('/attempts/{attempt}/guided/give-up', [StudentPracticeSetController::class, 'guidedGiveUp'])->name('attempts.guided.give-up');
     Route::post('/attempts/{attempt}/submit', [StudentPracticeSetController::class, 'submitAttempt'])->name('attempts.submit');
     Route::get('/attempts/{attempt}/result', [StudentPracticeSetController::class, 'result'])->name('attempts.result');
+    Route::get('/resolutions/{item}', [StudentPracticeSetController::class, 'showResolution'])->name('resolutions.show');
+    Route::post('/resolutions/{item}/answer', [StudentPracticeSetController::class, 'submitResolution'])->name('resolutions.answer');
 });
 
 Route::middleware('auth')->group(function () {

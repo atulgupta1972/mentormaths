@@ -20,6 +20,7 @@ const props = defineProps({
     examPlans: { type: Array, default: () => [] },
     syllabusChapters: { type: Array, default: () => [] },
     examTypeOptions: { type: Array, default: () => [] },
+    resolutionItems: { type: Array, default: () => [] },
 });
 
 const contactFields = computed(() => [
@@ -120,6 +121,24 @@ const submit = () => {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <div v-if="resolutionItems.length" class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">
+                    <h3 class="font-medium text-rose-900">Needs resolution · {{ resolutionItems.length }}</h3>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Sums the student gave up during guided practice. Explain in class, then they retry from their dashboard.
+                    </p>
+                    <ul class="mt-4 divide-y divide-gray-100">
+                        <li v-for="item in resolutionItems" :key="item.id" class="py-3">
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                    <p v-if="item.set_code" class="font-mono text-sm font-semibold text-indigo-600">{{ item.set_code }}</p>
+                                    <p class="mt-1 text-sm text-gray-800">{{ item.question_text }}</p>
+                                </div>
+                                <p class="text-xs text-gray-500">Given up {{ item.gave_up_at ? new Date(item.gave_up_at).toLocaleDateString('en-IN') : '—' }}</p>
+                            </div>
+                        </li>
+                    </ul>
                 </div>
 
                 <div v-if="latestEnrollment" class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">

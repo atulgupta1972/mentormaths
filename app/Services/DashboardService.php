@@ -12,6 +12,7 @@ class DashboardService
         private ExamPlanService $examPlanService,
         private SetAttemptService $attemptService,
         private AdminGradeContext $gradeContext,
+        private QuestionResolutionService $resolutionService,
     ) {}
 
     /**
@@ -22,6 +23,7 @@ class DashboardService
         $examPlanMeta = ['upcoming' => [], 'past' => []];
         $syllabusChapters = [];
         $assignments = [];
+        $resolutionItems = [];
 
         if ($enrollment) {
             $plans = $this->examPlanService->plansForEnrollment($enrollment);
@@ -32,6 +34,7 @@ class DashboardService
             ];
             $syllabusChapters = $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all();
             $assignments = $this->attemptService->dashboardForEnrollment($enrollment);
+            $resolutionItems = $this->resolutionService->pendingForEnrollment($enrollment->id);
         }
 
         return [
@@ -39,7 +42,9 @@ class DashboardService
             'examPlans' => $examPlanMeta,
             'syllabusChapters' => $syllabusChapters,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
-            'stats' => $this->studentStats($assignments, $examPlanMeta),
+            'stats' => $this->studentStats($assignments, $examPlanMeta, count($resolutionItems)),
+            'resolutionItems' => $resolutionItems,
+            'resolutionCount' => count($resolutionItems),
         ];
     }
 
@@ -124,7 +129,7 @@ class DashboardService
      * @param  array{upcoming: list<mixed>, past: list<mixed>}  $examPlans
      * @return array<string, int>
      */
-    private function studentStats(array $assignments, array $examPlans): array
+    private function studentStats(array $assignments, array $examPlans, int $resolutionCount = 0): array
     {
         $assignmentsCollection = collect($assignments);
 
@@ -137,6 +142,7 @@ class DashboardService
             'sets_done' => $assignmentsCollection->filter(
                 fn (array $row) => in_array($row['status'], ['green', 'green-late'], true),
             )->count(),
+            'resolution_count' => $resolutionCount,
         ];
     }
 }

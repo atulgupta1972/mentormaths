@@ -51,6 +51,7 @@ class HandleInertiaRequests extends Middleware
                 'promotion_errors' => fn () => $request->session()->get('promotion_errors'),
                 'import_rows' => fn () => $request->session()->get('import_rows'),
                 'whatsapp_notifications' => fn () => $request->session()->get('whatsapp_notifications'),
+                'guided_feedback' => fn () => $request->session()->get('guided_feedback'),
             ],
         ];
     }

@@ -9,6 +9,7 @@ use App\Models\GradeLevel;
 use App\Models\Student;
 use App\Services\AdminGradeContext;
 use App\Services\ExamPlanService;
+use App\Services\QuestionResolutionService;
 use App\Services\StudentPromotionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,7 @@ class StudentController extends Controller
         private StudentPromotionService $promotionService,
         private AdminGradeContext $gradeContext,
         private ExamPlanService $examPlanService,
+        private QuestionResolutionService $resolutionService,
     ) {}
 
     public function index(Request $request): Response
@@ -82,6 +84,9 @@ class StudentController extends Controller
             'examPlans' => $examPlans->values()->all(),
             'syllabusChapters' => $syllabusChapters,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
+            'resolutionItems' => $latest
+                ? $this->resolutionService->pendingForEnrollment($latest->id)
+                : [],
         ]);
     }
 

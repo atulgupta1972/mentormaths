@@ -20,6 +20,8 @@ const props = defineProps({
         default: () => ({}),
     },
     students: { type: Array, default: () => [] },
+    resolutionItems: { type: Array, default: () => [] },
+    resolutionCount: { type: Number, default: 0 },
 });
 
 const showManageExams = ref(false);
@@ -417,6 +419,37 @@ const adminSetStatusClass = (set) => {
 
                             <div v-else class="rounded-lg border border-dashed border-violet-300 bg-white/70 p-4 text-center text-xs text-violet-900">
                                 No upcoming exams yet. Click <strong>Add / edit exams</strong> to add your test date.
+                            </div>
+                        </section>
+
+                        <!-- Resolution queue — rose zone -->
+                        <section
+                            v-if="resolutionItems.length"
+                            class="rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 via-orange-50 to-amber-50 p-4 shadow-sm"
+                        >
+                            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-rose-900">
+                                Needs resolution · {{ resolutionCount }}
+                            </h3>
+                            <p class="mb-3 text-xs text-rose-800">
+                                These sums were given up during practice. Ask your teacher, then try again here.
+                            </p>
+                            <div class="space-y-2">
+                                <div
+                                    v-for="item in resolutionItems"
+                                    :key="item.id"
+                                    class="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-white p-3 shadow-sm"
+                                >
+                                    <div class="min-w-0 flex-1">
+                                        <p v-if="item.set_code" class="font-mono text-sm font-semibold text-indigo-600">{{ item.set_code }}</p>
+                                        <p class="mt-1 line-clamp-2 text-sm text-gray-800">{{ item.question_text }}</p>
+                                    </div>
+                                    <Link
+                                        :href="route('student.resolutions.show', item.id)"
+                                        class="shrink-0 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+                                    >
+                                        Retry
+                                    </Link>
+                                </div>
                             </div>
                         </section>
 

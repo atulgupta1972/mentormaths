@@ -1,0 +1,190 @@
+<?php
+
+namespace Tests\Unit;
+
+use App\Models\AcademicYear;
+use App\Models\Board;
+use App\Models\GradeLevel;
+use App\Models\GuidedAttemptQuestion;
+use App\Models\Question;
+use App\Models\QuestionOption;
+use App\Models\SetAssignment;
+use App\Models\SetAttempt;
+use App\Models\Student;
+use App\Models\StudentEnrollment;
+use App\Models\Subject;
+use App\Models\SyllabusChapter;
+use App\Models\SyllabusTopic;
+use App\Models\SyllabusVersion;
+use App\Models\Worksheet;
+use App\Services\GuidedPracticeService;
+use App\Support\PracticeSetScope;
+use App\Support\PracticeSetTier;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class GuidedPracticeServiceTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_wrong_twice_shows_explanation_phase(): void
+    {
+        [$attempt, $wrongOption, $correctOption] = $this->seedGuidedAttempt();
+
+        $service = app(GuidedPracticeService::class);
+
+        $service->submitAnswer($attempt, $wrongOption->id);
+        $attempt->refresh();
+        $payload = $service->submitAnswer($attempt, $wrongOption->id);
+
+        $this->assertSame('explained', $payload['phase']);
+        $this->assertTrue($payload['show_explanation']);
+        $this->assertNotNull($payload['question']['explanation']);
+
+        $service->submitAnswer($attempt->fresh(['guidedQuestions.question.options']), $correctOption->id);
+        $attempt->refresh();
+
+        $guided = $attempt->guidedQuestions->first();
+        $this->assertTrue($guided->corrected_after_help);
+        $this->assertSame(GuidedAttemptQuestion::PHASE_DONE, $guided->phase);
+    }
+
+    public function test_give_up_queues_resolution_item(): void
+    {
+        [$attempt, $wrongOption] = $this->seedGuidedAttempt();
+
+        $service = app(GuidedPracticeService::class);
+        $service->submitAnswer($attempt, $wrongOption->id);
+        $service->submitAnswer($attempt->fresh(['guidedQuestions.question.options']), $wrongOption->id);
+
+        $service->giveUp($attempt->fresh(['guidedQuestions', 'assignment']));
+
+        $this->assertDatabaseHas('question_resolution_items', [
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * @return array{0: SetAttempt, 1: QuestionOption, 2: QuestionOption}
+     */
+    private function seedGuidedAttempt(): array
+    {
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+
+        $board = Board::query()->create([
+            'code' => 'CBSE',
+            'name' => 'CBSE',
+            'is_active' => true,
+        ]);
+
+        $grade = GradeLevel::query()->create([
+            'name' => 'Class 7',
+            'sort_order' => 7,
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'MATHS',
+            'name' => 'Mathematics',
+        ]);
+
+        $syllabus = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        $chapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabus->id,
+            'name' => 'Integers',
+            'sort_order' => 1,
+        ]);
+
+        $topic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->id,
+            'name' => 'Addition',
+            'sort_order' => 1,
+        ]);
+
+        $student = Student::query()->create([
+            'name' => 'Test Student',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543210',
+            'school_name' => 'School',
+        ]);
+
+        $enrollment = StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $year->id,
+            'board_id' => $board->id,
+            'grade_level_id' => $grade->id,
+            'school_name' => 'School',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        $worksheet = Worksheet::query()->create([
+            'title' => 'Starter set',
+            'set_number' => 1,
+            'set_code' => 'S711',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::TOPIC,
+            'syllabus_topic_id' => $topic->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+        ]);
+
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'question_text' => 'What is 2 + 2?',
+            'explanation' => 'Add the two numbers.',
+            'type' => Question::TYPE_MCQ,
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+
+        $wrongOption = QuestionOption::query()->create([
+            'question_id' => $question->id,
+            'option_text' => '3',
+            'is_correct' => false,
+            'sort_order' => 1,
+        ]);
+
+        $correctOption = QuestionOption::query()->create([
+            'question_id' => $question->id,
+            'option_text' => '4',
+            'is_correct' => true,
+            'sort_order' => 2,
+        ]);
+
+        $worksheet->questions()->attach($question->id, ['sort_order' => 1]);
+
+        $assignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek(),
+            'status' => SetAssignment::STATUS_IN_PROGRESS,
+        ]);
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_GUIDED,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+        ]);
+
+        GuidedAttemptQuestion::query()->create([
+            'set_attempt_id' => $attempt->id,
+            'question_id' => $question->id,
+            'sort_order' => 0,
+            'phase' => GuidedAttemptQuestion::PHASE_ANSWERING,
+        ]);
+
+        return [$attempt, $wrongOption, $correctOption];
+    }
+}
