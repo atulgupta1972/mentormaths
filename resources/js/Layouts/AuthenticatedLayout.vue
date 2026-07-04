@@ -53,8 +53,16 @@ const teachingGroup = computed(() => ({
         {
             label: 'Classes',
             href: route('admin.classes.index'),
-            active: route().current('admin.classes.*'),
+            active: route().current('admin.classes.index') || route().current('admin.classes.show'),
             show: true,
+        },
+        {
+            label: 'Assign to class',
+            href: page.props.gradeContext?.selected?.id
+                ? route('admin.classes.assign', page.props.gradeContext.selected.id)
+                : route('admin.classes.index'),
+            active: route().current('admin.classes.assign'),
+            show: isAdmin.value,
         },
         {
             label: 'Practice sets',

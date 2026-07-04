@@ -149,6 +149,13 @@ watch(examFilter, (value, oldValue) => {
                     </Link>
                     <Link
                         v-if="isAdmin"
+                        :href="route('admin.classes.assign', gradeLevel.id)"
+                        class="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+                    >
+                        Assign to class
+                    </Link>
+                    <Link
+                        v-if="isAdmin"
                         :href="route('admin.practice-sets.index')"
                         class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                     >

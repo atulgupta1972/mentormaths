@@ -135,6 +135,146 @@ class AssignmentWhatsAppNotificationService
         return null;
     }
 
+    /**
+     * @param  list<Worksheet>  $worksheets
+     * @return list<array{mobile: string, label: string, message: string}>
+     */
+    public function notificationsForMultiAssignment(
+        Student $student,
+        array $worksheets,
+        string $dueDate,
+        ?string $notes = null,
+    ): array {
+        if ($worksheets === []) {
+            return [];
+        }
+
+        if (count($worksheets) === 1) {
+            return $this->notificationsForAssignment($student, $worksheets[0], $dueDate, $notes);
+        }
+
+        $message = $this->buildMultiAssignmentMessage($student, $worksheets, $dueDate, $notes);
+        $recipients = $this->contactService->recipientsForStudent($student);
+
+        return array_map(fn (array $recipient) => [
+            'mobile' => $recipient['mobile'],
+            'label' => $recipient['label'],
+            'message' => $message,
+        ], $recipients);
+    }
+
+    /**
+     * @param  array<int, list<Worksheet>>  $worksheetsByStudentId
+     * @return list<array{mobile: string, label: string, message: string}>
+     */
+    public function notificationsForClassMultiAssignment(
+        array $worksheetsByStudentId,
+        string $dueDate,
+        ?string $notes = null,
+    ): array {
+        $notifications = [];
+
+        foreach ($worksheetsByStudentId as $studentId => $worksheets) {
+            if ($worksheets === []) {
+                continue;
+            }
+
+            $student = Student::query()->find($studentId);
+
+            if (! $student) {
+                continue;
+            }
+
+            array_push(
+                $notifications,
+                ...$this->notificationsForMultiAssignment($student, $worksheets, $dueDate, $notes),
+            );
+        }
+
+        return $notifications;
+    }
+
+    /**
+     * @param  list<Worksheet>  $worksheets
+     */
+    public function buildMultiAssignmentMessage(
+        Student $student,
+        array $worksheets,
+        string $dueDate,
+        ?string $notes = null,
+    ): string {
+        $dueLabel = Carbon::parse($dueDate)->format('d M Y');
+        $login = route('login');
+        $dashboard = route('dashboard');
+
+        $lines = [
+            'Hello, this is Mentor Maths.',
+            '',
+            "New work assigned for {$student->name} (complete by {$dueLabel}):",
+            '',
+        ];
+
+        $totalMin = 0;
+        $totalMax = 0;
+
+        foreach (array_values($worksheets) as $index => $worksheet) {
+            $worksheet->loadMissing(['topic.chapter', 'chapter']);
+
+            if (! isset($worksheet->questions_count)) {
+                $worksheet->loadCount('questions');
+            }
+
+            $questionCount = (int) ($worksheet->questions_count ?? 0);
+            $kindLabel = $worksheet->isChapterScope() ? 'Test' : 'Practice';
+            $scope = $this->scopeLine($worksheet);
+            $timeEstimate = $this->estimateTimeLabel($worksheet, $questionCount);
+            [$minMinutes, $maxMinutes] = $this->estimateTimeRange($worksheet, $questionCount);
+            $totalMin += $minMinutes;
+            $totalMax += $maxMinutes;
+
+            $detail = "{$worksheet->set_code} — {$worksheet->tier_label} {$kindLabel}";
+            if ($scope) {
+                $detail .= ' · '.str_replace(['Topic: ', 'Chapter: '], '', $scope);
+            }
+            $detail .= " · {$questionCount} Q · {$timeEstimate}";
+
+            $lines[] = ($index + 1).". {$detail}";
+        }
+
+        if (count($worksheets) > 1) {
+            $lines[] = '';
+            $lines[] = "Total approx {$totalMin}–{$totalMax} min";
+        }
+
+        if (filled($notes)) {
+            $lines[] = '';
+            $lines[] = "Note: {$notes}";
+        }
+
+        $lines[] = '';
+        $lines[] = 'Login and start from your dashboard:';
+        $lines[] = $dashboard;
+        $lines[] = "Login: {$login}";
+        $lines[] = '';
+        $lines[] = 'Thank you.';
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @return array{0: int, 1: int}
+     */
+    private function estimateTimeRange(Worksheet $worksheet, int $questionCount): array
+    {
+        $label = $this->estimateTimeLabel($worksheet, $questionCount);
+
+        if (preg_match('/approx (\d+)–(\d+) min/', $label, $matches)) {
+            return [(int) $matches[1], (int) $matches[2]];
+        }
+
+        return [10, 15];
+    }
+
     public function estimateTimeLabel(Worksheet $worksheet, int $questionCount): string
     {
         if ($questionCount <= 0) {

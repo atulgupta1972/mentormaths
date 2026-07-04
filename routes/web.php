@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AcademicYearController;
 use App\Http\Controllers\Admin\ChapterHeadController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
+use App\Http\Controllers\Admin\ClassAssignmentController;
 use App\Http\Controllers\Admin\ClassHubController;
 use App\Http\Controllers\Admin\ExamPlanController as AdminExamPlanController;
 use App\Http\Controllers\Admin\GradeContextController;
@@ -43,6 +44,8 @@ Route::get('/dashboard', DashboardController::class)
 Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/classes', [ClassHubController::class, 'index'])->name('classes.index');
     Route::get('/classes/{gradeLevel}', [ClassHubController::class, 'show'])->name('classes.show');
+    Route::get('/classes/{gradeLevel}/assign', [ClassAssignmentController::class, 'show'])->name('classes.assign');
+    Route::post('/classes/{gradeLevel}/assign', [ClassAssignmentController::class, 'store'])->name('classes.assign.store');
 
     Route::get('/syllabus/{syllabusVersion}', [SyllabusVersionController::class, 'show'])->name('syllabus.show');
 
