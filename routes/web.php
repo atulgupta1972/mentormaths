@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AcademicYearController;
 use App\Http\Controllers\Admin\ChapterHeadController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
 use App\Http\Controllers\Admin\ClassHubController;
+use App\Http\Controllers\Admin\ExamPlanController as AdminExamPlanController;
 use App\Http\Controllers\Admin\GradeContextController;
 use App\Http\Controllers\Admin\GroupController;
 use App\Http\Controllers\Admin\PracticeSetController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
+use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
 use App\Http\Controllers\Student\PracticeSetController as StudentPracticeSetController;
 use App\Http\Controllers\StudentProfileController;
 use Illuminate\Support\Facades\Route;
@@ -104,6 +106,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('syllabus.import');
     Route::post('/syllabus/{syllabusVersion}/import', [SyllabusVersionController::class, 'importIntoVersion'])
         ->name('syllabus.import-into');
+    Route::post('/syllabus/{syllabusVersion}/import-preview', [SyllabusVersionController::class, 'previewImportIntoVersion'])
+        ->name('syllabus.import-preview');
     Route::put('/syllabus/{syllabusVersion}/rows', [SyllabusVersionController::class, 'updateRows'])
         ->name('syllabus.rows.update');
     Route::post('/syllabus/{syllabusVersion}/carry-forward', [SyllabusVersionController::class, 'carryForward'])
@@ -142,9 +146,17 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/practice-sets/{worksheet}/assign-bulk', [SetAssignmentController::class, 'storeBulk'])->name('practice-sets.assign-bulk');
     Route::get('/set-assignments/{assignment}', [SetAssignmentController::class, 'show'])->name('set-assignments.show');
     Route::post('/set-assignments/{assignment}/reassign', [SetAssignmentController::class, 'reassign'])->name('set-assignments.reassign');
+
+    Route::post('/exam-plans', [AdminExamPlanController::class, 'store'])->name('exam-plans.store');
+    Route::put('/exam-plans/{examPlan}', [AdminExamPlanController::class, 'update'])->name('exam-plans.update');
+    Route::delete('/exam-plans/{examPlan}', [AdminExamPlanController::class, 'destroy'])->name('exam-plans.destroy');
 });
 
 Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->group(function () {
+    Route::post('/exam-plans', [StudentExamPlanController::class, 'store'])->name('exam-plans.store');
+    Route::put('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'update'])->name('exam-plans.update');
+    Route::delete('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'destroy'])->name('exam-plans.destroy');
+
     Route::get('/assignments/{assignment}', [StudentPracticeSetController::class, 'showAssignment'])->name('assignments.show');
     Route::post('/assignments/{assignment}/start', [StudentPracticeSetController::class, 'startAttempt'])->name('assignments.start');
     Route::get('/attempts/{attempt}', [StudentPracticeSetController::class, 'showAttempt'])->name('attempts.show');

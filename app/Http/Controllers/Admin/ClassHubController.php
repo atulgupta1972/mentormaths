@@ -13,13 +13,17 @@ use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
+use App\Services\ExamPlanService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ClassHubController extends Controller
 {
-    public function __construct(private AdminGradeContext $gradeContext) {}
+    public function __construct(
+        private AdminGradeContext $gradeContext,
+        private ExamPlanService $examPlanService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -172,14 +176,14 @@ class ClassHubController extends Controller
             ])
             ->values()
             ->map(fn ($topic) => [
-            'id' => $topic->id,
-            'name' => $topic->name,
-            'chapter_id' => $topic->syllabus_chapter_id,
-            'chapter_number' => $topic->chapter->chapter_number,
-            'chapter_name' => $topic->chapter->name,
-            'questions_count' => $topic->questions_count,
-            'practice_sets_count' => $topic->practice_sets_count,
-        ]);
+                'id' => $topic->id,
+                'name' => $topic->name,
+                'chapter_id' => $topic->syllabus_chapter_id,
+                'chapter_number' => $topic->chapter->chapter_number,
+                'chapter_name' => $topic->chapter->name,
+                'questions_count' => $topic->questions_count,
+                'practice_sets_count' => $topic->practice_sets_count,
+            ]);
 
         $filteredChapters = $chapters->when($chapterId, fn ($c) => $c->where('id', $chapterId))->values();
 
@@ -190,6 +194,29 @@ class ClassHubController extends Controller
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
                 ->count()
             : 0;
+
+        $examFilter = $request->string('exam_filter')->toString();
+        if (! in_array($examFilter, ['upcoming', 'past', 'all'], true)) {
+            $examFilter = 'upcoming';
+        }
+
+        $examPlanRows = [];
+        $examPlanStats = ['with_upcoming' => 0, 'without_plan' => 0, 'without_upcoming' => 0];
+
+        if ($activeYear) {
+            $enrollments = $this->examPlanService->activeEnrollmentForYear($activeYear->id, $gradeLevel->id);
+            $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, true);
+            $examPlanStats = [
+                'with_upcoming' => collect($examPlanRows)->where('has_upcoming', true)->count(),
+                'without_plan' => collect($examPlanRows)->where('has_plan', false)->count(),
+                'without_upcoming' => collect($examPlanRows)->where('has_upcoming', false)->count(),
+            ];
+        }
+
+        $syllabusChapterOptions = $chapters->map(fn ($ch) => [
+            'id' => $ch['id'],
+            'label' => "Ch {$ch['chapter_number']} — {$ch['name']}",
+        ])->values()->all();
 
         return Inertia::render('Admin/Classes/Show', [
             'gradeLevel' => $gradeLevel->only(['id', 'name', 'sort_order']),
@@ -215,6 +242,11 @@ class ClassHubController extends Controller
                     : $topics->sum('practice_sets_count'),
                 'students_count' => $studentsCount,
             ],
+            'examFilter' => $examFilter,
+            'examPlanRows' => $examPlanRows,
+            'examPlanStats' => $examPlanStats,
+            'syllabusChapterOptions' => $syllabusChapterOptions,
+            'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ]);
     }
 }

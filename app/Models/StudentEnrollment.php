@@ -45,4 +45,9 @@ class StudentEnrollment extends Model
     {
         return $this->hasMany(SetAssignment::class, 'student_enrollment_id');
     }
+
+    public function examPlans(): HasMany
+    {
+        return $this->hasMany(ExamPlan::class)->orderBy('exam_date');
+    }
 }

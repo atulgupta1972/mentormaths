@@ -8,6 +8,7 @@ use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Student;
 use App\Services\AdminGradeContext;
+use App\Services\ExamPlanService;
 use App\Services\StudentPromotionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +20,7 @@ class StudentController extends Controller
     public function __construct(
         private StudentPromotionService $promotionService,
         private AdminGradeContext $gradeContext,
+        private ExamPlanService $examPlanService,
     ) {}
 
     public function index(Request $request): Response
@@ -57,6 +59,14 @@ class StudentController extends Controller
         $latest = $this->promotionService->latestEnrollment($student);
         $nextGrade = $latest?->gradeLevel?->next();
 
+        $examPlans = collect();
+        $syllabusChapters = collect();
+
+        if ($latest) {
+            $examPlans = $this->examPlanService->plansForEnrollment($latest, true);
+            $syllabusChapters = $this->examPlanService->chapterOptionsForEnrollment($latest)->values()->all();
+        }
+
         return Inertia::render('Admin/Students/Show', [
             'student' => $student,
             'enrollmentHistory' => $history,
@@ -69,6 +79,9 @@ class StudentController extends Controller
                 'login' => route('login'),
                 'dashboard' => route('dashboard'),
             ],
+            'examPlans' => $examPlans->values()->all(),
+            'syllabusChapters' => $syllabusChapters,
+            'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ]);
     }
 

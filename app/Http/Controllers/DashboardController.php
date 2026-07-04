@@ -3,14 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
-use App\Services\SetAttemptService;
+use App\Services\DashboardService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __construct(private SetAttemptService $attemptService) {}
+    public function __construct(private DashboardService $dashboardService) {}
 
     public function __invoke(Request $request): Response
     {
@@ -19,18 +19,17 @@ class DashboardController extends Controller
         if ($user->isAdmin()) {
             return Inertia::render('Dashboard', [
                 'isAdmin' => true,
+                ...$this->dashboardService->forAdmin($request),
             ]);
         }
 
         $enrollment = $user->student?->currentEnrollment();
-        $assignments = $enrollment
-            ? $this->attemptService->dashboardForEnrollment($enrollment)
-            : [];
+        $studentData = $this->dashboardService->forStudent($enrollment);
 
         return Inertia::render('Dashboard', [
             'isAdmin' => false,
-            'assignments' => $assignments,
             'activeYear' => AcademicYear::active()?->only(['id', 'name']),
+            ...$studentData,
         ]);
     }
 }

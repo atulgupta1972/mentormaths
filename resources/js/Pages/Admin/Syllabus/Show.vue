@@ -49,6 +49,10 @@ const importForm = useForm({
 watch(
     () => props.rows,
     (newRows) => {
+        if (previewActive.value) {
+            return;
+        }
+
         form.rows = newRows?.length
             ? newRows.map((row) => ({ ...row }))
             : [emptyRow()];
@@ -58,6 +62,10 @@ watch(
 
 const importFeedback = ref('');
 const importFeedbackType = ref('');
+const previewActive = ref(false);
+const previewFilename = ref('');
+const previewLoading = ref(false);
+const savedRowSnapshot = ref(null);
 
 const onImportFileChange = (event) => {
     importForm.file = event.target.files[0] ?? null;
@@ -65,43 +73,75 @@ const onImportFileChange = (event) => {
     importFeedbackType.value = importForm.file ? 'info' : '';
 };
 
-const submitExcelImport = () => {
+const snapshotSavedRows = () => {
+    savedRowSnapshot.value = props.rows.map((row) => ({ ...row }));
+};
+
+const applyPreviewRows = (rows, filename) => {
+    if (!previewActive.value && savedRowSnapshot.value === null) {
+        snapshotSavedRows();
+    }
+
+    form.rows = rows.map((row) => ({ ...row }));
+    previewActive.value = true;
+    previewFilename.value = filename;
+    importFeedbackType.value = 'info';
+    importFeedback.value = `Preview loaded: ${rows.length} row(s) from ${filename}. Review the table, then click Save syllabus to apply.`;
+    nextTick(resizeAllFields);
+};
+
+const discardPreview = () => {
+    if (savedRowSnapshot.value) {
+        form.rows = savedRowSnapshot.value.map((row) => ({ ...row }));
+    } else {
+        form.rows = props.rows.length ? props.rows.map((row) => ({ ...row })) : [emptyRow()];
+    }
+
+    previewActive.value = false;
+    previewFilename.value = '';
+    savedRowSnapshot.value = null;
+    importFeedback.value = 'Preview discarded. Showing the last saved syllabus again.';
+    importFeedbackType.value = 'info';
+};
+
+const submitExcelPreview = async () => {
     importFeedback.value = '';
     importFeedbackType.value = '';
+    importForm.clearErrors();
 
     if (!importForm.file) {
         importForm.setError('file', 'Choose an Excel file first.');
         importFeedback.value = 'Choose an Excel file first.';
         importFeedbackType.value = 'error';
+
         return;
     }
 
-    importFeedback.value = 'Uploading and importing… please wait.';
+    previewLoading.value = true;
+    importFeedback.value = 'Reading Excel file…';
     importFeedbackType.value = 'info';
 
-    importForm.post(route('admin.syllabus.import-into', props.version.id), {
-        forceFormData: true,
-        preserveScroll: true,
-        onSuccess: (page) => {
-            importForm.reset('file');
+    try {
+        const formData = new FormData();
+        formData.append('file', importForm.file);
 
-            if (page.props.flash?.error) {
-                importFeedbackType.value = 'error';
-                importFeedback.value = page.props.flash.error;
-                return;
-            }
+        const { data } = await window.axios.post(
+            route('admin.syllabus.import-preview', props.version.id),
+            formData,
+            { headers: { 'Content-Type': 'multipart/form-data' } },
+        );
 
-            importFeedbackType.value = 'success';
-            importFeedback.value = page.props.flash?.success || 'Import completed successfully.';
-        },
-        onError: () => {
-            importFeedbackType.value = 'error';
-            importFeedback.value =
-                importForm.errors.file
-                || Object.values(importForm.errors)[0]
-                || 'Upload failed. Use a .xlsx file under 10 MB.';
-        },
-    });
+        applyPreviewRows(data.rows, data.filename || importForm.file.name);
+        importForm.reset('file');
+    } catch (error) {
+        importFeedbackType.value = 'error';
+        importFeedback.value =
+            error.response?.data?.message
+            || error.response?.data?.errors?.file?.[0]
+            || 'Could not read the Excel file. Use a .xlsx file under 10 MB.';
+    } finally {
+        previewLoading.value = false;
+    }
 };
 
 function emptyRow() {
@@ -180,7 +220,14 @@ const resizeAllFields = () => {
 onMounted(resizeAllFields);
 
 const saveRows = () => {
-    form.put(route('admin.syllabus.rows.update', props.version.id));
+    form.put(route('admin.syllabus.rows.update', props.version.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            previewActive.value = false;
+            previewFilename.value = '';
+            savedRowSnapshot.value = null;
+        },
+    });
 };
 
 const submitCarryForward = () => {
@@ -274,10 +321,10 @@ const saveNewHead = async () => {
                 <div v-if="isAdmin" class="rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 p-4 shadow-sm">
                     <h3 class="font-medium text-gray-900">Import from Excel</h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Replace this syllabus from a .xlsx file (row 1 headers:
-                        Chapter No., Main Topic (Chapter), Sub-Topic, …).
+                        Load a .xlsx file to <strong>preview</strong> in the table below. Nothing is saved until you click
+                        <strong>Save syllabus</strong>.
                     </p>
-                    <form class="mt-3 flex flex-wrap items-end gap-3" @submit.prevent="submitExcelImport">
+                    <form class="mt-3 flex flex-wrap items-end gap-3" @submit.prevent="submitExcelPreview">
                         <div class="min-w-[240px] flex-1">
                             <InputLabel value="Excel file (.xlsx)" />
                             <input
@@ -288,8 +335,8 @@ const saveNewHead = async () => {
                             />
                             <InputError class="mt-1" :message="importForm.errors.file" />
                         </div>
-                        <PrimaryButton type="submit" :disabled="importForm.processing">
-                            {{ importForm.processing ? 'Importing…' : 'Import Excel' }}
+                        <PrimaryButton type="submit" :disabled="previewLoading">
+                            {{ previewLoading ? 'Reading…' : 'Preview Excel' }}
                         </PrimaryButton>
                     </form>
                     <div
@@ -302,6 +349,22 @@ const saveNewHead = async () => {
                         }"
                     >
                         {{ importFeedback }}
+                    </div>
+                </div>
+
+                <div
+                    v-if="previewActive"
+                    class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                >
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <p>
+                            <strong>Preview mode</strong> — showing {{ form.rows.length }} row(s) from
+                            <strong>{{ previewFilename }}</strong>. The saved syllabus is unchanged until you click
+                            <strong>Save syllabus</strong>.
+                        </p>
+                        <SecondaryButton type="button" @click="discardPreview">
+                            Discard preview
+                        </SecondaryButton>
                     </div>
                 </div>
 
@@ -323,7 +386,7 @@ const saveNewHead = async () => {
                         <div class="flex gap-2">
                             <SecondaryButton type="button" @click="addRow">Add row</SecondaryButton>
                             <PrimaryButton type="button" :disabled="form.processing" @click="saveRows">
-                                Save syllabus
+                                {{ previewActive ? 'Save preview to syllabus' : 'Save syllabus' }}
                             </PrimaryButton>
                         </div>
                     </div>

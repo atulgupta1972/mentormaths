@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\AssignmentProgress;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -19,6 +20,7 @@ class SetAssignment extends Model
     protected $fillable = [
         'student_enrollment_id',
         'worksheet_id',
+        'exam_plan_id',
         'assigned_by',
         'assigned_at',
         'reassigned_at',
@@ -38,7 +40,7 @@ class SetAssignment extends Model
 
     public function isOverdue(): bool
     {
-        return \App\Support\AssignmentProgress::isOverdue($this);
+        return AssignmentProgress::isOverdue($this);
     }
 
     public function enrollment(): BelongsTo
@@ -49,6 +51,11 @@ class SetAssignment extends Model
     public function practiceSet(): BelongsTo
     {
         return $this->belongsTo(Worksheet::class, 'worksheet_id');
+    }
+
+    public function examPlan(): BelongsTo
+    {
+        return $this->belongsTo(ExamPlan::class);
     }
 
     public function assigner(): BelongsTo

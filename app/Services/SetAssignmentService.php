@@ -14,12 +14,15 @@ use Illuminate\Support\Collection;
 
 class SetAssignmentService
 {
+    public function __construct(private ExamPlanService $examPlanService) {}
+
     public function assign(
         Worksheet $practiceSet,
         StudentEnrollment $enrollment,
         User $assigner,
         string $dueDate,
         ?string $notes = null,
+        ?int $examPlanId = null,
     ): SetAssignment {
         if ($practiceSet->status !== Worksheet::STATUS_PUBLISHED) {
             throw new \InvalidArgumentException('Only published practice sets can be assigned.');
@@ -38,9 +41,17 @@ class SetAssignmentService
             throw new \InvalidArgumentException('This student already has an active assignment for this set.');
         }
 
+        $examPlan = $this->examPlanService->matchingPlanForAssignment(
+            $enrollment,
+            $practiceSet,
+            $dueDate,
+            $examPlanId,
+        );
+
         return SetAssignment::create([
             'student_enrollment_id' => $enrollment->id,
             'worksheet_id' => $practiceSet->id,
+            'exam_plan_id' => $examPlan?->id,
             'assigned_by' => $assigner->id,
             'assigned_at' => now(),
             'due_date' => $dueDate,

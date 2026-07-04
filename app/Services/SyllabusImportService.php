@@ -14,6 +14,22 @@ class SyllabusImportService
 {
     public function import(UploadedFile $file, SyllabusVersion $version): int
     {
+        $rows = $this->parseFileToPreviewRows($file);
+
+        if ($rows->isEmpty()) {
+            return 0;
+        }
+
+        $this->syncRows($version, $rows->all());
+
+        return $rows->count();
+    }
+
+    /**
+     * Parse an Excel syllabus file into editable row arrays without touching the database.
+     */
+    public function parseFileToPreviewRows(UploadedFile $file): Collection
+    {
         if (! class_exists(\ZipArchive::class)) {
             throw new \RuntimeException('PHP zip extension is required to read Excel (.xlsx) files.');
         }
@@ -22,67 +38,58 @@ class SyllabusImportService
         $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
 
         if ($rows === []) {
-            return 0;
+            return collect();
         }
 
         $headerIndex = $this->findHeaderRowIndex($rows);
         $headers = $this->normalizeHeaders($rows[$headerIndex]);
         $dataRows = array_slice($rows, $headerIndex + 1);
 
-        $imported = 0;
+        $previewRows = collect();
         $currentChapter = null;
         $chapterSort = 0;
-        $topicSort = 0;
 
-        DB::transaction(function () use ($dataRows, $headers, $version, &$imported, &$currentChapter, &$chapterSort, &$topicSort) {
-            $version->chapters()->each(fn ($chapter) => $chapter->topics()->delete());
-            $version->chapters()->delete();
+        foreach ($dataRows as $row) {
+            $data = $this->mapRow($headers, $row);
 
-            foreach ($dataRows as $row) {
-                $data = $this->mapRow($headers, $row);
-
-                if ($data['topic'] === '' && $data['chapter_name'] === '') {
-                    continue;
-                }
-
-                if ($this->shouldCreateChapter($data, $currentChapter)) {
-                    $chapterSort++;
-                    $topicSort = 0;
-                    $currentChapter = SyllabusChapter::create([
-                        'syllabus_version_id' => $version->id,
-                        'chapter_number' => $this->cleanChapterNumber($data['chapter_number']) ?: (string) $chapterSort,
-                        'name' => $data['chapter_name'] ?: $data['topic'],
-                        'sort_order' => $chapterSort,
-                    ]);
-                }
-
-                if (! $currentChapter) {
-                    continue;
-                }
-
-                $topicName = $data['topic'] ?: $data['chapter_name'];
-
-                if ($topicName === '') {
-                    continue;
-                }
-
-                $topicSort++;
-                SyllabusTopic::create([
-                    'syllabus_chapter_id' => $currentChapter->id,
-                    'name' => $topicName,
-                    'learning_outcomes' => $data['learning_outcomes'] ?: null,
-                    'difficulty' => $data['difficulty'] ?: null,
-                    'planned_periods' => $this->parsePeriods($data['planned_periods']),
-                    'remarks' => $data['remarks'] ?: null,
-                    'sort_order' => $topicSort,
-                ]);
-                $imported++;
+            if ($data['topic'] === '' && $data['chapter_name'] === '') {
+                continue;
             }
 
-            $version->update(['status' => SyllabusVersion::STATUS_PUBLISHED]);
-        });
+            if ($this->shouldCreateChapter($data, $currentChapter)) {
+                $chapterSort++;
+                $currentChapter = new SyllabusChapter([
+                    'chapter_number' => $this->cleanChapterNumber($data['chapter_number']) ?: (string) $chapterSort,
+                    'name' => $data['chapter_name'] ?: $data['topic'],
+                ]);
+            }
 
-        return $imported;
+            if (! $currentChapter) {
+                continue;
+            }
+
+            $topicName = $data['topic'] ?: $currentChapter->name;
+
+            if ($topicName === '') {
+                continue;
+            }
+
+            $previewRows->push([
+                'id' => null,
+                'chapter_id' => null,
+                'chapter_number' => $currentChapter->chapter_number,
+                'chapter_name' => $currentChapter->name,
+                'chapter_head_id' => '',
+                'chapter_head_name' => '',
+                'topic_name' => $topicName,
+                'learning_outcomes' => $data['learning_outcomes'],
+                'difficulty' => $data['difficulty'],
+                'planned_periods' => $this->parsePeriods($data['planned_periods']) ?? '',
+                'remarks' => $data['remarks'],
+            ]);
+        }
+
+        return $previewRows;
     }
 
     /**

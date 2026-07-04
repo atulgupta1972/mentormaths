@@ -56,6 +56,7 @@ class SetAssignmentController extends Controller
             'student_id' => ['required', 'exists:students,id'],
             'target_date' => ['required', 'date', 'after_or_equal:today'],
             'notes' => ['nullable', 'string'],
+            'exam_plan_id' => ['nullable', 'exists:exam_plans,id'],
         ]);
 
         $student = Student::findOrFail($validated['student_id']);
@@ -72,6 +73,7 @@ class SetAssignmentController extends Controller
                 $request->user(),
                 $validated['target_date'],
                 $validated['notes'] ?? null,
+                $validated['exam_plan_id'] ?? null,
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());

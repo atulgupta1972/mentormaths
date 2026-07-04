@@ -11,6 +11,7 @@ use App\Models\SyllabusVersion;
 use App\Services\AdminGradeContext;
 use App\Services\SyllabusCarryForwardService;
 use App\Services\SyllabusImportService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -151,6 +152,37 @@ class SyllabusVersionController extends Controller
         ]);
 
         return $this->processImport($request, $syllabusVersion);
+    }
+
+    public function previewImportIntoVersion(Request $request, SyllabusVersion $syllabusVersion): JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls', 'extensions:xlsx,xls', 'max:10240'],
+        ]);
+
+        try {
+            $rows = $this->importService->parseFileToPreviewRows($request->file('file'));
+        } catch (\Throwable $e) {
+            report($e);
+
+            $message = str_contains(strtolower($e->getMessage()), 'zip')
+                ? 'Server cannot read .xlsx files (PHP zip extension missing). Ask your host to enable ext-zip.'
+                : 'Could not read the Excel file: '.$e->getMessage();
+
+            return response()->json(['message' => $message], 422);
+        }
+
+        if ($rows->isEmpty()) {
+            return response()->json([
+                'message' => 'No topics found. Check that row 1 has headers: Chapter No., Main Topic (Chapter), Sub-Topic, etc.',
+            ], 422);
+        }
+
+        return response()->json([
+            'rows' => $rows->values()->all(),
+            'count' => $rows->count(),
+            'filename' => $request->file('file')->getClientOriginalName(),
+        ]);
     }
 
     private function processImport(Request $request, SyllabusVersion $version): RedirectResponse

@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ContactNumbersPanel from '@/Components/ContactNumbersPanel.vue';
+import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -16,6 +17,9 @@ const props = defineProps({
     gradeLevels: Array,
     boards: Array,
     shareLinks: Object,
+    examPlans: { type: Array, default: () => [] },
+    syllabusChapters: { type: Array, default: () => [] },
+    examTypeOptions: { type: Array, default: () => [] },
 });
 
 const contactFields = computed(() => [
@@ -116,6 +120,16 @@ const submit = () => {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <div v-if="latestEnrollment" class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">
+                    <ExamPlanPanel
+                        :plans="examPlans"
+                        :syllabus-chapters="syllabusChapters"
+                        :exam-type-options="examTypeOptions"
+                        :student-id="student.id"
+                        context="admin"
+                    />
                 </div>
 
                 <div v-if="latestEnrollment" class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">
