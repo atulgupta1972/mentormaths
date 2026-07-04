@@ -15,6 +15,14 @@ class GuidedPracticeService
 {
     public function initialize(SetAttempt $attempt): void
     {
+        if ($attempt->guidedQuestions()->exists()) {
+            if (! $attempt->isGuided()) {
+                $attempt->update(['mode' => SetAttempt::MODE_GUIDED]);
+            }
+
+            return;
+        }
+
         $assignment = $attempt->assignment()->with('practiceSet.questions')->first();
         $questions = $assignment->practiceSet->questions->values();
 

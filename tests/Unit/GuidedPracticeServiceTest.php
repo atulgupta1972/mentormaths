@@ -18,6 +18,7 @@ use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\Worksheet;
 use App\Services\GuidedPracticeService;
+use App\Services\SetAttemptService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -65,10 +66,21 @@ class GuidedPracticeServiceTest extends TestCase
         ]);
     }
 
+    public function test_stale_batch_attempt_on_topic_practice_upgrades_to_guided(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt(withGuidedInit: false);
+
+        app(SetAttemptService::class)->ensureGuidedForTopicPractice($attempt);
+
+        $attempt->refresh();
+        $this->assertTrue($attempt->isGuided());
+        $this->assertSame(1, $attempt->guidedQuestions()->count());
+    }
+
     /**
-     * @return array{0: SetAttempt, 1: QuestionOption, 2: QuestionOption}
+     * @return array{0: SetAttempt, 1?: QuestionOption, 2?: QuestionOption}
      */
-    private function seedGuidedAttempt(): array
+    private function seedGuidedAttempt(bool $withGuidedInit = true): array
     {
         $year = AcademicYear::query()->create([
             'name' => '2026-27',
@@ -175,17 +187,19 @@ class GuidedPracticeServiceTest extends TestCase
         $attempt = SetAttempt::query()->create([
             'set_assignment_id' => $assignment->id,
             'attempt_number' => 1,
-            'mode' => SetAttempt::MODE_GUIDED,
+            'mode' => $withGuidedInit ? SetAttempt::MODE_GUIDED : SetAttempt::MODE_BATCH,
             'started_at' => now(),
             'status' => SetAttempt::STATUS_IN_PROGRESS,
         ]);
 
-        GuidedAttemptQuestion::query()->create([
-            'set_attempt_id' => $attempt->id,
-            'question_id' => $question->id,
-            'sort_order' => 0,
-            'phase' => GuidedAttemptQuestion::PHASE_ANSWERING,
-        ]);
+        if ($withGuidedInit) {
+            GuidedAttemptQuestion::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'sort_order' => 0,
+                'phase' => GuidedAttemptQuestion::PHASE_ANSWERING,
+            ]);
+        }
 
         return [$attempt, $wrongOption, $correctOption];
     }

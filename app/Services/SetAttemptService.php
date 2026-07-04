@@ -20,7 +20,9 @@ class SetAttemptService
             ->first();
 
         if ($inProgress) {
-            return $inProgress;
+            $this->ensureGuidedForTopicPractice($inProgress);
+
+            return $inProgress->fresh();
         }
 
         if ($assignment->status === SetAssignment::STATUS_COMPLETED) {
@@ -108,6 +110,23 @@ class SetAttemptService
             $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
 
             return $attempt->fresh(['answers', 'assignment.practiceSet']);
+        });
+    }
+
+    public function ensureGuidedForTopicPractice(SetAttempt $attempt): void
+    {
+        if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS || $attempt->isGuided()) {
+            return;
+        }
+
+        $attempt->loadMissing('assignment.practiceSet');
+
+        if ($attempt->assignment->practiceSet->isChapterScope()) {
+            return;
+        }
+
+        DB::transaction(function () use ($attempt) {
+            $this->guidedPractice->initialize($attempt);
         });
     }
 
