@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { questionHubClassUrl } from '@/utils/questionHub';
 
 const props = defineProps({
     chapter: Object,
@@ -12,9 +13,11 @@ const props = defineProps({
     setCards: Array,
     chapterTests: Array,
     stats: Object,
+    board: Object,
 });
 
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
+const classListUrl = computed(() => questionHubClassUrl(props.gradeLevel?.id, props.board?.id));
 
 const tierColor = (tier, type) => {
     if (type === 'chapter_test') return 'border-sky-300 bg-sky-50 hover:border-sky-500';
@@ -45,7 +48,7 @@ const packageAsSet = (card) => {
                 <div>
                 <Link
                     v-if="gradeLevel"
-                    :href="route('admin.questions.classes.show', gradeLevel.id)"
+                    :href="classListUrl"
                     class="text-sm text-indigo-600"
                 >
                     ← {{ gradeLevel.name }}

@@ -10,6 +10,8 @@ class AdminGradeContext
 {
     public const SESSION_KEY = 'admin_grade_level_id';
 
+    public const SESSION_BOARD_KEY = 'admin_board_id';
+
     /** Classes offered at Maths Foundation (middle + secondary). */
     public const CLASS_SORT_ORDERS = [6, 7, 8, 9, 10];
 
@@ -56,6 +58,28 @@ class AdminGradeContext
         }
 
         $request->session()->forget(self::SESSION_KEY);
+    }
+
+    public function resolveBoardId(Request $request): ?int
+    {
+        if ($request->filled('board_id')) {
+            $this->persistBoard($request, $request->integer('board_id') ?: null);
+        }
+
+        $id = $request->session()->get(self::SESSION_BOARD_KEY);
+
+        return $id ? (int) $id : null;
+    }
+
+    public function persistBoard(Request $request, ?int $boardId): void
+    {
+        if ($boardId) {
+            $request->session()->put(self::SESSION_BOARD_KEY, $boardId);
+
+            return;
+        }
+
+        $request->session()->forget(self::SESSION_BOARD_KEY);
     }
 
     public function sharedPayload(Request $request): array

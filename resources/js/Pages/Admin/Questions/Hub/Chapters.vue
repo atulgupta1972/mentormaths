@@ -36,6 +36,12 @@ const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
         <div class="py-12">
             <div class="mx-auto max-w-6xl space-y-6 sm:px-6 lg:px-8">
                 <BrowseModeNotice />
+                <div
+                    v-if="usePage().props.flash?.warning"
+                    class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                >
+                    {{ usePage().props.flash.warning }}
+                </div>
                 <div class="grid gap-4 sm:grid-cols-3">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.chapters_count }}</p>

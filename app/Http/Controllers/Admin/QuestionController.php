@@ -36,8 +36,12 @@ class QuestionController extends Controller
         $topic->load(['chapter.syllabusVersion.board', 'chapter.syllabusVersion.gradeLevel']);
 
         $gradeLevel = $topic->chapter?->syllabusVersion?->gradeLevel;
+        $board = $topic->chapter?->syllabusVersion?->board;
         if ($gradeLevel) {
             $this->gradeContext->persist($request, $gradeLevel->id);
+        }
+        if ($board) {
+            $this->gradeContext->persistBoard($request, $board->id);
         }
 
         $query = Question::query()
@@ -58,9 +62,12 @@ class QuestionController extends Controller
                 'chapter_id' => $topic->syllabus_chapter_id,
                 'chapter_number' => $topic->chapter->chapter_number,
                 'chapter_name' => $topic->chapter->name,
+                'grade_level_id' => $gradeLevel?->id,
                 'grade_name' => $gradeLevel?->name,
-                'board_code' => $topic->chapter->syllabusVersion?->board?->code,
+                'board_id' => $board?->id,
+                'board_code' => $board?->code,
             ],
+            'board' => $board?->only(['id', 'code', 'name']),
             'questions' => $questions,
             'filters' => [
                 'search' => $request->string('search')->toString(),

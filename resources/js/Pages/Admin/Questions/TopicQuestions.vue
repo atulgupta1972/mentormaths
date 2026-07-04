@@ -4,6 +4,7 @@ import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { questionHubChapterUrl, questionHubClassUrl } from '@/utils/questionHub';
 
 const props = defineProps({
     topic: Object,
@@ -16,6 +17,9 @@ const page = usePage();
 const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
 const generating = ref(false);
 const overwrite = ref(false);
+
+const classListUrl = computed(() => questionHubClassUrl(props.topic?.grade_level_id, props.topic?.board_id));
+const chapterSetsUrl = computed(() => questionHubChapterUrl(props.topic?.chapter_id));
 
 const applySearch = (event) => {
     const form = event.target;
@@ -61,13 +65,15 @@ const generateHints = () => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <Link
-                        :href="route('admin.questions.chapters.show', topic.chapter_id)"
+                        :href="chapterSetsUrl"
                         class="text-sm text-indigo-600"
                     >
                         ← Ch {{ topic.chapter_number }} {{ topic.chapter_name }}
                     </Link>
                     <p class="mt-1 text-sm text-gray-500">
                         {{ topic.board_code }} {{ topic.grade_name }}
+                        ·
+                        <Link :href="classListUrl" class="text-indigo-600 hover:underline">{{ topic.grade_name }} chapters</Link>
                     </p>
                     <h2 class="text-xl font-semibold text-gray-800">{{ topic.name }}</h2>
                     <p v-if="hintStats?.total > 0" class="mt-1 text-xs text-gray-500">

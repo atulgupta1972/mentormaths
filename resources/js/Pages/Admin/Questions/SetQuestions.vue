@@ -4,6 +4,7 @@ import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { questionHubChapterUrl, questionHubClassUrl } from '@/utils/questionHub';
 
 const props = defineProps({
     practiceSet: Object,
@@ -18,6 +19,9 @@ const page = usePage();
 const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
 const generating = ref(false);
 const overwrite = ref(false);
+
+const classListUrl = computed(() => questionHubClassUrl(props.topic?.grade_level_id, props.topic?.board_id));
+const chapterSetsUrl = computed(() => questionHubChapterUrl(props.topic?.chapter_id));
 
 const generateHints = () => {
     if (generating.value || !props.topic?.id) {
@@ -58,7 +62,7 @@ const generateHints = () => {
                 <div>
                     <Link
                         v-if="topic"
-                        :href="route('admin.questions.chapters.show', topic.chapter_id)"
+                        :href="chapterSetsUrl"
                         class="text-sm text-indigo-600"
                     >
                         ← Ch {{ topic.chapter_number }} {{ topic.chapter_name }}
@@ -67,6 +71,10 @@ const generateHints = () => {
                         {{ topic?.board_code }} {{ topic?.grade_name }}
                         <span v-if="isChapterTest"> · Chapter test (mixed)</span>
                         <span v-else-if="topic"> · {{ topic.name }}</span>
+                        <span v-if="topic?.grade_level_id && topic?.board_id">
+                            ·
+                            <Link :href="classListUrl" class="text-indigo-600 hover:underline">All chapters</Link>
+                        </span>
                     </p>
                     <div class="mt-1 flex items-center gap-3">
                         <span class="font-mono text-2xl font-bold tracking-wide text-indigo-600">

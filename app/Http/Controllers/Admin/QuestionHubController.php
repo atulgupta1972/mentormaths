@@ -18,6 +18,7 @@ use App\Services\QuestionMethodHintService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -61,7 +62,7 @@ class QuestionHubController extends Controller
         ]);
     }
 
-    public function chapters(Request $request, GradeLevel $gradeLevel): Response
+    public function chapters(Request $request, GradeLevel $gradeLevel): Response|RedirectResponse
     {
         if (! in_array($gradeLevel->sort_order, AdminGradeContext::CLASS_SORT_ORDERS, true)) {
             abort(404);
@@ -69,10 +70,21 @@ class QuestionHubController extends Controller
 
         $this->gradeContext->persist($request, $gradeLevel->id);
 
-        $boardId = $request->integer('board_id');
-        abort_unless($boardId, 404);
+        $boardId = $request->integer('board_id') ?: $this->gradeContext->resolveBoardId($request);
+        if (! $boardId) {
+            return redirect()
+                ->route('admin.questions.index')
+                ->with('warning', 'Choose a board and class from Question bank.');
+        }
 
-        $board = Board::query()->whereKey($boardId)->where('is_active', true)->firstOrFail();
+        $board = Board::query()->whereKey($boardId)->where('is_active', true)->first();
+        if (! $board) {
+            return redirect()
+                ->route('admin.questions.index')
+                ->with('warning', 'That board is not available. Please choose again.');
+        }
+
+        $this->gradeContext->persistBoard($request, $board->id);
 
         $activeYear = AcademicYear::active();
         $maths = Subject::query()->where('code', 'MATHS')->first();
@@ -123,8 +135,15 @@ class QuestionHubController extends Controller
         ]);
     }
 
-    public function topics(Request $request, SyllabusChapter $chapter): Response
+    public function topics(Request $request, int $chapter): Response|RedirectResponse
     {
+        $chapter = SyllabusChapter::query()->find($chapter);
+        if (! $chapter) {
+            return redirect()
+                ->route('admin.questions.index')
+                ->with('warning', 'That chapter is no longer available. Please pick it again from Question bank.');
+        }
+
         $chapter->load([
             'syllabusVersion.board',
             'syllabusVersion.gradeLevel',
@@ -132,9 +151,14 @@ class QuestionHubController extends Controller
         ]);
 
         $gradeLevel = $chapter->syllabusVersion?->gradeLevel;
+        $board = $chapter->syllabusVersion?->board;
 
         if ($gradeLevel) {
             $this->gradeContext->persist($request, $gradeLevel->id);
+        }
+
+        if ($board) {
+            $this->gradeContext->persistBoard($request, $board->id);
         }
 
         $codeService = app(PracticeSetCodeService::class);
@@ -204,7 +228,8 @@ class QuestionHubController extends Controller
                 'name' => $chapter->name,
             ],
             'gradeLevel' => $gradeLevel?->only(['id', 'name']),
-            'boardCode' => $chapter->syllabusVersion?->board?->code,
+            'board' => $board?->only(['id', 'code', 'name']),
+            'boardCode' => $board?->code,
             'activeYear' => $chapter->syllabusVersion?->academicYear?->only(['id', 'name']),
             'setCards' => $setCards->values()->all(),
             'chapterTests' => $chapterTests->values()->all(),
@@ -240,6 +265,11 @@ class QuestionHubController extends Controller
             $this->gradeContext->persist($request, $gradeLevel->id);
         }
 
+        $board = $topic?->chapter?->syllabusVersion?->board ?? $chapter?->syllabusVersion?->board;
+        if ($board) {
+            $this->gradeContext->persistBoard($request, $board->id);
+        }
+
         return Inertia::render('Admin/Questions/SetQuestions', [
             'practiceSet' => [
                 'id' => $worksheet->id,
@@ -257,17 +287,22 @@ class QuestionHubController extends Controller
                 'chapter_id' => $topic->syllabus_chapter_id,
                 'chapter_number' => $topic->chapter->chapter_number,
                 'chapter_name' => $topic->chapter->name,
+                'grade_level_id' => $gradeLevel?->id,
                 'grade_name' => $gradeLevel?->name,
-                'board_code' => $topic->chapter->syllabusVersion?->board?->code,
+                'board_id' => $board?->id,
+                'board_code' => $board?->code,
             ] : ($chapter ? [
                 'id' => null,
                 'name' => 'Chapter test (mixed topics)',
                 'chapter_id' => $chapter->id,
                 'chapter_number' => $chapter->chapter_number,
                 'chapter_name' => $chapter->name,
+                'grade_level_id' => $gradeLevel?->id,
                 'grade_name' => $gradeLevel?->name,
-                'board_code' => $chapter->syllabusVersion?->board?->code,
+                'board_id' => $board?->id,
+                'board_code' => $board?->code,
             ] : null),
+            'board' => $board?->only(['id', 'code', 'name']),
             'isChapterTest' => $worksheet->isChapterScope(),
             'questions' => $worksheet->questions->map(fn ($q) => [
                 'id' => $q->id,
