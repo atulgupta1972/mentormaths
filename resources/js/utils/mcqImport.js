@@ -102,6 +102,7 @@ function normalizeItem(item, index) {
     return {
         question_text: questionText,
         explanation: String(item.explanation ?? '').trim(),
+        method_hint: String(item.method_hint ?? '').trim(),
         difficulty: String(item.difficulty ?? '').trim(),
         options: normalizedOptions,
     };
@@ -140,6 +141,7 @@ export function rowsFromImportData(importRows) {
     return importRows.map((row) => ({
         question_text: row.question_text || '',
         explanation: row.explanation || '',
+        method_hint: row.method_hint || '',
         difficulty: row.difficulty || '',
         diagram: null,
         diagramPreview: row.diagram_preview_url || null,

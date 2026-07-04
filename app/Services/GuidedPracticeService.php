@@ -8,6 +8,7 @@ use App\Models\SetAttempt;
 use App\Models\SetAttemptAnswer;
 use App\Models\SetAssignment;
 use App\Support\AssignmentProgress;
+use App\Support\QuestionMethodHint;
 use Illuminate\Support\Facades\DB;
 
 class GuidedPracticeService
@@ -349,8 +350,8 @@ class GuidedPracticeService
             'number' => $number,
             'question_text' => $question->question_text,
             'diagram_url' => $question->diagram_url,
-            'explanation' => $guided->phase === GuidedAttemptQuestion::PHASE_EXPLAINED
-                ? $question->explanation
+            'method_hint' => $guided->phase === GuidedAttemptQuestion::PHASE_EXPLAINED
+                ? QuestionMethodHint::forStudent($question)
                 : null,
             'options' => $question->options->values()->map(function ($option, $index) {
                 return [

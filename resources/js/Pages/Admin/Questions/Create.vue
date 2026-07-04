@@ -414,6 +414,7 @@ const addRow = () => {
     rows.value.push({
         question_text: '',
         explanation: '',
+        method_hint: '',
         difficulty: 'Medium',
         diagram: null,
         diagramPreview: null,
@@ -451,6 +452,7 @@ const saveToBank = () => {
         rows.value.forEach((row, index) => {
             formData.append(`rows[${index}][question_text]`, row.question_text);
             formData.append(`rows[${index}][explanation]`, row.explanation || '');
+            formData.append(`rows[${index}][method_hint]`, row.method_hint || '');
             formData.append(`rows[${index}][difficulty]`, row.difficulty || '');
             row.options.forEach((opt, optIndex) => {
                 formData.append(`rows[${index}][options][${optIndex}][option_text]`, opt.option_text);
@@ -889,7 +891,8 @@ watch(() => props.initialImportRows, (importRows) => {
                                     <th v-if="!hideManualDiagramColumn" class="px-2 py-3 text-left text-xs uppercase text-gray-500">Diagram</th>
                                     <th v-else class="px-2 py-3 text-left text-xs uppercase text-gray-500">Preview</th>
                                     <th class="min-w-[280px] px-2 py-3 text-left text-xs uppercase text-gray-500">Options (click letter for correct)</th>
-                                    <th class="px-2 py-3 text-left text-xs uppercase text-gray-500">Explanation</th>
+                                    <th class="px-2 py-3 text-left text-xs uppercase text-gray-500">Method hint</th>
+                                    <th class="px-2 py-3 text-left text-xs uppercase text-gray-500">Explanation (teacher)</th>
                                     <th class="px-2 py-3 text-left text-xs uppercase text-gray-500">Difficulty</th>
                                     <th class="px-2 py-3"></th>
                                 </tr>
@@ -937,6 +940,15 @@ watch(() => props.initialImportRows, (importRows) => {
                                                 @input="autoResize"
                                             />
                                         </div>
+                                    </td>
+                                    <td class="align-top px-2 py-2">
+                                        <textarea
+                                            v-model="row.method_hint"
+                                            rows="2"
+                                            class="mcq-field w-full min-w-[180px] rounded-md border-gray-300 text-sm"
+                                            placeholder="Theory only — no answer"
+                                            @input="autoResize"
+                                        />
                                     </td>
                                     <td class="align-top px-2 py-2">
                                         <textarea

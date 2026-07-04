@@ -25,6 +25,7 @@ class Question extends Model
         'question_text',
         'diagram_path',
         'explanation',
+        'method_hint',
         'difficulty',
         'source',
         'created_by',

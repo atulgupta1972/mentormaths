@@ -16,6 +16,7 @@ const diagramPreview = ref(props.question.diagram_url || null);
 const form = useForm({
     question_text: props.question.question_text,
     explanation: props.question.explanation || '',
+    method_hint: props.question.method_hint || '',
     difficulty: props.question.difficulty || '',
     options: props.question.options.map((opt) => ({
         option_text: opt.option_text,
@@ -68,6 +69,7 @@ const submit = () => {
         formData.append('_method', 'PUT');
         formData.append('question_text', data.question_text);
         formData.append('explanation', data.explanation || '');
+        formData.append('method_hint', data.method_hint || '');
         formData.append('difficulty', data.difficulty || '');
         data.options.forEach((opt, index) => {
             formData.append(`options[${index}][option_text]`, opt.option_text);
@@ -164,7 +166,21 @@ const destroy = () => {
                     </div>
 
                     <div>
-                        <InputLabel value="Explanation" />
+                        <InputLabel value="Method hint (shown to students in guided practice)" />
+                        <p class="mt-1 text-xs text-gray-500">
+                            Theory only — e.g. sign rules. No final answer or option letter.
+                        </p>
+                        <textarea
+                            v-model="form.method_hint"
+                            rows="2"
+                            class="mcq-field mt-1 w-full rounded-md border-gray-300"
+                            placeholder="e.g. Negative × negative = positive. Odd count of negatives → negative product."
+                            @input="autoResize"
+                        />
+                    </div>
+
+                    <div>
+                        <InputLabel value="Explanation (teacher only — not shown to students)" />
                         <textarea
                             v-model="form.explanation"
                             rows="2"

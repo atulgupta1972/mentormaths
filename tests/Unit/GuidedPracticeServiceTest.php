@@ -39,7 +39,8 @@ class GuidedPracticeServiceTest extends TestCase
 
         $this->assertSame('explained', $payload['phase']);
         $this->assertTrue($payload['show_explanation']);
-        $this->assertNotNull($payload['question']['explanation']);
+        $this->assertSame('Add the two whole numbers together.', $payload['question']['method_hint']);
+        $this->assertStringNotContainsString('Answer key', $payload['question']['method_hint'] ?? '');
 
         $service->submitAnswer($attempt->fresh(['guidedQuestions.question.options']), $correctOption->id);
         $attempt->refresh();
@@ -141,7 +142,8 @@ class GuidedPracticeServiceTest extends TestCase
         $question = Question::query()->create([
             'syllabus_topic_id' => $topic->id,
             'question_text' => 'What is 2 + 2?',
-            'explanation' => 'Add the two numbers.',
+            'explanation' => 'Add the two numbers. Answer key: b.',
+            'method_hint' => 'Add the two whole numbers together.',
             'type' => Question::TYPE_MCQ,
             'source' => Question::SOURCE_MANUAL,
         ]);

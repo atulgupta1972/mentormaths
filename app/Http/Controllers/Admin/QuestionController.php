@@ -294,6 +294,7 @@ class QuestionController extends Controller
             'rows' => ['required', 'array', 'min:1'],
             'rows.*.question_text' => ['required', 'string'],
             'rows.*.explanation' => ['nullable', 'string'],
+            'rows.*.method_hint' => ['nullable', 'string'],
             'rows.*.difficulty' => ['nullable', 'string', 'max:20'],
             'rows.*.options' => ['required', 'array', 'min:2'],
             'rows.*.options.*.option_text' => ['required', 'string'],
@@ -362,6 +363,7 @@ class QuestionController extends Controller
         $validated = $request->validate([
             'question_text' => ['required', 'string'],
             'explanation' => ['nullable', 'string'],
+            'method_hint' => ['nullable', 'string'],
             'difficulty' => ['nullable', 'string', 'max:20'],
             'options' => ['required', 'array', 'min:2'],
             'options.*.option_text' => ['required', 'string'],

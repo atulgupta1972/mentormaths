@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Question;
 use App\Models\QuestionOption;
 use App\Models\SyllabusTopic;
+use App\Support\QuestionMethodHint;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -73,6 +74,7 @@ class McqImportService
                 'explanation' => $correctIndex !== null
                     ? 'Answer key: '.$answers[$number].'.'
                     : null,
+                'method_hint' => QuestionMethodHint::inferFromQuestionText($block['question']),
                 'difficulty' => 'Easy',
             ];
 
@@ -200,7 +202,10 @@ class McqImportService
                     'syllabus_topic_id' => $topic->id,
                     'type' => Question::TYPE_MCQ,
                     'question_text' => trim((string) $row['question_text']),
-                    'explanation' => $row['explanation'] ?? null,
+                    'explanation' => QuestionMethodHint::sanitizeExplanation($row['explanation'] ?? null),
+                    'method_hint' => filled($row['method_hint'] ?? null)
+                        ? trim((string) $row['method_hint'])
+                        : QuestionMethodHint::inferFromQuestionText(trim((string) $row['question_text'])),
                     'difficulty' => $row['difficulty'] ?? null,
                     'source' => $source,
                     'created_by' => $userId,
@@ -220,7 +225,14 @@ class McqImportService
         return DB::transaction(function () use ($question, $data) {
             $question->update([
                 'question_text' => trim((string) ($data['question_text'] ?? $question->question_text)),
-                'explanation' => $data['explanation'] ?? null,
+                'explanation' => array_key_exists('explanation', $data)
+                    ? QuestionMethodHint::sanitizeExplanation($data['explanation'])
+                    : $question->explanation,
+                'method_hint' => array_key_exists('method_hint', $data)
+                    ? ($data['method_hint'] !== null && trim((string) $data['method_hint']) !== ''
+                        ? trim((string) $data['method_hint'])
+                        : QuestionMethodHint::inferFromQuestionText(trim((string) ($data['question_text'] ?? $question->question_text))))
+                    : $question->method_hint,
                 'difficulty' => $data['difficulty'] ?? null,
             ]);
 
@@ -268,7 +280,8 @@ Requirements:
 {$difficultyBlock}
 - Class-appropriate CBSE/ICSE level
 - 4 options each, exactly one correct answer
-- Include a short explanation per question
+- Include "method_hint": short theory/rules ONLY (e.g. sign rules for integers). NO final numeric answer, NO option letter, NO step-by-step calculation to the answer.
+- Include "explanation": full teacher-only solution (can include working and answer key letter) — students never see this during practice
 - Set "difficulty" on each question to Easy, Medium, or Hard{$focusBlock}
 REQ,
         );
@@ -286,7 +299,8 @@ REQ,
 Requirements:
 - Turn each sum into one MCQ with 4 options (one correct, three plausible wrong answers)
 - Keep class-appropriate CBSE/ICSE level
-- Include a short explanation per question
+- Include "method_hint": short theory/rules ONLY (e.g. sign rules for integers). NO final numeric answer, NO option letter, NO step-by-step calculation to the answer.
+- Include "explanation": full teacher-only solution (can include working and answer key letter) — students never see this during practice
 - Set "difficulty" on each question to Easy, Medium, or Hard
 - If a sum is unclear, skip it rather than inventing numbers
 
@@ -358,7 +372,8 @@ JSON format:
       "question": "Question text here",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correct_index": 0,
-      "explanation": "Why this answer is correct",
+      "method_hint": "Theory or rule hint only — no final answer",
+      "explanation": "Full working for teacher (optional)",
       "difficulty": "Easy"
     }
   ]
@@ -442,7 +457,10 @@ PROMPT;
 
         return [
             'question_text' => $questionText,
-            'explanation' => trim((string) ($item['explanation'] ?? '')) ?: null,
+            'explanation' => QuestionMethodHint::sanitizeExplanation(trim((string) ($item['explanation'] ?? '')) ?: null),
+            'method_hint' => filled($item['method_hint'] ?? null)
+                ? trim((string) $item['method_hint'])
+                : QuestionMethodHint::inferFromQuestionText($questionText),
             'difficulty' => trim((string) ($item['difficulty'] ?? '')) ?: null,
             'options' => $normalizedOptions,
             '_row' => $index + 1,

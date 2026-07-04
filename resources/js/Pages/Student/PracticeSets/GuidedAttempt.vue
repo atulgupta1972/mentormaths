@@ -137,9 +137,12 @@ const canAnswer = computed(() => ['answering', 'retry', 'explained'].includes(pr
                         />
                     </div>
 
-                    <div v-if="show_explanation && question.explanation" class="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4">
-                        <p class="text-xs font-semibold uppercase tracking-wide text-sky-800">Method</p>
-                        <p class="mt-2 whitespace-pre-wrap text-sm text-sky-950">{{ question.explanation }}</p>
+                    <div v-if="show_explanation" class="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-sky-800">Method — theory only</p>
+                        <p v-if="question.method_hint" class="mt-2 whitespace-pre-wrap text-sm text-sky-950">{{ question.method_hint }}</p>
+                        <p v-else class="mt-2 text-sm text-sky-900">
+                            Think about the rules for this type of sum. No final answer is shown here — try again using the idea your teacher taught.
+                        </p>
                     </div>
 
                     <div class="mt-4 space-y-2">
