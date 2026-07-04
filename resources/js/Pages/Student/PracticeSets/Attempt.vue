@@ -1,6 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
+import QuestionBody from '@/Components/QuestionBody.vue';
+import McqOptionLine from '@/Components/McqOptionLine.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { onMounted, onUnmounted, ref } from 'vue';
@@ -69,49 +71,57 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
 
         <div class="py-12">
             <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
-                <WorksheetPdfViewer
-                    v-if="referencePdfUrl"
-                    :url="referencePdfUrl"
-                />
-
-                <div v-else class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-600">
-                    Use your printed or shared worksheet for {{ setLabel() }}.
+                <div class="rounded-lg bg-white p-4 shadow-sm">
+                    <p class="text-sm text-gray-600">
+                        Read each question and select one answer. All {{ questions.length }} questions must be answered before you submit.
+                    </p>
                 </div>
 
-                <div class="rounded-lg bg-white p-5 shadow-sm">
-                    <h3 class="text-sm font-semibold text-gray-800">Record your answers</h3>
-                    <p class="mt-1 text-xs text-gray-500">
-                        Match each sum on your sheet to the row below. Only option letters are shown here.
-                    </p>
+                <div class="space-y-5">
+                    <div
+                        v-for="q in questions"
+                        :key="q.id"
+                        class="rounded-lg bg-white p-5 shadow-sm"
+                    >
+                        <p class="text-sm font-semibold text-indigo-600">Question {{ q.number }}</p>
 
-                    <div class="mt-4 space-y-3">
-                        <div
-                            v-for="q in questions"
-                            :key="q.id"
-                            class="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 px-4 py-3"
-                        >
-                            <span class="w-10 text-sm font-semibold text-gray-700">Q{{ q.number }}</span>
-                            <div class="flex flex-wrap gap-2">
-                                <label
-                                    v-for="opt in q.options"
-                                    :key="opt.id"
-                                    class="flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition"
-                                    :class="answers[q.id] === opt.id ? 'border-indigo-500 bg-indigo-50 font-semibold text-indigo-800' : 'border-gray-200 hover:bg-gray-50'"
-                                >
-                                    <input
-                                        type="radio"
-                                        :name="`q-${q.id}`"
-                                        :value="opt.id"
-                                        :checked="answers[q.id] === opt.id"
-                                        class="sr-only"
-                                        @change="selectOption(q.id, opt.id)"
-                                    />
-                                    {{ opt.letter }}
-                                </label>
-                            </div>
+                        <div class="mt-3">
+                            <QuestionBody
+                                :question-text="q.question_text"
+                                :diagram-url="q.diagram_url"
+                                use-html
+                            />
+                        </div>
+
+                        <div class="mt-4 space-y-2">
+                            <label
+                                v-for="(opt, optIndex) in q.options"
+                                :key="opt.id"
+                                class="flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 text-sm transition"
+                                :class="answers[q.id] === opt.id
+                                    ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200'
+                                    : 'border-gray-200 hover:border-indigo-200 hover:bg-gray-50'"
+                            >
+                                <input
+                                    type="radio"
+                                    :name="`q-${q.id}`"
+                                    :value="opt.id"
+                                    :checked="answers[q.id] === opt.id"
+                                    class="mt-1 shrink-0 text-indigo-600"
+                                    @change="selectOption(q.id, opt.id)"
+                                />
+                                <McqOptionLine :index="optIndex" :text="opt.option_text" />
+                            </label>
                         </div>
                     </div>
                 </div>
+
+                <WorksheetPdfViewer
+                    v-if="referencePdfUrl"
+                    :url="referencePdfUrl"
+                    title="Reference worksheet (optional)"
+                    helper-text="Extra reference material for this topic. Answer using the questions above."
+                />
 
                 <div class="sticky bottom-4 rounded-lg bg-white p-4 shadow-lg">
                     <p class="mb-3 text-sm text-gray-600">

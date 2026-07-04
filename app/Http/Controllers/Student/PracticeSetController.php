@@ -88,10 +88,13 @@ class PracticeSetController extends Controller
             return [
                 'id' => $q->id,
                 'number' => $index + 1,
+                'question_text' => $q->question_text,
+                'diagram_url' => $q->diagram_url,
                 'options' => $q->options->values()->map(function ($o, $optionIndex) {
                     return [
                         'id' => $o->id,
                         'letter' => chr(65 + $optionIndex),
+                        'option_text' => $o->option_text,
                     ];
                 }),
             ];
