@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mentor Maths — Student Guide</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Segoe UI", system-ui, sans-serif;
+            background: #0f172a;
+            color: #1e293b;
+        }
+        .slide {
+            width: 1080px;
+            height: 1080px;
+            margin: 16px auto;
+            padding: 72px 64px;
+            background: linear-gradient(160deg, #ecfdf5 0%, #eff6ff 45%, #faf5ff 100%);
+            border-radius: 24px;
+            page-break-after: always;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+        }
+        .badge {
+            display: inline-block;
+            background: #059669;
+            color: white;
+            font-size: 22px;
+            font-weight: 700;
+            padding: 10px 22px;
+            border-radius: 999px;
+        }
+        .logo {
+            font-size: 42px;
+            font-weight: 800;
+            color: #312e81;
+            letter-spacing: -0.02em;
+        }
+        .tagline {
+            font-size: 26px;
+            color: #475569;
+            margin-top: 8px;
+        }
+        h1 {
+            font-size: 54px;
+            line-height: 1.15;
+            color: #0f172a;
+            margin-top: 24px;
+        }
+        h2 {
+            font-size: 44px;
+            color: #312e81;
+            margin-bottom: 28px;
+        }
+        .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            background: #4f46e5;
+            color: white;
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 20px;
+        }
+        ul {
+            list-style: none;
+            font-size: 30px;
+            line-height: 1.55;
+            color: #334155;
+        }
+        ul li {
+            margin-bottom: 18px;
+            padding-left: 36px;
+            position: relative;
+        }
+        ul li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #059669;
+            font-weight: 800;
+        }
+        .highlight {
+            background: #fef3c7;
+            padding: 2px 10px;
+            border-radius: 8px;
+            font-weight: 700;
+        }
+        .btn-sample {
+            display: inline-block;
+            background: #4f46e5;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 26px;
+            margin: 8px 0;
+        }
+        .footer {
+            font-size: 24px;
+            color: #64748b;
+            border-top: 2px solid #cbd5e1;
+            padding-top: 24px;
+        }
+        .url {
+            color: #4f46e5;
+            font-weight: 800;
+            font-size: 28px;
+        }
+        .tip {
+            background: white;
+            border: 3px solid #a7f3d0;
+            border-radius: 20px;
+            padding: 28px 32px;
+            font-size: 28px;
+            color: #065f46;
+            margin-top: 20px;
+        }
+        @media print {
+            body { background: white; }
+            .slide { margin: 0; box-shadow: none; border-radius: 0; }
+            .no-print { display: none; }
+        }
+        @media (max-width: 1100px) {
+            .slide {
+                width: 100vw;
+                height: 100vw;
+                max-width: 100%;
+                margin: 0;
+                border-radius: 0;
+            }
+        }
+        .instructions {
+            max-width: 1080px;
+            margin: 24px auto;
+            padding: 20px 24px;
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 12px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="instructions no-print">
+        <strong>Share on WhatsApp:</strong> Open this file in Chrome → press F11 or zoom so one slide fills the screen → screenshot each slide.
+        Or <strong>Print → Save as PDF</strong> and send the PDF on WhatsApp.
+    </div>
+
+    <!-- Slide 1: Cover -->
+    <section class="slide">
+        <div>
+            <span class="badge">Student guide</span>
+            <p class="logo" style="margin-top: 28px;">Mentor Maths</p>
+            <p class="tagline">Plan · Practice · Perform</p>
+            <h1>How to add your school exam &amp; submit practice sheets</h1>
+        </div>
+        <div class="footer">
+            Login at <span class="url">mentormaths.in</span><br>
+            Use the email &amp; password your teacher gave you
+        </div>
+    </section>
+
+    <!-- Slide 2: Login -->
+    <section class="slide">
+        <div>
+            <div class="step-num">1</div>
+            <h2>Login &amp; open Dashboard</h2>
+            <ul>
+                <li>Open <span class="highlight">mentormaths.in</span> on phone or laptop</li>
+                <li>Tap <strong>Login</strong> and enter your details</li>
+                <li>You land on your <strong>Dashboard</strong></li>
+                <li>Top bar shows: upcoming exams · sets to do · sets done</li>
+            </ul>
+        </div>
+        <div class="footer">Need login? Ask your teacher — registration is approved by admin only.</div>
+    </section>
+
+    <!-- Slide 3: Exam dates -->
+    <section class="slide">
+        <div>
+            <div class="step-num">2</div>
+            <h2>Add your school exam date</h2>
+            <ul>
+                <li>On Dashboard, tap <span class="btn-sample">Add / edit exams</span></li>
+                <li>Enter <strong>exam date</strong>, <strong>type</strong> (unit test / half yearly / final)</li>
+                <li>Give a <strong>title</strong> e.g. “Unit test 1”</li>
+                <li>Tick the <strong>chapters</strong> in your school test</li>
+                <li>Optional: tap <strong>Select topics</strong> to pick only some topics</li>
+                <li>Tap <strong>Save exam plan</strong></li>
+            </ul>
+            <div class="tip">Your exam appears on the left of the dashboard with days left and prep progress.</div>
+        </div>
+        <div class="footer">You can edit or remove plans anytime before the exam.</div>
+    </section>
+
+    <!-- Slide 4: Find sets -->
+    <section class="slide">
+        <div>
+            <div class="step-num">3</div>
+            <h2>Find your practice / test sheet</h2>
+            <ul>
+                <li>On Dashboard, look at <strong>Practice &amp; tests · To do</strong> (right side)</li>
+                <li>Each row shows a set code like <span class="highlight">S711</span> or <span class="highlight">S712</span></li>
+                <li>Status: <strong>To do</strong>, <strong>In progress</strong>, or <strong>Overdue</strong></li>
+                <li>Tap <span class="btn-sample" style="background:#059669;">Start</span> or <span class="btn-sample" style="background:#d97706;">Continue</span></li>
+            </ul>
+        </div>
+        <div class="footer">Sheets are assigned by your teacher — linked to your exam chapters.</div>
+    </section>
+
+    <!-- Slide 5: Attempt -->
+    <section class="slide">
+        <div>
+            <div class="step-num">4</div>
+            <h2>Attempt the sheet</h2>
+            <ul>
+                <li>Solve sums on your <strong>printed / PDF worksheet</strong> first</li>
+                <li>On screen, tap <strong>Start practice</strong> or <strong>Start test</strong></li>
+                <li>For each question, tap your answer: <strong>A B C D</strong></li>
+                <li>Timer runs — finish all questions</li>
+                <li>Tap <span class="btn-sample">Submit</span> when done</li>
+            </ul>
+            <div class="tip">Match Q1, Q2… on your paper to the rows on screen. Only letters are shown — not full questions.</div>
+        </div>
+        <div class="footer">Late submit is allowed but marked as delayed.</div>
+    </section>
+
+    <!-- Slide 6: Results -->
+    <section class="slide">
+        <div>
+            <div class="step-num">5</div>
+            <h2>See your score</h2>
+            <ul>
+                <li>After submit, you see your <strong>score</strong> (e.g. 6/7)</li>
+                <li>Completed sets move to the <strong>Completed</strong> section</li>
+                <li>Exam card shows prep progress: how many assigned sets are done</li>
+                <li>Keep practising until your school exam!</li>
+            </ul>
+        </div>
+        <div class="footer">
+            Questions? Message your teacher.<br>
+            <span class="url">mentormaths.in</span> · Plan · Practice · Perform
+        </div>
+    </section>
+</body>
+</html>
