@@ -8,6 +8,14 @@ Share these steps with students on WhatsApp.
 |------|-----|
 | `student-guide-whatsapp.html` | Open in Chrome — screenshot each slide or Print → Save as PDF |
 
+## Layout
+
+Each slide is **landscape**:
+- **Left** — what the screen looks like in Mentor Maths (mini browser mock matching your dashboard)
+- **Right** — step-by-step words for that screen only
+
+Slides: Cover → Dashboard → Add exam → Start practice → Submit answers → Done
+
 ## Quick share (WhatsApp)
 
 1. Open `docs/student-guide-whatsapp.html` in **Chrome** (double-click the file).
