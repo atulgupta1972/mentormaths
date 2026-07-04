@@ -61,21 +61,35 @@ class QuestionMethodHintService
     }
 
     /**
+     * @param  Collection<int, Question>|iterable<int, Question>  $questions
      * @return array{total: int, with_hint: int, missing_hint: int}
      */
-    public function statsForTopic(SyllabusTopic $topic): array
+    public function statsForQuestions(iterable $questions): array
     {
-        $total = Question::query()->where('syllabus_topic_id', $topic->id)->count();
-        $withHint = Question::query()
-            ->where('syllabus_topic_id', $topic->id)
-            ->whereNotNull('method_hint')
-            ->where('method_hint', '!=', '')
-            ->count();
+        $total = 0;
+        $withHint = 0;
+
+        foreach ($questions as $question) {
+            $total++;
+            if (filled($question->method_hint)) {
+                $withHint++;
+            }
+        }
 
         return [
             'total' => $total,
             'with_hint' => $withHint,
             'missing_hint' => max(0, $total - $withHint),
         ];
+    }
+
+    /**
+     * @return array{total: int, with_hint: int, missing_hint: int}
+     */
+    public function statsForTopic(SyllabusTopic $topic): array
+    {
+        return $this->statsForQuestions(
+            Question::query()->where('syllabus_topic_id', $topic->id)->get(['id', 'method_hint'])
+        );
     }
 }

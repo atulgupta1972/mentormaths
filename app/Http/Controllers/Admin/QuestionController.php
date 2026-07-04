@@ -105,7 +105,7 @@ class QuestionController extends Controller
         $message = $parts !== [] ? implode('. ', $parts).'.' : 'No changes were needed — all questions already have method hints.';
 
         return redirect()
-            ->route('admin.questions.topics.show', $topic)
+            ->back(fallback: route('admin.questions.topics.show', $topic))
             ->with($result['updated'] > 0 || $result['explanations_cleaned'] > 0 ? 'success' : 'warning', $message);
     }
 

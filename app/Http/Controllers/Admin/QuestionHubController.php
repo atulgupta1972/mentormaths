@@ -14,6 +14,7 @@ use App\Models\SyllabusVersion;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\PracticeSetCodeService;
+use App\Services\QuestionMethodHintService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,7 +24,10 @@ use Inertia\Response;
 
 class QuestionHubController extends Controller
 {
-    public function __construct(private AdminGradeContext $gradeContext) {}
+    public function __construct(
+        private AdminGradeContext $gradeContext,
+        private QuestionMethodHintService $methodHintService,
+    ) {}
 
     public function classes(Request $request): Response
     {
@@ -271,8 +275,15 @@ class QuestionHubController extends Controller
                 'diagram_url' => $q->diagram_url,
                 'difficulty' => $q->difficulty,
                 'source' => $q->source,
+                'method_hint' => $q->method_hint,
                 'options_count' => $q->options->count(),
             ])->values()->all(),
+            'hintStats' => $topic
+                ? $this->methodHintService->statsForQuestions($worksheet->questions)
+                : null,
+            'topicHintStats' => $topic
+                ? $this->methodHintService->statsForTopic($topic)
+                : null,
         ]);
     }
 
