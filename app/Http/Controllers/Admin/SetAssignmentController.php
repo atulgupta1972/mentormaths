@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SetAssignment;
 use App\Models\Student;
 use App\Models\Worksheet;
+use App\Services\AssignmentWhatsAppNotificationService;
 use App\Services\SetAssignmentService;
 use App\Support\AssignmentProgress;
 use Illuminate\Http\RedirectResponse;
@@ -15,7 +16,10 @@ use Inertia\Response;
 
 class SetAssignmentController extends Controller
 {
-    public function __construct(private SetAssignmentService $assignmentService) {}
+    public function __construct(
+        private SetAssignmentService $assignmentService,
+        private AssignmentWhatsAppNotificationService $whatsappNotifications,
+    ) {}
 
     public function show(SetAssignment $assignment): Response
     {
@@ -79,7 +83,18 @@ class SetAssignmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "Assigned {$worksheet->set_code} to {$student->name}. Target: {$validated['target_date']}.");
+        $whatsappNotifications = $this->whatsappNotifications->notificationsForAssignment(
+            $student,
+            $worksheet,
+            $validated['target_date'],
+            $validated['notes'] ?? null,
+        );
+
+        return $this->assignmentRedirect(
+            "Assigned {$worksheet->set_code} to {$student->name}. Target: {$validated['target_date']}.",
+            $whatsappNotifications,
+            $student->name,
+        );
     }
 
     public function storeBulk(Request $request, Worksheet $worksheet): RedirectResponse
@@ -108,9 +123,32 @@ class SetAssignmentController extends Controller
             $message .= " Skipped {$result['skipped']}.";
         }
 
-        return back()
-            ->with('success', $message)
-            ->with('warning', $result['errors'] ? implode(' ', array_slice($result['errors'], 0, 3)) : null);
+        $whatsappNotifications = $this->whatsappNotifications->notificationsForBulkAssignment(
+            $result['assignedStudents'] ?? [],
+            $worksheet,
+            $validated['target_date'],
+            $validated['notes'] ?? null,
+        );
+
+        $warnings = [];
+        if ($result['errors']) {
+            $warnings[] = implode(' ', array_slice($result['errors'], 0, 3));
+        }
+        if ($whatsappNotifications === [] && ($result['assigned'] ?? 0) > 0) {
+            $warnings[] = 'WhatsApp not opened — no notify-enabled contacts for assigned student(s).';
+        }
+
+        $redirect = back()->with('success', $message);
+
+        if ($warnings !== []) {
+            $redirect = $redirect->with('warning', implode(' ', $warnings));
+        }
+
+        if ($whatsappNotifications !== []) {
+            return $redirect->with('whatsapp_notifications', $whatsappNotifications);
+        }
+
+        return $redirect;
     }
 
     public function reassign(Request $request, SetAssignment $assignment): RedirectResponse
@@ -131,6 +169,39 @@ class SetAssignmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Re-assigned with new target date. Student can attempt again.');
+        $assignment->load([
+            'enrollment.student',
+            'practiceSet',
+        ]);
+
+        $student = $assignment->enrollment->student;
+        $whatsappNotifications = $this->whatsappNotifications->notificationsForAssignment(
+            $student,
+            $assignment->practiceSet,
+            $validated['target_date'],
+            $validated['notes'] ?? null,
+        );
+
+        return $this->assignmentRedirect(
+            'Re-assigned with new target date. Student can attempt again.',
+            $whatsappNotifications,
+            $student->name,
+        );
+    }
+
+    /**
+     * @param  list<array{mobile: string, label: string, message: string}>  $whatsappNotifications
+     */
+    private function assignmentRedirect(string $success, array $whatsappNotifications, string $studentName): RedirectResponse
+    {
+        if ($whatsappNotifications !== []) {
+            return back()
+                ->with('success', $success)
+                ->with('whatsapp_notifications', $whatsappNotifications);
+        }
+
+        return back()
+            ->with('success', $success)
+            ->with('warning', "WhatsApp not opened for {$studentName} — no notify-enabled contacts on their profile.");
     }
 }

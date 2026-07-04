@@ -70,18 +70,20 @@ class SetAssignmentService
         $assigned = 0;
         $skipped = 0;
         $errors = [];
+        $assignedStudents = [];
 
         foreach ($enrollments as $enrollment) {
             try {
                 $this->assign($practiceSet, $enrollment, $assigner, $dueDate, $notes);
                 $assigned++;
+                $assignedStudents[] = $enrollment->student;
             } catch (\InvalidArgumentException $e) {
                 $skipped++;
                 $errors[] = "{$enrollment->student->name}: {$e->getMessage()}";
             }
         }
 
-        return compact('assigned', 'skipped', 'errors');
+        return compact('assigned', 'skipped', 'errors', 'assignedStudents');
     }
 
     public function assignToActiveYearClass(

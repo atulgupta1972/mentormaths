@@ -7,10 +7,13 @@ import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavGroup from '@/Components/ResponsiveNavGroup.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
+import { useAssignmentWhatsAppFlash } from '@/composables/useAssignmentWhatsAppFlash';
 
 const showingNavigationDropdown = ref(false);
 const page = usePage();
 const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
+
+useAssignmentWhatsAppFlash();
 
 const peopleGroup = computed(() => ({
     label: 'People',
