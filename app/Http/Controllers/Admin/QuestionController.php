@@ -14,6 +14,7 @@ use App\Services\PdfPageImageService;
 use App\Services\PdfTextExtractionService;
 use App\Services\PdfWorksheetImportService;
 use App\Services\QuestionDiagramService;
+use App\Services\QuestionMethodHintService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -27,6 +28,7 @@ class QuestionController extends Controller
         private McqImportService $importService,
         private PdfTextExtractionService $pdfService,
         private AdminGradeContext $gradeContext,
+        private QuestionMethodHintService $methodHintService,
     ) {}
 
     public function topicIndex(Request $request, SyllabusTopic $topic): Response
@@ -63,7 +65,48 @@ class QuestionController extends Controller
             'filters' => [
                 'search' => $request->string('search')->toString(),
             ],
+            'hintStats' => $this->methodHintService->statsForTopic($topic),
         ]);
+    }
+
+    public function generateMethodHints(Request $request, SyllabusTopic $topic): RedirectResponse
+    {
+        $validated = $request->validate([
+            'overwrite' => ['sometimes', 'boolean'],
+            'sanitize_explanations' => ['sometimes', 'boolean'],
+        ]);
+
+        $result = $this->methodHintService->fillForTopic(
+            $topic,
+            (bool) ($validated['overwrite'] ?? false),
+            (bool) ($validated['sanitize_explanations'] ?? true),
+        );
+
+        if ($result['total'] === 0) {
+            return redirect()
+                ->route('admin.questions.topics.show', $topic)
+                ->with('warning', 'No questions in this topic yet.');
+        }
+
+        $parts = [];
+        if ($result['updated'] > 0) {
+            $parts[] = "Generated method hints for {$result['updated']} question".($result['updated'] === 1 ? '' : 's');
+        }
+        if ($result['skipped'] > 0) {
+            $parts[] = "{$result['skipped']} already had hints";
+        }
+        if ($result['unresolved'] > 0) {
+            $parts[] = "{$result['unresolved']} need manual hints (edit individually)";
+        }
+        if ($result['explanations_cleaned'] > 0) {
+            $parts[] = "Removed answer keys from {$result['explanations_cleaned']} teacher explanation".($result['explanations_cleaned'] === 1 ? '' : 's');
+        }
+
+        $message = $parts !== [] ? implode('. ', $parts).'.' : 'No changes were needed — all questions already have method hints.';
+
+        return redirect()
+            ->route('admin.questions.topics.show', $topic)
+            ->with($result['updated'] > 0 || $result['explanations_cleaned'] > 0 ? 'success' : 'warning', $message);
     }
 
     public function create(Request $request): Response
