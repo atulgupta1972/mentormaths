@@ -29,11 +29,13 @@ const emptyForm = () => ({
     title: '',
     exam_type: 'unit_test',
     notes: '',
-    syllabus_chapter_ids: [],
+    chapter_selections: [],
     ...(props.context === 'admin' && props.studentId ? { student_id: props.studentId } : {}),
 });
 
 const form = useForm(emptyForm());
+const chapterSelections = ref({});
+const expandedChapters = ref({});
 const assignForm = useForm({
     student_id: '',
     target_date: '',
@@ -88,6 +90,126 @@ const toggleAssign = (plan) => {
 const chapterHasSets = (chapter) =>
     (chapter.topic_sets?.length || 0) + (chapter.chapter_tests?.length || 0) > 0;
 
+const initChapterSelections = (plan = null) => {
+    const next = {};
+    const expanded = {};
+
+    for (const chapter of props.syllabusChapters) {
+        next[chapter.id] = { selected: false, topicIds: null };
+        expanded[chapter.id] = false;
+    }
+
+    const saved = plan?.chapter_selections || [];
+
+    for (const selection of saved) {
+        const chapterId = selection.syllabus_chapter_id;
+        next[chapterId] = {
+            selected: true,
+            topicIds: selection.syllabus_topic_ids ?? null,
+        };
+    }
+
+    chapterSelections.value = next;
+    expandedChapters.value = expanded;
+};
+
+const chapterById = (chapterId) => props.syllabusChapters.find((chapter) => chapter.id === chapterId);
+
+const allTopicIdsForChapter = (chapterId) => chapterById(chapterId)?.topics?.map((topic) => topic.id) || [];
+
+const isChapterSelected = (chapterId) => chapterSelections.value[chapterId]?.selected ?? false;
+
+const isTopicExpanded = (chapterId) => expandedChapters.value[chapterId] ?? false;
+
+const isTopicSelected = (chapterId, topicId) => {
+    const selection = chapterSelections.value[chapterId];
+
+    if (!selection?.selected) {
+        return false;
+    }
+
+    if (selection.topicIds === null) {
+        return true;
+    }
+
+    return selection.topicIds.includes(topicId);
+};
+
+const selectionSummary = (chapterId) => {
+    const selection = chapterSelections.value[chapterId];
+    const chapter = chapterById(chapterId);
+
+    if (!selection?.selected) {
+        return '';
+    }
+
+    if (selection.topicIds === null) {
+        return 'Full chapter';
+    }
+
+    const total = chapter?.topics?.length || 0;
+
+    return `${selection.topicIds.length} of ${total} topics`;
+};
+
+const syncFormSelections = () => {
+    form.chapter_selections = Object.entries(chapterSelections.value)
+        .filter(([, selection]) => selection.selected)
+        .map(([chapterId, selection]) => ({
+            syllabus_chapter_id: Number(chapterId),
+            syllabus_topic_ids: selection.topicIds,
+        }));
+};
+
+const toggleChapter = (chapterId) => {
+    const current = chapterSelections.value[chapterId];
+
+    if (current?.selected) {
+        chapterSelections.value[chapterId] = { selected: false, topicIds: null };
+        expandedChapters.value[chapterId] = false;
+    } else {
+        chapterSelections.value[chapterId] = { selected: true, topicIds: null };
+    }
+
+    syncFormSelections();
+};
+
+const toggleTopicPanel = (chapterId) => {
+    if (!isChapterSelected(chapterId)) {
+        return;
+    }
+
+    expandedChapters.value[chapterId] = !expandedChapters.value[chapterId];
+};
+
+const toggleTopic = (chapterId, topicId) => {
+    const selection = chapterSelections.value[chapterId];
+    const allTopicIds = allTopicIdsForChapter(chapterId);
+
+    if (!selection?.selected) {
+        return;
+    }
+
+    let current = selection.topicIds === null ? [...allTopicIds] : [...selection.topicIds];
+
+    if (current.includes(topicId)) {
+        current = current.filter((id) => id !== topicId);
+    } else {
+        current.push(topicId);
+    }
+
+    if (current.length === 0) {
+        chapterSelections.value[chapterId] = { selected: false, topicIds: null };
+        expandedChapters.value[chapterId] = false;
+    } else if (current.length === allTopicIds.length) {
+        chapterSelections.value[chapterId] = { selected: true, topicIds: null };
+    } else {
+        chapterSelections.value[chapterId] = { selected: true, topicIds: current };
+    }
+
+    syncFormSelections();
+};
+
 const assignSet = (plan, worksheetId) => {
     if (!props.studentId) {
         return;
@@ -109,6 +231,8 @@ const openCreate = () => {
     form.defaults(emptyForm());
     form.reset();
     form.clearErrors();
+    initChapterSelections();
+    syncFormSelections();
     showForm.value = true;
 };
 
@@ -121,10 +245,11 @@ const openEdit = (plan) => {
         title: plan.title,
         exam_type: plan.exam_type,
         notes: plan.notes || '',
-        syllabus_chapter_ids: [...(plan.chapter_ids || [])],
     });
     form.reset();
     form.clearErrors();
+    initChapterSelections(plan);
+    syncFormSelections();
     showForm.value = true;
 };
 
@@ -136,6 +261,8 @@ const cancelForm = () => {
 };
 
 const submit = () => {
+    syncFormSelections();
+
     if (editingPlan.value) {
         form.put(route(`${props.context}.exam-plans.update`, editingPlan.value.id), {
             preserveScroll: true,
@@ -235,20 +362,59 @@ watch(
                     </div>
                     <div class="sm:col-span-2">
                         <InputLabel value="Chapters in this exam" />
-                        <select
-                            v-model="form.syllabus_chapter_ids"
-                            multiple
-                            size="8"
-                            class="mt-1 block w-full rounded-md border-gray-300 text-sm"
-                        >
-                            <option v-for="chapter in syllabusChapters" :key="chapter.id" :value="chapter.id">
-                                {{ chapter.label }}
-                            </option>
-                        </select>
-                        <p class="mt-1 text-xs text-gray-500">
-                            Hold Ctrl (Windows) or Cmd (Mac) to select multiple chapter names.
-                        </p>
-                        <InputError class="mt-1" :message="form.errors.syllabus_chapter_ids" />
+                        <div class="mt-2 max-h-80 space-y-2 overflow-y-auto rounded-md border border-gray-300 bg-white p-3">
+                            <div
+                                v-for="chapter in syllabusChapters"
+                                :key="chapter.id"
+                                class="rounded-lg border border-gray-100 p-3"
+                            >
+                                <div class="flex items-start gap-3">
+                                    <input
+                                        type="checkbox"
+                                        class="mt-1 rounded border-gray-300 text-indigo-600"
+                                        :checked="isChapterSelected(chapter.id)"
+                                        @change="toggleChapter(chapter.id)"
+                                    />
+                                    <div class="min-w-0 flex-1">
+                                        <label class="block text-sm font-medium text-gray-900">{{ chapter.label }}</label>
+                                        <p v-if="isChapterSelected(chapter.id)" class="mt-0.5 text-xs text-gray-500">
+                                            {{ selectionSummary(chapter.id) }}
+                                        </p>
+                                        <button
+                                            v-if="isChapterSelected(chapter.id) && chapter.topics?.length"
+                                            type="button"
+                                            class="mt-1 text-xs font-medium text-indigo-600 hover:underline"
+                                            @click="toggleTopicPanel(chapter.id)"
+                                        >
+                                            {{ isTopicExpanded(chapter.id) ? 'Hide topics' : 'Select topics' }}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="isChapterSelected(chapter.id) && isTopicExpanded(chapter.id) && chapter.topics?.length"
+                                    class="mt-3 ml-7 space-y-1.5 border-l border-gray-200 pl-3"
+                                >
+                                    <label
+                                        v-for="topic in chapter.topics"
+                                        :key="topic.id"
+                                        class="flex cursor-pointer items-center gap-2 text-sm text-gray-700"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="rounded border-gray-300 text-indigo-600"
+                                            :checked="isTopicSelected(chapter.id, topic.id)"
+                                            @change="toggleTopic(chapter.id, topic.id)"
+                                        />
+                                        {{ topic.name }}
+                                    </label>
+                                    <p class="text-[11px] text-gray-400">
+                                        Leave all topics ticked for the full chapter, or untick topics to narrow the exam scope.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <InputError class="mt-1" :message="form.errors.chapter_selections" />
                     </div>
                     <div class="sm:col-span-2">
                         <InputLabel value="Notes (optional)" />

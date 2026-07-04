@@ -7,6 +7,7 @@ use App\Models\SetAssignment;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
+use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
@@ -28,6 +29,7 @@ class ExamPlanService
         return SyllabusVersion::query()
             ->where('academic_year_id', $enrollment->academic_year_id)
             ->where('grade_level_id', $enrollment->grade_level_id)
+            ->where('board_id', $enrollment->board_id)
             ->where('subject_id', $maths->id)
             ->first();
     }
@@ -42,6 +44,7 @@ class ExamPlanService
 
         return SyllabusChapter::query()
             ->where('syllabus_version_id', $syllabusVersion->id)
+            ->with(['topics' => fn ($query) => $query->orderBy('sort_order')->select('id', 'syllabus_chapter_id', 'name', 'sort_order')])
             ->orderBy('sort_order')
             ->get(['id', 'chapter_number', 'name'])
             ->map(fn (SyllabusChapter $chapter) => [
@@ -49,11 +52,85 @@ class ExamPlanService
                 'chapter_number' => $chapter->chapter_number,
                 'name' => $chapter->name,
                 'label' => self::chapterLabel($chapter),
+                'topics' => $chapter->topics->map(fn (SyllabusTopic $topic) => [
+                    'id' => $topic->id,
+                    'name' => $topic->name,
+                ])->values()->all(),
             ]);
     }
 
     /**
+     * @param  list<array{syllabus_chapter_id: int, syllabus_topic_ids?: list<int>|null}>  $selections
+     * @return array{chapter_ids: list<int>, topic_ids: list<int>}
+     */
+    public function normalizeChapterSelections(array $selections, StudentEnrollment $enrollment): array
+    {
+        if ($selections === []) {
+            throw ValidationException::withMessages([
+                'chapter_selections' => 'Select at least one chapter for this exam.',
+            ]);
+        }
+
+        $chaptersById = $this->chapterOptionsForEnrollment($enrollment)->keyBy('id');
+        $chapterIds = [];
+        $topicIds = [];
+
+        foreach ($selections as $selection) {
+            $chapterId = (int) ($selection['syllabus_chapter_id'] ?? 0);
+            $chapter = $chaptersById->get($chapterId);
+
+            if (! $chapter) {
+                throw ValidationException::withMessages([
+                    'chapter_selections' => 'One or more chapters are not part of this class syllabus.',
+                ]);
+            }
+
+            $chapterIds[] = $chapterId;
+            $requestedTopicIds = $selection['syllabus_topic_ids'] ?? null;
+
+            if ($requestedTopicIds === null || $requestedTopicIds === []) {
+                continue;
+            }
+
+            $allowedTopicIds = collect($chapter['topics'])->pluck('id')->all();
+            $invalidTopics = array_diff($requestedTopicIds, $allowedTopicIds);
+
+            if ($invalidTopics !== []) {
+                throw ValidationException::withMessages([
+                    'chapter_selections' => 'One or more topics are not part of the selected chapter.',
+                ]);
+            }
+
+            if (count($requestedTopicIds) >= count($allowedTopicIds)) {
+                continue;
+            }
+
+            foreach ($requestedTopicIds as $topicId) {
+                $topicIds[] = (int) $topicId;
+            }
+        }
+
+        return [
+            'chapter_ids' => array_values(array_unique($chapterIds)),
+            'topic_ids' => array_values(array_unique($topicIds)),
+        ];
+    }
+
+    /**
+     * @param  list<array{syllabus_chapter_id: int, syllabus_topic_ids?: list<int>|null}>  $selections
+     */
+    public function syncChapterSelections(ExamPlan $plan, array $selections, StudentEnrollment $enrollment): void
+    {
+        $normalized = $this->normalizeChapterSelections($selections, $enrollment);
+
+        $plan->chapters()->sync($normalized['chapter_ids']);
+        $plan->topics()->sync($normalized['topic_ids']);
+    }
+
+    /**
      * @param  list<int>  $chapterIds
+     *
+     * @deprecated Use normalizeChapterSelections() for topic-aware plans.
      */
     public function assertChaptersBelongToEnrollment(array $chapterIds, StudentEnrollment $enrollment): void
     {
@@ -69,12 +146,10 @@ class ExamPlanService
 
     /**
      * @param  array<string, mixed>  $data
-     * @param  list<int>  $chapterIds
+     * @param  list<array{syllabus_chapter_id: int, syllabus_topic_ids?: list<int>|null}>  $selections
      */
-    public function create(StudentEnrollment $enrollment, User $creator, array $data, array $chapterIds): ExamPlan
+    public function create(StudentEnrollment $enrollment, User $creator, array $data, array $selections): ExamPlan
     {
-        $this->assertChaptersBelongToEnrollment($chapterIds, $enrollment);
-
         $plan = ExamPlan::create([
             'student_enrollment_id' => $enrollment->id,
             'exam_date' => $data['exam_date'],
@@ -85,19 +160,17 @@ class ExamPlanService
             'status' => ExamPlan::STATUS_PLANNED,
         ]);
 
-        $plan->chapters()->sync($chapterIds);
+        $this->syncChapterSelections($plan, $selections, $enrollment);
 
-        return $plan->load('chapters');
+        return $plan->load(['chapters', 'topics']);
     }
 
     /**
      * @param  array<string, mixed>  $data
-     * @param  list<int>  $chapterIds
+     * @param  list<array{syllabus_chapter_id: int, syllabus_topic_ids?: list<int>|null}>  $selections
      */
-    public function update(ExamPlan $plan, array $data, array $chapterIds): ExamPlan
+    public function update(ExamPlan $plan, array $data, array $selections): ExamPlan
     {
-        $this->assertChaptersBelongToEnrollment($chapterIds, $plan->enrollment);
-
         $plan->update([
             'exam_date' => $data['exam_date'],
             'title' => $data['title'],
@@ -105,14 +178,37 @@ class ExamPlanService
             'notes' => $data['notes'] ?? null,
         ]);
 
-        $plan->chapters()->sync($chapterIds);
+        $this->syncChapterSelections($plan, $selections, $plan->enrollment);
 
-        return $plan->fresh(['chapters']);
+        return $plan->fresh(['chapters', 'topics']);
     }
 
     public function formatPlan(ExamPlan $plan, bool $includePrep = true, bool $includeAssignables = false): array
     {
-        $plan->loadMissing('chapters:id,chapter_number,name,sort_order');
+        $plan->loadMissing([
+            'chapters:id,chapter_number,name,sort_order',
+            'topics:id,syllabus_chapter_id,name,sort_order',
+        ]);
+
+        $topicsByChapter = $plan->topics->groupBy('syllabus_chapter_id');
+
+        $chapterSelections = $plan->chapters->map(function (SyllabusChapter $chapter) use ($topicsByChapter) {
+            $selectedTopics = $topicsByChapter->get($chapter->id, collect());
+
+            return [
+                'syllabus_chapter_id' => $chapter->id,
+                'syllabus_topic_ids' => $selectedTopics->isEmpty()
+                    ? null
+                    : $selectedTopics->pluck('id')->values()->all(),
+            ];
+        })->values()->all();
+
+        $chapterNames = $plan->chapters->map(
+            fn (SyllabusChapter $chapter) => self::chapterSelectionLabel(
+                $chapter,
+                $topicsByChapter->get($chapter->id, collect()),
+            ),
+        )->values()->all();
 
         $data = [
             'id' => $plan->id,
@@ -131,7 +227,8 @@ class ExamPlanService
                 'label' => self::chapterLabel($chapter),
             ])->values()->all(),
             'chapter_ids' => $plan->chapters->pluck('id')->all(),
-            'chapter_names' => $plan->chapters->map(fn (SyllabusChapter $chapter) => self::chapterLabel($chapter))->values()->all(),
+            'chapter_selections' => $chapterSelections,
+            'chapter_names' => $chapterNames,
         ];
 
         if ($includePrep) {
@@ -151,7 +248,12 @@ class ExamPlanService
      */
     public function assignableSetsForPlan(ExamPlan $plan): array
     {
-        $plan->loadMissing('chapters:id,chapter_number,name,sort_order');
+        $plan->loadMissing([
+            'chapters:id,chapter_number,name,sort_order',
+            'topics:id,syllabus_chapter_id,name',
+        ]);
+
+        $topicsByChapter = $plan->topics->groupBy('syllabus_chapter_id');
 
         $activeWorksheetIds = SetAssignment::query()
             ->where('student_enrollment_id', $plan->student_enrollment_id)
@@ -159,11 +261,19 @@ class ExamPlanService
             ->pluck('worksheet_id')
             ->all();
 
-        return $plan->chapters->map(function (SyllabusChapter $chapter) use ($activeWorksheetIds) {
+        return $plan->chapters->map(function (SyllabusChapter $chapter) use ($activeWorksheetIds, $topicsByChapter) {
+            $partialTopicIds = $topicsByChapter->get($chapter->id)?->pluck('id')->all();
+
             $topicSets = Worksheet::query()
                 ->where('status', Worksheet::STATUS_PUBLISHED)
                 ->where('scope', PracticeSetScope::TOPIC)
-                ->whereHas('topic', fn ($query) => $query->where('syllabus_chapter_id', $chapter->id))
+                ->whereHas('topic', function ($query) use ($chapter, $partialTopicIds) {
+                    $query->where('syllabus_chapter_id', $chapter->id);
+
+                    if ($partialTopicIds) {
+                        $query->whereIn('id', $partialTopicIds);
+                    }
+                })
                 ->with('topic:id,name')
                 ->withCount('questions')
                 ->orderBy('set_number')
@@ -214,6 +324,27 @@ class ExamPlanService
         $prefix = str_starts_with(strtolower($number), 'ch') ? $number : "Ch {$number}";
 
         return "{$prefix} — {$chapter->name}";
+    }
+
+    /**
+     * @param  Collection<int, SyllabusTopic>  $selectedTopics
+     */
+    public static function chapterSelectionLabel(SyllabusChapter $chapter, Collection $selectedTopics): string
+    {
+        $label = self::chapterLabel($chapter);
+
+        if ($selectedTopics->isEmpty()) {
+            return $label;
+        }
+
+        if ($selectedTopics->count() === 1) {
+            return "{$label} · {$selectedTopics->first()->name}";
+        }
+
+        $names = $selectedTopics->take(2)->pluck('name')->join(', ');
+        $extra = $selectedTopics->count() > 2 ? '…' : '';
+
+        return "{$label} · {$selectedTopics->count()} topics ({$names}{$extra})";
     }
 
     /**

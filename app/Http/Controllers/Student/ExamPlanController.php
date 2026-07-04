@@ -26,7 +26,7 @@ class ExamPlanController extends Controller
             $enrollment,
             $request->user(),
             $validated,
-            $validated['syllabus_chapter_ids'],
+            $validated['chapter_selections'],
         );
 
         return back()->with('success', 'Exam plan saved.');
@@ -41,7 +41,7 @@ class ExamPlanController extends Controller
         $this->examPlanService->update(
             $examPlan,
             $validated,
-            $validated['syllabus_chapter_ids'],
+            $validated['chapter_selections'],
         );
 
         return back()->with('success', 'Exam plan updated.');
@@ -76,8 +76,10 @@ class ExamPlanController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'exam_type' => ['required', 'in:unit_test,half_yearly,final,other'],
             'notes' => ['nullable', 'string', 'max:1000'],
-            'syllabus_chapter_ids' => ['required', 'array', 'min:1'],
-            'syllabus_chapter_ids.*' => ['integer', 'exists:syllabus_chapters,id'],
+            'chapter_selections' => ['required', 'array', 'min:1'],
+            'chapter_selections.*.syllabus_chapter_id' => ['required', 'integer', 'exists:syllabus_chapters,id'],
+            'chapter_selections.*.syllabus_topic_ids' => ['nullable', 'array'],
+            'chapter_selections.*.syllabus_topic_ids.*' => ['integer', 'exists:syllabus_topics,id'],
         ]);
     }
 }

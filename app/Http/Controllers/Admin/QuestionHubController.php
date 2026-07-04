@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
+use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Question;
 use App\Models\Subject;
@@ -15,6 +16,7 @@ use App\Services\AdminGradeContext;
 use App\Services\PracticeSetCodeService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,39 +29,30 @@ class QuestionHubController extends Controller
     {
         $activeYear = AcademicYear::active();
         $maths = Subject::query()->where('code', 'MATHS')->first();
+        $grades = $this->gradeContext->classLevels();
 
-        $cards = $this->gradeContext->classLevels()->map(function (GradeLevel $grade) use ($activeYear, $maths) {
-            $syllabus = null;
-            $chaptersCount = 0;
+        $boardSections = Board::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'code', 'name'])
+            ->map(function (Board $board) use ($activeYear, $maths, $grades) {
+                $classes = $grades
+                    ->map(fn (GradeLevel $grade) => $this->classCardForBoard($grade, $board, $activeYear, $maths))
+                    ->filter(fn (array $card) => $card['has_syllabus'] || $card['topics_count'] > 0 || $card['questions_count'] > 0)
+                    ->values();
 
-            if ($activeYear && $maths) {
-                $syllabus = SyllabusVersion::query()
-                    ->where('academic_year_id', $activeYear->id)
-                    ->where('grade_level_id', $grade->id)
-                    ->where('subject_id', $maths->id)
-                    ->withCount('chapters')
-                    ->first();
-                $chaptersCount = $syllabus?->chapters_count ?? 0;
-            }
-
-            $topicQuery = SyllabusTopic::query();
-            $this->gradeContext->scopeTopics($topicQuery, $grade->id);
-
-            $questionQuery = Question::query();
-            $this->gradeContext->scopeQuestions($questionQuery, $grade->id);
-
-            return [
-                'id' => $grade->id,
-                'name' => $grade->name,
-                'chapters_count' => $chaptersCount,
-                'topics_count' => (clone $topicQuery)->count(),
-                'questions_count' => (clone $questionQuery)->count(),
-                'has_syllabus' => (bool) $syllabus,
-            ];
-        });
+                return [
+                    'id' => $board->id,
+                    'code' => $board->code,
+                    'name' => $board->name,
+                    'classes' => $classes,
+                ];
+            })
+            ->filter(fn (array $section) => $section['classes']->isNotEmpty())
+            ->values();
 
         return Inertia::render('Admin/Questions/Hub/Classes', [
-            'classes' => $cards,
+            'boardSections' => $boardSections,
             'activeYear' => $activeYear?->only(['id', 'name']),
         ]);
     }
@@ -71,6 +64,11 @@ class QuestionHubController extends Controller
         }
 
         $this->gradeContext->persist($request, $gradeLevel->id);
+
+        $boardId = $request->integer('board_id');
+        abort_unless($boardId, 404);
+
+        $board = Board::query()->whereKey($boardId)->where('is_active', true)->firstOrFail();
 
         $activeYear = AcademicYear::active();
         $maths = Subject::query()->where('code', 'MATHS')->first();
@@ -84,6 +82,7 @@ class QuestionHubController extends Controller
                 ->where('academic_year_id', $activeYear->id)
                 ->where('grade_level_id', $gradeLevel->id)
                 ->where('subject_id', $maths->id)
+                ->where('board_id', $board->id)
                 ->first();
 
             if ($syllabusVersion) {
@@ -104,10 +103,12 @@ class QuestionHubController extends Controller
 
         return Inertia::render('Admin/Questions/Hub/Chapters', [
             'gradeLevel' => $gradeLevel->only(['id', 'name']),
+            'board' => $board->only(['id', 'code', 'name']),
             'activeYear' => $activeYear?->only(['id', 'name']),
             'syllabusVersion' => $syllabusVersion ? [
                 'id' => $syllabusVersion->id,
                 'board_code' => $syllabusVersion->board->code,
+                'board_name' => $syllabusVersion->board->name,
             ] : null,
             'chapters' => $chapters,
             'stats' => [
@@ -273,5 +274,50 @@ class QuestionHubController extends Controller
                 'options_count' => $q->options->count(),
             ])->values()->all(),
         ]);
+    }
+
+    private function classCardForBoard(
+        GradeLevel $grade,
+        Board $board,
+        ?AcademicYear $activeYear,
+        ?Subject $maths,
+    ): array {
+        $syllabus = null;
+        $chaptersCount = 0;
+
+        if ($activeYear && $maths) {
+            $syllabus = SyllabusVersion::query()
+                ->where('academic_year_id', $activeYear->id)
+                ->where('grade_level_id', $grade->id)
+                ->where('subject_id', $maths->id)
+                ->where('board_id', $board->id)
+                ->withCount('chapters')
+                ->first();
+            $chaptersCount = $syllabus?->chapters_count ?? 0;
+        }
+
+        $topicQuery = SyllabusTopic::query()->whereHas(
+            'chapter.syllabusVersion',
+            fn (Builder $query) => $query
+                ->where('grade_level_id', $grade->id)
+                ->where('board_id', $board->id),
+        );
+
+        $questionQuery = Question::query()->whereHas(
+            'topic.chapter.syllabusVersion',
+            fn (Builder $query) => $query
+                ->where('grade_level_id', $grade->id)
+                ->where('board_id', $board->id),
+        );
+
+        return [
+            'id' => $grade->id,
+            'name' => $grade->name,
+            'board_id' => $board->id,
+            'chapters_count' => $chaptersCount,
+            'topics_count' => (clone $topicQuery)->count(),
+            'questions_count' => (clone $questionQuery)->count(),
+            'has_syllabus' => (bool) $syllabus,
+        ];
     }
 }

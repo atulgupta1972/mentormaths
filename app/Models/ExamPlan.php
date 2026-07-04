@@ -62,6 +62,12 @@ class ExamPlan extends Model
             ->orderBy('sort_order');
     }
 
+    public function topics(): BelongsToMany
+    {
+        return $this->belongsToMany(SyllabusTopic::class, 'exam_plan_topics')
+            ->withTimestamps();
+    }
+
     public function setAssignments(): HasMany
     {
         return $this->hasMany(SetAssignment::class);

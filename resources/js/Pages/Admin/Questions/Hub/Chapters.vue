@@ -7,6 +7,7 @@ import { computed } from 'vue';
 
 defineProps({
     gradeLevel: Object,
+    board: Object,
     activeYear: Object,
     syllabusVersion: Object,
     chapters: Array,
@@ -22,10 +23,12 @@ const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
     <AuthenticatedLayout>
         <template #header>
             <div>
-                <Link :href="route('admin.questions.index')" class="text-sm text-indigo-600">← All classes</Link>
-                <h2 class="mt-1 text-xl font-semibold text-gray-800">{{ gradeLevel.name }} — Question Bank</h2>
+                <Link :href="route('admin.questions.index')" class="text-sm text-indigo-600">← All boards</Link>
+                <h2 class="mt-1 text-xl font-semibold text-gray-800">
+                    {{ board?.code }} · {{ gradeLevel.name }} — Question Bank
+                </h2>
                 <p v-if="activeYear" class="text-sm text-gray-500">
-                    {{ syllabusVersion?.board_code }} · {{ activeYear.name }} · {{ stats.questions_count }} questions
+                    {{ board?.name }} · {{ activeYear.name }} · {{ stats.questions_count }} questions
                 </p>
             </div>
         </template>
@@ -49,7 +52,7 @@ const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
                 </div>
 
                 <div v-if="!syllabusVersion" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    No syllabus for {{ gradeLevel.name }} yet.
+                    No {{ board?.code }} syllabus for {{ gradeLevel.name }} yet.
                     <Link v-if="isAdmin" :href="route('admin.syllabus.index')" class="font-medium text-indigo-600">Import syllabus</Link>
                 </div>
 
