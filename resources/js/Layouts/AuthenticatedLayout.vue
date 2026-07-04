@@ -8,6 +8,7 @@ import ResponsiveNavGroup from '@/Components/ResponsiveNavGroup.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { useAssignmentWhatsAppFlash } from '@/composables/useAssignmentWhatsAppFlash';
+import { assignToClassPath, safeRoute } from '@/utils/routes';
 
 const showingNavigationDropdown = ref(false);
 const page = usePage();
@@ -59,9 +60,13 @@ const teachingGroup = computed(() => ({
         {
             label: 'Assign to class',
             href: page.props.gradeContext?.selected?.id
-                ? route('admin.classes.assign', page.props.gradeContext.selected.id)
+                ? safeRoute(
+                    'admin.classes.assign',
+                    page.props.gradeContext.selected.id,
+                    assignToClassPath(page.props.gradeContext.selected.id),
+                )
                 : route('admin.classes.index'),
-            active: route().current('admin.classes.assign'),
+            active: page.url.includes('/admin/classes/') && page.url.endsWith('/assign'),
             show: isAdmin.value,
         },
         {

@@ -5,6 +5,7 @@ import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import { assignToClassPath, safeRoute } from '@/utils/routes';
 
 const props = defineProps({
     gradeLevel: Object,
@@ -149,7 +150,7 @@ watch(examFilter, (value, oldValue) => {
                     </Link>
                     <Link
                         v-if="isAdmin"
-                        :href="route('admin.classes.assign', gradeLevel.id)"
+                        :href="safeRoute('admin.classes.assign', gradeLevel.id, assignToClassPath(gradeLevel.id))"
                         class="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
                     >
                         Assign to class

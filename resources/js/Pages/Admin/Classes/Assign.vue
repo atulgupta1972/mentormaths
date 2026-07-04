@@ -5,6 +5,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import { assignToClassPath, assignToClassStorePath, safeRoute } from '@/utils/routes';
 
 const props = defineProps({
     gradeLevel: Object,
@@ -127,7 +128,7 @@ const clearSheets = () => {
 };
 
 const switchClass = (gradeId) => {
-    router.get(route('admin.classes.assign', gradeId));
+    router.get(safeRoute('admin.classes.assign', gradeId, assignToClassPath(gradeId)));
 };
 
 const submit = () => {
@@ -135,7 +136,7 @@ const submit = () => {
     form.target_date = targetDate.value;
     form.notes = notes.value;
 
-    form.post(route('admin.classes.assign.store', props.gradeLevel.id), {
+    form.post(safeRoute('admin.classes.assign.store', props.gradeLevel.id, assignToClassStorePath(props.gradeLevel.id)), {
         preserveScroll: true,
     });
 };
