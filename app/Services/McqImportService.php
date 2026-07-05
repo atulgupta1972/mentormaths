@@ -419,15 +419,19 @@ PROMPT;
         $normalizedOptions = [];
         $correctIndex = isset($item['correct_index']) ? (int) $item['correct_index'] : null;
 
-        if ($correctIndex === null && isset($item['correct_answer'])) {
-            $correctLetter = strtoupper(trim((string) $item['correct_answer']));
+        if ($correctIndex === null && (isset($item['correct_answer']) || isset($item['correctAnswer']))) {
+            $correctLetter = strtoupper(trim((string) ($item['correct_answer'] ?? $item['correctAnswer'])));
             $correctIndex = ord($correctLetter) - ord('A');
         }
 
         foreach (array_values($options) as $optIndex => $option) {
             if (is_array($option)) {
-                $text = trim((string) ($option['text'] ?? $option['option'] ?? ''));
+                $text = trim((string) ($option['text'] ?? $option['option'] ?? $option['option_text'] ?? ''));
                 $isCorrect = (bool) ($option['is_correct'] ?? false);
+                if (! $isCorrect && isset($option['key']) && (isset($item['correct_answer']) || isset($item['correctAnswer']))) {
+                    $answerKey = strtoupper(trim((string) ($item['correct_answer'] ?? $item['correctAnswer'])));
+                    $isCorrect = strtoupper(trim((string) $option['key'])) === $answerKey;
+                }
             } else {
                 $text = trim((string) $option);
                 $isCorrect = $correctIndex === $optIndex;
@@ -455,11 +459,13 @@ PROMPT;
             $normalizedOptions[0]['is_correct'] = true;
         }
 
+        $methodHint = $item['method_hint'] ?? $item['hint'] ?? null;
+
         return [
             'question_text' => $questionText,
             'explanation' => QuestionMethodHint::sanitizeExplanation(trim((string) ($item['explanation'] ?? '')) ?: null),
-            'method_hint' => filled($item['method_hint'] ?? null)
-                ? trim((string) $item['method_hint'])
+            'method_hint' => filled($methodHint)
+                ? trim((string) $methodHint)
                 : QuestionMethodHint::inferFromQuestionText($questionText),
             'difficulty' => trim((string) ($item['difficulty'] ?? '')) ?: null,
             'options' => $normalizedOptions,

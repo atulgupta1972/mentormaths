@@ -56,8 +56,9 @@ function normalizeItem(item, index) {
     }
 
     let correctIndex = item.correct_index !== undefined ? Number(item.correct_index) : null;
-    if (correctIndex === null && item.correct_answer) {
-        correctIndex = item.correct_answer.toString().trim().toUpperCase().charCodeAt(0) - 65;
+    if (correctIndex === null && (item.correct_answer || item.correctAnswer)) {
+        const letter = String(item.correct_answer ?? item.correctAnswer).trim().toUpperCase();
+        correctIndex = letter.charCodeAt(0) - 65;
     }
 
     const normalizedOptions = [];
@@ -69,6 +70,10 @@ function normalizeItem(item, index) {
         if (option && typeof option === 'object') {
             text = String(option.text ?? option.option ?? option.option_text ?? '').trim();
             isCorrect = Boolean(option.is_correct);
+            if (!isCorrect && option.key && (item.correct_answer || item.correctAnswer)) {
+                const answerKey = String(item.correct_answer ?? item.correctAnswer).trim().toUpperCase();
+                isCorrect = String(option.key).trim().toUpperCase() === answerKey;
+            }
         } else {
             text = String(option ?? '').trim();
             isCorrect = correctIndex === optIndex;
@@ -102,7 +107,7 @@ function normalizeItem(item, index) {
     return {
         question_text: questionText,
         explanation: String(item.explanation ?? '').trim(),
-        method_hint: String(item.method_hint ?? '').trim(),
+        method_hint: String(item.method_hint ?? item.hint ?? '').trim(),
         difficulty: String(item.difficulty ?? '').trim(),
         options: normalizedOptions,
     };
