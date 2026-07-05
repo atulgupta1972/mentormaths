@@ -37,6 +37,14 @@ const cardHref = (card) => {
 const packageAsSet = (card) => {
     router.post(route('admin.practice-sets.from-topic', card.topic_id), { tier: card.tier });
 };
+
+const clearBank = (card) => {
+    if (!window.confirm(`Delete all ${card.questions_count} questions in “${card.topic_name}”? This cannot be undone.`)) {
+        return;
+    }
+
+    router.delete(route('admin.questions.topics.clear-bank', card.topic_id));
+};
 </script>
 
 <template>
@@ -81,6 +89,18 @@ const packageAsSet = (card) => {
         <div class="py-12">
             <div class="mx-auto max-w-6xl space-y-6 sm:px-6 lg:px-8">
                 <BrowseModeNotice />
+                <div
+                    v-if="usePage().props.flash?.success"
+                    class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+                >
+                    {{ usePage().props.flash.success }}
+                </div>
+                <div
+                    v-if="usePage().props.flash?.error"
+                    class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+                >
+                    {{ usePage().props.flash.error }}
+                </div>
                 <div class="grid gap-4 sm:grid-cols-4">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-sky-600">{{ stats.chapter_tests_count || 0 }}</p>
@@ -146,6 +166,14 @@ const packageAsSet = (card) => {
                                 @click="packageAsSet(card)"
                             >
                                 Package as {{ card.set_code }}
+                            </button>
+                            <span class="mx-1 text-emerald-600">·</span>
+                            <button
+                                type="button"
+                                class="font-medium text-rose-700 hover:underline"
+                                @click="clearBank(card)"
+                            >
+                                Delete all
                             </button>
                         </p>
                         <p v-else-if="!isAdmin && card.type === 'bank'" class="mt-3 border-t border-emerald-200 pt-3 text-xs text-emerald-800">

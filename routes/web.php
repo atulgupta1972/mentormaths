@@ -130,6 +130,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/questions/bulk-store', [QuestionController::class, 'storeBulk'])->name('questions.bulk-store');
     Route::post('/questions/topics/{topic}/generate-method-hints', [QuestionController::class, 'generateMethodHints'])
         ->name('questions.topics.generate-method-hints');
+    Route::delete('/questions/topics/{topic}/bank', [QuestionController::class, 'clearTopicBank'])
+        ->name('questions.topics.clear-bank');
     Route::get('/questions/{question}/edit', [QuestionController::class, 'edit'])->name('questions.edit');
     Route::put('/questions/{question}', [QuestionController::class, 'update'])->name('questions.update');
     Route::delete('/questions/{question}', [QuestionController::class, 'destroy'])->name('questions.destroy');

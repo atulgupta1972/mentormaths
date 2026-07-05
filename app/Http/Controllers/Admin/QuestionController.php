@@ -73,7 +73,33 @@ class QuestionController extends Controller
                 'search' => $request->string('search')->toString(),
             ],
             'hintStats' => $this->methodHintService->statsForTopic($topic),
+            'canClearBank' => ! $topic->practiceSets()->exists(),
         ]);
+    }
+
+    public function clearTopicBank(SyllabusTopic $topic): RedirectResponse
+    {
+        if ($topic->practiceSets()->exists()) {
+            return redirect()
+                ->back()
+                ->with('error', 'This topic has a packaged practice set. Delete the set first, or remove questions one by one.');
+        }
+
+        $count = $topic->questions()->count();
+
+        if ($count === 0) {
+            return redirect()
+                ->back()
+                ->with('warning', 'No questions to delete in this topic.');
+        }
+
+        DB::transaction(function () use ($topic) {
+            $topic->questions()->each(fn (Question $question) => $question->delete());
+        });
+
+        return redirect()
+            ->route('admin.questions.chapters.show', $topic->syllabus_chapter_id)
+            ->with('success', "Deleted {$count} question".($count === 1 ? '' : 's')." from {$topic->name}.");
     }
 
     public function generateMethodHints(Request $request, SyllabusTopic $topic): RedirectResponse

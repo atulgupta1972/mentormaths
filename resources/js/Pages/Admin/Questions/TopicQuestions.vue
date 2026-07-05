@@ -11,6 +11,7 @@ const props = defineProps({
     questions: Object,
     filters: Object,
     hintStats: Object,
+    canClearBank: { type: Boolean, default: false },
 });
 
 const page = usePage();
@@ -54,6 +55,15 @@ const generateHints = () => {
             generating.value = false;
         },
     });
+};
+
+const clearBank = () => {
+    const total = props.hintStats?.total ?? props.questions?.total ?? 0;
+    if (!window.confirm(`Delete all ${total} questions in “${props.topic.name}”? This cannot be undone.`)) {
+        return;
+    }
+
+    router.delete(route('admin.questions.topics.clear-bank', props.topic.id));
 };
 </script>
 
@@ -103,6 +113,14 @@ const generateHints = () => {
                     >
                         Add MCQs
                     </Link>
+                    <button
+                        v-if="canClearBank && hintStats?.total > 0"
+                        type="button"
+                        class="rounded-md border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-800 hover:bg-rose-100"
+                        @click="clearBank"
+                    >
+                        Delete all questions
+                    </button>
                 </div>
             </div>
         </template>
@@ -122,6 +140,12 @@ const generateHints = () => {
                     class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
                 >
                     {{ page.props.flash.warning }}
+                </div>
+                <div
+                    v-if="page.props.flash?.error"
+                    class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+                >
+                    {{ page.props.flash.error }}
                 </div>
 
                 <form class="flex gap-3 rounded-lg bg-white p-4 shadow-sm" @submit.prevent="applySearch">
