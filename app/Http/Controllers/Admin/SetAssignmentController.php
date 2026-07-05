@@ -137,6 +137,9 @@ class SetAssignmentController extends Controller
         if ($emailCounts['skipped'] > 0 && $emailCounts['sent'] === 0) {
             $warnings[] = 'Add student emails on their profiles to notify by email.';
         }
+        if ($emailCounts['via_log'] ?? false) {
+            $warnings[] = 'MAIL_MAILER=log on server — emails are not delivered. Set SMTP in .env and run php artisan config:cache.';
+        }
 
         if ($warnings !== []) {
             $redirect = $redirect->with('warning', implode(' ', $warnings));
@@ -198,6 +201,13 @@ class SetAssignmentController extends Controller
 
         if (! $emailResult['sent'] && $emailResult['error'] === 'send_failed') {
             return $redirect->with('warning', 'Assignment saved but the email could not be sent. Check mail settings.');
+        }
+
+        if ($emailResult['sent'] && ! empty($emailResult['via_log'])) {
+            return $redirect->with(
+                'warning',
+                'Assignment saved. Email was written to the server log only (MAIL_MAILER=log). Configure SMTP in .env to deliver real emails.',
+            );
         }
 
         return $redirect;

@@ -53,7 +53,9 @@ class AssignmentMailer
 
             $pending->send(new AssignmentAssigned($student, $worksheets, $dueDate, $notes));
 
-            return ['sent' => true, 'email' => $email, 'error' => null];
+            $viaLog = config('mail.default') === 'log';
+
+            return ['sent' => true, 'email' => $email, 'error' => null, 'via_log' => $viaLog];
         } catch (\Throwable $e) {
             Log::error('Failed to send assignment email.', [
                 'student_id' => $student->id,
@@ -83,6 +85,9 @@ class AssignmentMailer
 
             if ($result['sent']) {
                 $counts['sent']++;
+                if (! empty($result['via_log'])) {
+                    $counts['via_log'] = true;
+                }
             } elseif ($result['error'] === 'no_email') {
                 $counts['skipped']++;
             } else {
@@ -121,6 +126,9 @@ class AssignmentMailer
 
             if ($result['sent']) {
                 $counts['sent']++;
+                if (! empty($result['via_log'])) {
+                    $counts['via_log'] = true;
+                }
             } elseif ($result['error'] === 'no_email') {
                 $counts['skipped']++;
             } else {
@@ -161,7 +169,14 @@ class AssignmentMailer
     public static function flashSuffixForSingle(array $result, string $studentName): ?string
     {
         if ($result['sent']) {
-            return " Email sent to {$result['email']} (admin CC'd).";
+            $to = $result['email'] ?? 'recipient';
+            $suffix = " Email sent to {$to}";
+
+            if (! empty($result['via_log'])) {
+                return $suffix.' (log mailer only — not delivered; set MAIL_MAILER=smtp in .env).';
+            }
+
+            return $suffix.' (admin CC\'d).';
         }
 
         if ($result['error'] === 'no_email') {
@@ -183,7 +198,7 @@ class AssignmentMailer
         $parts = [];
 
         if ($counts['sent'] > 0) {
-            $parts[] = "{$counts['sent']} email".($counts['sent'] === 1 ? '' : 's')." sent (admin CC'd)";
+            $parts[] = "{$counts['sent']} email".($counts['sent'] === 1 ? '' : 's').' sent';
         }
 
         if ($counts['skipped'] > 0) {
