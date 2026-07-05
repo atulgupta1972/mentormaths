@@ -15,6 +15,7 @@ const props = defineProps({
     },
     syllabusChapters: { type: Array, default: () => [] },
     examTypeOptions: { type: Array, default: () => [] },
+    examTypeOptions: { type: Array, default: () => [] },
     stats: {
         type: Object,
         default: () => ({}),
@@ -300,45 +301,17 @@ const adminSetStatusClass = (set) => {
                                         </button>
 
                                         <div v-if="expandedStudentId === student.student_id" class="space-y-3 border-t border-gray-100 bg-white px-2.5 py-2.5">
-                                <div>
-                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-sky-700">Upcoming exams</h4>
-                                    <div v-if="student.upcoming_exams.length" class="mt-1.5 space-y-1.5">
-                                        <div
-                                            v-for="exam in student.upcoming_exams"
-                                            :key="exam.id"
-                                            class="rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600 p-2.5 text-white"
-                                        >
-                                            <div class="flex items-start justify-between gap-2">
-                                                <div class="min-w-0">
-                                                    <p class="truncate text-xs font-semibold">{{ exam.title }}</p>
-                                                    <p class="text-[10px] text-sky-100">{{ exam.exam_type_label }}</p>
-                                                </div>
-                                                <span class="shrink-0 rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase">
-                                                    {{ daysUntil(exam.exam_date) }}
-                                                </span>
-                                            </div>
-                                            <p class="mt-1 text-[11px] font-medium">{{ formatDate(exam.exam_date) }}</p>
-                                            <p class="mt-0.5 truncate text-[10px] text-sky-100">{{ chapterList(exam) }}</p>
-                                        </div>
-                                    </div>
-                                    <p v-else class="mt-1 text-[11px] text-gray-500">No upcoming exam plan.</p>
-                                </div>
-
-                                <div v-if="student.past_exams.length">
-                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Completed exams</h4>
-                                    <div class="mt-1 flex flex-wrap gap-1">
-                                        <span
-                                            v-for="exam in student.past_exams"
-                                            :key="`past-${exam.id}`"
-                                            class="rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-700"
-                                        >
-                                            {{ exam.title }}
-                                        </span>
-                                    </div>
-                                </div>
+                                <ExamPlanPanel
+                                    :plans="student.exam_plans || []"
+                                    :syllabus-chapters="student.syllabus_chapters || []"
+                                    :exam-type-options="examTypeOptions"
+                                    :student-id="student.student_id"
+                                    context="admin"
+                                    compact
+                                />
 
                                 <div>
-                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">To do</h4>
+                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Sets to do</h4>
                                     <div v-if="student.assignments_pending.length" class="mt-1 flex flex-wrap gap-1">
                                         <Link
                                             v-for="set in student.assignments_pending"
@@ -354,7 +327,7 @@ const adminSetStatusClass = (set) => {
                                 </div>
 
                                 <div v-if="student.assignments_completed.length">
-                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Done</h4>
+                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Sets done</h4>
                                     <div class="mt-1 flex flex-wrap gap-1">
                                         <Link
                                             v-for="set in student.assignments_completed"
@@ -424,7 +397,15 @@ const adminSetStatusClass = (set) => {
                                         </span>
                                     </div>
                                     <p class="mt-2 text-lg font-semibold">{{ formatDate(plan.exam_date) }}</p>
-                                    <p class="mt-1 truncate text-xs text-violet-100" :title="chapterList(plan)">{{ chapterList(plan) }}</p>
+                                    <div v-if="plan.chapter_names?.length" class="mt-2 rounded-lg bg-white/10 p-2">
+                                        <p class="text-[10px] font-semibold uppercase tracking-wide text-violet-100">Chapters / topics</p>
+                                        <ul class="mt-1 space-y-0.5 text-xs leading-snug text-white">
+                                            <li v-for="(name, index) in plan.chapter_names" :key="index">
+                                                {{ name }}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <p v-else class="mt-1 text-xs text-violet-100">No chapters selected yet.</p>
                                     <div v-if="plan.prep_summary?.total" class="mt-2.5">
                                         <div class="flex justify-between text-[10px] text-violet-100">
                                             <span>Prep assigned</span>

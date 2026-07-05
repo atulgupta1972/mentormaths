@@ -83,8 +83,8 @@ class DashboardService
             ->values();
 
         $students = $enrollments->map(function (StudentEnrollment $enrollment) {
-            $plans = $this->examPlanService->plansForEnrollment($enrollment);
-            $split = $this->examPlanService->splitPlansByTiming($plans);
+            $allPlans = $this->examPlanService->plansForEnrollment($enrollment, true);
+            $split = $this->examPlanService->splitPlansByTiming($allPlans);
             $assignments = collect($this->attemptService->dashboardForEnrollment($enrollment));
 
             $pending = $assignments->filter(
@@ -102,6 +102,8 @@ class DashboardService
                 'grade_level_id' => $enrollment->grade_level_id,
                 'upcoming_exams' => $split['upcoming']->values()->all(),
                 'past_exams' => $split['past']->values()->all(),
+                'exam_plans' => $allPlans->values()->all(),
+                'syllabus_chapters' => $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all(),
                 'assignments_pending' => $pending,
                 'assignments_completed' => $completed,
             ];
@@ -121,6 +123,7 @@ class DashboardService
                 'completed_sets_count' => $completedSetsCount,
             ],
             'students' => $students,
+            'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ];
     }
 

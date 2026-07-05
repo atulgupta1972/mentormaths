@@ -4,7 +4,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { useForm } from '@inertiajs/vue3';
+import { useForm, Link } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -441,7 +441,7 @@ watch(
             No exam plans yet.
         </div>
 
-        <div v-else-if="plans.length" class="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div v-else-if="plans.length" class="overflow-x-auto rounded-lg border border-gray-200 bg-white">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                     <tr>
@@ -547,8 +547,28 @@ watch(
                                     >
                                         <h5 class="text-sm font-medium text-gray-900">{{ chapter.chapter_label }}</h5>
 
-                                        <div v-if="!chapterHasSets(chapter)" class="mt-2 text-xs text-gray-400">
-                                            No published practice sets or chapter tests for this chapter yet.
+                                        <div v-if="!chapterHasSets(chapter)" class="mt-2 space-y-2">
+                                            <p class="text-xs text-amber-700">No published sets for this chapter yet.</p>
+                                            <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium">
+                                                <Link
+                                                    :href="route('admin.questions.create', { syllabus_chapter_id: chapter.chapter_id, scope: 'chapter' })"
+                                                    class="text-indigo-600 hover:underline"
+                                                >
+                                                    Add MCQs
+                                                </Link>
+                                                <Link
+                                                    :href="route('admin.questions.chapters.show', chapter.chapter_id)"
+                                                    class="text-indigo-600 hover:underline"
+                                                >
+                                                    Question bank
+                                                </Link>
+                                                <Link
+                                                    :href="route('admin.practice-sets.chapters.show', chapter.chapter_id)"
+                                                    class="text-indigo-600 hover:underline"
+                                                >
+                                                    Create chapter test
+                                                </Link>
+                                            </div>
                                         </div>
 
                                         <div v-if="chapter.topic_sets?.length" class="mt-3">
