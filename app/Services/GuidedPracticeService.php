@@ -8,6 +8,7 @@ use App\Models\SetAttempt;
 use App\Models\SetAttemptAnswer;
 use App\Models\SetAssignment;
 use App\Support\AssignmentProgress;
+use App\Support\AttemptTiming;
 use App\Support\QuestionMethodHint;
 use Illuminate\Support\Facades\DB;
 
@@ -308,7 +309,7 @@ class GuidedPracticeService
             'first_try_correct_count' => $firstTryCorrect,
             'corrected_after_help_count' => $correctedAfterHelp,
             'given_up_count' => $givenUp,
-            'time_seconds' => (int) $attempt->started_at->diffInSeconds($completedAt),
+            'time_seconds' => AttemptTiming::elapsedSeconds($attempt->started_at, $completedAt),
             'status' => SetAttempt::STATUS_SUBMITTED,
             'submission_timing' => AssignmentProgress::submissionTiming($assignment, $completedAt),
         ]);

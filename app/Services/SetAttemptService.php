@@ -7,6 +7,7 @@ use App\Models\SetAttempt;
 use App\Models\SetAttemptAnswer;
 use App\Models\StudentEnrollment;
 use App\Support\AssignmentProgress;
+use App\Support\AttemptTiming;
 use Illuminate\Support\Facades\DB;
 
 class SetAttemptService
@@ -94,7 +95,7 @@ class SetAttemptService
                 );
             }
 
-            $timeSeconds = (int) $attempt->started_at->diffInSeconds(now());
+            $timeSeconds = AttemptTiming::elapsedSeconds($attempt->started_at);
             $completedAt = now();
             $submissionTiming = AssignmentProgress::submissionTiming($assignment, $completedAt);
 
