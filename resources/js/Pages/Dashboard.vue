@@ -235,21 +235,21 @@ const adminSetStatusClass = (set) => {
                     </div>
 
                     <div class="grid grid-cols-4 gap-2">
-                        <div class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-2 text-center shadow-sm">
-                            <p class="text-xl font-bold leading-none text-violet-700">{{ stats.students_count || 0 }}</p>
-                            <p class="mt-1 text-[9px] font-semibold uppercase tracking-wide text-violet-600">Students</p>
+                        <div class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-2.5 text-center shadow-sm">
+                            <p class="text-2xl font-extrabold leading-none text-violet-700">{{ stats.students_count || 0 }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Students</p>
                         </div>
-                        <div class="rounded-lg border border-sky-200 bg-sky-50 px-2 py-2 text-center shadow-sm">
-                            <p class="text-xl font-bold leading-none text-sky-700">{{ stats.upcoming_exams_count || 0 }}</p>
-                            <p class="mt-1 text-[9px] font-semibold uppercase tracking-wide text-sky-600">Exams</p>
+                        <div class="rounded-lg border border-sky-200 bg-sky-50 px-2 py-2.5 text-center shadow-sm">
+                            <p class="text-2xl font-extrabold leading-none text-sky-700">{{ stats.upcoming_exams_count || 0 }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">Exams</p>
                         </div>
-                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-center shadow-sm">
-                            <p class="text-xl font-bold leading-none text-amber-700">{{ stats.pending_sets_count || 0 }}</p>
-                            <p class="mt-1 text-[9px] font-semibold uppercase tracking-wide text-amber-600">To do</p>
+                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-2.5 text-center shadow-sm">
+                            <p class="text-2xl font-extrabold leading-none text-amber-700">{{ stats.pending_sets_count || 0 }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">To do</p>
                         </div>
-                        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-2 text-center shadow-sm">
-                            <p class="text-xl font-bold leading-none text-emerald-700">{{ stats.completed_sets_count || 0 }}</p>
-                            <p class="mt-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">Done</p>
+                        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-center shadow-sm">
+                            <p class="text-2xl font-extrabold leading-none text-emerald-700">{{ stats.completed_sets_count || 0 }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Done</p>
                         </div>
                     </div>
 
@@ -258,7 +258,7 @@ const adminSetStatusClass = (set) => {
                     </div>
 
                     <section v-else class="space-y-3">
-                        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-700">All students · by class</h3>
+                        <h3 class="text-sm font-bold uppercase tracking-wide text-gray-800">All students · by class</h3>
 
                         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                             <div
@@ -266,35 +266,35 @@ const adminSetStatusClass = (set) => {
                                 :key="className"
                                 class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
                             >
-                                <p class="mb-2 border-b border-gray-100 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
+                                <p class="mb-2 border-b border-gray-100 pb-1.5 text-xs font-extrabold uppercase tracking-wide text-indigo-800">
                                     {{ className }}
-                                    <span class="font-normal normal-case text-gray-500">({{ classStudents.length }})</span>
+                                    <span class="font-bold normal-case text-gray-600">({{ classStudents.length }})</span>
                                 </p>
 
-                                <div class="space-y-1.5">
+                                <div class="space-y-2">
                                     <div
                                         v-for="student in classStudents"
                                         :key="student.student_id"
-                                        class="overflow-hidden rounded-lg border border-gray-100 bg-slate-50"
+                                        class="overflow-hidden rounded-lg border border-gray-200 bg-slate-50"
                                     >
                                         <button
                                             type="button"
-                                            class="flex w-full items-start justify-between gap-2 px-2.5 py-2 text-left hover:bg-slate-100"
+                                            class="flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-100"
                                             @click="toggleStudent(student.student_id)"
                                         >
                                             <div class="min-w-0">
                                                 <Link
                                                     :href="route('admin.students.show', student.student_id)"
-                                                    class="block truncate text-sm font-semibold text-indigo-600 hover:underline"
+                                                    class="block truncate text-base font-bold leading-tight text-indigo-700 hover:underline"
                                                     @click.stop
                                                 >
                                                     {{ student.student_name }}
                                                 </Link>
-                                                <p class="mt-0.5 text-[10px] leading-snug text-gray-600">
+                                                <p class="mt-1 text-xs font-semibold leading-snug text-gray-700">
                                                     {{ studentSummary(student) }}
                                                 </p>
                                             </div>
-                                            <span class="shrink-0 pt-0.5 text-[10px] text-gray-400">
+                                            <span class="shrink-0 pt-1 text-xs font-bold text-gray-500">
                                                 {{ expandedStudentId === student.student_id ? '▲' : '▼' }}
                                             </span>
                                         </button>
