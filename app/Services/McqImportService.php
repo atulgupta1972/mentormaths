@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Question;
 use App\Models\QuestionOption;
+use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Support\QuestionMethodHint;
 use Illuminate\Support\Facades\DB;
@@ -244,6 +245,137 @@ class McqImportService
     }
 
     /**
+     * @param  list<array{topic_id: int, topic_name?: string, easy?: int, medium?: int, hard?: int}>  $planRows
+     */
+    public function cursorPromptForChapter(SyllabusChapter $chapter, array $planRows): string
+    {
+        $chapter->loadMissing([
+            'topics' => fn ($q) => $q->orderBy('sort_order'),
+            'syllabusVersion.board',
+            'syllabusVersion.gradeLevel',
+            'syllabusVersion.academicYear',
+        ]);
+
+        $lines = [];
+        $total = 0;
+
+        foreach ($planRows as $row) {
+            $easy = max(0, (int) ($row['easy'] ?? 0));
+            $medium = max(0, (int) ($row['medium'] ?? 0));
+            $hard = max(0, (int) ($row['hard'] ?? 0));
+            $subtotal = $easy + $medium + $hard;
+
+            if ($subtotal === 0) {
+                continue;
+            }
+
+            $name = trim((string) ($row['topic_name'] ?? ''));
+            if ($name === '' && ! empty($row['topic_id'])) {
+                $name = (string) ($chapter->topics->firstWhere('id', (int) $row['topic_id'])?->name ?? '');
+            }
+
+            if ($name === '') {
+                continue;
+            }
+
+            $lines[] = "- {$name}: Easy {$easy}, Medium {$medium}, Hard {$hard}";
+            $total += $subtotal;
+        }
+
+        if ($total === 0) {
+            throw new InvalidArgumentException('Enter at least one question in the chapter plan.');
+        }
+
+        $planBlock = implode("\n", $lines);
+
+        return $this->basePrompt(
+            'Create MCQ questions for an entire maths chapter. Return ONLY valid JSON (no markdown fences).',
+            $this->chapterContext($chapter),
+            <<<REQ
+Requirements:
+- Exactly {$total} questions total, distributed as follows:
+{$planBlock}
+- Each question MUST include "topic" with the exact topic name from the plan above
+- Class-appropriate CBSE/ICSE level
+- 4 options each, exactly one correct answer
+- Include "hint" or "method_hint": short theory/rules ONLY. NO final numeric answer, NO option letter, NO step-by-step working to the answer
+- Include "explanation": full teacher-only solution (can include working and answer key letter)
+- Set "difficulty" on each question to Easy, Medium, or Hard matching the plan row
+REQ,
+            chapterFormat: true,
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<Question>
+     */
+    public function saveChapterRows(SyllabusChapter $chapter, array $rows, int $userId, string $source = Question::SOURCE_AI): array
+    {
+        $chapter->loadMissing(['topics']);
+
+        return DB::transaction(function () use ($chapter, $rows, $userId, $source) {
+            $saved = [];
+
+            foreach ($rows as $row) {
+                if (trim((string) ($row['question_text'] ?? '')) === '') {
+                    continue;
+                }
+
+                $topicId = $this->resolveTopicIdForChapterRow($chapter, $row);
+                $topic = $chapter->topics->firstWhere('id', $topicId)
+                    ?? SyllabusTopic::query()->findOrFail($topicId);
+
+                $question = Question::create([
+                    'syllabus_topic_id' => $topic->id,
+                    'type' => Question::TYPE_MCQ,
+                    'question_text' => trim((string) $row['question_text']),
+                    'explanation' => QuestionMethodHint::sanitizeExplanation($row['explanation'] ?? null),
+                    'method_hint' => filled($row['method_hint'] ?? null)
+                        ? trim((string) $row['method_hint'])
+                        : QuestionMethodHint::inferFromQuestionText(trim((string) $row['question_text'])),
+                    'difficulty' => $row['difficulty'] ?? null,
+                    'source' => $source,
+                    'created_by' => $userId,
+                ]);
+
+                $this->syncOptions($question, $row['options'] ?? []);
+                $saved[] = $question->load('options');
+            }
+
+            return $saved;
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    public function resolveTopicIdForChapterRow(SyllabusChapter $chapter, array $row): int
+    {
+        if (! empty($row['syllabus_topic_id'])) {
+            $topicId = (int) $row['syllabus_topic_id'];
+            if ($chapter->topics()->whereKey($topicId)->exists()) {
+                return $topicId;
+            }
+        }
+
+        $name = trim((string) ($row['topic'] ?? $row['topic_name'] ?? ''));
+        if ($name === '') {
+            throw new InvalidArgumentException('Each question must include a topic name for chapter import.');
+        }
+
+        $topic = $chapter->topics()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->first();
+
+        if (! $topic) {
+            throw new InvalidArgumentException("Unknown topic \"{$name}\" for this chapter.");
+        }
+
+        return $topic->id;
+    }
+
+    /**
      * @param  array{total?: int, easy?: int, medium?: int, hard?: int, focus?: string}  $options
      */
     public function cursorPrompt(SyllabusTopic $topic, array $options = []): string
@@ -355,17 +487,46 @@ REQ,
         ])->filter()->implode("\n");
     }
 
-    private function basePrompt(string $intro, string $context, string $requirements): string
+    private function chapterContext(SyllabusChapter $chapter): string
     {
-        return <<<PROMPT
-{$intro}
+        $chapter->loadMissing([
+            'topics' => fn ($q) => $q->orderBy('sort_order'),
+            'syllabusVersion.board',
+            'syllabusVersion.gradeLevel',
+            'syllabusVersion.academicYear',
+        ]);
 
-Context:
-{$context}
+        $version = $chapter->syllabusVersion;
+        $topicList = $chapter->topics->pluck('name')->implode(', ');
 
-{$requirements}
+        return collect([
+            $version ? "Board: {$version->board->code}" : null,
+            $version ? "Class: {$version->gradeLevel->name}" : null,
+            $version ? "Academic year: {$version->academicYear->name}" : null,
+            "Chapter: {$chapter->chapter_number} — {$chapter->name}",
+            $topicList !== '' ? "Topics: {$topicList}" : null,
+        ])->filter()->implode("\n");
+    }
 
-JSON format:
+    private function basePrompt(string $intro, string $context, string $requirements, bool $chapterFormat = false): string
+    {
+        $jsonFormat = $chapterFormat
+            ? <<<'JSON'
+{
+  "questions": [
+    {
+      "topic": "Exact topic name from plan",
+      "question": "Question text here",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correct_index": 0,
+      "hint": "Theory or rule hint only — no final answer",
+      "explanation": "Full working for teacher (optional)",
+      "difficulty": "Easy"
+    }
+  ]
+}
+JSON
+            : <<<'JSON'
 {
   "questions": [
     {
@@ -378,6 +539,18 @@ JSON format:
     }
   ]
 }
+JSON;
+
+        return <<<PROMPT
+{$intro}
+
+Context:
+{$context}
+
+{$requirements}
+
+JSON format:
+{$jsonFormat}
 PROMPT;
     }
 
@@ -463,6 +636,8 @@ PROMPT;
 
         return [
             'question_text' => $questionText,
+            'topic_name' => trim((string) ($item['topic'] ?? $item['topic_name'] ?? '')),
+            'syllabus_topic_id' => isset($item['syllabus_topic_id']) ? (int) $item['syllabus_topic_id'] : null,
             'explanation' => QuestionMethodHint::sanitizeExplanation(trim((string) ($item['explanation'] ?? '')) ?: null),
             'method_hint' => filled($methodHint)
                 ? trim((string) $methodHint)

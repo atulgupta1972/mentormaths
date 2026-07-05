@@ -106,6 +106,8 @@ function normalizeItem(item, index) {
 
     return {
         question_text: questionText,
+        topic_name: String(item.topic ?? item.topic_name ?? '').trim(),
+        syllabus_topic_id: item.syllabus_topic_id ?? item.topic_id ?? null,
         explanation: String(item.explanation ?? '').trim(),
         method_hint: String(item.method_hint ?? item.hint ?? '').trim(),
         difficulty: String(item.difficulty ?? '').trim(),
@@ -147,6 +149,8 @@ export function rowsFromImportData(importRows) {
         question_text: row.question_text || '',
         explanation: row.explanation || '',
         method_hint: row.method_hint || '',
+        topic_name: row.topic_name || '',
+        syllabus_topic_id: row.syllabus_topic_id || '',
         difficulty: row.difficulty || '',
         diagram: null,
         diagramPreview: row.diagram_preview_url || null,

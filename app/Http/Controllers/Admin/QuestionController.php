@@ -301,6 +301,8 @@ class QuestionController extends Controller
 
         $chapters = $this->chapterOptions($grade?->id);
 
+        $scope = $request->string('scope')->toString() === 'chapter' ? 'chapter' : 'topic';
+
         return Inertia::render('Admin/Questions/Create', [
             'chapters' => $chapters,
             'chapterTopics' => $chapterId ? $this->topicsForChapter($chapterId) : collect(),
@@ -309,9 +311,11 @@ class QuestionController extends Controller
             ])->all(),
             'selectedChapterId' => $chapterId,
             'selectedTopicId' => $topicId,
+            'scope' => $scope,
+            'chapterPlan' => session('chapter_plan', []),
             'topic' => $topic,
             'selectedGrade' => $grade?->only(['id', 'name']),
-            'cursorPrompt' => $activePrompt,
+            'cursorPrompt' => session('chapter_cursor_prompt') ?? $activePrompt,
             'promptOptions' => $promptOptions,
             'importMode' => $importMode,
             'extractedPreview' => $overrides['extractedPreview'] ?? null,
@@ -337,6 +341,73 @@ class QuestionController extends Controller
         $mime = strtolower((string) $file->getMimeType());
 
         return $extension === 'pdf' || str_contains($mime, 'pdf');
+    }
+
+    public function chapterPrompt(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'plan' => ['required', 'array', 'min:1'],
+            'plan.*.topic_id' => ['required', 'exists:syllabus_topics,id'],
+            'plan.*.topic_name' => ['nullable', 'string'],
+            'plan.*.easy' => ['nullable', 'integer', 'min:0'],
+            'plan.*.medium' => ['nullable', 'integer', 'min:0'],
+            'plan.*.hard' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $chapter = SyllabusChapter::query()->findOrFail($validated['syllabus_chapter_id']);
+
+        try {
+            $prompt = $this->importService->cursorPromptForChapter($chapter, $validated['plan']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.questions.create', [
+                'syllabus_chapter_id' => $chapter->id,
+                'scope' => 'chapter',
+            ])
+            ->with('chapter_cursor_prompt', $prompt)
+            ->with('chapter_plan', $validated['plan']);
+    }
+
+    public function storeBulkChapter(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'rows' => ['required', 'array', 'min:1'],
+            'rows.*.syllabus_topic_id' => ['nullable', 'exists:syllabus_topics,id'],
+            'rows.*.topic_name' => ['nullable', 'string'],
+            'rows.*.question_text' => ['required', 'string'],
+            'rows.*.explanation' => ['nullable', 'string'],
+            'rows.*.method_hint' => ['nullable', 'string'],
+            'rows.*.difficulty' => ['nullable', 'string', 'max:20'],
+            'rows.*.options' => ['required', 'array', 'min:2'],
+            'rows.*.options.*.option_text' => ['required', 'string'],
+            'rows.*.options.*.is_correct' => ['boolean'],
+        ]);
+
+        $chapter = SyllabusChapter::query()
+            ->with('topics')
+            ->findOrFail($validated['syllabus_chapter_id']);
+
+        try {
+            $saved = DB::transaction(function () use ($validated, $request, $chapter) {
+                return $this->importService->saveChapterRows(
+                    $chapter,
+                    $validated['rows'],
+                    $request->user()->id,
+                    Question::SOURCE_AI,
+                );
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.questions.chapters.show', $chapter->id)
+            ->with('success', count($saved).' question(s) saved across topics. Use Chapter tests to build a mixed test.');
     }
 
     public function previewImport(Request $request): RedirectResponse

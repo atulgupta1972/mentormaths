@@ -128,6 +128,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/questions/extract-pdf', [QuestionController::class, 'extractPdf'])->name('questions.extract-pdf');
     Route::post('/questions/extract-pdf-worksheet', [QuestionController::class, 'extractPdfWorksheet'])->name('questions.extract-pdf-worksheet');
     Route::post('/questions/bulk-store', [QuestionController::class, 'storeBulk'])->name('questions.bulk-store');
+    Route::post('/questions/bulk-store-chapter', [QuestionController::class, 'storeBulkChapter'])->name('questions.bulk-store-chapter');
+    Route::post('/questions/chapter-prompt', [QuestionController::class, 'chapterPrompt'])->name('questions.chapter-prompt');
     Route::post('/questions/topics/{topic}/generate-method-hints', [QuestionController::class, 'generateMethodHints'])
         ->name('questions.topics.generate-method-hints');
     Route::delete('/questions/topics/{topic}/bank', [QuestionController::class, 'clearTopicBank'])

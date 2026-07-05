@@ -6,6 +6,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
+import ChapterQuestionPlan from '@/Components/ChapterQuestionPlan.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { parseMcqJson, rowsFromImportData } from '@/utils/mcqImport';
@@ -30,6 +31,8 @@ const props = defineProps({
     referencePdfUrl: { type: String, default: null },
     pdfPageCount: { type: Number, default: null },
     pdfImportWarning: { type: String, default: null },
+    scope: { type: String, default: 'topic' },
+    chapterPlan: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -50,6 +53,23 @@ const pdfInput = ref(null);
 const pdfResultBox = ref(null);
 const selectedPdfName = ref('');
 const pdfImportToken = ref(props.pdfImportToken || null);
+const scopeMode = ref(props.scope || 'topic');
+const generatingChapterPrompt = ref(false);
+
+const buildDefaultChapterPlan = () => (props.chapterTopics || []).map((topic, index) => ({
+    topic_id: topic.id,
+    topic_name: topic.name,
+    easy: 0,
+    medium: 0,
+    hard: 0,
+    sort_order: index + 1,
+}));
+
+const chapterPlanRows = ref(
+    props.chapterPlan?.length
+        ? props.chapterPlan
+        : buildDefaultChapterPlan(),
+);
 
 const promptSettings = ref({
     total: props.promptOptions?.total ?? 6,
@@ -158,11 +178,23 @@ const difficultyMismatch = computed(
 );
 
 const activePrompt = computed(() => {
+    if (scopeMode.value === 'chapter' && chapterFilter.value) {
+        return props.cursorPrompt || 'Fill in the chapter plan matrix, then click Generate Cursor prompt for chapter.';
+    }
+
     if (!props.cursorPrompt) {
         return 'Select a topic first to generate the Cursor prompt.';
     }
 
     return props.cursorPrompt;
+});
+
+const isChapterScope = computed(() => scopeMode.value === 'chapter' && Boolean(chapterFilter.value));
+const isTopicScope = computed(() => scopeMode.value === 'topic' && Boolean(selectedTopic.value));
+const hasChapterPrompt = computed(() => isChapterScope.value && Boolean(props.cursorPrompt));
+const selectedChapterLabel = computed(() => {
+    const chapter = props.chapters?.find((c) => String(c.id) === String(chapterFilter.value));
+    return chapter?.label || '';
 });
 
 const modeTitle = computed(() => {
@@ -179,19 +211,85 @@ const modeTitle = computed(() => {
     return 'Step 1 — Custom prompt → Cursor';
 });
 
+watch(() => props.chapterPlan, (plan) => {
+    if (plan?.length) {
+        chapterPlanRows.value = plan;
+    }
+});
+
+watch(() => props.scope, (scope) => {
+    if (scope) {
+        scopeMode.value = scope;
+    }
+});
+
 watch(chapterFilter, (id, oldId) => {
     if (id === oldId) {
         return;
     }
     selectedTopic.value = '';
+    chapterPlanRows.value = buildDefaultChapterPlan();
     if (id) {
         router.get(
-            route('admin.questions.create', { syllabus_chapter_id: id }),
+            route('admin.questions.create', { syllabus_chapter_id: id, scope: scopeMode.value }),
             {},
             { preserveState: false },
         );
     }
 });
+
+const switchScope = (scope) => {
+    scopeMode.value = scope;
+    if (!chapterFilter.value) {
+        return;
+    }
+
+    router.get(
+        route('admin.questions.create', {
+            syllabus_chapter_id: chapterFilter.value,
+            scope,
+            syllabus_topic_id: scope === 'topic' ? (selectedTopic.value || undefined) : undefined,
+        }),
+        {},
+        { preserveState: false },
+    );
+};
+
+const generateChapterPrompt = () => {
+    if (!chapterFilter.value || generatingChapterPrompt.value) {
+        return;
+    }
+
+    generatingChapterPrompt.value = true;
+    router.post(route('admin.questions.chapter-prompt'), {
+        syllabus_chapter_id: chapterFilter.value,
+        plan: chapterPlanRows.value,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            generatingChapterPrompt.value = false;
+        },
+    });
+};
+
+const resolveTopicIdForRow = (row) => {
+    if (row.syllabus_topic_id) {
+        return row.syllabus_topic_id;
+    }
+
+    const name = String(row.topic_name || '').trim().toLowerCase();
+    if (!name) {
+        return null;
+    }
+
+    const match = (props.chapterTopics || []).find((topic) => topic.name.toLowerCase() === name);
+    return match?.id ?? null;
+};
+
+const assignTopicsToRows = (parsedRows) => parsedRows.map((row) => ({
+    ...row,
+    syllabus_topic_id: resolveTopicIdForRow(row),
+}));
 
 watch(selectedTopic, (id, oldId) => {
     if (!id || id === oldId) {
@@ -217,6 +315,7 @@ function buildQueryParams(overrides = {}) {
     const params = {
         syllabus_chapter_id: chapterFilter.value || props.selectedChapterId || undefined,
         syllabus_topic_id: selectedTopic.value || props.selectedTopicId || undefined,
+        scope: scopeMode.value,
         mode: importMode.value,
         ...overrides,
     };
@@ -338,7 +437,10 @@ const loadPreview = () => {
     }
 
     try {
-        rows.value = rowsFromImportData(parseMcqJson(jsonInput.value));
+        const parsed = parseMcqJson(jsonInput.value);
+        rows.value = isChapterScope.value
+            ? rowsFromImportData(assignTopicsToRows(parsed))
+            : rowsFromImportData(parsed);
         if (!saveTopicId.value && selectedTopic.value) {
             saveTopicId.value = selectedTopic.value;
             saveChapterId.value = chapterFilter.value || props.selectedChapterId || '';
@@ -441,6 +543,38 @@ const setRowDiagram = (row, event) => {
 const saveToBank = () => {
     saveTopicError.value = '';
 
+    if (isChapterScope.value) {
+        const missingTopic = rows.value.some((row) => !resolveTopicIdForRow(row));
+        if (missingTopic) {
+            saveTopicError.value = 'Each question must have a topic name that matches a topic in this chapter.';
+            return;
+        }
+
+        saveForm.transform(() => {
+            const formData = new FormData();
+            formData.append('syllabus_chapter_id', chapterFilter.value);
+            rows.value.forEach((row, index) => {
+                formData.append(`rows[${index}][syllabus_topic_id]`, resolveTopicIdForRow(row));
+                formData.append(`rows[${index}][topic_name]`, row.topic_name || '');
+                formData.append(`rows[${index}][question_text]`, row.question_text);
+                formData.append(`rows[${index}][explanation]`, row.explanation || '');
+                formData.append(`rows[${index}][method_hint]`, row.method_hint || '');
+                formData.append(`rows[${index}][difficulty]`, row.difficulty || '');
+                row.options.forEach((opt, optIndex) => {
+                    formData.append(`rows[${index}][options][${optIndex}][option_text]`, opt.option_text);
+                    formData.append(`rows[${index}][options][${optIndex}][is_correct]`, opt.is_correct ? '1' : '0');
+                });
+            });
+
+            return formData;
+        }).post(route('admin.questions.bulk-store-chapter'), {
+            forceFormData: true,
+            preserveScroll: true,
+        });
+
+        return;
+    }
+
     if (!saveTopicId.value) {
         saveTopicError.value = 'Choose chapter and topic to save into.';
         return;
@@ -523,7 +657,9 @@ watch(() => props.initialImportRows, (importRows) => {
             <div class="flex items-center justify-between">
                 <h2 class="text-xl font-semibold text-gray-800">Add MCQs</h2>
                 <Link
-                    :href="selectedTopic ? route('admin.questions.topics.show', selectedTopic) : route('admin.questions.index')"
+                    :href="selectedTopic
+                        ? route('admin.questions.topics.show', selectedTopic)
+                        : (chapterFilter ? route('admin.questions.chapters.show', chapterFilter) : route('admin.questions.index'))"
                     class="text-sm text-indigo-600"
                 >
                     Question bank
@@ -565,6 +701,34 @@ watch(() => props.initialImportRows, (importRows) => {
                     </div>
 
                     <div v-if="chapterFilter">
+                        <InputLabel value="Add questions for" />
+                        <div class="mt-2 grid gap-2 sm:grid-cols-2 max-w-3xl">
+                            <button
+                                type="button"
+                                class="rounded-lg border p-4 text-left transition"
+                                :class="scopeMode === 'topic'
+                                    ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500'
+                                    : 'border-gray-200 hover:border-gray-300'"
+                                @click="switchScope('topic')"
+                            >
+                                <p class="font-medium text-gray-900">One topic</p>
+                                <p class="mt-1 text-xs text-gray-500">Pick a topic, then generate MCQs for that topic only</p>
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-lg border p-4 text-left transition"
+                                :class="scopeMode === 'chapter'
+                                    ? 'border-sky-500 bg-sky-50 ring-1 ring-sky-500'
+                                    : 'border-gray-200 hover:border-gray-300'"
+                                @click="switchScope('chapter')"
+                            >
+                                <p class="font-medium text-gray-900">Whole chapter</p>
+                                <p class="mt-1 text-xs text-gray-500">Plan counts per topic, generate once, save to each topic bank</p>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="chapterFilter && scopeMode === 'topic'">
                         <InputLabel value="Topic" />
                         <select v-model="selectedTopic" class="mt-1 block w-full max-w-3xl rounded-md border-gray-300 text-sm" required>
                             <option value="">Select topic</option>
@@ -575,6 +739,18 @@ watch(() => props.initialImportRows, (importRows) => {
                         <p v-if="chapterTopics.length === 0" class="mt-1 text-xs text-amber-700">No topics in this chapter.</p>
                     </div>
                 </div>
+
+                <ChapterQuestionPlan
+                    v-if="isChapterScope && chapterTopics.length"
+                    v-model="chapterPlanRows"
+                    :topics="chapterTopics"
+                    :generating="generatingChapterPrompt"
+                    @generate-prompt="generateChapterPrompt"
+                />
+
+                <p v-else-if="isChapterScope && chapterTopics.length === 0" class="rounded-md bg-amber-50 p-4 text-sm text-amber-900">
+                    No topics in this chapter — add topics in syllabus setup first.
+                </p>
 
                 <div v-if="topic" class="rounded-lg bg-white p-2 shadow-sm">
                     <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -637,6 +813,75 @@ watch(() => props.initialImportRows, (importRows) => {
                         :url="referencePdfUrl"
                         title="Imported worksheet preview"
                     />
+                </div>
+
+                <div v-if="hasChapterPrompt" class="rounded-lg border border-indigo-100 bg-indigo-50 p-6">
+                    <h3 class="font-medium text-indigo-900">Step 1 — Chapter prompt → Cursor</h3>
+
+                    <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm text-indigo-950">
+                        <li>Click <strong>Copy prompt</strong> below (or select all text in the box and press <kbd class="rounded bg-white px-1">Ctrl+C</kbd>).</li>
+                        <li>Open <strong>Cursor</strong> on your computer (this IDE — not the browser).</li>
+                        <li>Open the <strong>Chat</strong> panel in Cursor (<kbd class="rounded bg-white px-1">Ctrl+L</kbd> or chat icon on the right).</li>
+                        <li><strong>Paste</strong> there with <kbd class="rounded bg-white px-1">Ctrl+V</kbd> and press Enter.</li>
+                        <li>When Cursor replies with JSON, copy that JSON and paste it in <strong>Step 2</strong> on this page.</li>
+                    </ol>
+
+                    <div class="mt-4 flex flex-wrap items-center gap-3">
+                        <SecondaryButton type="button" @click="copyPrompt">
+                            {{ copied ? 'Copied! Now paste in Cursor chat' : 'Copy prompt' }}
+                        </SecondaryButton>
+                        <SecondaryButton type="button" @click="selectPrompt">Select all</SecondaryButton>
+                    </div>
+
+                    <p v-if="copyError" class="mt-2 text-sm font-medium text-amber-800">{{ copyError }}</p>
+                    <p v-else-if="copied" class="mt-2 text-sm font-medium text-green-800">
+                        Copied! Switch to Cursor → Chat panel → Ctrl+V → Enter.
+                    </p>
+
+                    <textarea
+                        ref="promptBox"
+                        :value="activePrompt"
+                        readonly
+                        rows="14"
+                        class="mt-3 w-full cursor-text rounded-md border border-indigo-200 bg-white p-3 font-mono text-xs text-gray-800"
+                        @focus="selectPrompt"
+                    />
+                    <p class="mt-2 text-xs text-indigo-800">
+                        Each question in the JSON must include a <strong>topic</strong> field matching a topic name in this chapter.
+                    </p>
+                </div>
+
+                <div v-if="isChapterScope" class="rounded-lg bg-white p-6 shadow-sm">
+                    <h3 class="font-medium text-gray-900">Step 2 — Import JSON</h3>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Paste JSON from Cursor — each question needs a <strong>topic</strong> name. Questions will be saved into the matching topic banks.
+                    </p>
+                    <textarea
+                        v-model="jsonInput"
+                        rows="8"
+                        class="mt-3 w-full rounded-md border-gray-300 font-mono text-xs"
+                        placeholder='{"questions": [{"topic": "Topic name", "question": "...", "options": [...], "correctAnswer": "A", ...}]}'
+                        @paste="onJsonPaste"
+                    />
+                    <div class="mt-3 flex flex-wrap items-center gap-3">
+                        <PrimaryButton type="button" :disabled="!jsonInput.trim()" @click="loadPreview">
+                            Load preview
+                        </PrimaryButton>
+                        <SecondaryButton type="button" @click="jsonFileInput?.click()">
+                            Upload .json file
+                        </SecondaryButton>
+                        <input
+                            ref="jsonFileInput"
+                            type="file"
+                            accept=".json,application/json"
+                            class="hidden"
+                            @change="onJsonFileSelected"
+                        />
+                    </div>
+                    <InputError class="mt-2" :message="previewError || importForm.errors.json" />
+                    <p v-if="rows.length" class="mt-2 text-sm text-green-700">
+                        {{ rows.length }} question(s) loaded — scroll down to review and save into topic banks.
+                    </p>
                 </div>
 
                 <div v-if="topic && importMode === 'custom'" class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -851,28 +1096,37 @@ watch(() => props.initialImportRows, (importRows) => {
                         </div>
 
                         <div class="rounded-md bg-amber-50 p-4 text-sm text-amber-900">
-                            <p class="font-medium">Save destination — change here if you picked the wrong topic earlier</p>
-                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                                <div>
-                                    <InputLabel value="Chapter" />
-                                    <select v-model="saveChapterId" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
-                                        <option value="">Select chapter</option>
-                                        <option v-for="ch in chapters" :key="ch.id" :value="ch.id">{{ ch.label }}</option>
-                                    </select>
+                            <template v-if="isChapterScope">
+                                <p class="font-medium">Save destination — whole chapter</p>
+                                <p class="mt-2">
+                                    Questions will be saved into each topic bank under
+                                    <strong>{{ selectedChapterLabel }}</strong> based on the <strong>topic</strong> field on each row.
+                                </p>
+                            </template>
+                            <template v-else>
+                                <p class="font-medium">Save destination — change here if you picked the wrong topic earlier</p>
+                                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <InputLabel value="Chapter" />
+                                        <select v-model="saveChapterId" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                                            <option value="">Select chapter</option>
+                                            <option v-for="ch in chapters" :key="ch.id" :value="ch.id">{{ ch.label }}</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <InputLabel value="Topic" />
+                                        <select v-model="saveTopicId" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                                            <option value="">Select topic</option>
+                                            <option v-for="t in saveTopics" :key="t.id" :value="t.id">
+                                                {{ t.name }} ({{ t.questions_count }} in bank)
+                                            </option>
+                                        </select>
+                                    </div>
                                 </div>
-                                <div>
-                                    <InputLabel value="Topic" />
-                                    <select v-model="saveTopicId" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
-                                        <option value="">Select topic</option>
-                                        <option v-for="t in saveTopics" :key="t.id" :value="t.id">
-                                            {{ t.name }} ({{ t.questions_count }} in bank)
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                            <p v-if="selectedSaveTopicLabel" class="mt-2 text-xs text-amber-800">
-                                Will save to: <strong>{{ selectedSaveTopicLabel }}</strong>
-                            </p>
+                                <p v-if="selectedSaveTopicLabel" class="mt-2 text-xs text-amber-800">
+                                    Will save to: <strong>{{ selectedSaveTopicLabel }}</strong>
+                                </p>
+                            </template>
                             <InputError class="mt-2" :message="saveTopicError" />
                         </div>
 
@@ -887,6 +1141,7 @@ watch(() => props.initialImportRows, (importRows) => {
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="bg-gray-50">
                                 <tr>
+                                    <th v-if="isChapterScope" class="px-2 py-3 text-left text-xs uppercase text-gray-500">Topic</th>
                                     <th class="px-2 py-3 text-left text-xs uppercase text-gray-500">Question</th>
                                     <th v-if="!hideManualDiagramColumn" class="px-2 py-3 text-left text-xs uppercase text-gray-500">Diagram</th>
                                     <th v-else class="px-2 py-3 text-left text-xs uppercase text-gray-500">Preview</th>
@@ -899,6 +1154,21 @@ watch(() => props.initialImportRows, (importRows) => {
                             </thead>
                             <tbody class="divide-y divide-gray-200">
                                 <tr v-for="(row, rowIndex) in rows" :key="rowIndex">
+                                    <td v-if="isChapterScope" class="align-top px-2 py-2">
+                                        <select
+                                            v-model="row.syllabus_topic_id"
+                                            class="w-full min-w-[140px] rounded-md border-gray-300 text-sm"
+                                            @change="row.topic_name = (chapterTopics.find((t) => String(t.id) === String(row.syllabus_topic_id))?.name || row.topic_name)"
+                                        >
+                                            <option value="">Select topic</option>
+                                            <option v-for="t in chapterTopics" :key="t.id" :value="t.id">
+                                                {{ t.name }}
+                                            </option>
+                                        </select>
+                                        <p v-if="row.topic_name && !resolveTopicIdForRow(row)" class="mt-1 text-xs text-red-600">
+                                            Unknown topic: {{ row.topic_name }}
+                                        </p>
+                                    </td>
                                     <td class="align-top px-2 py-2">
                                         <textarea
                                             v-model="row.question_text"
