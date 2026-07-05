@@ -1100,7 +1100,8 @@ watch(() => props.initialImportRows, (importRows) => {
                                 <p class="font-medium">Save destination — whole chapter</p>
                                 <p class="mt-2">
                                     Questions will be saved into each topic bank under
-                                    <strong>{{ selectedChapterLabel }}</strong> based on the <strong>topic</strong> field on each row.
+                                    <strong>{{ selectedChapterLabel }}</strong>, then packaged automatically as
+                                    <strong>one chapter test</strong> (T code, mixed topics).
                                 </p>
                             </template>
                             <template v-else>

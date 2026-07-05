@@ -9,7 +9,20 @@ use Illuminate\Support\Collection;
 class ChapterMixedQuestionService
 {
     /**
-     * Pick questions from every topic in the chapter (round-robin by topic).
+     * @return list<int>
+     */
+    public function unpackagedQuestionIds(SyllabusChapter $chapter): array
+    {
+        return Question::query()
+            ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
+            ->whereDoesntHave('worksheets')
+            ->orderBy('syllabus_topic_id')
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
      *
      * @return list<int>
      */

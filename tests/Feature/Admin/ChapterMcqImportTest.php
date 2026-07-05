@@ -11,6 +11,8 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\User;
+use App\Models\Worksheet;
+use App\Support\PracticeSetScope;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -100,6 +102,38 @@ class ChapterMcqImportTest extends TestCase
 
         $this->assertSame(1, Question::query()->where('syllabus_topic_id', $topics[0]->id)->count());
         $this->assertSame(1, Question::query()->where('syllabus_topic_id', $topics[1]->id)->count());
+
+        $chapterTest = Worksheet::query()
+            ->where('scope', PracticeSetScope::CHAPTER)
+            ->where('syllabus_chapter_id', $chapter->id)
+            ->first();
+
+        $this->assertNotNull($chapterTest);
+        $this->assertSame(2, $chapterTest->questions()->count());
+    }
+
+    public function test_chapter_hub_shows_one_bank_card_for_multi_topic_unpackaged_questions(): void
+    {
+        [$chapter, $topics, $admin] = $this->seedChapterWithTopics();
+
+        foreach ($topics as $index => $topic) {
+            Question::query()->create([
+                'syllabus_topic_id' => $topic->id,
+                'question_text' => "Question {$index}",
+                'type' => Question::TYPE_MCQ,
+                'source' => Question::SOURCE_AI,
+            ]);
+        }
+
+        $response = $this->actingAs($admin)
+            ->get(route('admin.questions.chapters.show', $chapter->id));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->has('setCards', 1)
+            ->where('setCards.0.type', 'chapter_bank')
+            ->where('setCards.0.questions_count', 2)
+        );
     }
 
     /**

@@ -19,6 +19,9 @@ const props = defineProps({
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 const classListUrl = computed(() => questionHubClassUrl(props.gradeLevel?.id, props.board?.id));
 
+const topicSetCards = computed(() => (props.setCards || []).filter((card) => card.type !== 'chapter_bank'));
+const chapterBankCards = computed(() => (props.setCards || []).filter((card) => card.type === 'chapter_bank'));
+
 const tierColor = (tier, type) => {
     if (type === 'chapter_test') return 'border-sky-300 bg-sky-50 hover:border-sky-500';
     if (tier === 'starter') return 'border-emerald-300 bg-emerald-50 hover:border-emerald-500';
@@ -31,11 +34,18 @@ const cardHref = (card) => {
     if (card.type === 'chapter_test' || card.type === 'set') {
         return route('admin.questions.sets.show', card.id);
     }
+    if (card.type === 'chapter_bank') {
+        return route('admin.practice-sets.chapters.create', props.chapter.id);
+    }
     return route('admin.questions.topics.show', card.topic_id);
 };
 
 const packageAsSet = (card) => {
     router.post(route('admin.practice-sets.from-topic', card.topic_id), { tier: card.tier });
+};
+
+const packageChapterBank = () => {
+    router.post(route('admin.practice-sets.chapters.from-bank', props.chapter.id));
 };
 
 const clearBank = (card) => {
@@ -107,7 +117,7 @@ const clearBank = (card) => {
                         <p class="text-xs text-gray-500">Chapter tests</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
-                        <p class="text-2xl font-bold text-indigo-600">{{ setCards.length }}</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ topicSetCards.length + chapterBankCards.length }}</p>
                         <p class="text-xs text-gray-500">Topic sets / banks</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
@@ -117,6 +127,37 @@ const clearBank = (card) => {
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.sets_count }}</p>
                         <p class="text-xs text-gray-500">Packaged sets</p>
+                    </div>
+                </div>
+
+                <div v-if="chapterBankCards.length" class="space-y-3">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-sky-700">Chapter question bank</h3>
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div
+                            v-for="card in chapterBankCards"
+                            :key="`cb-${card.set_code}`"
+                            class="rounded-xl border border-sky-300 bg-sky-50 p-5 shadow-sm transition hover:border-sky-500"
+                        >
+                            <Link :href="cardHref(card)" class="block hover:opacity-90">
+                                <p class="font-mono text-3xl font-bold tracking-wide text-sky-800">{{ card.set_code }}</p>
+                                <p class="mt-2 text-sm font-semibold text-gray-800">{{ card.tier_label }}</p>
+                                <p class="mt-1 text-xs text-gray-600">
+                                    {{ card.topics_count }} topic{{ card.topics_count === 1 ? '' : 's' }} · mixed chapter test
+                                </p>
+                                <p class="mt-2 text-sm text-gray-700">{{ card.questions_count }} questions in bank</p>
+                            </Link>
+
+                            <p v-if="isAdmin" class="mt-3 border-t border-sky-200 pt-3 text-xs text-sky-900">
+                                Saved topic-wise in the bank — package as one chapter test.
+                                <button
+                                    type="button"
+                                    class="ml-1 font-medium text-indigo-600 hover:underline"
+                                    @click="packageChapterBank"
+                                >
+                                    Create as {{ card.set_code }}
+                                </button>
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -140,11 +181,11 @@ const clearBank = (card) => {
                     </div>
                 </div>
 
-                <div v-if="setCards.length" class="space-y-3">
+                <div v-if="topicSetCards.length" class="space-y-3">
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Topic practice sets</h3>
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <div
-                        v-for="card in setCards"
+                        v-for="card in topicSetCards"
                         :key="`${card.type}-${card.id || card.topic_id}-${card.set_code}`"
                         class="rounded-xl border p-5 shadow-sm transition"
                         :class="tierColor(card.tier, card.type)"
@@ -184,7 +225,7 @@ const clearBank = (card) => {
                     </div>
                 </div>
 
-                <div v-if="!setCards.length && !chapterTests?.length" class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
+                <div v-if="!topicSetCards.length && !chapterBankCards.length && !chapterTests?.length" class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
                     No questions or sets in this chapter yet.
                     <Link v-if="isAdmin" :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })" class="text-indigo-600 hover:underline">Add MCQs</Link>
                 </div>

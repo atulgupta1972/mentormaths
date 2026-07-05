@@ -183,4 +183,24 @@ class ChapterPracticeSetController extends Controller
             ->route('admin.questions.sets.show', $practiceSet)
             ->with('success', "{$practiceSet->set_code} auto-mixed from all topics.");
     }
+
+    public function storeFromChapterBank(Request $request, SyllabusChapter $chapter): RedirectResponse
+    {
+        $questionIds = $this->mixedQuestionService->unpackagedQuestionIds($chapter);
+
+        if ($questionIds === []) {
+            return back()->with('error', 'No unpackaged questions in this chapter.');
+        }
+
+        $practiceSet = $this->practiceSetService->createChapterTest(
+            $chapter,
+            $questionIds,
+            $request->user()->id,
+            Worksheet::STATUS_PUBLISHED,
+        );
+
+        return redirect()
+            ->route('admin.questions.sets.show', $practiceSet)
+            ->with('success', "{$practiceSet->set_code} chapter test created from question bank.");
+    }
 }
