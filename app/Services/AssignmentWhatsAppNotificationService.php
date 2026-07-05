@@ -80,7 +80,6 @@ class AssignmentWhatsAppNotificationService
         $scopeLine = $this->scopeLine($worksheet);
         $timeEstimate = $this->estimateTimeLabel($worksheet, $questionCount);
         $dueLabel = Carbon::parse($dueDate)->format('d M Y');
-        $login = route('login');
         $dashboard = route('dashboard');
 
         $lines = [
@@ -104,9 +103,8 @@ class AssignmentWhatsAppNotificationService
         }
 
         $lines[] = '';
-        $lines[] = 'Login and start from your dashboard:';
+        $lines[] = 'Start here:';
         $lines[] = $dashboard;
-        $lines[] = "Login: {$login}";
         $lines[] = '';
         $lines[] = 'Thank you.';
 
@@ -204,7 +202,6 @@ class AssignmentWhatsAppNotificationService
         ?string $notes = null,
     ): string {
         $dueLabel = Carbon::parse($dueDate)->format('d M Y');
-        $login = route('login');
         $dashboard = route('dashboard');
 
         $lines = [
@@ -252,9 +249,8 @@ class AssignmentWhatsAppNotificationService
         }
 
         $lines[] = '';
-        $lines[] = 'Login and start from your dashboard:';
+        $lines[] = 'Start here:';
         $lines[] = $dashboard;
-        $lines[] = "Login: {$login}";
         $lines[] = '';
         $lines[] = 'Thank you.';
 

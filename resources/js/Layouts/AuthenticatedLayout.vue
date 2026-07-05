@@ -7,14 +7,12 @@ import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavGroup from '@/Components/ResponsiveNavGroup.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
-import { useAssignmentWhatsAppFlash } from '@/composables/useAssignmentWhatsAppFlash';
+import AssignmentWhatsAppPrompt from '@/Components/AssignmentWhatsAppPrompt.vue';
 import { assignToClassPath, safeRoute } from '@/utils/routes';
 
 const showingNavigationDropdown = ref(false);
 const page = usePage();
 const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
-
-useAssignmentWhatsAppFlash();
 
 const peopleGroup = computed(() => ({
     label: 'People',
@@ -246,6 +244,8 @@ const navGroups = computed(() =>
                     </div>
                 </div>
             </nav>
+
+            <AssignmentWhatsAppPrompt />
 
             <header v-if="$slots.header" class="bg-white shadow">
                 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">

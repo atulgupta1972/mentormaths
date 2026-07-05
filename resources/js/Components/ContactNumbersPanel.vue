@@ -4,7 +4,7 @@ import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { openWhatsApp, openWhatsAppBatch, normalizeWhatsAppNumber } from '@/utils/whatsapp';
+import { openWhatsApp, openWhatsAppBatch, normalizeWhatsAppNumber, copyWhatsAppMessage } from '@/utils/whatsapp';
 import { useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
@@ -24,6 +24,7 @@ const props = defineProps({
 
 const editing = ref(false);
 const messageType = ref('progress');
+const copiedContactKey = ref(null);
 
 const form = useForm({
     student_mobile: '',
@@ -99,7 +100,20 @@ const buildMessage = () => {
         return `Hello, this is Mentor Maths.\n\nReport card / progress summary for ${name} is ready.\n\nView details here:\n${dashboard}\n\nLogin: ${login}\n\nThank you.`;
     }
 
-    return `Hello, this is Mentor Maths.\n\nProgress update for ${name}.\n\nView assignments and results here:\n${dashboard}\n\nLogin: ${login}\n\nThank you.`;
+    return `Hello, this is Mentor Maths.\n\nProgress update for ${name}.\n\nView assignments and results:\n${dashboard}\n\nThank you.`;
+};
+
+const copyForContact = async (contact) => {
+    const ok = await copyWhatsAppMessage(buildMessage());
+
+    if (ok) {
+        copiedContactKey.value = contact.key;
+        window.setTimeout(() => {
+            if (copiedContactKey.value === contact.key) {
+                copiedContactKey.value = null;
+            }
+        }, 2500);
+    }
 };
 
 const sendToOne = (contact) => {
@@ -202,17 +216,26 @@ const saveSettings = () => {
                             {{ contact.mobile || '—' }}
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium"
-                        :class="contact.whatsappReady
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                            : 'cursor-not-allowed bg-gray-100 text-gray-400'"
-                        :disabled="!contact.whatsappReady"
-                        @click="sendToOne(contact)"
-                    >
-                        WhatsApp now
-                    </button>
+                    <div class="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            class="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium bg-indigo-100 text-indigo-800 hover:bg-indigo-200"
+                            @click="copyForContact(contact)"
+                        >
+                            {{ copiedContactKey === contact.key ? 'Copied!' : 'Copy msg' }}
+                        </button>
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium"
+                            :class="contact.whatsappReady
+                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                : 'cursor-not-allowed bg-gray-100 text-gray-400'"
+                            :disabled="!contact.whatsappReady"
+                            @click="sendToOne(contact)"
+                        >
+                            Open WhatsApp
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -254,7 +277,7 @@ const saveSettings = () => {
                 WhatsApp saved recipients ({{ notifyEnabledRows.length }})
             </SecondaryButton>
             <p class="text-xs text-gray-500">
-                Uses the numbers you saved above with Notify checked. Save first, then send.
+                Copy message works even when WhatsApp Web is stuck. Paste in WhatsApp on your phone if needed.
             </p>
         </div>
     </div>

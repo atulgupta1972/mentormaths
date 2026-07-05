@@ -33,7 +33,59 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        $user = $request->user();
+        $intended = $request->session()->get('url.intended');
+
+        if ($intended && $this->shouldSkipIntendedUrl($user, $intended)) {
+            $request->session()->forget('url.intended');
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
+    }
+
+    /**
+     * Drop post-login redirects to admin-only URLs for non-admin accounts.
+     */
+    private function shouldSkipIntendedUrl($user, string $url): bool
+    {
+        if ($user->isAdmin()) {
+            return false;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH) ?? '/';
+
+        $adminOnlyPrefixes = [
+            '/admin/registration-requests',
+            '/admin/users',
+            '/admin/groups',
+            '/admin/students',
+            '/admin/academic-years',
+            '/admin/chapter-heads',
+            '/admin/practice-sets',
+            '/admin/set-assignments',
+            '/admin/exam-plans',
+            '/admin/questions/create',
+        ];
+
+        foreach ($adminOnlyPrefixes as $prefix) {
+            if ($path === $prefix || str_starts_with($path, $prefix.'/')) {
+                return true;
+            }
+        }
+
+        if ($path === '/admin/syllabus' || str_starts_with($path, '/admin/syllabus/import')) {
+            return true;
+        }
+
+        if (preg_match('#^/admin/syllabus/\d+/(import|import-preview|rows|carry-forward)#', $path)) {
+            return true;
+        }
+
+        if (preg_match('#^/admin/questions/\d+/edit$#', $path)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

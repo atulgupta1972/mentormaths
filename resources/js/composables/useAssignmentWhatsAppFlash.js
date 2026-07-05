@@ -1,27 +1,30 @@
-import { watch } from 'vue';
+import { ref, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
-import { openWhatsApp } from '@/utils/whatsapp';
 
-const OPEN_DELAY_MS = 700;
+const visible = ref(false);
+const notifications = ref([]);
 
 export function useAssignmentWhatsAppFlash() {
     const page = usePage();
 
-    const openNotifications = (notifications) => {
-        if (!Array.isArray(notifications) || notifications.length === 0) {
-            return;
-        }
-
-        notifications.forEach((notification, index) => {
-            setTimeout(() => {
-                openWhatsApp(notification.mobile, notification.message);
-            }, index * OPEN_DELAY_MS);
-        });
-    };
-
     watch(
         () => page.props.flash?.whatsapp_notifications,
-        (notifications) => openNotifications(notifications),
+        (next) => {
+            if (Array.isArray(next) && next.length > 0) {
+                notifications.value = next;
+                visible.value = true;
+            }
+        },
         { immediate: true },
     );
+
+    const dismiss = () => {
+        visible.value = false;
+    };
+
+    return {
+        visible,
+        notifications,
+        dismiss,
+    };
 }

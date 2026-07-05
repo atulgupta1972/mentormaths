@@ -10,10 +10,16 @@ class EnsureUserIsAdmin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (! $request->user()?->isAdmin()) {
+        if ($request->user()?->isAdmin()) {
+            return $next($request);
+        }
+
+        if ($request->expectsJson()) {
             abort(403, 'Admin access required.');
         }
 
-        return $next($request);
+        return redirect()
+            ->route('dashboard')
+            ->with('warning', 'That page is for administrators only.');
     }
 }

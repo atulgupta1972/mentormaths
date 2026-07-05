@@ -35,6 +35,6 @@ class BrowseAccessTest extends TestCase
 
         $this->actingAs($student)
             ->get(route('admin.users.index'))
-            ->assertForbidden();
+            ->assertRedirect(route('dashboard'));
     }
 }

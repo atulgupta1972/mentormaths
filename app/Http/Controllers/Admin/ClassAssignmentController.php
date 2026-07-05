@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\GradeLevel;
 use App\Services\AdminGradeContext;
-use App\Services\AssignmentWhatsAppNotificationService;
 use App\Services\ClassAssignmentService;
+use App\Support\AssignmentMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,7 +18,6 @@ class ClassAssignmentController extends Controller
     public function __construct(
         private AdminGradeContext $gradeContext,
         private ClassAssignmentService $classAssignmentService,
-        private AssignmentWhatsAppNotificationService $whatsappNotifications,
     ) {}
 
     public function show(Request $request, GradeLevel $gradeLevel): Response
@@ -83,7 +82,7 @@ class ClassAssignmentController extends Controller
             $message .= " Skipped {$result['skipped']} duplicate assignment(s).";
         }
 
-        $whatsappNotifications = $this->whatsappNotifications->notificationsForClassMultiAssignment(
+        $emailCounts = AssignmentMailer::sendClassMultiAssigned(
             $result['worksheets_by_student'],
             $validated['target_date'],
             $validated['notes'] ?? null,
@@ -93,9 +92,8 @@ class ClassAssignmentController extends Controller
         if ($result['errors']) {
             $warnings[] = implode(' ', array_slice($result['errors'], 0, 3));
         }
-        if ($whatsappNotifications === [] && $studentCount > 0) {
-            $warnings[] = 'WhatsApp not opened — no notify-enabled contacts for assigned student(s).';
-        }
+
+        $message .= AssignmentMailer::flashSuffixForBulk($emailCounts) ?? '';
 
         $redirect = back()->with('success', $message);
 
@@ -103,8 +101,10 @@ class ClassAssignmentController extends Controller
             $redirect = $redirect->with('warning', implode(' ', $warnings));
         }
 
-        if ($whatsappNotifications !== []) {
-            return $redirect->with('whatsapp_notifications', $whatsappNotifications);
+        if ($emailCounts['skipped'] > 0 && $emailCounts['sent'] === 0 && $studentCount > 0) {
+            $extra = 'Add student emails on their profiles to notify by email.';
+            $existing = $warnings !== [] ? implode(' ', $warnings).' ' : '';
+            $redirect = $redirect->with('warning', $existing.$extra);
         }
 
         return $redirect;

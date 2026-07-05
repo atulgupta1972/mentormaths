@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\SetAssignment;
 use App\Models\Student;
 use App\Models\Worksheet;
-use App\Services\AssignmentWhatsAppNotificationService;
 use App\Services\SetAssignmentService;
+use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,10 +16,7 @@ use Inertia\Response;
 
 class SetAssignmentController extends Controller
 {
-    public function __construct(
-        private SetAssignmentService $assignmentService,
-        private AssignmentWhatsAppNotificationService $whatsappNotifications,
-    ) {}
+    public function __construct(private SetAssignmentService $assignmentService) {}
 
     public function show(SetAssignment $assignment): Response
     {
@@ -83,18 +80,17 @@ class SetAssignmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        $whatsappNotifications = $this->whatsappNotifications->notificationsForAssignment(
+        $emailResult = AssignmentMailer::sendAssigned(
             $student,
             $worksheet,
             $validated['target_date'],
             $validated['notes'] ?? null,
         );
 
-        return $this->assignmentRedirect(
-            "Assigned {$worksheet->set_code} to {$student->name}. Target: {$validated['target_date']}.",
-            $whatsappNotifications,
-            $student->name,
-        );
+        $message = "Assigned {$worksheet->set_code} to {$student->name}. Target: {$validated['target_date']}."
+            .(AssignmentMailer::flashSuffixForSingle($emailResult, $student->name) ?? '');
+
+        return $this->assignmentRedirect($message, $emailResult);
     }
 
     public function storeBulk(Request $request, Worksheet $worksheet): RedirectResponse
@@ -117,35 +113,33 @@ class SetAssignmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        $message = "Assigned {$worksheet->set_code} to {$result['assigned']} student(s). Target: {$validated['target_date']}.";
-
-        if ($result['skipped'] > 0) {
-            $message .= " Skipped {$result['skipped']}.";
-        }
-
-        $whatsappNotifications = $this->whatsappNotifications->notificationsForBulkAssignment(
+        $emailCounts = AssignmentMailer::sendBulkAssigned(
             $result['assignedStudents'] ?? [],
             $worksheet,
             $validated['target_date'],
             $validated['notes'] ?? null,
         );
 
+        $message = "Assigned {$worksheet->set_code} to {$result['assigned']} student(s). Target: {$validated['target_date']}.";
+
+        if ($result['skipped'] > 0) {
+            $message .= " Skipped {$result['skipped']}.";
+        }
+
+        $message .= AssignmentMailer::flashSuffixForBulk($emailCounts) ?? '';
+
+        $redirect = back()->with('success', $message);
+
         $warnings = [];
         if ($result['errors']) {
             $warnings[] = implode(' ', array_slice($result['errors'], 0, 3));
         }
-        if ($whatsappNotifications === [] && ($result['assigned'] ?? 0) > 0) {
-            $warnings[] = 'WhatsApp not opened — no notify-enabled contacts for assigned student(s).';
+        if ($emailCounts['skipped'] > 0 && $emailCounts['sent'] === 0) {
+            $warnings[] = 'Add student emails on their profiles to notify by email.';
         }
-
-        $redirect = back()->with('success', $message);
 
         if ($warnings !== []) {
             $redirect = $redirect->with('warning', implode(' ', $warnings));
-        }
-
-        if ($whatsappNotifications !== []) {
-            return $redirect->with('whatsapp_notifications', $whatsappNotifications);
         }
 
         return $redirect;
@@ -175,33 +169,37 @@ class SetAssignmentController extends Controller
         ]);
 
         $student = $assignment->enrollment->student;
-        $whatsappNotifications = $this->whatsappNotifications->notificationsForAssignment(
+        $emailResult = AssignmentMailer::sendAssigned(
             $student,
             $assignment->practiceSet,
             $validated['target_date'],
             $validated['notes'] ?? null,
         );
 
-        return $this->assignmentRedirect(
-            'Re-assigned with new target date. Student can attempt again.',
-            $whatsappNotifications,
-            $student->name,
-        );
+        $message = 'Re-assigned with new target date. Student can attempt again.'
+            .(AssignmentMailer::flashSuffixForSingle($emailResult, $student->name) ?? '');
+
+        return $this->assignmentRedirect($message, $emailResult);
     }
 
     /**
-     * @param  list<array{mobile: string, label: string, message: string}>  $whatsappNotifications
+     * @param  array{sent: bool, email: ?string, error: ?string}  $emailResult
      */
-    private function assignmentRedirect(string $success, array $whatsappNotifications, string $studentName): RedirectResponse
+    private function assignmentRedirect(string $success, array $emailResult): RedirectResponse
     {
-        if ($whatsappNotifications !== []) {
-            return back()
-                ->with('success', $success)
-                ->with('whatsapp_notifications', $whatsappNotifications);
+        $redirect = back()->with('success', $success);
+
+        if (! $emailResult['sent'] && $emailResult['error'] === 'no_email') {
+            return $redirect->with(
+                'warning',
+                'Assignment saved. Add an email on the student profile to send notifications automatically.',
+            );
         }
 
-        return back()
-            ->with('success', $success)
-            ->with('warning', "WhatsApp not opened for {$studentName} — no notify-enabled contacts on their profile.");
+        if (! $emailResult['sent'] && $emailResult['error'] === 'send_failed') {
+            return $redirect->with('warning', 'Assignment saved but the email could not be sent. Check mail settings.');
+        }
+
+        return $redirect;
     }
 }
