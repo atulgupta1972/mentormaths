@@ -8,13 +8,11 @@ use App\Models\Question;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
-use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\McqImportService;
 use App\Services\PdfPageImageService;
 use App\Services\PdfTextExtractionService;
 use App\Services\PdfWorksheetImportService;
-use App\Services\PracticeSetService;
 use App\Services\QuestionDiagramService;
 use App\Services\QuestionMethodHintService;
 use Illuminate\Http\RedirectResponse;
@@ -31,7 +29,6 @@ class QuestionController extends Controller
         private PdfTextExtractionService $pdfService,
         private AdminGradeContext $gradeContext,
         private QuestionMethodHintService $methodHintService,
-        private PracticeSetService $practiceSetService,
     ) {}
 
     public function topicIndex(Request $request, SyllabusTopic $topic): Response
@@ -396,43 +393,21 @@ class QuestionController extends Controller
             ->findOrFail($validated['syllabus_chapter_id']);
 
         try {
-            $practiceSet = null;
-
-            $saved = DB::transaction(function () use ($validated, $request, $chapter, &$practiceSet) {
-                $saved = $this->importService->saveChapterRows(
+            $saved = DB::transaction(function () use ($validated, $request, $chapter) {
+                return $this->importService->saveChapterRows(
                     $chapter,
                     $validated['rows'],
                     $request->user()->id,
                     Question::SOURCE_AI,
                 );
-
-                $questionIds = array_map(fn (Question $question) => $question->id, $saved);
-
-                if ($questionIds !== []) {
-                    $practiceSet = $this->practiceSetService->createChapterTest(
-                        $chapter,
-                        $questionIds,
-                        $request->user()->id,
-                        Worksheet::STATUS_PUBLISHED,
-                    );
-                }
-
-                return $saved;
             });
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        $message = count($saved).' question(s) saved to topic banks';
-        if ($practiceSet) {
-            $message .= " and packaged as {$practiceSet->set_code} chapter test.";
-        } else {
-            $message .= '.';
-        }
-
         return redirect()
             ->route('admin.questions.chapters.show', $chapter->id)
-            ->with('success', $message);
+            ->with('success', count($saved).' question(s) saved to topic banks. Use Create as T… on the chapter bank card when you want a test.');
     }
 
     public function previewImport(Request $request): RedirectResponse

@@ -103,13 +103,10 @@ class ChapterMcqImportTest extends TestCase
         $this->assertSame(1, Question::query()->where('syllabus_topic_id', $topics[0]->id)->count());
         $this->assertSame(1, Question::query()->where('syllabus_topic_id', $topics[1]->id)->count());
 
-        $chapterTest = Worksheet::query()
+        $this->assertSame(0, Worksheet::query()
             ->where('scope', PracticeSetScope::CHAPTER)
             ->where('syllabus_chapter_id', $chapter->id)
-            ->first();
-
-        $this->assertNotNull($chapterTest);
-        $this->assertSame(2, $chapterTest->questions()->count());
+            ->count());
     }
 
     public function test_chapter_hub_shows_one_bank_card_for_multi_topic_unpackaged_questions(): void
