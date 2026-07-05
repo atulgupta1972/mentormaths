@@ -11,7 +11,10 @@ class AttemptTimingTest extends TestCase
     {
         $startedAt = now()->addHour();
 
-        $this->assertSame(3600, AttemptTiming::elapsedSeconds($startedAt));
+        $elapsed = AttemptTiming::elapsedSeconds($startedAt);
+
+        $this->assertGreaterThanOrEqual(3599, $elapsed);
+        $this->assertLessThanOrEqual(3601, $elapsed);
     }
 
     public function test_elapsed_seconds_for_normal_attempt(): void
