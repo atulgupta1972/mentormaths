@@ -27,6 +27,7 @@ const props = defineProps({
 });
 
 const showManageExams = ref(false);
+const showHelpRequests = ref(false);
 const expandedStudentId = ref(null);
 
 const pendingAssignments = computed(() =>
@@ -105,6 +106,14 @@ const prepProgressPercent = (plan) => {
 
 const toggleStudent = (studentId) => {
     expandedStudentId.value = expandedStudentId.value === studentId ? null : studentId;
+};
+
+const toggleHelpRequests = () => {
+    if (!props.helpRequests.length) {
+        return;
+    }
+
+    showHelpRequests.value = !showHelpRequests.value;
 };
 
 const studentsByClass = computed(() => {
@@ -261,10 +270,22 @@ const adminSetStatusClass = (set) => {
                             <p class="text-2xl font-extrabold leading-none text-sky-700">{{ stats.upcoming_exams_count || 0 }}</p>
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">Exams</p>
                         </div>
-                        <div class="rounded-lg border border-rose-200 bg-rose-50 px-2 py-2.5 text-center shadow-sm">
+                        <button
+                            type="button"
+                            class="rounded-lg border px-2 py-2.5 text-center shadow-sm transition"
+                            :class="showHelpRequests
+                                ? 'border-rose-500 bg-rose-100 ring-2 ring-rose-400'
+                                : 'border-rose-200 bg-rose-50 hover:border-rose-400'"
+                            :disabled="!helpRequests.length"
+                            :title="helpRequests.length ? 'Click to show or hide help requests' : 'No help requests'"
+                            @click="toggleHelpRequests"
+                        >
                             <p class="text-2xl font-extrabold leading-none text-rose-700">{{ stats.help_requests_count || 0 }}</p>
-                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-rose-700">Need help</p>
-                        </div>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-rose-700">
+                                Need help
+                                <span v-if="helpRequests.length" class="ml-0.5">{{ showHelpRequests ? '▲' : '▼' }}</span>
+                            </p>
+                        </button>
                         <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-amber-700">{{ stats.pending_sets_count || 0 }}</p>
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">To do</p>
@@ -276,7 +297,7 @@ const adminSetStatusClass = (set) => {
                     </div>
 
                     <section
-                        v-if="helpRequests.length"
+                        v-if="showHelpRequests && helpRequests.length"
                         class="rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 via-orange-50 to-amber-50 p-4 shadow-sm"
                     >
                         <h3 class="text-sm font-bold uppercase tracking-wide text-rose-900">
