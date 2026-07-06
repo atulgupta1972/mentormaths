@@ -5,7 +5,7 @@ namespace App\Mail;
 use App\Models\Student;
 use App\Models\Worksheet;
 use App\Services\AssignmentWhatsAppNotificationService;
-use Carbon\Carbon;
+use App\Support\DateLabels;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -37,7 +37,7 @@ class AssignmentAssigned extends Mailable
     public function content(): Content
     {
         $service = app(AssignmentWhatsAppNotificationService::class);
-        $dueLabel = Carbon::parse($this->dueDate)->format('d M Y');
+        $dueLabel = DateLabels::formatDate($this->dueDate, 'See dashboard');
 
         $items = collect($this->worksheets)->map(function (Worksheet $worksheet) use ($service) {
             $worksheet->loadMissing(['topic.chapter', 'chapter']);

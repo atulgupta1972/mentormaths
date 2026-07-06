@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\Question;
 use App\Models\SyllabusChapter;
-use Illuminate\Support\Collection;
+use App\Support\QuestionBankPurpose;
 
 class ChapterMixedQuestionService
 {
@@ -16,6 +16,9 @@ class ChapterMixedQuestionService
         return Question::query()
             ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
             ->whereDoesntHave('worksheets')
+            ->where(fn ($q) => $q
+                ->where('bank_purpose', QuestionBankPurpose::CHAPTER_TEST)
+                ->orWhereNull('bank_purpose'))
             ->orderBy('syllabus_topic_id')
             ->orderBy('id')
             ->pluck('id')

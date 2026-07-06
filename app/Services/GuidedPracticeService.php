@@ -7,6 +7,7 @@ use App\Models\QuestionResolutionItem;
 use App\Models\SetAttempt;
 use App\Models\SetAttemptAnswer;
 use App\Models\SetAssignment;
+use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
 use App\Support\AttemptTiming;
 use App\Support\QuestionMethodHint;
@@ -315,6 +316,14 @@ class GuidedPracticeService
         ]);
 
         $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
+
+        AssignmentMailer::sendCompleted($attempt->fresh([
+            'guidedQuestions.question.topic.chapter',
+            'answers.question.topic.chapter',
+            'assignment.practiceSet.topic.chapter',
+            'assignment.practiceSet.chapter',
+            'assignment.practiceSet.questions.topic.chapter',
+        ]));
     }
 
     private function queueForResolution(SetAttempt $attempt, GuidedAttemptQuestion $guided): void

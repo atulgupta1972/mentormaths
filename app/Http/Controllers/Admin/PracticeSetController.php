@@ -14,6 +14,7 @@ use App\Services\ChapterMixedQuestionService;
 use App\Services\PracticeSetService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
+use App\Support\QuestionBankPurpose;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -234,11 +235,16 @@ class PracticeSetController extends Controller
             'tier' => ['nullable', 'in:'.implode(',', PracticeSetTier::all())],
         ]);
 
-        $topic->load('questions');
-        $questionIds = $topic->questions->pluck('id')->all();
+        $questionIds = Question::query()
+            ->where('syllabus_topic_id', $topic->id)
+            ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+            ->whereDoesntHave('worksheets')
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
 
         if (count($questionIds) === 0) {
-            return back()->with('error', 'No questions in this topic to package as a set.');
+            return back()->with('error', 'No practice-set questions in this topic to package.');
         }
 
         $tier = $validated['tier'] ?? PracticeSetTier::STARTER;

@@ -6,6 +6,7 @@ use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\SetAttemptAnswer;
 use App\Models\StudentEnrollment;
+use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
 use App\Support\AttemptTiming;
 use Illuminate\Support\Facades\DB;
@@ -110,7 +111,11 @@ class SetAttemptService
 
             $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
 
-            return $attempt->fresh(['answers', 'assignment.practiceSet']);
+            $freshAttempt = $attempt->fresh(['answers', 'assignment.practiceSet']);
+
+            AssignmentMailer::sendCompleted($freshAttempt);
+
+            return $freshAttempt;
         });
     }
 

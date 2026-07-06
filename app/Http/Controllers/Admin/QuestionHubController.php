@@ -17,6 +17,7 @@ use App\Services\PracticeSetCodeService;
 use App\Services\QuestionMethodHintService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
+use App\Support\QuestionBankPurpose;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -164,9 +165,12 @@ class QuestionHubController extends Controller
         $codeService = app(PracticeSetCodeService::class);
         $browseOnly = ! $request->user()?->isAdmin();
 
-        $unpackagedQuestionIds = Question::query()
+        $unpackagedChapterTestIds = Question::query()
             ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
             ->whereDoesntHave('worksheets')
+            ->where(fn (Builder $q) => $q
+                ->where('bank_purpose', QuestionBankPurpose::CHAPTER_TEST)
+                ->orWhereNull('bank_purpose'))
             ->pluck('id');
 
         $chapterTests = Worksheet::query()
@@ -212,21 +216,13 @@ class QuestionHubController extends Controller
                 ]);
             }
 
-            if ($topic->practiceSets->isEmpty() && $topic->questions_count > 0) {
-                $unpackagedCount = Question::query()
-                    ->where('syllabus_topic_id', $topic->id)
-                    ->whereDoesntHave('worksheets')
-                    ->count();
+            $practiceSetUnpackagedCount = Question::query()
+                ->where('syllabus_topic_id', $topic->id)
+                ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+                ->whereDoesntHave('worksheets')
+                ->count();
 
-                if ($unpackagedCount === 0) {
-                    continue;
-                }
-
-                // Multi-topic unpackaged banks are shown as one chapter card below.
-                if ($unpackagedQuestionIds->count() > $unpackagedCount) {
-                    continue;
-                }
-
+            if ($topic->practiceSets->isEmpty() && $practiceSetUnpackagedCount > 0) {
                 $setCards->push([
                     'type' => 'bank',
                     'topic_id' => $topic->id,
@@ -234,21 +230,21 @@ class QuestionHubController extends Controller
                     'set_code' => $codeService->generate($topic, PracticeSetTier::STARTER),
                     'tier' => PracticeSetTier::STARTER,
                     'tier_label' => PracticeSetTier::label(PracticeSetTier::STARTER),
-                    'questions_count' => $unpackagedCount,
+                    'questions_count' => $practiceSetUnpackagedCount,
                     'status' => 'bank',
                 ]);
             }
         }
 
-        if ($unpackagedQuestionIds->count() > 0) {
+        if ($unpackagedChapterTestIds->count() > 0) {
             $topicsWithUnpackaged = Question::query()
-                ->whereIn('id', $unpackagedQuestionIds)
+                ->whereIn('id', $unpackagedChapterTestIds)
                 ->distinct()
                 ->count('syllabus_topic_id');
 
             $setCards->prepend([
                 'type' => 'chapter_bank',
-                'questions_count' => $unpackagedQuestionIds->count(),
+                'questions_count' => $unpackagedChapterTestIds->count(),
                 'topics_count' => $topicsWithUnpackaged,
                 'set_code' => $codeService->generateChapterTest($chapter),
                 'tier' => PracticeSetTier::CHAPTER_TEST,

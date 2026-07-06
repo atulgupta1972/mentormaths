@@ -140,9 +140,9 @@ const clearBank = (card) => {
                         >
                             <Link :href="cardHref(card)" class="block hover:opacity-90">
                                 <p class="font-mono text-3xl font-bold tracking-wide text-sky-800">{{ card.set_code }}</p>
-                                <p class="mt-2 text-sm font-semibold text-gray-800">{{ card.tier_label }}</p>
+                                <p class="mt-2 text-sm font-semibold text-gray-800">Chapter test bank</p>
                                 <p class="mt-1 text-xs text-gray-600">
-                                    {{ card.topics_count }} topic{{ card.topics_count === 1 ? '' : 's' }} · mixed chapter test
+                                    {{ card.topics_count }} topic{{ card.topics_count === 1 ? '' : 's' }} · mixed chapter test (unpackaged)
                                 </p>
                                 <p class="mt-2 text-sm text-gray-700">{{ card.questions_count }} questions in bank</p>
                             </Link>
@@ -194,7 +194,7 @@ const clearBank = (card) => {
                             <p class="font-mono text-3xl font-bold tracking-wide text-gray-900">
                                 {{ card.set_code }}
                             </p>
-                            <p class="mt-2 text-sm font-semibold text-gray-800">{{ card.tier_label }}</p>
+                            <p class="mt-2 text-sm font-semibold text-gray-800">{{ card.tier_label }} bank</p>
                             <p class="mt-1 text-xs text-gray-600">{{ card.topic_name }}</p>
                             <p class="mt-2 text-sm text-gray-700">{{ card.questions_count }} questions</p>
                         </Link>

@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\SetAssignment;
+use App\Models\SetAttempt;
 use App\Models\Student;
 use App\Models\Worksheet;
 use App\Services\SetAssignmentService;
 use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
+use App\Support\AttemptResultSummary;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -29,6 +31,9 @@ class SetAssignmentController extends Controller
         ]);
 
         $latest = $assignment->attempts->first();
+        $latestSummary = ($latest && $latest->status === SetAttempt::STATUS_SUBMITTED)
+            ? AttemptResultSummary::forAdmin($latest)
+            : null;
 
         return Inertia::render('Admin/Assignments/Show', [
             'assignment' => [
@@ -48,6 +53,7 @@ class SetAssignmentController extends Controller
                 'started_at' => $a->started_at?->toDateTimeString(),
                 'completed_at' => $a->completed_at?->toDateTimeString(),
             ]),
+            'latestResult' => $latestSummary,
         ]);
     }
 

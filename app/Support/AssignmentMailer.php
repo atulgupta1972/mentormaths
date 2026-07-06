@@ -3,8 +3,11 @@
 namespace App\Support;
 
 use App\Mail\AssignmentAssigned;
+use App\Mail\AssignmentCompleted;
+use App\Models\SetAttempt;
 use App\Models\Student;
 use App\Models\Worksheet;
+use App\Support\AttemptResultSummary;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -13,6 +16,55 @@ class AssignmentMailer
     /**
      * @return array{sent: bool, email: ?string, error: ?string}
      */
+    /**
+     * @return array{sent: bool, email: ?string, error: ?string}
+     */
+    public static function sendCompleted(SetAttempt $attempt): array
+    {
+        $attempt->loadMissing('assignment.enrollment.student');
+        $student = $attempt->assignment->enrollment->student;
+
+        if (! $student) {
+            return ['sent' => false, 'email' => null, 'error' => 'no_student'];
+        }
+
+        $email = self::resolveStudentEmail($student);
+
+        if (! $email) {
+            return ['sent' => false, 'email' => null, 'error' => 'no_email'];
+        }
+
+        $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
+        $summary = AttemptResultSummary::forMail($attempt->fresh([
+            'answers.question.topic.chapter',
+            'guidedQuestions.question.topic.chapter',
+            'assignment.practiceSet.topic.chapter',
+            'assignment.practiceSet.chapter',
+            'assignment.practiceSet.questions.topic.chapter',
+        ]));
+
+        try {
+            $pending = Mail::to($email);
+
+            if ($adminEmail && strcasecmp($adminEmail, $email) !== 0) {
+                $pending->cc($adminEmail);
+            }
+
+            $pending->send(new AssignmentCompleted($student, $summary));
+
+            return ['sent' => true, 'email' => $email, 'error' => null];
+        } catch (\Throwable $e) {
+            Log::error('Failed to send completion email.', [
+                'attempt_id' => $attempt->id,
+                'student_id' => $student->id,
+                'email' => $email,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['sent' => false, 'email' => $email, 'error' => 'send_failed'];
+        }
+    }
+
     public static function sendAssigned(
         Student $student,
         Worksheet $worksheet,

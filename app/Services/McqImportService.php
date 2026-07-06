@@ -6,6 +6,7 @@ use App\Models\Question;
 use App\Models\QuestionOption;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
+use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -189,9 +190,14 @@ class McqImportService
      * @param  list<array<string, mixed>>  $rows
      * @return list<Question>
      */
-    public function saveRows(SyllabusTopic $topic, array $rows, int $userId, string $source = Question::SOURCE_AI): array
-    {
-        return DB::transaction(function () use ($topic, $rows, $userId, $source) {
+    public function saveRows(
+        SyllabusTopic $topic,
+        array $rows,
+        int $userId,
+        string $source = Question::SOURCE_AI,
+        string $bankPurpose = QuestionBankPurpose::PRACTICE_SET,
+    ): array {
+        return DB::transaction(function () use ($topic, $rows, $userId, $source, $bankPurpose) {
             $saved = [];
 
             foreach ($rows as $row) {
@@ -209,6 +215,7 @@ class McqImportService
                         : QuestionMethodHint::inferFromQuestionText(trim((string) $row['question_text'])),
                     'difficulty' => $row['difficulty'] ?? null,
                     'source' => $source,
+                    'bank_purpose' => QuestionBankPurpose::normalize($bankPurpose),
                     'created_by' => $userId,
                 ]);
 
@@ -310,11 +317,16 @@ REQ,
      * @param  list<array<string, mixed>>  $rows
      * @return list<Question>
      */
-    public function saveChapterRows(SyllabusChapter $chapter, array $rows, int $userId, string $source = Question::SOURCE_AI): array
-    {
+    public function saveChapterRows(
+        SyllabusChapter $chapter,
+        array $rows,
+        int $userId,
+        string $source = Question::SOURCE_AI,
+        string $bankPurpose = QuestionBankPurpose::PRACTICE_SET,
+    ): array {
         $chapter->loadMissing(['topics']);
 
-        return DB::transaction(function () use ($chapter, $rows, $userId, $source) {
+        return DB::transaction(function () use ($chapter, $rows, $userId, $source, $bankPurpose) {
             $saved = [];
 
             foreach ($rows as $row) {
@@ -336,6 +348,7 @@ REQ,
                         : QuestionMethodHint::inferFromQuestionText(trim((string) $row['question_text'])),
                     'difficulty' => $row['difficulty'] ?? null,
                     'source' => $source,
+                    'bank_purpose' => QuestionBankPurpose::normalize($bankPurpose),
                     'created_by' => $userId,
                 ]);
 

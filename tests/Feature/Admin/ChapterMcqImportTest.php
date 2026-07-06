@@ -13,6 +13,7 @@ use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Support\PracticeSetScope;
+use App\Support\QuestionBankPurpose;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -69,6 +70,7 @@ class ChapterMcqImportTest extends TestCase
 
         $payload = [
             'syllabus_chapter_id' => $chapter->id,
+            'bank_purpose' => QuestionBankPurpose::CHAPTER_TEST,
             'rows' => [
                 [
                     'syllabus_topic_id' => $topics[0]->id,
@@ -107,6 +109,31 @@ class ChapterMcqImportTest extends TestCase
             ->where('scope', PracticeSetScope::CHAPTER)
             ->where('syllabus_chapter_id', $chapter->id)
             ->count());
+    }
+
+    public function test_chapter_hub_shows_topic_banks_for_practice_set_questions(): void
+    {
+        [$chapter, $topics, $admin] = $this->seedChapterWithTopics();
+
+        foreach ($topics as $index => $topic) {
+            Question::query()->create([
+                'syllabus_topic_id' => $topic->id,
+                'question_text' => "Question {$index}",
+                'type' => Question::TYPE_MCQ,
+                'source' => Question::SOURCE_AI,
+                'bank_purpose' => QuestionBankPurpose::PRACTICE_SET,
+            ]);
+        }
+
+        $response = $this->actingAs($admin)
+            ->get(route('admin.questions.chapters.show', $chapter->id));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->has('setCards', 2)
+            ->where('setCards.0.type', 'bank')
+            ->where('setCards.1.type', 'bank')
+        );
     }
 
     public function test_chapter_hub_shows_one_bank_card_for_multi_topic_unpackaged_questions(): void

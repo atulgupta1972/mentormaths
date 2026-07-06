@@ -19,6 +19,10 @@ class Question extends Model
 
     public const SOURCE_PDF = 'pdf';
 
+    public const BANK_PRACTICE_SET = 'practice_set';
+
+    public const BANK_CHAPTER_TEST = 'chapter_test';
+
     protected $fillable = [
         'syllabus_topic_id',
         'type',
@@ -28,6 +32,7 @@ class Question extends Model
         'method_hint',
         'difficulty',
         'source',
+        'bank_purpose',
         'created_by',
     ];
 

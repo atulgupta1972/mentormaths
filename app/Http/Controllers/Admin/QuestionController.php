@@ -8,6 +8,7 @@ use App\Models\Question;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
+use App\Support\QuestionBankPurpose;
 use App\Services\AdminGradeContext;
 use App\Services\McqImportService;
 use App\Services\PdfPageImageService;
@@ -376,6 +377,7 @@ class QuestionController extends Controller
     {
         $validated = $request->validate([
             'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'bank_purpose' => ['required', 'in:'.implode(',', QuestionBankPurpose::all())],
             'rows' => ['required', 'array', 'min:1'],
             'rows.*.syllabus_topic_id' => ['nullable', 'exists:syllabus_topics,id'],
             'rows.*.topic_name' => ['nullable', 'string'],
@@ -399,15 +401,24 @@ class QuestionController extends Controller
                     $validated['rows'],
                     $request->user()->id,
                     Question::SOURCE_AI,
+                    $validated['bank_purpose'],
                 );
             });
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
+        $purposeLabel = QuestionBankPurpose::label($validated['bank_purpose']);
+        $success = count($saved)." question(s) saved as {$purposeLabel} banks.";
+        if (QuestionBankPurpose::isChapterTest($validated['bank_purpose'])) {
+            $success .= ' Use Create as T… on the chapter bank card when you want a test.';
+        } else {
+            $success .= ' Use Package as S… on each topic card when you want a practice set.';
+        }
+
         return redirect()
             ->route('admin.questions.chapters.show', $chapter->id)
-            ->with('success', count($saved).' question(s) saved to topic banks. Use Create as T… on the chapter bank card when you want a test.');
+            ->with('success', $success);
     }
 
     public function previewImport(Request $request): RedirectResponse
@@ -438,6 +449,7 @@ class QuestionController extends Controller
     {
         $validated = $request->validate([
             'syllabus_topic_id' => ['required', 'exists:syllabus_topics,id'],
+            'bank_purpose' => ['nullable', 'in:'.implode(',', QuestionBankPurpose::all())],
             'rows' => ['required', 'array', 'min:1'],
             'rows.*.question_text' => ['required', 'string'],
             'rows.*.explanation' => ['nullable', 'string'],
@@ -465,6 +477,7 @@ class QuestionController extends Controller
                 $validated['rows'],
                 $request->user()->id,
                 Question::SOURCE_AI,
+                QuestionBankPurpose::normalize($validated['bank_purpose'] ?? QuestionBankPurpose::PRACTICE_SET),
             );
 
             foreach ($saved as $index => $question) {

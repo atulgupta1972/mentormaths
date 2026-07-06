@@ -54,7 +54,21 @@ const pdfResultBox = ref(null);
 const selectedPdfName = ref('');
 const pdfImportToken = ref(props.pdfImportToken || null);
 const scopeMode = ref(props.scope || 'topic');
+const bankPurpose = ref('practice_set');
 const generatingChapterPrompt = ref(false);
+
+const bankPurposeOptions = [
+    {
+        value: 'practice_set',
+        label: 'Practice set',
+        hint: 'Saved per topic (S711). Package each topic as a practice set when ready.',
+    },
+    {
+        value: 'chapter_test',
+        label: 'Chapter test',
+        hint: 'Saved for a mixed chapter test (T711). Package all topics together as one test.',
+    },
+];
 
 const buildDefaultChapterPlan = () => (props.chapterTopics || []).map((topic, index) => ({
     topic_id: topic.id,
@@ -553,6 +567,7 @@ const saveToBank = () => {
         saveForm.transform(() => {
             const formData = new FormData();
             formData.append('syllabus_chapter_id', chapterFilter.value);
+            formData.append('bank_purpose', bankPurpose.value);
             rows.value.forEach((row, index) => {
                 formData.append(`rows[${index}][syllabus_topic_id]`, resolveTopicIdForRow(row));
                 formData.append(`rows[${index}][topic_name]`, row.topic_name || '');
@@ -583,6 +598,7 @@ const saveToBank = () => {
     saveForm.transform(() => {
         const formData = new FormData();
         formData.append('syllabus_topic_id', saveTopicId.value);
+        formData.append('bank_purpose', bankPurpose.value);
         rows.value.forEach((row, index) => {
             formData.append(`rows[${index}][question_text]`, row.question_text);
             formData.append(`rows[${index}][explanation]`, row.explanation || '');
@@ -1096,16 +1112,35 @@ watch(() => props.initialImportRows, (importRows) => {
                         </div>
 
                         <div class="rounded-md bg-amber-50 p-4 text-sm text-amber-900">
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <InputLabel value="Save as" />
+                                    <select v-model="bankPurpose" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                                        <option v-for="opt in bankPurposeOptions" :key="opt.value" :value="opt.value">
+                                            {{ opt.label }}
+                                        </option>
+                                    </select>
+                                    <p class="mt-1 text-xs text-amber-800">
+                                        {{ bankPurposeOptions.find((opt) => opt.value === bankPurpose)?.hint }}
+                                    </p>
+                                </div>
+                            </div>
+
                             <template v-if="isChapterScope">
-                                <p class="font-medium">Save destination — whole chapter</p>
+                                <p class="mt-3 font-medium">Save destination — whole chapter</p>
                                 <p class="mt-2">
                                     Questions will be saved into each topic bank under
                                     <strong>{{ selectedChapterLabel }}</strong>.
-                                    They stay in the bank until you click <strong>Create as T…</strong> on the chapter page to make a test.
+                                    <span v-if="bankPurpose === 'practice_set'">
+                                        They appear as topic practice banks (S…) until you package each topic.
+                                    </span>
+                                    <span v-else>
+                                        They appear in the chapter test bank (T…) until you click <strong>Create as T…</strong>.
+                                    </span>
                                 </p>
                             </template>
                             <template v-else>
-                                <p class="font-medium">Save destination — change here if you picked the wrong topic earlier</p>
+                                <p class="mt-3 font-medium">Save destination — change here if you picked the wrong topic earlier</p>
                                 <div class="mt-3 grid gap-3 sm:grid-cols-2">
                                     <div>
                                         <InputLabel value="Chapter" />
