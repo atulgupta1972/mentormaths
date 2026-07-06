@@ -16,6 +16,7 @@ use App\Services\PdfTextExtractionService;
 use App\Services\PdfWorksheetImportService;
 use App\Services\QuestionDiagramService;
 use App\Services\QuestionMethodHintService;
+use App\Services\QuestionSaveConfirmation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -30,6 +31,7 @@ class QuestionController extends Controller
         private PdfTextExtractionService $pdfService,
         private AdminGradeContext $gradeContext,
         private QuestionMethodHintService $methodHintService,
+        private QuestionSaveConfirmation $saveConfirmation,
     ) {}
 
     public function topicIndex(Request $request, SyllabusTopic $topic): Response
@@ -408,17 +410,16 @@ class QuestionController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        $purposeLabel = QuestionBankPurpose::label($validated['bank_purpose']);
-        $success = count($saved)." question(s) saved as {$purposeLabel} banks.";
-        if (QuestionBankPurpose::isChapterTest($validated['bank_purpose'])) {
-            $success .= ' Use Create as T… on the chapter bank card when you want a test.';
-        } else {
-            $success .= ' Use Package as S… on each topic card when you want a practice set.';
-        }
+        $confirmation = $this->saveConfirmation->build(
+            $saved,
+            $validated['bank_purpose'],
+            $chapter,
+        );
 
         return redirect()
             ->route('admin.questions.chapters.show', $chapter->id)
-            ->with('success', $success);
+            ->with('success', count($saved).' question(s) saved successfully.')
+            ->with('save_confirmation', $confirmation);
     }
 
     public function previewImport(Request $request): RedirectResponse
@@ -504,9 +505,19 @@ class QuestionController extends Controller
             return $saved;
         });
 
+        $bankPurpose = QuestionBankPurpose::normalize($validated['bank_purpose'] ?? QuestionBankPurpose::PRACTICE_SET);
+        $topic->load('chapter');
+
+        $confirmation = $this->saveConfirmation->build(
+            $saved,
+            $bankPurpose,
+            topic: $topic,
+        );
+
         return redirect()
-            ->route('admin.questions.topics.show', $topic->id)
-            ->with('success', count($saved).' question(s) saved to the bank.');
+            ->route('admin.questions.chapters.show', $topic->syllabus_chapter_id)
+            ->with('success', count($saved).' question(s) saved successfully.')
+            ->with('save_confirmation', $confirmation);
     }
 
     public function edit(Question $question): Response

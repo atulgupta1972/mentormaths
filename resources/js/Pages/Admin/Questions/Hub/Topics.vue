@@ -1,8 +1,9 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import SaveConfirmationModal from '@/Components/SaveConfirmationModal.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { questionHubClassUrl } from '@/utils/questionHub';
 
 const props = defineProps({
@@ -18,6 +19,25 @@ const props = defineProps({
 
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 const classListUrl = computed(() => questionHubClassUrl(props.gradeLevel?.id, props.board?.id));
+const page = usePage();
+const showSaveModal = ref(Boolean(page.props.flash?.save_confirmation));
+const saveConfirmation = computed(() => page.props.flash?.save_confirmation ?? null);
+
+watch(
+    () => page.props.flash?.save_confirmation,
+    (confirmation) => {
+        if (confirmation) {
+            showSaveModal.value = true;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    },
+);
+
+onMounted(() => {
+    if (saveConfirmation.value) {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+});
 
 const topicSetCards = computed(() => (props.setCards || []).filter((card) => card.type !== 'chapter_bank'));
 const chapterBankCards = computed(() => (props.setCards || []).filter((card) => card.type === 'chapter_bank'));
@@ -231,5 +251,11 @@ const clearBank = (card) => {
                 </div>
             </div>
         </div>
+
+        <SaveConfirmationModal
+            :show="showSaveModal"
+            :confirmation="saveConfirmation"
+            @close="showSaveModal = false"
+        />
     </AuthenticatedLayout>
 </template>

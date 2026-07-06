@@ -52,6 +52,7 @@ class HandleInertiaRequests extends Middleware
                 'import_rows' => fn () => $request->session()->get('import_rows'),
                 'whatsapp_notifications' => fn () => $request->session()->get('whatsapp_notifications'),
                 'guided_feedback' => fn () => $request->session()->get('guided_feedback'),
+                'save_confirmation' => fn () => $request->session()->get('save_confirmation'),
             ],
         ];
     }

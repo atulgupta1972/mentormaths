@@ -100,7 +100,8 @@ class ChapterMcqImportTest extends TestCase
 
         $this->actingAs($admin)
             ->post(route('admin.questions.bulk-store-chapter'), $payload)
-            ->assertRedirect(route('admin.questions.chapters.show', $chapter->id));
+            ->assertRedirect(route('admin.questions.chapters.show', $chapter->id))
+            ->assertSessionHas('save_confirmation');
 
         $this->assertSame(1, Question::query()->where('syllabus_topic_id', $topics[0]->id)->count());
         $this->assertSame(1, Question::query()->where('syllabus_topic_id', $topics[1]->id)->count());

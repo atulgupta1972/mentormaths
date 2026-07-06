@@ -564,27 +564,33 @@ const saveToBank = () => {
             return;
         }
 
-        saveForm.transform(() => {
-            const formData = new FormData();
-            formData.append('syllabus_chapter_id', chapterFilter.value);
-            formData.append('bank_purpose', bankPurpose.value);
-            rows.value.forEach((row, index) => {
-                formData.append(`rows[${index}][syllabus_topic_id]`, resolveTopicIdForRow(row));
-                formData.append(`rows[${index}][topic_name]`, row.topic_name || '');
-                formData.append(`rows[${index}][question_text]`, row.question_text);
-                formData.append(`rows[${index}][explanation]`, row.explanation || '');
-                formData.append(`rows[${index}][method_hint]`, row.method_hint || '');
-                formData.append(`rows[${index}][difficulty]`, row.difficulty || '');
-                row.options.forEach((opt, optIndex) => {
-                    formData.append(`rows[${index}][options][${optIndex}][option_text]`, opt.option_text);
-                    formData.append(`rows[${index}][options][${optIndex}][is_correct]`, opt.is_correct ? '1' : '0');
-                });
+        const formData = new FormData();
+        formData.append('syllabus_chapter_id', chapterFilter.value);
+        formData.append('bank_purpose', bankPurpose.value);
+        rows.value.forEach((row, index) => {
+            formData.append(`rows[${index}][syllabus_topic_id]`, resolveTopicIdForRow(row));
+            formData.append(`rows[${index}][topic_name]`, row.topic_name || '');
+            formData.append(`rows[${index}][question_text]`, row.question_text);
+            formData.append(`rows[${index}][explanation]`, row.explanation || '');
+            formData.append(`rows[${index}][method_hint]`, row.method_hint || '');
+            formData.append(`rows[${index}][difficulty]`, row.difficulty || '');
+            row.options.forEach((opt, optIndex) => {
+                formData.append(`rows[${index}][options][${optIndex}][option_text]`, opt.option_text);
+                formData.append(`rows[${index}][options][${optIndex}][is_correct]`, opt.is_correct ? '1' : '0');
             });
+        });
 
-            return formData;
-        }).post(route('admin.questions.bulk-store-chapter'), {
+        saveForm.processing = true;
+        router.post(route('admin.questions.bulk-store-chapter'), formData, {
             forceFormData: true,
-            preserveScroll: true,
+            preserveScroll: false,
+            onFinish: () => {
+                saveForm.processing = false;
+            },
+            onError: (errors) => {
+                saveTopicError.value = errors.rows || errors.bank_purpose || errors.syllabus_chapter_id || 'Could not save questions. Check the form and try again.';
+                step3Ref.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            },
         });
 
         return;
@@ -595,31 +601,37 @@ const saveToBank = () => {
         return;
     }
 
-    saveForm.transform(() => {
-        const formData = new FormData();
-        formData.append('syllabus_topic_id', saveTopicId.value);
-        formData.append('bank_purpose', bankPurpose.value);
-        rows.value.forEach((row, index) => {
-            formData.append(`rows[${index}][question_text]`, row.question_text);
-            formData.append(`rows[${index}][explanation]`, row.explanation || '');
-            formData.append(`rows[${index}][method_hint]`, row.method_hint || '');
-            formData.append(`rows[${index}][difficulty]`, row.difficulty || '');
-            row.options.forEach((opt, optIndex) => {
-                formData.append(`rows[${index}][options][${optIndex}][option_text]`, opt.option_text);
-                formData.append(`rows[${index}][options][${optIndex}][is_correct]`, opt.is_correct ? '1' : '0');
-            });
-            if (row.diagram instanceof File) {
-                formData.append(`diagrams[${index}]`, row.diagram);
-            }
+    const formData = new FormData();
+    formData.append('syllabus_topic_id', saveTopicId.value);
+    formData.append('bank_purpose', bankPurpose.value);
+    rows.value.forEach((row, index) => {
+        formData.append(`rows[${index}][question_text]`, row.question_text);
+        formData.append(`rows[${index}][explanation]`, row.explanation || '');
+        formData.append(`rows[${index}][method_hint]`, row.method_hint || '');
+        formData.append(`rows[${index}][difficulty]`, row.difficulty || '');
+        row.options.forEach((opt, optIndex) => {
+            formData.append(`rows[${index}][options][${optIndex}][option_text]`, opt.option_text);
+            formData.append(`rows[${index}][options][${optIndex}][is_correct]`, opt.is_correct ? '1' : '0');
         });
-        if (pdfImportToken.value) {
-            formData.append('pdf_import_token', pdfImportToken.value);
+        if (row.diagram instanceof File) {
+            formData.append(`diagrams[${index}]`, row.diagram);
         }
+    });
+    if (pdfImportToken.value) {
+        formData.append('pdf_import_token', pdfImportToken.value);
+    }
 
-        return formData;
-    }).post(route('admin.questions.bulk-store'), {
+    saveForm.processing = true;
+    router.post(route('admin.questions.bulk-store'), formData, {
         forceFormData: true,
-        preserveScroll: true,
+        preserveScroll: false,
+        onFinish: () => {
+            saveForm.processing = false;
+        },
+        onError: (errors) => {
+            saveTopicError.value = errors.rows || errors.bank_purpose || errors.syllabus_topic_id || 'Could not save questions. Check the form and try again.';
+            step3Ref.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        },
     });
 };
 
@@ -1106,7 +1118,7 @@ watch(() => props.initialImportRows, (importRows) => {
                             <div class="flex gap-2">
                                 <SecondaryButton type="button" @click="addRow">Add row</SecondaryButton>
                                 <PrimaryButton type="button" :disabled="saveForm.processing" @click="saveToBank">
-                                    Save to question bank
+                                    {{ saveForm.processing ? 'Saving…' : 'Save to question bank' }}
                                 </PrimaryButton>
                             </div>
                         </div>
