@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\RegistrationRequest;
+use App\Rules\UniqueStudentIdentity;
 use App\Support\RegistrationMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,7 +45,7 @@ class RegistrationRequestController extends Controller
         $validated = $request->validate([
             'student_name' => ['required', 'string', 'max:255'],
             'date_of_birth' => ['nullable', 'date', 'before:today'],
-            'student_mobile' => ['nullable', 'string', 'max:15'],
+            'student_mobile' => ['required', 'string', 'max:15', new UniqueStudentIdentity],
             'parent1_name' => ['required', 'string', 'max:255'],
             'parent1_mobile' => ['required', 'string', 'max:15'],
             'parent2_name' => ['nullable', 'string', 'max:255'],
@@ -69,6 +70,7 @@ class RegistrationRequestController extends Controller
             'notify_parent2_mobile' => ['sometimes', 'boolean'],
         ], [
             'email.unique' => 'This login email is already registered or has a pending request. Try another email or log in.',
+            'student_mobile.required' => 'Student mobile is required so we can identify returning students.',
         ]);
 
         $registrationRequest = RegistrationRequest::create([

@@ -120,8 +120,8 @@ const submit = () => {
                                 <InputError class="mt-1" :message="form.errors.date_of_birth" />
                             </div>
                             <div>
-                                <InputLabel for="student_mobile" value="Student mobile (optional)" />
-                                <TextInput id="student_mobile" v-model="form.student_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" />
+                                <InputLabel for="student_mobile" value="Student mobile" />
+                                <TextInput id="student_mobile" v-model="form.student_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" required />
                                 <InputError class="mt-1" :message="form.errors.student_mobile" />
                             </div>
                         </div>

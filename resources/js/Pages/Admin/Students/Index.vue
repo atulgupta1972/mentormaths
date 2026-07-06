@@ -7,6 +7,20 @@ defineProps({
     activeYear: Object,
     selectedGrade: Object,
 });
+
+const enrollmentStatus = (student) => student.enrollments[0]?.status || '—';
+
+const statusClass = (status) => {
+    if (status === 'active') {
+        return 'bg-green-100 text-green-800';
+    }
+
+    if (status === 'inactive') {
+        return 'bg-red-100 text-red-800';
+    }
+
+    return 'bg-gray-100 text-gray-700';
+};
 </script>
 
 <template>
@@ -33,6 +47,7 @@ defineProps({
                                 <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Current class</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Board</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Parent contact</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Status</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200">
@@ -40,7 +55,8 @@ defineProps({
                                 <td class="px-4 py-3">
                                     <Link
                                         :href="route('admin.students.show', student.id)"
-                                        class="font-medium text-indigo-600 hover:text-indigo-800"
+                                        class="font-medium hover:text-indigo-800"
+                                        :class="enrollmentStatus(student) === 'inactive' ? 'text-gray-500 line-through' : 'text-indigo-600'"
                                     >
                                         {{ student.name }}
                                     </Link>
@@ -52,6 +68,14 @@ defineProps({
                                     {{ student.enrollments[0]?.board?.code || '—' }}
                                 </td>
                                 <td class="px-4 py-3 text-sm text-gray-600">{{ student.parent1_mobile }}</td>
+                                <td class="px-4 py-3">
+                                    <span
+                                        class="rounded-full px-2 py-0.5 text-xs font-semibold capitalize"
+                                        :class="statusClass(enrollmentStatus(student))"
+                                    >
+                                        {{ enrollmentStatus(student) }}
+                                    </span>
+                                </td>
                             </tr>
                         </tbody>
                     </table>

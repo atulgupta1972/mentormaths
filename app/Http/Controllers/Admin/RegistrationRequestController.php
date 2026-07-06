@@ -9,6 +9,7 @@ use App\Models\StudentEnrollment;
 use App\Models\User;
 use App\Services\UserGroupService;
 use App\Support\RegistrationMailer;
+use App\Support\StudentIdentity;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -72,6 +73,14 @@ class RegistrationRequestController extends Controller
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        if (StudentIdentity::hasDuplicate(
+            $registrationRequest->student_name,
+            $registrationRequest->student_mobile,
+            $registrationRequest->id,
+        )) {
+            return back()->with('error', 'A student with this name and mobile number is already registered. Remove the duplicate profile before approving this request.');
+        }
 
         $generatedPassword = null;
         $loginEmail = null;

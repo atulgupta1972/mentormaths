@@ -42,6 +42,7 @@ class RegistrationRequestTest extends TestCase
     {
         return [
             'student_name' => 'Rahul Sharma',
+            'student_mobile' => '9876543211',
             'parent1_name' => 'Mr Sharma',
             'parent1_mobile' => '9876543210',
             'school_name' => 'Demo School',
@@ -117,5 +118,59 @@ class RegistrationRequestTest extends TestCase
         $response
             ->assertRedirect(route('registration.create'))
             ->assertSessionHasErrors('email');
+    }
+
+    public function test_duplicate_name_and_mobile_in_students_is_rejected(): void
+    {
+        ['year' => $year, 'board' => $board, 'grade' => $grade] = $this->seedRegistrationPrerequisites();
+
+        \App\Models\Student::query()->create([
+            'name' => 'Saanvi Dahiya',
+            'student_mobile' => '9711011125',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9711011125',
+            'school_name' => 'School',
+        ]);
+
+        $response = $this->from(route('registration.create'))
+            ->post(route('registration.store'), [
+                ...$this->validPayload($board->id, $grade->id, 'new@example.com'),
+                'student_name' => 'Saanvi Dahiya',
+                'student_mobile' => '9711011125',
+            ]);
+
+        $response
+            ->assertRedirect(route('registration.create'))
+            ->assertSessionHasErrors('student_mobile');
+    }
+
+    public function test_duplicate_name_and_mobile_in_pending_requests_is_rejected(): void
+    {
+        ['year' => $year, 'board' => $board, 'grade' => $grade] = $this->seedRegistrationPrerequisites();
+
+        RegistrationRequest::query()->create([
+            'academic_year_id' => $year->id,
+            'board_id' => $board->id,
+            'grade_level_id' => $grade->id,
+            'student_name' => 'Saanvi Dahiya',
+            'student_mobile' => '9711011125',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9711011125',
+            'school_name' => 'School',
+            'email' => 'pending@example.com',
+            'password' => bcrypt('password'),
+            'status' => RegistrationRequest::STATUS_PENDING,
+        ]);
+
+        $response = $this->from(route('registration.create'))
+            ->post(route('registration.store'), [
+                ...$this->validPayload($board->id, $grade->id, 'other@example.com'),
+                'student_name' => 'Saanvi Dahiya',
+                'student_mobile' => '9711011125',
+            ]);
+
+        $response
+            ->assertRedirect(route('registration.create'))
+            ->assertSessionHasErrors('student_mobile');
     }
 }

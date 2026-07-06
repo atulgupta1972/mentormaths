@@ -10,6 +10,8 @@ class StudentEnrollment extends Model
 {
     public const STATUS_ACTIVE = 'active';
 
+    public const STATUS_INACTIVE = 'inactive';
+
     public const STATUS_COMPLETED = 'completed';
 
     protected $fillable = [

@@ -10,6 +10,7 @@ use App\Models\Student;
 use App\Services\AdminGradeContext;
 use App\Services\ExamPlanService;
 use App\Services\QuestionResolutionService;
+use App\Services\StudentAccountService;
 use App\Services\StudentPromotionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class StudentController extends Controller
 {
     public function __construct(
         private StudentPromotionService $promotionService,
+        private StudentAccountService $accountService,
         private AdminGradeContext $gradeContext,
         private ExamPlanService $examPlanService,
         private QuestionResolutionService $resolutionService,
@@ -69,8 +71,15 @@ class StudentController extends Controller
             $syllabusChapters = $this->examPlanService->chapterOptionsForEnrollment($latest)->values()->all();
         }
 
+        $activeYear = AcademicYear::active();
+        $currentYearEnrollment = $activeYear
+            ? $student->enrollmentForYear($activeYear->id)
+            : null;
+
         return Inertia::render('Admin/Students/Show', [
             'student' => $student,
+            'accountActive' => $this->accountService->isActive($student),
+            'currentYearEnrollment' => $currentYearEnrollment?->only(['id', 'status']),
             'enrollmentHistory' => $history,
             'latestEnrollment' => $latest,
             'nextGrade' => $nextGrade?->only(['id', 'name']),
@@ -88,6 +97,34 @@ class StudentController extends Controller
                 ? $this->resolutionService->pendingForEnrollment($latest->id)
                 : [],
         ]);
+    }
+
+    public function toggleActive(Student $student): RedirectResponse
+    {
+        try {
+            if ($this->accountService->isActive($student)) {
+                $this->accountService->deactivate($student);
+
+                return back()->with('success', "{$student->name} deactivated. They cannot log in and are hidden from class lists.");
+            }
+
+            $this->accountService->activate($student);
+
+            return back()->with('success', "{$student->name} activated. They can log in and appear in class lists again.");
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function destroy(Student $student): RedirectResponse
+    {
+        $name = $student->name;
+
+        $this->accountService->delete($student);
+
+        return redirect()
+            ->route('admin.students.index')
+            ->with('success', "{$name} deleted. Their login, enrollments, and assignments have been removed.");
     }
 
     public function promote(Request $request, Student $student): RedirectResponse

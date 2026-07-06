@@ -94,6 +94,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('students.index');
     Route::get('/students/{student}', [StudentController::class, 'show'])
         ->name('students.show');
+    Route::post('/students/{student}/toggle-active', [StudentController::class, 'toggleActive'])
+        ->name('students.toggle-active');
+    Route::delete('/students/{student}', [StudentController::class, 'destroy'])
+        ->name('students.destroy');
     Route::patch('/students/{student}/contacts', [StudentController::class, 'updateContacts'])
         ->name('students.contacts.update');
     Route::post('/students/{student}/promote', [StudentController::class, 'promote'])

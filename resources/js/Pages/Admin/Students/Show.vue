@@ -1,15 +1,19 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ContactNumbersPanel from '@/Components/ContactNumbersPanel.vue';
+import DangerButton from '@/Components/DangerButton.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, watch } from 'vue';
 
 const props = defineProps({
     student: Object,
+    accountActive: { type: Boolean, default: true },
+    currentYearEnrollment: { type: Object, default: null },
     enrollmentHistory: Array,
     latestEnrollment: Object,
     nextGrade: Object,
@@ -71,6 +75,29 @@ watch(defaultYear, (year) => {
 const submit = () => {
     form.post(route('admin.students.promote', props.student.id));
 };
+
+const toggleActive = () => {
+    const action = props.accountActive ? 'Deactivate' : 'Activate';
+    const detail = props.accountActive
+        ? 'They will not be able to log in and will be hidden from class lists and assignments.'
+        : 'They will be able to log in and appear in class lists again.';
+
+    if (!confirm(`${action} ${props.student.name}? ${detail}`)) {
+        return;
+    }
+
+    router.post(route('admin.students.toggle-active', props.student.id));
+};
+
+const deleteForm = useForm({});
+
+const destroyStudent = () => {
+    if (!confirm(`Permanently delete ${props.student.name}? This removes their login, enrollments, exam plans, and assignments. This cannot be undone.`)) {
+        return;
+    }
+
+    deleteForm.delete(route('admin.students.destroy', props.student.id));
+};
 </script>
 
 <template>
@@ -86,6 +113,36 @@ const submit = () => {
 
         <div class="py-12">
             <div class="mx-auto max-w-5xl space-y-6 sm:px-6 lg:px-8">
+                <div
+                    class="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4 shadow-sm"
+                    :class="accountActive ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'"
+                >
+                    <div>
+                        <p class="text-sm font-semibold" :class="accountActive ? 'text-emerald-900' : 'text-rose-900'">
+                            {{ accountActive ? 'Active student' : 'Inactive student' }}
+                        </p>
+                        <p class="mt-1 text-sm" :class="accountActive ? 'text-emerald-800' : 'text-rose-800'">
+                            <span v-if="student.user">Login: {{ student.user.email }}</span>
+                            <span v-else>No login linked</span>
+                            <span v-if="currentYearEnrollment?.status"> · Enrollment: {{ currentYearEnrollment.status }}</span>
+                        </p>
+                        <p v-if="!accountActive" class="mt-1 text-xs text-rose-700">
+                            Deactivate keeps the record but blocks login. Use Delete below to remove a duplicate registration entirely.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <DangerButton v-if="accountActive" type="button" @click="toggleActive">
+                            Deactivate student
+                        </DangerButton>
+                        <SecondaryButton v-else type="button" @click="toggleActive">
+                            Activate student
+                        </SecondaryButton>
+                        <DangerButton type="button" :disabled="deleteForm.processing" @click="destroyStudent">
+                            Delete student
+                        </DangerButton>
+                    </div>
+                </div>
+
                 <div class="rounded-lg bg-indigo-50 p-4 text-sm text-indigo-900">
                     <strong>Same student, new class each year.</strong>
                     Profile stays one record. Each academic year gets its own enrollment row

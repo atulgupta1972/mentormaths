@@ -57,7 +57,10 @@ class Student extends Model
             return null;
         }
 
-        return $this->enrollmentForYear($activeYear->id);
+        return $this->enrollments()
+            ->where('academic_year_id', $activeYear->id)
+            ->where('status', StudentEnrollment::STATUS_ACTIVE)
+            ->first();
     }
 
     public function enrollmentForYear(int $academicYearId): ?StudentEnrollment
