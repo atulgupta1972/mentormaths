@@ -112,7 +112,7 @@ class ChapterMcqImportTest extends TestCase
             ->count());
     }
 
-    public function test_chapter_hub_shows_topic_banks_for_practice_set_questions(): void
+    public function test_chapter_hub_shows_one_practice_bank_for_chapter_practice_set_questions(): void
     {
         [$chapter, $topics, $admin] = $this->seedChapterWithTopics();
 
@@ -131,9 +131,9 @@ class ChapterMcqImportTest extends TestCase
 
         $response->assertOk();
         $response->assertInertia(fn ($page) => $page
-            ->has('setCards', 2)
-            ->where('setCards.0.type', 'bank')
-            ->where('setCards.1.type', 'bank')
+            ->has('setCards', 1)
+            ->where('setCards.0.type', 'chapter_practice_bank')
+            ->where('setCards.0.questions_count', 2)
         );
     }
 

@@ -28,29 +28,7 @@ class QuestionSaveConfirmation
         $chapter?->loadMissing(['syllabusVersion.board', 'syllabusVersion.gradeLevel']);
 
         $isPracticeSet = QuestionBankPurpose::isPracticeSet($bankPurpose);
-
-        $banks = $questions
-            ->groupBy('syllabus_topic_id')
-            ->map(function ($group, $topicId) use ($isPracticeSet) {
-                $topicModel = SyllabusTopic::query()->find($topicId);
-                if (! $topicModel) {
-                    return null;
-                }
-
-                $bank = [
-                    'topic_name' => $topicModel->name,
-                    'questions_count' => $group->count(),
-                ];
-
-                if ($isPracticeSet) {
-                    $bank['set_code'] = $this->codeService->generate($topicModel, PracticeSetTier::STARTER);
-                }
-
-                return $bank;
-            })
-            ->filter()
-            ->values()
-            ->all();
+        $topicsCount = $questions->pluck('syllabus_topic_id')->unique()->count();
 
         $payload = [
             'bank_purpose' => $bankPurpose,
@@ -64,16 +42,18 @@ class QuestionSaveConfirmation
                     'Ch '.$chapter->chapter_number.' — '.$chapter->name,
                 ])->filter()->implode(' · '))
                 : null,
-            'banks' => $banks,
+            'topics_count' => $topicsCount,
         ];
 
-        if ($isPracticeSet && count($banks) === 1) {
-            $payload['set_code'] = $banks[0]['set_code'];
-        }
-
-        if (! $isPracticeSet && $chapter) {
+        if ($isPracticeSet && $chapter) {
+            $payload['set_code'] = $this->codeService->generateChapterPractice($chapter);
+            $payload['mode_label'] = 'Guided practice — one question at a time';
+        } elseif (! $isPracticeSet && $chapter) {
             $payload['set_code'] = $this->codeService->generateChapterTest($chapter);
-            $payload['topics_count'] = count($banks);
+            $payload['mode_label'] = 'Chapter test — all questions together';
+        } elseif ($isPracticeSet && $topic) {
+            $payload['set_code'] = $this->codeService->generate($topic, PracticeSetTier::STARTER);
+            $payload['mode_label'] = 'Guided practice — one question at a time';
         }
 
         return $payload;

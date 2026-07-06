@@ -173,6 +173,14 @@ class QuestionHubController extends Controller
                 ->orWhereNull('bank_purpose'))
             ->pluck('id');
 
+        $unpackagedPracticeSetIds = Question::query()
+            ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
+            ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+            ->whereDoesntHave('worksheets')
+            ->pluck('id');
+
+        $hasChapterPracticeBank = $unpackagedPracticeSetIds->count() > 0;
+
         $chapterTests = Worksheet::query()
             ->where('scope', PracticeSetScope::CHAPTER)
             ->where('syllabus_chapter_id', $chapter->id)
@@ -222,7 +230,7 @@ class QuestionHubController extends Controller
                 ->whereDoesntHave('worksheets')
                 ->count();
 
-            if ($topic->practiceSets->isEmpty() && $practiceSetUnpackagedCount > 0) {
+            if (! $hasChapterPracticeBank && $topic->practiceSets->isEmpty() && $practiceSetUnpackagedCount > 0) {
                 $setCards->push([
                     'type' => 'bank',
                     'topic_id' => $topic->id,
@@ -234,6 +242,23 @@ class QuestionHubController extends Controller
                     'status' => 'bank',
                 ]);
             }
+        }
+
+        if ($hasChapterPracticeBank) {
+            $topicsWithUnpackaged = Question::query()
+                ->whereIn('id', $unpackagedPracticeSetIds)
+                ->distinct()
+                ->count('syllabus_topic_id');
+
+            $setCards->prepend([
+                'type' => 'chapter_practice_bank',
+                'questions_count' => $unpackagedPracticeSetIds->count(),
+                'topics_count' => $topicsWithUnpackaged,
+                'set_code' => $codeService->generateChapterPractice($chapter),
+                'tier' => PracticeSetTier::STARTER,
+                'tier_label' => PracticeSetTier::label(PracticeSetTier::STARTER),
+                'status' => 'bank',
+            ]);
         }
 
         if ($unpackagedChapterTestIds->count() > 0) {

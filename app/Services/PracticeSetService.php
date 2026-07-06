@@ -93,4 +93,37 @@ class PracticeSetService
 
         return $practiceSet->loadCount('questions');
     }
+
+    /**
+     * @param  list<int>  $questionIds
+     */
+    public function createChapterPracticeSet(
+        SyllabusChapter $chapter,
+        array $questionIds,
+        int $userId,
+        string $tier = PracticeSetTier::STARTER,
+        string $status = Worksheet::STATUS_PUBLISHED,
+    ): Worksheet {
+        $setNumber = $this->nextChapterSetNumber($chapter->id);
+        $setCode = $this->codeService->generateChapterPractice($chapter, $tier);
+        $label = PracticeSetTier::label($tier);
+
+        $practiceSet = Worksheet::create([
+            'title' => "{$setCode} — {$label} practice (".count($questionIds).' sums)',
+            'set_number' => $setNumber,
+            'set_code' => $setCode,
+            'tier' => $tier,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapter->id,
+            'syllabus_topic_id' => null,
+            'status' => $status,
+            'created_by' => $userId,
+        ]);
+
+        foreach ($questionIds as $index => $questionId) {
+            $practiceSet->questions()->attach($questionId, ['sort_order' => $index + 1]);
+        }
+
+        return $practiceSet->loadCount('questions');
+    }
 }

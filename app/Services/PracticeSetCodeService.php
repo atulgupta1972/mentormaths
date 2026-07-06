@@ -62,6 +62,32 @@ class PracticeSetCodeService
         return "{$letter}{$classNum}{$chapterNum}{$seq}";
     }
 
+    /**
+     * Format: S821 = Starter practice · Class 8 · Chapter 2 · Set 1 (mixed topics, guided).
+     */
+    public function generateChapterPractice(SyllabusChapter $chapter, string $tier = PracticeSetTier::STARTER): string
+    {
+        $chapter->loadMissing('syllabusVersion.gradeLevel');
+        $grade = $chapter->syllabusVersion?->gradeLevel;
+
+        if (! $grade) {
+            throw new \InvalidArgumentException('Chapter must belong to a syllabus version and class.');
+        }
+
+        $classNum = $grade->sort_order;
+        $chapterNum = $this->chapterNumber($chapter);
+
+        $seq = Worksheet::query()
+            ->where('scope', PracticeSetScope::CHAPTER)
+            ->where('syllabus_chapter_id', $chapter->id)
+            ->where('tier', $tier)
+            ->count() + 1;
+
+        $letter = PracticeSetTier::codeLetter($tier);
+
+        return "{$letter}{$classNum}{$chapterNum}{$seq}";
+    }
+
     public function backfillAll(): void
     {
         $grouped = Worksheet::query()

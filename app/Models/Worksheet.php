@@ -49,6 +49,16 @@ class Worksheet extends Model
         return $this->scope === PracticeSetScope::CHAPTER;
     }
 
+    public function isChapterTest(): bool
+    {
+        return $this->isChapterScope() && $this->tier === PracticeSetTier::CHAPTER_TEST;
+    }
+
+    public function isChapterPractice(): bool
+    {
+        return $this->isChapterScope() && ! $this->isChapterTest();
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

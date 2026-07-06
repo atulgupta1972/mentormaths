@@ -203,4 +203,23 @@ class ChapterPracticeSetController extends Controller
             ->route('admin.questions.sets.show', $practiceSet)
             ->with('success', "{$practiceSet->set_code} chapter test created from question bank.");
     }
+
+    public function storeFromChapterPracticeBank(Request $request, SyllabusChapter $chapter): RedirectResponse
+    {
+        $questionIds = $this->mixedQuestionService->unpackagedPracticeSetQuestionIds($chapter);
+
+        if ($questionIds === []) {
+            return back()->with('error', 'No practice-set questions in this chapter to package.');
+        }
+
+        $practiceSet = $this->practiceSetService->createChapterPracticeSet(
+            $chapter,
+            $questionIds,
+            $request->user()->id,
+        );
+
+        return redirect()
+            ->route('admin.questions.sets.show', $practiceSet)
+            ->with('success', "{$practiceSet->set_code} practice set created from question bank.");
+    }
 }

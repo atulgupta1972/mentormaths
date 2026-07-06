@@ -45,14 +45,16 @@ class AssignmentProgress
             'tier_label' => $assignment->practiceSet->tier_label,
             'display_title' => $assignment->practiceSet->display_title,
             'topic_id' => $assignment->practiceSet->syllabus_topic_id,
-            'topic_name' => $assignment->practiceSet->isChapterScope()
+            'topic_name' => $assignment->practiceSet->isChapterTest()
                 ? 'Chapter test · '.$assignment->practiceSet->chapter?->name
-                : $assignment->practiceSet->topic?->name,
+                : ($assignment->practiceSet->isChapterPractice()
+                    ? 'Chapter practice · '.$assignment->practiceSet->chapter?->name
+                    : $assignment->practiceSet->topic?->name),
             'chapter_name' => $assignment->practiceSet->isChapterScope()
                 ? $assignment->practiceSet->chapter?->name
                 : $assignment->practiceSet->topic?->chapter?->name,
             'scope' => $assignment->practiceSet->scope ?? 'topic',
-            'kind_label' => $assignment->practiceSet->isChapterScope() ? 'Test' : 'Practice',
+            'kind_label' => $assignment->practiceSet->isChapterTest() ? 'Test' : 'Practice',
             'question_count' => $assignment->practiceSet->questions_count ?? $assignment->practiceSet->questions()->count(),
             'assignment_status' => $assignment->status,
             'target_date' => $assignment->due_date?->toDateString(),

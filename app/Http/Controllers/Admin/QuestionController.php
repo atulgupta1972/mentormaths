@@ -105,6 +105,31 @@ class QuestionController extends Controller
             ->with('success', "Deleted {$count} question".($count === 1 ? '' : 's')." from {$topic->name}.");
     }
 
+    public function clearChapterPracticeBank(SyllabusChapter $chapter): RedirectResponse
+    {
+        $questions = Question::query()
+            ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
+            ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+            ->whereDoesntHave('worksheets')
+            ->get();
+
+        if ($questions->isEmpty()) {
+            return redirect()
+                ->back()
+                ->with('warning', 'No practice-set questions to delete in this chapter.');
+        }
+
+        $count = $questions->count();
+
+        DB::transaction(function () use ($questions) {
+            $questions->each(fn (Question $question) => $question->delete());
+        });
+
+        return redirect()
+            ->route('admin.questions.chapters.show', $chapter->id)
+            ->with('success', "Deleted {$count} practice-set question".($count === 1 ? '' : 's').' from this chapter.');
+    }
+
     public function generateMethodHints(Request $request, SyllabusTopic $topic): RedirectResponse
     {
         $validated = $request->validate([

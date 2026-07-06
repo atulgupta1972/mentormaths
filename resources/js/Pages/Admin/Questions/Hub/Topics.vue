@@ -39,7 +39,8 @@ onMounted(() => {
     }
 });
 
-const topicSetCards = computed(() => (props.setCards || []).filter((card) => card.type !== 'chapter_bank'));
+const topicSetCards = computed(() => (props.setCards || []).filter((card) => card.type === 'bank' || card.type === 'set'));
+const chapterPracticeBankCards = computed(() => (props.setCards || []).filter((card) => card.type === 'chapter_practice_bank'));
 const chapterBankCards = computed(() => (props.setCards || []).filter((card) => card.type === 'chapter_bank'));
 
 const tierColor = (tier, type) => {
@@ -57,15 +58,30 @@ const cardHref = (card) => {
     if (card.type === 'chapter_bank') {
         return route('admin.practice-sets.chapters.create', props.chapter.id);
     }
+    if (card.type === 'chapter_practice_bank') {
+        return route('admin.questions.chapters.show', props.chapter.id);
+    }
     return route('admin.questions.topics.show', card.topic_id);
 };
 
-const packageAsSet = (card) => {
-    router.post(route('admin.practice-sets.from-topic', card.topic_id), { tier: card.tier });
+const packageChapterPracticeBank = () => {
+    router.post(route('admin.practice-sets.chapters.from-practice-bank', props.chapter.id));
 };
 
 const packageChapterBank = () => {
     router.post(route('admin.practice-sets.chapters.from-bank', props.chapter.id));
+};
+
+const clearChapterPracticeBank = () => {
+    if (!window.confirm(`Delete all practice-set questions in this chapter (${chapterPracticeBankCards.value[0]?.questions_count || 0})? This cannot be undone.`)) {
+        return;
+    }
+
+    router.delete(route('admin.questions.chapters.clear-practice-bank', props.chapter.id));
+};
+
+const packageAsSet = (card) => {
+    router.post(route('admin.practice-sets.from-topic', card.topic_id), { tier: card.tier });
 };
 
 const clearBank = (card) => {
@@ -95,7 +111,7 @@ const clearBank = (card) => {
                     {{ boardCode }} {{ gradeLevel?.name }} · Ch {{ chapter.chapter_number }} · {{ chapter.name }}
                 </p>
                 <h2 class="text-xl font-semibold text-gray-800">Practice sets & chapter tests</h2>
-                <p class="mt-1 text-xs text-gray-500">S711 = topic set · T711 = chapter test (mixed topics)</p>
+                <p class="mt-1 text-xs text-gray-500">S821 = one practice set · T821 = one chapter test</p>
             </div>
             <div class="flex flex-wrap gap-2">
                 <Link
@@ -137,7 +153,7 @@ const clearBank = (card) => {
                         <p class="text-xs text-gray-500">Chapter tests</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
-                        <p class="text-2xl font-bold text-indigo-600">{{ topicSetCards.length + chapterBankCards.length }}</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ topicSetCards.length + chapterPracticeBankCards.length + chapterBankCards.length }}</p>
                         <p class="text-xs text-gray-500">Topic sets / banks</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
@@ -147,6 +163,45 @@ const clearBank = (card) => {
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.sets_count }}</p>
                         <p class="text-xs text-gray-500">Packaged sets</p>
+                    </div>
+                </div>
+
+                <div v-if="chapterPracticeBankCards.length" class="space-y-3">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-emerald-700">Practice set bank</h3>
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div
+                            v-for="card in chapterPracticeBankCards"
+                            :key="`cpb-${card.set_code}`"
+                            class="rounded-xl border border-emerald-300 bg-emerald-50 p-5 shadow-sm transition hover:border-emerald-500"
+                        >
+                            <div class="block">
+                                <p class="font-mono text-3xl font-bold tracking-wide text-emerald-900">{{ card.set_code }}</p>
+                                <p class="mt-2 text-sm font-semibold text-gray-800">Practice set bank</p>
+                                <p class="mt-1 text-xs text-gray-600">
+                                    {{ card.topics_count }} topic{{ card.topics_count === 1 ? '' : 's' }} · guided practice (one JSON = one set)
+                                </p>
+                                <p class="mt-2 text-sm text-gray-700">{{ card.questions_count }} questions in bank</p>
+                            </div>
+
+                            <p v-if="isAdmin" class="mt-3 border-t border-emerald-200 pt-3 text-xs text-emerald-900">
+                                Package all questions as one practice set.
+                                <button
+                                    type="button"
+                                    class="ml-1 font-medium text-indigo-600 hover:underline"
+                                    @click="packageChapterPracticeBank"
+                                >
+                                    Package as {{ card.set_code }}
+                                </button>
+                                <span class="mx-1 text-emerald-600">·</span>
+                                <button
+                                    type="button"
+                                    class="font-medium text-rose-700 hover:underline"
+                                    @click="clearChapterPracticeBank"
+                                >
+                                    Delete all
+                                </button>
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -245,7 +300,7 @@ const clearBank = (card) => {
                     </div>
                 </div>
 
-                <div v-if="!topicSetCards.length && !chapterBankCards.length && !chapterTests?.length" class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
+                <div v-if="!topicSetCards.length && !chapterPracticeBankCards.length && !chapterBankCards.length && !chapterTests?.length" class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
                     No questions or sets in this chapter yet.
                     <Link v-if="isAdmin" :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })" class="text-indigo-600 hover:underline">Add MCQs</Link>
                 </div>

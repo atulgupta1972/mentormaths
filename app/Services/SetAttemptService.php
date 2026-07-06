@@ -39,7 +39,7 @@ class SetAttemptService
             $attempt = SetAttempt::create([
                 'set_assignment_id' => $assignment->id,
                 'attempt_number' => $nextNumber,
-                'mode' => $assignment->practiceSet->isChapterScope()
+                'mode' => $assignment->practiceSet->isChapterTest()
                     ? SetAttempt::MODE_BATCH
                     : SetAttempt::MODE_GUIDED,
                 'started_at' => now(),
@@ -127,7 +127,7 @@ class SetAttemptService
 
         $attempt->loadMissing('assignment.practiceSet');
 
-        if ($attempt->assignment->practiceSet->isChapterScope()) {
+        if ($attempt->assignment->practiceSet->isChapterTest()) {
             return;
         }
 

@@ -149,6 +149,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/practice-sets/chapters/{chapter}', [ChapterPracticeSetController::class, 'store'])->name('practice-sets.chapters.store');
     Route::post('/practice-sets/chapters/{chapter}/auto-mix', [ChapterPracticeSetController::class, 'storeAutoMix'])->name('practice-sets.chapters.auto-mix');
     Route::post('/practice-sets/chapters/{chapter}/from-bank', [ChapterPracticeSetController::class, 'storeFromChapterBank'])->name('practice-sets.chapters.from-bank');
+    Route::post('/practice-sets/chapters/{chapter}/from-practice-bank', [ChapterPracticeSetController::class, 'storeFromChapterPracticeBank'])->name('practice-sets.chapters.from-practice-bank');
+    Route::delete('/questions/chapters/{chapter}/practice-bank', [QuestionController::class, 'clearChapterPracticeBank'])->name('questions.chapters.clear-practice-bank');
     Route::get('/practice-sets', [PracticeSetController::class, 'index'])->name('practice-sets.index');
     Route::get('/practice-sets/create', [PracticeSetController::class, 'create'])->name('practice-sets.create');
     Route::post('/practice-sets', [PracticeSetController::class, 'store'])->name('practice-sets.store');

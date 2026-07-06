@@ -26,6 +26,21 @@ class ChapterMixedQuestionService
     }
 
     /**
+     * @return list<int>
+     */
+    public function unpackagedPracticeSetQuestionIds(SyllabusChapter $chapter): array
+    {
+        return Question::query()
+            ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
+            ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+            ->whereDoesntHave('worksheets')
+            ->orderBy('syllabus_topic_id')
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
      *
      * @return list<int>
      */

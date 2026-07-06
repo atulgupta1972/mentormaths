@@ -7,6 +7,7 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import ChapterQuestionPlan from '@/Components/ChapterQuestionPlan.vue';
+import Modal from '@/Components/Modal.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { parseMcqJson, rowsFromImportData } from '@/utils/mcqImport';
@@ -55,18 +56,19 @@ const selectedPdfName = ref('');
 const pdfImportToken = ref(props.pdfImportToken || null);
 const scopeMode = ref(props.scope || 'topic');
 const bankPurpose = ref('practice_set');
+const showSavePurposeModal = ref(false);
 const generatingChapterPrompt = ref(false);
 
 const bankPurposeOptions = [
     {
         value: 'practice_set',
         label: 'Practice set',
-        hint: 'Saved per topic (S711). Package each topic as a practice set when ready.',
+        hint: 'One set for this upload (S821). Students answer one question at a time with instant feedback.',
     },
     {
         value: 'chapter_test',
         label: 'Chapter test',
-        hint: 'Saved for a mixed chapter test (T711). Package all topics together as one test.',
+        hint: 'One test for this upload (T821). Students answer all questions together.',
     },
 ];
 
@@ -563,7 +565,19 @@ const saveToBank = () => {
             saveTopicError.value = 'Each question must have a topic name that matches a topic in this chapter.';
             return;
         }
+    } else if (!saveTopicId.value) {
+        saveTopicError.value = 'Choose chapter and topic to save into.';
+        return;
+    }
 
+    showSavePurposeModal.value = true;
+};
+
+const confirmSaveToBank = () => {
+    showSavePurposeModal.value = false;
+    saveTopicError.value = '';
+
+    if (isChapterScope.value) {
         const formData = new FormData();
         formData.append('syllabus_chapter_id', chapterFilter.value);
         formData.append('bank_purpose', bankPurpose.value);
@@ -593,11 +607,6 @@ const saveToBank = () => {
             },
         });
 
-        return;
-    }
-
-    if (!saveTopicId.value) {
-        saveTopicError.value = 'Choose chapter and topic to save into.';
         return;
     }
 
@@ -751,7 +760,7 @@ watch(() => props.initialImportRows, (importRows) => {
                                 @click="switchScope('chapter')"
                             >
                                 <p class="font-medium text-gray-900">Whole chapter</p>
-                                <p class="mt-1 text-xs text-gray-500">Plan counts per topic, generate once, save to each topic bank</p>
+                                <p class="mt-1 text-xs text-gray-500">One JSON upload → one practice set or one chapter test</p>
                             </button>
                         </div>
                     </div>
@@ -882,7 +891,7 @@ watch(() => props.initialImportRows, (importRows) => {
                 <div v-if="isChapterScope" class="rounded-lg bg-white p-6 shadow-sm">
                     <h3 class="font-medium text-gray-900">Step 2 — Import JSON</h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Paste JSON from Cursor — each question needs a <strong>topic</strong> name. Questions will be saved into the matching topic banks.
+                        Paste JSON from Cursor — each question needs a <strong>topic</strong> name. All questions become <strong>one set</strong> (practice or test).
                     </p>
                     <textarea
                         v-model="jsonInput"
@@ -908,7 +917,7 @@ watch(() => props.initialImportRows, (importRows) => {
                     </div>
                     <InputError class="mt-2" :message="previewError || importForm.errors.json" />
                     <p v-if="rows.length" class="mt-2 text-sm text-green-700">
-                        {{ rows.length }} question(s) loaded — scroll down to review and save into topic banks.
+                        {{ rows.length }} question(s) loaded — scroll down to review and save as one set.
                     </p>
                 </div>
 
@@ -1124,35 +1133,16 @@ watch(() => props.initialImportRows, (importRows) => {
                         </div>
 
                         <div class="rounded-md bg-amber-50 p-4 text-sm text-amber-900">
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <div>
-                                    <InputLabel value="Save as" />
-                                    <select v-model="bankPurpose" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
-                                        <option v-for="opt in bankPurposeOptions" :key="opt.value" :value="opt.value">
-                                            {{ opt.label }}
-                                        </option>
-                                    </select>
-                                    <p class="mt-1 text-xs text-amber-800">
-                                        {{ bankPurposeOptions.find((opt) => opt.value === bankPurpose)?.hint }}
-                                    </p>
-                                </div>
-                            </div>
-
                             <template v-if="isChapterScope">
-                                <p class="mt-3 font-medium">Save destination — whole chapter</p>
+                                <p class="font-medium">Save destination — whole chapter</p>
                                 <p class="mt-2">
-                                    Questions will be saved into each topic bank under
-                                    <strong>{{ selectedChapterLabel }}</strong>.
-                                    <span v-if="bankPurpose === 'practice_set'">
-                                        They appear as topic practice banks (S…) until you package each topic.
-                                    </span>
-                                    <span v-else>
-                                        They appear in the chapter test bank (T…) until you click <strong>Create as T…</strong>.
-                                    </span>
+                                    {{ rows.length }} question(s) under <strong>{{ selectedChapterLabel }}</strong>.
+                                    Click save — you will choose <strong>Practice set</strong> or <strong>Chapter test</strong>.
+                                    One JSON = one set on the chapter page.
                                 </p>
                             </template>
                             <template v-else>
-                                <p class="mt-3 font-medium">Save destination — change here if you picked the wrong topic earlier</p>
+                                <p class="font-medium">Save destination — change here if you picked the wrong topic earlier</p>
                                 <div class="mt-3 grid gap-3 sm:grid-cols-2">
                                     <div>
                                         <InputLabel value="Chapter" />
@@ -1296,6 +1286,38 @@ watch(() => props.initialImportRows, (importRows) => {
                 </div>
             </div>
         </div>
+
+        <Modal :show="showSavePurposeModal" max-width="lg" @close="showSavePurposeModal = false">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-900">Save as practice set or chapter test?</h3>
+                <p class="mt-1 text-sm text-gray-600">
+                    {{ rows.length }} question(s) — one upload becomes one set on the chapter page.
+                </p>
+
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <button
+                        v-for="opt in bankPurposeOptions"
+                        :key="opt.value"
+                        type="button"
+                        class="rounded-lg border p-4 text-left transition"
+                        :class="bankPurpose === opt.value
+                            ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500'
+                            : 'border-gray-200 hover:border-gray-300'"
+                        @click="bankPurpose = opt.value"
+                    >
+                        <p class="font-medium text-gray-900">{{ opt.label }}</p>
+                        <p class="mt-1 text-xs text-gray-600">{{ opt.hint }}</p>
+                    </button>
+                </div>
+
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
+                    <SecondaryButton type="button" @click="showSavePurposeModal = false">Cancel</SecondaryButton>
+                    <PrimaryButton type="button" :disabled="saveForm.processing" @click="confirmSaveToBank">
+                        {{ saveForm.processing ? 'Saving…' : `Save as ${bankPurposeOptions.find((o) => o.value === bankPurpose)?.label}` }}
+                    </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
     </AuthenticatedLayout>
 </template>
 
