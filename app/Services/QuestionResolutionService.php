@@ -108,6 +108,7 @@ class QuestionResolutionService
             ->with([
                 'question:id,question_text',
                 'enrollment.student:id,name',
+                'enrollment.gradeLevel:id,name',
                 'assignment.practiceSet:id,set_code',
             ])
             ->where('status', QuestionResolutionItem::STATUS_PENDING)
@@ -123,6 +124,7 @@ class QuestionResolutionService
             'id' => $item->id,
             'student_id' => $item->enrollment->student_id,
             'student_name' => $item->enrollment->student?->name,
+            'class_name' => $item->enrollment->gradeLevel?->name,
             'set_code' => $item->assignment?->practiceSet?->set_code,
             'question_text' => $item->question->question_text,
             'gave_up_at' => $item->gave_up_at?->toDateTimeString(),

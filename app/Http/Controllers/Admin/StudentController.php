@@ -76,6 +76,8 @@ class StudentController extends Controller
             ? $student->enrollmentForYear($activeYear->id)
             : null;
 
+        $resolutionEnrollment = $currentYearEnrollment ?? $latest;
+
         return Inertia::render('Admin/Students/Show', [
             'student' => $student,
             'accountActive' => $this->accountService->isActive($student),
@@ -93,9 +95,12 @@ class StudentController extends Controller
             'examPlans' => $examPlans->values()->all(),
             'syllabusChapters' => $syllabusChapters,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
-            'resolutionItems' => $latest
-                ? $this->resolutionService->pendingForEnrollment($latest->id)
+            'resolutionItems' => $resolutionEnrollment
+                ? $this->resolutionService->pendingForEnrollment($resolutionEnrollment->id)
                 : [],
+            'helpRequestsCount' => $resolutionEnrollment
+                ? $this->resolutionService->pendingCountForEnrollment($resolutionEnrollment->id)
+                : 0,
         ]);
     }
 

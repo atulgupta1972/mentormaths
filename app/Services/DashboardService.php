@@ -65,8 +65,10 @@ class DashboardService
                     'upcoming_exams_count' => 0,
                     'pending_sets_count' => 0,
                     'completed_sets_count' => 0,
+                    'help_requests_count' => 0,
                 ],
                 'students' => [],
+                'helpRequests' => [],
             ];
         }
 
@@ -82,7 +84,14 @@ class DashboardService
             ->sortBy(fn (StudentEnrollment $enrollment) => $enrollment->student?->name ?? '')
             ->values();
 
-        $students = $enrollments->map(function (StudentEnrollment $enrollment) {
+        $studentIds = $enrollments->pluck('student_id')->all();
+        $helpRequests = $this->resolutionService
+            ->pendingForStudentIds($studentIds, $activeYear->id)
+            ->values()
+            ->all();
+        $helpByStudent = collect($helpRequests)->groupBy('student_id');
+
+        $students = $enrollments->map(function (StudentEnrollment $enrollment) use ($helpByStudent) {
             $allPlans = $this->examPlanService->plansForEnrollment($enrollment, true);
             $split = $this->examPlanService->splitPlansByTiming($allPlans);
             $assignments = collect($this->attemptService->dashboardForEnrollment($enrollment));
@@ -95,6 +104,8 @@ class DashboardService
                 fn (array $row) => in_array($row['status'], ['green', 'green-late'], true),
             )->values()->all();
 
+            $studentHelp = $helpByStudent->get($enrollment->student_id, collect());
+
             return [
                 'student_id' => $enrollment->student_id,
                 'student_name' => $enrollment->student?->name,
@@ -106,12 +117,15 @@ class DashboardService
                 'syllabus_chapters' => $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all(),
                 'assignments_pending' => $pending,
                 'assignments_completed' => $completed,
+                'help_requests' => $studentHelp->values()->all(),
+                'help_requests_count' => $studentHelp->count(),
             ];
         })->values()->all();
 
         $upcomingExamsCount = collect($students)->sum(fn (array $row) => count($row['upcoming_exams']));
         $pendingSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_pending']));
         $completedSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_completed']));
+        $helpRequestsCount = count($helpRequests);
 
         return [
             'activeYear' => $activeYear->only(['id', 'name']),
@@ -121,8 +135,10 @@ class DashboardService
                 'upcoming_exams_count' => $upcomingExamsCount,
                 'pending_sets_count' => $pendingSetsCount,
                 'completed_sets_count' => $completedSetsCount,
+                'help_requests_count' => $helpRequestsCount,
             ],
             'students' => $students,
+            'helpRequests' => $helpRequests,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ];
     }

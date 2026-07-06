@@ -25,6 +25,7 @@ const props = defineProps({
     syllabusChapters: { type: Array, default: () => [] },
     examTypeOptions: { type: Array, default: () => [] },
     resolutionItems: { type: Array, default: () => [] },
+    helpRequestsCount: { type: Number, default: 0 },
 });
 
 const contactFields = computed(() => [
@@ -180,22 +181,32 @@ const destroyStudent = () => {
                     </table>
                 </div>
 
-                <div v-if="resolutionItems.length" class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">
-                    <h3 class="font-medium text-rose-900">Needs resolution · {{ resolutionItems.length }}</h3>
+                <div class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">
+                    <h3 class="font-medium text-rose-900">
+                        Asked for teacher help
+                        <span v-if="helpRequestsCount" class="ml-1 rounded-full bg-rose-100 px-2 py-0.5 text-sm font-bold text-rose-800">
+                            {{ helpRequestsCount }}
+                        </span>
+                    </h3>
                     <p class="mt-1 text-sm text-gray-600">
                         Sums the student gave up during guided practice. Explain in class, then they retry from their dashboard.
                     </p>
-                    <ul class="mt-4 divide-y divide-gray-100">
+                    <ul v-if="resolutionItems.length" class="mt-4 divide-y divide-gray-100">
                         <li v-for="item in resolutionItems" :key="item.id" class="py-3">
                             <div class="flex flex-wrap items-start justify-between gap-2">
                                 <div>
                                     <p v-if="item.set_code" class="font-mono text-sm font-semibold text-indigo-600">{{ item.set_code }}</p>
                                     <p class="mt-1 text-sm text-gray-800">{{ item.question_text }}</p>
                                 </div>
-                                <p class="text-xs text-gray-500">Given up {{ item.gave_up_at ? new Date(item.gave_up_at).toLocaleDateString('en-IN') : '—' }}</p>
+                                <p class="text-xs text-gray-500">
+                                    Given up {{ item.gave_up_at ? new Date(item.gave_up_at).toLocaleDateString('en-IN') : '—' }}
+                                </p>
                             </div>
                         </li>
                     </ul>
+                    <p v-else class="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                        No pending help requests for this student.
+                    </p>
                 </div>
 
                 <div v-if="latestEnrollment" class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">

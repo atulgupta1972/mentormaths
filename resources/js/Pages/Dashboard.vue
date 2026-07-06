@@ -21,6 +21,7 @@ const props = defineProps({
         default: () => ({}),
     },
     students: { type: Array, default: () => [] },
+    helpRequests: { type: Array, default: () => [] },
     resolutionItems: { type: Array, default: () => [] },
     resolutionCount: { type: Number, default: 0 },
 });
@@ -127,7 +128,23 @@ const studentSummary = (student) => {
         `${student.assignments_completed.length} done`,
     ];
 
+    if (student.help_requests_count > 0) {
+        parts.push(`${student.help_requests_count} need help`);
+    }
+
     return parts.join(' · ');
+};
+
+const formatHelpDate = (value) => {
+    if (!value) {
+        return '';
+    }
+
+    return new Date(value).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    });
 };
 
 const pendingBorderClass = (set) => {
@@ -235,7 +252,7 @@ const adminSetStatusClass = (set) => {
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-4 gap-2">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                         <div class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-violet-700">{{ stats.students_count || 0 }}</p>
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Students</p>
@@ -243,6 +260,10 @@ const adminSetStatusClass = (set) => {
                         <div class="rounded-lg border border-sky-200 bg-sky-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-sky-700">{{ stats.upcoming_exams_count || 0 }}</p>
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">Exams</p>
+                        </div>
+                        <div class="rounded-lg border border-rose-200 bg-rose-50 px-2 py-2.5 text-center shadow-sm">
+                            <p class="text-2xl font-extrabold leading-none text-rose-700">{{ stats.help_requests_count || 0 }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-rose-700">Need help</p>
                         </div>
                         <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-amber-700">{{ stats.pending_sets_count || 0 }}</p>
@@ -253,6 +274,40 @@ const adminSetStatusClass = (set) => {
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Done</p>
                         </div>
                     </div>
+
+                    <section
+                        v-if="helpRequests.length"
+                        class="rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 via-orange-50 to-amber-50 p-4 shadow-sm"
+                    >
+                        <h3 class="text-sm font-bold uppercase tracking-wide text-rose-900">
+                            Students asked for help · {{ helpRequests.length }}
+                        </h3>
+                        <p class="mt-1 text-xs text-rose-800">
+                            These sums were given up during guided practice. Explain in class, then the student retries from their dashboard.
+                        </p>
+                        <div class="mt-3 space-y-2">
+                            <div
+                                v-for="item in helpRequests"
+                                :key="item.id"
+                                class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-rose-200 bg-white p-3 shadow-sm"
+                            >
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <Link
+                                            :href="route('admin.students.show', item.student_id)"
+                                            class="text-sm font-bold text-indigo-700 hover:underline"
+                                        >
+                                            {{ item.student_name }}
+                                        </Link>
+                                        <span v-if="item.class_name" class="text-xs text-gray-500">{{ item.class_name }}</span>
+                                        <span v-if="item.set_code" class="font-mono text-xs font-semibold text-indigo-600">{{ item.set_code }}</span>
+                                    </div>
+                                    <p class="mt-1 line-clamp-2 text-sm text-gray-800">{{ item.question_text }}</p>
+                                </div>
+                                <p class="shrink-0 text-xs text-gray-500">{{ formatHelpDate(item.gave_up_at) }}</p>
+                            </div>
+                        </div>
+                    </section>
 
                     <div v-if="students.length === 0" class="rounded-xl bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
                         No active students{{ selectedGrade ? ` in ${selectedGrade.name}` : '' }} for this year.
@@ -294,6 +349,12 @@ const adminSetStatusClass = (set) => {
                                                 <p class="mt-1 text-xs font-semibold leading-snug text-gray-700">
                                                     {{ studentSummary(student) }}
                                                 </p>
+                                                <p
+                                                    v-if="student.help_requests_count > 0"
+                                                    class="mt-1 text-xs font-bold text-rose-700"
+                                                >
+                                                    {{ student.help_requests_count }} sum{{ student.help_requests_count === 1 ? '' : 's' }} need teacher help
+                                                </p>
                                             </div>
                                             <span class="shrink-0 pt-1 text-xs font-bold text-gray-500">
                                                 {{ expandedStudentId === student.student_id ? '▲' : '▼' }}
@@ -309,6 +370,20 @@ const adminSetStatusClass = (set) => {
                                     context="admin"
                                     compact
                                 />
+
+                                <div v-if="student.help_requests?.length">
+                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-rose-700">Asked for help</h4>
+                                    <ul class="mt-1 space-y-1">
+                                        <li
+                                            v-for="item in student.help_requests"
+                                            :key="item.id"
+                                            class="rounded border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] text-gray-800"
+                                        >
+                                            <span v-if="item.set_code" class="font-mono font-semibold text-indigo-700">{{ item.set_code }}</span>
+                                            <span class="block line-clamp-2">{{ item.question_text }}</span>
+                                        </li>
+                                    </ul>
+                                </div>
 
                                 <div>
                                     <h4 class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Sets to do</h4>
