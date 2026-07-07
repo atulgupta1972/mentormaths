@@ -11,7 +11,11 @@ use App\Services\AdminGradeContext;
 use App\Services\ExamPlanService;
 use App\Services\QuestionResolutionService;
 use App\Services\StudentAccountService;
+use App\Services\StudentProgressSummaryService;
+use App\Services\StudentProgressWhatsAppService;
 use App\Services\StudentPromotionService;
+use App\Support\AssignmentMailer;
+use App\Support\StudentProgressMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -25,6 +29,8 @@ class StudentController extends Controller
         private AdminGradeContext $gradeContext,
         private ExamPlanService $examPlanService,
         private QuestionResolutionService $resolutionService,
+        private StudentProgressSummaryService $progressSummaryService,
+        private StudentProgressWhatsAppService $progressWhatsAppService,
     ) {}
 
     public function index(Request $request): Response
@@ -101,6 +107,7 @@ class StudentController extends Controller
             'helpRequestsCount' => $resolutionEnrollment
                 ? $this->resolutionService->pendingCountForEnrollment($resolutionEnrollment->id)
                 : 0,
+            'defaultSummaryEmail' => AssignmentMailer::resolveStudentEmail($student),
         ]);
     }
 
@@ -205,5 +212,70 @@ class StudentController extends Controller
         }
 
         return back()->with('success', 'Contact and notification settings saved.');
+    }
+
+    public function sendProgressSummary(Request $request, Student $student): RedirectResponse
+    {
+        $validated = $request->validate([
+            'as_of_date' => ['required', 'date'],
+            'send_email' => ['sometimes', 'boolean'],
+            'send_whatsapp' => ['sometimes', 'boolean'],
+            'email' => ['nullable', 'email', 'max:255'],
+        ]);
+
+        $enrollment = $student->currentEnrollment();
+
+        if (! $enrollment) {
+            return back()->with('error', 'Student has no active enrollment for the current year.');
+        }
+
+        $asOf = \Carbon\Carbon::parse($validated['as_of_date']);
+        $summary = $this->progressSummaryService->build($enrollment, $asOf);
+
+        $messages = [];
+        $warnings = [];
+
+        if ($request->boolean('send_email')) {
+            $result = StudentProgressMailer::send(
+                $student,
+                $summary,
+                $validated['email'] ?? null,
+            );
+
+            if ($result['sent']) {
+                $messages[] = "Email sent to {$result['email']}.";
+            } elseif ($result['error'] === 'no_email') {
+                $warnings[] = 'No email on file — add one on the student profile or enter an address below.';
+            } else {
+                $warnings[] = 'Email could not be sent. Check mail settings.';
+            }
+        }
+
+        if ($request->boolean('send_whatsapp')) {
+            $notifications = $this->progressWhatsAppService->notificationsForSummary($student, $summary);
+
+            if ($notifications === []) {
+                $warnings[] = 'No WhatsApp recipients — tick Notify on at least one mobile number and save.';
+            } else {
+                session()->flash('whatsapp_notifications', $notifications);
+                $messages[] = count($notifications).' WhatsApp message'.(count($notifications) === 1 ? '' : 's').' ready — use the green panel to copy or open.';
+            }
+        }
+
+        if ($messages === [] && $warnings === []) {
+            return back()->with('warning', 'Choose Email and/or WhatsApp to send the summary.');
+        }
+
+        $redirect = back();
+
+        if ($messages !== []) {
+            $redirect = $redirect->with('success', implode(' ', $messages));
+        }
+
+        if ($warnings !== []) {
+            $redirect = $redirect->with('warning', implode(' ', $warnings));
+        }
+
+        return $redirect;
     }
 }

@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ContactNumbersPanel from '@/Components/ContactNumbersPanel.vue';
+import StudentProgressSummaryPanel from '@/Components/StudentProgressSummaryPanel.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -26,6 +27,7 @@ const props = defineProps({
     examTypeOptions: { type: Array, default: () => [] },
     resolutionItems: { type: Array, default: () => [] },
     helpRequestsCount: { type: Number, default: 0 },
+    defaultSummaryEmail: { type: String, default: '' },
 });
 
 const contactFields = computed(() => [
@@ -155,6 +157,11 @@ const destroyStudent = () => {
                     :contacts="contactFields"
                     :save-url="route('admin.students.contacts.update', student.id)"
                     :share-links="shareLinks"
+                />
+
+                <StudentProgressSummaryPanel
+                    :student="student"
+                    :default-email="defaultSummaryEmail"
                 />
 
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">

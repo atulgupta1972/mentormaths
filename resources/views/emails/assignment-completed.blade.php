@@ -62,10 +62,10 @@
     </p>
 @endif
 
-@if (count($summary['questions']) > 0)
-    <p><strong>Question breakdown (this attempt):</strong></p>
+@if (count($summary['wrong_questions']) > 0)
+    <p><strong>What went wrong (needs review):</strong></p>
     <ul>
-        @foreach ($summary['questions'] as $question)
+        @foreach ($summary['wrong_questions'] as $question)
             <li>
                 <strong>Q{{ $question['number'] }}</strong> — {{ $question['outcome_label'] }}
                 @if (! empty($question['help_asked_label']))
@@ -82,8 +82,8 @@
             </li>
         @endforeach
     </ul>
-@elseif (count($summary['wrong_questions']) === 0)
-    <p><strong>All questions answered correctly.</strong></p>
+@else
+    <p><strong>No mistakes — all questions answered correctly.</strong></p>
 @endif
 
 <p>
