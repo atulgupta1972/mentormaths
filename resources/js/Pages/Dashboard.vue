@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
@@ -59,6 +59,59 @@ const formatTime = (seconds) => {
     const secs = seconds % 60;
 
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+};
+
+const formatDateTime = (value) => {
+    if (!value) {
+        return '';
+    }
+
+    const date = new Date(String(value).includes('T') ? value : value.replace(' ', 'T'));
+
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+
+    return date.toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+};
+
+const acknowledgingId = ref(null);
+const acknowledgingAll = ref(false);
+
+const acknowledgeItem = (itemId) => {
+    acknowledgingId.value = itemId;
+
+    router.post(route('student.resolutions.acknowledge', itemId), {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            acknowledgingId.value = null;
+        },
+    });
+};
+
+const acknowledgeAll = () => {
+    if (! props.resolutionItems.length) {
+        return;
+    }
+
+    if (! window.confirm(`Mark all ${props.resolutionItems.length} doubt${props.resolutionItems.length === 1 ? '' : 's'} as cleared?`)) {
+        return;
+    }
+
+    acknowledgingAll.value = true;
+
+    router.post(route('student.resolutions.acknowledge-all'), {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            acknowledgingAll.value = false;
+        },
+    });
 };
 
 const scorePercent = (set) => {
@@ -457,6 +510,12 @@ const adminSetStatusClass = (set) => {
                             <span class="rounded-full bg-white/20 px-2.5 py-0.5">{{ stats.upcoming_exams || 0 }} exams</span>
                             <span class="rounded-full bg-amber-300/40 px-2.5 py-0.5">{{ stats.sets_todo || 0 }} to do</span>
                             <span class="rounded-full bg-violet-300/40 px-2.5 py-0.5">{{ stats.sets_done || 0 }} done</span>
+                            <Link
+                                :href="route('student.resolutions.history')"
+                                class="rounded-full bg-white/20 px-2.5 py-0.5 underline decoration-white/50 underline-offset-2 hover:bg-white/30"
+                            >
+                                Help history
+                            </Link>
                         </div>
                     </div>
 
@@ -532,30 +591,63 @@ const adminSetStatusClass = (set) => {
                             </div>
                         </section>
 
-                        <!-- Resolution queue — rose zone -->
+                        <!-- Help queue — rose zone -->
                         <section
                             v-if="resolutionItems.length"
                             class="rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 via-orange-50 to-amber-50 p-4 shadow-sm"
                         >
-                            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-rose-900">
-                                Needs resolution · {{ resolutionCount }}
-                            </h3>
+                            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                <h3 class="text-xs font-semibold uppercase tracking-wide text-rose-900">
+                                    Asked for help · {{ resolutionCount }}
+                                </h3>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <Link
+                                        :href="route('student.resolutions.history')"
+                                        class="text-xs font-semibold text-rose-700 underline decoration-rose-300 underline-offset-2 hover:text-rose-900"
+                                    >
+                                        History
+                                    </Link>
+                                    <button
+                                        type="button"
+                                        class="rounded-lg border border-rose-300 bg-white px-2.5 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-50 disabled:opacity-50"
+                                        :disabled="acknowledgingAll || acknowledgingId !== null"
+                                        @click="acknowledgeAll"
+                                    >
+                                        {{ acknowledgingAll ? 'Clearing…' : 'Clear all' }}
+                                    </button>
+                                </div>
+                            </div>
                             <p class="mb-3 text-xs text-rose-800">
-                                These sums were given up during practice. Ask your teacher, then try again here.
+                                After your teacher explains these, tick to clear. You can also retry a sum if you want to answer it yourself.
                             </p>
                             <div class="space-y-2">
                                 <div
                                     v-for="item in resolutionItems"
                                     :key="item.id"
-                                    class="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-white p-3 shadow-sm"
+                                    class="flex items-start gap-3 rounded-xl border border-rose-200 bg-white p-3 shadow-sm"
                                 >
+                                    <button
+                                        type="button"
+                                        class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition"
+                                        :class="acknowledgingId === item.id
+                                            ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
+                                            : 'border-emerald-500 bg-white text-emerald-600 hover:bg-emerald-50'"
+                                        :disabled="acknowledgingId !== null || acknowledgingAll"
+                                        :title="acknowledgingId === item.id ? 'Clearing…' : 'Mark as cleared'"
+                                        @click="acknowledgeItem(item.id)"
+                                    >
+                                        <span class="text-base font-bold leading-none">✓</span>
+                                    </button>
                                     <div class="min-w-0 flex-1">
                                         <p v-if="item.set_code" class="font-mono text-sm font-semibold text-indigo-600">{{ item.set_code }}</p>
                                         <p class="mt-1 line-clamp-2 text-sm text-gray-800">{{ item.question_text }}</p>
+                                        <p v-if="item.gave_up_at" class="mt-1 text-[10px] text-gray-500">
+                                            Asked {{ formatDateTime(item.gave_up_at) }}
+                                        </p>
                                     </div>
                                     <Link
                                         :href="route('student.resolutions.show', item.id)"
-                                        class="shrink-0 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+                                        class="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
                                     >
                                         Retry
                                     </Link>

@@ -297,6 +297,61 @@ class PracticeSetController extends Controller
         ]);
     }
 
+    public function acknowledgeResolution(Request $request, QuestionResolutionItem $item): RedirectResponse
+    {
+        $this->authorizeResolution($request, $item);
+
+        try {
+            $result = $this->resolutionService->acknowledgeItem($item);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $message = $result['message'];
+
+        if ($result['email_sent']) {
+            $message .= ' Confirmation email sent to you and admin.';
+        }
+
+        return back()->with('success', $message);
+    }
+
+    public function acknowledgeAllResolutions(Request $request): RedirectResponse
+    {
+        $enrollment = $request->user()->student?->currentEnrollment();
+
+        if (! $enrollment) {
+            abort(403);
+        }
+
+        $result = $this->resolutionService->acknowledgeAll($enrollment->id);
+
+        if ($result['cleared_count'] === 0) {
+            return back()->with('warning', $result['message']);
+        }
+
+        $message = $result['message'];
+
+        if ($result['email_sent']) {
+            $message .= ' Confirmation email sent to you and admin.';
+        }
+
+        return back()->with('success', $message);
+    }
+
+    public function resolutionHistory(Request $request): Response
+    {
+        $enrollment = $request->user()->student?->currentEnrollment();
+
+        if (! $enrollment) {
+            abort(403);
+        }
+
+        return Inertia::render('Student/PracticeSets/ResolutionHistory', [
+            'items' => $this->resolutionService->historyForEnrollment($enrollment->id),
+        ]);
+    }
+
     public function submitResolution(Request $request, QuestionResolutionItem $item): RedirectResponse
     {
         $this->authorizeResolution($request, $item);

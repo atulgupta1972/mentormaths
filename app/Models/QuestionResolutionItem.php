@@ -11,6 +11,10 @@ class QuestionResolutionItem extends Model
 
     public const STATUS_RESOLVED = 'resolved';
 
+    public const CLEARANCE_ANSWERED = 'answered';
+
+    public const CLEARANCE_ACKNOWLEDGED = 'acknowledged';
+
     protected $fillable = [
         'student_enrollment_id',
         'question_id',
@@ -20,6 +24,7 @@ class QuestionResolutionItem extends Model
         'status',
         'gave_up_at',
         'resolved_at',
+        'clearance_method',
     ];
 
     protected function casts(): array

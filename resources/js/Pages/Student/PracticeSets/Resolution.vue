@@ -70,7 +70,7 @@ const submitBlankAnswer = () => {
         <div class="py-10">
             <div class="mx-auto max-w-3xl space-y-5 sm:px-6 lg:px-8">
                 <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    Your teacher should have explained this sum. Try again now — when you get it right, it leaves your resolution list.
+                    Your teacher should have explained this sum. Try again here, or tick it off from your dashboard once you are satisfied.
                 </div>
 
                 <div v-if="page.props.flash?.warning" class="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
