@@ -29,6 +29,8 @@ class QuestionSaveConfirmation
 
         $isPracticeSet = QuestionBankPurpose::isPracticeSet($bankPurpose);
         $topicsCount = $questions->pluck('syllabus_topic_id')->unique()->count();
+        $fillInBlank = $questions->isNotEmpty()
+            && $questions->every(fn (Question $question) => $question->isFillInBlank());
 
         $payload = [
             'bank_purpose' => $bankPurpose,
@@ -46,14 +48,18 @@ class QuestionSaveConfirmation
         ];
 
         if ($isPracticeSet && $chapter) {
-            $payload['set_code'] = $this->codeService->generateChapterPractice($chapter);
-            $payload['mode_label'] = 'Guided practice — one question at a time';
+            $payload['set_code'] = $this->codeService->generateChapterPractice($chapter, PracticeSetTier::STARTER, $fillInBlank);
+            $payload['mode_label'] = $fillInBlank
+                ? 'Fill-in-blank guided practice — one question at a time'
+                : 'Guided practice — one question at a time';
         } elseif (! $isPracticeSet && $chapter) {
             $payload['set_code'] = $this->codeService->generateChapterTest($chapter);
             $payload['mode_label'] = 'Chapter test — all questions together';
         } elseif ($isPracticeSet && $topic) {
-            $payload['set_code'] = $this->codeService->generate($topic, PracticeSetTier::STARTER);
-            $payload['mode_label'] = 'Guided practice — one question at a time';
+            $payload['set_code'] = $this->codeService->generate($topic, PracticeSetTier::STARTER, $fillInBlank);
+            $payload['mode_label'] = $fillInBlank
+                ? 'Fill-in-blank guided practice — one question at a time'
+                : 'Guided practice — one question at a time';
         }
 
         return $payload;

@@ -2,9 +2,11 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
+import TextInput from '@/Components/TextInput.vue';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
     finished: { type: Boolean, default: false },
@@ -22,10 +24,29 @@ const page = usePage();
 const elapsed = ref(0);
 let timer = null;
 
-const answerForm = useForm({ option_id: null });
+const answerForm = useForm({ option_id: null, answer_text: '' });
 const giveUpForm = useForm({});
 
 const feedback = computed(() => page.props.flash?.guided_feedback ?? null);
+const isFillInBlank = computed(() => props.question?.type === 'fill_in_blank');
+
+const answerPlaceholder = computed(() => {
+    const format = props.question?.answer_format;
+
+    if (format === 'integer') {
+        return 'Enter a whole number, e.g. -4';
+    }
+
+    if (format === 'decimal') {
+        return 'Enter a decimal, e.g. 3.5';
+    }
+
+    if (format === 'fraction') {
+        return 'Enter a fraction, e.g. 3/4 or 1 1/2';
+    }
+
+    return 'Enter your answer';
+});
 
 const setLabel = () => props.practice_set?.set_code || 'Practice';
 
@@ -67,8 +88,16 @@ const formatTime = (seconds) => {
     return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const submitAnswer = (optionId) => {
+const submitMcqAnswer = (optionId) => {
     answerForm.option_id = optionId;
+    answerForm.answer_text = '';
+    answerForm.post(route('student.attempts.guided.answer', props.attempt.id), {
+        preserveScroll: true,
+    });
+};
+
+const submitBlankAnswer = () => {
+    answerForm.option_id = null;
     answerForm.post(route('student.attempts.guided.answer', props.attempt.id), {
         preserveScroll: true,
     });
@@ -85,6 +114,17 @@ const giveUp = () => {
 };
 
 const canAnswer = computed(() => ['answering', 'retry', 'explained'].includes(props.phase));
+
+watch(
+    () => props.question?.id,
+    (questionId, previousId) => {
+        if (questionId && questionId !== previousId) {
+            answerForm.answer_text = '';
+            answerForm.option_id = null;
+            answerForm.clearErrors();
+        }
+    },
+);
 </script>
 
 <template>
@@ -145,7 +185,31 @@ const canAnswer = computed(() => ['answering', 'retry', 'explained'].includes(pr
                         </p>
                     </div>
 
-                    <div class="mt-4 space-y-2">
+                    <div v-if="isFillInBlank" class="mt-4 space-y-3">
+                        <p v-if="question.answer_format_label" class="text-xs font-medium uppercase tracking-wide text-gray-500">
+                            {{ question.answer_format_label }}
+                        </p>
+                        <TextInput
+                            :key="question.id"
+                            v-model="answerForm.answer_text"
+                            type="text"
+                            inputmode="decimal"
+                            autocomplete="off"
+                            class="block w-full max-w-xs text-lg"
+                            :placeholder="answerPlaceholder"
+                            :disabled="!canAnswer || answerForm.processing"
+                            @keyup.enter="submitBlankAnswer"
+                        />
+                        <PrimaryButton
+                            type="button"
+                            :disabled="!canAnswer || answerForm.processing || !answerForm.answer_text.trim()"
+                            @click="submitBlankAnswer"
+                        >
+                            {{ answerForm.processing ? 'Checking…' : 'Submit answer' }}
+                        </PrimaryButton>
+                    </div>
+
+                    <div v-else class="mt-4 space-y-2">
                         <button
                             v-for="(opt, optIndex) in question.options"
                             :key="opt.id"
@@ -155,7 +219,7 @@ const canAnswer = computed(() => ['answering', 'retry', 'explained'].includes(pr
                                 ? 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'
                                 : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70'"
                             :disabled="!canAnswer || answerForm.processing"
-                            @click="submitAnswer(opt.id)"
+                            @click="submitMcqAnswer(opt.id)"
                         >
                             <McqOptionLine :index="optIndex" :text="opt.option_text" />
                         </button>

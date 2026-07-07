@@ -14,6 +14,7 @@ use App\Services\ChapterMixedQuestionService;
 use App\Services\PracticeSetService;
 use App\Services\SetAssignmentService;
 use App\Support\PracticeSetScope;
+use App\Support\PracticeSetTier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -216,6 +217,9 @@ class ChapterPracticeSetController extends Controller
             $chapter,
             $questionIds,
             $request->user()->id,
+            PracticeSetTier::STARTER,
+            Worksheet::STATUS_PUBLISHED,
+            Question::idsAreAllFillInBlank($questionIds),
         );
 
         return redirect()

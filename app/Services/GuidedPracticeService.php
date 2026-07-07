@@ -7,6 +7,7 @@ use App\Models\QuestionResolutionItem;
 use App\Models\SetAttempt;
 use App\Models\SetAttemptAnswer;
 use App\Models\SetAssignment;
+use App\Support\AnswerValidationService;
 use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
 use App\Support\AttemptTiming;
@@ -15,6 +16,9 @@ use Illuminate\Support\Facades\DB;
 
 class GuidedPracticeService
 {
+    public function __construct(
+        private AnswerValidationService $answerValidation,
+    ) {}
     public function initialize(SetAttempt $attempt): void
     {
         if ($attempt->guidedQuestions()->exists()) {
@@ -53,6 +57,7 @@ class GuidedPracticeService
         $attempt->loadMissing([
             'assignment.practiceSet',
             'guidedQuestions.question.options',
+            'guidedQuestions.question.blankAnswer',
         ]);
 
         $guidedRows = $attempt->guidedQuestions;
@@ -93,13 +98,16 @@ class GuidedPracticeService
     /**
      * @return array<string, mixed>
      */
-    public function submitAnswer(SetAttempt $attempt, int $optionId): array
+    public function submitAnswer(SetAttempt $attempt, ?int $optionId = null, ?string $answerText = null): array
     {
         if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS || ! $attempt->isGuided()) {
             throw new \InvalidArgumentException('This guided practice session is not active.');
         }
 
-        $attempt->loadMissing('guidedQuestions.question.options');
+        $attempt->loadMissing([
+            'guidedQuestions.question.options',
+            'guidedQuestions.question.blankAnswer',
+        ]);
         $current = $attempt->guidedQuestions->firstWhere('sort_order', $attempt->current_question_index);
 
         if (! $current || $current->isFinished()) {
@@ -114,19 +122,38 @@ class GuidedPracticeService
             throw new \InvalidArgumentException('You cannot answer this question in its current state.');
         }
 
-        $option = $current->question->options->firstWhere('id', $optionId);
+        $question = $current->question;
+        $isCorrect = false;
+        $resolvedOptionId = null;
+        $resolvedAnswerText = null;
 
-        if (! $option) {
-            throw new \InvalidArgumentException('Invalid option selected.');
+        if ($question->isFillInBlank()) {
+            if (! filled($answerText)) {
+                throw new \InvalidArgumentException('Enter an answer before submitting.');
+            }
+
+            $resolvedAnswerText = trim($answerText);
+            $isCorrect = $this->answerValidation->isCorrect($question, $resolvedAnswerText);
+        } else {
+            if (! $optionId) {
+                throw new \InvalidArgumentException('Select an option before submitting.');
+            }
+
+            $option = $question->options->firstWhere('id', $optionId);
+
+            if (! $option) {
+                throw new \InvalidArgumentException('Invalid option selected.');
+            }
+
+            $resolvedOptionId = $optionId;
+            $isCorrect = (bool) $option->is_correct;
         }
 
-        $isCorrect = (bool) $option->is_correct;
-
-        return DB::transaction(function () use ($attempt, $current, $optionId, $isCorrect) {
+        return DB::transaction(function () use ($attempt, $current, $resolvedOptionId, $resolvedAnswerText, $isCorrect) {
             $feedback = match ($current->phase) {
-                GuidedAttemptQuestion::PHASE_ANSWERING => $this->handleFirstTry($current, $optionId, $isCorrect),
-                GuidedAttemptQuestion::PHASE_RETRY => $this->handleSecondTry($current, $optionId, $isCorrect),
-                GuidedAttemptQuestion::PHASE_EXPLAINED => $this->handleAfterExplanation($current, $optionId, $isCorrect),
+                GuidedAttemptQuestion::PHASE_ANSWERING => $this->handleFirstTry($current, $resolvedOptionId, $resolvedAnswerText, $isCorrect),
+                GuidedAttemptQuestion::PHASE_RETRY => $this->handleSecondTry($current, $resolvedOptionId, $resolvedAnswerText, $isCorrect),
+                GuidedAttemptQuestion::PHASE_EXPLAINED => $this->handleAfterExplanation($current, $resolvedOptionId, $resolvedAnswerText, $isCorrect),
                 default => throw new \InvalidArgumentException('Unexpected question phase.'),
             };
 
@@ -137,6 +164,7 @@ class GuidedPracticeService
             $payload = $this->buildPayload($attempt->fresh([
                 'assignment.practiceSet',
                 'guidedQuestions.question.options',
+                'guidedQuestions.question.blankAnswer',
             ]));
             $payload['feedback'] = $feedback;
 
@@ -180,13 +208,14 @@ class GuidedPracticeService
     /**
      * @return array<string, mixed>
      */
-    private function handleFirstTry(GuidedAttemptQuestion $current, int $optionId, bool $isCorrect): array
+    private function handleFirstTry(GuidedAttemptQuestion $current, ?int $optionId, ?string $answerText, bool $isCorrect): array
     {
         if ($isCorrect) {
             $current->update([
                 'phase' => GuidedAttemptQuestion::PHASE_DONE,
                 'first_try_correct' => true,
                 'final_option_id' => $optionId,
+                'final_answer_text' => $answerText,
                 'final_is_correct' => true,
             ]);
 
@@ -210,12 +239,13 @@ class GuidedPracticeService
     /**
      * @return array<string, mixed>
      */
-    private function handleSecondTry(GuidedAttemptQuestion $current, int $optionId, bool $isCorrect): array
+    private function handleSecondTry(GuidedAttemptQuestion $current, ?int $optionId, ?string $answerText, bool $isCorrect): array
     {
         if ($isCorrect) {
             $current->update([
                 'phase' => GuidedAttemptQuestion::PHASE_DONE,
                 'final_option_id' => $optionId,
+                'final_answer_text' => $answerText,
                 'final_is_correct' => true,
             ]);
 
@@ -239,13 +269,14 @@ class GuidedPracticeService
     /**
      * @return array<string, mixed>
      */
-    private function handleAfterExplanation(GuidedAttemptQuestion $current, int $optionId, bool $isCorrect): array
+    private function handleAfterExplanation(GuidedAttemptQuestion $current, ?int $optionId, ?string $answerText, bool $isCorrect): array
     {
         if ($isCorrect) {
             $current->update([
                 'phase' => GuidedAttemptQuestion::PHASE_DONE,
                 'corrected_after_help' => true,
                 'final_option_id' => $optionId,
+                'final_answer_text' => $answerText,
                 'final_is_correct' => true,
             ]);
 
@@ -295,6 +326,7 @@ class GuidedPracticeService
                 ],
                 [
                     'question_option_id' => $row->final_option_id,
+                    'answer_text' => $row->final_answer_text,
                     'is_correct' => $row->final_is_correct,
                 ],
             );
@@ -363,22 +395,35 @@ class GuidedPracticeService
      */
     private function formatQuestion($question, int $number, GuidedAttemptQuestion $guided): array
     {
-        return [
+        $payload = [
             'id' => $question->id,
+            'type' => $question->type,
             'number' => $number,
             'question_text' => $question->question_text,
             'diagram_url' => $question->diagram_url,
             'method_hint' => $guided->phase === GuidedAttemptQuestion::PHASE_EXPLAINED
                 ? QuestionMethodHint::forStudent($question)
                 : null,
-            'options' => $question->options->values()->map(function ($option, $index) {
-                return [
-                    'id' => $option->id,
-                    'letter' => chr(65 + $index),
-                    'option_text' => $option->option_text,
-                ];
-            }),
         ];
+
+        if ($question->isFillInBlank()) {
+            $question->loadMissing('blankAnswer');
+            $payload['answer_format'] = $question->blankAnswer?->answer_format;
+            $payload['answer_format_label'] = $this->answerValidation->formatLabel($question->blankAnswer?->answer_format);
+            $payload['options'] = [];
+
+            return $payload;
+        }
+
+        $payload['options'] = $question->options->values()->map(function ($option, $index) {
+            return [
+                'id' => $option->id,
+                'letter' => chr(65 + $index),
+                'option_text' => $option->option_text,
+            ];
+        });
+
+        return $payload;
     }
 
     /**

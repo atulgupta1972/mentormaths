@@ -108,6 +108,12 @@ const clearBank = () => {
                         {{ generating ? 'Generating…' : 'Generate method hints' }}
                     </button>
                     <Link
+                        :href="route('admin.questions.create-fill-in-blank', { syllabus_topic_id: topic.id })"
+                        class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
+                    >
+                        Add fill in the blanks
+                    </Link>
+                    <Link
                         :href="route('admin.questions.create', { syllabus_topic_id: topic.id })"
                         class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                     >
@@ -197,13 +203,21 @@ const clearBank = () => {
                             <tr v-if="questions.data.length === 0">
                                 <td :colspan="isAdmin ? 5 : 4" class="px-4 py-8 text-center text-gray-500">
                                     No questions for this topic yet.
-                                    <Link
-                                        v-if="isAdmin"
-                                        :href="route('admin.questions.create', { syllabus_topic_id: topic.id })"
-                                        class="text-indigo-600"
-                                    >
-                                        Add MCQs
-                                    </Link>
+                                    <span v-if="isAdmin">
+                                        <Link
+                                            :href="route('admin.questions.create-fill-in-blank', { syllabus_topic_id: topic.id })"
+                                            class="text-emerald-700"
+                                        >
+                                            Add fill in the blanks
+                                        </Link>
+                                        or
+                                        <Link
+                                            :href="route('admin.questions.create', { syllabus_topic_id: topic.id })"
+                                            class="text-indigo-600"
+                                        >
+                                            Add MCQs
+                                        </Link>
+                                    </span>
                                 </td>
                             </tr>
                         </tbody>

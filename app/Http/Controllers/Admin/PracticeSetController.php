@@ -155,6 +155,7 @@ class PracticeSetController extends Controller
             $topic,
             $validated['tier'],
             count($validated['question_ids']),
+            Question::idsAreAllFillInBlank($allowedIds),
         );
 
         $practiceSet = Worksheet::create([
@@ -249,7 +250,12 @@ class PracticeSetController extends Controller
 
         $tier = $validated['tier'] ?? PracticeSetTier::STARTER;
 
-        $meta = $this->practiceSetService->prepareForCreate($topic, $tier, count($questionIds));
+        $meta = $this->practiceSetService->prepareForCreate(
+            $topic,
+            $tier,
+            count($questionIds),
+            Question::idsAreAllFillInBlank($questionIds),
+        );
 
         $practiceSet = Worksheet::create([
             'title' => $meta['title'],

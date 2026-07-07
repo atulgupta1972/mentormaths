@@ -13,6 +13,8 @@ class Question extends Model
 {
     public const TYPE_MCQ = 'mcq';
 
+    public const TYPE_FILL_IN_BLANK = 'fill_in_blank';
+
     public const SOURCE_MANUAL = 'manual';
 
     public const SOURCE_AI = 'ai';
@@ -68,6 +70,36 @@ class Question extends Model
     public function options(): HasMany
     {
         return $this->hasMany(QuestionOption::class)->orderBy('sort_order');
+    }
+
+    public function blankAnswer(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(QuestionBlankAnswer::class);
+    }
+
+    public function isMcq(): bool
+    {
+        return $this->type === self::TYPE_MCQ;
+    }
+
+    public function isFillInBlank(): bool
+    {
+        return $this->type === self::TYPE_FILL_IN_BLANK;
+    }
+
+    /**
+     * @param  list<int>  $questionIds
+     */
+    public static function idsAreAllFillInBlank(array $questionIds): bool
+    {
+        if ($questionIds === []) {
+            return false;
+        }
+
+        return ! static::query()
+            ->whereIn('id', $questionIds)
+            ->where('type', '!=', self::TYPE_FILL_IN_BLANK)
+            ->exists();
     }
 
     public function creator(): BelongsTo

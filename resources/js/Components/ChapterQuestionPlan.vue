@@ -16,6 +16,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    questionLabel: {
+        type: String,
+        default: 'MCQs',
+    },
 });
 
 const emit = defineEmits(['update:modelValue', 'generate-prompt']);
@@ -55,7 +59,7 @@ const canGenerate = computed(() => columnTotals.value.total > 0);
     <div class="rounded-lg border border-indigo-200 bg-white p-6 shadow-sm">
         <h3 class="font-medium text-gray-900">Chapter question plan</h3>
         <p class="mt-1 text-sm text-gray-600">
-            Set how many MCQs you want per topic and difficulty. Questions will be saved into each topic bank.
+            Set how many {{ questionLabel }} you want per topic and difficulty. Questions will be saved into each topic bank.
         </p>
 
         <div class="mt-4 overflow-x-auto">

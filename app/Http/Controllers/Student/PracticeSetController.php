@@ -137,12 +137,31 @@ class PracticeSetController extends Controller
         $assignment = $attempt->assignment;
         $this->authorizeAssignment($request, $assignment);
 
+        $attempt->loadMissing([
+            'guidedQuestions.question',
+        ]);
+        $current = $attempt->guidedQuestions->firstWhere('sort_order', $attempt->current_question_index);
+        $question = $current?->question;
+
         $validated = $request->validate([
-            'option_id' => ['required', 'integer'],
+            'option_id' => ['nullable', 'integer'],
+            'answer_text' => ['nullable', 'string', 'max:64'],
         ]);
 
+        if ($question?->isFillInBlank()) {
+            if (! filled($validated['answer_text'] ?? null)) {
+                return back()->with('error', 'Enter an answer before submitting.');
+            }
+        } elseif (! ($validated['option_id'] ?? null)) {
+            return back()->with('error', 'Select an option before submitting.');
+        }
+
         try {
-            $payload = $this->guidedPractice->submitAnswer($attempt, $validated['option_id']);
+            $payload = $this->guidedPractice->submitAnswer(
+                $attempt,
+                $validated['option_id'] ?? null,
+                $validated['answer_text'] ?? null,
+            );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -283,11 +302,16 @@ class PracticeSetController extends Controller
         $this->authorizeResolution($request, $item);
 
         $validated = $request->validate([
-            'option_id' => ['required', 'integer'],
+            'option_id' => ['nullable', 'integer'],
+            'answer_text' => ['nullable', 'string', 'max:64'],
         ]);
 
         try {
-            $result = $this->resolutionService->submitAnswer($item, $validated['option_id']);
+            $result = $this->resolutionService->submitAnswer(
+                $item,
+                $validated['option_id'] ?? null,
+                $validated['answer_text'] ?? null,
+            );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }

@@ -111,9 +111,16 @@ const clearBank = (card) => {
                     {{ boardCode }} {{ gradeLevel?.name }} · Ch {{ chapter.chapter_number }} · {{ chapter.name }}
                 </p>
                 <h2 class="text-xl font-semibold text-gray-800">Practice sets & chapter tests</h2>
-                <p class="mt-1 text-xs text-gray-500">S821 = one practice set · T821 = one chapter test</p>
+                <p class="mt-1 text-xs text-gray-500">S821 = MCQ practice · SF821 = fill-in-blank practice · T821 = chapter test</p>
             </div>
             <div class="flex flex-wrap gap-2">
+                <Link
+                    v-if="isAdmin"
+                    :href="route('admin.questions.create-fill-in-blank', { syllabus_chapter_id: chapter.id })"
+                    class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
+                >
+                    Add fill in the blanks
+                </Link>
                 <Link
                     v-if="isAdmin"
                     :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })"
@@ -302,7 +309,11 @@ const clearBank = (card) => {
 
                 <div v-if="!topicSetCards.length && !chapterPracticeBankCards.length && !chapterBankCards.length && !chapterTests?.length" class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
                     No questions or sets in this chapter yet.
-                    <Link v-if="isAdmin" :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })" class="text-indigo-600 hover:underline">Add MCQs</Link>
+                    <span v-if="isAdmin">
+                        <Link :href="route('admin.questions.create-fill-in-blank', { syllabus_chapter_id: chapter.id })" class="text-emerald-700 hover:underline">Add fill in the blanks</Link>
+                        or
+                        <Link :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })" class="text-indigo-600 hover:underline">Add MCQs</Link>
+                    </span>
                 </div>
             </div>
         </div>

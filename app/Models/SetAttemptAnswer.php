@@ -11,6 +11,7 @@ class SetAttemptAnswer extends Model
         'set_attempt_id',
         'question_id',
         'question_option_id',
+        'answer_text',
         'is_correct',
     ];
 

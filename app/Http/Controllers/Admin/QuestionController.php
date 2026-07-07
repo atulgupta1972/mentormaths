@@ -10,6 +10,7 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Support\QuestionBankPurpose;
 use App\Services\AdminGradeContext;
+use App\Services\FillBlankImportService;
 use App\Services\McqImportService;
 use App\Services\PdfPageImageService;
 use App\Services\PdfTextExtractionService;
@@ -28,6 +29,7 @@ class QuestionController extends Controller
 {
     public function __construct(
         private McqImportService $importService,
+        private FillBlankImportService $fillBlankImportService,
         private PdfTextExtractionService $pdfService,
         private AdminGradeContext $gradeContext,
         private QuestionMethodHintService $methodHintService,
@@ -175,6 +177,147 @@ class QuestionController extends Controller
         return $this->renderCreate($request);
     }
 
+    public function createFillInBlank(Request $request): Response
+    {
+        return $this->renderFillInBlankCreate($request);
+    }
+
+    public function previewFillBlankImport(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'syllabus_topic_id' => ['required', 'exists:syllabus_topics,id'],
+            'json' => ['required', 'string'],
+        ]);
+
+        try {
+            $rows = $this->fillBlankImportService->parseJson($validated['json']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.questions.create-fill-in-blank', array_filter([
+                'syllabus_topic_id' => $validated['syllabus_topic_id'],
+                'syllabus_chapter_id' => SyllabusTopic::query()
+                    ->whereKey($validated['syllabus_topic_id'])
+                    ->value('syllabus_chapter_id'),
+            ]))
+            ->with('import_rows', $rows);
+    }
+
+    public function storeBulkFillBlank(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'syllabus_topic_id' => ['required', 'exists:syllabus_topics,id'],
+            'rows' => ['required', 'array', 'min:1'],
+            'rows.*.question_text' => ['required', 'string'],
+            'rows.*.answer_format' => ['required', 'in:'.implode(',', \App\Models\QuestionBlankAnswer::formats())],
+            'rows.*.correct_answer' => ['required', 'string', 'max:64'],
+            'rows.*.decimal_places' => ['nullable', 'integer', 'min:0', 'max:6'],
+            'rows.*.explanation' => ['nullable', 'string'],
+            'rows.*.method_hint' => ['nullable', 'string'],
+            'rows.*.difficulty' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        $topic = SyllabusTopic::findOrFail($validated['syllabus_topic_id']);
+
+        $saved = $this->fillBlankImportService->saveRows(
+            $topic,
+            $validated['rows'],
+            $request->user()->id,
+            Question::SOURCE_AI,
+            QuestionBankPurpose::PRACTICE_SET,
+        );
+
+        $topic->load('chapter');
+
+        $confirmation = $this->saveConfirmation->build(
+            $saved,
+            QuestionBankPurpose::PRACTICE_SET,
+            topic: $topic,
+        );
+
+        return redirect()
+            ->route('admin.questions.chapters.show', $topic->syllabus_chapter_id)
+            ->with('success', count($saved).' fill-in-the-blank question(s) saved successfully.')
+            ->with('save_confirmation', $confirmation);
+    }
+
+    public function chapterFillBlankPrompt(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'plan' => ['required', 'array', 'min:1'],
+            'plan.*.topic_id' => ['required', 'exists:syllabus_topics,id'],
+            'plan.*.topic_name' => ['nullable', 'string'],
+            'plan.*.easy' => ['nullable', 'integer', 'min:0'],
+            'plan.*.medium' => ['nullable', 'integer', 'min:0'],
+            'plan.*.hard' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $chapter = SyllabusChapter::query()->findOrFail($validated['syllabus_chapter_id']);
+
+        try {
+            $prompt = $this->fillBlankImportService->cursorPromptForChapter($chapter, $validated['plan']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.questions.create-fill-in-blank', [
+                'syllabus_chapter_id' => $chapter->id,
+                'scope' => 'chapter',
+            ])
+            ->with('chapter_fill_blank_cursor_prompt', $prompt)
+            ->with('chapter_plan', $validated['plan']);
+    }
+
+    public function storeBulkChapterFillBlank(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'rows' => ['required', 'array', 'min:1'],
+            'rows.*.syllabus_topic_id' => ['nullable', 'exists:syllabus_topics,id'],
+            'rows.*.topic_name' => ['nullable', 'string'],
+            'rows.*.question_text' => ['required', 'string'],
+            'rows.*.answer_format' => ['required', 'in:'.implode(',', \App\Models\QuestionBlankAnswer::formats())],
+            'rows.*.correct_answer' => ['required', 'string', 'max:64'],
+            'rows.*.decimal_places' => ['nullable', 'integer', 'min:0', 'max:6'],
+            'rows.*.explanation' => ['nullable', 'string'],
+            'rows.*.method_hint' => ['nullable', 'string'],
+            'rows.*.difficulty' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        $chapter = SyllabusChapter::query()
+            ->with('topics')
+            ->findOrFail($validated['syllabus_chapter_id']);
+
+        try {
+            $saved = DB::transaction(function () use ($validated, $request, $chapter) {
+                return $this->fillBlankImportService->saveChapterRows(
+                    $chapter,
+                    $validated['rows'],
+                    $request->user()->id,
+                    Question::SOURCE_AI,
+                    QuestionBankPurpose::PRACTICE_SET,
+                );
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $confirmation = $this->saveConfirmation->build(
+            $saved,
+            QuestionBankPurpose::PRACTICE_SET,
+            $chapter,
+        );
+
+        return redirect()
+            ->route('admin.questions.chapters.show', $chapter->id)
+            ->with('success', count($saved).' fill-in-the-blank question(s) saved successfully.')
+            ->with('save_confirmation', $confirmation);
+    }
+
     public function extractPdf(Request $request): Response
     {
         $validated = $request->validate([
@@ -294,6 +437,57 @@ class QuestionController extends Controller
     /**
      * @param  array<string, mixed>  $overrides
      */
+    private function renderFillInBlankCreate(Request $request, array $overrides = []): Response
+    {
+        $grade = $this->gradeContext->resolve($request);
+        $topicId = $overrides['selectedTopicId']
+            ?? ($request->integer('syllabus_topic_id') ?: null);
+        $chapterId = $request->integer('syllabus_chapter_id') ?: null;
+
+        if ($topicId && ! $chapterId) {
+            $chapterId = SyllabusTopic::query()->whereKey($topicId)->value('syllabus_chapter_id');
+        }
+
+        $topic = $topicId
+            ? SyllabusTopic::with(['chapter.syllabusVersion.board', 'chapter.syllabusVersion.gradeLevel', 'chapter.syllabusVersion.academicYear'])->find($topicId)
+            : null;
+
+        $promptOptions = [
+            'total' => max(1, min(50, $request->integer('total') ?: 6)),
+            'easy' => max(0, $request->integer('easy') ?: 2),
+            'medium' => max(0, $request->integer('medium') ?: 2),
+            'hard' => max(0, $request->integer('hard') ?: 2),
+            'focus' => $request->string('focus')->toString(),
+        ];
+
+        $activePrompt = $overrides['cursorPrompt'] ?? null;
+        if ($activePrompt === null && $topic) {
+            $activePrompt = $this->fillBlankImportService->cursorPrompt($topic, $promptOptions);
+        }
+
+        $chapters = $this->chapterOptions($grade?->id);
+
+        $scope = $request->string('scope')->toString() === 'chapter' ? 'chapter' : 'topic';
+
+        return Inertia::render('Admin/Questions/FillInBlankCreate', [
+            'chapters' => $chapters,
+            'chapterTopics' => $chapterId ? $this->topicsForChapter($chapterId) : collect(),
+            'topicsByChapter' => $chapters->mapWithKeys(fn ($chapter) => [
+                $chapter['id'] => $this->topicsForChapter($chapter['id'])->values()->all(),
+            ])->all(),
+            'selectedChapterId' => $chapterId,
+            'selectedTopicId' => $topicId,
+            'scope' => $scope,
+            'chapterPlan' => session('chapter_plan', []),
+            'topic' => $topic,
+            'selectedGrade' => $grade?->only(['id', 'name']),
+            'cursorPrompt' => session('chapter_fill_blank_cursor_prompt') ?? ($scope === 'topic' ? $activePrompt : null),
+            'promptOptions' => $promptOptions,
+            'initialImportRows' => $overrides['importRows'] ?? null,
+            'pageError' => $overrides['error'] ?? null,
+        ]);
+    }
+
     private function renderCreate(Request $request, array $overrides = []): Response
     {
         $grade = $this->gradeContext->resolve($request);

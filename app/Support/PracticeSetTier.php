@@ -33,6 +33,17 @@ class PracticeSetTier
         };
     }
 
+    public static function codePrefix(string $tier, bool $fillInBlank = false): string
+    {
+        $letter = self::codeLetter($tier);
+
+        if ($fillInBlank && $tier !== self::CHAPTER_TEST) {
+            return $letter.'F';
+        }
+
+        return $letter;
+    }
+
     public static function label(string $tier): string
     {
         return match ($tier) {

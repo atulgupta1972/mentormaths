@@ -130,11 +130,16 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::delete('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'destroy'])->name('chapter-heads.destroy');
 
     Route::get('/questions/create', [QuestionController::class, 'create'])->name('questions.create');
+    Route::get('/questions/create-fill-in-blank', [QuestionController::class, 'createFillInBlank'])->name('questions.create-fill-in-blank');
+    Route::post('/questions/preview-fill-blank-import', [QuestionController::class, 'previewFillBlankImport'])->name('questions.preview-fill-blank-import');
+    Route::post('/questions/bulk-store-fill-blank', [QuestionController::class, 'storeBulkFillBlank'])->name('questions.bulk-store-fill-blank');
     Route::post('/questions/preview-import', [QuestionController::class, 'previewImport'])->name('questions.preview-import');
     Route::post('/questions/extract-pdf', [QuestionController::class, 'extractPdf'])->name('questions.extract-pdf');
     Route::post('/questions/extract-pdf-worksheet', [QuestionController::class, 'extractPdfWorksheet'])->name('questions.extract-pdf-worksheet');
     Route::post('/questions/bulk-store', [QuestionController::class, 'storeBulk'])->name('questions.bulk-store');
     Route::post('/questions/bulk-store-chapter', [QuestionController::class, 'storeBulkChapter'])->name('questions.bulk-store-chapter');
+    Route::post('/questions/chapter-fill-blank-prompt', [QuestionController::class, 'chapterFillBlankPrompt'])->name('questions.chapter-fill-blank-prompt');
+    Route::post('/questions/bulk-store-chapter-fill-blank', [QuestionController::class, 'storeBulkChapterFillBlank'])->name('questions.bulk-store-chapter-fill-blank');
     Route::post('/questions/chapter-prompt', [QuestionController::class, 'chapterPrompt'])->name('questions.chapter-prompt');
     Route::post('/questions/topics/{topic}/generate-method-hints', [QuestionController::class, 'generateMethodHints'])
         ->name('questions.topics.generate-method-hints');

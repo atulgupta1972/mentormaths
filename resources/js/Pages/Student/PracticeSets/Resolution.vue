@@ -3,17 +3,47 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
+import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps({
     item: Object,
 });
 
 const page = usePage();
-const form = useForm({ option_id: null });
+const form = useForm({ option_id: null, answer_text: '' });
 
-const submitAnswer = (optionId) => {
+const isFillInBlank = computed(() => props.item?.question_type === 'fill_in_blank');
+
+const answerPlaceholder = computed(() => {
+    const format = props.item?.answer_format;
+
+    if (format === 'integer') {
+        return 'Enter a whole number, e.g. -4';
+    }
+
+    if (format === 'decimal') {
+        return 'Enter a decimal, e.g. 3.5';
+    }
+
+    if (format === 'fraction') {
+        return 'Enter a fraction, e.g. 3/4 or 1 1/2';
+    }
+
+    return 'Enter your answer';
+});
+
+const submitMcqAnswer = (optionId) => {
     form.option_id = optionId;
+    form.answer_text = '';
+    form.post(route('student.resolutions.answer', props.item.id), {
+        preserveScroll: true,
+    });
+};
+
+const submitBlankAnswer = () => {
+    form.option_id = null;
     form.post(route('student.resolutions.answer', props.item.id), {
         preserveScroll: true,
     });
@@ -57,14 +87,37 @@ const submitAnswer = (optionId) => {
                         use-html
                     />
 
-                    <div class="mt-4 space-y-2">
+                    <div v-if="isFillInBlank" class="mt-4 space-y-3">
+                        <p v-if="item.answer_format_label" class="text-xs font-medium uppercase tracking-wide text-gray-500">
+                            {{ item.answer_format_label }}
+                        </p>
+                        <TextInput
+                            v-model="form.answer_text"
+                            type="text"
+                            inputmode="decimal"
+                            autocomplete="off"
+                            class="block w-full max-w-xs text-lg"
+                            :placeholder="answerPlaceholder"
+                            :disabled="form.processing"
+                            @keyup.enter="submitBlankAnswer"
+                        />
+                        <PrimaryButton
+                            type="button"
+                            :disabled="form.processing || !form.answer_text.trim()"
+                            @click="submitBlankAnswer"
+                        >
+                            {{ form.processing ? 'Checking…' : 'Submit answer' }}
+                        </PrimaryButton>
+                    </div>
+
+                    <div v-else class="mt-4 space-y-2">
                         <button
                             v-for="(opt, optIndex) in item.options"
                             :key="opt.id"
                             type="button"
                             class="flex w-full items-start gap-3 rounded-lg border border-gray-200 px-4 py-3 text-left text-sm transition hover:border-indigo-300 hover:bg-indigo-50"
                             :disabled="form.processing"
-                            @click="submitAnswer(opt.id)"
+                            @click="submitMcqAnswer(opt.id)"
                         >
                             <McqOptionLine :index="optIndex" :text="opt.option_text" />
                         </button>

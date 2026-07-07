@@ -29,6 +29,7 @@ class GuidedAttemptQuestion extends Model
         'corrected_after_help',
         'gave_up',
         'final_option_id',
+        'final_answer_text',
         'final_is_correct',
     ];
 

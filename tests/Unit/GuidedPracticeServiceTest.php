@@ -7,6 +7,7 @@ use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\GuidedAttemptQuestion;
 use App\Models\Question;
+use App\Models\QuestionBlankAnswer;
 use App\Models\QuestionOption;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
@@ -64,6 +65,31 @@ class GuidedPracticeServiceTest extends TestCase
         $this->assertDatabaseHas('question_resolution_items', [
             'status' => 'pending',
         ]);
+    }
+
+    public function test_fill_in_blank_wrong_twice_shows_explanation_phase(): void
+    {
+        [$attempt] = $this->seedFillBlankGuidedAttempt();
+
+        $service = app(GuidedPracticeService::class);
+
+        $service->submitAnswer($attempt, null, '-3');
+        $payload = $service->submitAnswer($attempt->fresh(['guidedQuestions.question.blankAnswer']), null, '-3');
+
+        $this->assertSame('explained', $payload['phase']);
+        $this->assertTrue($payload['show_explanation']);
+        $this->assertSame('fill_in_blank', $payload['question']['type']);
+    }
+
+    public function test_fill_in_blank_correct_on_first_try(): void
+    {
+        [$attempt] = $this->seedFillBlankGuidedAttempt();
+
+        $service = app(GuidedPracticeService::class);
+        $payload = $service->submitAnswer($attempt, null, '-4');
+
+        $this->assertSame('correct', $payload['feedback']['type']);
+        $this->assertTrue($attempt->fresh()->guidedQuestions->first()->first_try_correct);
     }
 
     public function test_stale_batch_attempt_on_topic_practice_upgrades_to_guided(): void
@@ -202,5 +228,41 @@ class GuidedPracticeServiceTest extends TestCase
         }
 
         return [$attempt, $wrongOption, $correctOption];
+    }
+
+    /**
+     * @return array{0: SetAttempt}
+     */
+    private function seedFillBlankGuidedAttempt(): array
+    {
+        [$attempt, , ] = $this->seedGuidedAttempt(withGuidedInit: false);
+
+        $attempt->update(['mode' => SetAttempt::MODE_GUIDED]);
+
+        $assignment = $attempt->assignment()->with('practiceSet.questions')->first();
+        $question = $assignment->practiceSet->questions->first();
+
+        $question->update([
+            'type' => Question::TYPE_FILL_IN_BLANK,
+            'question_text' => '(-12) + 8 = ____',
+            'method_hint' => 'Subtract absolute values and keep the sign of the larger number.',
+        ]);
+
+        $question->options()->delete();
+
+        QuestionBlankAnswer::query()->create([
+            'question_id' => $question->id,
+            'answer_format' => QuestionBlankAnswer::FORMAT_INTEGER,
+            'correct_answer' => '-4',
+        ]);
+
+        GuidedAttemptQuestion::query()->create([
+            'set_attempt_id' => $attempt->id,
+            'question_id' => $question->id,
+            'sort_order' => 0,
+            'phase' => GuidedAttemptQuestion::PHASE_ANSWERING,
+        ]);
+
+        return [$attempt->fresh(['guidedQuestions.question.blankAnswer'])];
     }
 }

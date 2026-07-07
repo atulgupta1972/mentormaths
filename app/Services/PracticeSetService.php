@@ -39,10 +39,10 @@ class PracticeSetService
         return "Set {$setNumber} — {$label} ({$questionCount} sums)";
     }
 
-    public function prepareForCreate(SyllabusTopic $topic, string $tier, int $questionCount): array
+    public function prepareForCreate(SyllabusTopic $topic, string $tier, int $questionCount, bool $fillInBlank = false): array
     {
         $setNumber = $this->nextSetNumber($topic->id);
-        $setCode = $this->codeService->generate($topic, $tier);
+        $setCode = $this->codeService->generate($topic, $tier, $fillInBlank);
 
         return [
             'set_number' => $setNumber,
@@ -103,9 +103,10 @@ class PracticeSetService
         int $userId,
         string $tier = PracticeSetTier::STARTER,
         string $status = Worksheet::STATUS_PUBLISHED,
+        bool $fillInBlank = false,
     ): Worksheet {
         $setNumber = $this->nextChapterSetNumber($chapter->id);
-        $setCode = $this->codeService->generateChapterPractice($chapter, $tier);
+        $setCode = $this->codeService->generateChapterPractice($chapter, $tier, $fillInBlank);
         $label = PracticeSetTier::label($tier);
 
         $practiceSet = Worksheet::create([

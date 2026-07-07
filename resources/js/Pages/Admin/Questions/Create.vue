@@ -691,16 +691,24 @@ watch(() => props.initialImportRows, (importRows) => {
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <h2 class="text-xl font-semibold text-gray-800">Add MCQs</h2>
-                <Link
-                    :href="selectedTopic
-                        ? route('admin.questions.topics.show', selectedTopic)
-                        : (chapterFilter ? route('admin.questions.chapters.show', chapterFilter) : route('admin.questions.index'))"
-                    class="text-sm text-indigo-600"
-                >
-                    Question bank
-                </Link>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Link
+                        :href="route('admin.questions.create-fill-in-blank', buildQueryParams())"
+                        class="text-sm text-emerald-700 hover:underline"
+                    >
+                        Add fill in the blanks instead
+                    </Link>
+                    <Link
+                        :href="selectedTopic
+                            ? route('admin.questions.topics.show', selectedTopic)
+                            : (chapterFilter ? route('admin.questions.chapters.show', chapterFilter) : route('admin.questions.index'))"
+                        class="text-sm text-indigo-600"
+                    >
+                        Question bank
+                    </Link>
+                </div>
             </div>
         </template>
 

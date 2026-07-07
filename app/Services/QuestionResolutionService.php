@@ -4,10 +4,14 @@ namespace App\Services;
 
 use App\Models\QuestionResolutionItem;
 use App\Models\StudentEnrollment;
+use App\Support\AnswerValidationService;
 use Illuminate\Support\Collection;
 
 class QuestionResolutionService
 {
+    public function __construct(
+        private AnswerValidationService $answerValidation,
+    ) {}
     /**
      * @return list<array<string, mixed>>
      */
@@ -32,47 +36,67 @@ class QuestionResolutionService
      */
     public function formatItem(QuestionResolutionItem $item): array
     {
-        $item->loadMissing(['question.options', 'assignment.practiceSet']);
+        $item->loadMissing(['question.options', 'question.blankAnswer', 'assignment.practiceSet']);
 
         return [
             'id' => $item->id,
             'question_id' => $item->question_id,
+            'question_type' => $item->question->type,
+            'answer_format' => $item->question->blankAnswer?->answer_format,
+            'answer_format_label' => $this->answerValidation->formatLabel($item->question->blankAnswer?->answer_format),
             'gave_up_at' => $item->gave_up_at?->toDateTimeString(),
             'set_code' => $item->assignment?->practiceSet?->set_code,
             'question_text' => $item->question->question_text,
             'diagram_url' => $item->question->diagram_url,
-            'options' => $item->question->options->values()->map(function ($option, $index) {
-                return [
-                    'id' => $option->id,
-                    'letter' => chr(65 + $index),
-                    'option_text' => $option->option_text,
-                ];
-            }),
+            'options' => $item->question->isMcq()
+                ? $item->question->options->values()->map(function ($option, $index) {
+                    return [
+                        'id' => $option->id,
+                        'letter' => chr(65 + $index),
+                        'option_text' => $option->option_text,
+                    ];
+                })->all()
+                : [],
         ];
     }
 
     /**
      * @return array{correct: bool, message: string, resolved: bool}
      */
-    public function submitAnswer(QuestionResolutionItem $item, int $optionId): array
+    public function submitAnswer(QuestionResolutionItem $item, ?int $optionId = null, ?string $answerText = null): array
     {
         if ($item->status !== QuestionResolutionItem::STATUS_PENDING) {
             throw new \InvalidArgumentException('This question is already resolved.');
         }
 
-        $item->loadMissing('question.options');
-        $option = $item->question->options->firstWhere('id', $optionId);
+        $item->loadMissing(['question.options', 'question.blankAnswer']);
 
-        if (! $option) {
-            throw new \InvalidArgumentException('Invalid option selected.');
-        }
+        if ($item->question->isFillInBlank()) {
+            if (! filled($answerText)) {
+                throw new \InvalidArgumentException('Enter an answer before submitting.');
+            }
 
-        if (! $option->is_correct) {
-            return [
-                'correct' => false,
-                'resolved' => false,
-                'message' => 'Not correct yet. Ask your teacher if you are stuck, then try again.',
-            ];
+            if (! $this->answerValidation->isCorrect($item->question, $answerText)) {
+                return [
+                    'correct' => false,
+                    'resolved' => false,
+                    'message' => 'Not correct yet. Ask your teacher if you are stuck, then try again.',
+                ];
+            }
+        } else {
+            $option = $item->question->options->firstWhere('id', $optionId);
+
+            if (! $option) {
+                throw new \InvalidArgumentException('Invalid option selected.');
+            }
+
+            if (! $option->is_correct) {
+                return [
+                    'correct' => false,
+                    'resolved' => false,
+                    'message' => 'Not correct yet. Ask your teacher if you are stuck, then try again.',
+                ];
+            }
         }
 
         $item->update([

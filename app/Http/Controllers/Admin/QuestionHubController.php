@@ -231,11 +231,22 @@ class QuestionHubController extends Controller
                 ->count();
 
             if (! $hasChapterPracticeBank && $topic->practiceSets->isEmpty() && $practiceSetUnpackagedCount > 0) {
+                $unpackagedIds = Question::query()
+                    ->where('syllabus_topic_id', $topic->id)
+                    ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+                    ->whereDoesntHave('worksheets')
+                    ->pluck('id')
+                    ->all();
+
                 $setCards->push([
                     'type' => 'bank',
                     'topic_id' => $topic->id,
                     'topic_name' => $topic->name,
-                    'set_code' => $codeService->generate($topic, PracticeSetTier::STARTER),
+                    'set_code' => $codeService->generate(
+                        $topic,
+                        PracticeSetTier::STARTER,
+                        Question::idsAreAllFillInBlank($unpackagedIds),
+                    ),
                     'tier' => PracticeSetTier::STARTER,
                     'tier_label' => PracticeSetTier::label(PracticeSetTier::STARTER),
                     'questions_count' => $practiceSetUnpackagedCount,
@@ -254,7 +265,11 @@ class QuestionHubController extends Controller
                 'type' => 'chapter_practice_bank',
                 'questions_count' => $unpackagedPracticeSetIds->count(),
                 'topics_count' => $topicsWithUnpackaged,
-                'set_code' => $codeService->generateChapterPractice($chapter),
+                'set_code' => $codeService->generateChapterPractice(
+                    $chapter,
+                    PracticeSetTier::STARTER,
+                    Question::idsAreAllFillInBlank($unpackagedPracticeSetIds->all()),
+                ),
                 'tier' => PracticeSetTier::STARTER,
                 'tier_label' => PracticeSetTier::label(PracticeSetTier::STARTER),
                 'status' => 'bank',
