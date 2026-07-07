@@ -29,48 +29,46 @@ class QuestionResolutionServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_acknowledge_item_marks_cleared_and_sends_email(): void
+    public function test_submit_answer_clears_item_without_sending_email(): void
     {
         Mail::fake();
 
         config(['mail.registration_notify' => 'admin@example.com']);
 
-        [$item, $student] = $this->seedResolutionItem();
+        [$item] = $this->seedResolutionItem(withOptions: true);
+        $option = $item->question->options->firstWhere('is_correct', true);
 
-        $result = app(QuestionResolutionService::class)->acknowledgeItem($item->fresh());
+        $result = app(QuestionResolutionService::class)->submitAnswer($item->fresh(), $option->id);
 
-        $this->assertTrue($result['cleared']);
-        $this->assertTrue($result['email_sent']);
+        $this->assertTrue($result['resolved']);
+        $this->assertSame(QuestionResolutionItem::CLEARANCE_ANSWERED, $item->fresh()->clearance_method);
 
-        $item->refresh();
-        $this->assertSame(QuestionResolutionItem::STATUS_RESOLVED, $item->status);
-        $this->assertSame(QuestionResolutionItem::CLEARANCE_ACKNOWLEDGED, $item->clearance_method);
-        $this->assertNotNull($item->resolved_at);
-
-        Mail::assertSent(DoubtsCleared::class, function (DoubtsCleared $mail) use ($student) {
-            return $mail->hasTo('student@example.com')
-                && $mail->hasCc('admin@example.com')
-                && $mail->student->is($student)
-                && count($mail->items) === 1;
-        });
+        Mail::assertNothingSent();
     }
 
-    public function test_acknowledge_all_clears_pending_items_in_one_email(): void
+    public function test_batch_clearance_email_sends_once_with_all_items(): void
     {
         Mail::fake();
 
         config(['mail.registration_notify' => 'admin@example.com']);
 
-        [$first, $student] = $this->seedResolutionItem();
+        [$first, $student] = $this->seedResolutionItem(withOptions: true);
         $second = $this->seedAnotherResolutionItem($first->student_enrollment_id);
+        $second->question->options()->createMany([
+            ['option_text' => '5', 'is_correct' => false, 'sort_order' => 1],
+            ['option_text' => '6', 'is_correct' => true, 'sort_order' => 2],
+        ]);
 
-        $result = app(QuestionResolutionService::class)->acknowledgeAll($first->student_enrollment_id);
+        $service = app(QuestionResolutionService::class);
+        $firstOption = $first->question->options->firstWhere('is_correct', true);
+        $secondOption = $second->fresh(['question.options'])->question->options->firstWhere('is_correct', true);
 
-        $this->assertSame(2, $result['cleared_count']);
-        $this->assertTrue($result['email_sent']);
+        $service->submitAnswer($first->fresh(['question.options']), $firstOption->id);
+        $service->submitAnswer($second->fresh(['question.options']), $secondOption->id);
 
-        $this->assertSame(QuestionResolutionItem::STATUS_RESOLVED, $first->fresh()->status);
-        $this->assertSame(QuestionResolutionItem::STATUS_RESOLVED, $second->fresh()->status);
+        $emailResult = $service->sendClearanceEmailForItems($student, [$first->id, $second->id]);
+
+        $this->assertTrue($emailResult['sent']);
 
         Mail::assertSent(DoubtsCleared::class, function (DoubtsCleared $mail) use ($student) {
             return $mail->student->is($student) && count($mail->items) === 2;
@@ -79,11 +77,35 @@ class QuestionResolutionServiceTest extends TestCase
         Mail::assertSentCount(1);
     }
 
+    public function test_clear_all_queue_starts_with_first_pending_item(): void
+    {
+        [$first] = $this->seedResolutionItem();
+        $second = $this->seedAnotherResolutionItem($first->student_enrollment_id);
+
+        $service = app(QuestionResolutionService::class);
+
+        $this->assertTrue($service->firstPendingForEnrollment($first->student_enrollment_id)->is($second));
+        $this->assertTrue($service->nextPendingAfter($first->student_enrollment_id, $second->id)->is($first));
+        $this->assertNull($service->nextPendingAfter($first->student_enrollment_id, $first->id));
+    }
+
+    public function test_queue_meta_reports_position_and_total(): void
+    {
+        [$first] = $this->seedResolutionItem();
+        $second = $this->seedAnotherResolutionItem($first->student_enrollment_id);
+
+        $service = app(QuestionResolutionService::class);
+
+        $this->assertSame(['position' => 1, 'total' => 2], $service->queueMetaForItem($second));
+        $this->assertSame(['position' => 2, 'total' => 2], $service->queueMetaForItem($first));
+    }
+
     public function test_history_lists_cleared_items_with_dates(): void
     {
-        [$item] = $this->seedResolutionItem();
+        [$item] = $this->seedResolutionItem(withOptions: true);
+        $option = $item->question->options->firstWhere('is_correct', true);
 
-        app(QuestionResolutionService::class)->acknowledgeItem($item->fresh());
+        app(QuestionResolutionService::class)->submitAnswer($item->fresh(), $option->id);
 
         $history = app(QuestionResolutionService::class)->historyForEnrollment($item->student_enrollment_id);
 
@@ -91,19 +113,7 @@ class QuestionResolutionServiceTest extends TestCase
         $this->assertSame($item->id, $history[0]['id']);
         $this->assertNotNull($history[0]['gave_up_at']);
         $this->assertNotNull($history[0]['resolved_at']);
-        $this->assertSame('Marked cleared after teacher help', $history[0]['clearance_label']);
-    }
-
-    public function test_submit_answer_sets_answered_clearance_method(): void
-    {
-        [$item] = $this->seedResolutionItem(withOptions: true);
-
-        $option = $item->question->options->firstWhere('is_correct', true);
-
-        $result = app(QuestionResolutionService::class)->submitAnswer($item->fresh(), $option->id);
-
-        $this->assertTrue($result['resolved']);
-        $this->assertSame(QuestionResolutionItem::CLEARANCE_ANSWERED, $item->fresh()->clearance_method);
+        $this->assertSame('Answered correctly', $history[0]['clearance_label']);
     }
 
     public function test_doubts_cleared_mailable_uses_requested_subject(): void

@@ -292,31 +292,18 @@ class PracticeSetController extends Controller
             return redirect()->route('dashboard')->with('success', 'This sum is already resolved.');
         }
 
+        $inQueue = $request->query('queue') === 'all';
+        $queueMeta = $inQueue ? $this->resolutionService->queueMetaForItem($item) : null;
+
         return Inertia::render('Student/PracticeSets/Resolution', [
             'item' => $this->resolutionService->formatItem($item),
+            'inQueue' => $inQueue,
+            'queuePosition' => $queueMeta['position'] ?? null,
+            'queueTotal' => $queueMeta['total'] ?? null,
         ]);
     }
 
-    public function acknowledgeResolution(Request $request, QuestionResolutionItem $item): RedirectResponse
-    {
-        $this->authorizeResolution($request, $item);
-
-        try {
-            $result = $this->resolutionService->acknowledgeItem($item);
-        } catch (\InvalidArgumentException $e) {
-            return back()->with('error', $e->getMessage());
-        }
-
-        $message = $result['message'];
-
-        if ($result['email_sent']) {
-            $message .= ' Confirmation email sent to you and admin.';
-        }
-
-        return back()->with('success', $message);
-    }
-
-    public function acknowledgeAllResolutions(Request $request): RedirectResponse
+    public function startClearAllQueue(Request $request): RedirectResponse
     {
         $enrollment = $request->user()->student?->currentEnrollment();
 
@@ -324,19 +311,21 @@ class PracticeSetController extends Controller
             abort(403);
         }
 
-        $result = $this->resolutionService->acknowledgeAll($enrollment->id);
+        $first = $this->resolutionService->firstPendingForEnrollment($enrollment->id);
 
-        if ($result['cleared_count'] === 0) {
-            return back()->with('warning', $result['message']);
+        if (! $first) {
+            return redirect()->route('dashboard')->with('warning', 'No pending help requests to clear.');
         }
 
-        $message = $result['message'];
+        $request->session()->put('doubt_clear_batch', [
+            'enrollment_id' => $enrollment->id,
+            'cleared_ids' => [],
+        ]);
 
-        if ($result['email_sent']) {
-            $message .= ' Confirmation email sent to you and admin.';
-        }
-
-        return back()->with('success', $message);
+        return redirect()->route('student.resolutions.show', [
+            'item' => $first->id,
+            'queue' => 'all',
+        ]);
     }
 
     public function resolutionHistory(Request $request): Response
@@ -359,7 +348,10 @@ class PracticeSetController extends Controller
         $validated = $request->validate([
             'option_id' => ['nullable', 'integer'],
             'answer_text' => ['nullable', 'string', 'max:64'],
+            'queue' => ['nullable', 'string'],
         ]);
+
+        $inQueue = ($validated['queue'] ?? null) === 'all';
 
         try {
             $result = $this->resolutionService->submitAnswer(
@@ -372,7 +364,57 @@ class PracticeSetController extends Controller
         }
 
         if ($result['resolved']) {
-            return redirect()->route('dashboard')->with('success', $result['message']);
+            $message = $result['message'];
+            $student = $request->user()->student;
+            $enrollment = $student?->currentEnrollment();
+
+            if ($inQueue) {
+                $batch = $request->session()->get('doubt_clear_batch', [
+                    'enrollment_id' => $enrollment?->id,
+                    'cleared_ids' => [],
+                ]);
+                $batch['cleared_ids'][] = $item->id;
+                $request->session()->put('doubt_clear_batch', $batch);
+
+                $next = $enrollment
+                    ? $this->resolutionService->nextPendingAfter($enrollment->id, $item->id)
+                    : null;
+
+                if ($next) {
+                    return redirect()->route('student.resolutions.show', [
+                        'item' => $next->id,
+                        'queue' => 'all',
+                    ])->with('success', $message);
+                }
+
+                $request->session()->forget('doubt_clear_batch');
+
+                if ($student && $batch['cleared_ids'] !== []) {
+                    $emailResult = $this->resolutionService->sendClearanceEmailForItems(
+                        $student,
+                        $batch['cleared_ids'],
+                    );
+
+                    if ($emailResult['sent']) {
+                        $message .= ' Confirmation email sent to you and admin.';
+                    }
+                }
+
+                return redirect()->route('dashboard')->with(
+                    'success',
+                    $message.' All doubts cleared — well done!',
+                );
+            }
+
+            if ($student && $enrollment && $this->resolutionService->pendingCountForEnrollment($enrollment->id) === 0) {
+                $emailResult = $this->resolutionService->sendClearanceEmailForItems($student, [$item->id]);
+
+                if ($emailResult['sent']) {
+                    $message .= ' Confirmation email sent to you and admin.';
+                }
+            }
+
+            return redirect()->route('dashboard')->with('success', $message);
         }
 
         return back()->with('warning', $result['message']);

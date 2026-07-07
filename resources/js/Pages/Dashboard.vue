@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
@@ -78,39 +78,6 @@ const formatDateTime = (value) => {
         year: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-    });
-};
-
-const acknowledgingId = ref(null);
-const acknowledgingAll = ref(false);
-
-const acknowledgeItem = (itemId) => {
-    acknowledgingId.value = itemId;
-
-    router.post(route('student.resolutions.acknowledge', itemId), {}, {
-        preserveScroll: true,
-        onFinish: () => {
-            acknowledgingId.value = null;
-        },
-    });
-};
-
-const acknowledgeAll = () => {
-    if (! props.resolutionItems.length) {
-        return;
-    }
-
-    if (! window.confirm(`Mark all ${props.resolutionItems.length} doubt${props.resolutionItems.length === 1 ? '' : 's'} as cleared?`)) {
-        return;
-    }
-
-    acknowledgingAll.value = true;
-
-    router.post(route('student.resolutions.acknowledge-all'), {}, {
-        preserveScroll: true,
-        onFinish: () => {
-            acknowledgingAll.value = false;
-        },
     });
 };
 
@@ -607,18 +574,16 @@ const adminSetStatusClass = (set) => {
                                     >
                                         History
                                     </Link>
-                                    <button
-                                        type="button"
-                                        class="rounded-lg border border-rose-300 bg-white px-2.5 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-50 disabled:opacity-50"
-                                        :disabled="acknowledgingAll || acknowledgingId !== null"
-                                        @click="acknowledgeAll"
+                                    <Link
+                                        :href="route('student.resolutions.clear-all')"
+                                        class="rounded-lg border border-rose-300 bg-white px-2.5 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-50"
                                     >
-                                        {{ acknowledgingAll ? 'Clearing…' : 'Clear all' }}
-                                    </button>
+                                        Clear all
+                                    </Link>
                                 </div>
                             </div>
                             <p class="mb-3 text-xs text-rose-800">
-                                After your teacher explains these, tick to clear. You can also retry a sum if you want to answer it yourself.
+                                After your teacher explains these, answer each one correctly to clear it. Use <strong>Clear all</strong> to work through them one by one.
                             </p>
                             <div class="space-y-2">
                                 <div
@@ -626,18 +591,6 @@ const adminSetStatusClass = (set) => {
                                     :key="item.id"
                                     class="flex items-start gap-3 rounded-xl border border-rose-200 bg-white p-3 shadow-sm"
                                 >
-                                    <button
-                                        type="button"
-                                        class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition"
-                                        :class="acknowledgingId === item.id
-                                            ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
-                                            : 'border-emerald-500 bg-white text-emerald-600 hover:bg-emerald-50'"
-                                        :disabled="acknowledgingId !== null || acknowledgingAll"
-                                        :title="acknowledgingId === item.id ? 'Clearing…' : 'Mark as cleared'"
-                                        @click="acknowledgeItem(item.id)"
-                                    >
-                                        <span class="text-base font-bold leading-none">✓</span>
-                                    </button>
                                     <div class="min-w-0 flex-1">
                                         <p v-if="item.set_code" class="font-mono text-sm font-semibold text-indigo-600">{{ item.set_code }}</p>
                                         <p class="mt-1 line-clamp-2 text-sm text-gray-800">{{ item.question_text }}</p>
@@ -647,9 +600,9 @@ const adminSetStatusClass = (set) => {
                                     </div>
                                     <Link
                                         :href="route('student.resolutions.show', item.id)"
-                                        class="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                                        class="shrink-0 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
                                     >
-                                        Retry
+                                        Answer
                                     </Link>
                                 </div>
                             </div>

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\QuestionResolutionItem;
+use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Support\AnswerValidationService;
 use App\Support\DateLabels;
@@ -110,107 +111,67 @@ class QuestionResolutionService
         return [
             'correct' => true,
             'resolved' => true,
-            'message' => 'Well done — this sum is cleared from your resolution list.',
+            'message' => 'Well done — this sum is cleared from your help list.',
         ];
     }
 
     /**
-     * @return array{cleared: bool, message: string, email_sent: bool}
+     * @param  list<int>  $itemIds
+     * @return array{sent: bool, email: ?string, error: ?string}
      */
-    public function acknowledgeItem(QuestionResolutionItem $item): array
+    public function sendClearanceEmailForItems(Student $student, array $itemIds): array
     {
-        if ($item->status !== QuestionResolutionItem::STATUS_PENDING) {
-            throw new \InvalidArgumentException('This question is already cleared.');
+        if ($itemIds === []) {
+            return ['sent' => false, 'email' => null, 'error' => 'no_items'];
         }
 
-        $now = now();
-
-        $item->update([
-            'status' => QuestionResolutionItem::STATUS_RESOLVED,
-            'resolved_at' => $now,
-            'clearance_method' => QuestionResolutionItem::CLEARANCE_ACKNOWLEDGED,
-        ]);
-
-        $item->loadMissing([
-            'enrollment.student',
-            'question.topic.chapter',
-            'assignment.practiceSet',
-        ]);
-
-        $student = $item->enrollment->student;
-        $emailResult = ['sent' => false];
-
-        if ($student) {
-            $emailResult = DoubtsClearedMailer::send($student, [
-                $this->formatEmailItem($item),
-            ]);
-        }
-
-        return [
-            'cleared' => true,
-            'message' => 'Doubt cleared — removed from your help list.',
-            'email_sent' => $emailResult['sent'],
-        ];
-    }
-
-    /**
-     * @return array{cleared_count: int, message: string, email_sent: bool}
-     */
-    public function acknowledgeAll(int $enrollmentId): array
-    {
         $items = QuestionResolutionItem::query()
             ->with([
-                'enrollment.student',
                 'question.topic.chapter',
                 'assignment.practiceSet',
             ])
-            ->where('student_enrollment_id', $enrollmentId)
-            ->where('status', QuestionResolutionItem::STATUS_PENDING)
-            ->orderByDesc('gave_up_at')
-            ->get();
+            ->whereIn('id', $itemIds)
+            ->orderByDesc('resolved_at')
+            ->get()
+            ->map(fn (QuestionResolutionItem $item) => $this->formatEmailItem($item))
+            ->values()
+            ->all();
 
-        if ($items->isEmpty()) {
-            return [
-                'cleared_count' => 0,
-                'message' => 'No pending help requests to clear.',
-                'email_sent' => false,
-            ];
+        return DoubtsClearedMailer::send($student, $items);
+    }
+
+    public function firstPendingForEnrollment(int $enrollmentId): ?QuestionResolutionItem
+    {
+        return $this->pendingQueryForEnrollment($enrollmentId)->first();
+    }
+
+    public function nextPendingAfter(int $enrollmentId, int $currentItemId): ?QuestionResolutionItem
+    {
+        $ids = $this->pendingQueryForEnrollment($enrollmentId)->pluck('id');
+        $index = $ids->search($currentItemId);
+
+        if ($index === false) {
+            return $this->firstPendingForEnrollment($enrollmentId);
         }
 
-        $now = now();
+        $nextId = $ids->get($index + 1);
 
-        QuestionResolutionItem::query()
-            ->whereIn('id', $items->pluck('id'))
-            ->update([
-                'status' => QuestionResolutionItem::STATUS_RESOLVED,
-                'resolved_at' => $now,
-                'clearance_method' => QuestionResolutionItem::CLEARANCE_ACKNOWLEDGED,
-            ]);
+        return $nextId
+            ? QuestionResolutionItem::query()->find($nextId)
+            : null;
+    }
 
-        $items->each(function (QuestionResolutionItem $item) use ($now) {
-            $item->status = QuestionResolutionItem::STATUS_RESOLVED;
-            $item->resolved_at = $now;
-            $item->clearance_method = QuestionResolutionItem::CLEARANCE_ACKNOWLEDGED;
-        });
-
-        $student = $items->first()?->enrollment?->student;
-        $emailResult = ['sent' => false];
-
-        if ($student) {
-            $emailResult = DoubtsClearedMailer::send(
-                $student,
-                $items->map(fn (QuestionResolutionItem $item) => $this->formatEmailItem($item))->all(),
-            );
-        }
-
-        $count = $items->count();
+    /**
+     * @return array{position: int, total: int}
+     */
+    public function queueMetaForItem(QuestionResolutionItem $item): array
+    {
+        $ids = $this->pendingQueryForEnrollment($item->student_enrollment_id)->pluck('id');
+        $index = $ids->search($item->id);
 
         return [
-            'cleared_count' => $count,
-            'message' => $count === 1
-                ? '1 doubt cleared.'
-                : "{$count} doubts cleared.",
-            'email_sent' => $emailResult['sent'],
+            'position' => $index === false ? 1 : $index + 1,
+            'total' => $ids->count(),
         ];
     }
 
@@ -284,9 +245,21 @@ class QuestionResolutionService
     {
         return match ($method) {
             QuestionResolutionItem::CLEARANCE_ACKNOWLEDGED => 'Marked cleared after teacher help',
-            QuestionResolutionItem::CLEARANCE_ANSWERED => 'Answered correctly on retry',
+            QuestionResolutionItem::CLEARANCE_ANSWERED => 'Answered correctly',
             default => 'Cleared',
         };
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<QuestionResolutionItem>
+     */
+    private function pendingQueryForEnrollment(int $enrollmentId)
+    {
+        return QuestionResolutionItem::query()
+            ->where('student_enrollment_id', $enrollmentId)
+            ->where('status', QuestionResolutionItem::STATUS_PENDING)
+            ->orderByDesc('gave_up_at')
+            ->orderByDesc('id');
     }
 
     public function pendingCountForEnrollment(int $enrollmentId): int

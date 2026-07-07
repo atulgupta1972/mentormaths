@@ -9,10 +9,13 @@ import { computed } from 'vue';
 
 const props = defineProps({
     item: Object,
+    inQueue: { type: Boolean, default: false },
+    queuePosition: { type: Number, default: null },
+    queueTotal: { type: Number, default: null },
 });
 
 const page = usePage();
-const form = useForm({ option_id: null, answer_text: '' });
+const form = useForm({ option_id: null, answer_text: '', queue: props.inQueue ? 'all' : null });
 
 const isFillInBlank = computed(() => props.item?.question_type === 'fill_in_blank');
 
@@ -57,7 +60,12 @@ const submitBlankAnswer = () => {
         <template #header>
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm text-gray-500">Resolution practice</p>
+                    <p class="text-sm text-gray-500">
+                        {{ inQueue ? 'Clear all doubts' : 'Answer to clear' }}
+                        <span v-if="inQueue && queuePosition && queueTotal" class="text-indigo-600">
+                            · {{ queuePosition }} of {{ queueTotal }}
+                        </span>
+                    </p>
                     <h2 class="text-xl font-semibold text-gray-800">
                         <span v-if="item.set_code" class="font-mono text-indigo-600">{{ item.set_code }}</span>
                         <span v-else>Clear this sum</span>
@@ -70,7 +78,12 @@ const submitBlankAnswer = () => {
         <div class="py-10">
             <div class="mx-auto max-w-3xl space-y-5 sm:px-6 lg:px-8">
                 <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    Your teacher should have explained this sum. Try again here, or tick it off from your dashboard once you are satisfied.
+                    Your teacher should have explained this sum. Submit the correct answer to clear it from your help list.
+                    <span v-if="inQueue"> The next doubt will appear automatically after a correct answer.</span>
+                </div>
+
+                <div v-if="page.props.flash?.success" class="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">
+                    {{ page.props.flash.success }}
                 </div>
 
                 <div v-if="page.props.flash?.warning" class="rounded-md bg-amber-50 p-3 text-sm text-amber-900">

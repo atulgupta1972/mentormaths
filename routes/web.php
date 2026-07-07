@@ -188,9 +188,8 @@ Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->gr
     Route::post('/attempts/{attempt}/submit', [StudentPracticeSetController::class, 'submitAttempt'])->name('attempts.submit');
     Route::get('/attempts/{attempt}/result', [StudentPracticeSetController::class, 'result'])->name('attempts.result');
     Route::get('/resolutions/history', [StudentPracticeSetController::class, 'resolutionHistory'])->name('resolutions.history');
-    Route::post('/resolutions/acknowledge-all', [StudentPracticeSetController::class, 'acknowledgeAllResolutions'])->name('resolutions.acknowledge-all');
+    Route::get('/resolutions/clear-all', [StudentPracticeSetController::class, 'startClearAllQueue'])->name('resolutions.clear-all');
     Route::get('/resolutions/{item}', [StudentPracticeSetController::class, 'showResolution'])->name('resolutions.show');
-    Route::post('/resolutions/{item}/acknowledge', [StudentPracticeSetController::class, 'acknowledgeResolution'])->name('resolutions.acknowledge');
     Route::post('/resolutions/{item}/answer', [StudentPracticeSetController::class, 'submitResolution'])->name('resolutions.answer');
 });
 
