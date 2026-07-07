@@ -6,6 +6,7 @@ use App\Mail\AssignmentAssigned;
 use App\Mail\AssignmentCompleted;
 use App\Models\SetAttempt;
 use App\Models\Student;
+use App\Models\User;
 use App\Models\Worksheet;
 use App\Support\AttemptResultSummary;
 use Illuminate\Support\Facades\Log;
@@ -190,10 +191,24 @@ class AssignmentMailer
             return $student->email;
         }
 
-        $student->loadMissing('user');
+        $userId = $student->getAttribute('user_id');
 
-        if ($student->user && self::isDeliverableEmail($student->user->email)) {
-            return $student->user->email;
+        if ($userId === null && $student->exists) {
+            $userId = Student::query()->whereKey($student->id)->value('user_id');
+        }
+
+        if ($userId) {
+            $student->loadMissing('user');
+
+            if ($student->user && self::isDeliverableEmail($student->user->email)) {
+                return $student->user->email;
+            }
+
+            $loginEmail = User::query()->whereKey($userId)->value('email');
+
+            if (self::isDeliverableEmail($loginEmail)) {
+                return $loginEmail;
+            }
         }
 
         return null;
@@ -225,7 +240,7 @@ class AssignmentMailer
         }
 
         if ($result['error'] === 'no_email') {
-            return " No email sent for {$studentName} — add an email on their profile.";
+            return " No email sent for {$studentName} — add a contact email on their profile or ensure their login account is linked.";
         }
 
         return " Email could not be sent for {$studentName}.";
@@ -247,7 +262,7 @@ class AssignmentMailer
         }
 
         if ($counts['skipped'] > 0) {
-            $parts[] = "{$counts['skipped']} skipped (no email on file)";
+            $parts[] = "{$counts['skipped']} skipped (no deliverable email on file)";
         }
 
         if ($counts['failed'] > 0) {

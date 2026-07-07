@@ -100,7 +100,7 @@ class SetAssignmentService
         }
 
         $query = StudentEnrollment::query()
-            ->with('student:id,name')
+            ->with(['student:id,name,email,user_id', 'student.user:id,email'])
             ->where('academic_year_id', $activeYear->id)
             ->where('status', StudentEnrollment::STATUS_ACTIVE);
 

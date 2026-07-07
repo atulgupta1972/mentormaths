@@ -101,6 +101,25 @@ class AssignmentMailerTest extends TestCase
         $this->assertSame('student.login@example.com', AssignmentMailer::resolveStudentEmail($student));
     }
 
+    public function test_resolve_student_email_when_student_partially_loaded_without_user_id(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'partial.load@example.com',
+        ]);
+
+        $student = Student::query()->create([
+            'name' => 'Partial Load Student',
+            'user_id' => $user->id,
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543210',
+            'school_name' => 'School',
+        ]);
+
+        $partial = Student::query()->select('id', 'name')->findOrFail($student->id);
+
+        $this->assertSame('partial.load@example.com', AssignmentMailer::resolveStudentEmail($partial));
+    }
+
     public function test_send_completed_emails_admin_even_without_student_email(): void
     {
         Mail::fake();
