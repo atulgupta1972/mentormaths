@@ -26,7 +26,7 @@ class AssignmentCompleted extends Mailable
         $summary = $this->summary;
 
         return new Envelope(
-            subject: "Mentor Maths — {$summary['student_name']} completed {$summary['set_code']} ({$summary['score_label']} · {$summary['time_label']})",
+            subject: "Mentor Maths — {$summary['student_name']} finished {$summary['set_code']} · {$summary['attempt_label']} ({$summary['score_label']})",
         );
     }
 

@@ -16,9 +16,6 @@ class AssignmentMailer
     /**
      * @return array{sent: bool, email: ?string, error: ?string}
      */
-    /**
-     * @return array{sent: bool, email: ?string, error: ?string}
-     */
     public static function sendCompleted(SetAttempt $attempt): array
     {
         $attempt->loadMissing('assignment.enrollment.student');
@@ -28,40 +25,36 @@ class AssignmentMailer
             return ['sent' => false, 'email' => null, 'error' => 'no_student'];
         }
 
-        $email = self::resolveStudentEmail($student);
+        $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
 
-        if (! $email) {
-            return ['sent' => false, 'email' => null, 'error' => 'no_email'];
+        if (! $adminEmail) {
+            return ['sent' => false, 'email' => null, 'error' => 'no_admin_email'];
         }
 
-        $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
-        $summary = AttemptResultSummary::forMail($attempt->fresh([
+        $relations = [
             'answers.question.topic.chapter',
             'guidedQuestions.question.topic.chapter',
             'assignment.practiceSet.topic.chapter',
             'assignment.practiceSet.chapter',
             'assignment.practiceSet.questions.topic.chapter',
-        ]));
+            'assignment.attempts',
+        ];
+
+        $summary = AttemptResultSummary::forAdmin($attempt->fresh($relations));
 
         try {
-            $pending = Mail::to($email);
+            Mail::to($adminEmail)->send(new AssignmentCompleted($student, $summary));
 
-            if ($adminEmail && strcasecmp($adminEmail, $email) !== 0) {
-                $pending->cc($adminEmail);
-            }
-
-            $pending->send(new AssignmentCompleted($student, $summary));
-
-            return ['sent' => true, 'email' => $email, 'error' => null];
+            return ['sent' => true, 'email' => $adminEmail, 'error' => null];
         } catch (\Throwable $e) {
             Log::error('Failed to send completion email.', [
                 'attempt_id' => $attempt->id,
                 'student_id' => $student->id,
-                'email' => $email,
+                'admin_email' => $adminEmail,
                 'error' => $e->getMessage(),
             ]);
 
-            return ['sent' => false, 'email' => $email, 'error' => 'send_failed'];
+            return ['sent' => false, 'email' => $adminEmail, 'error' => 'send_failed'];
         }
     }
 
