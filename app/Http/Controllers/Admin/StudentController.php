@@ -11,6 +11,7 @@ use App\Services\AdminGradeContext;
 use App\Services\ExamPlanService;
 use App\Services\QuestionResolutionService;
 use App\Services\StudentAccountService;
+use App\Services\StudentNotificationContactService;
 use App\Services\StudentProgressSummaryService;
 use App\Services\StudentProgressWhatsAppService;
 use App\Services\StudentPromotionService;
@@ -31,6 +32,7 @@ class StudentController extends Controller
         private QuestionResolutionService $resolutionService,
         private StudentProgressSummaryService $progressSummaryService,
         private StudentProgressWhatsAppService $progressWhatsAppService,
+        private StudentNotificationContactService $notificationContactService,
     ) {}
 
     public function index(Request $request): Response
@@ -108,6 +110,7 @@ class StudentController extends Controller
                 ? $this->resolutionService->pendingCountForEnrollment($resolutionEnrollment->id)
                 : 0,
             'defaultSummaryEmail' => AssignmentMailer::resolveStudentEmail($student),
+            'whatsappRecipientCount' => count($this->notificationContactService->recipientsForStudent($student)),
         ]);
     }
 
@@ -234,6 +237,7 @@ class StudentController extends Controller
 
         $messages = [];
         $warnings = [];
+        $whatsappNotifications = [];
 
         if ($request->boolean('send_email')) {
             $result = StudentProgressMailer::send(
@@ -252,13 +256,12 @@ class StudentController extends Controller
         }
 
         if ($request->boolean('send_whatsapp')) {
-            $notifications = $this->progressWhatsAppService->notificationsForSummary($student, $summary);
+            $whatsappNotifications = $this->progressWhatsAppService->notificationsForSummary($student, $summary);
 
-            if ($notifications === []) {
-                $warnings[] = 'No WhatsApp recipients — tick Notify on at least one mobile number and save.';
+            if ($whatsappNotifications === []) {
+                $warnings[] = 'No WhatsApp recipients — tick Notify on at least one mobile number above and click Save notification settings.';
             } else {
-                session()->flash('whatsapp_notifications', $notifications);
-                $messages[] = count($notifications).' WhatsApp message'.(count($notifications) === 1 ? '' : 's').' ready — use the green panel to copy or open.';
+                $messages[] = count($whatsappNotifications).' WhatsApp message'.(count($whatsappNotifications) === 1 ? '' : 's').' ready below.';
             }
         }
 
@@ -274,6 +277,10 @@ class StudentController extends Controller
 
         if ($warnings !== []) {
             $redirect = $redirect->with('warning', implode(' ', $warnings));
+        }
+
+        if ($whatsappNotifications !== []) {
+            $redirect = $redirect->with('whatsapp_notifications', $whatsappNotifications);
         }
 
         return $redirect;

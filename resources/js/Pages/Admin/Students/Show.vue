@@ -28,6 +28,7 @@ const props = defineProps({
     resolutionItems: { type: Array, default: () => [] },
     helpRequestsCount: { type: Number, default: 0 },
     defaultSummaryEmail: { type: String, default: '' },
+    whatsappRecipientCount: { type: Number, default: 0 },
 });
 
 const contactFields = computed(() => [
@@ -162,6 +163,7 @@ const destroyStudent = () => {
                 <StudentProgressSummaryPanel
                     :student="student"
                     :default-email="defaultSummaryEmail"
+                    :whatsapp-recipient-count="whatsappRecipientCount"
                 />
 
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">

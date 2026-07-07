@@ -41,7 +41,7 @@ const copyMessage = async (row) => {
     >
         <div class="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-3">
             <div>
-                <p class="font-medium text-green-900">Send assignment on WhatsApp</p>
+                <p class="font-medium text-green-900">Send on WhatsApp</p>
                 <p class="mt-0.5 text-sm text-green-800">
                     <strong>Recommended:</strong> click <strong>Copy message</strong>, open WhatsApp on your
                     <strong>phone</strong>, find the parent chat, paste and send.
