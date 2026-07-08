@@ -240,6 +240,8 @@ class GuidedPracticeService
         $current->update([
             'phase' => GuidedAttemptQuestion::PHASE_RETRY,
             'wrong_before_explanation' => 1,
+            'first_wrong_option_id' => $optionId,
+            'first_wrong_answer_text' => $answerText,
         ]);
 
         return [
@@ -270,6 +272,8 @@ class GuidedPracticeService
         $current->update([
             'phase' => GuidedAttemptQuestion::PHASE_EXPLAINED,
             'wrong_before_explanation' => 2,
+            'second_wrong_option_id' => $optionId,
+            'second_wrong_answer_text' => $answerText,
         ]);
 
         return [

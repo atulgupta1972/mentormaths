@@ -6,9 +6,243 @@ use App\Models\GuidedAttemptQuestion;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\Worksheet;
+use App\Support\QuestionMethodHint;
 
 class AttemptResultSummary
 {
+    /**
+     * @return array<string, mixed>
+     */
+    public static function forStudentReview(SetAttempt $attempt): array
+    {
+        $attempt->loadMissing([
+            'assignment.practiceSet.questions.options',
+            'assignment.practiceSet.questions.blankAnswer',
+            'assignment.enrollment.student',
+        ]);
+
+        $summary = self::build($attempt, includeCorrect: true);
+
+        if ($attempt->isGuided()) {
+            $summary['questions'] = self::guidedReviewRows($attempt);
+        } else {
+            $summary['questions'] = self::batchReviewRows($attempt, $attempt->assignment->practiceSet);
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function guidedReviewRows(SetAttempt $attempt): array
+    {
+        $attempt->loadMissing([
+            'guidedQuestions.question.options',
+            'guidedQuestions.question.blankAnswer',
+        ]);
+
+        return $attempt->guidedQuestions
+            ->sortBy('sort_order')
+            ->values()
+            ->map(function (GuidedAttemptQuestion $guided, int $index) {
+                $question = $guided->question;
+
+                return [
+                    'number' => $index + 1,
+                    'question_text' => $question?->question_text,
+                    'diagram_url' => $question?->diagram_url,
+                    'type' => $question?->type,
+                    'method_hint' => ($guided->corrected_after_help || ($guided->wrong_before_explanation ?? 0) >= 2)
+                        ? QuestionMethodHint::forStudent($question)
+                        : null,
+                    'correct_answer' => self::correctAnswerLabel($question),
+                    'attempts' => self::guidedReviewAttempts($guided, $question),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function guidedReviewAttempts(GuidedAttemptQuestion $guided, $question): array
+    {
+        $attempts = [];
+
+        if ($guided->first_try_correct) {
+            $attempts[] = self::formatReviewAttempt(
+                'Correct on first try',
+                $guided->final_option_id,
+                $guided->final_answer_text,
+                $question,
+                true,
+            );
+
+            return $attempts;
+        }
+
+        if ($guided->first_wrong_option_id || filled($guided->first_wrong_answer_text)) {
+            $attempts[] = self::formatReviewAttempt(
+                '1st try — wrong',
+                $guided->first_wrong_option_id,
+                $guided->first_wrong_answer_text,
+                $question,
+                false,
+            );
+        } elseif (($guided->wrong_before_explanation ?? 0) >= 1) {
+            $attempts[] = [
+                'label' => '1st try — wrong',
+                'answer' => null,
+                'is_correct' => false,
+            ];
+        }
+
+        if ($guided->second_wrong_option_id || filled($guided->second_wrong_answer_text)) {
+            $attempts[] = self::formatReviewAttempt(
+                '2nd try — wrong',
+                $guided->second_wrong_option_id,
+                $guided->second_wrong_answer_text,
+                $question,
+                false,
+            );
+        } elseif (($guided->wrong_before_explanation ?? 0) >= 2) {
+            $attempts[] = [
+                'label' => '2nd try — wrong',
+                'answer' => null,
+                'is_correct' => false,
+            ];
+        }
+
+        if ($guided->gave_up) {
+            $attempts[] = [
+                'label' => 'Asked for teacher help',
+                'answer' => null,
+                'is_correct' => false,
+            ];
+
+            return $attempts;
+        }
+
+        if ($guided->final_is_correct) {
+            $label = $guided->corrected_after_help
+                ? 'Correct after method'
+                : (($guided->wrong_before_explanation ?? 0) >= 1 ? '2nd try — correct' : 'Correct answer');
+            $attempts[] = self::formatReviewAttempt(
+                $label,
+                $guided->final_option_id,
+                $guided->final_answer_text,
+                $question,
+                true,
+            );
+        } elseif ($guided->final_option_id || filled($guided->final_answer_text)) {
+            $attempts[] = self::formatReviewAttempt(
+                'Final try — wrong',
+                $guided->final_option_id,
+                $guided->final_answer_text,
+                $question,
+                false,
+            );
+        }
+
+        return $attempts;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function batchReviewRows(SetAttempt $attempt, Worksheet $worksheet): array
+    {
+        $attempt->loadMissing(['answers.question.options', 'answers.question.blankAnswer']);
+        $answersByQuestion = $attempt->answers->keyBy('question_id');
+        $rows = [];
+
+        foreach ($worksheet->questions as $index => $question) {
+            $answer = $answersByQuestion->get($question->id);
+            $attempts = [];
+
+            if ($answer) {
+                $attempts[] = self::formatReviewAttempt(
+                    $answer->is_correct ? 'Your answer — correct' : 'Your answer — wrong',
+                    $answer->question_option_id,
+                    $answer->answer_text,
+                    $question,
+                    (bool) $answer->is_correct,
+                );
+            }
+
+            $rows[] = [
+                'number' => $index + 1,
+                'question_text' => $question->question_text,
+                'diagram_url' => $question->diagram_url,
+                'type' => $question->type,
+                'method_hint' => null,
+                'correct_answer' => self::correctAnswerLabel($question),
+                'attempts' => $attempts,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function formatReviewAttempt(
+        string $label,
+        ?int $optionId,
+        ?string $answerText,
+        $question,
+        bool $isCorrect,
+    ): array {
+        $answer = null;
+
+        if ($optionId && $question?->relationLoaded('options')) {
+            $option = $question->options->firstWhere('id', $optionId);
+
+            if ($option) {
+                $index = $question->options->values()->search(fn ($row) => $row->id === $option->id);
+                $letter = $index !== false ? chr(65 + $index) : null;
+                $answer = trim(($letter ? "{$letter}. " : '').$option->option_text);
+            }
+        }
+
+        if ($answer === null && filled($answerText)) {
+            $answer = $answerText;
+        }
+
+        return [
+            'label' => $label,
+            'answer' => $answer,
+            'is_correct' => $isCorrect,
+        ];
+    }
+
+    private static function correctAnswerLabel($question): ?string
+    {
+        if (! $question) {
+            return null;
+        }
+
+        if ($question->isFillInBlank()) {
+            $question->loadMissing('blankAnswer');
+
+            return $question->blankAnswer?->correct_answer;
+        }
+
+        $question->loadMissing('options');
+        $correct = $question->options->firstWhere('is_correct', true);
+
+        if (! $correct) {
+            return null;
+        }
+
+        $index = $question->options->values()->search(fn ($row) => $row->id === $correct->id);
+        $letter = $index !== false ? chr(65 + $index) : null;
+
+        return trim(($letter ? "{$letter}. " : '').$correct->option_text);
+    }
+
     /**
      * @return array<string, mixed>
      */

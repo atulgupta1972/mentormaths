@@ -9,6 +9,7 @@ use App\Models\SetAttempt;
 use App\Services\GuidedPracticeService;
 use App\Services\QuestionResolutionService;
 use App\Services\SetAttemptService;
+use App\Support\AttemptResultSummary;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -229,6 +230,8 @@ class PracticeSetController extends Controller
         $practiceSet = $assignment->practiceSet;
 
         if ($attempt->isGuided()) {
+            $review = AttemptResultSummary::forStudentReview($attempt);
+
             return Inertia::render('Student/PracticeSets/GuidedResult', [
                 'attempt' => [
                     'id' => $attempt->id,
@@ -249,17 +252,11 @@ class PracticeSetController extends Controller
                     'set_number' => $practiceSet->set_number,
                     'kind_label' => 'Practice',
                 ],
+                'questions' => $review['questions'],
             ]);
         }
 
-        $questions = $practiceSet->questions->values()->map(function ($q, $index) use ($attempt) {
-            $answer = $attempt->answers->firstWhere('question_id', $q->id);
-
-            return [
-                'number' => $index + 1,
-                'is_correct' => $answer?->is_correct ?? false,
-            ];
-        });
+        $review = AttemptResultSummary::forStudentReview($attempt);
 
         return Inertia::render('Student/PracticeSets/Result', [
             'attempt' => [
@@ -280,7 +277,7 @@ class PracticeSetController extends Controller
                 'kind_label' => $practiceSet->isChapterScope() ? 'Test' : 'Practice',
             ],
             'referencePdfUrl' => $this->referencePdfUrlFor($assignment),
-            'questions' => $questions,
+            'questions' => $review['questions'],
         ]);
     }
 

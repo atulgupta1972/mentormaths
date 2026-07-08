@@ -29,6 +29,43 @@ class GuidedPracticeServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_wrong_first_try_is_stored_for_review(): void
+    {
+        [$attempt, $wrongOption, $correctOption] = $this->seedGuidedAttempt();
+
+        $service = app(GuidedPracticeService::class);
+        $service->submitAnswer($attempt, $wrongOption->id);
+        $service->submitAnswer($attempt->fresh(['guidedQuestions.question.options']), $correctOption->id);
+
+        $guided = $attempt->fresh()->guidedQuestions->first();
+
+        $this->assertSame($wrongOption->id, $guided->first_wrong_option_id);
+        $this->assertSame($correctOption->id, $guided->final_option_id);
+        $this->assertTrue($guided->final_is_correct);
+    }
+
+    public function test_student_review_shows_wrong_then_correct_attempts(): void
+    {
+        [$attempt, $wrongOption, $correctOption] = $this->seedGuidedAttempt();
+
+        $service = app(GuidedPracticeService::class);
+        $service->submitAnswer($attempt, $wrongOption->id);
+        $service->submitAnswer($attempt->fresh(['guidedQuestions.question.options']), $correctOption->id);
+
+        $attempt = $attempt->fresh([
+            'guidedQuestions.question.options',
+            'assignment.practiceSet.questions.options',
+        ]);
+
+        $review = \App\Support\AttemptResultSummary::forStudentReview($attempt);
+        $question = $review['questions'][0];
+
+        $this->assertSame('1st try — wrong', $question['attempts'][0]['label']);
+        $this->assertFalse($question['attempts'][0]['is_correct']);
+        $this->assertSame('2nd try — correct', $question['attempts'][1]['label']);
+        $this->assertTrue($question['attempts'][1]['is_correct']);
+    }
+
     public function test_wrong_twice_shows_explanation_phase(): void
     {
         [$attempt, $wrongOption, $correctOption] = $this->seedGuidedAttempt();

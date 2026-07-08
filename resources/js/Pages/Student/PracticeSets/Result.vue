@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import AttemptReviewList from '@/Components/AttemptReviewList.vue';
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, Link } from '@inertiajs/vue3';
@@ -8,7 +9,7 @@ const props = defineProps({
     attempt: Object,
     assignment: Object,
     practiceSet: Object,
-    questions: Array,
+    questions: { type: Array, default: () => [] },
     referencePdfUrl: { type: String, default: null },
 });
 
@@ -23,7 +24,7 @@ const formatTime = (seconds) => {
 
 const percent = (score, max) => (max ? Math.round((score / max) * 100) : 0);
 
-const correctCount = () => props.questions.filter((q) => q.is_correct).length;
+const correctCount = () => props.questions.filter((q) => q.attempts?.some((row) => row.is_correct)).length;
 </script>
 
 <template>
@@ -72,18 +73,20 @@ const correctCount = () => props.questions.filter((q) => q.is_correct).length;
                             v-for="q in questions"
                             :key="q.number"
                             class="inline-flex h-9 min-w-9 items-center justify-center rounded-md px-2 text-sm font-semibold"
-                            :class="q.is_correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                            :class="q.attempts?.some((row) => row.is_correct) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
                         >
                             Q{{ q.number }}
                         </span>
                     </div>
                 </div>
 
+                <AttemptReviewList :questions="questions" />
+
                 <WorksheetPdfViewer
                     v-if="referencePdfUrl"
                     :url="referencePdfUrl"
                     title="Your worksheet"
-                    helper-text="Refer to your worksheet to review sums. Question text is not shown here."
+                    helper-text="Refer to your worksheet for diagrams or extra working space."
                 />
 
                 <Link :href="route('dashboard')">

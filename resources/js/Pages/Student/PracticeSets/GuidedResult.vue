@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import AttemptReviewList from '@/Components/AttemptReviewList.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, Link } from '@inertiajs/vue3';
 
@@ -7,6 +8,7 @@ const props = defineProps({
     attempt: Object,
     assignment: Object,
     practiceSet: Object,
+    questions: { type: Array, default: () => [] },
 });
 
 const setLabel = () => props.practiceSet?.set_code || 'Practice';
@@ -38,7 +40,7 @@ const formatTime = (seconds) => {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-2xl space-y-6 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
                 <div class="rounded-lg bg-white p-6 text-center shadow-sm">
                     <p class="text-sm text-gray-500">First-try score</p>
                     <p class="text-4xl font-bold text-indigo-600">
@@ -62,6 +64,8 @@ const formatTime = (seconds) => {
                     {{ attempt.given_up }} sum{{ attempt.given_up === 1 ? '' : 's' }} moved to your
                     <strong>Resolution</strong> list on the dashboard. Your teacher will explain them, then you can retry.
                 </div>
+
+                <AttemptReviewList :questions="questions" />
 
                 <Link :href="route('dashboard')">
                     <PrimaryButton>Back to dashboard</PrimaryButton>
