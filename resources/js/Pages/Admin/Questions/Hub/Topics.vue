@@ -64,8 +64,10 @@ const cardHref = (card) => {
     return route('admin.questions.topics.show', card.topic_id);
 };
 
-const packageChapterPracticeBank = () => {
-    router.post(route('admin.practice-sets.chapters.from-practice-bank', props.chapter.id));
+const packageChapterPracticeBank = (card) => {
+    router.post(route('admin.practice-sets.chapters.from-practice-bank', props.chapter.id), {
+        fill_in_blank: card?.fill_in_blank ?? false,
+    });
 };
 
 const packageChapterBank = () => {
@@ -81,8 +83,13 @@ const clearChapterPracticeBank = () => {
 };
 
 const packageAsSet = (card) => {
-    router.post(route('admin.practice-sets.from-topic', card.topic_id), { tier: card.tier });
+    router.post(route('admin.practice-sets.from-topic', card.topic_id), {
+        tier: card.tier,
+        fill_in_blank: card.fill_in_blank ?? false,
+    });
 };
+
+const isFillBlankCode = (code) => /^[SBC]F/i.test(code || '');
 
 const clearBank = (card) => {
     if (!window.confirm(`Delete all ${card.questions_count} questions in “${card.topic_name}”? This cannot be undone.`)) {
@@ -114,6 +121,13 @@ const clearBank = (card) => {
                 <p class="mt-1 text-xs text-gray-500">S821 = MCQ practice · SF821 = fill-in-blank practice · T821 = chapter test</p>
             </div>
             <div class="flex flex-wrap gap-2">
+                <Link
+                    v-if="isAdmin"
+                    :href="route('admin.questions.set-code')"
+                    class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                >
+                    Look up set code
+                </Link>
                 <Link
                     v-if="isAdmin"
                     :href="route('admin.questions.create-fill-in-blank', { syllabus_chapter_id: chapter.id })"
@@ -182,8 +196,10 @@ const clearBank = (card) => {
                             class="rounded-xl border border-emerald-300 bg-emerald-50 p-5 shadow-sm transition hover:border-emerald-500"
                         >
                             <div class="block">
-                                <p class="font-mono text-3xl font-bold tracking-wide text-emerald-900">{{ card.set_code }}</p>
-                                <p class="mt-2 text-sm font-semibold text-gray-800">Practice set bank</p>
+                                <p class="font-mono text-3xl font-bold tracking-wide" :class="isFillBlankCode(card.set_code) ? 'text-emerald-900' : 'text-emerald-900'">{{ card.set_code }}</p>
+                                <p class="mt-2 text-sm font-semibold text-gray-800">
+                                    {{ isFillBlankCode(card.set_code) ? 'Fill-in-blank practice bank' : 'MCQ practice bank' }}
+                                </p>
                                 <p class="mt-1 text-xs text-gray-600">
                                     {{ card.topics_count }} topic{{ card.topics_count === 1 ? '' : 's' }} · guided practice (one JSON = one set)
                                 </p>
@@ -195,7 +211,7 @@ const clearBank = (card) => {
                                 <button
                                     type="button"
                                     class="ml-1 font-medium text-indigo-600 hover:underline"
-                                    @click="packageChapterPracticeBank"
+                                    @click="packageChapterPracticeBank(card)"
                                 >
                                     Package as {{ card.set_code }}
                                 </button>
@@ -276,7 +292,12 @@ const clearBank = (card) => {
                             <p class="font-mono text-3xl font-bold tracking-wide text-gray-900">
                                 {{ card.set_code }}
                             </p>
-                            <p class="mt-2 text-sm font-semibold text-gray-800">{{ card.tier_label }} bank</p>
+                            <p class="mt-2 text-sm font-semibold text-gray-800">
+                                <span v-if="card.type === 'bank'">
+                                    {{ isFillBlankCode(card.set_code) ? 'Fill-in-blank bank' : 'MCQ bank' }}
+                                </span>
+                                <span v-else>{{ card.tier_label }} set</span>
+                            </p>
                             <p class="mt-1 text-xs text-gray-600">{{ card.topic_name }}</p>
                             <p class="mt-2 text-sm text-gray-700">{{ card.questions_count }} questions</p>
                         </Link>

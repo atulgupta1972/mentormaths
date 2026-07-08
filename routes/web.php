@@ -147,7 +147,9 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('questions.topics.clear-bank');
     Route::get('/questions/{question}/edit', [QuestionController::class, 'edit'])->name('questions.edit');
     Route::put('/questions/{question}', [QuestionController::class, 'update'])->name('questions.update');
+    Route::patch('/questions/{question}/fill-blank', [QuestionController::class, 'updateFillBlank'])->name('questions.fill-blank.update');
     Route::delete('/questions/{question}', [QuestionController::class, 'destroy'])->name('questions.destroy');
+    Route::get('/questions/set-code', [QuestionHubController::class, 'setCodeReview'])->name('questions.set-code');
 
     Route::post('/practice-sets/from-topic/{topic}', [PracticeSetController::class, 'storeFromTopic'])
         ->name('practice-sets.from-topic');

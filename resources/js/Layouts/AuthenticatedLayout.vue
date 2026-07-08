@@ -84,6 +84,12 @@ const contentGroup = computed(() => ({
         || route().current('admin.syllabus.*'),
     items: [
         {
+            label: 'Look up set code',
+            href: route('admin.questions.set-code'),
+            active: route().current('admin.questions.set-code'),
+            show: isAdmin.value,
+        },
+        {
             label: 'Questions',
             href: route('admin.questions.index'),
             active: route().current('admin.questions.*'),

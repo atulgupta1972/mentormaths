@@ -207,7 +207,14 @@ class ChapterPracticeSetController extends Controller
 
     public function storeFromChapterPracticeBank(Request $request, SyllabusChapter $chapter): RedirectResponse
     {
-        $questionIds = $this->mixedQuestionService->unpackagedPracticeSetQuestionIds($chapter);
+        if ($request->has('fill_in_blank')) {
+            $questionIds = $this->mixedQuestionService->unpackagedPracticeSetQuestionIdsByType(
+                $chapter,
+                $request->boolean('fill_in_blank'),
+            );
+        } else {
+            $questionIds = $this->mixedQuestionService->unpackagedPracticeSetQuestionIds($chapter);
+        }
 
         if ($questionIds === []) {
             return back()->with('error', 'No practice-set questions in this chapter to package.');

@@ -234,15 +234,20 @@ class PracticeSetController extends Controller
     {
         $validated = $request->validate([
             'tier' => ['nullable', 'in:'.implode(',', PracticeSetTier::all())],
+            'fill_in_blank' => ['nullable', 'boolean'],
         ]);
 
-        $questionIds = Question::query()
+        $query = Question::query()
             ->where('syllabus_topic_id', $topic->id)
             ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
-            ->whereDoesntHave('worksheets')
-            ->orderBy('id')
-            ->pluck('id')
-            ->all();
+            ->whereDoesntHave('worksheets');
+
+        if ($request->has('fill_in_blank')) {
+            $fillInBlank = $request->boolean('fill_in_blank');
+            $query->where('type', $fillInBlank ? Question::TYPE_FILL_IN_BLANK : Question::TYPE_MCQ);
+        }
+
+        $questionIds = $query->orderBy('id')->pluck('id')->all();
 
         if (count($questionIds) === 0) {
             return back()->with('error', 'No practice-set questions in this topic to package.');

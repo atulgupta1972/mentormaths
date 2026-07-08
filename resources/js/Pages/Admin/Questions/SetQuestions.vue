@@ -11,6 +11,7 @@ const props = defineProps({
     topic: Object,
     questions: Array,
     isChapterTest: { type: Boolean, default: false },
+    isFillInBlankSet: { type: Boolean, default: false },
     hintStats: Object,
     topicHintStats: Object,
 });
@@ -81,6 +82,12 @@ const generateHints = () => {
                             {{ practiceSet.set_code }}
                         </span>
                         <span class="text-sm text-gray-600">{{ practiceSet.tier_label }} · {{ practiceSet.questions_count }} sums</span>
+                        <span
+                            v-if="isFillInBlankSet"
+                            class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800"
+                        >
+                            Fill in blank
+                        </span>
                     </div>
                     <p v-if="isAdmin && topic?.id && hintStats?.total > 0" class="mt-1 text-xs text-gray-500">
                         Method hints in this set: {{ hintStats.with_hint }}/{{ hintStats.total }}
@@ -93,6 +100,12 @@ const generateHints = () => {
                     </p>
                 </div>
                 <div v-if="isAdmin" class="flex flex-wrap items-center gap-2">
+                    <Link
+                        :href="route('admin.questions.set-code', { code: practiceSet.set_code })"
+                        class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                        Look up / edit answers
+                    </Link>
                     <template v-if="topic?.id && !isChapterTest">
                         <label v-if="hintStats?.total > 0" class="flex items-center gap-2 text-xs text-gray-600">
                             <input v-model="overwrite" type="checkbox" class="rounded border-gray-300 text-indigo-600" />
@@ -157,7 +170,8 @@ const generateHints = () => {
                             <tr>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">#</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Question</th>
-                                <th v-if="isAdmin" class="px-4 py-3 text-left text-xs uppercase text-gray-500">Hint</th>
+                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Answer</th>
+                                <th v-if="isAdmin && !isFillInBlankSet" class="px-4 py-3 text-left text-xs uppercase text-gray-500">Hint</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Difficulty</th>
                                 <th v-if="isAdmin" class="px-4 py-3"></th>
                             </tr>
@@ -167,9 +181,26 @@ const generateHints = () => {
                                 <td class="px-4 py-3 text-gray-500">{{ index + 1 }}</td>
                                 <td class="px-4 py-3">
                                     <QuestionBody :question-text="q.question_text" :diagram-url="q.diagram_url" :compact="true" />
-                                    <p class="mt-1 text-xs text-gray-500">{{ q.options_count }} options</p>
+                                    <p class="mt-1 text-xs text-gray-500">
+                                        <span
+                                            class="rounded-full px-1.5 py-0.5 font-medium"
+                                            :class="q.type === 'fill_in_blank' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'"
+                                        >
+                                            {{ q.type_label }}
+                                        </span>
+                                        <span v-if="q.type !== 'fill_in_blank'"> · {{ q.options_count }} options</span>
+                                    </p>
                                 </td>
-                                <td v-if="isAdmin" class="px-4 py-3">
+                                <td class="px-4 py-3">
+                                    <template v-if="q.type === 'fill_in_blank'">
+                                        <p class="font-mono font-semibold text-gray-900">{{ q.correct_answer || '—' }}</p>
+                                        <p class="text-xs text-gray-500">{{ q.answer_format || '—' }}</p>
+                                    </template>
+                                    <template v-else>
+                                        <p class="font-mono text-sm text-gray-700">{{ q.correct_answer || '—' }}</p>
+                                    </template>
+                                </td>
+                                <td v-if="isAdmin && !isFillInBlankSet" class="px-4 py-3">
                                     <span
                                         v-if="q.method_hint"
                                         class="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800"
@@ -181,13 +212,20 @@ const generateHints = () => {
                                 </td>
                                 <td class="px-4 py-3">{{ q.difficulty || '—' }}</td>
                                 <td v-if="isAdmin" class="px-4 py-3 text-right">
-                                    <Link :href="route('admin.questions.edit', q.id)" class="text-indigo-600 hover:text-indigo-800">
+                                    <Link
+                                        v-if="q.type === 'fill_in_blank'"
+                                        :href="route('admin.questions.set-code', { code: practiceSet.set_code })"
+                                        class="text-indigo-600 hover:text-indigo-800"
+                                    >
+                                        Edit answer
+                                    </Link>
+                                    <Link v-else :href="route('admin.questions.edit', q.id)" class="text-indigo-600 hover:text-indigo-800">
                                         Edit
                                     </Link>
                                 </td>
                             </tr>
                             <tr v-if="questions.length === 0">
-                                <td :colspan="isAdmin ? 5 : 3" class="px-4 py-8 text-center text-gray-500">No questions in this set.</td>
+                                <td :colspan="isAdmin ? (isFillInBlankSet ? 4 : 5) : 3" class="px-4 py-8 text-center text-gray-500">No questions in this set.</td>
                             </tr>
                         </tbody>
                     </table>

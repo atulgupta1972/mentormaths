@@ -15,6 +15,7 @@ use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\PracticeSetCodeService;
 use App\Services\QuestionMethodHintService;
+use App\Services\SetCodeLookupService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
@@ -29,7 +30,20 @@ class QuestionHubController extends Controller
     public function __construct(
         private AdminGradeContext $gradeContext,
         private QuestionMethodHintService $methodHintService,
+        private SetCodeLookupService $setCodeLookup,
     ) {}
+
+    public function setCodeReview(Request $request): Response
+    {
+        $code = trim((string) $request->query('code', ''));
+        $result = $code !== '' ? $this->setCodeLookup->lookup($code) : null;
+
+        return Inertia::render('Admin/Questions/SetCodeReview', [
+            'code' => $code,
+            'result' => $result,
+            'answerFormats' => ['integer', 'decimal', 'fraction'],
+        ]);
+    }
 
     public function classes(Request $request): Response
     {
@@ -224,56 +238,67 @@ class QuestionHubController extends Controller
                 ]);
             }
 
-            $practiceSetUnpackagedCount = Question::query()
-                ->where('syllabus_topic_id', $topic->id)
-                ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
-                ->whereDoesntHave('worksheets')
-                ->count();
+            if (! $hasChapterPracticeBank) {
+                foreach ([false, true] as $fillInBlank) {
+                    $unpackagedIds = Question::query()
+                        ->where('syllabus_topic_id', $topic->id)
+                        ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+                        ->where('type', $fillInBlank ? Question::TYPE_FILL_IN_BLANK : Question::TYPE_MCQ)
+                        ->whereDoesntHave('worksheets')
+                        ->pluck('id')
+                        ->all();
 
-            if (! $hasChapterPracticeBank && $topic->practiceSets->isEmpty() && $practiceSetUnpackagedCount > 0) {
-                $unpackagedIds = Question::query()
-                    ->where('syllabus_topic_id', $topic->id)
-                    ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
-                    ->whereDoesntHave('worksheets')
-                    ->pluck('id')
-                    ->all();
+                    if ($unpackagedIds === []) {
+                        continue;
+                    }
 
-                $setCards->push([
-                    'type' => 'bank',
-                    'topic_id' => $topic->id,
-                    'topic_name' => $topic->name,
-                    'set_code' => $codeService->generate(
-                        $topic,
-                        PracticeSetTier::STARTER,
-                        Question::idsAreAllFillInBlank($unpackagedIds),
-                    ),
-                    'tier' => PracticeSetTier::STARTER,
-                    'tier_label' => PracticeSetTier::label(PracticeSetTier::STARTER),
-                    'questions_count' => $practiceSetUnpackagedCount,
-                    'status' => 'bank',
-                ]);
+                    $setCards->push([
+                        'type' => 'bank',
+                        'topic_id' => $topic->id,
+                        'topic_name' => $topic->name,
+                        'set_code' => $codeService->generate($topic, PracticeSetTier::STARTER, $fillInBlank),
+                        'tier' => PracticeSetTier::STARTER,
+                        'tier_label' => PracticeSetTier::label(PracticeSetTier::STARTER),
+                        'questions_count' => count($unpackagedIds),
+                        'status' => 'bank',
+                        'fill_in_blank' => $fillInBlank,
+                    ]);
+                }
             }
         }
 
         if ($hasChapterPracticeBank) {
-            $topicsWithUnpackaged = Question::query()
-                ->whereIn('id', $unpackagedPracticeSetIds)
-                ->distinct()
-                ->count('syllabus_topic_id');
+            foreach ([false, true] as $fillInBlank) {
+                $typedIds = Question::query()
+                    ->whereIn('id', $unpackagedPracticeSetIds)
+                    ->where('type', $fillInBlank ? Question::TYPE_FILL_IN_BLANK : Question::TYPE_MCQ)
+                    ->pluck('id')
+                    ->all();
 
-            $setCards->prepend([
-                'type' => 'chapter_practice_bank',
-                'questions_count' => $unpackagedPracticeSetIds->count(),
-                'topics_count' => $topicsWithUnpackaged,
-                'set_code' => $codeService->generateChapterPractice(
-                    $chapter,
-                    PracticeSetTier::STARTER,
-                    Question::idsAreAllFillInBlank($unpackagedPracticeSetIds->all()),
-                ),
-                'tier' => PracticeSetTier::STARTER,
-                'tier_label' => PracticeSetTier::label(PracticeSetTier::STARTER),
-                'status' => 'bank',
-            ]);
+                if ($typedIds === []) {
+                    continue;
+                }
+
+                $topicsWithUnpackaged = Question::query()
+                    ->whereIn('id', $typedIds)
+                    ->distinct()
+                    ->count('syllabus_topic_id');
+
+                $setCards->prepend([
+                    'type' => 'chapter_practice_bank',
+                    'questions_count' => count($typedIds),
+                    'topics_count' => $topicsWithUnpackaged,
+                    'set_code' => $codeService->generateChapterPractice(
+                        $chapter,
+                        PracticeSetTier::STARTER,
+                        $fillInBlank,
+                    ),
+                    'tier' => PracticeSetTier::STARTER,
+                    'tier_label' => PracticeSetTier::label(PracticeSetTier::STARTER),
+                    'status' => 'bank',
+                    'fill_in_blank' => $fillInBlank,
+                ]);
+            }
         }
 
         if ($unpackagedChapterTestIds->count() > 0) {
@@ -326,6 +351,7 @@ class QuestionHubController extends Controller
             'chapter.syllabusVersion.board',
             'chapter.syllabusVersion.gradeLevel',
             'questions.options',
+            'questions.blankAnswer',
         ]);
         $worksheet->loadCount('questions');
 
@@ -375,16 +401,26 @@ class QuestionHubController extends Controller
                 'board_code' => $board?->code,
             ] : null),
             'board' => $board?->only(['id', 'code', 'name']),
-            'isChapterTest' => $worksheet->isChapterScope(),
-            'questions' => $worksheet->questions->map(fn ($q) => [
-                'id' => $q->id,
-                'question_text' => $q->question_text,
-                'diagram_url' => $q->diagram_url,
-                'difficulty' => $q->difficulty,
-                'source' => $q->source,
-                'method_hint' => $q->method_hint,
-                'options_count' => $q->options->count(),
-            ])->values()->all(),
+            'isChapterTest' => $worksheet->isChapterTest(),
+            'isFillInBlankSet' => $worksheet->questions->every(fn (Question $q) => $q->isFillInBlank()),
+            'questions' => $worksheet->questions->map(function ($q) {
+                $correctOption = $q->options->firstWhere('is_correct', true);
+
+                return [
+                    'id' => $q->id,
+                    'question_text' => $q->question_text,
+                    'diagram_url' => $q->diagram_url,
+                    'difficulty' => $q->difficulty,
+                    'source' => $q->source,
+                    'method_hint' => $q->method_hint,
+                    'type' => $q->type,
+                    'type_label' => $q->isFillInBlank() ? 'Fill in blank' : 'MCQ',
+                    'options_count' => $q->options->count(),
+                    'answer_format' => $q->blankAnswer?->answer_format,
+                    'correct_answer' => $q->blankAnswer?->correct_answer ?? $correctOption?->option_text,
+                    'decimal_places' => $q->blankAnswer?->decimal_places,
+                ];
+            })->values()->all(),
             'hintStats' => $topic
                 ? $this->methodHintService->statsForQuestions($worksheet->questions)
                 : null,

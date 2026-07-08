@@ -777,6 +777,41 @@ class QuestionController extends Controller
             ->with('success', 'Question updated.');
     }
 
+    public function updateFillBlank(Request $request, Question $question): RedirectResponse
+    {
+        if (! $question->isFillInBlank()) {
+            abort(422, 'This question is not fill-in-blank.');
+        }
+
+        $validated = $request->validate([
+            'question_text' => ['required', 'string'],
+            'answer_format' => ['required', 'in:integer,decimal,fraction'],
+            'correct_answer' => ['required', 'string', 'max:64'],
+            'decimal_places' => ['nullable', 'integer', 'min:0', 'max:6'],
+            'explanation' => ['nullable', 'string'],
+            'method_hint' => ['nullable', 'string'],
+            'difficulty' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        $question->update([
+            'question_text' => $validated['question_text'],
+            'explanation' => $validated['explanation'] ?? null,
+            'method_hint' => $validated['method_hint'] ?? null,
+            'difficulty' => $validated['difficulty'] ?? null,
+        ]);
+
+        $question->blankAnswer()->updateOrCreate(
+            ['question_id' => $question->id],
+            [
+                'answer_format' => $validated['answer_format'],
+                'correct_answer' => trim($validated['correct_answer']),
+                'decimal_places' => $validated['decimal_places'] ?? null,
+            ],
+        );
+
+        return back()->with('success', 'Fill-in-blank question updated.');
+    }
+
     public function destroy(Question $question): RedirectResponse
     {
         $topicId = $question->syllabus_topic_id;

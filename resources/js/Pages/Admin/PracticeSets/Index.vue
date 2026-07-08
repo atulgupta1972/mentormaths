@@ -1,11 +1,24 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 defineProps({
     practiceSets: Array,
     selectedGrade: Object,
 });
+
+const setCode = ref('');
+
+const lookupSet = () => {
+    if (!setCode.value.trim()) {
+        return;
+    }
+
+    router.get(route('admin.questions.set-code'), {
+        code: setCode.value.trim().toUpperCase(),
+    });
+};
 </script>
 
 <template>
@@ -30,7 +43,21 @@ defineProps({
 
         <div class="py-12">
             <div class="mx-auto max-w-6xl sm:px-6 lg:px-8">
-                <div class="mb-4 flex gap-3">
+                <div class="mb-4 flex flex-wrap items-end gap-3">
+                    <form class="flex flex-wrap items-end gap-2" @submit.prevent="lookupSet">
+                        <div>
+                            <label class="block text-xs font-medium uppercase text-gray-500">Look up set code</label>
+                            <input
+                                v-model="setCode"
+                                type="text"
+                                placeholder="SF121"
+                                class="mt-1 rounded-md border-gray-300 font-mono uppercase text-sm shadow-sm"
+                            >
+                        </div>
+                        <button type="submit" class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                            Review Q&amp;A
+                        </button>
+                    </form>
                     <Link :href="route('admin.classes.index')" class="text-sm text-indigo-600 hover:underline">
                         Browse by class →
                     </Link>
