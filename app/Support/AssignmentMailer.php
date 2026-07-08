@@ -26,10 +26,11 @@ class AssignmentMailer
             return ['sent' => false, 'email' => null, 'error' => 'no_student'];
         }
 
+        $studentEmail = self::resolveStudentEmail($student);
         $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
 
-        if (! $adminEmail) {
-            return ['sent' => false, 'email' => null, 'error' => 'no_admin_email'];
+        if (! $studentEmail && ! $adminEmail) {
+            return ['sent' => false, 'email' => null, 'error' => 'no_email'];
         }
 
         $relations = [
@@ -44,18 +45,26 @@ class AssignmentMailer
         $summary = AttemptResultSummary::forAdmin($attempt->fresh($relations));
 
         try {
-            Mail::to($adminEmail)->send(new AssignmentCompleted($student, $summary));
+            $recipient = $studentEmail ?: $adminEmail;
+            $pending = Mail::to($recipient);
 
-            return ['sent' => true, 'email' => $adminEmail, 'error' => null];
+            if ($studentEmail && $adminEmail && strcasecmp($adminEmail, $studentEmail) !== 0) {
+                $pending->cc($adminEmail);
+            }
+
+            $pending->send(new AssignmentCompleted($student, $summary));
+
+            return ['sent' => true, 'email' => $recipient, 'error' => null];
         } catch (\Throwable $e) {
             Log::error('Failed to send completion email.', [
                 'attempt_id' => $attempt->id,
                 'student_id' => $student->id,
+                'student_email' => $studentEmail,
                 'admin_email' => $adminEmail,
                 'error' => $e->getMessage(),
             ]);
 
-            return ['sent' => false, 'email' => $adminEmail, 'error' => 'send_failed'];
+            return ['sent' => false, 'email' => $studentEmail ?: $adminEmail, 'error' => 'send_failed'];
         }
     }
 

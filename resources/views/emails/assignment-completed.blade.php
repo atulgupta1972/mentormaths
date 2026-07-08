@@ -1,9 +1,9 @@
-<p>Hello,</p>
+<p>Hello {{ $studentName }},</p>
 
 <p>
-    <strong>{{ $studentName }}</strong> has submitted
+    Your submission for
     <strong>{{ $summary['set_code'] }}</strong>
-    ({{ $summary['tier_label'] }} {{ $summary['kind_label'] }}).
+    ({{ $summary['tier_label'] }} {{ $summary['kind_label'] }}) is recorded.
 </p>
 
 @if ($summary['scope_line'])
@@ -87,8 +87,15 @@
 @endif
 
 <p>
-    View full details in admin:<br>
-    <a href="{{ $summary['admin_url'] }}">{{ $summary['admin_url'] }}</a>
+    View your dashboard:<br>
+    <a href="{{ $dashboardUrl }}">{{ $dashboardUrl }}</a>
 </p>
+
+@if (! empty($summary['admin_url']))
+    <p>
+        Admin review link:<br>
+        <a href="{{ $summary['admin_url'] }}">{{ $summary['admin_url'] }}</a>
+    </p>
+@endif
 
 <p>Thank you,<br>{{ config('app.name') }}</p>

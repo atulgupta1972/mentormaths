@@ -120,7 +120,29 @@ class AssignmentMailerTest extends TestCase
         $this->assertSame('partial.load@example.com', AssignmentMailer::resolveStudentEmail($partial));
     }
 
-    public function test_send_completed_emails_admin_even_without_student_email(): void
+    public function test_send_completed_emails_student_and_ccs_admin(): void
+    {
+        Mail::fake();
+
+        config(['mail.registration_notify' => 'admin@mentormaths.in']);
+
+        $attempt = $this->seedSubmittedAttempt('student@example.com');
+
+        $result = AssignmentMailer::sendCompleted($attempt);
+
+        $this->assertTrue($result['sent']);
+        $this->assertSame('student@example.com', $result['email']);
+
+        Mail::assertSent(AssignmentCompleted::class, function (AssignmentCompleted $mail) {
+            return $mail->hasTo('student@example.com')
+                && $mail->hasCc('admin@mentormaths.in')
+                && $mail->summary['attempt_number'] === 1
+                && $mail->summary['score_label'] === '3/5';
+        });
+        Mail::assertSentCount(1);
+    }
+
+    public function test_send_completed_emails_admin_when_student_has_no_email(): void
     {
         Mail::fake();
 
@@ -141,7 +163,7 @@ class AssignmentMailerTest extends TestCase
         Mail::assertSentCount(1);
     }
 
-    public function test_send_completed_skips_when_no_admin_email_configured(): void
+    public function test_send_completed_skips_when_no_recipient_email(): void
     {
         Mail::fake();
 
@@ -153,11 +175,11 @@ class AssignmentMailerTest extends TestCase
         $result = AssignmentMailer::sendCompleted($attempt);
 
         $this->assertFalse($result['sent']);
-        $this->assertSame('no_admin_email', $result['error']);
+        $this->assertSame('no_email', $result['error']);
         Mail::assertNothingSent();
     }
 
-    private function seedSubmittedAttempt(): SetAttempt
+    private function seedSubmittedAttempt(?string $studentEmail = null): SetAttempt
     {
         $year = AcademicYear::query()->create([
             'name' => '2026-27',
@@ -185,6 +207,7 @@ class AssignmentMailerTest extends TestCase
 
         $student = Student::query()->create([
             'name' => 'Parth Gupta',
+            'email' => $studentEmail,
             'parent1_name' => 'Parent',
             'parent1_mobile' => '9876543210',
             'school_name' => 'School',
