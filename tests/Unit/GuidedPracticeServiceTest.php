@@ -67,6 +67,19 @@ class GuidedPracticeServiceTest extends TestCase
         ]);
     }
 
+    public function test_give_up_from_first_question_queues_resolution_item(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt();
+
+        $service = app(GuidedPracticeService::class);
+        $payload = $service->giveUp($attempt->fresh(['guidedQuestions', 'assignment']));
+
+        $this->assertTrue($payload['help_requested']);
+        $this->assertDatabaseHas('question_resolution_items', [
+            'status' => 'pending',
+        ]);
+    }
+
     public function test_fill_in_blank_wrong_twice_shows_explanation_phase(): void
     {
         [$attempt] = $this->seedFillBlankGuidedAttempt();

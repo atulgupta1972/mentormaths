@@ -21,8 +21,10 @@ class UniqueStudentIdentity implements ValidationRule
             return;
         }
 
-        if (StudentIdentity::findExistingStudent($name, $mobile)) {
-            $fail('A student with this name and mobile number is already registered. Please log in or contact the admin.');
+        if ($existing = StudentIdentity::findExistingStudent($name, $mobile)) {
+            if (! StudentIdentity::canReuseStudentProfile($existing)) {
+                $fail('A student with this name and mobile number is already registered. Please log in or contact the admin.');
+            }
 
             return;
         }

@@ -31,12 +31,19 @@ class AnswerValidationService
             return false;
         }
 
-        return match ($blank->answer_format) {
+        $formatMatch = match ($blank->answer_format) {
             QuestionBlankAnswer::FORMAT_INTEGER => $this->matchesInteger($blank->correct_answer, $student),
             QuestionBlankAnswer::FORMAT_DECIMAL => $this->matchesDecimal($blank->correct_answer, $student, $blank->decimal_places),
             QuestionBlankAnswer::FORMAT_FRACTION => $this->matchesFraction($blank->correct_answer, $student),
+            QuestionBlankAnswer::FORMAT_TEXT => $this->matchesText($blank->correct_answer, $student),
             default => false,
         };
+
+        if ($formatMatch) {
+            return true;
+        }
+
+        return $this->matchesText($blank->correct_answer, $student);
     }
 
     public function formatLabel(?string $format): string
@@ -45,7 +52,26 @@ class AnswerValidationService
             QuestionBlankAnswer::FORMAT_INTEGER => 'Whole number',
             QuestionBlankAnswer::FORMAT_DECIMAL => 'Decimal',
             QuestionBlankAnswer::FORMAT_FRACTION => 'Fraction',
+            QuestionBlankAnswer::FORMAT_TEXT => 'Symbol or text',
             default => 'Answer',
+        };
+    }
+
+    private function matchesText(string $expected, string $student): bool
+    {
+        return strcasecmp($this->normalizeTextAnswer($expected), $this->normalizeTextAnswer($student)) === 0;
+    }
+
+    private function normalizeTextAnswer(string $value): string
+    {
+        $value = trim(str_replace(',', '.', $value));
+        $value = preg_replace('/\s+/u', ' ', $value) ?? $value;
+
+        return match ($value) {
+            '≤', '=<', '<=' => '<=',
+            '≥', '=>', '>=' => '>=',
+            '≠', '!=' => '!=',
+            default => $value,
         };
     }
 

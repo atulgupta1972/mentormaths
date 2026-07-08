@@ -64,6 +64,23 @@ class AnswerValidationServiceTest extends TestCase
         $this->assertTrue($this->service->isCorrect($question, '3/2'));
     }
 
+    public function test_comparison_symbol_accepted_even_when_format_is_fraction(): void
+    {
+        $question = $this->fillBlankQuestion(QuestionBlankAnswer::FORMAT_FRACTION, '<');
+
+        $this->assertTrue($this->service->isCorrect($question, '<'));
+        $this->assertTrue($this->service->isCorrect($question, ' < '));
+        $this->assertFalse($this->service->isCorrect($question, '>'));
+    }
+
+    public function test_text_format_matches_symbols(): void
+    {
+        $question = $this->fillBlankQuestion(QuestionBlankAnswer::FORMAT_TEXT, '=');
+
+        $this->assertTrue($this->service->isCorrect($question, '='));
+        $this->assertFalse($this->service->isCorrect($question, '<'));
+    }
+
     /**
      * @return Question
      */

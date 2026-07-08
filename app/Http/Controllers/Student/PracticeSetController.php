@@ -188,7 +188,7 @@ class PracticeSetController extends Controller
             return redirect()->route('student.attempts.result', $attempt);
         }
 
-        return back();
+        return back()->with('success', 'Help requested — your teacher will explain this sum. It is on your dashboard help list.');
     }
 
     public function submitAttempt(Request $request, SetAttempt $attempt): RedirectResponse

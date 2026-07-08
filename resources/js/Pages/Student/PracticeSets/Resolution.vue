@@ -34,6 +34,10 @@ const answerPlaceholder = computed(() => {
         return 'Enter a fraction, e.g. 3/4 or 1 1/2';
     }
 
+    if (format === 'text') {
+        return 'Enter your answer, e.g. < or > or =';
+    }
+
     return 'Enter your answer';
 });
 

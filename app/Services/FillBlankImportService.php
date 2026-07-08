@@ -337,7 +337,7 @@ PROMPT;
         $format = strtolower(trim((string) ($item['answer_format'] ?? $item['format'] ?? 'integer')));
 
         if (! in_array($format, QuestionBlankAnswer::formats(), true)) {
-            throw new InvalidArgumentException('Question '.($index + 1).' has invalid answer_format (use integer, decimal, or fraction).');
+            throw new InvalidArgumentException('Question '.($index + 1).' has invalid answer_format (use integer, decimal, fraction, or text).');
         }
 
         $correctAnswer = trim((string) ($item['correct_answer'] ?? $item['answer'] ?? ''));
@@ -345,6 +345,8 @@ PROMPT;
         if ($correctAnswer === '') {
             throw new InvalidArgumentException('Question '.($index + 1).' is missing correct_answer.');
         }
+
+        $format = $this->resolveAnswerFormat($format, $correctAnswer);
 
         return [
             'question_text' => $questionText,
@@ -357,6 +359,24 @@ PROMPT;
             'method_hint' => trim((string) ($item['method_hint'] ?? $item['hint'] ?? '')),
             'difficulty' => trim((string) ($item['difficulty'] ?? '')),
         ];
+    }
+
+    private function resolveAnswerFormat(string $format, string $correctAnswer): string
+    {
+        if ($format === QuestionBlankAnswer::FORMAT_TEXT) {
+            return QuestionBlankAnswer::FORMAT_TEXT;
+        }
+
+        if (preg_match('/^(<=|>=|!=|[<=>≤≥≠])$/u', $correctAnswer)) {
+            return QuestionBlankAnswer::FORMAT_TEXT;
+        }
+
+        if ($format === QuestionBlankAnswer::FORMAT_FRACTION
+            && ! preg_match('/^-?\d+(?:\.\d+)?(?:\s+\d+\s*\/\s*\d+|\s*\/\s*\d+)?$/', $correctAnswer)) {
+            return QuestionBlankAnswer::FORMAT_TEXT;
+        }
+
+        return $format;
     }
 
     private function chapterContext(SyllabusChapter $chapter): string

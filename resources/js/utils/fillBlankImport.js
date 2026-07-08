@@ -1,4 +1,4 @@
-const FORMATS = ['integer', 'decimal', 'fraction'];
+const FORMATS = ['integer', 'decimal', 'fraction', 'text'];
 
 function stripMarkdownFences(text) {
     let json = text.trim();
@@ -41,6 +41,22 @@ function extractJsonObject(text) {
     return null;
 }
 
+function resolveAnswerFormat(format, correctAnswer) {
+    if (format === 'text') {
+        return 'text';
+    }
+
+    if (/^(<=|>=|!=|[<=>≤≥≠])$/.test(correctAnswer)) {
+        return 'text';
+    }
+
+    if (format === 'fraction' && !/^-?\d+(?:\.\d+)?(?:\s+\d+\s*\/\s*\d+|\s*\/\s*\d+)?$/.test(correctAnswer)) {
+        return 'text';
+    }
+
+    return format;
+}
+
 function normalizeItem(item, index) {
     const questionText = String(item.question ?? item.question_text ?? '').trim();
     const answerFormat = String(item.answer_format ?? item.format ?? 'integer').trim().toLowerCase();
@@ -51,18 +67,20 @@ function normalizeItem(item, index) {
     }
 
     if (!FORMATS.includes(answerFormat)) {
-        throw new Error(`Question ${index + 1} must use answer_format integer, decimal, or fraction.`);
+        throw new Error(`Question ${index + 1} must use answer_format integer, decimal, fraction, or text.`);
     }
 
     if (!correctAnswer) {
         throw new Error(`Question ${index + 1} is missing correct_answer.`);
     }
 
+    const resolvedFormat = resolveAnswerFormat(answerFormat, correctAnswer);
+
     return {
         question_text: questionText,
         topic_name: String(item.topic ?? item.topic_name ?? '').trim(),
         syllabus_topic_id: item.syllabus_topic_id ?? item.topic_id ?? null,
-        answer_format: answerFormat,
+        answer_format: resolvedFormat,
         correct_answer: correctAnswer,
         decimal_places: item.decimal_places ?? null,
         explanation: String(item.explanation ?? '').trim(),

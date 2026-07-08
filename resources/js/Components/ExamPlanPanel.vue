@@ -593,15 +593,13 @@ watch(
                                             <span class="ml-2 text-xs text-gray-400">{{ set.tier_label }} · {{ set.questions_count }} Q</span>
                                         </div>
                                         <PrimaryButton
-                                            v-if="!set.is_assigned"
                                             type="button"
                                             class="!py-1.5 !text-xs"
                                             :disabled="assignForm.processing"
                                             @click="assignSet(plan, set.id)"
                                         >
-                                            Assign
+                                            {{ set.is_assigned ? 'Re-assign' : 'Assign' }}
                                         </PrimaryButton>
-                                        <span v-else class="text-xs font-medium text-green-700">Already assigned</span>
                                     </li>
                                 </ul>
                             </div>
@@ -620,15 +618,13 @@ watch(
                                             <span class="ml-2 text-xs text-gray-400">{{ set.questions_count }} Q</span>
                                         </div>
                                         <PrimaryButton
-                                            v-if="!set.is_assigned"
                                             type="button"
                                             class="!py-1.5 !text-xs"
                                             :disabled="assignForm.processing"
                                             @click="assignSet(plan, set.id)"
                                         >
-                                            Assign
+                                            {{ set.is_assigned ? 'Re-assign' : 'Assign' }}
                                         </PrimaryButton>
-                                        <span v-else class="text-xs font-medium text-green-700">Already assigned</span>
                                     </li>
                                 </ul>
                             </div>

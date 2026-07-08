@@ -13,6 +13,8 @@ class QuestionBlankAnswer extends Model
 
     public const FORMAT_FRACTION = 'fraction';
 
+    public const FORMAT_TEXT = 'text';
+
     protected $fillable = [
         'question_id',
         'answer_format',
@@ -34,6 +36,7 @@ class QuestionBlankAnswer extends Model
             self::FORMAT_INTEGER,
             self::FORMAT_DECIMAL,
             self::FORMAT_FRACTION,
+            self::FORMAT_TEXT,
         ];
     }
 }

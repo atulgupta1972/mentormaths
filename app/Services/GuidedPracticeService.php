@@ -80,7 +80,11 @@ class GuidedPracticeService
             ],
             'phase' => $current->phase,
             'show_explanation' => $current->phase === GuidedAttemptQuestion::PHASE_EXPLAINED,
-            'can_give_up' => $current->phase === GuidedAttemptQuestion::PHASE_EXPLAINED,
+            'can_give_up' => in_array($current->phase, [
+                GuidedAttemptQuestion::PHASE_ANSWERING,
+                GuidedAttemptQuestion::PHASE_RETRY,
+                GuidedAttemptQuestion::PHASE_EXPLAINED,
+            ], true),
             'feedback' => null,
             'question' => $this->formatQuestion($question, $attempt->current_question_index + 1, $current),
             'practice_set' => [
@@ -184,8 +188,12 @@ class GuidedPracticeService
         $attempt->loadMissing(['guidedQuestions', 'assignment']);
         $current = $attempt->guidedQuestions->firstWhere('sort_order', $attempt->current_question_index);
 
-        if (! $current || $current->phase !== GuidedAttemptQuestion::PHASE_EXPLAINED) {
-            throw new \InvalidArgumentException('You can give up only after reading the explanation.');
+        if (! $current || ! in_array($current->phase, [
+            GuidedAttemptQuestion::PHASE_ANSWERING,
+            GuidedAttemptQuestion::PHASE_RETRY,
+            GuidedAttemptQuestion::PHASE_EXPLAINED,
+        ], true)) {
+            throw new \InvalidArgumentException('You cannot ask for help on this question right now.');
         }
 
         return DB::transaction(function () use ($attempt, $current) {
@@ -198,10 +206,14 @@ class GuidedPracticeService
             $this->queueForResolution($attempt, $current);
             $this->advanceOrFinalize($attempt);
 
-            return $this->buildPayload($attempt->fresh([
+            $payload = $this->buildPayload($attempt->fresh([
                 'assignment.practiceSet',
                 'guidedQuestions.question.options',
+                'guidedQuestions.question.blankAnswer',
             ]));
+            $payload['help_requested'] = true;
+
+            return $payload;
         });
     }
 
@@ -262,7 +274,7 @@ class GuidedPracticeService
 
         return [
             'type' => 'explained',
-            'message' => 'Read the method below, then try again or give up if you still need your teacher.',
+            'message' => 'Read the method below, then try again or tap I need help if you want your teacher to explain.',
         ];
     }
 
@@ -288,7 +300,7 @@ class GuidedPracticeService
 
         return [
             'type' => 'incorrect',
-            'message' => 'Still not correct. Read the method again, try once more, or give up for your teacher to explain.',
+            'message' => 'Still not correct. Read the method again, try once more, or tap I need help for your teacher.',
         ];
     }
 

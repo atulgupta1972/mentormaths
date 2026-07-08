@@ -785,7 +785,7 @@ class QuestionController extends Controller
 
         $validated = $request->validate([
             'question_text' => ['required', 'string'],
-            'answer_format' => ['required', 'in:integer,decimal,fraction'],
+            'answer_format' => ['required', 'in:integer,decimal,fraction,text'],
             'correct_answer' => ['required', 'string', 'max:64'],
             'decimal_places' => ['nullable', 'integer', 'min:0', 'max:6'],
             'explanation' => ['nullable', 'string'],

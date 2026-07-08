@@ -257,7 +257,10 @@ class ExamPlanService
 
         $activeWorksheetIds = SetAssignment::query()
             ->where('student_enrollment_id', $plan->student_enrollment_id)
-            ->whereNotIn('status', [SetAssignment::STATUS_CANCELLED])
+            ->whereIn('status', [
+                SetAssignment::STATUS_ASSIGNED,
+                SetAssignment::STATUS_IN_PROGRESS,
+            ])
             ->pluck('worksheet_id')
             ->all();
 

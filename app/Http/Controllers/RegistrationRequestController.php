@@ -7,6 +7,7 @@ use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\RegistrationRequest;
 use App\Rules\UniqueStudentIdentity;
+use App\Rules\UniqueStudentLoginEmail;
 use App\Support\RegistrationMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -58,7 +59,7 @@ class RegistrationRequestController extends Controller
                 'string',
                 'email',
                 'max:255',
-                Rule::unique('users', 'email'),
+                new UniqueStudentLoginEmail,
                 Rule::unique('registration_requests', 'email')->where(
                     fn ($query) => $query->where('status', RegistrationRequest::STATUS_PENDING),
                 ),

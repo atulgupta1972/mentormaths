@@ -38,7 +38,7 @@ class SetAssignmentService
             ->first();
 
         if ($existing) {
-            throw new \InvalidArgumentException('This student already has an active assignment for this set.');
+            return $this->reassign($existing, $assigner, $dueDate, $notes);
         }
 
         $examPlan = $this->examPlanService->matchingPlanForAssignment(
@@ -123,7 +123,7 @@ class SetAssignmentService
 
         $inProgress = $assignment->attempts()->where('status', 'in_progress')->exists();
         if ($inProgress) {
-            throw new \InvalidArgumentException('Student has an attempt in progress. Wait for submission first.');
+            $assignment->attempts()->where('status', 'in_progress')->delete();
         }
 
         $assignment->update([

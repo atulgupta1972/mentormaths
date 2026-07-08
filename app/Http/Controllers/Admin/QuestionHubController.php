@@ -7,6 +7,7 @@ use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Question;
+use App\Models\QuestionBlankAnswer;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
@@ -41,7 +42,7 @@ class QuestionHubController extends Controller
         return Inertia::render('Admin/Questions/SetCodeReview', [
             'code' => $code,
             'result' => $result,
-            'answerFormats' => ['integer', 'decimal', 'fraction'],
+            'answerFormats' => QuestionBlankAnswer::formats(),
         ]);
     }
 

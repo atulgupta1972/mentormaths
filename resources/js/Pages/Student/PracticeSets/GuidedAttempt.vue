@@ -4,7 +4,6 @@ import QuestionBody from '@/Components/QuestionBody.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import TextInput from '@/Components/TextInput.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
@@ -43,6 +42,10 @@ const answerPlaceholder = computed(() => {
 
     if (format === 'fraction') {
         return 'Enter a fraction, e.g. 3/4 or 1 1/2';
+    }
+
+    if (format === 'text') {
+        return 'Enter your answer, e.g. < or > or =';
     }
 
     return 'Enter your answer';
@@ -103,8 +106,8 @@ const submitBlankAnswer = () => {
     });
 };
 
-const giveUp = () => {
-    if (!confirm('Give up on this sum? It will go to your resolution list for your teacher to explain.')) {
+const requestHelp = () => {
+    if (!confirm('Ask your teacher for help on this sum? It goes on your help list and you move to the next question.')) {
         return;
     }
 
@@ -143,6 +146,10 @@ watch(
 
         <div class="py-10">
             <div class="mx-auto max-w-3xl space-y-5 sm:px-6 lg:px-8">
+                <div v-if="page.props.flash?.success" class="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">
+                    {{ page.props.flash.success }}
+                </div>
+
                 <div v-if="page.props.flash?.error" class="rounded-md bg-red-50 p-3 text-sm text-red-800">
                     {{ page.props.flash.error }}
                 </div>
@@ -167,7 +174,18 @@ watch(
                 </div>
 
                 <div v-if="question" class="rounded-lg bg-white p-5 shadow-sm">
-                    <p class="text-sm font-semibold text-indigo-600">Question {{ question.number }}</p>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <p class="text-sm font-semibold text-indigo-600">Question {{ question.number }}</p>
+                        <button
+                            v-if="can_give_up"
+                            type="button"
+                            class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                            :disabled="giveUpForm.processing"
+                            @click="requestHelp"
+                        >
+                            {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
+                        </button>
+                    </div>
 
                     <div class="mt-3">
                         <QuestionBody
@@ -223,12 +241,6 @@ watch(
                         >
                             <McqOptionLine :index="optIndex" :text="opt.option_text" />
                         </button>
-                    </div>
-
-                    <div v-if="can_give_up" class="mt-4 flex flex-wrap gap-3 border-t pt-4">
-                        <SecondaryButton type="button" :disabled="giveUpForm.processing" @click="giveUp">
-                            Give up — ask teacher later
-                        </SecondaryButton>
                     </div>
                 </div>
 

@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\RegistrationRequest;
 use App\Models\Student;
+use App\Models\User;
 
 class StudentIdentity
 {
@@ -66,9 +67,36 @@ class StudentIdentity
             ->first(fn (RegistrationRequest $request) => self::normalizeMobile($request->student_mobile) === $normalizedMobile);
     }
 
+    public static function canReuseStudentProfile(Student $student): bool
+    {
+        $student->loadMissing('user');
+
+        if (! $student->user) {
+            return true;
+        }
+
+        return ! $student->user->isActiveAccount();
+    }
+
     public static function hasDuplicate(string $name, ?string $mobile, ?int $ignoreRequestId = null): bool
     {
-        return self::findExistingStudent($name, $mobile) !== null
-            || self::findPendingRequest($name, $mobile, $ignoreRequestId) !== null;
+        $existing = self::findExistingStudent($name, $mobile);
+
+        if ($existing !== null && ! self::canReuseStudentProfile($existing)) {
+            return true;
+        }
+
+        return self::findPendingRequest($name, $mobile, $ignoreRequestId) !== null;
+    }
+
+    public static function releaseInactiveLoginForEmail(string $email): void
+    {
+        User::query()
+            ->where('email', $email)
+            ->where('is_active', false)
+            ->each(function (User $user) {
+                Student::query()->where('user_id', $user->id)->update(['user_id' => null]);
+                $user->delete();
+            });
     }
 }
