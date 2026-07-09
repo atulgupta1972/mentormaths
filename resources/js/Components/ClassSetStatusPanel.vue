@@ -3,7 +3,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     chapters: { type: Array, default: () => [] },
@@ -39,23 +39,24 @@ const statusLegend = [
     { label: 'Not assigned', boxClass: 'bg-slate-100 text-slate-400 border-slate-200' },
 ];
 
-watch(
-    () => props.chapters,
-    (chapters) => {
-        if (!chapters.length) {
-            selectedChapterId.value = '';
-            return;
-        }
+const showAllChapters = computed(() => !selectedChapterId.value);
 
-        if (!chapters.some((chapter) => String(chapter.chapter_id) === String(selectedChapterId.value))) {
-            selectedChapterId.value = String(chapters[0].chapter_id);
-        }
-    },
-    { immediate: true },
+const visibleChapters = computed(() => {
+    if (!selectedChapterId.value) {
+        return props.chapters;
+    }
+
+    return props.chapters.filter(
+        (chapter) => String(chapter.chapter_id) === String(selectedChapterId.value),
+    );
+});
+
+const hasVisibleSets = computed(() =>
+    visibleChapters.value.some((chapter) => (chapter.sets?.length ?? 0) > 0),
 );
 
-const activeChapter = computed(() =>
-    props.chapters.find((chapter) => String(chapter.chapter_id) === String(selectedChapterId.value)) ?? null,
+const visibleSetCount = computed(() =>
+    visibleChapters.value.reduce((sum, chapter) => sum + (chapter.sets?.length ?? 0), 0),
 );
 
 const studentRow = (set, studentId) =>
@@ -234,32 +235,39 @@ const setMeta = (set) => {
         </div>
 
         <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
-            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <div class="flex items-center gap-2">
-                    <InputLabel value="Chapter" class="!mb-0 shrink-0 !text-xs" />
-                    <select
-                        v-model="selectedChapterId"
-                        class="rounded-md border-gray-300 py-1 text-xs"
-                    >
-                        <option v-for="chapter in chapters" :key="chapter.chapter_id" :value="String(chapter.chapter_id)">
-                            {{ chapter.chapter_label }}
-                        </option>
-                    </select>
+            <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div class="flex items-center gap-2">
+                        <InputLabel value="Chapter" class="!mb-0 shrink-0 !text-xs" />
+                        <select
+                            v-model="selectedChapterId"
+                            class="rounded-md border-gray-300 py-1 text-xs"
+                        >
+                            <option value="">All chapters · {{ chapters.length }} total</option>
+                            <option v-for="chapter in chapters" :key="chapter.chapter_id" :value="String(chapter.chapter_id)">
+                                {{ chapter.chapter_label }} · {{ chapter.sets?.length ?? 0 }} sheets
+                            </option>
+                        </select>
+                    </div>
+                    <div v-if="canAssign" class="flex items-center gap-2">
+                        <InputLabel value="Target date" class="!mb-0 shrink-0 !text-xs" />
+                        <input v-model="targetDate" type="date" class="rounded-md border-gray-300 py-1 text-xs" />
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span
+                            v-for="item in statusLegend"
+                            :key="item.label"
+                            :class="item.boxClass"
+                            class="inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold"
+                        >
+                            {{ item.label }}
+                        </span>
+                    </div>
                 </div>
-                <div v-if="canAssign" class="flex items-center gap-2">
-                    <InputLabel value="Target date" class="!mb-0 shrink-0 !text-xs" />
-                    <input v-model="targetDate" type="date" class="rounded-md border-gray-300 py-1 text-xs" />
-                </div>
-                <div class="flex flex-wrap items-center gap-1.5">
-                    <span
-                        v-for="item in statusLegend"
-                        :key="item.label"
-                        :class="item.boxClass"
-                        class="inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold"
-                    >
-                        {{ item.label }}
-                    </span>
-                </div>
+                <p v-if="hasVisibleSets" class="text-[10px] text-gray-500">
+                    {{ visibleSetCount }} sheet{{ visibleSetCount === 1 ? '' : 's' }}
+                    {{ showAllChapters ? '· all chapters' : '· filtered' }}
+                </p>
             </div>
         </div>
 
@@ -267,8 +275,8 @@ const setMeta = (set) => {
             No published practice sets or tests for this class yet.
         </div>
 
-        <div v-else-if="!activeChapter?.sets?.length" class="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-xs text-gray-500">
-            No sheets in this chapter.
+        <div v-else-if="!hasVisibleSets" class="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-xs text-gray-500">
+            No sheets match this chapter filter.
         </div>
 
         <div v-else class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -276,7 +284,16 @@ const setMeta = (set) => {
                 <table class="min-w-full border-collapse text-xs">
                     <thead>
                         <tr class="border-b bg-slate-100/90">
-                            <th class="sticky left-0 z-10 bg-slate-100 px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide text-gray-600">
+                            <th
+                                v-if="showAllChapters"
+                                class="sticky left-0 z-10 bg-slate-100 px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide text-gray-600"
+                            >
+                                Chapter
+                            </th>
+                            <th
+                                class="sticky px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide text-gray-600"
+                                :class="showAllChapters ? 'left-[120px] z-10 bg-slate-100' : 'left-0 z-10 bg-slate-100'"
+                            >
                                 Set
                             </th>
                             <th class="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide text-gray-600">
@@ -298,89 +315,93 @@ const setMeta = (set) => {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr class="border-b bg-violet-50">
-                            <td
-                                :colspan="2 + students.length + (canAssign ? 1 : 0)"
-                                class="px-2 py-1 text-[11px] font-semibold text-violet-900"
+                        <template v-for="chapter in visibleChapters" :key="chapter.chapter_id">
+                            <tr
+                                v-for="set in chapter.sets"
+                                :key="set.id"
+                                class="border-b border-gray-100 hover:bg-gray-50/60"
                             >
-                                {{ activeChapter.chapter_label }}
-                            </td>
-                        </tr>
-
-                        <tr
-                            v-for="set in activeChapter.sets"
-                            :key="set.id"
-                            class="border-b border-gray-100 hover:bg-gray-50/60"
-                        >
-                            <td class="sticky left-0 z-10 max-w-[140px] bg-white px-2 py-1.5">
-                                <div class="font-mono text-sm font-bold leading-none text-indigo-600">{{ set.set_code }}</div>
-                                <div class="mt-0.5 truncate text-[10px] text-gray-500" :title="setMeta(set)">
-                                    {{ setMeta(set) }}
-                                </div>
-                            </td>
-                            <td class="px-2 py-1.5">
-                                <span :class="classDoneClass(set)">
-                                    {{ set.completed_count }}/{{ students.length }}
-                                </span>
-                            </td>
-                            <td
-                                v-for="student in students"
-                                :key="`${set.id}-${student.id}`"
-                                class="px-2 py-1.5"
-                            >
-                                <button
-                                    v-if="canAssign"
-                                    type="button"
-                                    :class="cellStatus(studentRow(set, student.id)?.progress).boxClass"
-                                    :title="cellStatus(studentRow(set, student.id)?.progress).title"
-                                    @click="onCellClick(set, student.id)"
+                                <td
+                                    v-if="showAllChapters"
+                                    class="sticky left-0 z-10 max-w-[120px] bg-white px-2 py-1.5 text-[10px] font-medium text-gray-600"
                                 >
-                                    {{ cellStatus(studentRow(set, student.id)?.progress).label }}
-                                </button>
-                                <Link
-                                    v-else-if="studentRow(set, student.id)?.progress?.assignment_id"
-                                    :href="route('admin.set-assignments.show', studentRow(set, student.id).progress.assignment_id)"
-                                    :class="cellStatus(studentRow(set, student.id)?.progress).boxClass"
+                                    <span class="line-clamp-2" :title="chapter.chapter_label">
+                                        {{ chapter.chapter_label.replace(/^Ch \d+ — /, '') }}
+                                    </span>
+                                </td>
+                                <td
+                                    class="sticky max-w-[140px] bg-white px-2 py-1.5"
+                                    :class="showAllChapters ? 'left-[120px] z-10' : 'left-0 z-10'"
                                 >
-                                    {{ cellStatus(studentRow(set, student.id)?.progress).label }}
-                                </Link>
-                                <span
-                                    v-else
-                                    :class="cellStatus(studentRow(set, student.id)?.progress).boxClass"
+                                    <div class="font-mono text-sm font-bold leading-none text-indigo-600">{{ set.set_code }}</div>
+                                    <div class="mt-0.5 truncate text-[10px] text-gray-500" :title="setMeta(set)">
+                                        {{ setMeta(set) }}
+                                    </div>
+                                </td>
+                                <td class="px-2 py-1.5">
+                                    <span :class="classDoneClass(set)">
+                                        {{ set.completed_count }}/{{ students.length }}
+                                    </span>
+                                </td>
+                                <td
+                                    v-for="student in students"
+                                    :key="`${set.id}-${student.id}`"
+                                    class="px-2 py-1.5"
                                 >
-                                    {{ cellStatus(studentRow(set, student.id)?.progress).label }}
-                                </span>
-                            </td>
-                            <td v-if="canAssign" class="px-2 py-1.5">
-                                <div class="flex min-w-[200px] items-center gap-1">
-                                    <select
-                                        v-model="assignStudentBySet[set.id]"
-                                        class="min-w-0 flex-1 rounded border-gray-300 py-1 text-[10px]"
-                                    >
-                                        <option value="">Student</option>
-                                        <option v-for="student in students" :key="`pick-${set.id}-${student.id}`" :value="String(student.id)">
-                                            {{ student.name }}
-                                        </option>
-                                    </select>
-                                    <PrimaryButton
+                                    <button
+                                        v-if="canAssign"
                                         type="button"
-                                        class="!px-2 !py-1 !text-[10px]"
-                                        :disabled="!assignStudentBySet[set.id] || !targetDate || assignForm.processing || reassignForm.processing"
-                                        @click="assignOrReassign(set)"
+                                        :class="cellStatus(studentRow(set, student.id)?.progress).boxClass"
+                                        :title="cellStatus(studentRow(set, student.id)?.progress).title"
+                                        @click="onCellClick(set, student.id)"
                                     >
-                                        {{ assignActionLabel(set) }}
-                                    </PrimaryButton>
-                                    <SecondaryButton
-                                        type="button"
-                                        class="!px-2 !py-1 !text-[10px]"
-                                        :disabled="!targetDate || bulkForm.processing"
-                                        @click="assignBulk(set.id)"
+                                        {{ cellStatus(studentRow(set, student.id)?.progress).label }}
+                                    </button>
+                                    <Link
+                                        v-else-if="studentRow(set, student.id)?.progress?.assignment_id"
+                                        :href="route('admin.set-assignments.show', studentRow(set, student.id).progress.assignment_id)"
+                                        :class="cellStatus(studentRow(set, student.id)?.progress).boxClass"
                                     >
-                                        All
-                                    </SecondaryButton>
-                                </div>
-                            </td>
-                        </tr>
+                                        {{ cellStatus(studentRow(set, student.id)?.progress).label }}
+                                    </Link>
+                                    <span
+                                        v-else
+                                        :class="cellStatus(studentRow(set, student.id)?.progress).boxClass"
+                                    >
+                                        {{ cellStatus(studentRow(set, student.id)?.progress).label }}
+                                    </span>
+                                </td>
+                                <td v-if="canAssign" class="px-2 py-1.5">
+                                    <div class="flex min-w-[200px] items-center gap-1">
+                                        <select
+                                            v-model="assignStudentBySet[set.id]"
+                                            class="min-w-0 flex-1 rounded border-gray-300 py-1 text-[10px]"
+                                        >
+                                            <option value="">Student</option>
+                                            <option v-for="student in students" :key="`pick-${set.id}-${student.id}`" :value="String(student.id)">
+                                                {{ student.name }}
+                                            </option>
+                                        </select>
+                                        <PrimaryButton
+                                            type="button"
+                                            class="!px-2 !py-1 !text-[10px]"
+                                            :disabled="!assignStudentBySet[set.id] || !targetDate || assignForm.processing || reassignForm.processing"
+                                            @click="assignOrReassign(set)"
+                                        >
+                                            {{ assignActionLabel(set) }}
+                                        </PrimaryButton>
+                                        <SecondaryButton
+                                            type="button"
+                                            class="!px-2 !py-1 !text-[10px]"
+                                            :disabled="!targetDate || bulkForm.processing"
+                                            @click="assignBulk(set.id)"
+                                        >
+                                            All
+                                        </SecondaryButton>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
                     </tbody>
                 </table>
             </div>
