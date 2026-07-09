@@ -26,6 +26,8 @@ class SetAttempt extends Model
         'mode',
         'current_question_index',
         'started_at',
+        'active_seconds',
+        'active_session_started_at',
         'completed_at',
         'score',
         'max_score',
@@ -41,6 +43,7 @@ class SetAttempt extends Model
     {
         return [
             'started_at' => 'datetime',
+            'active_session_started_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
     }

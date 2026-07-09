@@ -186,7 +186,9 @@ Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->gr
     Route::post('/assignments/{assignment}/start', [StudentPracticeSetController::class, 'startAttempt'])->name('assignments.start');
     Route::get('/attempts/{attempt}', [StudentPracticeSetController::class, 'showAttempt'])->name('attempts.show');
     Route::post('/attempts/{attempt}/guided/answer', [StudentPracticeSetController::class, 'guidedAnswer'])->name('attempts.guided.answer');
+    Route::post('/attempts/{attempt}/guided/request-hint', [StudentPracticeSetController::class, 'guidedRequestHint'])->name('attempts.guided.request-hint');
     Route::post('/attempts/{attempt}/guided/give-up', [StudentPracticeSetController::class, 'guidedGiveUp'])->name('attempts.guided.give-up');
+    Route::post('/attempts/{attempt}/timing/pause', [StudentPracticeSetController::class, 'pauseAttemptTiming'])->name('attempts.timing.pause');
     Route::post('/attempts/{attempt}/submit', [StudentPracticeSetController::class, 'submitAttempt'])->name('attempts.submit');
     Route::get('/attempts/{attempt}/result', [StudentPracticeSetController::class, 'result'])->name('attempts.result');
     Route::get('/resolutions/history', [StudentPracticeSetController::class, 'resolutionHistory'])->name('resolutions.history');

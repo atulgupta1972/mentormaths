@@ -10,6 +10,8 @@ use App\Services\GuidedPracticeService;
 use App\Services\QuestionResolutionService;
 use App\Services\SetAttemptService;
 use App\Support\AttemptResultSummary;
+use App\Support\AttemptTiming;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -96,6 +98,11 @@ class PracticeSetController extends Controller
         $this->attemptService->ensureGuidedForTopicPractice($attempt);
         $attempt->refresh();
 
+        if ($attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
+            AttemptTiming::resumeSession($attempt);
+            $attempt->refresh();
+        }
+
         if ($attempt->isGuided()) {
             return Inertia::render('Student/PracticeSets/GuidedAttempt', $this->guidedPractice->buildPayload($attempt));
         }
@@ -122,6 +129,7 @@ class PracticeSetController extends Controller
             'attempt' => [
                 'id' => $attempt->id,
                 'started_at' => $attempt->started_at->toIso8601String(),
+                ...AttemptTiming::payloadForAttempt($attempt),
             ],
             'practiceSet' => [
                 'set_code' => $practiceSet->set_code,
@@ -131,6 +139,19 @@ class PracticeSetController extends Controller
             'referencePdfUrl' => $this->referencePdfUrlFor($assignment),
             'questions' => $questions,
         ]);
+    }
+
+    public function pauseAttemptTiming(Request $request, SetAttempt $attempt): JsonResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        if ($attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
+            AttemptTiming::pauseSession($attempt);
+            $attempt->refresh();
+        }
+
+        return response()->json(AttemptTiming::payloadForAttempt($attempt));
     }
 
     public function guidedAnswer(Request $request, SetAttempt $attempt): RedirectResponse
@@ -171,7 +192,7 @@ class PracticeSetController extends Controller
             return redirect()->route('student.attempts.result', $attempt);
         }
 
-        return back()->with('guided_feedback', $payload['feedback'] ?? null);
+        return $this->guidedAttemptRedirect($attempt, $payload['feedback'] ?? null);
     }
 
     public function guidedGiveUp(Request $request, SetAttempt $attempt): RedirectResponse
@@ -189,7 +210,37 @@ class PracticeSetController extends Controller
             return redirect()->route('student.attempts.result', $attempt);
         }
 
-        return back()->with('success', 'Help requested — your teacher will explain this sum. It is on your dashboard help list.');
+        return $this->guidedAttemptRedirect($attempt, null, 'Help requested — your teacher will explain this sum. It is on your dashboard help list.');
+    }
+
+    public function guidedRequestHint(Request $request, SetAttempt $attempt): RedirectResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        try {
+            $payload = $this->guidedPractice->requestEarlyHint($attempt);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return $this->guidedAttemptRedirect($attempt, $payload['feedback'] ?? null);
+    }
+
+    private function guidedAttemptRedirect(
+        SetAttempt $attempt,
+        ?array $feedback = null,
+        ?string $success = null,
+    ): RedirectResponse {
+        $redirect = redirect()
+            ->route('student.attempts.show', $attempt)
+            ->with('guided_feedback', $feedback);
+
+        if ($success) {
+            $redirect = $redirect->with('success', $success);
+        }
+
+        return $redirect;
     }
 
     public function submitAttempt(Request $request, SetAttempt $attempt): RedirectResponse

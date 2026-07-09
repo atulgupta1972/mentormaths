@@ -66,7 +66,26 @@ class GuidedPracticeServiceTest extends TestCase
         $this->assertTrue($question['attempts'][1]['is_correct']);
     }
 
-    public function test_wrong_twice_shows_explanation_phase(): void
+    public function test_early_hint_shows_method_and_blocks_first_try_score(): void
+    {
+        [$attempt, , $correctOption] = $this->seedGuidedAttempt();
+
+        $service = app(GuidedPracticeService::class);
+        $payload = $service->requestEarlyHint($attempt->fresh(['guidedQuestions', 'assignment']));
+
+        $this->assertSame('explained', $payload['phase']);
+        $this->assertTrue($payload['show_explanation']);
+        $this->assertNotEmpty($payload['question']['method_hint']);
+
+        $service->submitAnswer($attempt->fresh(['guidedQuestions.question.options']), $correctOption->id);
+        $guided = $attempt->fresh()->guidedQuestions->first();
+
+        $this->assertTrue($guided->used_early_hint);
+        $this->assertTrue($guided->corrected_after_help);
+        $this->assertFalse($guided->first_try_correct);
+    }
+
+    public function test_wrong_twice_does_not_show_method_until_hint_requested(): void
     {
         [$attempt, $wrongOption, $correctOption] = $this->seedGuidedAttempt();
 
@@ -76,11 +95,12 @@ class GuidedPracticeServiceTest extends TestCase
         $attempt->refresh();
         $payload = $service->submitAnswer($attempt, $wrongOption->id);
 
-        $this->assertSame('explained', $payload['phase']);
-        $this->assertTrue($payload['show_explanation']);
-        $this->assertSame('Add the two whole numbers together.', $payload['question']['method_hint']);
-        $this->assertStringNotContainsString('Answer key', $payload['question']['method_hint'] ?? '');
+        $this->assertSame('retry', $payload['phase']);
+        $this->assertFalse($payload['show_explanation']);
+        $this->assertTrue($payload['can_show_hint']);
+        $this->assertNull($payload['question']['method_hint']);
 
+        $service->requestEarlyHint($attempt->fresh(['guidedQuestions', 'assignment']));
         $service->submitAnswer($attempt->fresh(['guidedQuestions.question.options']), $correctOption->id);
         $attempt->refresh();
 
@@ -117,7 +137,7 @@ class GuidedPracticeServiceTest extends TestCase
         ]);
     }
 
-    public function test_fill_in_blank_wrong_twice_shows_explanation_phase(): void
+    public function test_fill_in_blank_wrong_twice_hides_method_until_hint_requested(): void
     {
         [$attempt] = $this->seedFillBlankGuidedAttempt();
 
@@ -126,9 +146,11 @@ class GuidedPracticeServiceTest extends TestCase
         $service->submitAnswer($attempt, null, '-3');
         $payload = $service->submitAnswer($attempt->fresh(['guidedQuestions.question.blankAnswer']), null, '-3');
 
-        $this->assertSame('explained', $payload['phase']);
-        $this->assertTrue($payload['show_explanation']);
+        $this->assertSame('retry', $payload['phase']);
+        $this->assertFalse($payload['show_explanation']);
+        $this->assertTrue($payload['can_show_hint']);
         $this->assertSame('fill_in_blank', $payload['question']['type']);
+        $this->assertNull($payload['question']['method_hint']);
     }
 
     public function test_fill_in_blank_correct_on_first_try(): void

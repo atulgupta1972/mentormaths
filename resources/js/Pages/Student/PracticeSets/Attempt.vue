@@ -4,8 +4,9 @@ import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
 import { Head, useForm } from '@inertiajs/vue3';
-import { onMounted, onUnmounted, ref } from 'vue';
+import { ref } from 'vue';
 
 const props = defineProps({
     attempt: Object,
@@ -15,8 +16,11 @@ const props = defineProps({
 });
 
 const answers = ref({});
-const elapsed = ref(0);
-let timer = null;
+
+const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
+    active_seconds: props.attempt?.active_seconds ?? 0,
+    active_session_started_at: props.attempt?.active_session_started_at,
+});
 
 const form = useForm({
     answers: {},
@@ -24,27 +28,8 @@ const form = useForm({
 
 const setLabel = () => props.practiceSet.set_code || `Set ${props.practiceSet.set_number}`;
 
-onMounted(() => {
-    const started = new Date(props.attempt.started_at).getTime();
-    const tick = () => {
-        elapsed.value = Math.floor((Date.now() - started) / 1000);
-    };
-    tick();
-    timer = setInterval(tick, 1000);
-});
-
-onUnmounted(() => {
-    if (timer) clearInterval(timer);
-});
-
 const selectOption = (questionId, optionId) => {
     answers.value[questionId] = optionId;
-};
-
-const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
 };
 
 const submit = () => {

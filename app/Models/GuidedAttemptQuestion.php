@@ -25,6 +25,7 @@ class GuidedAttemptQuestion extends Model
         'sort_order',
         'phase',
         'wrong_before_explanation',
+        'used_early_hint',
         'first_wrong_option_id',
         'first_wrong_answer_text',
         'second_wrong_option_id',
@@ -40,6 +41,7 @@ class GuidedAttemptQuestion extends Model
     protected function casts(): array
     {
         return [
+            'used_early_hint' => 'boolean',
             'first_try_correct' => 'boolean',
             'corrected_after_help' => 'boolean',
             'gave_up' => 'boolean',

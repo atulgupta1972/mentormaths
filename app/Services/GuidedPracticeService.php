@@ -79,12 +79,16 @@ class GuidedPracticeService
                 'total' => $guidedRows->count(),
             ],
             'phase' => $current->phase,
-            'show_explanation' => $current->phase === GuidedAttemptQuestion::PHASE_EXPLAINED,
+            'show_explanation' => (bool) $current->used_early_hint,
             'can_give_up' => in_array($current->phase, [
                 GuidedAttemptQuestion::PHASE_ANSWERING,
                 GuidedAttemptQuestion::PHASE_RETRY,
                 GuidedAttemptQuestion::PHASE_EXPLAINED,
             ], true),
+            'can_show_hint' => in_array($current->phase, [
+                GuidedAttemptQuestion::PHASE_ANSWERING,
+                GuidedAttemptQuestion::PHASE_RETRY,
+            ], true) && ! $current->used_early_hint,
             'feedback' => null,
             'question' => $this->formatQuestion($question, $attempt->current_question_index + 1, $current),
             'practice_set' => [
@@ -95,6 +99,7 @@ class GuidedPracticeService
             'attempt' => [
                 'id' => $attempt->id,
                 'started_at' => $attempt->started_at->toIso8601String(),
+                ...AttemptTiming::payloadForAttempt($attempt),
             ],
         ];
     }
@@ -179,6 +184,45 @@ class GuidedPracticeService
     /**
      * @return array<string, mixed>
      */
+    public function requestEarlyHint(SetAttempt $attempt): array
+    {
+        if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS || ! $attempt->isGuided()) {
+            throw new \InvalidArgumentException('This guided practice session is not active.');
+        }
+
+        $attempt->loadMissing(['guidedQuestions', 'assignment']);
+        $current = $attempt->guidedQuestions->firstWhere('sort_order', $attempt->current_question_index);
+
+        if (! $current || ! in_array($current->phase, [
+            GuidedAttemptQuestion::PHASE_ANSWERING,
+            GuidedAttemptQuestion::PHASE_RETRY,
+        ], true)) {
+            throw new \InvalidArgumentException('You cannot request a hint on this question right now.');
+        }
+
+        return DB::transaction(function () use ($attempt, $current) {
+            $current->update([
+                'phase' => GuidedAttemptQuestion::PHASE_EXPLAINED,
+                'used_early_hint' => true,
+            ]);
+
+            $payload = $this->buildPayload($attempt->fresh([
+                'assignment.practiceSet',
+                'guidedQuestions.question.options',
+                'guidedQuestions.question.blankAnswer',
+            ]));
+            $payload['feedback'] = [
+                'type' => 'explained',
+                'message' => 'Method shown. This sum will not count toward your first-try score — answer when ready.',
+            ];
+
+            return $payload;
+        });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     public function giveUp(SetAttempt $attempt): array
     {
         if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS || ! $attempt->isGuided()) {
@@ -246,7 +290,7 @@ class GuidedPracticeService
 
         return [
             'type' => 'retry',
-            'message' => 'Not quite. Try once more before the method is shown.',
+            'message' => 'Not quite. Try once more, or tap Show hint if you want the method (no first-try mark).',
         ];
     }
 
@@ -270,15 +314,15 @@ class GuidedPracticeService
         }
 
         $current->update([
-            'phase' => GuidedAttemptQuestion::PHASE_EXPLAINED,
+            'phase' => GuidedAttemptQuestion::PHASE_RETRY,
             'wrong_before_explanation' => 2,
             'second_wrong_option_id' => $optionId,
             'second_wrong_answer_text' => $answerText,
         ]);
 
         return [
-            'type' => 'explained',
-            'message' => 'Read the method below, then try again or tap I need help if you want your teacher to explain.',
+            'type' => 'retry',
+            'message' => 'Still not correct. Try again, tap Show hint for the method, or I need help for your teacher.',
         ];
     }
 
@@ -358,7 +402,7 @@ class GuidedPracticeService
             'first_try_correct_count' => $firstTryCorrect,
             'corrected_after_help_count' => $correctedAfterHelp,
             'given_up_count' => $givenUp,
-            'time_seconds' => AttemptTiming::elapsedSeconds($attempt->started_at, $completedAt),
+            'time_seconds' => AttemptTiming::finalizeActiveTime($attempt),
             'status' => SetAttempt::STATUS_SUBMITTED,
             'submission_timing' => AssignmentProgress::submissionTiming($assignment, $completedAt),
         ]);
@@ -417,7 +461,7 @@ class GuidedPracticeService
             'number' => $number,
             'question_text' => $question->question_text,
             'diagram_url' => $question->diagram_url,
-            'method_hint' => $guided->phase === GuidedAttemptQuestion::PHASE_EXPLAINED
+            'method_hint' => $guided->used_early_hint
                 ? QuestionMethodHint::forStudent($question)
                 : null,
         ];

@@ -4,14 +4,17 @@ import QuestionBody from '@/Components/QuestionBody.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import TextInput from '@/Components/TextInput.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 
 const props = defineProps({
     finished: { type: Boolean, default: false },
     progress: { type: Object, default: null },
     phase: { type: String, default: 'answering' },
     show_explanation: { type: Boolean, default: false },
+    can_show_hint: { type: Boolean, default: false },
     can_give_up: { type: Boolean, default: false },
     question: { type: Object, default: null },
     practice_set: { type: Object, default: null },
@@ -20,11 +23,15 @@ const props = defineProps({
 });
 
 const page = usePage();
-const elapsed = ref(0);
-let timer = null;
+
+const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
+    active_seconds: props.attempt?.active_seconds ?? 0,
+    active_session_started_at: props.attempt?.active_session_started_at,
+});
 
 const answerForm = useForm({ option_id: null, answer_text: '' });
 const giveUpForm = useForm({});
+const hintForm = useForm({});
 
 const feedback = computed(() => page.props.flash?.guided_feedback ?? null);
 const isFillInBlank = computed(() => props.question?.type === 'fill_in_blank');
@@ -66,31 +73,6 @@ const feedbackClass = computed(() => {
     }[feedback.value.type] || 'border-gray-200 bg-gray-50 text-gray-800';
 });
 
-onMounted(() => {
-    if (!props.attempt?.started_at) {
-        return;
-    }
-
-    const started = new Date(props.attempt.started_at).getTime();
-    const tick = () => {
-        elapsed.value = Math.floor((Date.now() - started) / 1000);
-    };
-    tick();
-    timer = setInterval(tick, 1000);
-});
-
-onUnmounted(() => {
-    if (timer) {
-        clearInterval(timer);
-    }
-});
-
-const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
-};
-
 const submitMcqAnswer = (optionId) => {
     answerForm.option_id = optionId;
     answerForm.answer_text = '';
@@ -116,7 +98,29 @@ const requestHelp = () => {
     });
 };
 
+const requestHint = () => {
+    if (!confirm(
+        'Show the method hint?\n\nYou can still answer this sum, but it will NOT count toward your first-try score.\n\nTap Cancel to keep trying on your own.',
+    )) {
+        return;
+    }
+
+    hintForm.post(route('student.attempts.guided.request-hint', props.attempt.id), {
+        preserveScroll: true,
+    });
+};
+
 const canAnswer = computed(() => ['answering', 'retry', 'explained'].includes(props.phase));
+
+const hintAvailable = computed(() => {
+    if (props.show_explanation) {
+        return false;
+    }
+
+    return props.can_show_hint || ['answering', 'retry'].includes(props.phase);
+});
+
+const helpAvailable = computed(() => props.can_give_up || hintAvailable.value);
 
 watch(
     () => props.question?.id,
@@ -170,21 +174,36 @@ watch(
                 </div>
 
                 <div v-if="feedback" class="rounded-lg border p-4 text-sm" :class="feedbackClass">
-                    {{ feedback.message }}
+                    <p>{{ feedback.message }}</p>
+                    <div v-if="hintAvailable" class="mt-3 flex flex-wrap gap-2">
+                        <SecondaryButton type="button" :disabled="hintForm.processing" @click="requestHint">
+                            {{ hintForm.processing ? 'Loading…' : 'Show hint' }}
+                        </SecondaryButton>
+                    </div>
                 </div>
 
                 <div v-if="question" class="rounded-lg bg-white p-5 shadow-sm">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <p class="text-sm font-semibold text-indigo-600">Question {{ question.number }}</p>
-                        <button
-                            v-if="can_give_up"
-                            type="button"
-                            class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
-                            :disabled="giveUpForm.processing"
-                            @click="requestHelp"
-                        >
-                            {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
-                        </button>
+                        <div class="flex flex-wrap gap-2">
+                            <SecondaryButton
+                                v-if="hintAvailable"
+                                type="button"
+                                :disabled="hintForm.processing"
+                                @click="requestHint"
+                            >
+                                {{ hintForm.processing ? 'Loading…' : 'Show hint' }}
+                            </SecondaryButton>
+                            <SecondaryButton
+                                v-if="helpAvailable"
+                                type="button"
+                                class="!border-rose-200 !text-rose-800 hover:!bg-rose-50"
+                                :disabled="giveUpForm.processing"
+                                @click="requestHelp"
+                            >
+                                {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
+                            </SecondaryButton>
+                        </div>
                     </div>
 
                     <div class="mt-3">
@@ -241,6 +260,26 @@ watch(
                         >
                             <McqOptionLine :index="optIndex" :text="opt.option_text" />
                         </button>
+                    </div>
+
+                    <div v-if="hintAvailable || helpAvailable" class="mt-4 flex flex-wrap gap-3 border-t pt-4">
+                        <SecondaryButton
+                            v-if="hintAvailable"
+                            type="button"
+                            :disabled="hintForm.processing"
+                            @click="requestHint"
+                        >
+                            {{ hintForm.processing ? 'Loading…' : 'Show hint (no first-try mark)' }}
+                        </SecondaryButton>
+                        <SecondaryButton
+                            v-if="helpAvailable"
+                            type="button"
+                            class="!border-rose-200 !text-rose-800 hover:!bg-rose-50"
+                            :disabled="giveUpForm.processing"
+                            @click="requestHelp"
+                        >
+                            {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
+                        </SecondaryButton>
                     </div>
                 </div>
 

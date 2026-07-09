@@ -53,7 +53,7 @@ class AttemptResultSummary
                     'question_text' => $question?->question_text,
                     'diagram_url' => $question?->diagram_url,
                     'type' => $question?->type,
-                    'method_hint' => ($guided->corrected_after_help || ($guided->wrong_before_explanation ?? 0) >= 2)
+                    'method_hint' => ($guided->used_early_hint || $guided->corrected_after_help)
                         ? QuestionMethodHint::forStudent($question)
                         : null,
                     'correct_answer' => self::correctAnswerLabel($question),
@@ -80,6 +80,14 @@ class AttemptResultSummary
             );
 
             return $attempts;
+        }
+
+        if ($guided->used_early_hint) {
+            $attempts[] = [
+                'label' => 'Hint used before answering — no first-try mark',
+                'answer' => null,
+                'is_correct' => false,
+            ];
         }
 
         if ($guided->first_wrong_option_id || filled($guided->first_wrong_answer_text)) {
@@ -126,7 +134,7 @@ class AttemptResultSummary
 
         if ($guided->final_is_correct) {
             $label = $guided->corrected_after_help
-                ? 'Correct after method'
+                ? ($guided->used_early_hint ? 'Correct after hint (no first-try mark)' : 'Correct after method')
                 : (($guided->wrong_before_explanation ?? 0) >= 1 ? '2nd try — correct' : 'Correct answer');
             $attempts[] = self::formatReviewAttempt(
                 $label,
@@ -438,16 +446,21 @@ class AttemptResultSummary
         foreach ($attempt->guidedQuestions as $index => $guided) {
             $question = $guided->question;
 
-            if ($guided->first_try_correct) {
-                $outcome = 'correct';
-                $outcomeLabel = 'Correct on first try';
-            } elseif ($guided->gave_up) {
-                $outcome = 'gave_up';
-                $outcomeLabel = 'Gave up — needs teacher help';
-            } elseif ($guided->corrected_after_help) {
-                $outcome = 'corrected_after_help';
-                $outcomeLabel = 'Correct after using method';
-            } else {
+        if ($guided->first_try_correct) {
+            $outcome = 'correct';
+            $outcomeLabel = 'Correct on first try';
+        } elseif ($guided->gave_up) {
+            $outcome = 'gave_up';
+            $outcomeLabel = 'Gave up — needs teacher help';
+        } elseif ($guided->corrected_after_help) {
+            $outcome = 'corrected_after_help';
+            $outcomeLabel = $guided->used_early_hint
+                ? 'Correct after using hint (no first-try mark)'
+                : 'Correct after using method';
+        } elseif ($guided->used_early_hint) {
+            $outcome = 'incorrect';
+            $outcomeLabel = 'Hint used before answering — no first-try mark';
+        } else {
                 $outcome = 'incorrect';
                 $outcomeLabel = 'Not correct on first try';
             }

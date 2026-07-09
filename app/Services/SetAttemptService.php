@@ -43,6 +43,8 @@ class SetAttemptService
                     ? SetAttempt::MODE_BATCH
                     : SetAttempt::MODE_GUIDED,
                 'started_at' => now(),
+                'active_seconds' => 0,
+                'active_session_started_at' => now(),
                 'status' => SetAttempt::STATUS_IN_PROGRESS,
             ]);
 
@@ -96,7 +98,7 @@ class SetAttemptService
                 );
             }
 
-            $timeSeconds = AttemptTiming::elapsedSeconds($attempt->started_at);
+            $timeSeconds = AttemptTiming::finalizeActiveTime($attempt);
             $completedAt = now();
             $submissionTiming = AssignmentProgress::submissionTiming($assignment, $completedAt);
 
