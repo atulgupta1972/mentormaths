@@ -10,6 +10,7 @@ const props = defineProps({
     students: { type: Array, default: () => [] },
     gradeLevelId: { type: Number, required: true },
     gradeLevelName: { type: String, default: '' },
+    boardId: { type: [Number, String, null], default: null },
     canAssign: { type: Boolean, default: true },
 });
 
@@ -29,7 +30,7 @@ const targetDate = ref(defaultTargetDate());
 const assignStudentBySet = ref({});
 
 const assignForm = useForm({ student_id: '', target_date: '', notes: '' });
-const bulkForm = useForm({ grade_level_id: '', target_date: '', notes: '' });
+const bulkForm = useForm({ grade_level_id: '', board_id: '', target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
 
 const statusLegend = [
@@ -192,6 +193,7 @@ const assignOrReassign = (set) => {
 
 const assignBulk = (setId) => {
     bulkForm.grade_level_id = String(props.gradeLevelId);
+    bulkForm.board_id = props.boardId ? String(props.boardId) : '';
     bulkForm.target_date = targetDate.value;
     bulkForm.post(route('admin.practice-sets.assign-bulk', setId), { preserveScroll: true });
 };

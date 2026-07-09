@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AcademicYear;
+use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\SetAssignment;
 use App\Models\StudentEnrollment;
@@ -18,7 +19,7 @@ class ClassAssignmentService
 {
     public function __construct(private SetAssignmentService $setAssignmentService) {}
 
-    public function syllabusForGrade(GradeLevel $gradeLevel): ?SyllabusVersion
+    public function syllabusForGrade(GradeLevel $gradeLevel, ?int $boardId = null): ?SyllabusVersion
     {
         $activeYear = AcademicYear::active();
         $maths = Subject::query()->where('code', 'MATHS')->first();
@@ -32,7 +33,72 @@ class ClassAssignmentService
             ->where('academic_year_id', $activeYear->id)
             ->where('grade_level_id', $gradeLevel->id)
             ->where('subject_id', $maths->id)
+            ->when($boardId, fn ($query) => $query->where('board_id', $boardId))
             ->first();
+    }
+
+    /**
+     * @return list<array{id: int, code: string, name: string, label: string, students_count: int}>
+     */
+    public function boardsForGrade(GradeLevel $gradeLevel): array
+    {
+        $activeYear = AcademicYear::active();
+
+        if (! $activeYear) {
+            return [];
+        }
+
+        $maths = Subject::query()->where('code', 'MATHS')->first();
+
+        $enrollmentCounts = StudentEnrollment::query()
+            ->where('academic_year_id', $activeYear->id)
+            ->where('grade_level_id', $gradeLevel->id)
+            ->where('status', StudentEnrollment::STATUS_ACTIVE)
+            ->selectRaw('board_id, count(*) as students_count')
+            ->groupBy('board_id')
+            ->pluck('students_count', 'board_id');
+
+        $syllabusBoardIds = $maths
+            ? SyllabusVersion::query()
+                ->where('academic_year_id', $activeYear->id)
+                ->where('grade_level_id', $gradeLevel->id)
+                ->where('subject_id', $maths->id)
+                ->pluck('board_id')
+            : collect();
+
+        $boardIds = $enrollmentCounts->keys()->merge($syllabusBoardIds)->unique()->filter();
+
+        if ($boardIds->isEmpty()) {
+            return [];
+        }
+
+        return Board::query()
+            ->whereIn('id', $boardIds)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'code', 'name'])
+            ->map(fn (Board $board) => [
+                'id' => $board->id,
+                'code' => $board->code,
+                'name' => $board->name,
+                'label' => $board->name,
+                'students_count' => (int) ($enrollmentCounts[$board->id] ?? 0),
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function defaultBoardIdForGrade(GradeLevel $gradeLevel): ?int
+    {
+        $boards = $this->boardsForGrade($gradeLevel);
+
+        if ($boards === []) {
+            return null;
+        }
+
+        usort($boards, fn (array $left, array $right) => $right['students_count'] <=> $left['students_count']);
+
+        return $boards[0]['id'];
     }
 
     /**
@@ -194,9 +260,9 @@ class ClassAssignmentService
      *
      * @return array{students: list<array<string, mixed>>, chapters: list<array<string, mixed>>}
      */
-    public function classSetStatusBoard(GradeLevel $gradeLevel, ?int $chapterId = null): array
+    public function classSetStatusBoard(GradeLevel $gradeLevel, ?int $chapterId = null, ?int $boardId = null): array
     {
-        $syllabusVersion = $this->syllabusForGrade($gradeLevel);
+        $syllabusVersion = $this->syllabusForGrade($gradeLevel, $boardId);
 
         if (! $syllabusVersion) {
             return ['students' => [], 'chapters' => []];
@@ -212,6 +278,7 @@ class ClassAssignmentService
             ->with('student:id,name')
             ->where('academic_year_id', $activeYear->id)
             ->where('grade_level_id', $gradeLevel->id)
+            ->when($boardId, fn ($query) => $query->where('board_id', $boardId))
             ->where('status', StudentEnrollment::STATUS_ACTIVE)
             ->whereHas('student')
             ->get()

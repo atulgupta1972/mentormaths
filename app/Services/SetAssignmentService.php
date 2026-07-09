@@ -90,6 +90,7 @@ class SetAssignmentService
         string $dueDate,
         ?int $gradeLevelId = null,
         ?string $notes = null,
+        ?int $boardId = null,
     ): array {
         $activeYear = AcademicYear::active();
 
@@ -104,6 +105,10 @@ class SetAssignmentService
 
         if ($gradeLevelId) {
             $query->where('grade_level_id', $gradeLevelId);
+        }
+
+        if ($boardId) {
+            $query->where('board_id', $boardId);
         }
 
         return $this->assignBulk($practiceSet, $query->get(), $assigner, $dueDate, $notes);
@@ -178,8 +183,11 @@ class SetAssignmentService
     /**
      * @return Collection<int, array{id: int, name: string, class_name: string, label: string}>
      */
-    public function activeStudentsForAssignment(?int $academicYearId = null, ?int $gradeLevelId = null): Collection
-    {
+    public function activeStudentsForAssignment(
+        ?int $academicYearId = null,
+        ?int $gradeLevelId = null,
+        ?int $boardId = null,
+    ): Collection {
         $yearId = $academicYearId ?? AcademicYear::active()?->id;
 
         if (! $yearId) {
@@ -190,11 +198,13 @@ class SetAssignmentService
             ->whereHas('enrollments', fn ($q) => $q
                 ->where('academic_year_id', $yearId)
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
-                ->when($gradeLevelId, fn ($query) => $query->where('grade_level_id', $gradeLevelId)))
+                ->when($gradeLevelId, fn ($query) => $query->where('grade_level_id', $gradeLevelId))
+                ->when($boardId, fn ($query) => $query->where('board_id', $boardId)))
             ->with(['enrollments' => fn ($q) => $q
                 ->where('academic_year_id', $yearId)
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
                 ->when($gradeLevelId, fn ($query) => $query->where('grade_level_id', $gradeLevelId))
+                ->when($boardId, fn ($query) => $query->where('board_id', $boardId))
                 ->with('gradeLevel:id,name,sort_order')])
             ->orderBy('name')
             ->get(['id', 'name'])

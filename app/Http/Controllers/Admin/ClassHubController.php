@@ -95,14 +95,28 @@ class ClassHubController extends Controller
         $activeYear = AcademicYear::active();
         $maths = Subject::query()->where('code', 'MATHS')->first();
 
+        $boardOptions = $this->classAssignmentService->boardsForGrade($gradeLevel);
+        $boardId = $request->integer('board_id') ?: null;
+
+        if ($boardId && ! collect($boardOptions)->contains(fn (array $board) => $board['id'] === $boardId)) {
+            $boardId = null;
+        }
+
+        if (! $boardId) {
+            $boardId = $this->classAssignmentService->defaultBoardIdForGrade($gradeLevel);
+        }
+
+        $selectedBoard = collect($boardOptions)->firstWhere('id', $boardId);
+
         $syllabusVersion = null;
         $chapters = collect();
-        if ($activeYear && $maths) {
+        if ($activeYear && $maths && $boardId) {
             $syllabusVersion = SyllabusVersion::query()
                 ->with(['board:id,code,name', 'subject:id,name'])
                 ->where('academic_year_id', $activeYear->id)
                 ->where('grade_level_id', $gradeLevel->id)
                 ->where('subject_id', $maths->id)
+                ->where('board_id', $boardId)
                 ->first();
 
             if ($syllabusVersion) {
@@ -195,6 +209,7 @@ class ClassHubController extends Controller
             ? StudentEnrollment::query()
                 ->where('academic_year_id', $activeYear->id)
                 ->where('grade_level_id', $gradeLevel->id)
+                ->when($boardId, fn ($query) => $query->where('board_id', $boardId))
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
                 ->count()
             : 0;
@@ -208,7 +223,7 @@ class ClassHubController extends Controller
         $examPlanStats = ['with_upcoming' => 0, 'without_plan' => 0, 'without_upcoming' => 0];
 
         if ($activeYear) {
-            $enrollments = $this->examPlanService->activeEnrollmentForYear($activeYear->id, $gradeLevel->id);
+            $enrollments = $this->examPlanService->activeEnrollmentForYear($activeYear->id, $gradeLevel->id, $boardId);
             $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, true);
             $examPlanStats = [
                 'with_upcoming' => collect($examPlanRows)->where('has_upcoming', true)->count(),
@@ -226,9 +241,9 @@ class ClassHubController extends Controller
         $classStudents = [];
 
         if ($view === 'sets' && $syllabusVersion) {
-            $setStatusBoard = $this->classAssignmentService->classSetStatusBoard($gradeLevel);
+            $setStatusBoard = $this->classAssignmentService->classSetStatusBoard($gradeLevel, null, $boardId);
             $classStudents = $this->setAssignmentService
-                ->activeStudentsForAssignment($activeYear?->id, $gradeLevel->id)
+                ->activeStudentsForAssignment($activeYear?->id, $gradeLevel->id, $boardId)
                 ->values()
                 ->all();
         }
@@ -236,6 +251,9 @@ class ClassHubController extends Controller
         return Inertia::render('Admin/Classes/Show', [
             'gradeLevel' => $gradeLevel->only(['id', 'name', 'sort_order']),
             'activeYear' => $activeYear?->only(['id', 'name']),
+            'boardOptions' => $boardOptions,
+            'selectedBoardId' => $boardId,
+            'selectedBoard' => $selectedBoard,
             'syllabusVersion' => $syllabusVersion ? [
                 'id' => $syllabusVersion->id,
                 'label' => $syllabusVersion->label(),

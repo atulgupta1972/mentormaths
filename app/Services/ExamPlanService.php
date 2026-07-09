@@ -511,7 +511,7 @@ class ExamPlanService
         return ['upcoming' => $upcoming, 'past' => $past];
     }
 
-    public function activeEnrollmentForYear(int $academicYearId, int $gradeLevelId): Collection
+    public function activeEnrollmentForYear(int $academicYearId, int $gradeLevelId, ?int $boardId = null): Collection
     {
         return StudentEnrollment::query()
             ->with([
@@ -520,6 +520,7 @@ class ExamPlanService
             ])
             ->where('academic_year_id', $academicYearId)
             ->where('grade_level_id', $gradeLevelId)
+            ->when($boardId, fn ($query) => $query->where('board_id', $boardId))
             ->where('status', StudentEnrollment::STATUS_ACTIVE)
             ->get()
             ->sortBy(fn (StudentEnrollment $enrollment) => $enrollment->student?->name ?? '')

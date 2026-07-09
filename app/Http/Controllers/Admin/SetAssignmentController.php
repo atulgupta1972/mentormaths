@@ -103,6 +103,7 @@ class SetAssignmentController extends Controller
     {
         $validated = $request->validate([
             'grade_level_id' => ['nullable', 'exists:grade_levels,id'],
+            'board_id' => ['nullable', 'exists:boards,id'],
             'target_date' => ['required', 'date', 'after_or_equal:today'],
             'notes' => ['nullable', 'string'],
         ]);
@@ -114,6 +115,7 @@ class SetAssignmentController extends Controller
                 $validated['target_date'],
                 $validated['grade_level_id'] ?? null,
                 $validated['notes'] ?? null,
+                $validated['board_id'] ?? null,
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());

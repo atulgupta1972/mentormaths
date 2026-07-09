@@ -30,9 +30,13 @@ const props = defineProps({
         default: () => ({ students: [], chapters: [] }),
     },
     classStudents: { type: Array, default: () => [] },
+    boardOptions: { type: Array, default: () => [] },
+    selectedBoardId: [Number, String, null],
+    selectedBoard: { type: Object, default: null },
 });
 
 const viewMode = ref(props.view || 'sets');
+const boardFilter = ref(props.selectedBoardId ? String(props.selectedBoardId) : '');
 const chapterFilter = ref(props.selectedChapterId || '');
 const topicFilter = ref(props.selectedTopicId || '');
 const examFilter = ref(props.examFilter || 'upcoming');
@@ -43,9 +47,20 @@ const isChapterView = computed(() => viewMode.value === 'chapter');
 const isSetsView = computed(() => viewMode.value === 'sets');
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 
+const classMatrixLabel = computed(() => {
+    const parts = [props.gradeLevel?.name];
+
+    if (props.selectedBoard?.code) {
+        parts.push(props.selectedBoard.code);
+    }
+
+    return parts.join(' · ');
+});
+
 const reload = () => {
     const params = {
         view: viewMode.value,
+        board_id: boardFilter.value || undefined,
         syllabus_chapter_id: chapterFilter.value || undefined,
         exam_filter: examFilter.value,
     };
@@ -60,6 +75,7 @@ const reload = () => {
 const reloadExamFilter = () => {
     router.get(route('admin.classes.show', props.gradeLevel.id), {
         view: viewMode.value,
+        board_id: boardFilter.value || undefined,
         syllabus_chapter_id: chapterFilter.value || undefined,
         syllabus_topic_id: topicFilter.value || undefined,
         exam_filter: examFilter.value,
@@ -128,6 +144,13 @@ watch(examFilter, (value, oldValue) => {
     }
     reloadExamFilter();
 });
+
+watch(boardFilter, (value, oldValue) => {
+    if (value === oldValue) {
+        return;
+    }
+    reload();
+});
 </script>
 
 <template>
@@ -139,7 +162,9 @@ watch(examFilter, (value, oldValue) => {
                 <div>
                     <Link :href="route('admin.classes.index')" class="text-sm text-indigo-600">← All classes</Link>
                     <h2 class="mt-1 text-xl font-semibold text-gray-800">{{ gradeLevel.name }}</h2>
-                    <p v-if="activeYear" class="text-sm text-gray-500">{{ activeYear.name }}</p>
+                    <p v-if="activeYear" class="text-sm text-gray-500">
+                        {{ activeYear.name }}<span v-if="selectedBoard"> · {{ selectedBoard.name }} board</span>
+                    </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <Link
@@ -325,6 +350,18 @@ watch(examFilter, (value, oldValue) => {
                 </div>
 
                 <div v-else class="rounded-lg bg-white p-4 shadow-sm space-y-4">
+                    <div v-if="boardOptions.length" class="flex flex-wrap items-end gap-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+                        <div class="min-w-[200px]">
+                            <InputLabel value="Board" />
+                            <select v-model="boardFilter" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                                <option v-for="board in boardOptions" :key="board.id" :value="String(board.id)">
+                                    {{ board.name }} · {{ board.students_count }} student{{ board.students_count === 1 ? '' : 's' }}
+                                </option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Syllabus and students are filtered by board — CBSE and ICSE are separate.</p>
+                        </div>
+                    </div>
+
                     <div>
                         <InputLabel value="View" />
                         <div class="mt-2 grid gap-2 sm:grid-cols-3">
@@ -395,9 +432,15 @@ watch(examFilter, (value, oldValue) => {
                     :chapters="setStatusBoard.chapters"
                     :students="classStudents"
                     :grade-level-id="gradeLevel.id"
-                    :grade-level-name="gradeLevel.name"
+                    :grade-level-name="classMatrixLabel"
+                    :board-id="selectedBoardId"
                     :can-assign="isAdmin"
                 />
+
+                <div v-else-if="isSetsView && !syllabusVersion && boardOptions.length" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    No syllabus imported for {{ gradeLevel.name }} · {{ selectedBoard?.name || 'this board' }} yet.
+                    <Link :href="route('admin.syllabus.index')" class="font-medium text-indigo-600">Import syllabus</Link>
+                </div>
 
                 <!-- Chapter wise table -->
                 <div v-if="isChapterView && syllabusVersion" class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
