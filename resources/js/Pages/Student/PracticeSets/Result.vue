@@ -80,7 +80,7 @@ const correctCount = () => props.questions.filter((q) => q.attempts?.some((row) 
                     </div>
                 </div>
 
-                <AttemptReviewList :questions="questions" />
+                <AttemptReviewList :questions="questions" :attempt-id="attempt.id" allow-practice-retry />
 
                 <WorksheetPdfViewer
                     v-if="referencePdfUrl"

@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import ClassSetStatusPanel from '@/Components/ClassSetStatusPanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -24,9 +25,14 @@ const props = defineProps({
     examPlanStats: { type: Object, default: () => ({}) },
     syllabusChapterOptions: { type: Array, default: () => [] },
     examTypeOptions: { type: Array, default: () => [] },
+    setStatusBoard: {
+        type: Object,
+        default: () => ({ students: [], chapters: [] }),
+    },
+    classStudents: { type: Array, default: () => [] },
 });
 
-const viewMode = ref(props.view || 'topic');
+const viewMode = ref(props.view || 'sets');
 const chapterFilter = ref(props.selectedChapterId || '');
 const topicFilter = ref(props.selectedTopicId || '');
 const examFilter = ref(props.examFilter || 'upcoming');
@@ -34,6 +40,7 @@ const editingStudentId = ref(null);
 const autoOpenCreate = ref(false);
 
 const isChapterView = computed(() => viewMode.value === 'chapter');
+const isSetsView = computed(() => viewMode.value === 'sets');
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 
 const reload = () => {
@@ -43,7 +50,7 @@ const reload = () => {
         exam_filter: examFilter.value,
     };
 
-    if (!isChapterView.value) {
+    if (!isChapterView.value && !isSetsView.value) {
         params.syllabus_topic_id = topicFilter.value || undefined;
     }
 
@@ -94,7 +101,7 @@ const closeStudentPlans = () => {
 };
 
 watch(viewMode, () => {
-    if (isChapterView.value) {
+    if (isChapterView.value || isSetsView.value) {
         topicFilter.value = '';
     }
     reload();
@@ -109,7 +116,7 @@ watch(chapterFilter, (id, oldId) => {
 });
 
 watch(topicFilter, (id, oldId) => {
-    if (isChapterView.value || id === oldId) {
+    if (isChapterView.value || isSetsView.value || id === oldId) {
         return;
     }
     reload();
@@ -320,11 +327,22 @@ watch(examFilter, (value, oldValue) => {
                 <div v-else class="rounded-lg bg-white p-4 shadow-sm space-y-4">
                     <div>
                         <InputLabel value="View" />
-                        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                        <div class="mt-2 grid gap-2 sm:grid-cols-3">
                             <button
                                 type="button"
                                 class="rounded-lg border p-3 text-left text-sm transition"
-                                :class="!isChapterView
+                                :class="viewMode === 'sets'
+                                    ? 'border-violet-500 bg-violet-50 ring-1 ring-violet-500'
+                                    : 'border-gray-200 hover:border-gray-300'"
+                                @click="viewMode = 'sets'"
+                            >
+                                <p class="font-medium text-gray-900">Practice & tests</p>
+                                <p class="mt-0.5 text-xs text-gray-500">Chapter-wise sheets, student scores, assign here</p>
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-lg border p-3 text-left text-sm transition"
+                                :class="viewMode === 'topic'
                                     ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500'
                                     : 'border-gray-200 hover:border-gray-300'"
                                 @click="viewMode = 'topic'"
@@ -340,13 +358,13 @@ watch(examFilter, (value, oldValue) => {
                                     : 'border-gray-200 hover:border-gray-300'"
                                 @click="viewMode = 'chapter'"
                             >
-                                <p class="font-medium text-gray-900">Chapter wise</p>
-                                <p class="mt-0.5 text-xs text-gray-500">Summary per chapter — optional chapter filter</p>
+                                <p class="font-medium text-gray-900">Chapter summary</p>
+                                <p class="mt-0.5 text-xs text-gray-500">Counts per chapter — links to question bank</p>
                             </button>
                         </div>
                     </div>
 
-                    <div class="grid gap-4 sm:grid-cols-2">
+                    <div v-if="!isSetsView" class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <InputLabel value="Chapter" />
                             <select v-model="chapterFilter" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
@@ -354,7 +372,7 @@ watch(examFilter, (value, oldValue) => {
                                 <option v-for="ch in chapters" :key="ch.id" :value="ch.id">{{ ch.label }}</option>
                             </select>
                         </div>
-                        <div v-if="!isChapterView">
+                        <div v-if="viewMode === 'topic'">
                             <InputLabel value="Topic (optional)" />
                             <select
                                 v-model="topicFilter"
@@ -370,6 +388,16 @@ watch(examFilter, (value, oldValue) => {
                         </div>
                     </div>
                 </div>
+
+                <!-- Practice & tests — assign + student status -->
+                <ClassSetStatusPanel
+                    v-if="isSetsView && syllabusVersion"
+                    :chapters="setStatusBoard.chapters"
+                    :students="classStudents"
+                    :grade-level-id="gradeLevel.id"
+                    :grade-level-name="gradeLevel.name"
+                    :can-assign="isAdmin"
+                />
 
                 <!-- Chapter wise table -->
                 <div v-if="isChapterView && syllabusVersion" class="overflow-hidden bg-white shadow-sm sm:rounded-lg">

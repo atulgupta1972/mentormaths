@@ -4,13 +4,14 @@ namespace App\Services;
 
 use App\Models\AcademicYear;
 use App\Models\GradeLevel;
-use App\Models\Student;
+use App\Models\SetAssignment;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
+use App\Support\AssignmentProgress;
 use App\Support\PracticeSetScope;
 
 class ClassAssignmentService
@@ -189,6 +190,112 @@ class ClassAssignmentService
     }
 
     /**
+     * Chapter-wise practice/test sets with per-student status for a class.
+     *
+     * @return array{students: list<array<string, mixed>>, chapters: list<array<string, mixed>>}
+     */
+    public function classSetStatusBoard(GradeLevel $gradeLevel, ?int $chapterId = null): array
+    {
+        $syllabusVersion = $this->syllabusForGrade($gradeLevel);
+
+        if (! $syllabusVersion) {
+            return ['students' => [], 'chapters' => []];
+        }
+
+        $activeYear = AcademicYear::active();
+
+        if (! $activeYear) {
+            return ['students' => [], 'chapters' => []];
+        }
+
+        $enrollments = StudentEnrollment::query()
+            ->with('student:id,name')
+            ->where('academic_year_id', $activeYear->id)
+            ->where('grade_level_id', $gradeLevel->id)
+            ->where('status', StudentEnrollment::STATUS_ACTIVE)
+            ->whereHas('student')
+            ->get()
+            ->sortBy(fn (StudentEnrollment $enrollment) => $enrollment->student->name)
+            ->values();
+
+        $students = $enrollments->map(fn (StudentEnrollment $enrollment) => [
+            'id' => $enrollment->student_id,
+            'enrollment_id' => $enrollment->id,
+            'name' => $enrollment->student->name,
+            'label' => $enrollment->student->name,
+        ])->values()->all();
+
+        $chapters = collect($this->assignableChapters($syllabusVersion));
+
+        if ($chapterId) {
+            $chapters = $chapters->where('chapter_id', $chapterId)->values();
+        }
+
+        $worksheetIds = $chapters
+            ->flatMap(function (array $chapter) {
+                return collect($chapter['topic_sets'] ?? [])
+                    ->pluck('id')
+                    ->merge(collect($chapter['chapter_tests'] ?? [])->pluck('id'));
+            })
+            ->unique()
+            ->values();
+
+        $assignmentsByKey = $worksheetIds->isEmpty()
+            ? collect()
+            : SetAssignment::query()
+                ->whereIn('student_enrollment_id', $enrollments->pluck('id'))
+                ->whereIn('worksheet_id', $worksheetIds)
+                ->with([
+                    'practiceSet' => fn ($query) => $query->withCount('questions'),
+                    'attempts' => fn ($query) => $query->orderByDesc('attempt_number'),
+                ])
+                ->get()
+                ->keyBy(fn (SetAssignment $assignment) => "{$assignment->worksheet_id}:{$assignment->student_enrollment_id}");
+
+        $chapterRows = $chapters->map(function (array $chapter) use ($enrollments, $assignmentsByKey) {
+            $sets = [];
+
+            foreach (array_merge($chapter['topic_sets'] ?? [], $chapter['chapter_tests'] ?? []) as $set) {
+                $studentRows = $enrollments->map(function (StudentEnrollment $enrollment) use ($set, $assignmentsByKey) {
+                    /** @var SetAssignment|null $assignment */
+                    $assignment = $assignmentsByKey->get("{$set['id']}:{$enrollment->id}");
+                    $latest = $assignment?->attempts->first();
+                    $progress = $assignment
+                        ? AssignmentProgress::formatAssignmentSummary($assignment, $latest)
+                        : null;
+
+                    return [
+                        'student_id' => $enrollment->student_id,
+                        'student_name' => $enrollment->student->name,
+                        'progress' => $progress,
+                    ];
+                })->values()->all();
+
+                $sets[] = [
+                    ...$set,
+                    'chapter_label' => $chapter['chapter_label'],
+                    'students' => $studentRows,
+                    'assigned_count' => collect($studentRows)->filter(fn (array $row) => $row['progress'] !== null)->count(),
+                    'completed_count' => collect($studentRows)->filter(
+                        fn (array $row) => ($row['progress']['assignment_status'] ?? null) === SetAssignment::STATUS_COMPLETED,
+                    )->count(),
+                ];
+            }
+
+            return [
+                'chapter_id' => $chapter['chapter_id'],
+                'chapter_label' => $chapter['chapter_label'],
+                'sets' => $sets,
+            ];
+        })->values()->all();
+
+        return [
+            'students' => $students,
+            'chapters' => $chapterRows,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function worksheetSummary(Worksheet $set, string $kindLabel): array
@@ -200,6 +307,7 @@ class ClassAssignmentService
             'topic_name' => $set->topic?->name,
             'questions_count' => $set->questions_count,
             'kind_label' => $kindLabel,
+            'scope' => $set->scope ?? PracticeSetScope::TOPIC,
         ];
     }
 }

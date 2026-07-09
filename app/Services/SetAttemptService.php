@@ -8,12 +8,17 @@ use App\Models\SetAttemptAnswer;
 use App\Models\StudentEnrollment;
 use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
+use App\Support\AttemptResultSummary;
 use App\Support\AttemptTiming;
+use App\Support\AnswerValidationService;
 use Illuminate\Support\Facades\DB;
 
 class SetAttemptService
 {
-    public function __construct(private GuidedPracticeService $guidedPractice) {}
+    public function __construct(
+        private GuidedPracticeService $guidedPractice,
+        private AnswerValidationService $answerValidation,
+    ) {}
 
     public function start(SetAssignment $assignment): SetAttempt
     {
@@ -157,5 +162,71 @@ class SetAttemptService
             ['set_code', 'asc'],
             ['set_number', 'asc'],
         ])->values()->all();
+    }
+
+    /**
+     * @return array{correct: bool, message: string, correct_answer: ?string}
+     */
+    public function checkPracticeRetry(
+        SetAttempt $attempt,
+        int $questionId,
+        ?int $optionId = null,
+        ?string $answerText = null,
+    ): array {
+        if ($attempt->status !== SetAttempt::STATUS_SUBMITTED) {
+            throw new \InvalidArgumentException('Practice retry is only available after submission.');
+        }
+
+        $assignment = $attempt->assignment()->with([
+            'practiceSet.questions.options',
+            'practiceSet.questions.blankAnswer',
+        ])->first();
+
+        $question = $assignment->practiceSet->questions->firstWhere('id', $questionId);
+
+        if (! $question) {
+            throw new \InvalidArgumentException('Question not found in this set.');
+        }
+
+        if ($attempt->isGuided()) {
+            $guided = $attempt->guidedQuestions()->where('question_id', $questionId)->first();
+
+            if ($guided?->final_is_correct) {
+                throw new \InvalidArgumentException('This question was already answered correctly.');
+            }
+        } else {
+            $answer = $attempt->answers()->where('question_id', $questionId)->first();
+
+            if ($answer?->is_correct) {
+                throw new \InvalidArgumentException('This question was already answered correctly.');
+            }
+        }
+
+        $isCorrect = false;
+
+        if ($question->isFillInBlank()) {
+            if (! filled($answerText)) {
+                throw new \InvalidArgumentException('Enter an answer before submitting.');
+            }
+
+            $isCorrect = $this->answerValidation->isCorrect($question, $answerText);
+        } else {
+            if (! $optionId) {
+                throw new \InvalidArgumentException('Select an option before submitting.');
+            }
+
+            $option = $question->options->firstWhere('id', $optionId);
+            $isCorrect = $option?->is_correct ?? false;
+        }
+
+        return [
+            'correct' => $isCorrect,
+            'message' => $isCorrect
+                ? 'Correct! Well done.'
+                : 'Not quite — try again.',
+            'correct_answer' => $isCorrect
+                ? AttemptResultSummary::correctAnswerForQuestion($question)
+                : null,
+        ];
     }
 }

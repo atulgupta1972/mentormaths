@@ -180,7 +180,7 @@ class SetAssignmentService
     /**
      * @return Collection<int, array{id: int, name: string, class_name: string, label: string}>
      */
-    public function activeStudentsForAssignment(?int $academicYearId = null): Collection
+    public function activeStudentsForAssignment(?int $academicYearId = null, ?int $gradeLevelId = null): Collection
     {
         $yearId = $academicYearId ?? AcademicYear::active()?->id;
 
@@ -191,10 +191,12 @@ class SetAssignmentService
         return Student::query()
             ->whereHas('enrollments', fn ($q) => $q
                 ->where('academic_year_id', $yearId)
-                ->where('status', StudentEnrollment::STATUS_ACTIVE))
+                ->where('status', StudentEnrollment::STATUS_ACTIVE)
+                ->when($gradeLevelId, fn ($query) => $query->where('grade_level_id', $gradeLevelId)))
             ->with(['enrollments' => fn ($q) => $q
                 ->where('academic_year_id', $yearId)
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
+                ->when($gradeLevelId, fn ($query) => $query->where('grade_level_id', $gradeLevelId))
                 ->with('gradeLevel:id,name,sort_order')])
             ->orderBy('name')
             ->get(['id', 'name'])

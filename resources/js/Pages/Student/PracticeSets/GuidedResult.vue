@@ -65,7 +65,7 @@ const formatTime = (seconds) => {
                     <strong>Resolution</strong> list on the dashboard. Your teacher will explain them, then you can retry.
                 </div>
 
-                <AttemptReviewList :questions="questions" />
+                <AttemptReviewList :questions="questions" :attempt-id="attempt.id" allow-practice-retry />
 
                 <Link :href="route('dashboard')">
                     <PrimaryButton>Back to dashboard</PrimaryButton>

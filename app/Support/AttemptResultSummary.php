@@ -7,6 +7,7 @@ use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\Worksheet;
 use App\Support\QuestionMethodHint;
+use App\Support\AnswerValidationService;
 
 class AttemptResultSummary
 {
@@ -29,6 +30,17 @@ class AttemptResultSummary
             $summary['questions'] = self::batchReviewRows($attempt, $attempt->assignment->practiceSet);
         }
 
+        usort($summary['questions'], function (array $left, array $right) {
+            $leftWrong = $left['needs_practice_retry'] ?? false;
+            $rightWrong = $right['needs_practice_retry'] ?? false;
+
+            if ($leftWrong !== $rightWrong) {
+                return $rightWrong <=> $leftWrong;
+            }
+
+            return ($left['number'] ?? 0) <=> ($right['number'] ?? 0);
+        });
+
         return $summary;
     }
 
@@ -50,6 +62,7 @@ class AttemptResultSummary
 
                 return [
                     'number' => $index + 1,
+                    'question_id' => $question?->id,
                     'question_text' => $question?->question_text,
                     'diagram_url' => $question?->diagram_url,
                     'type' => $question?->type,
@@ -58,6 +71,7 @@ class AttemptResultSummary
                         : null,
                     'correct_answer' => self::correctAnswerLabel($question),
                     'attempts' => self::guidedReviewAttempts($guided, $question),
+                    ...self::practiceRetryMeta($question, $guided->final_is_correct ?? false),
                 ];
             })
             ->all();
@@ -181,12 +195,14 @@ class AttemptResultSummary
 
             $rows[] = [
                 'number' => $index + 1,
+                'question_id' => $question->id,
                 'question_text' => $question->question_text,
                 'diagram_url' => $question->diagram_url,
                 'type' => $question->type,
                 'method_hint' => null,
                 'correct_answer' => self::correctAnswerLabel($question),
                 'attempts' => $attempts,
+                ...self::practiceRetryMeta($question, (bool) ($answer?->is_correct ?? false)),
             ];
         }
 
@@ -226,7 +242,44 @@ class AttemptResultSummary
         ];
     }
 
+    /**
+     * @return array{needs_practice_retry: bool, options: list<array<string, mixed>>, answer_format: ?string, answer_format_label: ?string}
+     */
+    private static function practiceRetryMeta($question, bool $wasCorrect): array
+    {
+        if (! $question || $wasCorrect) {
+            return [
+                'needs_practice_retry' => false,
+                'options' => [],
+                'answer_format' => null,
+                'answer_format_label' => null,
+            ];
+        }
+
+        $question->loadMissing(['options', 'blankAnswer']);
+
+        return [
+            'needs_practice_retry' => true,
+            'options' => $question->isMcq()
+                ? $question->options->values()->map(function ($option, $index) {
+                    return [
+                        'id' => $option->id,
+                        'letter' => chr(65 + $index),
+                        'option_text' => $option->option_text,
+                    ];
+                })->all()
+                : [],
+            'answer_format' => $question->blankAnswer?->answer_format,
+            'answer_format_label' => app(AnswerValidationService::class)->formatLabel($question->blankAnswer?->answer_format),
+        ];
+    }
+
     private static function correctAnswerLabel($question): ?string
+    {
+        return self::correctAnswerForQuestion($question);
+    }
+
+    public static function correctAnswerForQuestion($question): ?string
     {
         if (! $question) {
             return null;

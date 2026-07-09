@@ -95,15 +95,22 @@ const startLabel = () => {
                                 <span v-if="att.status === 'submitted'">
                                     {{ att.score }}/{{ att.max_score }} · {{ formatTime(att.time_seconds) }}
                                     <span v-if="att.submission_timing === 'late'" class="text-amber-700">· Delayed</span>
-                                    <Link :href="route('student.attempts.result', att.id)" class="ml-2 text-indigo-600">Review</Link>
+                                    <Link :href="route('student.attempts.result', att.id)" class="ml-2 text-indigo-600">Review & retry wrong sums</Link>
                                 </span>
                                 <span v-else class="text-yellow-700">In progress</span>
                             </li>
                         </ul>
                     </div>
 
+                    <Link
+                        v-if="assignment.status === 'completed' && assignment.latest_attempt_id"
+                        :href="route('student.attempts.result', assignment.latest_attempt_id)"
+                        class="mt-6 inline-flex"
+                    >
+                        <PrimaryButton>Review results & retry wrong sums</PrimaryButton>
+                    </Link>
                     <PrimaryButton
-                        v-if="assignment.status !== 'completed' || assignment.in_progress_attempt_id"
+                        v-else-if="assignment.status !== 'completed' || assignment.in_progress_attempt_id"
                         class="mt-6"
                         :disabled="startForm.processing"
                         @click="startOrContinue"

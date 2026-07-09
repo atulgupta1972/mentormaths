@@ -89,6 +89,12 @@ const scorePercent = (set) => {
     return Math.round((set.latest_score / set.latest_max_score) * 100);
 };
 
+const completedAssignmentHref = (set) => (
+    set.latest_attempt_id
+        ? route('student.attempts.result', set.latest_attempt_id)
+        : route('student.assignments.show', set.assignment_id)
+);
+
 const setLabel = (set) => set.set_code || `Set ${set.set_number}`;
 
 const daysUntil = (dateStr) => {
@@ -695,7 +701,7 @@ const adminSetStatusClass = (set) => {
                             <Link
                                 v-for="set in completedAssignments"
                                 :key="`done-${set.assignment_id}`"
-                                :href="route('student.assignments.show', set.assignment_id)"
+                                :href="completedAssignmentHref(set)"
                                 class="rounded-lg border border-emerald-300 bg-gradient-to-br from-emerald-50 to-green-100 p-2.5 shadow-sm transition hover:border-emerald-500"
                             >
                                 <div class="min-w-0">

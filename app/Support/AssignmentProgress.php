@@ -108,6 +108,7 @@ class AssignmentProgress
             'latest_time_seconds' => $summary['latest_time_seconds'],
             'submission_timing' => $summary['submission_timing'],
             'status' => $summary['status'],
+            'latest_attempt_id' => $latest?->status === SetAttempt::STATUS_SUBMITTED ? $latest->id : null,
         ];
     }
 }

@@ -35,6 +35,7 @@ class PracticeSetController extends Controller
         ]);
 
         $inProgress = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_IN_PROGRESS);
+        $latestSubmitted = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_SUBMITTED);
         $practiceSet = $assignment->practiceSet;
 
         return Inertia::render('Student/PracticeSets/Assignment', [
@@ -45,6 +46,7 @@ class PracticeSetController extends Controller
                 'target_date' => $assignment->due_date?->toDateString(),
                 'is_overdue' => $assignment->isOverdue(),
                 'is_guided' => ! $practiceSet->isChapterScope(),
+                'latest_attempt_id' => $latestSubmitted?->id,
                 'practice_set' => [
                     'set_code' => $practiceSet->set_code,
                     'set_number' => $practiceSet->set_number,
@@ -330,6 +332,31 @@ class PracticeSetController extends Controller
             'referencePdfUrl' => $this->referencePdfUrlFor($assignment),
             'questions' => $review['questions'],
         ]);
+    }
+
+    public function practiceRetry(Request $request, SetAttempt $attempt): JsonResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        $validated = $request->validate([
+            'question_id' => ['required', 'integer'],
+            'option_id' => ['nullable', 'integer'],
+            'answer_text' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        try {
+            $result = $this->attemptService->checkPracticeRetry(
+                $attempt,
+                (int) $validated['question_id'],
+                isset($validated['option_id']) ? (int) $validated['option_id'] : null,
+                $validated['answer_text'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($result);
     }
 
     public function showResolution(Request $request, QuestionResolutionItem $item): Response|RedirectResponse
