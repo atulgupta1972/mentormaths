@@ -240,25 +240,28 @@ class ClassAssignmentService
             ->unique()
             ->values();
 
-        $assignmentsByKey = $worksheetIds->isEmpty()
+        $assignmentsGrouped = $worksheetIds->isEmpty()
             ? collect()
             : SetAssignment::query()
                 ->whereIn('student_enrollment_id', $enrollments->pluck('id'))
                 ->whereIn('worksheet_id', $worksheetIds)
+                ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
                 ->with([
                     'practiceSet' => fn ($query) => $query->withCount('questions'),
                     'attempts' => fn ($query) => $query->orderByDesc('attempt_number'),
                 ])
+                ->orderByDesc('id')
                 ->get()
-                ->keyBy(fn (SetAssignment $assignment) => "{$assignment->worksheet_id}:{$assignment->student_enrollment_id}");
+                ->groupBy(fn (SetAssignment $assignment) => "{$assignment->worksheet_id}:{$assignment->student_enrollment_id}");
 
-        $chapterRows = $chapters->map(function (array $chapter) use ($enrollments, $assignmentsByKey) {
+        $chapterRows = $chapters->map(function (array $chapter) use ($enrollments, $assignmentsGrouped) {
             $sets = [];
 
             foreach (array_merge($chapter['topic_sets'] ?? [], $chapter['chapter_tests'] ?? []) as $set) {
-                $studentRows = $enrollments->map(function (StudentEnrollment $enrollment) use ($set, $assignmentsByKey) {
-                    /** @var SetAssignment|null $assignment */
-                    $assignment = $assignmentsByKey->get("{$set['id']}:{$enrollment->id}");
+                $studentRows = $enrollments->map(function (StudentEnrollment $enrollment) use ($set, $assignmentsGrouped) {
+                    $assignment = $this->resolveCurrentAssignment(
+                        $assignmentsGrouped->get("{$set['id']}:{$enrollment->id}", collect()),
+                    );
                     $latest = $assignment?->attempts->first();
                     $progress = $assignment
                         ? AssignmentProgress::formatAssignmentSummary($assignment, $latest)
@@ -275,7 +278,14 @@ class ClassAssignmentService
                     ...$set,
                     'chapter_label' => $chapter['chapter_label'],
                     'students' => $studentRows,
-                    'assigned_count' => collect($studentRows)->filter(fn (array $row) => $row['progress'] !== null)->count(),
+                    'assigned_count' => collect($studentRows)->filter(
+                        fn (array $row) => $row['progress'] !== null
+                            && in_array($row['progress']['assignment_status'] ?? null, [
+                                SetAssignment::STATUS_ASSIGNED,
+                                SetAssignment::STATUS_IN_PROGRESS,
+                                SetAssignment::STATUS_COMPLETED,
+                            ], true),
+                    )->count(),
                     'completed_count' => collect($studentRows)->filter(
                         fn (array $row) => ($row['progress']['assignment_status'] ?? null) === SetAssignment::STATUS_COMPLETED,
                     )->count(),
@@ -293,6 +303,30 @@ class ClassAssignmentService
             'students' => $students,
             'chapters' => $chapterRows,
         ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, SetAssignment>  $assignments
+     */
+    private function resolveCurrentAssignment($assignments): ?SetAssignment
+    {
+        if ($assignments->isEmpty()) {
+            return null;
+        }
+
+        $active = $assignments
+            ->whereIn('status', [SetAssignment::STATUS_ASSIGNED, SetAssignment::STATUS_IN_PROGRESS])
+            ->sortByDesc('id')
+            ->first();
+
+        if ($active) {
+            return $active;
+        }
+
+        return $assignments
+            ->where('status', SetAssignment::STATUS_COMPLETED)
+            ->sortByDesc('id')
+            ->first();
     }
 
     /**

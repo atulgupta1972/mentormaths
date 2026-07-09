@@ -31,10 +31,8 @@ class SetAssignmentService
         $existing = SetAssignment::query()
             ->where('student_enrollment_id', $enrollment->id)
             ->where('worksheet_id', $practiceSet->id)
-            ->whereIn('status', [
-                SetAssignment::STATUS_ASSIGNED,
-                SetAssignment::STATUS_IN_PROGRESS,
-            ])
+            ->whereNot('status', SetAssignment::STATUS_CANCELLED)
+            ->orderByDesc('id')
             ->first();
 
         if ($existing) {

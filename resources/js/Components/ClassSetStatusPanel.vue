@@ -17,10 +17,12 @@ const page = usePage();
 
 const defaultTargetDate = () => {
     const d = new Date();
-    d.setDate(d.getDate() + 7);
+    d.setDate(d.getDate() + 3);
 
     return d.toISOString().slice(0, 10);
 };
+
+const quickAssignDate = () => defaultTargetDate();
 
 const selectedChapterId = ref('');
 const targetDate = ref(defaultTargetDate());
@@ -59,24 +61,38 @@ const activeChapter = computed(() =>
 const studentRow = (set, studentId) =>
     set.students?.find((row) => row.student_id === studentId) ?? null;
 
+const isNotAssigned = (progress) => !progress?.assignment_id;
+
 const cellStatus = (progress) => {
     const box = 'inline-flex min-h-[22px] min-w-[76px] items-center justify-center rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-tight';
 
-    if (!progress) {
-        return { label: '—', boxClass: `${box} bg-slate-100 text-slate-400 border-slate-200`, title: 'Not assigned' };
+    if (isNotAssigned(progress)) {
+        return {
+            label: 'Not assigned',
+            boxClass: `${box} bg-slate-100 text-slate-500 border-slate-200`,
+            title: 'Click to assign (3-day target)',
+        };
     }
 
-    if (progress.assignment_status === 'completed' && progress.latest_score != null) {
-        const late = progress.submission_timing === 'late';
+    if (progress.assignment_status === 'completed') {
+        if (progress.latest_score != null) {
+            const late = progress.submission_timing === 'late';
+
+            return {
+                label: late
+                    ? `${progress.latest_score}/${progress.latest_max_score} late`
+                    : `${progress.latest_score}/${progress.latest_max_score}`,
+                boxClass: late
+                    ? `${box} bg-amber-100 text-amber-900 border-amber-300`
+                    : `${box} bg-emerald-100 text-emerald-800 border-emerald-300`,
+                title: late ? 'Completed (delayed)' : 'Completed',
+            };
+        }
 
         return {
-            label: late
-                ? `${progress.latest_score}/${progress.latest_max_score} late`
-                : `${progress.latest_score}/${progress.latest_max_score}`,
-            boxClass: late
-                ? `${box} bg-amber-100 text-amber-900 border-amber-300`
-                : `${box} bg-emerald-100 text-emerald-800 border-emerald-300`,
-            title: late ? 'Completed (delayed)' : 'Completed',
+            label: 'Done',
+            boxClass: `${box} bg-emerald-100 text-emerald-800 border-emerald-300`,
+            title: 'Completed',
         };
     }
 
@@ -88,10 +104,18 @@ const cellStatus = (progress) => {
         return { label: 'In progress', boxClass: `${box} bg-amber-100 text-amber-900 border-amber-300`, title: 'Started, not submitted' };
     }
 
+    if (progress.assignment_status === 'assigned') {
+        return {
+            label: 'Not done',
+            boxClass: `${box} bg-rose-100 text-rose-800 border-rose-300`,
+            title: 'Assigned, not submitted yet',
+        };
+    }
+
     return {
-        label: 'Not done',
-        boxClass: `${box} bg-rose-100 text-rose-800 border-rose-300`,
-        title: 'Assigned, not submitted yet',
+        label: 'Not assigned',
+        boxClass: `${box} bg-slate-100 text-slate-500 border-slate-200`,
+        title: 'Click to assign (3-day target)',
     };
 };
 
@@ -176,7 +200,16 @@ const onCellClick = (set, studentId) => {
         return;
     }
 
+    const progress = studentRow(set, studentId)?.progress;
     assignStudentBySet.value[set.id] = String(studentId);
+
+    if (isNotAssigned(progress)) {
+        assignForm.student_id = String(studentId);
+        assignForm.target_date = quickAssignDate();
+        assignForm.post(route('admin.practice-sets.assign', set.id), { preserveScroll: true });
+        return;
+    }
+
     assignOrReassign(set);
 };
 
@@ -353,7 +386,7 @@ const setMeta = (set) => {
             </div>
 
             <p v-if="canAssign" class="border-t bg-gray-50 px-2 py-1 text-[10px] text-gray-500">
-                Click a coloured cell to assign / re-assign · row dropdown or <strong>All</strong> for whole class
+                Click <strong>Not assigned</strong> to assign with a 3-day target · other cells assign / re-assign using the date above
             </p>
         </div>
     </div>

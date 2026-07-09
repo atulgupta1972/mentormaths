@@ -25,11 +25,11 @@ class SetAssignmentServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_assign_allows_same_set_after_previous_assignment_completed(): void
+    public function test_assign_reassigns_when_previous_assignment_completed(): void
     {
         [$enrollment, $worksheet, $assigner] = $this->seedAssignmentContext();
 
-        SetAssignment::query()->create([
+        $existing = SetAssignment::query()->create([
             'student_enrollment_id' => $enrollment->id,
             'worksheet_id' => $worksheet->id,
             'assigned_by' => $assigner->id,
@@ -41,8 +41,10 @@ class SetAssignmentServiceTest extends TestCase
         $service = app(SetAssignmentService::class);
         $assignment = $service->assign($worksheet, $enrollment, $assigner, now()->addWeeks(2)->toDateString());
 
+        $this->assertSame($existing->id, $assignment->id);
         $this->assertSame(SetAssignment::STATUS_ASSIGNED, $assignment->status);
-        $this->assertSame(2, SetAssignment::query()->where('student_enrollment_id', $enrollment->id)->count());
+        $this->assertNotNull($assignment->reassigned_at);
+        $this->assertSame(1, SetAssignment::query()->where('student_enrollment_id', $enrollment->id)->count());
     }
 
     public function test_assign_reassigns_when_active_assignment_exists(): void
