@@ -169,6 +169,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::post('/practice-sets/{worksheet}/assign', [SetAssignmentController::class, 'store'])->name('practice-sets.assign');
     Route::post('/practice-sets/{worksheet}/assign-bulk', [SetAssignmentController::class, 'storeBulk'])->name('practice-sets.assign-bulk');
+    Route::post('/practice-sets/{worksheet}/assign-students', [SetAssignmentController::class, 'storeStudents'])->name('practice-sets.assign-students');
     Route::get('/set-assignments/{assignment}', [SetAssignmentController::class, 'show'])->name('set-assignments.show');
     Route::post('/set-assignments/{assignment}/reassign', [SetAssignmentController::class, 'reassign'])->name('set-assignments.reassign');
 

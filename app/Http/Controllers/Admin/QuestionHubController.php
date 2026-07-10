@@ -16,6 +16,7 @@ use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\PracticeSetCodeService;
 use App\Services\QuestionMethodHintService;
+use App\Services\SetAssignmentService;
 use App\Services\SetCodeLookupService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
@@ -32,6 +33,7 @@ class QuestionHubController extends Controller
         private AdminGradeContext $gradeContext,
         private QuestionMethodHintService $methodHintService,
         private SetCodeLookupService $setCodeLookup,
+        private SetAssignmentService $assignmentService,
     ) {}
 
     public function setCodeReview(Request $request): Response
@@ -369,6 +371,26 @@ class QuestionHubController extends Controller
             $this->gradeContext->persistBoard($request, $board->id);
         }
 
+        $isAdmin = (bool) $request->user()?->isAdmin();
+        $activeYear = AcademicYear::active();
+        $assignmentPanel = null;
+
+        if ($isAdmin && $worksheet->status === Worksheet::STATUS_PUBLISHED) {
+            $assignmentPanel = [
+                'activeYear' => $activeYear?->only(['id', 'name']),
+                'gradeLevels' => GradeLevel::query()
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->get(['id', 'name']),
+                'students' => $this->assignmentService
+                    ->activeStudentsForAssignment($activeYear?->id)
+                    ->all(),
+                'existingAssignments' => $this->assignmentService
+                    ->worksheetAssignmentOverview($worksheet->id, $activeYear?->id)
+                    ->all(),
+            ];
+        }
+
         return Inertia::render('Admin/Questions/SetQuestions', [
             'practiceSet' => [
                 'id' => $worksheet->id,
@@ -428,6 +450,7 @@ class QuestionHubController extends Controller
             'topicHintStats' => $topic
                 ? $this->methodHintService->statsForTopic($topic)
                 : null,
+            'assignmentPanel' => $assignmentPanel,
         ]);
     }
 

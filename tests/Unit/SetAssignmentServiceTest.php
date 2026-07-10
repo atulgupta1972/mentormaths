@@ -25,6 +25,47 @@ class SetAssignmentServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_assign_to_selected_students(): void
+    {
+        [$enrollment, $worksheet, $assigner] = $this->seedAssignmentContext();
+
+        $service = app(SetAssignmentService::class);
+        $result = $service->assignToStudents(
+            $worksheet,
+            [$enrollment->student_id],
+            $assigner,
+            now()->addWeek()->toDateString(),
+        );
+
+        $this->assertSame(1, $result['assigned']);
+        $this->assertSame(0, $result['skipped']);
+        $this->assertDatabaseHas('set_assignments', [
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+    }
+
+    public function test_worksheet_assignment_overview_returns_active_year_rows(): void
+    {
+        [$enrollment, $worksheet, $assigner] = $this->seedAssignmentContext();
+
+        SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $assigner->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek(),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        $overview = app(SetAssignmentService::class)->worksheetAssignmentOverview($worksheet->id);
+
+        $this->assertCount(1, $overview);
+        $this->assertSame($enrollment->student_id, $overview->first()['student_id']);
+        $this->assertSame('Test Student', $overview->first()['student_name']);
+    }
+
     public function test_assign_reassigns_when_previous_assignment_completed(): void
     {
         [$enrollment, $worksheet, $assigner] = $this->seedAssignmentContext();

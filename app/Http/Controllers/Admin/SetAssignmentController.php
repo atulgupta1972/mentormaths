@@ -156,6 +156,62 @@ class SetAssignmentController extends Controller
         return $redirect;
     }
 
+    public function storeStudents(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        $validated = $request->validate([
+            'student_ids' => ['required', 'array', 'min:1'],
+            'student_ids.*' => ['integer', 'exists:students,id'],
+            'target_date' => ['required', 'date', 'after_or_equal:today'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        try {
+            $result = $this->assignmentService->assignToStudents(
+                $worksheet,
+                $validated['student_ids'],
+                $request->user(),
+                $validated['target_date'],
+                $validated['notes'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $emailCounts = AssignmentMailer::sendBulkAssigned(
+            $result['assignedStudents'] ?? [],
+            $worksheet,
+            $validated['target_date'],
+            $validated['notes'] ?? null,
+        );
+
+        $message = "Assigned {$worksheet->set_code} to {$result['assigned']} student(s). Target: {$validated['target_date']}.";
+
+        if ($result['skipped'] > 0) {
+            $message .= " Skipped {$result['skipped']}.";
+        }
+
+        $message .= AssignmentMailer::flashSuffixForBulk($emailCounts) ?? '';
+
+        $redirect = back()->with('success', $message);
+
+        $warnings = [];
+        if ($result['errors']) {
+            $warnings[] = implode(' ', array_slice($result['errors'], 0, 3));
+        }
+        if ($emailCounts['skipped'] > 0 && $emailCounts['sent'] === 0) {
+            $warnings[] = 'Add student emails on their profiles to notify by email.';
+        }
+        if ($emailCounts['via_log'] ?? false) {
+            $warnings[] = 'MAIL_MAILER=log on server — emails are not delivered. Set SMTP in .env and run php artisan config:cache.';
+        }
+
+        if ($warnings !== []) {
+            $redirect = $redirect->with('warning', implode(' ', $warnings));
+        }
+
+        return $redirect;
+    }
+
     public function reassign(Request $request, SetAssignment $assignment): RedirectResponse
     {
         $validated = $request->validate([
