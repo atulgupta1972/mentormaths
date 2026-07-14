@@ -157,8 +157,9 @@ class ExamPlanService
             'title' => $data['title'],
             'exam_type' => $data['exam_type'],
             'notes' => $data['notes'] ?? null,
+            ...$this->marksPayload($data, null),
             'created_by' => $creator->id,
-            'status' => ExamPlan::STATUS_PLANNED,
+            'status' => $this->statusForMarks($data['exam_date'], $this->normalizeMarks($data)),
         ]);
 
         $this->syncChapterSelections($plan, $selections, $enrollment);
@@ -172,11 +173,15 @@ class ExamPlanService
      */
     public function update(ExamPlan $plan, array $data, array $selections): ExamPlan
     {
+        $marks = $this->normalizeMarks($data);
+
         $plan->update([
             'exam_date' => $data['exam_date'],
             'title' => $data['title'],
             'exam_type' => $data['exam_type'],
             'notes' => $data['notes'] ?? null,
+            ...$this->marksPayload($data, $plan),
+            'status' => $this->statusForMarks($data['exam_date'], $marks),
         ]);
 
         $this->syncChapterSelections($plan, $selections, $plan->enrollment);
@@ -219,6 +224,11 @@ class ExamPlanService
             'exam_type' => $plan->exam_type,
             'exam_type_label' => $plan->typeLabel(),
             'notes' => $plan->notes,
+            'obtained_marks' => $plan->obtained_marks,
+            'total_marks' => $plan->total_marks,
+            'marks_score_label' => ScoreLabel::format($plan->obtained_marks, $plan->total_marks),
+            'marks_entered_at' => $plan->marks_entered_at?->toDateTimeString(),
+            'has_marks' => $plan->hasMarks(),
             'status' => $plan->status,
             'is_upcoming' => $plan->isUpcoming(),
             'chapters' => $plan->chapters->map(fn (SyllabusChapter $chapter) => [
@@ -565,5 +575,68 @@ class ExamPlanService
                 'all_plans' => $plans->values()->all(),
             ];
         })->values()->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{obtained_marks: int, total_marks: int}|null
+     */
+    private function normalizeMarks(array $data): ?array
+    {
+        if (! array_key_exists('obtained_marks', $data) && ! array_key_exists('total_marks', $data)) {
+            return null;
+        }
+
+        $obtained = $data['obtained_marks'] ?? null;
+        $total = $data['total_marks'] ?? null;
+
+        if ($obtained === null && $total === null) {
+            return null;
+        }
+
+        return [
+            'obtained_marks' => (int) $obtained,
+            'total_marks' => (int) $total,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function marksPayload(array $data, ?ExamPlan $existing): array
+    {
+        if (! array_key_exists('obtained_marks', $data) && ! array_key_exists('total_marks', $data)) {
+            return [];
+        }
+
+        $marks = $this->normalizeMarks($data);
+
+        if ($marks === null) {
+            return [
+                'obtained_marks' => null,
+                'total_marks' => null,
+                'marks_entered_at' => null,
+            ];
+        }
+
+        $unchanged = $existing?->hasMarks()
+            && $existing->obtained_marks === $marks['obtained_marks']
+            && $existing->total_marks === $marks['total_marks'];
+
+        return [
+            'obtained_marks' => $marks['obtained_marks'],
+            'total_marks' => $marks['total_marks'],
+            'marks_entered_at' => $unchanged ? $existing->marks_entered_at : now(),
+        ];
+    }
+
+    private function statusForMarks(string $examDate, ?array $marks): string
+    {
+        if ($examDate > now()->toDateString()) {
+            return ExamPlan::STATUS_PLANNED;
+        }
+
+        return $marks !== null ? ExamPlan::STATUS_COMPLETED : ExamPlan::STATUS_PLANNED;
     }
 }

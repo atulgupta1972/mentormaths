@@ -34,6 +34,9 @@ class ExamPlan extends Model
         'title',
         'exam_type',
         'notes',
+        'obtained_marks',
+        'total_marks',
+        'marks_entered_at',
         'created_by',
         'status',
     ];
@@ -42,6 +45,7 @@ class ExamPlan extends Model
     {
         return [
             'exam_date' => 'date',
+            'marks_entered_at' => 'datetime',
         ];
     }
 
@@ -87,5 +91,10 @@ class ExamPlan extends Model
     {
         return $this->status === self::STATUS_PLANNED
             && $this->exam_date->toDateString() >= now()->toDateString();
+    }
+
+    public function hasMarks(): bool
+    {
+        return $this->obtained_marks !== null && $this->total_marks !== null;
     }
 }

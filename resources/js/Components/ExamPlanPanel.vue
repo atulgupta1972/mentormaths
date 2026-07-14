@@ -4,7 +4,8 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { useForm, Link } from '@inertiajs/vue3';
+import { formatScoreLabel } from '@/utils/scores';
+import { useForm, Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -23,12 +24,17 @@ const showForm = ref(false);
 const editingPlan = ref(null);
 const assigningPlanId = ref(null);
 const assignDueDates = ref({});
+const marksDraft = ref({});
+const savingMarksPlanId = ref(null);
+const marksErrors = ref({});
 
 const emptyForm = () => ({
     exam_date: '',
     title: '',
     exam_type: 'unit_test',
     notes: '',
+    obtained_marks: '',
+    total_marks: '',
     chapter_selections: [],
     ...(props.context === 'admin' && props.studentId ? { student_id: props.studentId } : {}),
 });
@@ -72,6 +78,52 @@ const prepStatusClass = (prep) => {
 };
 
 const dueDateForPlan = (plan) => assignDueDates.value[plan.id] || plan.suggested_due_date || plan.exam_date;
+
+const isPastPlan = (plan) => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    return plan.exam_date < today || plan.status === 'completed';
+};
+
+const marksScoreLabel = (plan) => plan.marks_score_label || formatScoreLabel(plan.obtained_marks, plan.total_marks);
+
+const syncMarksDraft = () => {
+    const next = {};
+
+    for (const plan of props.plans) {
+        next[plan.id] = {
+            obtained_marks: plan.obtained_marks ?? '',
+            total_marks: plan.total_marks ?? '',
+        };
+    }
+
+    marksDraft.value = next;
+};
+
+const saveMarks = (plan) => {
+    const draft = marksDraft.value[plan.id] || {};
+
+    savingMarksPlanId.value = plan.id;
+    marksErrors.value = {};
+
+    router.put(route(`${props.context}.exam-plans.update`, plan.id), {
+        exam_date: plan.exam_date,
+        title: plan.title,
+        exam_type: plan.exam_type,
+        notes: plan.notes || '',
+        chapter_selections: plan.chapter_selections,
+        obtained_marks: draft.obtained_marks === '' ? null : Number(draft.obtained_marks),
+        total_marks: draft.total_marks === '' ? null : Number(draft.total_marks),
+    }, {
+        preserveScroll: true,
+        onError: (errors) => {
+            marksErrors.value = errors;
+        },
+        onFinish: () => {
+            savingMarksPlanId.value = null;
+        },
+    });
+};
 
 const toggleAssign = (plan) => {
     if (assigningPlanId.value === plan.id) {
@@ -245,6 +297,8 @@ const openEdit = (plan) => {
         title: plan.title,
         exam_type: plan.exam_type,
         notes: plan.notes || '',
+        obtained_marks: plan.obtained_marks ?? '',
+        total_marks: plan.total_marks ?? '',
     });
     form.reset();
     form.clearErrors();
@@ -263,8 +317,14 @@ const cancelForm = () => {
 const submit = () => {
     syncFormSelections();
 
+    const payload = {
+        ...form.data(),
+        obtained_marks: form.obtained_marks === '' ? null : Number(form.obtained_marks),
+        total_marks: form.total_marks === '' ? null : Number(form.total_marks),
+    };
+
     if (editingPlan.value) {
-        form.put(route(`${props.context}.exam-plans.update`, editingPlan.value.id), {
+        form.transform(() => payload).put(route(`${props.context}.exam-plans.update`, editingPlan.value.id), {
             preserveScroll: true,
             onSuccess: () => cancelForm(),
         });
@@ -272,7 +332,7 @@ const submit = () => {
         return;
     }
 
-    form.post(route(`${props.context}.exam-plans.store`), {
+    form.transform(() => payload).post(route(`${props.context}.exam-plans.store`), {
         preserveScroll: true,
         onSuccess: () => cancelForm(),
     });
@@ -296,6 +356,14 @@ watch(
         }
     },
     { immediate: true },
+);
+
+watch(
+    () => props.plans,
+    () => {
+        syncMarksDraft();
+    },
+    { immediate: true, deep: true },
 );
 </script>
 
@@ -426,6 +494,31 @@ watch(
                         />
                         <InputError class="mt-1" :message="form.errors.notes" />
                     </div>
+                    <div>
+                        <InputLabel value="Marks obtained (optional)" />
+                        <TextInput
+                            v-model="form.obtained_marks"
+                            type="number"
+                            min="0"
+                            class="mt-1 block w-full"
+                            placeholder="e.g. 42"
+                        />
+                        <InputError class="mt-1" :message="form.errors.obtained_marks" />
+                    </div>
+                    <div>
+                        <InputLabel value="Total marks (optional)" />
+                        <TextInput
+                            v-model="form.total_marks"
+                            type="number"
+                            min="1"
+                            class="mt-1 block w-full"
+                            placeholder="e.g. 50"
+                        />
+                        <InputError class="mt-1" :message="form.errors.total_marks" />
+                    </div>
+                    <p class="sm:col-span-2 text-xs text-gray-500">
+                        Enter your school test result after the exam. Leave blank until you have the marks.
+                    </p>
                 </div>
 
                 <div class="flex flex-wrap gap-2">
@@ -459,6 +552,9 @@ watch(
                             {{ plan.chapter_names.join(' · ') }}
                         </p>
                         <p v-else class="mt-1 text-sm text-gray-400">No chapters selected</p>
+                        <p v-if="plan.has_marks" class="mt-2 text-sm font-semibold text-emerald-700">
+                            Result: {{ marksScoreLabel(plan) }}
+                        </p>
                     </div>
                     <div v-if="canManage" class="flex shrink-0 flex-wrap justify-end gap-x-3 gap-y-1 text-sm">
                         <button type="button" class="text-indigo-600 hover:underline" @click="openEdit(plan)">
@@ -527,6 +623,57 @@ watch(
                     <p v-else class="text-xs text-gray-400">
                         {{ isAdminContext ? 'Click Assign sheets to add practice or tests.' : 'No prep assigned yet.' }}
                     </p>
+                </div>
+
+                <div
+                    v-if="!isAdminContext && isPastPlan(plan) && marksDraft[plan.id]"
+                    class="border-t border-gray-200 bg-emerald-50/40 px-4 py-3"
+                >
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+                        Your school test marks
+                    </p>
+                    <p class="mt-1 text-xs text-gray-600">
+                        Enter marks from your answer sheet — obtained and total for the test paper.
+                    </p>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <InputLabel value="Marks obtained" class="!text-xs" />
+                            <TextInput
+                                v-model="marksDraft[plan.id].obtained_marks"
+                                type="number"
+                                min="0"
+                                class="mt-1 block w-full text-sm"
+                                placeholder="e.g. 42"
+                            />
+                        </div>
+                        <div>
+                            <InputLabel value="Total marks" class="!text-xs" />
+                            <TextInput
+                                v-model="marksDraft[plan.id].total_marks"
+                                type="number"
+                                min="1"
+                                class="mt-1 block w-full text-sm"
+                                placeholder="e.g. 50"
+                            />
+                        </div>
+                    </div>
+                    <InputError class="mt-2" :message="marksErrors.obtained_marks" />
+                    <InputError class="mt-1" :message="marksErrors.total_marks" />
+                    <PrimaryButton
+                        type="button"
+                        class="mt-3 !py-1.5 !text-xs"
+                        :disabled="savingMarksPlanId === plan.id"
+                        @click="saveMarks(plan)"
+                    >
+                        {{ savingMarksPlanId === plan.id ? 'Saving…' : 'Save marks' }}
+                    </PrimaryButton>
+                </div>
+
+                <div
+                    v-else-if="isAdminContext && plan.has_marks"
+                    class="border-t border-gray-200 bg-emerald-50/40 px-4 py-3 text-sm text-emerald-800"
+                >
+                    <span class="font-medium">School test result:</span> {{ marksScoreLabel(plan) }}
                 </div>
 
                 <div v-if="isAdminContext && assigningPlanId === plan.id" class="border-t border-gray-200 bg-slate-50 px-4 py-4">

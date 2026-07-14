@@ -684,6 +684,15 @@ const adminSetStatusClass = (set) => {
                             >
                                 <p class="text-sm font-semibold text-gray-900">{{ plan.title }}</p>
                                 <p class="mt-0.5 text-xs text-gray-600">{{ formatDate(plan.exam_date) }}</p>
+                                <p
+                                    v-if="plan.has_marks || plan.marks_score_label"
+                                    class="mt-2 text-sm font-semibold text-emerald-700"
+                                >
+                                    {{ plan.marks_score_label }}
+                                </p>
+                                <p v-else class="mt-2 text-xs text-amber-700">
+                                    Marks not entered yet — open Add / edit exams to record your score.
+                                </p>
                                 <p class="mt-1 truncate text-[10px] text-gray-500">{{ chapterList(plan) }}</p>
                             </div>
                         </div>
