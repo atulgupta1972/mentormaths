@@ -77,6 +77,16 @@ class Worksheet extends Model
         return $this->hasMany(SetAssignment::class, 'worksheet_id');
     }
 
+    public function audits(): HasMany
+    {
+        return $this->hasMany(QuestionSetAudit::class);
+    }
+
+    public function latestAudit(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(QuestionSetAudit::class)->latestOfMany();
+    }
+
     public function getTierLabelAttribute(): string
     {
         return PracticeSetTier::label($this->tier ?? PracticeSetTier::STARTER);

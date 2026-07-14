@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\GradeContextController;
 use App\Http\Controllers\Admin\GroupController;
 use App\Http\Controllers\Admin\PracticeSetController;
 use App\Http\Controllers\Admin\PracticeSetTopicController;
+use App\Http\Controllers\Admin\QuestionAuditController;
 use App\Http\Controllers\Admin\QuestionController;
 use App\Http\Controllers\Admin\QuestionHubController;
 use App\Http\Controllers\Admin\RegistrationRequestController as AdminRegistrationRequestController;
@@ -150,6 +151,12 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::patch('/questions/{question}/fill-blank', [QuestionController::class, 'updateFillBlank'])->name('questions.fill-blank.update');
     Route::delete('/questions/{question}', [QuestionController::class, 'destroy'])->name('questions.destroy');
     Route::get('/questions/set-code', [QuestionHubController::class, 'setCodeReview'])->name('questions.set-code');
+
+    Route::get('/question-audit', [QuestionAuditController::class, 'index'])->name('question-audit.index');
+    Route::get('/question-audit/classes/{gradeLevel}', [QuestionAuditController::class, 'chapters'])->name('question-audit.classes.show');
+    Route::get('/question-audit/chapters/{chapter}', [QuestionAuditController::class, 'chapterSets'])->name('question-audit.chapters.show');
+    Route::get('/question-audit/worksheets/{worksheet}', [QuestionAuditController::class, 'show'])->name('question-audit.worksheets.show');
+    Route::post('/question-audit/worksheets/{worksheet}/run', [QuestionAuditController::class, 'run'])->name('question-audit.worksheets.run');
 
     Route::post('/practice-sets/from-topic/{topic}', [PracticeSetController::class, 'storeFromTopic'])
         ->name('practice-sets.from-topic');

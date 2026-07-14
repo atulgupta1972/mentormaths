@@ -80,6 +80,7 @@ const contentGroup = computed(() => ({
     label: 'Question bank',
     active:
         route().current('admin.questions.*')
+        || route().current('admin.question-audit.*')
         || route().current('admin.chapter-heads.*')
         || route().current('admin.syllabus.*'),
     items: [
@@ -87,6 +88,12 @@ const contentGroup = computed(() => ({
             label: 'Look up set code',
             href: route('admin.questions.set-code'),
             active: route().current('admin.questions.set-code'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Answer audit',
+            href: route('admin.question-audit.index'),
+            active: route().current('admin.question-audit.*'),
             show: isAdmin.value,
         },
         {

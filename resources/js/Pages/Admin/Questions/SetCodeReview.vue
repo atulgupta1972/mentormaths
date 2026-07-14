@@ -154,7 +154,7 @@ watch(
                             </thead>
                             <tbody class="divide-y divide-gray-200">
                                 <template v-for="(question, index) in result.questions" :key="question.id">
-                                    <tr>
+                                    <tr :id="`question-${question.id}`">
                                         <td class="px-4 py-3 align-top text-gray-500">{{ index + 1 }}</td>
                                         <td class="px-4 py-3 align-top">
                                             <QuestionBody :question-text="question.question_text" :compact="true" />
