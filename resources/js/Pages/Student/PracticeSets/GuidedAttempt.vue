@@ -5,9 +5,11 @@ import McqOptionLine from '@/Components/McqOptionLine.vue';
 import TextInput from '@/Components/TextInput.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import Modal from '@/Components/Modal.vue';
 import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
+import { optionLetter } from '@/utils/mcqDisplay';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     finished: { type: Boolean, default: false },
@@ -32,6 +34,9 @@ const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
 const answerForm = useForm({ option_id: null, answer_text: '' });
 const giveUpForm = useForm({});
 const hintForm = useForm({});
+const pendingMcqOption = ref(null);
+
+const showMcqConfirm = computed(() => pendingMcqOption.value !== null);
 
 const feedback = computed(() => page.props.flash?.guided_feedback ?? null);
 const isFillInBlank = computed(() => props.question?.type === 'fill_in_blank');
@@ -78,7 +83,35 @@ const submitMcqAnswer = (optionId) => {
     answerForm.answer_text = '';
     answerForm.post(route('student.attempts.guided.answer', props.attempt.id), {
         preserveScroll: true,
+        onFinish: () => {
+            pendingMcqOption.value = null;
+        },
     });
+};
+
+const promptMcqAnswer = (option, optIndex) => {
+    if (!canAnswer.value || answerForm.processing) {
+        return;
+    }
+
+    pendingMcqOption.value = {
+        id: option.id,
+        index: optIndex,
+        text: option.option_text,
+        letter: optionLetter(optIndex),
+    };
+};
+
+const confirmMcqAnswer = () => {
+    if (!pendingMcqOption.value) {
+        return;
+    }
+
+    submitMcqAnswer(pendingMcqOption.value.id);
+};
+
+const cancelMcqConfirm = () => {
+    pendingMcqOption.value = null;
 };
 
 const submitBlankAnswer = () => {
@@ -129,6 +162,7 @@ watch(
             answerForm.answer_text = '';
             answerForm.option_id = null;
             answerForm.clearErrors();
+            pendingMcqOption.value = null;
         }
     },
 );
@@ -247,16 +281,19 @@ watch(
                     </div>
 
                     <div v-else class="mt-4 space-y-2">
+                        <p class="text-xs text-gray-500">Tap an option to check it before submitting.</p>
                         <button
                             v-for="(opt, optIndex) in question.options"
                             :key="opt.id"
                             type="button"
                             class="flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left text-sm transition"
-                            :class="canAnswer && !answerForm.processing
-                                ? 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'
-                                : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70'"
+                            :class="pendingMcqOption?.id === opt.id
+                                ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200'
+                                : canAnswer && !answerForm.processing
+                                    ? 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'
+                                    : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70'"
                             :disabled="!canAnswer || answerForm.processing"
-                            @click="submitMcqAnswer(opt.id)"
+                            @click="promptMcqAnswer(opt, optIndex)"
                         >
                             <McqOptionLine :index="optIndex" :text="opt.option_text" />
                         </button>
@@ -288,5 +325,28 @@ watch(
                 </Link>
             </div>
         </div>
+
+        <Modal :show="showMcqConfirm" max-width="md" @close="cancelMcqConfirm">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-900">Submit this answer?</h3>
+                <p class="mt-2 text-sm text-gray-600">
+                    You selected option <strong>{{ pendingMcqOption?.letter }}</strong> for question {{ question?.number }}.
+                </p>
+                <div class="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-gray-900">
+                    <McqOptionLine :index="pendingMcqOption?.index ?? 0" :text="pendingMcqOption?.text ?? ''" />
+                </div>
+                <p class="mt-3 text-xs text-gray-500">
+                    Your answer will be checked immediately. Tap Cancel to pick a different option.
+                </p>
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
+                    <SecondaryButton type="button" :disabled="answerForm.processing" @click="cancelMcqConfirm">
+                        Cancel
+                    </SecondaryButton>
+                    <PrimaryButton type="button" :disabled="answerForm.processing" @click="confirmMcqAnswer">
+                        {{ answerForm.processing ? 'Submitting…' : 'Submit answer' }}
+                    </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
     </AuthenticatedLayout>
 </template>
