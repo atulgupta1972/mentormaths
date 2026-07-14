@@ -8,6 +8,7 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import { questionHubChapterUrl, questionHubClassUrl } from '@/utils/questionHub';
+import { formatScoreLabel } from '@/utils/scores';
 
 const props = defineProps({
     practiceSet: Object,
@@ -124,7 +125,7 @@ const formatDate = (value) => {
 const statusLabel = (row) => {
     if (row.assignment_status === 'completed' && row.latest_score != null) {
         const late = row.submission_timing === 'late' ? ' · Delayed' : '';
-        return `${row.latest_score}/${row.latest_max_score}${late}`;
+        return `${row.latest_score_label || formatScoreLabel(row.latest_score, row.latest_max_score)}${late}`;
     }
 
     if (row.is_overdue) {

@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
+import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -79,14 +80,6 @@ const formatDateTime = (value) => {
         hour: 'numeric',
         minute: '2-digit',
     });
-};
-
-const scorePercent = (set) => {
-    if (!set.latest_max_score) {
-        return null;
-    }
-
-    return Math.round((set.latest_score / set.latest_max_score) * 100);
 };
 
 const completedAssignmentHref = (set) => (
@@ -458,7 +451,7 @@ const adminSetStatusClass = (set) => {
                                             class="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-mono font-semibold text-emerald-900"
                                         >
                                             {{ setLabel(set) }}
-                                            <span class="font-sans">{{ set.latest_score }}/{{ set.latest_max_score }}</span>
+                                            <span class="font-sans">{{ set.latest_score_label || formatScoreLabel(set.latest_score, set.latest_max_score) }}</span>
                                         </Link>
                                     </div>
                                 </div>
@@ -715,8 +708,7 @@ const adminSetStatusClass = (set) => {
                                     </div>
                                     <p class="mt-0.5 font-mono text-base font-bold tracking-wide text-emerald-900">{{ setLabel(set) }}</p>
                                     <p class="text-[11px] font-bold text-emerald-800">
-                                        {{ set.latest_score }}/{{ set.latest_max_score }}
-                                        <span v-if="scorePercent(set) !== null" class="text-[10px]">({{ scorePercent(set) }}%)</span>
+                                        {{ set.latest_score_label || formatScoreLabel(set.latest_score, set.latest_max_score) }}
                                     </p>
                                 </div>
                             </Link>

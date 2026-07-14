@@ -4,6 +4,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { formatScoreLabel } from '@/utils/scores';
 
 const props = defineProps({
     chapters: { type: Array, default: () => [] },
@@ -82,8 +83,8 @@ const cellStatus = (progress) => {
 
             return {
                 label: late
-                    ? `${progress.latest_score}/${progress.latest_max_score} late`
-                    : `${progress.latest_score}/${progress.latest_max_score}`,
+                    ? `${progress.latest_score_label || formatScoreLabel(progress.latest_score, progress.latest_max_score)} late`
+                    : (progress.latest_score_label || formatScoreLabel(progress.latest_score, progress.latest_max_score)),
                 boxClass: late
                     ? `${box} bg-amber-100 text-amber-900 border-amber-300`
                     : `${box} bg-emerald-100 text-emerald-800 border-emerald-300`,

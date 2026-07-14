@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Worksheet;
 use App\Support\AssignmentProgress;
 use App\Support\PracticeSetScope;
+use App\Support\ScoreLabel;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
@@ -416,7 +417,7 @@ class ExamPlanService
         if ($summary['assignment_status'] === SetAssignment::STATUS_COMPLETED && $summary['latest_score'] !== null) {
             $late = $summary['submission_timing'] === 'late' ? ' · late' : '';
 
-            return "Done {$summary['latest_score']}/{$summary['latest_max_score']}{$late}";
+            return 'Done '.($summary['latest_score_label'] ?? ScoreLabel::format($summary['latest_score'], $summary['latest_max_score']) ?? "{$summary['latest_score']}/{$summary['latest_max_score']}").$late;
         }
 
         if ($summary['is_overdue']) {

@@ -12,6 +12,10 @@
     <p><strong>Period covered:</strong> {{ $summary['period_label'] }}</p>
 @endif
 
+@if (($summary['stats']['overall_score_label'] ?? null) && ($summary['stats']['completed_count'] ?? 0) > 0)
+    <p><strong>Overall score:</strong> {{ $summary['stats']['overall_score_label'] }}</p>
+@endif
+
 <p>
     <strong>Completed:</strong> {{ $summary['stats']['completed_count'] }} ·
     <strong>Pending:</strong> {{ $summary['stats']['pending_count'] }} ·
@@ -25,7 +29,7 @@
         @foreach ($summary['completed'] as $row)
             <li>
                 <strong>{{ $row['set_code'] }}</strong>
-                — {{ $row['latest_score'] }}/{{ $row['latest_max_score'] }}
+                — {{ $row['latest_score_label'] ?? \App\Support\ScoreLabel::format($row['latest_score'] ?? null, $row['latest_max_score'] ?? null) ?? '—' }}
                 ({{ $row['kind_label'] }})
                 @if (($row['latest_attempt_number'] ?? 0) > 1)
                     · Attempt {{ $row['latest_attempt_number'] }}
@@ -90,7 +94,7 @@
     <p><strong>Completed in this period:</strong></p>
     <ul>
         @foreach ($summary['recently_completed'] as $row)
-            <li>{{ $row['set_code'] }} — {{ $row['latest_score'] }}/{{ $row['latest_max_score'] }}</li>
+            <li>{{ $row['set_code'] }} — {{ $row['latest_score_label'] ?? \App\Support\ScoreLabel::format($row['latest_score'] ?? null, $row['latest_max_score'] ?? null) ?? '—' }}</li>
         @endforeach
     </ul>
 @endif

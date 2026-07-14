@@ -360,7 +360,8 @@ class AttemptResultSummary
             'scope_line' => $scope['scope_line'],
             'score' => $attempt->score,
             'max_score' => $attempt->max_score,
-            'score_label' => "{$attempt->score}/{$attempt->max_score}",
+            'score_percent' => ScoreLabel::percent($attempt->score, $attempt->max_score),
+            'score_label' => ScoreLabel::format($attempt->score, $attempt->max_score) ?? "{$attempt->score}/{$attempt->max_score}",
             'time_seconds' => $attempt->time_seconds,
             'time_label' => self::formatTimeLabel($attempt->time_seconds),
             'attempt_number' => $attempt->attempt_number,
@@ -405,7 +406,9 @@ class AttemptResultSummary
                 'attempt_number' => $attempt->attempt_number,
                 'is_current' => $attempt->id === $current->id,
                 'status' => $attempt->status,
-                'score_label' => $submitted ? "{$attempt->score}/{$attempt->max_score}" : 'In progress',
+                'score_label' => $submitted
+                    ? (ScoreLabel::format($attempt->score, $attempt->max_score) ?? "{$attempt->score}/{$attempt->max_score}")
+                    : 'In progress',
                 'time_label' => self::formatTimeLabel($attempt->time_seconds),
                 'completed_label' => DateLabels::formatDateTime($attempt->completed_at),
                 'submission_timing_label' => $submitted

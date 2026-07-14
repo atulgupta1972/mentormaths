@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AttemptReviewList from '@/Components/AttemptReviewList.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -44,7 +45,7 @@ const formatTime = (seconds) => {
                 <div class="rounded-lg bg-white p-6 text-center shadow-sm">
                     <p class="text-sm text-gray-500">First-try score</p>
                     <p class="text-4xl font-bold text-indigo-600">
-                        {{ attempt.first_try_correct }}/{{ attempt.max_score }}
+                        {{ formatScoreLabel(attempt.first_try_correct, attempt.max_score) }}
                     </p>
                     <p class="mt-2 text-sm text-gray-600">Time: {{ formatTime(attempt.time_seconds) }}</p>
                 </div>

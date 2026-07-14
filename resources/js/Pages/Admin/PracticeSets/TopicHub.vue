@@ -5,6 +5,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { formatScoreLabel } from '@/utils/scores';
 
 const props = defineProps({
     topic: Object,
@@ -80,7 +81,7 @@ const progressLabel = (p) => {
     if (!p) return { label: 'Not assigned', class: 'bg-gray-100 text-gray-600' };
     if (p.assignment_status === 'completed' && p.latest_score != null) {
         const late = p.submission_timing === 'late' ? ' · Delayed' : '';
-        return { label: `${p.latest_score}/${p.latest_max_score}${late}`, class: p.submission_timing === 'late' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-800' };
+        return { label: `${p.latest_score_label || formatScoreLabel(p.latest_score, p.latest_max_score)}${late}`, class: p.submission_timing === 'late' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-800' };
     }
     if (p.is_overdue) return { label: 'Overdue', class: 'bg-red-100 text-red-800' };
     if (p.assignment_status === 'in_progress') return { label: 'In progress', class: 'bg-yellow-100 text-yellow-800' };
@@ -151,7 +152,7 @@ const progressLabel = (p) => {
                                     </div>
                                     <div v-if="set.student_progress.latest_score != null">
                                         <dt class="text-xs text-gray-500">Score</dt>
-                                        <dd class="font-medium">{{ set.student_progress.latest_score }}/{{ set.student_progress.latest_max_score }} · {{ formatTime(set.student_progress.latest_time_seconds) }}</dd>
+                                        <dd class="font-medium">{{ set.student_progress.latest_score_label || formatScoreLabel(set.student_progress.latest_score, set.student_progress.latest_max_score) }} · {{ formatTime(set.student_progress.latest_time_seconds) }}</dd>
                                     </div>
                                     <div>
                                         <dt class="text-xs text-gray-500">Attempts</dt>

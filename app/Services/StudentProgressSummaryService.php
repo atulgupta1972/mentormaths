@@ -8,6 +8,7 @@ use App\Models\StudentEnrollment;
 use App\Support\AssignmentProgress;
 use App\Support\AttemptResultSummary;
 use App\Support\DateLabels;
+use App\Support\ScoreLabel;
 use Carbon\Carbon;
 
 class StudentProgressSummaryService
@@ -79,6 +80,7 @@ class StudentProgressSummaryService
         }
 
         $helpRequests = $this->resolutionService->pendingForEnrollment($enrollment->id);
+        $overall = ScoreLabel::aggregateFromRows($completed);
 
         return [
             'student_name' => $enrollment->student?->name ?? 'Student',
@@ -100,6 +102,10 @@ class StudentProgressSummaryService
                 'overdue_count' => count($overdue),
                 'help_count' => count($helpRequests),
                 'recent_count' => count($recentlyCompleted),
+                'overall_score_total' => $overall['score_total'],
+                'overall_max_total' => $overall['max_total'],
+                'overall_percent' => $overall['percent'],
+                'overall_score_label' => $overall['label'],
             ],
             'dashboard_url' => route('dashboard'),
         ];

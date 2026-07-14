@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { formatDate, formatDateTime, formatTime } from '@/utils/dates';
+import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link } from '@inertiajs/vue3';
 
 defineProps({
@@ -73,7 +74,7 @@ const outcomeClass = (outcome) => {
                 <div v-if="assignment.latest_score != null" class="rounded-lg bg-indigo-50 p-6">
                     <div class="flex flex-wrap items-center justify-between gap-4">
                         <div>
-                            <p class="text-3xl font-bold text-indigo-700">{{ assignment.latest_score }}/{{ assignment.latest_max_score }}</p>
+                            <p class="text-3xl font-bold text-indigo-700">{{ assignment.latest_score_label || formatScoreLabel(assignment.latest_score, assignment.latest_max_score) }}</p>
                             <p class="text-sm text-gray-600">Latest score</p>
                         </div>
                         <div v-if="assignment.latest_time_seconds" class="text-right">
@@ -132,7 +133,7 @@ const outcomeClass = (outcome) => {
                             <tr v-for="att in attempts" :key="att.id">
                                 <td class="px-4 py-3">#{{ att.attempt_number }}</td>
                                 <td class="px-4 py-3">
-                                    <span v-if="att.status === 'submitted'">{{ att.score }}/{{ att.max_score }}</span>
+                                    <span v-if="att.status === 'submitted'">{{ formatScoreLabel(att.score, att.max_score) }}</span>
                                     <span v-else class="text-yellow-700">In progress</span>
                                 </td>
                                 <td class="px-4 py-3">{{ formatTime(att.time_seconds) }}</td>

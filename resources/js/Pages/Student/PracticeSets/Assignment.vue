@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -93,7 +94,7 @@ const startLabel = () => {
                             <li v-for="att in assignment.attempts" :key="att.id" class="flex justify-between rounded border px-3 py-2">
                                 <span>Attempt {{ att.attempt_number }}</span>
                                 <span v-if="att.status === 'submitted'">
-                                    {{ att.score }}/{{ att.max_score }} · {{ formatTime(att.time_seconds) }}
+                                    {{ formatScoreLabel(att.score, att.max_score) }} · {{ formatTime(att.time_seconds) }}
                                     <span v-if="att.submission_timing === 'late'" class="text-amber-700">· Delayed</span>
                                     <Link :href="route('student.attempts.result', att.id)" class="ml-2 text-indigo-600">Review & retry wrong sums</Link>
                                 </span>

@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AttemptReviewList from '@/Components/AttemptReviewList.vue';
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -22,7 +23,7 @@ const formatTime = (seconds) => {
     return m ? `${m}m ${s}s` : `${s}s`;
 };
 
-const percent = (score, max) => (max ? Math.round((score / max) * 100) : 0);
+const percent = (score, max) => formatScoreLabel(score, max);
 
 const correctCount = () => props.questions.filter((q) => q.attempts?.some((row) => row.is_correct)).length;
 </script>
@@ -44,8 +45,7 @@ const correctCount = () => props.questions.filter((q) => q.attempts?.some((row) 
         <div class="py-12">
             <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
                 <div class="rounded-lg bg-white p-6 text-center shadow-sm">
-                    <p class="text-4xl font-bold text-indigo-600">{{ attempt.score }}/{{ attempt.max_score }}</p>
-                    <p class="mt-1 text-lg text-gray-600">{{ percent(attempt.score, attempt.max_score) }}%</p>
+                    <p class="text-4xl font-bold text-indigo-600">{{ percent(attempt.score, attempt.max_score) }}</p>
                     <p class="mt-2 text-sm text-gray-500">
                         Time: {{ formatTime(attempt.time_seconds) }} · Attempt {{ attempt.attempt_number }}
                     </p>

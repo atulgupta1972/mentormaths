@@ -79,6 +79,8 @@ class StudentProgressSummaryTest extends TestCase
 
         $this->assertStringContainsString('Progress summary for Test Student', $message);
         $this->assertStringContainsString('Completed (1):', $message);
+        $this->assertStringContainsString('100% (1/1)', $message);
+        $this->assertStringContainsString('Overall score: 100% (1/1)', $message);
         $this->assertStringContainsString('Pending (1):', $message);
         $this->assertStringContainsString('S902', $message);
     }

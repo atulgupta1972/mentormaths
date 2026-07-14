@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Student;
 use App\Support\DateLabels;
+use App\Support\ScoreLabel;
 
 class StudentProgressWhatsAppService
 {
@@ -42,6 +43,10 @@ class StudentProgressWhatsAppService
             $lines[] = 'Class: '.$summary['class_name'];
         }
 
+        if (($summary['stats']['overall_score_label'] ?? null) && ($summary['stats']['completed_count'] ?? 0) > 0) {
+            $lines[] = 'Overall score: '.$summary['stats']['overall_score_label'];
+        }
+
         if ($summary['period_label'] ?? null) {
             $lines[] = 'Period: '.$summary['period_label'];
         }
@@ -53,7 +58,10 @@ class StudentProgressWhatsAppService
             $lines[] = '— none yet';
         } else {
             foreach ($summary['completed'] as $row) {
-                $line = "• {$row['set_code']} — {$row['latest_score']}/{$row['latest_max_score']}";
+                $scoreLabel = $row['latest_score_label']
+                    ?? ScoreLabel::format($row['latest_score'] ?? null, $row['latest_max_score'] ?? null)
+                    ?? '—';
+                $line = "• {$row['set_code']} — {$scoreLabel}";
 
                 if (($row['latest_attempt_number'] ?? 0) > 1) {
                     $line .= ' · Attempt '.$row['latest_attempt_number'];
@@ -110,7 +118,10 @@ class StudentProgressWhatsAppService
             $lines[] = 'Completed this period ('.$summary['stats']['recent_count'].'):';
 
             foreach ($summary['recently_completed'] as $row) {
-                $lines[] = "• {$row['set_code']} — {$row['latest_score']}/{$row['latest_max_score']}";
+                $scoreLabel = $row['latest_score_label']
+                    ?? ScoreLabel::format($row['latest_score'] ?? null, $row['latest_max_score'] ?? null)
+                    ?? '—';
+                $lines[] = "• {$row['set_code']} — {$scoreLabel}";
             }
         }
 
