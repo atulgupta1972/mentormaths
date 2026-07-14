@@ -101,6 +101,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('students.destroy');
     Route::patch('/students/{student}/contacts', [StudentController::class, 'updateContacts'])
         ->name('students.contacts.update');
+    Route::get('/students/{student}/progress-summary-preview', [StudentController::class, 'progressSummaryPreview'])
+        ->name('students.progress-summary-preview');
     Route::post('/students/{student}/send-progress-summary', [StudentController::class, 'sendProgressSummary'])
         ->name('students.send-progress-summary');
     Route::post('/students/{student}/promote', [StudentController::class, 'promote'])

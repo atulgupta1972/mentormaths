@@ -50,6 +50,62 @@ class StudentProgressSummaryTest extends TestCase
         $this->assertSame('S902', $summary['pending'][0]['set_code']);
     }
 
+    public function test_completed_sets_are_ordered_by_submission_date_asc(): void
+    {
+        [$enrollment, $firstAssignment, $secondAssignment] = $this->seedAssignments();
+
+        $laterWorksheet = Worksheet::query()->create([
+            'title' => 'Later set',
+            'set_number' => 3,
+            'set_code' => 'S903',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::TOPIC,
+            'status' => Worksheet::STATUS_PUBLISHED,
+        ]);
+
+        $laterAssignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $laterWorksheet->id,
+            'assigned_at' => now()->subDays(3),
+            'due_date' => now()->addWeek(),
+            'status' => SetAssignment::STATUS_COMPLETED,
+        ]);
+
+        SetAttempt::query()->create([
+            'set_assignment_id' => $firstAssignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subDays(2),
+            'completed_at' => now()->subDays(2)->setTime(10, 0),
+            'score' => 8,
+            'max_score' => 10,
+            'time_seconds' => 120,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+
+        SetAttempt::query()->create([
+            'set_assignment_id' => $laterAssignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subDay(),
+            'completed_at' => now()->subDay()->setTime(15, 0),
+            'score' => 9,
+            'max_score' => 10,
+            'time_seconds' => 130,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+
+        $summary = app(StudentProgressSummaryService::class)->build($enrollment, now());
+
+        $this->assertSame(2, $summary['stats']['completed_count']);
+        $this->assertSame(['S901', 'S903'], array_column($summary['completed'], 'set_code'));
+        $this->assertArrayHasKey('completed_by_chapter', $summary);
+        $this->assertSame(1, $summary['stats']['pending_count']);
+        $this->assertSame('S902', $summary['pending'][0]['set_code']);
+    }
+
     public function test_whatsapp_message_includes_completed_and_pending_lines(): void
     {
         [$enrollment, $completedAssignment] = $this->seedAssignments();
@@ -81,6 +137,7 @@ class StudentProgressSummaryTest extends TestCase
         $this->assertStringContainsString('Completed (1):', $message);
         $this->assertStringContainsString('100% (1/1)', $message);
         $this->assertStringContainsString('Overall score: 100% (1/1)', $message);
+        $this->assertStringContainsString('Date · Set · Type · Topic · Score · Review', $message);
         $this->assertStringContainsString('Pending (1):', $message);
         $this->assertStringContainsString('S902', $message);
     }

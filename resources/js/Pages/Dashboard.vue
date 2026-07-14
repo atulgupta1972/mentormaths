@@ -31,12 +31,25 @@ const showManageExams = ref(false);
 const showHelpRequests = ref(false);
 const expandedStudentId = ref(null);
 
+const sortByDateKey = (rows, key) => rows.slice().sort((a, b) => {
+    const left = a[key] ?? '9999-12-31';
+    const right = b[key] ?? '9999-12-31';
+
+    return String(left).localeCompare(String(right));
+});
+
 const pendingAssignments = computed(() =>
-    props.assignments.filter((a) => a.status !== 'green' && a.status !== 'green-late'),
+    sortByDateKey(
+        props.assignments.filter((a) => a.status !== 'green' && a.status !== 'green-late'),
+        'target_date',
+    ),
 );
 
 const completedAssignments = computed(() =>
-    props.assignments.filter((a) => a.status === 'green' || a.status === 'green-late'),
+    sortByDateKey(
+        props.assignments.filter((a) => a.status === 'green' || a.status === 'green-late'),
+        'submitted_at',
+    ),
 );
 
 const formatDate = (d) => {

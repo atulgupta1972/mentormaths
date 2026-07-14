@@ -17,6 +17,7 @@ use App\Services\StudentProgressWhatsAppService;
 use App\Services\StudentPromotionService;
 use App\Support\AssignmentMailer;
 use App\Support\StudentProgressMailer;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -215,6 +216,26 @@ class StudentController extends Controller
         }
 
         return back()->with('success', 'Contact and notification settings saved.');
+    }
+
+    public function progressSummaryPreview(Request $request, Student $student): JsonResponse
+    {
+        $validated = $request->validate([
+            'as_of_date' => ['required', 'date'],
+        ]);
+
+        $enrollment = $student->currentEnrollment();
+
+        if (! $enrollment) {
+            return response()->json([
+                'error' => 'Student has no active enrollment for the current year.',
+            ], 422);
+        }
+
+        $asOf = \Carbon\Carbon::parse($validated['as_of_date']);
+        $summary = $this->progressSummaryService->build($enrollment, $asOf);
+
+        return response()->json(['summary' => $summary]);
     }
 
     public function sendProgressSummary(Request $request, Student $student): RedirectResponse

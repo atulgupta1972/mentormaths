@@ -96,13 +96,13 @@ class DashboardService
             $split = $this->examPlanService->splitPlansByTiming($allPlans);
             $assignments = collect($this->attemptService->dashboardForEnrollment($enrollment));
 
-            $pending = $assignments->filter(
-                fn (array $row) => ! in_array($row['status'], ['green', 'green-late'], true),
-            )->values()->all();
-
             $completed = $assignments->filter(
                 fn (array $row) => in_array($row['status'], ['green', 'green-late'], true),
-            )->values()->all();
+            )->sortBy(fn (array $row) => $row['submitted_at'] ?? '9999-12-31 23:59:59')->values()->all();
+
+            $pending = $assignments->filter(
+                fn (array $row) => ! in_array($row['status'], ['green', 'green-late'], true),
+            )->sortBy(fn (array $row) => $row['target_date'] ?? '9999-12-31')->values()->all();
 
             $studentHelp = $helpByStudent->get($enrollment->student_id, collect());
 

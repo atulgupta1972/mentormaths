@@ -8,6 +8,7 @@ use App\Models\StudentEnrollment;
 use App\Support\AssignmentProgress;
 use App\Support\AttemptResultSummary;
 use App\Support\DateLabels;
+use App\Support\ProgressSummaryTable;
 use App\Support\ScoreLabel;
 use Carbon\Carbon;
 
@@ -32,7 +33,9 @@ class StudentProgressSummaryService
 
         $assignments = SetAssignment::query()
             ->with([
-                'practiceSet' => fn ($query) => $query->withCount('questions'),
+                'practiceSet' => fn ($query) => $query
+                    ->withCount('questions')
+                    ->with(['chapter:id,name', 'topic.chapter:id,name']),
                 'attempts' => fn ($query) => $query->orderByDesc('attempt_number'),
             ])
             ->where('student_enrollment_id', $enrollment->id)
@@ -80,6 +83,10 @@ class StudentProgressSummaryService
         }
 
         $helpRequests = $this->resolutionService->pendingForEnrollment($enrollment->id);
+        $completed = $this->sortBySubmittedDateAsc($completed);
+        $recentlyCompleted = $this->sortBySubmittedDateAsc($recentlyCompleted);
+        $pending = $this->sortByTargetDateAsc($pending);
+        $overdue = $this->sortByTargetDateAsc($overdue);
         $overall = ScoreLabel::aggregateFromRows($completed);
 
         return [
@@ -92,9 +99,13 @@ class StudentProgressSummaryService
                 ? DateLabels::formatDate($periodStart->toDateString()).' – '.DateLabels::formatDate($asOf->toDateString())
                 : null,
             'completed' => $completed,
+            'completed_by_chapter' => ProgressSummaryTable::groupByChapter($completed, 'submitted_at'),
             'pending' => $pending,
+            'pending_by_chapter' => ProgressSummaryTable::groupByChapter($pending, 'target_date'),
             'overdue' => $overdue,
+            'overdue_by_chapter' => ProgressSummaryTable::groupByChapter($overdue, 'target_date'),
             'recently_completed' => $recentlyCompleted,
+            'recently_completed_by_chapter' => ProgressSummaryTable::groupByChapter($recentlyCompleted, 'submitted_at'),
             'help_requests' => $helpRequests,
             'stats' => [
                 'completed_count' => count($completed),
@@ -148,5 +159,29 @@ class StudentProgressSummaryService
                 'help_asked_label' => $question['help_asked_label'] ?? null,
             ];
         }, $summary['wrong_questions']);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function sortBySubmittedDateAsc(array $rows): array
+    {
+        return collect($rows)
+            ->sortBy(fn (array $row) => $row['submitted_at'] ?? '9999-12-31 23:59:59')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function sortByTargetDateAsc(array $rows): array
+    {
+        return collect($rows)
+            ->sortBy(fn (array $row) => $row['target_date'] ?? '9999-12-31')
+            ->values()
+            ->all();
     }
 }

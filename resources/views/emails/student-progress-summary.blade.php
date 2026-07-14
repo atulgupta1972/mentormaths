@@ -24,56 +24,36 @@
 </p>
 
 @if (count($summary['completed']) > 0)
-    <p><strong>Completed work:</strong></p>
-    <ul>
-        @foreach ($summary['completed'] as $row)
-            <li>
-                <strong>{{ $row['set_code'] }}</strong>
-                — {{ $row['latest_score_label'] ?? \App\Support\ScoreLabel::format($row['latest_score'] ?? null, $row['latest_max_score'] ?? null) ?? '—' }}
-                ({{ $row['kind_label'] }})
-                @if (($row['latest_attempt_number'] ?? 0) > 1)
-                    · Attempt {{ $row['latest_attempt_number'] }}
-                @endif
-                @if (count($row['review_items'] ?? []) > 0)
-                    <br>Needs review:
-                    <ul>
-                        @foreach ($row['review_items'] as $item)
-                            <li>
-                                {{ $item['label'] }}
-                                @if ($item['help_asked_label'])
-                                    — {{ $item['help_asked_label'] }}
-                                @endif
-                            </li>
-                        @endforeach
-                    </ul>
-                @else
-                    <br>All correct — no review needed.
-                @endif
-            </li>
-        @endforeach
-    </ul>
+    <p><strong>Completed work</strong></p>
+
+    @foreach ($summary['completed_by_chapter'] as $group)
+        <p style="margin: 16px 0 8px; font-weight: bold;">{{ $group['chapter_name'] }}</p>
+        @include('emails.partials.progress-summary-completed-table', ['rows' => $group['rows']])
+    @endforeach
 @endif
 
 @if (count($summary['overdue']) > 0)
-    <p><strong>Overdue:</strong></p>
-    <ul>
-        @foreach ($summary['overdue'] as $row)
-            <li>
-                {{ $row['set_code'] }} — target {{ $row['target_date'] ? \App\Support\DateLabels::formatDate($row['target_date']) : '—' }}
-            </li>
-        @endforeach
-    </ul>
+    <p><strong>Overdue</strong></p>
+
+    @foreach ($summary['overdue_by_chapter'] as $group)
+        <p style="margin: 16px 0 8px; font-weight: bold;">{{ $group['chapter_name'] }}</p>
+        @include('emails.partials.progress-summary-target-table', [
+            'rows' => $group['rows'],
+            'dateLabel' => 'Due date',
+        ])
+    @endforeach
 @endif
 
 @if (count($summary['pending']) > 0)
-    <p><strong>Pending:</strong></p>
-    <ul>
-        @foreach ($summary['pending'] as $row)
-            <li>
-                {{ $row['set_code'] }} — target {{ $row['target_date'] ? \App\Support\DateLabels::formatDate($row['target_date']) : '—' }}
-            </li>
-        @endforeach
-    </ul>
+    <p><strong>Pending</strong></p>
+
+    @foreach ($summary['pending_by_chapter'] as $group)
+        <p style="margin: 16px 0 8px; font-weight: bold;">{{ $group['chapter_name'] }}</p>
+        @include('emails.partials.progress-summary-target-table', [
+            'rows' => $group['rows'],
+            'dateLabel' => 'Target date',
+        ])
+    @endforeach
 @endif
 
 @if (count($summary['help_requests']) > 0)
@@ -91,12 +71,12 @@
 @endif
 
 @if (count($summary['recently_completed'] ?? []) > 0 && ($summary['period_label'] ?? null))
-    <p><strong>Completed in this period:</strong></p>
-    <ul>
-        @foreach ($summary['recently_completed'] as $row)
-            <li>{{ $row['set_code'] }} — {{ $row['latest_score_label'] ?? \App\Support\ScoreLabel::format($row['latest_score'] ?? null, $row['latest_max_score'] ?? null) ?? '—' }}</li>
-        @endforeach
-    </ul>
+    <p><strong>Completed in this period</strong></p>
+
+    @foreach ($summary['recently_completed_by_chapter'] as $group)
+        <p style="margin: 16px 0 8px; font-weight: bold;">{{ $group['chapter_name'] }}</p>
+        @include('emails.partials.progress-summary-completed-table', ['rows' => $group['rows']])
+    @endforeach
 @endif
 
 <p>

@@ -109,6 +109,7 @@ class AssignmentProgress
             'latest_max_score' => $summary['latest_max_score'],
             'latest_score_percent' => $summary['latest_score_percent'],
             'latest_score_label' => $summary['latest_score_label'],
+            'submitted_at' => $summary['submitted_at'],
             'latest_time_seconds' => $summary['latest_time_seconds'],
             'submission_timing' => $summary['submission_timing'],
             'status' => $summary['status'],

@@ -2,6 +2,7 @@
 import Checkbox from '@/Components/Checkbox.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import ProgressSummaryTables from '@/Components/ProgressSummaryTables.vue';
 import TextInput from '@/Components/TextInput.vue';
 import {
     buildWhatsAppUrl,
@@ -29,6 +30,9 @@ const props = defineProps({
 const page = usePage();
 const copiedKey = ref(null);
 const whatsappPanel = ref(null);
+const previewSummary = ref(null);
+const previewLoading = ref(false);
+const previewError = ref('');
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -67,6 +71,55 @@ watch(
         await nextTick();
         whatsappPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     },
+);
+
+const loadPreview = async () => {
+    if (!form.as_of_date) {
+        previewSummary.value = null;
+        previewError.value = '';
+
+        return;
+    }
+
+    previewLoading.value = true;
+    previewError.value = '';
+
+    try {
+        const url = route('admin.students.progress-summary-preview', {
+            student: props.student.id,
+            as_of_date: form.as_of_date,
+        });
+        const response = await fetch(url, {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+
+        const payload = await response.json();
+
+        if (!response.ok) {
+            previewSummary.value = null;
+            previewError.value = payload.error || 'Could not load preview.';
+
+            return;
+        }
+
+        previewSummary.value = payload.summary;
+    } catch {
+        previewSummary.value = null;
+        previewError.value = 'Could not load preview.';
+    } finally {
+        previewLoading.value = false;
+    }
+};
+
+watch(
+    () => form.as_of_date,
+    () => {
+        loadPreview();
+    },
+    { immediate: true },
 );
 
 const copyMessage = async (row) => {
@@ -121,6 +174,15 @@ const submit = () => {
                     class="mt-1 block w-full max-w-xs rounded-md border-gray-300 text-sm shadow-sm"
                 />
                 <InputError :message="form.errors.as_of_date" class="mt-1" />
+            </div>
+
+            <div>
+                <div class="mb-2 flex items-center justify-between gap-2">
+                    <p class="text-sm font-medium text-gray-700">Preview</p>
+                    <p v-if="previewLoading" class="text-xs text-gray-500">Loading…</p>
+                </div>
+                <p v-if="previewError" class="mb-2 text-sm text-rose-700">{{ previewError }}</p>
+                <ProgressSummaryTables :summary="previewSummary" />
             </div>
 
             <div class="flex flex-wrap gap-6 text-sm">
