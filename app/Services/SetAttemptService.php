@@ -65,6 +65,17 @@ class SetAttemptService
         });
     }
 
+    public function recordTabLeave(SetAttempt $attempt): SetAttempt
+    {
+        if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS) {
+            return $attempt;
+        }
+
+        $attempt->increment('tab_leave_count');
+
+        return $attempt->fresh();
+    }
+
     public function submit(SetAttempt $attempt, array $answers): SetAttempt
     {
         if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {

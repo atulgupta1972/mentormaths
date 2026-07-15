@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import ClassAttemptProtectionPanel from '@/Components/ClassAttemptProtectionPanel.vue';
 import ClassSetStatusPanel from '@/Components/ClassSetStatusPanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -201,6 +202,9 @@ watch(boardFilter, (value, oldValue) => {
         <div class="py-12">
             <div class="mx-auto max-w-6xl space-y-6 sm:px-6 lg:px-8">
                 <BrowseModeNotice />
+
+                <ClassAttemptProtectionPanel v-if="isAdmin" :grade-level="gradeLevel" />
+
                 <div class="grid gap-4 sm:grid-cols-4">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.students_count }}</p>

@@ -28,6 +28,7 @@ class SetAttempt extends Model
         'started_at',
         'active_seconds',
         'active_session_started_at',
+        'tab_leave_count',
         'completed_at',
         'score',
         'max_score',

@@ -9,6 +9,7 @@ use App\Models\SetAttempt;
 use App\Services\GuidedPracticeService;
 use App\Services\QuestionResolutionService;
 use App\Services\SetAttemptService;
+use App\Support\AttemptIntegrity;
 use App\Support\AttemptResultSummary;
 use App\Support\AttemptTiming;
 use Illuminate\Http\JsonResponse;
@@ -37,6 +38,9 @@ class PracticeSetController extends Controller
         $inProgress = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_IN_PROGRESS);
         $latestSubmitted = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_SUBMITTED);
         $practiceSet = $assignment->practiceSet;
+        $enrollment = $request->user()->student?->currentEnrollment();
+        $enrollment?->loadMissing('gradeLevel:id,name,protect_test_attempts,protect_practice_attempts');
+        $isTest = $practiceSet->isChapterScope();
 
         return Inertia::render('Student/PracticeSets/Assignment', [
             'assignment' => [
@@ -45,8 +49,9 @@ class PracticeSetController extends Controller
                 'notes' => $assignment->notes,
                 'target_date' => $assignment->due_date?->toDateString(),
                 'is_overdue' => $assignment->isOverdue(),
-                'is_guided' => ! $practiceSet->isChapterScope(),
+                'is_guided' => ! $isTest,
                 'latest_attempt_id' => $latestSubmitted?->id,
+                'integrity' => AttemptIntegrity::configFor($enrollment, $isTest),
                 'practice_set' => [
                     'set_code' => $practiceSet->set_code,
                     'set_number' => $practiceSet->set_number,
@@ -106,7 +111,10 @@ class PracticeSetController extends Controller
         }
 
         if ($attempt->isGuided()) {
-            return Inertia::render('Student/PracticeSets/GuidedAttempt', $this->guidedPractice->buildPayload($attempt));
+            return Inertia::render('Student/PracticeSets/GuidedAttempt', [
+                ...$this->guidedPractice->buildPayload($attempt),
+                'integrity' => AttemptIntegrity::payloadForAttempt($attempt, false),
+            ]);
         }
 
         $assignment->load(['practiceSet.questions.options']);
@@ -133,6 +141,7 @@ class PracticeSetController extends Controller
                 'started_at' => $attempt->started_at->toIso8601String(),
                 ...AttemptTiming::payloadForAttempt($attempt),
             ],
+            'integrity' => AttemptIntegrity::payloadForAttempt($attempt, true),
             'practiceSet' => [
                 'set_code' => $practiceSet->set_code,
                 'set_number' => $practiceSet->set_number,
@@ -154,6 +163,21 @@ class PracticeSetController extends Controller
         }
 
         return response()->json(AttemptTiming::payloadForAttempt($attempt));
+    }
+
+    public function recordTabLeave(Request $request, SetAttempt $attempt): JsonResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        if ($attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
+            $this->attemptService->recordTabLeave($attempt);
+            $attempt->refresh();
+        }
+
+        return response()->json([
+            'tab_leave_count' => $attempt->tab_leave_count ?? 0,
+        ]);
     }
 
     public function guidedAnswer(Request $request, SetAttempt $attempt): RedirectResponse

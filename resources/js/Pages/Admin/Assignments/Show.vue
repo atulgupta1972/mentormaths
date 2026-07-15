@@ -126,6 +126,7 @@ const outcomeClass = (outcome) => {
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Score</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Time</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Submitted</th>
+                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Tab leaves</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Timing</th>
                             </tr>
                         </thead>
@@ -139,13 +140,18 @@ const outcomeClass = (outcome) => {
                                 <td class="px-4 py-3">{{ formatTime(att.time_seconds) }}</td>
                                 <td class="px-4 py-3">{{ att.completed_at ? formatDateTime(att.completed_at) : '—' }}</td>
                                 <td class="px-4 py-3">
+                                    <span :class="att.tab_leave_count > 0 ? 'font-medium text-amber-700' : 'text-gray-500'">
+                                        {{ att.tab_leave_count ?? 0 }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3">
                                     <span :class="att.submission_timing === 'late' ? 'text-amber-700' : 'text-green-700'">
                                         {{ timingLabel(att.submission_timing) }}
                                     </span>
                                 </td>
                             </tr>
                             <tr v-if="attempts.length === 0">
-                                <td colspan="5" class="px-4 py-6 text-center text-gray-500">No attempts yet.</td>
+                                <td colspan="6" class="px-4 py-6 text-center text-gray-500">No attempts yet.</td>
                             </tr>
                         </tbody>
                     </table>

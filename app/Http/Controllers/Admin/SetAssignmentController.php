@@ -50,6 +50,7 @@ class SetAssignmentController extends Controller
                 'max_score' => $a->max_score,
                 'time_seconds' => $a->time_seconds,
                 'submission_timing' => $a->submission_timing,
+                'tab_leave_count' => $a->tab_leave_count ?? 0,
                 'started_at' => $a->started_at?->toDateTimeString(),
                 'completed_at' => $a->completed_at?->toDateTimeString(),
             ]),

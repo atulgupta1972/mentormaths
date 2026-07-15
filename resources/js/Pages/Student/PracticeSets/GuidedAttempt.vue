@@ -6,7 +6,10 @@ import TextInput from '@/Components/TextInput.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Modal from '@/Components/Modal.vue';
+import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
+import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
 import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
+import { useAttemptContentProtection } from '@/composables/useAttemptContentProtection';
 import { optionLetter } from '@/utils/mcqDisplay';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
@@ -22,6 +25,10 @@ const props = defineProps({
     practice_set: { type: Object, default: null },
     attempt: { type: Object, default: null },
     summary: { type: Object, default: null },
+    integrity: {
+        type: Object,
+        default: () => ({ mode: 'off', enabled: false }),
+    },
 });
 
 const page = usePage();
@@ -29,6 +36,15 @@ const page = usePage();
 const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
     active_seconds: props.attempt?.active_seconds ?? 0,
     active_session_started_at: props.attempt?.active_session_started_at,
+});
+
+const protectionMode = computed(() => props.integrity?.mode ?? 'off');
+
+const { contentHidden, enabled: protectionEnabled } = useAttemptContentProtection({
+    mode: protectionMode.value,
+    attemptId: props.attempt?.id,
+    trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
+    initialTabLeaveCount: props.integrity?.tab_leave_count ?? 0,
 });
 
 const answerForm = useForm({ option_id: null, answer_text: '' });
@@ -172,6 +188,8 @@ watch(
     <Head :title="setLabel()" />
 
     <AuthenticatedLayout>
+        <AttemptHiddenOverlay v-if="protectionEnabled && contentHidden" />
+
         <template #header>
             <div class="flex items-center justify-between">
                 <div>
@@ -182,8 +200,10 @@ watch(
             </div>
         </template>
 
-        <div class="py-10">
+        <div :class="protectionEnabled ? 'attempt-protected py-10' : 'py-10'">
             <div class="mx-auto max-w-3xl space-y-5 sm:px-6 lg:px-8">
+                <AttemptIntegrityNotice :mode="protectionMode" />
+
                 <div v-if="page.props.flash?.success" class="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">
                     {{ page.props.flash.success }}
                 </div>

@@ -4,23 +4,45 @@ import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import AttemptFullscreenGate from '@/Components/AttemptFullscreenGate.vue';
+import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
+import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
 import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
+import { useAttemptContentProtection } from '@/composables/useAttemptContentProtection';
 import { Head, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     attempt: Object,
     practiceSet: Object,
     questions: Array,
     referencePdfUrl: { type: String, default: null },
+    integrity: {
+        type: Object,
+        default: () => ({ mode: 'off', enabled: false }),
+    },
 });
 
 const answers = ref({});
+const fullscreenReady = ref(!(props.integrity?.require_fullscreen ?? false));
 
 const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
     active_seconds: props.attempt?.active_seconds ?? 0,
     active_session_started_at: props.attempt?.active_session_started_at,
 });
+
+const protectionMode = computed(() => props.integrity?.mode ?? 'off');
+
+const { contentHidden, enabled: protectionEnabled } = useAttemptContentProtection({
+    mode: protectionMode.value,
+    attemptId: props.attempt?.id,
+    trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
+    initialTabLeaveCount: props.integrity?.tab_leave_count ?? 0,
+});
+
+const isTest = computed(() => props.practiceSet?.kind_label === 'Test');
+const needsFullscreenGate = computed(() => props.integrity?.require_fullscreen ?? false);
+const canShowAttempt = computed(() => !needsFullscreenGate.value || fullscreenReady.value);
 
 const form = useForm({
     answers: {},
@@ -44,6 +66,12 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
     <Head :title="setLabel()" />
 
     <AuthenticatedLayout>
+        <AttemptFullscreenGate
+            v-if="needsFullscreenGate && !fullscreenReady"
+            @ready="fullscreenReady = true"
+        />
+        <AttemptHiddenOverlay v-if="protectionEnabled && contentHidden && canShowAttempt" />
+
         <template #header>
             <div class="flex items-center justify-between">
                 <div>
@@ -54,8 +82,10 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
             </div>
         </template>
 
-        <div class="py-12">
+        <div v-if="canShowAttempt" :class="protectionEnabled ? 'attempt-protected py-12' : 'py-12'">
             <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
+                <AttemptIntegrityNotice :is-test="isTest" :mode="protectionMode" />
+
                 <div class="rounded-lg bg-white p-4 shadow-sm">
                     <p class="text-sm text-gray-600">
                         Read each question and select one answer. All {{ questions.length }} questions must be answered before you submit.
@@ -106,6 +136,7 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
                     :url="referencePdfUrl"
                     title="Reference worksheet (optional)"
                     helper-text="Extra reference material for this topic. Answer using the questions above."
+                    :protected="protectionEnabled && protectionMode === 'strict'"
                 />
 
                 <div class="sticky bottom-4 rounded-lg bg-white p-4 shadow-lg">

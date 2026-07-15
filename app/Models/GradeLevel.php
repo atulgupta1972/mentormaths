@@ -11,12 +11,16 @@ class GradeLevel extends Model
         'name',
         'sort_order',
         'is_active',
+        'protect_test_attempts',
+        'protect_practice_attempts',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'protect_test_attempts' => 'boolean',
+            'protect_practice_attempts' => 'boolean',
         ];
     }
 

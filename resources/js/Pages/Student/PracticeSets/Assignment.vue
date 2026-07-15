@@ -2,13 +2,16 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { formatScoreLabel } from '@/utils/scores';
+import { requestAttemptFullscreen } from '@/utils/attemptFullscreen';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 const props = defineProps({
     assignment: Object,
 });
 
 const startForm = useForm({});
+const startError = ref('');
 
 const setLabel = () =>
     props.assignment.practice_set.set_code
@@ -16,30 +19,52 @@ const setLabel = () =>
 
 const kindLabel = () => props.assignment.practice_set.kind_label || 'Practice';
 
-const startOrContinue = () => {
+const startOrContinue = async () => {
+    startError.value = '';
+
     if (props.assignment.in_progress_attempt_id) {
         window.location.href = route('student.attempts.show', props.assignment.in_progress_attempt_id);
+
         return;
     }
+
+    if (props.assignment.integrity?.require_fullscreen) {
+        const ok = await requestAttemptFullscreen();
+
+        if (!ok) {
+            startError.value = 'Please allow fullscreen in your browser to start the test.';
+
+            return;
+        }
+    }
+
     startForm.post(route('student.assignments.start', props.assignment.id));
 };
 
 const formatTime = (seconds) => {
-    if (!seconds) return '—';
+    if (!seconds) {
+        return '—';
+    }
+
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
+
     return m ? `${m}m ${s}s` : `${s}s`;
 };
 
 const formatDate = (d) => {
-    if (!d) return '—';
-    return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    if (!d) {
+        return '—';
+    }
+
+    return new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
 const startLabel = () => {
     if (props.assignment.in_progress_attempt_id) {
         return 'Continue';
     }
+
     if (props.assignment.is_overdue) {
         return `Submit delayed ${kindLabel().toLowerCase()}`;
     }
@@ -82,10 +107,14 @@ const startLabel = () => {
                         </template>
                         <template v-else>
                             Answer all questions and submit when finished.
+                            <span v-if="assignment.integrity?.require_fullscreen"> Tests open in fullscreen.</span>
                         </template>
                     </p>
                     <p v-if="assignment.notes" class="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">
                         Teacher note: {{ assignment.notes }}
+                    </p>
+                    <p v-if="startError" class="mt-3 rounded bg-rose-50 p-3 text-sm text-rose-800">
+                        {{ startError }}
                     </p>
 
                     <div v-if="assignment.attempts.length" class="mt-6">

@@ -16,6 +16,7 @@ use App\Services\AdminGradeContext;
 use App\Services\ClassAssignmentService;
 use App\Services\ExamPlanService;
 use App\Services\SetAssignmentService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -249,7 +250,13 @@ class ClassHubController extends Controller
         }
 
         return Inertia::render('Admin/Classes/Show', [
-            'gradeLevel' => $gradeLevel->only(['id', 'name', 'sort_order']),
+            'gradeLevel' => $gradeLevel->only([
+                'id',
+                'name',
+                'sort_order',
+                'protect_test_attempts',
+                'protect_practice_attempts',
+            ]),
             'activeYear' => $activeYear?->only(['id', 'name']),
             'boardOptions' => $boardOptions,
             'selectedBoardId' => $boardId,
@@ -283,5 +290,21 @@ class ClassHubController extends Controller
             'setStatusBoard' => $setStatusBoard,
             'classStudents' => $classStudents,
         ]);
+    }
+
+    public function updateAttemptProtection(Request $request, GradeLevel $gradeLevel): RedirectResponse
+    {
+        if (! in_array($gradeLevel->sort_order, AdminGradeContext::CLASS_SORT_ORDERS, true)) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'protect_test_attempts' => ['required', 'boolean'],
+            'protect_practice_attempts' => ['required', 'boolean'],
+        ]);
+
+        $gradeLevel->update($validated);
+
+        return back()->with('success', 'Attempt protection settings saved for '.$gradeLevel->name.'.');
     }
 }

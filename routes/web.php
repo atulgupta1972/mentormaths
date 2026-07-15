@@ -45,6 +45,8 @@ Route::get('/dashboard', DashboardController::class)
 Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/classes', [ClassHubController::class, 'index'])->name('classes.index');
     Route::get('/classes/{gradeLevel}', [ClassHubController::class, 'show'])->name('classes.show');
+    Route::patch('/classes/{gradeLevel}/attempt-protection', [ClassHubController::class, 'updateAttemptProtection'])
+        ->name('classes.attempt-protection.update');
     Route::get('/classes/{gradeLevel}/assign', [ClassAssignmentController::class, 'show'])->name('classes.assign');
     Route::post('/classes/{gradeLevel}/assign', [ClassAssignmentController::class, 'store'])->name('classes.assign.store');
 
@@ -199,6 +201,7 @@ Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->gr
     Route::post('/attempts/{attempt}/guided/request-hint', [StudentPracticeSetController::class, 'guidedRequestHint'])->name('attempts.guided.request-hint');
     Route::post('/attempts/{attempt}/guided/give-up', [StudentPracticeSetController::class, 'guidedGiveUp'])->name('attempts.guided.give-up');
     Route::post('/attempts/{attempt}/timing/pause', [StudentPracticeSetController::class, 'pauseAttemptTiming'])->name('attempts.timing.pause');
+    Route::post('/attempts/{attempt}/integrity/tab-leave', [StudentPracticeSetController::class, 'recordTabLeave'])->name('attempts.integrity.tab-leave');
     Route::post('/attempts/{attempt}/submit', [StudentPracticeSetController::class, 'submitAttempt'])->name('attempts.submit');
     Route::get('/attempts/{attempt}/result', [StudentPracticeSetController::class, 'result'])->name('attempts.result');
     Route::post('/attempts/{attempt}/practice-retry', [StudentPracticeSetController::class, 'practiceRetry'])->name('attempts.practice-retry');
