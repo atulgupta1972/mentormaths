@@ -7,6 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AttemptFullscreenGate from '@/Components/AttemptFullscreenGate.vue';
 import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
 import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
+import AttemptProtectionBadge from '@/Components/AttemptProtectionBadge.vue';
 import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
 import { useAttemptContentProtection } from '@/composables/useAttemptContentProtection';
 import { Head, useForm } from '@inertiajs/vue3';
@@ -33,7 +34,7 @@ const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
 
 const protectionMode = computed(() => props.integrity?.mode ?? 'off');
 
-const { contentHidden, enabled: protectionEnabled } = useAttemptContentProtection({
+const { contentHidden, enabled: protectionEnabled, tabLeaveCount } = useAttemptContentProtection({
     mode: protectionMode.value,
     attemptId: props.attempt?.id,
     trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
@@ -73,12 +74,18 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
         <AttemptHiddenOverlay v-if="protectionEnabled && contentHidden && canShowAttempt" />
 
         <template #header>
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-3">
                 <div>
                     <p class="text-sm text-gray-500">{{ practiceSet.kind_label }}</p>
                     <h2 class="font-mono text-xl font-semibold text-gray-800">{{ setLabel() }}</h2>
+                    <AttemptProtectionBadge
+                        v-if="protectionEnabled"
+                        class="mt-1"
+                        :mode="protectionMode"
+                        :tab-leave-count="tabLeaveCount"
+                    />
                 </div>
-                <span class="rounded-full bg-gray-100 px-3 py-1 font-mono text-sm">{{ formatTime(elapsed) }}</span>
+                <span class="shrink-0 rounded-full bg-gray-100 px-3 py-1 font-mono text-sm">{{ formatTime(elapsed) }}</span>
             </div>
         </template>
 
@@ -136,7 +143,7 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
                     :url="referencePdfUrl"
                     title="Reference worksheet (optional)"
                     helper-text="Extra reference material for this topic. Answer using the questions above."
-                    :protected="protectionEnabled && protectionMode === 'strict'"
+                    :protected="protectionEnabled"
                 />
 
                 <div class="sticky bottom-4 rounded-lg bg-white p-4 shadow-lg">

@@ -20,11 +20,10 @@ defineProps({
         <p class="font-medium">
             {{ isTest ? 'Test mode — work on your own' : 'Practice mode — work on your own' }}
         </p>
-        <p v-if="mode === 'strict'" class="mt-1 text-xs leading-relaxed opacity-90">
-            Copy, paste, and right-click are disabled. The test runs in fullscreen. If you switch tabs, questions are hidden until you return.
-        </p>
-        <p v-else class="mt-1 text-xs leading-relaxed opacity-90">
-            If you switch tabs or apps, questions are hidden until you return. Tab switches are recorded for your teacher.
+        <p class="mt-1 text-xs leading-relaxed opacity-90">
+            Copy, paste, right-click, and text selection are disabled on questions.
+            If you switch tabs or apps, questions are hidden until you return — each switch is counted.
+            <span v-if="mode === 'strict'"> Chapter tests also run in fullscreen.</span>
         </p>
     </div>
 </template>

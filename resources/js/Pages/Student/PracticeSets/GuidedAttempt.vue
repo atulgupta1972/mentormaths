@@ -8,6 +8,7 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Modal from '@/Components/Modal.vue';
 import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
 import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
+import AttemptProtectionBadge from '@/Components/AttemptProtectionBadge.vue';
 import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
 import { useAttemptContentProtection } from '@/composables/useAttemptContentProtection';
 import { optionLetter } from '@/utils/mcqDisplay';
@@ -40,7 +41,7 @@ const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
 
 const protectionMode = computed(() => props.integrity?.mode ?? 'off');
 
-const { contentHidden, enabled: protectionEnabled } = useAttemptContentProtection({
+const { contentHidden, enabled: protectionEnabled, tabLeaveCount } = useAttemptContentProtection({
     mode: protectionMode.value,
     attemptId: props.attempt?.id,
     trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
@@ -191,12 +192,18 @@ watch(
         <AttemptHiddenOverlay v-if="protectionEnabled && contentHidden" />
 
         <template #header>
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-3">
                 <div>
                     <p class="text-sm text-gray-500">Guided practice</p>
                     <h2 class="font-mono text-xl font-semibold text-gray-800">{{ setLabel() }}</h2>
+                    <AttemptProtectionBadge
+                        v-if="protectionEnabled"
+                        class="mt-1"
+                        :mode="protectionMode"
+                        :tab-leave-count="tabLeaveCount"
+                    />
                 </div>
-                <span v-if="attempt" class="rounded-full bg-gray-100 px-3 py-1 font-mono text-sm">{{ formatTime(elapsed) }}</span>
+                <span v-if="attempt" class="shrink-0 rounded-full bg-gray-100 px-3 py-1 font-mono text-sm">{{ formatTime(elapsed) }}</span>
             </div>
         </template>
 

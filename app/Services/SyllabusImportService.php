@@ -143,6 +143,54 @@ class SyllabusImportService
         });
     }
 
+    /**
+     * @param  array{
+     *     chapter_id?: int|null,
+     *     chapter_number?: string|null,
+     *     chapter_name?: string|null,
+     *     chapter_head_id?: int|null
+     * }  $chapterData
+     * @param  array{
+     *     topic_name: string,
+     *     learning_outcomes?: string|null,
+     *     difficulty?: string|null,
+     *     planned_periods?: mixed,
+     *     remarks?: string|null
+     * }  $topicData
+     */
+    public function addTopic(SyllabusVersion $version, array $chapterData, array $topicData): SyllabusTopic
+    {
+        return DB::transaction(function () use ($version, $chapterData, $topicData) {
+            $chapterCache = [];
+            $chapterSort = ($version->chapters()->max('sort_order') ?? 0) + 1;
+
+            $chapter = $this->resolveChapter($version, [
+                'chapter_id' => $chapterData['chapter_id'] ?? null,
+                'chapter_number' => $chapterData['chapter_number'] ?? '',
+                'chapter_name' => $chapterData['chapter_name'] ?? '',
+                'chapter_head_id' => $chapterData['chapter_head_id'] ?? null,
+            ], $chapterSort, $chapterCache);
+
+            $topicSort = SyllabusTopic::query()
+                ->whereIn('syllabus_chapter_id', $version->chapters()->pluck('id'))
+                ->max('sort_order') ?? 0;
+
+            $topic = SyllabusTopic::create([
+                'syllabus_chapter_id' => $chapter->id,
+                'name' => trim($topicData['topic_name']),
+                'learning_outcomes' => $topicData['learning_outcomes'] ?? null,
+                'difficulty' => $topicData['difficulty'] ?? null,
+                'planned_periods' => $this->parsePeriods($topicData['planned_periods'] ?? null),
+                'remarks' => $topicData['remarks'] ?? null,
+                'sort_order' => $topicSort + 1,
+            ]);
+
+            $version->update(['status' => SyllabusVersion::STATUS_PUBLISHED]);
+
+            return $topic;
+        });
+    }
+
     public function flattenToRows(SyllabusVersion $version): Collection
     {
         $version->load(['chapters.topics', 'chapters.chapterHead']);

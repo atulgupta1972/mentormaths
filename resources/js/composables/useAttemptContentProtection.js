@@ -74,6 +74,7 @@ export function useAttemptContentProtection(options = {}) {
     const trackTabLeaves = options.trackTabLeaves ?? mode !== 'off';
     const strict = mode === 'strict';
     const enabled = mode !== 'off';
+    const blockContent = enabled;
 
     const contentHidden = ref(false);
     const tabLeaveCount = ref(options.initialTabLeaveCount ?? 0);
@@ -132,7 +133,7 @@ export function useAttemptContentProtection(options = {}) {
 
         document.addEventListener('visibilitychange', onVisibilityChange);
 
-        if (strict) {
+        if (blockContent) {
             document.addEventListener('copy', onCopy, true);
             document.addEventListener('cut', onCopy, true);
             document.addEventListener('paste', onPaste, true);

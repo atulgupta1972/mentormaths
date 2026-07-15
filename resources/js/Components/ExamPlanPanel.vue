@@ -16,6 +16,7 @@ const props = defineProps({
     context: { type: String, default: 'student' },
     compact: { type: Boolean, default: false },
     autoOpenCreate: { type: Boolean, default: false },
+    highlightPlanId: { type: [Number, String], default: null },
 });
 
 const isAdminContext = computed(() => props.context === 'admin');
@@ -78,12 +79,6 @@ const prepStatusClass = (prep) => {
 };
 
 const dueDateForPlan = (plan) => assignDueDates.value[plan.id] || plan.suggested_due_date || plan.exam_date;
-
-const isPastPlan = (plan) => {
-    const today = new Date().toISOString().slice(0, 10);
-
-    return plan.exam_date < today || plan.status === 'completed';
-};
 
 const marksScoreLabel = (plan) => plan.marks_score_label || formatScoreLabel(plan.obtained_marks, plan.total_marks);
 
@@ -537,8 +532,10 @@ watch(
         <div v-else-if="plans.length" class="space-y-3">
             <div
                 v-for="plan in plans"
+                :id="`exam-plan-${plan.id}`"
                 :key="plan.id"
-                class="overflow-hidden rounded-lg border border-gray-200 bg-white"
+                class="overflow-hidden rounded-lg border border-gray-200 bg-white scroll-mt-4"
+                :class="highlightPlanId === plan.id ? 'ring-2 ring-emerald-400' : ''"
             >
                 <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-3">
                     <div class="min-w-0 flex-1">
@@ -626,7 +623,7 @@ watch(
                 </div>
 
                 <div
-                    v-if="!isAdminContext && isPastPlan(plan) && marksDraft[plan.id]"
+                    v-if="!isAdminContext && marksDraft[plan.id]"
                     class="border-t border-gray-200 bg-emerald-50/40 px-4 py-3"
                 >
                     <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
@@ -634,6 +631,7 @@ watch(
                     </p>
                     <p class="mt-1 text-xs text-gray-600">
                         Enter marks from your answer sheet — obtained and total for the test paper.
+                        Leave blank until you have the result.
                     </p>
                     <div class="mt-3 grid gap-3 sm:grid-cols-2">
                         <div>

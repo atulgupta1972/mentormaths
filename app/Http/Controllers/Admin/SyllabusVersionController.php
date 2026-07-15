@@ -99,6 +99,50 @@ class SyllabusVersionController extends Controller
                 : 'Syllabus already exists — continue editing below.');
     }
 
+    public function storeTopic(Request $request, SyllabusVersion $syllabusVersion): RedirectResponse
+    {
+        $validated = $request->validate([
+            'chapter_id' => ['nullable', 'integer'],
+            'chapter_number' => ['required_without:chapter_id', 'nullable', 'string', 'max:20'],
+            'chapter_name' => ['required_without:chapter_id', 'nullable', 'string', 'max:255'],
+            'chapter_head_id' => ['nullable', 'integer', 'exists:chapter_heads,id'],
+            'topic_name' => ['required', 'string', 'max:255'],
+            'learning_outcomes' => ['nullable', 'string'],
+            'difficulty' => ['nullable', 'string', 'max:20'],
+            'planned_periods' => ['nullable'],
+            'remarks' => ['nullable', 'string'],
+        ]);
+
+        if (! empty($validated['chapter_id'])) {
+            abort_unless(
+                $syllabusVersion->chapters()->whereKey($validated['chapter_id'])->exists(),
+                422,
+                'Chapter not found in this syllabus.',
+            );
+        }
+
+        $this->importService->addTopic(
+            $syllabusVersion,
+            [
+                'chapter_id' => $validated['chapter_id'] ?? null,
+                'chapter_number' => $validated['chapter_number'] ?? null,
+                'chapter_name' => $validated['chapter_name'] ?? null,
+                'chapter_head_id' => $validated['chapter_head_id'] ?? null,
+            ],
+            [
+                'topic_name' => $validated['topic_name'],
+                'learning_outcomes' => $validated['learning_outcomes'] ?? null,
+                'difficulty' => $validated['difficulty'] ?? null,
+                'planned_periods' => $validated['planned_periods'] ?? null,
+                'remarks' => $validated['remarks'] ?? null,
+            ],
+        );
+
+        return redirect()
+            ->route('admin.syllabus.show', $syllabusVersion)
+            ->with('success', 'Topic added to syllabus.');
+    }
+
     public function updateRows(Request $request, SyllabusVersion $syllabusVersion): RedirectResponse
     {
         $validated = $request->validate([

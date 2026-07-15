@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -40,6 +41,19 @@ const form = useForm({
 
 const carryForm = useForm({
     academic_year_id: '',
+});
+
+const quickTopicForm = useForm({
+    mode: 'existing',
+    chapter_key: '',
+    chapter_id: '',
+    chapter_number: '',
+    chapter_name: '',
+    chapter_head_id: '',
+    topic_name: '',
+    learning_outcomes: '',
+    difficulty: '',
+    planned_periods: '',
 });
 
 const importForm = useForm({
@@ -167,6 +181,129 @@ const addRow = () => {
         chapter_name: last?.chapter_name || '',
         chapter_id: last?.chapter_id || null,
         chapter_head_id: last?.chapter_head_id || '',
+    });
+};
+
+const chapterRowKey = (row) => {
+    if (row.chapter_id) {
+        return `id:${row.chapter_id}`;
+    }
+
+    return `new:${row.chapter_number}|${row.chapter_name}`;
+};
+
+const distinctChapters = computed(() => {
+    const seen = new Map();
+
+    for (const row of form.rows) {
+        if (!String(row.chapter_name ?? '').trim() && !String(row.chapter_number ?? '').trim()) {
+            continue;
+        }
+
+        const key = chapterRowKey(row);
+
+        if (!seen.has(key)) {
+            seen.set(key, {
+                key,
+                chapter_id: row.chapter_id,
+                chapter_number: row.chapter_number,
+                chapter_name: row.chapter_name,
+                chapter_head_id: row.chapter_head_id,
+                topicCount: 0,
+            });
+        }
+
+        if (String(row.topic_name ?? '').trim()) {
+            seen.get(key).topicCount += 1;
+        }
+    }
+
+    return [...seen.values()].sort((a, b) =>
+        String(a.chapter_number).localeCompare(String(b.chapter_number), undefined, { numeric: true }),
+    );
+});
+
+const selectedQuickChapter = computed(() =>
+    distinctChapters.value.find((chapter) => chapter.key === quickTopicForm.chapter_key) ?? null,
+);
+
+watch(
+    () => distinctChapters.value,
+    (chapters) => {
+        if (chapters.length === 0) {
+            quickTopicForm.mode = 'new';
+            quickTopicForm.chapter_key = '';
+
+            return;
+        }
+
+        if (quickTopicForm.mode === 'existing' && !chapters.some((chapter) => chapter.key === quickTopicForm.chapter_key)) {
+            quickTopicForm.chapter_key = chapters[0].key;
+        }
+    },
+    { immediate: true },
+);
+
+const addTopicForRow = (index) => {
+    const source = form.rows[index];
+
+    form.rows.splice(index + 1, 0, {
+        ...emptyRow(),
+        chapter_id: source.chapter_id,
+        chapter_number: source.chapter_number,
+        chapter_name: source.chapter_name,
+        chapter_head_id: source.chapter_head_id,
+    });
+
+    nextTick(resizeAllFields);
+};
+
+const submitQuickTopic = () => {
+    quickTopicForm.clearErrors();
+
+    const payload = {
+        topic_name: quickTopicForm.topic_name,
+        learning_outcomes: quickTopicForm.learning_outcomes || null,
+        difficulty: quickTopicForm.difficulty || null,
+        planned_periods: quickTopicForm.planned_periods === '' ? null : quickTopicForm.planned_periods,
+        remarks: null,
+    };
+
+    if (quickTopicForm.mode === 'existing') {
+        const chapter = selectedQuickChapter.value;
+
+        if (!chapter) {
+            quickTopicForm.setError('chapter_key', 'Select a chapter first.');
+
+            return;
+        }
+
+        payload.chapter_id = chapter.chapter_id || null;
+        payload.chapter_number = chapter.chapter_number || null;
+        payload.chapter_name = chapter.chapter_name || null;
+        payload.chapter_head_id = chapter.chapter_head_id || null;
+    } else {
+        payload.chapter_id = null;
+        payload.chapter_number = quickTopicForm.chapter_number;
+        payload.chapter_name = quickTopicForm.chapter_name;
+        payload.chapter_head_id = quickTopicForm.chapter_head_id || null;
+    }
+
+    quickTopicForm.transform(() => payload).post(route('admin.syllabus.topics.store', props.version.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            quickTopicForm.topic_name = '';
+            quickTopicForm.learning_outcomes = '';
+            quickTopicForm.difficulty = '';
+            quickTopicForm.planned_periods = '';
+
+            if (quickTopicForm.mode === 'new') {
+                quickTopicForm.chapter_number = '';
+                quickTopicForm.chapter_name = '';
+                quickTopicForm.chapter_head_id = '';
+                quickTopicForm.mode = distinctChapters.value.length ? 'existing' : 'new';
+            }
+        },
     });
 };
 
@@ -380,6 +517,138 @@ const saveNewHead = async () => {
                     </p>
                 </div>
 
+                <div v-if="isAdmin" class="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-sm font-medium text-gray-900">Add topic manually</h3>
+                            <p class="text-xs text-gray-600">Select chapter, enter topic — saves immediately.</p>
+                        </div>
+                        <div class="flex gap-3 text-xs">
+                            <label class="inline-flex items-center gap-1.5">
+                                <input
+                                    v-model="quickTopicForm.mode"
+                                    type="radio"
+                                    value="existing"
+                                    class="text-emerald-600"
+                                    :disabled="distinctChapters.length === 0"
+                                />
+                                Existing chapter
+                            </label>
+                            <label class="inline-flex items-center gap-1.5">
+                                <input v-model="quickTopicForm.mode" type="radio" value="new" class="text-emerald-600" />
+                                New chapter
+                            </label>
+                        </div>
+                    </div>
+
+                    <form class="mt-3 max-w-4xl space-y-2" @submit.prevent="submitQuickTopic">
+                        <div v-if="quickTopicForm.mode === 'existing'" class="flex flex-wrap items-end gap-2">
+                            <div class="min-w-[200px] flex-1">
+                                <InputLabel value="Chapter" class="!text-xs" />
+                                <select
+                                    v-model="quickTopicForm.chapter_key"
+                                    class="mt-0.5 block w-full rounded-md border-gray-300 py-1.5 text-sm"
+                                    required
+                                >
+                                    <option value="" disabled>Select chapter</option>
+                                    <option v-for="chapter in distinctChapters" :key="chapter.key" :value="chapter.key">
+                                        Ch {{ chapter.chapter_number || '?' }} — {{ chapter.chapter_name }}
+                                        ({{ chapter.topicCount }})
+                                    </option>
+                                </select>
+                                <InputError class="mt-0.5" :message="quickTopicForm.errors.chapter_key" />
+                            </div>
+                            <div class="min-w-[180px] flex-[1.2]">
+                                <InputLabel value="Topic name" class="!text-xs" />
+                                <TextInput
+                                    v-model="quickTopicForm.topic_name"
+                                    class="mt-0.5 block w-full !py-1.5 text-sm"
+                                    placeholder="Advanced Percent Problems"
+                                    required
+                                />
+                                <InputError class="mt-0.5" :message="quickTopicForm.errors.topic_name" />
+                            </div>
+                        </div>
+
+                        <div v-else class="flex flex-wrap items-end gap-2">
+                            <div class="w-16">
+                                <InputLabel value="Ch No." class="!text-xs" />
+                                <TextInput
+                                    v-model="quickTopicForm.chapter_number"
+                                    class="mt-0.5 block w-full !py-1.5 text-sm"
+                                    placeholder="7"
+                                    required
+                                />
+                                <InputError class="mt-0.5" :message="quickTopicForm.errors.chapter_number" />
+                            </div>
+                            <div class="min-w-[140px] flex-1">
+                                <InputLabel value="Chapter name" class="!text-xs" />
+                                <TextInput
+                                    v-model="quickTopicForm.chapter_name"
+                                    class="mt-0.5 block w-full !py-1.5 text-sm"
+                                    placeholder="Percentages"
+                                    required
+                                />
+                                <InputError class="mt-0.5" :message="quickTopicForm.errors.chapter_name" />
+                            </div>
+                            <div class="min-w-[120px] flex-1">
+                                <InputLabel value="Head" class="!text-xs" />
+                                <select
+                                    v-model="quickTopicForm.chapter_head_id"
+                                    class="mt-0.5 block w-full rounded-md border-gray-300 py-1.5 text-sm"
+                                >
+                                    <option value="">—</option>
+                                    <option v-for="head in chapterHeadsList" :key="head.id" :value="head.id">{{ head.name }}</option>
+                                </select>
+                            </div>
+                            <div class="min-w-[180px] flex-[1.2]">
+                                <InputLabel value="Topic name" class="!text-xs" />
+                                <TextInput
+                                    v-model="quickTopicForm.topic_name"
+                                    class="mt-0.5 block w-full !py-1.5 text-sm"
+                                    placeholder="Advanced Percent Problems"
+                                    required
+                                />
+                                <InputError class="mt-0.5" :message="quickTopicForm.errors.topic_name" />
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-end gap-2">
+                            <div class="min-w-[200px] flex-[1.5]">
+                                <InputLabel value="Key concepts (optional)" class="!text-xs" />
+                                <input
+                                    v-model="quickTopicForm.learning_outcomes"
+                                    type="text"
+                                    class="mt-0.5 block w-full rounded-md border-gray-300 py-1.5 text-sm shadow-sm"
+                                    placeholder="Complex percentage adjustments..."
+                                />
+                            </div>
+                            <div class="w-24">
+                                <InputLabel value="Difficulty" class="!text-xs" />
+                                <select v-model="quickTopicForm.difficulty" class="mt-0.5 block w-full rounded-md border-gray-300 py-1.5 text-sm">
+                                    <option value="">—</option>
+                                    <option value="Easy">Easy</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="Hard">Hard</option>
+                                </select>
+                            </div>
+                            <div class="w-16">
+                                <InputLabel value="Periods" class="!text-xs" />
+                                <TextInput
+                                    v-model="quickTopicForm.planned_periods"
+                                    type="number"
+                                    min="0"
+                                    class="mt-0.5 block w-full !py-1.5 text-sm"
+                                    placeholder="3"
+                                />
+                            </div>
+                            <PrimaryButton type="submit" class="!py-1.5 !text-xs" :disabled="quickTopicForm.processing">
+                                {{ quickTopicForm.processing ? 'Adding…' : 'Add topic' }}
+                            </PrimaryButton>
+                        </div>
+                    </form>
+                </div>
+
                 <div v-if="isAdmin" class="overflow-hidden rounded-lg bg-white shadow-sm">
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
                         <h3 class="font-medium text-gray-900">Syllabus table</h3>
@@ -499,6 +768,13 @@ const saveNewHead = async () => {
                                             placeholder="Chapter title in book"
                                             @input="autoResize"
                                         />
+                                        <button
+                                            type="button"
+                                            class="mt-1 text-xs text-emerald-700 hover:underline"
+                                            @click="addTopicForRow(index)"
+                                        >
+                                            + Topic
+                                        </button>
                                     </td>
                                     <td class="align-top px-2 py-2">
                                         <textarea

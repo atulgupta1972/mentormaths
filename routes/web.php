@@ -124,6 +124,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('syllabus.import-preview');
     Route::put('/syllabus/{syllabusVersion}/rows', [SyllabusVersionController::class, 'updateRows'])
         ->name('syllabus.rows.update');
+    Route::post('/syllabus/{syllabusVersion}/topics', [SyllabusVersionController::class, 'storeTopic'])
+        ->name('syllabus.topics.store');
     Route::post('/syllabus/{syllabusVersion}/carry-forward', [SyllabusVersionController::class, 'carryForward'])
         ->name('syllabus.carry-forward');
 

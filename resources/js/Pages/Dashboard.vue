@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 const props = defineProps({
     isAdmin: { type: Boolean, default: false },
@@ -30,6 +30,30 @@ const props = defineProps({
 const showManageExams = ref(false);
 const showHelpRequests = ref(false);
 const expandedStudentId = ref(null);
+const highlightedExamPlanId = ref(null);
+
+const allExamPlans = computed(() => [
+    ...(props.examPlans.upcoming || []),
+    ...(props.examPlans.past || []),
+]);
+
+const openExamMarks = async (planId) => {
+    showManageExams.value = true;
+    highlightedExamPlanId.value = planId;
+
+    await nextTick();
+
+    document.getElementById(`exam-plan-${planId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+    });
+};
+
+onMounted(() => {
+    if (allExamPlans.value.some((plan) => !plan.has_marks)) {
+        showManageExams.value = true;
+    }
+});
 
 const sortByDateKey = (rows, key) => rows.slice().sort((a, b) => {
     const left = a[key] ?? '9999-12-31';
@@ -562,6 +586,20 @@ const adminSetStatusClass = (set) => {
                                             <span>{{ prep.progress_label }}</span>
                                         </li>
                                     </ul>
+                                    <p
+                                        v-if="plan.has_marks"
+                                        class="mt-2 text-sm font-semibold text-emerald-200"
+                                    >
+                                        Result: {{ plan.marks_score_label }}
+                                    </p>
+                                    <button
+                                        v-else
+                                        type="button"
+                                        class="mt-2 rounded-md bg-white/20 px-2.5 py-1 text-xs font-semibold hover:bg-white/30"
+                                        @click="openExamMarks(plan.id)"
+                                    >
+                                        Enter school test marks
+                                    </button>
                                 </div>
                             </div>
 
@@ -690,9 +728,14 @@ const adminSetStatusClass = (set) => {
                                 >
                                     {{ plan.marks_score_label }}
                                 </p>
-                                <p v-else class="mt-2 text-xs text-amber-700">
-                                    Marks not entered yet — open Add / edit exams to record your score.
-                                </p>
+                                <button
+                                    v-else
+                                    type="button"
+                                    class="mt-2 text-xs font-semibold text-amber-800 underline decoration-amber-400 underline-offset-2 hover:text-amber-950"
+                                    @click="openExamMarks(plan.id)"
+                                >
+                                    Enter school test marks
+                                </button>
                                 <p class="mt-1 truncate text-[10px] text-gray-500">{{ chapterList(plan) }}</p>
                             </div>
                         </div>
@@ -700,9 +743,10 @@ const adminSetStatusClass = (set) => {
 
                     <section v-if="showManageExams" class="rounded-xl bg-white p-4 shadow-sm">
                         <ExamPlanPanel
-                            :plans="[...(examPlans.upcoming || []), ...(examPlans.past || [])]"
+                            :plans="allExamPlans"
                             :syllabus-chapters="syllabusChapters"
                             :exam-type-options="examTypeOptions"
+                            :highlight-plan-id="highlightedExamPlanId"
                             context="student"
                         />
                     </section>
