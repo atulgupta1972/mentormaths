@@ -17,7 +17,14 @@ export function formatMcqText(text) {
         return '';
     }
 
-    const escaped = escapeHtml(String(text));
+    // Split on numbers first, then escape each segment. Escaping before bolding
+    // used to wrap digits inside entities like &#39; and break apostrophes in the UI.
+    return String(text)
+        .split(/(\d+(?:\.\d+)?(?:\/\d+)?)/g)
+        .map((part, index) => {
+            const escaped = escapeHtml(part);
 
-    return escaped.replace(/(\d+(?:\.\d+)?(?:\/\d+)?)/g, '<strong>$1</strong>');
+            return index % 2 === 1 ? `<strong>${escaped}</strong>` : escaped;
+        })
+        .join('');
 }
