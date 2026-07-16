@@ -199,7 +199,7 @@ const clearFilters = () => {
                                 1. Students needing catch-up · {{ weakStudents.length }}
                             </h3>
                             <p class="text-xs text-gray-500">
-                                Wrong first try, used hint, or asked for help — and not yet covered by a catch-up set.
+                                Wrong first try, used hint, or asked for help — including finished questions in sets still in progress.
                             </p>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">

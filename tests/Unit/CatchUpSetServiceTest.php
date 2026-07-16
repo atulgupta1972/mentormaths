@@ -207,10 +207,40 @@ class CatchUpSetServiceTest extends TestCase
         $this->assertNotSame($sourceQuestionA->id, $questionB->id);
     }
 
+    public function test_in_progress_guided_attempt_includes_finished_weak_questions(): void
+    {
+        [$topic, $enrollment, $sourceQuestion, $assigner] = $this->seedWeakGuidedContext(submitAttempt: false);
+
+        $worksheet = Worksheet::query()->where('set_code', 'S711')->firstOrFail();
+        $assignment = SetAssignment::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->where('worksheet_id', $worksheet->id)
+            ->firstOrFail();
+        $attempt = SetAttempt::query()->where('set_assignment_id', $assignment->id)->firstOrFail();
+
+        GuidedAttemptQuestion::query()->where('set_attempt_id', $attempt->id)->delete();
+
+        GuidedAttemptQuestion::query()->create([
+            'set_attempt_id' => $attempt->id,
+            'question_id' => $sourceQuestion->id,
+            'sort_order' => 0,
+            'phase' => GuidedAttemptQuestion::PHASE_DONE,
+            'wrong_before_explanation' => 1,
+            'first_try_correct' => false,
+            'final_is_correct' => true,
+        ]);
+
+        $overview = app(CatchUpSetService::class)->weakStudentsOverview();
+
+        $this->assertCount(1, $overview);
+        $this->assertSame($enrollment->id, $overview[0]['student_enrollment_id']);
+        $this->assertSame(1, $overview[0]['weak_count']);
+    }
+
     /**
      * @return array{0: SyllabusTopic, 1: StudentEnrollment, 2: Question, 3: User}
      */
-    private function seedWeakGuidedContext(): array
+    private function seedWeakGuidedContext(bool $submitAttempt = true): array
     {
         $year = AcademicYear::query()->create([
             'name' => '2026-27',
@@ -304,7 +334,7 @@ class CatchUpSetServiceTest extends TestCase
             'assigned_by' => $assigner->id,
             'assigned_at' => now(),
             'due_date' => now()->addWeek(),
-            'status' => SetAssignment::STATUS_COMPLETED,
+            'status' => $submitAttempt ? SetAssignment::STATUS_COMPLETED : SetAssignment::STATUS_IN_PROGRESS,
         ]);
 
         $attempt = SetAttempt::query()->create([
@@ -312,23 +342,25 @@ class CatchUpSetServiceTest extends TestCase
             'attempt_number' => 1,
             'mode' => SetAttempt::MODE_GUIDED,
             'started_at' => now()->subHour(),
-            'completed_at' => now(),
-            'status' => SetAttempt::STATUS_SUBMITTED,
-            'score' => 0,
-            'max_score' => 1,
+            'completed_at' => $submitAttempt ? now() : null,
+            'status' => $submitAttempt ? SetAttempt::STATUS_SUBMITTED : SetAttempt::STATUS_IN_PROGRESS,
+            'score' => $submitAttempt ? 0 : null,
+            'max_score' => $submitAttempt ? 1 : null,
         ]);
 
-        GuidedAttemptQuestion::query()->create([
-            'set_attempt_id' => $attempt->id,
-            'question_id' => $question->id,
-            'sort_order' => 0,
-            'phase' => GuidedAttemptQuestion::PHASE_DONE,
-            'wrong_before_explanation' => 1,
-            'first_try_correct' => false,
-            'corrected_after_help' => true,
-            'used_early_hint' => true,
-            'final_is_correct' => true,
-        ]);
+        if ($submitAttempt) {
+            GuidedAttemptQuestion::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'sort_order' => 0,
+                'phase' => GuidedAttemptQuestion::PHASE_DONE,
+                'wrong_before_explanation' => 1,
+                'first_try_correct' => false,
+                'corrected_after_help' => true,
+                'used_early_hint' => true,
+                'final_is_correct' => true,
+            ]);
+        }
 
         return [$topic, $enrollment, $question, $assigner];
     }

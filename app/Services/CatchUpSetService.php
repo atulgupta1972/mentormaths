@@ -466,8 +466,11 @@ PROMPT;
                 }
             })
             ->whereHas('attempt', function ($q) use ($gradeLevelId) {
-                $q->where('status', SetAttempt::STATUS_SUBMITTED)
-                    ->where('mode', SetAttempt::MODE_GUIDED)
+                $q->where('mode', SetAttempt::MODE_GUIDED)
+                    ->whereIn('status', [
+                        SetAttempt::STATUS_SUBMITTED,
+                        SetAttempt::STATUS_IN_PROGRESS,
+                    ])
                     ->whereHas('assignment.practiceSet', function ($w) {
                         $w->where(function ($inner) {
                             $inner->whereNull('purpose')
@@ -478,6 +481,14 @@ PROMPT;
                 if ($gradeLevelId) {
                     $q->whereHas('assignment.enrollment', fn ($e) => $e->where('grade_level_id', $gradeLevelId));
                 }
+            })
+            ->where(function ($q) {
+                // Submitted sets: include all weak rows. In-progress sets: only finished questions.
+                $q->whereHas('attempt', fn ($a) => $a->where('status', SetAttempt::STATUS_SUBMITTED))
+                    ->orWhereIn('phase', [
+                        GuidedAttemptQuestion::PHASE_DONE,
+                        GuidedAttemptQuestion::PHASE_GIVEN_UP,
+                    ]);
             })
             ->orderByDesc('id')
             ->get();
