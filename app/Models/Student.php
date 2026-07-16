@@ -15,22 +15,32 @@ class Student extends Model
         'student_mobile',
         'parent1_name',
         'parent1_mobile',
+        'parent1_email',
         'parent2_name',
         'parent2_mobile',
+        'parent2_email',
         'school_name',
         'email',
+        'notify_contact_email',
+        'notify_login_email',
         'notify_student_mobile',
         'notify_parent1_mobile',
+        'notify_parent1_email',
         'notify_parent2_mobile',
+        'notify_parent2_email',
     ];
 
     protected function casts(): array
     {
         return [
             'date_of_birth' => 'date',
+            'notify_contact_email' => 'boolean',
+            'notify_login_email' => 'boolean',
             'notify_student_mobile' => 'boolean',
             'notify_parent1_mobile' => 'boolean',
+            'notify_parent1_email' => 'boolean',
             'notify_parent2_mobile' => 'boolean',
+            'notify_parent2_email' => 'boolean',
         ];
     }
 

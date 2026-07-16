@@ -4,8 +4,8 @@ namespace App\Console\Commands;
 
 use App\Models\AcademicYear;
 use App\Models\StudentEnrollment;
+use App\Services\StudentNotificationEmailService;
 use App\Services\StudentProgressSummaryService;
-use App\Support\AssignmentMailer;
 use App\Support\StudentProgressMailer;
 use Illuminate\Console\Command;
 
@@ -13,10 +13,12 @@ class SendWeeklyStudentSummaries extends Command
 {
     protected $signature = 'students:send-weekly-summaries {--dry-run : Show what would be sent without emailing}';
 
-    protected $description = 'Email weekly progress summaries to students with an email on file';
+    protected $description = 'Email weekly progress summaries (with PDF) to all notify-enabled student/parent emails';
 
-    public function handle(StudentProgressSummaryService $summaryService): int
-    {
+    public function handle(
+        StudentProgressSummaryService $summaryService,
+        StudentNotificationEmailService $emailService,
+    ): int {
         $activeYear = AcademicYear::active();
 
         if (! $activeYear) {
@@ -29,7 +31,7 @@ class SendWeeklyStudentSummaries extends Command
         $periodStart = now()->subDays(6)->startOfDay();
 
         $enrollments = StudentEnrollment::query()
-            ->with('student')
+            ->with(['student.user:id,email'])
             ->where('academic_year_id', $activeYear->id)
             ->where('status', StudentEnrollment::STATUS_ACTIVE)
             ->get();
@@ -47,7 +49,9 @@ class SendWeeklyStudentSummaries extends Command
                 continue;
             }
 
-            if (! AssignmentMailer::resolveStudentEmail($student)) {
+            $emails = $emailService->emailAddressesForStudent($student);
+
+            if ($emails === []) {
                 $skipped++;
 
                 continue;
@@ -56,7 +60,7 @@ class SendWeeklyStudentSummaries extends Command
             $summary = $summaryService->build($enrollment, $asOf, $periodStart);
 
             if ($this->option('dry-run')) {
-                $this->line("Would send to {$student->name}");
+                $this->line("Would send to {$student->name}: ".implode(', ', $emails));
 
                 continue;
             }
@@ -65,7 +69,7 @@ class SendWeeklyStudentSummaries extends Command
 
             if ($result['sent']) {
                 $sent++;
-                $this->info("Sent to {$student->name} ({$result['email']})");
+                $this->info("Sent to {$student->name} (".implode(', ', $result['emails']).')');
             } elseif ($result['error'] === 'no_email') {
                 $skipped++;
             } else {
@@ -75,6 +79,10 @@ class SendWeeklyStudentSummaries extends Command
         }
 
         $this->info("Weekly summaries: {$sent} sent, {$skipped} skipped, {$failed} failed.");
+
+        if (config('progress_summary.whatsapp_driver') === 'manual') {
+            $this->comment('WhatsApp: manual mode — use student page to copy message or download PDF for parents.');
+        }
 
         return self::SUCCESS;
     }

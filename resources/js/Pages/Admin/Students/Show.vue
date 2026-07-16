@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ContactNumbersPanel from '@/Components/ContactNumbersPanel.vue';
+import StudentEmailContactsPanel from '@/Components/StudentEmailContactsPanel.vue';
 import StudentProgressSummaryPanel from '@/Components/StudentProgressSummaryPanel.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
@@ -28,6 +29,7 @@ const props = defineProps({
     resolutionItems: { type: Array, default: () => [] },
     helpRequestsCount: { type: Number, default: 0 },
     defaultSummaryEmail: { type: String, default: '' },
+    summaryEmailRecipients: { type: Array, default: () => [] },
     whatsappRecipientCount: { type: Number, default: 0 },
 });
 
@@ -160,9 +162,17 @@ const destroyStudent = () => {
                     :share-links="shareLinks"
                 />
 
+                <StudentEmailContactsPanel
+                    :student="student"
+                    :login-email="student.user?.email || ''"
+                    :save-url="route('admin.students.emails.update', student.id)"
+                    :summary-email-recipients="summaryEmailRecipients"
+                />
+
                 <StudentProgressSummaryPanel
                     :student="student"
                     :default-email="defaultSummaryEmail"
+                    :summary-email-recipients="summaryEmailRecipients"
                     :whatsapp-recipient-count="whatsappRecipientCount"
                 />
 

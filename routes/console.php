@@ -9,5 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('students:send-weekly-summaries')
-    ->weeklyOn(0, '18:00')
+    ->weeklyOn(6, '08:00')
     ->timezone('Asia/Kolkata');

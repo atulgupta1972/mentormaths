@@ -5,6 +5,7 @@ namespace App\Mail;
 use App\Models\Student;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
@@ -19,6 +20,8 @@ class StudentProgressSummary extends Mailable
     public function __construct(
         public Student $student,
         public array $summary,
+        public ?string $pdfBytes = null,
+        public ?string $pdfFilename = null,
     ) {}
 
     public function envelope(): Envelope
@@ -39,5 +42,20 @@ class StudentProgressSummary extends Mailable
                 'summary' => $this->summary,
             ],
         );
+    }
+
+    /**
+     * @return list<Attachment>
+     */
+    public function attachments(): array
+    {
+        if ($this->pdfBytes === null || $this->pdfFilename === null) {
+            return [];
+        }
+
+        return [
+            Attachment::fromData(fn () => $this->pdfBytes, $this->pdfFilename)
+                ->withMime('application/pdf'),
+        ];
     }
 }

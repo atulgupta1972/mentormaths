@@ -1,5 +1,4 @@
 <script setup>
-import Checkbox from '@/Components/Checkbox.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import ProgressSummaryTables from '@/Components/ProgressSummaryTables.vue';
@@ -21,6 +20,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    summaryEmailRecipients: {
+        type: Array,
+        default: () => [],
+    },
     whatsappRecipientCount: {
         type: Number,
         default: 0,
@@ -38,8 +41,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 const form = useForm({
     as_of_date: today(),
-    send_email: false,
-    send_whatsapp: true,
+    send_email: true,
+    send_whatsapp: false,
     email: '',
 });
 
@@ -135,9 +138,34 @@ const copyMessage = async (row) => {
     }
 };
 
-const submit = () => {
-    form.post(route('admin.students.send-progress-summary', props.student.id), {
+const submit = (options = {}) => {
+    const { sendEmail = false, sendWhatsapp = false } = options;
+
+    form.transform((data) => ({
+        ...data,
+        send_email: sendEmail,
+        send_whatsapp: sendWhatsapp,
+    })).post(route('admin.students.send-progress-summary', props.student.id), {
         preserveScroll: true,
+    });
+};
+
+const sendEmailNow = () => {
+    submit({ sendEmail: true, sendWhatsapp: false });
+};
+
+const prepareWhatsApp = () => {
+    submit({ sendEmail: false, sendWhatsapp: true });
+};
+
+const downloadPdf = () => {
+    if (!form.as_of_date) {
+        return;
+    }
+
+    window.location.href = route('admin.students.progress-summary-pdf', {
+        student: props.student.id,
+        as_of_date: form.as_of_date,
     });
 };
 </script>
@@ -151,7 +179,7 @@ const submit = () => {
             </p>
         </div>
 
-        <form class="space-y-4 p-6" @submit.prevent="submit">
+        <form class="space-y-4 p-6" @submit.prevent="sendEmailNow">
             <div
                 v-if="flashSuccess"
                 class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900"
@@ -185,47 +213,65 @@ const submit = () => {
                 <ProgressSummaryTables :summary="previewSummary" />
             </div>
 
-            <div class="flex flex-wrap gap-6 text-sm">
-                <label class="flex items-center gap-2">
-                    <Checkbox :checked="form.send_email" @update:checked="form.send_email = $event" />
-                    Send email
-                </label>
-                <label class="flex items-center gap-2">
-                    <Checkbox :checked="form.send_whatsapp" @update:checked="form.send_whatsapp = $event" />
-                    Prepare WhatsApp
-                </label>
+            <div v-if="form.send_email" class="rounded-lg border border-indigo-100 bg-indigo-50/50 p-4">
+                <p class="text-sm font-medium text-indigo-900">Email recipients</p>
+                <p v-if="summaryEmailRecipients.length" class="mt-1 text-sm text-indigo-800">
+                    {{ summaryEmailRecipients.map((row) => row.email).join(', ') }}
+                    <span class="text-indigo-600">(+ admin CC, PDF attached)</span>
+                </p>
+                <p v-else-if="defaultEmail" class="mt-1 text-sm text-indigo-800">
+                    {{ defaultEmail }}
+                    <span class="text-indigo-600">(+ admin CC, PDF attached)</span>
+                </p>
+                <p v-else class="mt-1 text-sm text-amber-800">
+                    No saved recipients — add emails in <strong>Email contacts</strong> above, or enter one below.
+                </p>
+
+                <div class="mt-3">
+                    <label class="text-sm font-medium text-gray-700">Override: send to this address only (optional)</label>
+                    <TextInput
+                        v-model="form.email"
+                        type="email"
+                        class="mt-1 block w-full max-w-md text-sm"
+                        placeholder="Leave blank to use all included emails above"
+                    />
+                    <InputError :message="form.errors.email" class="mt-1" />
+                </div>
             </div>
 
-            <p v-if="form.send_whatsapp && whatsappRecipientCount === 0" class="text-sm text-amber-800">
-                No WhatsApp recipients yet. In <strong>Contact &amp; notification settings</strong> above, tick
-                <strong>Notify</strong> on at least one mobile number and save.
+            <div class="flex flex-wrap gap-2">
+                <button
+                    type="button"
+                    class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    :disabled="!form.as_of_date"
+                    @click="downloadPdf"
+                >
+                    Download PDF
+                </button>
+                <PrimaryButton type="submit" :disabled="form.processing">
+                    {{ form.processing ? 'Sending…' : 'Send email now' }}
+                </PrimaryButton>
+                <button
+                    type="button"
+                    class="rounded-md border border-green-600 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
+                    :disabled="form.processing"
+                    @click="prepareWhatsApp"
+                >
+                    Prepare WhatsApp
+                </button>
+            </div>
+
+            <p v-if="whatsappRecipientCount === 0" class="text-sm text-gray-500">
+                For WhatsApp: tick <strong>Notify</strong> on mobile numbers in contact settings above, then click Prepare WhatsApp.
             </p>
-            <p v-else-if="form.send_whatsapp" class="text-sm text-gray-600">
+            <p v-else class="text-sm text-gray-600">
                 {{ whatsappRecipientCount }} WhatsApp recipient{{ whatsappRecipientCount === 1 ? '' : 's' }} saved for notify.
             </p>
 
-            <div v-if="form.send_email">
-                <label class="text-sm font-medium text-gray-700">Email to (optional)</label>
-                <TextInput
-                    v-model="form.email"
-                    type="email"
-                    class="mt-1 block w-full max-w-md text-sm"
-                    :placeholder="defaultEmail || 'Uses student profile email if blank'"
-                />
-                <p v-if="defaultEmail" class="mt-1 text-xs text-gray-500">
-                    Default: {{ defaultEmail }}
-                </p>
-                <InputError :message="form.errors.email" class="mt-1" />
-            </div>
-
             <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                <strong>Weekly auto-email:</strong> every Sunday at 6:00 PM IST to students with an email on file.
-                Run manually on server: <code class="text-xs">php artisan students:send-weekly-summaries</code>
+                <strong>Weekly auto-email:</strong> every Saturday at 8:00 AM IST to all ticked emails above (admin CC'd, PDF attached).
+                Server cron must run <code class="text-xs">php artisan schedule:run</code> every minute.
             </div>
-
-            <PrimaryButton type="submit" :disabled="form.processing">
-                Send progress summary
-            </PrimaryButton>
 
             <div
                 v-if="whatsappRows.length > 0"
@@ -234,7 +280,8 @@ const submit = () => {
             >
                 <p class="font-medium text-green-900">Send progress summary on WhatsApp</p>
                 <p class="mt-1 text-sm text-green-800">
-                    Click <strong>Copy message</strong>, open WhatsApp on your phone, paste and send to each contact.
+                    Click <strong>Copy message</strong> or <strong>Download PDF</strong> above, open WhatsApp on your phone, paste/send to each contact.
+                    Fully automatic WhatsApp needs a Business API provider (Interakt/Twilio) — not configured yet.
                 </p>
 
                 <ul class="mt-4 space-y-3">

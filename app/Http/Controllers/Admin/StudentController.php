@@ -12,6 +12,8 @@ use App\Services\ExamPlanService;
 use App\Services\QuestionResolutionService;
 use App\Services\StudentAccountService;
 use App\Services\StudentNotificationContactService;
+use App\Services\StudentNotificationEmailService;
+use App\Services\StudentProgressPdfService;
 use App\Services\StudentProgressSummaryService;
 use App\Services\StudentProgressWhatsAppService;
 use App\Services\StudentPromotionService;
@@ -34,6 +36,8 @@ class StudentController extends Controller
         private StudentProgressSummaryService $progressSummaryService,
         private StudentProgressWhatsAppService $progressWhatsAppService,
         private StudentNotificationContactService $notificationContactService,
+        private StudentNotificationEmailService $notificationEmailService,
+        private StudentProgressPdfService $progressPdfService,
     ) {}
 
     public function index(Request $request): Response
@@ -111,6 +115,7 @@ class StudentController extends Controller
                 ? $this->resolutionService->pendingCountForEnrollment($resolutionEnrollment->id)
                 : 0,
             'defaultSummaryEmail' => AssignmentMailer::resolveStudentEmail($student),
+            'summaryEmailRecipients' => $this->notificationEmailService->recipientsForStudent($student),
             'whatsappRecipientCount' => count($this->notificationContactService->recipientsForStudent($student)),
         ]);
     }
@@ -218,6 +223,23 @@ class StudentController extends Controller
         return back()->with('success', 'Contact and notification settings saved.');
     }
 
+    public function updateEmails(Request $request, Student $student): RedirectResponse
+    {
+        $validated = $request->validate([
+            'email' => ['nullable', 'email', 'max:255'],
+            'parent1_email' => ['nullable', 'email', 'max:255'],
+            'parent2_email' => ['nullable', 'email', 'max:255'],
+            'notify_contact_email' => ['sometimes', 'boolean'],
+            'notify_login_email' => ['sometimes', 'boolean'],
+            'notify_parent1_email' => ['sometimes', 'boolean'],
+            'notify_parent2_email' => ['sometimes', 'boolean'],
+        ]);
+
+        $student->update($validated);
+
+        return back()->with('success', 'Email notification settings saved.');
+    }
+
     public function progressSummaryPreview(Request $request, Student $student): JsonResponse
     {
         $validated = $request->validate([
@@ -261,16 +283,20 @@ class StudentController extends Controller
         $whatsappNotifications = [];
 
         if ($request->boolean('send_email')) {
+            $overrideEmails = filled($validated['email'] ?? null)
+                ? [trim($validated['email'])]
+                : null;
+
             $result = StudentProgressMailer::send(
                 $student,
                 $summary,
-                $validated['email'] ?? null,
+                $overrideEmails,
             );
 
             if ($result['sent']) {
-                $messages[] = "Email sent to {$result['email']}.";
+                $messages[] = 'Email sent to '.implode(', ', $result['emails']).'. Admin CC included.';
             } elseif ($result['error'] === 'no_email') {
-                $warnings[] = 'No email on file — add one on the student profile or enter an address below.';
+                $warnings[] = 'No email recipients — add contact/parent emails above or enter an address below.';
             } else {
                 $warnings[] = 'Email could not be sent. Check mail settings.';
             }
@@ -305,5 +331,28 @@ class StudentController extends Controller
         }
 
         return $redirect;
+    }
+
+    public function progressSummaryPdf(Request $request, Student $student)
+    {
+        $validated = $request->validate([
+            'as_of_date' => ['required', 'date'],
+        ]);
+
+        $enrollment = $student->currentEnrollment();
+
+        if (! $enrollment) {
+            abort(422, 'Student has no active enrollment for the current year.');
+        }
+
+        $asOf = \Carbon\Carbon::parse($validated['as_of_date']);
+        $summary = $this->progressSummaryService->build($enrollment, $asOf);
+        $pdfBytes = $this->progressPdfService->render($summary);
+        $filename = $this->progressPdfService->filename($student, $summary);
+
+        return response($pdfBytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
     }
 }

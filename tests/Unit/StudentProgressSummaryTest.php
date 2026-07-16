@@ -148,13 +148,29 @@ class StudentProgressSummaryTest extends TestCase
 
         [$enrollment] = $this->seedAssignments();
         $student = $enrollment->student;
-        $student->update(['email' => 'parent@example.com']);
+        $student->update([
+            'email' => 'parent@example.com',
+            'parent1_email' => 'parent1@example.com',
+            'notify_contact_email' => true,
+            'notify_parent1_email' => true,
+        ]);
+
+        config(['mail.registration_notify' => 'admin@example.com']);
 
         $summary = app(StudentProgressSummaryService::class)->build($enrollment, now());
         $result = StudentProgressMailer::send($student, $summary);
 
         $this->assertTrue($result['sent']);
-        Mail::assertSent(StudentProgressSummary::class, fn (StudentProgressSummary $mail) => $mail->hasTo('parent@example.com'));
+        $this->assertEqualsCanonicalizing(
+            ['parent@example.com', 'parent1@example.com'],
+            $result['emails'],
+        );
+
+        Mail::assertSent(StudentProgressSummary::class, function (StudentProgressSummary $mail) {
+            return $mail->hasTo('parent@example.com')
+                && $mail->hasTo('parent1@example.com')
+                && $mail->hasCc('admin@example.com');
+        });
     }
 
     /**
