@@ -26,18 +26,26 @@ const lookupSet = () => {
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Practice Sets</h2>
                     <p v-if="selectedGrade" class="text-sm text-indigo-600">Showing: {{ selectedGrade.name }}</p>
                     <p v-else class="text-sm text-gray-500">All classes · use the class selector in the nav bar to filter</p>
                 </div>
-                <Link
-                    :href="route('admin.practice-sets.create')"
-                    class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-                >
-                    Create practice set
-                </Link>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Link
+                        :href="route('admin.practice-sets.create')"
+                        class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                    >
+                        Create practice set
+                    </Link>
+                    <Link
+                        :href="route('admin.catch-up.index')"
+                        class="rounded-md border border-indigo-300 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+                    >
+                        Catch-up sets
+                    </Link>
+                </div>
             </div>
         </template>
 

@@ -64,7 +64,20 @@ const sortByDateKey = (rows, key) => rows.slice().sort((a, b) => {
 
 const pendingAssignments = computed(() =>
     sortByDateKey(
-        props.assignments.filter((a) => a.status !== 'green' && a.status !== 'green-late'),
+        props.assignments.filter((a) =>
+            a.status !== 'green'
+            && a.status !== 'green-late'
+            && !a.is_catch_up),
+        'target_date',
+    ),
+);
+
+const pendingCatchUpAssignments = computed(() =>
+    sortByDateKey(
+        props.assignments.filter((a) =>
+            a.status !== 'green'
+            && a.status !== 'green-late'
+            && a.is_catch_up),
         'target_date',
     ),
 );
@@ -653,6 +666,53 @@ const adminSetStatusClass = (set) => {
                                         class="shrink-0 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
                                     >
                                         Answer
+                                    </Link>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Catch-up sets -->
+                        <section
+                            v-if="pendingCatchUpAssignments.length"
+                            class="rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 via-cyan-50 to-teal-50 p-4 shadow-sm"
+                        >
+                            <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-sky-900">
+                                Catch-up Sets · {{ pendingCatchUpAssignments.length }}
+                            </h3>
+                            <p class="mb-3 text-xs text-sky-800">
+                                Extra practice on sums you needed help with — new numbers, same skills.
+                            </p>
+                            <div class="grid gap-2 sm:grid-cols-2">
+                                <div
+                                    v-for="set in pendingCatchUpAssignments"
+                                    :key="set.assignment_id"
+                                    class="rounded-lg border p-2.5 shadow-sm transition"
+                                    :class="pendingBorderClass(set)"
+                                >
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex flex-wrap items-center gap-1">
+                                                <span class="rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide" :class="pendingBadgeClass(set)">
+                                                    {{ pendingStatusLabel(set) }}
+                                                </span>
+                                                <span class="text-[8px] font-semibold uppercase text-sky-700">
+                                                    Catch-up
+                                                </span>
+                                            </div>
+                                            <p class="mt-0.5 font-mono text-lg font-bold leading-none tracking-wide text-gray-900 sm:text-xl">
+                                                {{ setLabel(set) }}
+                                            </p>
+                                            <p v-if="set.target_date" class="mt-1 text-[9px] font-medium" :class="set.is_overdue ? 'text-rose-600' : 'text-gray-600'">
+                                                Due {{ formatDate(set.target_date) }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Link
+                                        :href="route('student.assignments.show', set.assignment_id)"
+                                        class="mt-2 block w-full rounded-md py-2 text-center text-xs font-semibold text-white shadow sm:mt-1.5 sm:w-auto sm:px-3 sm:py-1.5"
+                                        :class="pendingButtonClass(set)"
+                                    >
+                                        {{ pendingButtonLabel(set) }}
                                     </Link>
                                 </div>
                             </div>

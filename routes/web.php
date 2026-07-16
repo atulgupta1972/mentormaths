@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AcademicYearController;
 use App\Http\Controllers\Admin\ChapterHeadController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
+use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ClassAssignmentController;
 use App\Http\Controllers\Admin\ClassHubController;
 use App\Http\Controllers\Admin\ExamPlanController as AdminExamPlanController;
@@ -179,6 +180,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/practice-sets/topics/{topic}', [PracticeSetTopicController::class, 'show'])->name('practice-sets.topics.show');
     Route::get('/practice-sets/{worksheet}', [PracticeSetController::class, 'show'])->name('practice-sets.show');
     Route::delete('/practice-sets/{worksheet}', [PracticeSetController::class, 'destroy'])->name('practice-sets.destroy');
+
+    Route::get('/catch-up', [CatchUpSetController::class, 'index'])->name('catch-up.index');
+    Route::post('/catch-up/prompt', [CatchUpSetController::class, 'prompt'])->name('catch-up.prompt');
+    Route::post('/catch-up/import', [CatchUpSetController::class, 'import'])->name('catch-up.import');
 
     Route::post('/practice-sets/{worksheet}/assign', [SetAssignmentController::class, 'store'])->name('practice-sets.assign');
     Route::post('/practice-sets/{worksheet}/assign-bulk', [SetAssignmentController::class, 'storeBulk'])->name('practice-sets.assign-bulk');

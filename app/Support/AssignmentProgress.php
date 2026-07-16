@@ -54,7 +54,10 @@ class AssignmentProgress
                 ? $assignment->practiceSet->chapter?->name
                 : $assignment->practiceSet->topic?->chapter?->name,
             'scope' => $assignment->practiceSet->scope ?? 'topic',
-            'kind_label' => $assignment->practiceSet->isChapterTest() ? 'Test' : 'Practice',
+            'is_catch_up' => $assignment->practiceSet->isCatchUp(),
+            'kind_label' => $assignment->practiceSet->isCatchUp()
+                ? 'Catch-up'
+                : ($assignment->practiceSet->isChapterTest() ? 'Test' : 'Practice'),
             'question_count' => $assignment->practiceSet->questions_count ?? $assignment->practiceSet->questions()->count(),
             'assignment_status' => $assignment->status,
             'target_date' => $assignment->due_date?->toDateString(),
@@ -102,6 +105,7 @@ class AssignmentProgress
             'set_code' => $summary['set_code'],
             'set_number' => $summary['set_number'],
             'kind_label' => $summary['kind_label'],
+            'is_catch_up' => $summary['is_catch_up'],
             'scope' => $summary['scope'],
             'target_date' => $summary['target_date'],
             'is_overdue' => $summary['is_overdue'],

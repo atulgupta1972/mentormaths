@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
+use App\Support\WorksheetPurpose;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -26,6 +27,10 @@ class Worksheet extends Model
         'status',
         'notes',
         'created_by',
+        'purpose',
+        'catch_up_parent_worksheet_id',
+        'catch_up_for_enrollment_id',
+        'catch_up_source_question_ids',
     ];
 
     protected $appends = [
@@ -33,6 +38,13 @@ class Worksheet extends Model
         'tier_tagline',
         'display_title',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'catch_up_source_question_ids' => 'array',
+        ];
+    }
 
     public function topic(): BelongsTo
     {
@@ -59,9 +71,24 @@ class Worksheet extends Model
         return $this->isChapterScope() && ! $this->isChapterTest();
     }
 
+    public function isCatchUp(): bool
+    {
+        return ($this->purpose ?? WorksheetPurpose::STANDARD) === WorksheetPurpose::CATCH_UP;
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function catchUpParent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'catch_up_parent_worksheet_id');
+    }
+
+    public function catchUpEnrollment(): BelongsTo
+    {
+        return $this->belongsTo(StudentEnrollment::class, 'catch_up_for_enrollment_id');
     }
 
     public function questions(): BelongsToMany
@@ -100,6 +127,12 @@ class Worksheet extends Model
     public function getDisplayTitleAttribute(): string
     {
         $count = $this->questions_count ?? $this->questions()->count();
+
+        if ($this->isCatchUp()) {
+            return ($this->set_code ? $this->set_code.' · ' : '')
+                ."Catch-up · {$count} sums";
+        }
+
         $scopeLabel = $this->isChapterScope() ? 'Chapter test' : $this->tier_label;
 
         return ($this->set_code ? $this->set_code.' · ' : '')

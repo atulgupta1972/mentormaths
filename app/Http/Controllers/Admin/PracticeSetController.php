@@ -15,6 +15,7 @@ use App\Services\PracticeSetService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
+use App\Support\WorksheetPurpose;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -37,7 +38,11 @@ class PracticeSetController extends Controller
                 'topic.chapter.syllabusVersion.gradeLevel',
                 'creator:id,name',
             ])
-            ->withCount('questions');
+            ->withCount('questions')
+            ->where(function ($q) {
+                $q->whereNull('purpose')
+                    ->orWhere('purpose', WorksheetPurpose::STANDARD);
+            });
 
         $this->gradeContext->scopePracticeSets($query, $grade?->id);
 
