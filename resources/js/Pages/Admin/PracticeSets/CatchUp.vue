@@ -86,6 +86,10 @@ const importForm = useForm({
     due_date: dueDateDefault(),
 });
 
+const jsonFileInput = ref(null);
+const jsonFileName = ref('');
+const jsonUploadError = ref('');
+
 const filterParams = () => ({
     grade_level_id: classId.value || undefined,
     student_enrollment_id: studentEnrollmentId.value || undefined,
@@ -174,8 +178,38 @@ const importSets = () => {
     importForm.post(route('admin.catch-up.import'), {
         onSuccess: () => {
             importForm.json = '';
+            jsonFileName.value = '';
+            jsonUploadError.value = '';
         },
     });
+};
+
+const onJsonFileSelected = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    jsonUploadError.value = '';
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        importForm.json = String(reader.result || '');
+        jsonFileName.value = file.name;
+        importForm.clearErrors('json');
+    };
+    reader.onerror = () => {
+        jsonUploadError.value = 'Could not read that file. Try another .json file.';
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+};
+
+const clearImportedJson = () => {
+    importForm.json = '';
+    jsonFileName.value = '';
+    jsonUploadError.value = '';
+    importForm.clearErrors('json');
 };
 
 const copyPrompt = async () => {
@@ -430,7 +464,7 @@ const hasScopeFilter = computed(() =>
 
                 <section v-if="cursorPrompt" class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 shadow-sm">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                        <h3 class="text-sm font-semibold text-indigo-950">2. Copy prompt → Cursor → paste JSON</h3>
+                        <h3 class="text-sm font-semibold text-indigo-950">2. Copy prompt → Cursor</h3>
                         <button
                             type="button"
                             class="rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
@@ -444,17 +478,58 @@ const hasScopeFilter = computed(() =>
                         readonly
                         :value="cursorPrompt"
                     />
+                </section>
+
+                <section
+                    v-if="cursorPrompt || selectedIds.length"
+                    class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 shadow-sm"
+                >
+                    <h3 class="text-sm font-semibold text-indigo-950">
+                        {{ cursorPrompt ? '3. Import catch-up JSON' : '2. Import catch-up JSON' }}
+                    </h3>
+                    <p class="mt-1 text-xs text-indigo-900/70">
+                        Paste JSON from Cursor or upload a <strong>.json</strong> file, then create sets for the selected students.
+                    </p>
 
                     <form class="mt-4 space-y-3" @submit.prevent="importSets">
                         <div>
-                            <label class="block text-xs font-medium uppercase text-gray-600">Paste Cursor JSON</label>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <label class="block text-xs font-medium uppercase text-gray-600">Paste or upload JSON</label>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        class="rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                                        @click="jsonFileInput?.click()"
+                                    >
+                                        Upload .json
+                                    </button>
+                                    <button
+                                        v-if="importForm.json.trim()"
+                                        type="button"
+                                        class="text-xs font-semibold text-gray-500 hover:text-gray-700"
+                                        @click="clearImportedJson"
+                                    >
+                                        Clear
+                                    </button>
+                                </div>
+                            </div>
+                            <input
+                                ref="jsonFileInput"
+                                type="file"
+                                accept=".json,application/json"
+                                class="hidden"
+                                @change="onJsonFileSelected"
+                            >
+                            <p v-if="jsonFileName" class="mt-1 text-xs text-emerald-700">
+                                Loaded from {{ jsonFileName }}
+                            </p>
                             <textarea
                                 v-model="importForm.json"
                                 rows="10"
                                 class="mt-1 w-full rounded-md border-gray-300 font-mono text-xs shadow-sm"
                                 placeholder='{"students":[{"student_enrollment_id":…,"variants":[…]}]}'
-                                required
                             />
+                            <p v-if="jsonUploadError" class="mt-1 text-xs text-rose-600">{{ jsonUploadError }}</p>
                             <p v-if="importForm.errors.json" class="mt-1 text-xs text-rose-600">{{ importForm.errors.json }}</p>
                         </div>
                         <div class="max-w-xs">
@@ -469,7 +544,7 @@ const hasScopeFilter = computed(() =>
                         <button
                             type="submit"
                             class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                            :disabled="importForm.processing || !importForm.json.trim()"
+                            :disabled="importForm.processing || !importForm.json.trim() || !selectedIds.length"
                         >
                             {{ importForm.processing ? 'Creating…' : 'Create & assign catch-up sets' }}
                         </button>
