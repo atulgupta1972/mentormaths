@@ -164,6 +164,40 @@ class GuidedPracticeServiceTest extends TestCase
         $this->assertTrue($attempt->fresh()->guidedQuestions->first()->first_try_correct);
     }
 
+    public function test_repairs_one_based_sort_order_for_in_progress_attempt(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt(withGuidedInit: false);
+
+        foreach ($attempt->assignment->practiceSet->questions as $index => $question) {
+            GuidedAttemptQuestion::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'sort_order' => $index + 1,
+                'phase' => GuidedAttemptQuestion::PHASE_PENDING,
+            ]);
+        }
+
+        $attempt->update([
+            'mode' => SetAttempt::MODE_GUIDED,
+            'current_question_index' => 0,
+        ]);
+
+        $service = app(GuidedPracticeService::class);
+        $service->ensureAttemptReady($attempt->fresh());
+
+        $attempt->refresh()->load('guidedQuestions');
+
+        $this->assertSame(0, $attempt->current_question_index);
+        $this->assertSame(
+            GuidedAttemptQuestion::PHASE_ANSWERING,
+            $attempt->guidedQuestions->firstWhere('sort_order', 0)?->phase,
+        );
+
+        $payload = $service->buildPayload($attempt->fresh(['guidedQuestions.question.options']));
+        $this->assertFalse($payload['finished']);
+        $this->assertNotNull($payload['question']);
+    }
+
     public function test_stale_batch_attempt_on_topic_practice_upgrades_to_guided(): void
     {
         [$attempt] = $this->seedGuidedAttempt(withGuidedInit: false);

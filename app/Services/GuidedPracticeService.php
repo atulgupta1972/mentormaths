@@ -7,6 +7,7 @@ use App\Models\QuestionResolutionItem;
 use App\Models\SetAttempt;
 use App\Models\SetAttemptAnswer;
 use App\Models\SetAssignment;
+use App\Models\Worksheet;
 use App\Support\AnswerValidationService;
 use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
@@ -26,11 +27,13 @@ class GuidedPracticeService
                 $attempt->update(['mode' => SetAttempt::MODE_GUIDED]);
             }
 
+            $this->ensureAttemptReady($attempt);
+
             return;
         }
 
         $assignment = $attempt->assignment()->with('practiceSet.questions')->first();
-        $questions = $assignment->practiceSet->questions->values();
+        $questions = $this->orderedWorksheetQuestions($assignment->practiceSet);
 
         foreach ($questions as $index => $question) {
             GuidedAttemptQuestion::create([
@@ -47,6 +50,73 @@ class GuidedPracticeService
             'mode' => SetAttempt::MODE_GUIDED,
             'current_question_index' => 0,
         ]);
+    }
+
+    public function ensureAttemptReady(SetAttempt $attempt): void
+    {
+        if (! $attempt->isGuided() || $attempt->status !== SetAttempt::STATUS_IN_PROGRESS) {
+            return;
+        }
+
+        $attempt->loadMissing('guidedQuestions');
+
+        if ($attempt->guidedQuestions->isEmpty()) {
+            $this->initialize($attempt->fresh());
+
+            return;
+        }
+
+        DB::transaction(function () use ($attempt) {
+            $rows = $attempt->guidedQuestions()->orderBy('sort_order')->get()->values();
+            $needsRenumber = $rows->first()->sort_order !== 0
+                || $rows->last()->sort_order !== ($rows->count() - 1);
+
+            if ($needsRenumber) {
+                foreach ($rows as $index => $row) {
+                    if ((int) $row->sort_order !== $index) {
+                        $row->update(['sort_order' => $index]);
+                    }
+                }
+
+                $rows = $attempt->guidedQuestions()->orderBy('sort_order')->get()->values();
+            }
+
+            $activePhases = [
+                GuidedAttemptQuestion::PHASE_ANSWERING,
+                GuidedAttemptQuestion::PHASE_RETRY,
+                GuidedAttemptQuestion::PHASE_EXPLAINED,
+            ];
+
+            $current = $rows->first(fn (GuidedAttemptQuestion $row) => in_array($row->phase, $activePhases, true));
+
+            if (! $current) {
+                $current = $rows->firstWhere('phase', GuidedAttemptQuestion::PHASE_PENDING);
+
+                if ($current) {
+                    $current->update(['phase' => GuidedAttemptQuestion::PHASE_ANSWERING]);
+                }
+            }
+
+            if ($current) {
+                if ((int) $attempt->current_question_index !== (int) $current->sort_order) {
+                    $attempt->update(['current_question_index' => $current->sort_order]);
+                }
+
+                return;
+            }
+
+            if ($rows->every(fn (GuidedAttemptQuestion $row) => $row->isFinished())) {
+                $this->finalize($attempt->fresh(['guidedQuestions', 'assignment']));
+            }
+        });
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, \App\Models\Question>
+     */
+    private function orderedWorksheetQuestions(Worksheet $worksheet)
+    {
+        return $worksheet->questions()->orderBy('worksheet_question.sort_order')->get()->values();
     }
 
     /**

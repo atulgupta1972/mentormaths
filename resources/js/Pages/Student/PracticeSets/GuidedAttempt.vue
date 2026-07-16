@@ -271,7 +271,6 @@ watch(
                         <QuestionBody
                             :question-text="question.question_text"
                             :diagram-url="question.diagram_url"
-                            use-html
                         />
                     </div>
 
@@ -345,6 +344,13 @@ watch(
                             {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
                         </SecondaryButton>
                     </div>
+                </div>
+
+                <div v-else-if="finished" class="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+                    <p class="font-medium">This practice session has ended.</p>
+                    <Link :href="route('dashboard')" class="mt-3 inline-block text-indigo-600 hover:underline">
+                        Back to dashboard
+                    </Link>
                 </div>
 
                 <Link :href="route('dashboard')" class="inline-block text-sm text-indigo-600 hover:underline">

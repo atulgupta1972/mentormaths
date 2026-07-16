@@ -105,6 +105,15 @@ class PracticeSetController extends Controller
         $this->attemptService->ensureGuidedForTopicPractice($attempt);
         $attempt->refresh();
 
+        if ($attempt->isGuided()) {
+            $this->guidedPractice->ensureAttemptReady($attempt);
+            $attempt->refresh();
+        }
+
+        if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {
+            return redirect()->route('student.attempts.result', $attempt);
+        }
+
         if ($attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
             AttemptTiming::resumeSession($attempt);
             $attempt->refresh();
