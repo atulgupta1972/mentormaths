@@ -12,10 +12,6 @@ const props = defineProps({
         type: String,
         default: null,
     },
-    useHtml: {
-        type: Boolean,
-        default: false,
-    },
     compact: {
         type: Boolean,
         default: false,
@@ -29,15 +25,9 @@ const formattedText = computed(() => formatMcqText(props.questionText));
     <div>
         <QuestionDiagram :url="diagramUrl" :compact="compact" />
         <p
-            v-if="questionText && useHtml"
-            class="font-medium text-gray-900"
+            v-if="questionText"
+            class="whitespace-pre-wrap font-medium text-gray-900 [&_sup]:relative [&_sup]:top-[-0.35em] [&_sup]:text-[0.75em]"
             v-html="formattedText"
         />
-        <p
-            v-else-if="questionText"
-            class="whitespace-pre-wrap font-medium text-gray-900"
-        >
-            {{ questionText }}
-        </p>
     </div>
 </template>

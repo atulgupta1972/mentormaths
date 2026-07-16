@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
+import McqOptionLine from '@/Components/McqOptionLine.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
@@ -175,9 +176,9 @@ watch(
                                             <template v-else>
                                                 <p class="font-mono font-semibold text-gray-900">{{ question.correct_answer || '—' }}</p>
                                                 <ul v-if="question.options?.length" class="mt-1 space-y-0.5 text-xs text-gray-500">
-                                                    <li v-for="opt in question.options" :key="opt.letter">
-                                                        {{ opt.letter }}. {{ opt.option_text }}
-                                                        <span v-if="opt.is_correct" class="font-semibold text-emerald-700">✓</span>
+                                                    <li v-for="(opt, optIndex) in question.options" :key="opt.letter">
+                                                        <McqOptionLine :index="optIndex" :text="opt.option_text" />
+                                                        <span v-if="opt.is_correct" class="ml-1 font-semibold text-emerald-700">✓</span>
                                                     </li>
                                                 </ul>
                                             </template>
