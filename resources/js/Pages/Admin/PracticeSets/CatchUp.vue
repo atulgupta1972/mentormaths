@@ -5,6 +5,8 @@ import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     selectedGrade: Object,
+    gradeLevels: { type: Array, default: () => [] },
+    studentOptions: { type: Array, default: () => [] },
     chapters: { type: Array, default: () => [] },
     topics: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
@@ -18,26 +20,48 @@ const page = usePage();
 const flashSuccess = computed(() => page.props.flash?.success);
 const flashError = computed(() => page.props.flash?.error);
 
+const classId = ref(props.filters.grade_level_id ? String(props.filters.grade_level_id) : '');
+const studentEnrollmentId = ref(
+    props.filters.student_enrollment_id ? String(props.filters.student_enrollment_id) : '',
+);
 const chapterId = ref(props.filters.syllabus_chapter_id || '');
 const topicId = ref(props.filters.syllabus_topic_id || '');
-const selectedIds = ref(
-    props.selectedEnrollmentIds?.length
-        ? [...props.selectedEnrollmentIds]
-        : props.weakStudents.map((s) => s.student_enrollment_id),
+const selectedIds = ref([]);
+
+const syncSelectionFromFilters = () => {
+    const ids = props.weakStudents.map((s) => s.student_enrollment_id);
+
+    if (props.filters.student_enrollment_id) {
+        selectedIds.value = ids.filter((id) => id === props.filters.student_enrollment_id);
+    } else if (props.filters.grade_level_id) {
+        selectedIds.value = [...ids];
+    } else if (props.selectedEnrollmentIds?.length) {
+        selectedIds.value = props.selectedEnrollmentIds.filter((id) => ids.includes(id));
+        if (!selectedIds.value.length && ids.length) {
+            selectedIds.value = [...ids];
+        }
+    } else {
+        selectedIds.value = [];
+    }
+};
+
+watch(
+    () => [props.weakStudents, props.filters, props.selectedEnrollmentIds],
+    () => syncSelectionFromFilters(),
+    { immediate: true, deep: true },
 );
 
 watch(
-    () => props.weakStudents,
-    (rows) => {
-        const ids = rows.map((s) => s.student_enrollment_id);
-        if (props.selectedEnrollmentIds?.length) {
-            selectedIds.value = props.selectedEnrollmentIds.filter((id) => ids.includes(id));
-            if (!selectedIds.value.length) {
-                selectedIds.value = ids;
-            }
-        } else {
-            selectedIds.value = ids;
-        }
+    () => props.filters.grade_level_id,
+    (id) => {
+        classId.value = id ? String(id) : '';
+    },
+);
+
+watch(
+    () => props.filters.student_enrollment_id,
+    (id) => {
+        studentEnrollmentId.value = id ? String(id) : '';
     },
 );
 
@@ -62,15 +86,34 @@ const importForm = useForm({
     due_date: dueDateDefault(),
 });
 
+const filterParams = () => ({
+    grade_level_id: classId.value || undefined,
+    student_enrollment_id: studentEnrollmentId.value || undefined,
+    syllabus_chapter_id: chapterId.value || undefined,
+    syllabus_topic_id: topicId.value || undefined,
+});
+
 const applyFilters = () => {
-    router.get(route('admin.catch-up.index'), {
-        syllabus_chapter_id: chapterId.value || undefined,
-        syllabus_topic_id: topicId.value || undefined,
-    }, {
+    router.get(route('admin.catch-up.index'), filterParams(), {
         preserveState: true,
         replace: true,
     });
 };
+
+watch(classId, (value, oldValue) => {
+    if (value === oldValue) {
+        return;
+    }
+    studentEnrollmentId.value = '';
+    applyFilters();
+});
+
+watch(studentEnrollmentId, (value, oldValue) => {
+    if (value === oldValue) {
+        return;
+    }
+    applyFilters();
+});
 
 watch(chapterId, (value, oldValue) => {
     if (value === oldValue) {
@@ -151,10 +194,16 @@ const reasonLabel = (reason) => ({
 }[reason] || reason);
 
 const clearFilters = () => {
+    classId.value = '';
+    studentEnrollmentId.value = '';
     chapterId.value = '';
     topicId.value = '';
     router.get(route('admin.catch-up.index'), {}, { preserveState: true, replace: true });
 };
+
+const hasScopeFilter = computed(() =>
+    Boolean(classId.value || studentEnrollmentId.value || chapterId.value || topicId.value),
+);
 </script>
 
 <template>
@@ -166,10 +215,8 @@ const clearFilters = () => {
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Catch-up Sets</h2>
                     <p class="text-sm text-gray-500">
-                        Pick students who need more practice — all selected by default — then generate one Cursor prompt.
+                        Filter by class or student, then generate a Cursor prompt for the selected students only.
                     </p>
-                    <p v-if="selectedGrade" class="text-sm text-indigo-600">Showing: {{ selectedGrade.name }}</p>
-                    <p v-else class="text-sm text-amber-700">Tip: choose a class in the nav to narrow the list.</p>
                 </div>
                 <Link :href="route('admin.practice-sets.index')" class="text-sm text-indigo-600 hover:underline">
                     ← Practice sets
@@ -209,12 +256,51 @@ const clearFilters = () => {
                                 class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                                 @click="toggleAll"
                             >
-                                {{ allSelected ? 'Clear all' : 'Select all' }}
+                                {{ allSelected ? 'Clear all' : 'Select all shown' }}
                             </button>
                         </div>
                     </div>
 
                     <div class="mt-3 grid gap-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
+                        <div>
+                            <label class="block text-xs font-medium uppercase text-gray-500">Filter class</label>
+                            <select
+                                v-model="classId"
+                                class="mt-1 w-full rounded-md border-gray-300 text-sm shadow-sm"
+                            >
+                                <option value="">All classes</option>
+                                <option
+                                    v-for="grade in gradeLevels"
+                                    :key="grade.id"
+                                    :value="grade.id"
+                                >
+                                    {{ grade.name }} ({{ grade.weak_student_count }})
+                                </option>
+                            </select>
+                            <p class="mt-1 text-[11px] text-gray-500">
+                                Selecting a class shows and selects all its students.
+                            </p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium uppercase text-gray-500">Filter student (optional)</label>
+                            <select
+                                v-model="studentEnrollmentId"
+                                class="mt-1 w-full rounded-md border-gray-300 text-sm shadow-sm"
+                                :disabled="!studentOptions.length"
+                            >
+                                <option value="">All students{{ classId ? ' in class' : '' }}</option>
+                                <option
+                                    v-for="student in studentOptions"
+                                    :key="student.student_enrollment_id"
+                                    :value="student.student_enrollment_id"
+                                >
+                                    {{ student.student_name }}{{ student.grade_name && !classId ? ` · ${student.grade_name}` : '' }}
+                                </option>
+                            </select>
+                            <p class="mt-1 text-[11px] text-gray-500">
+                                Pick one student to create a catch-up set only for them.
+                            </p>
+                        </div>
                         <div>
                             <label class="block text-xs font-medium uppercase text-gray-500">Filter chapter (optional)</label>
                             <select
@@ -249,7 +335,7 @@ const clearFilters = () => {
                                     </option>
                                 </select>
                                 <button
-                                    v-if="chapterId || topicId"
+                                    v-if="hasScopeFilter"
                                     type="button"
                                     class="shrink-0 text-xs font-semibold text-indigo-600 hover:underline"
                                     @click="clearFilters"
@@ -281,6 +367,12 @@ const clearFilters = () => {
                                     <span v-if="student.grade_name" class="text-xs text-gray-500">{{ student.grade_name }}</span>
                                     <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-200">
                                         {{ student.weak_count }} weak sum{{ student.weak_count === 1 ? '' : 's' }}
+                                    </span>
+                                    <span
+                                        v-if="student.pending_catch_up_count"
+                                        class="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200"
+                                    >
+                                        {{ student.pending_catch_up_count }} catch-up pending
                                     </span>
                                 </div>
                                 <p class="mt-1 text-xs text-gray-600">
@@ -317,7 +409,7 @@ const clearFilters = () => {
                         <p class="text-sm font-medium text-gray-700">No students need catch-up right now</p>
                         <p class="mt-1 text-xs text-gray-500">
                             After students finish practice with wrongs / hints / help, they will appear here.
-                            Use the class selector in the nav if you expect to see someone.
+                            Try clearing filters or choosing a different class.
                         </p>
                     </div>
 
@@ -331,7 +423,7 @@ const clearFilters = () => {
                             {{ promptForm.processing ? 'Building…' : `Generate prompt for ${selectedIds.length || 0} student${selectedIds.length === 1 ? '' : 's'}` }}
                         </button>
                         <p class="text-xs text-gray-500">
-                            {{ selectedWeakCount }} weak sum{{ selectedWeakCount === 1 ? '' : 's' }} selected · one Cursor prompt for all
+                            {{ selectedWeakCount }} weak sum{{ selectedWeakCount === 1 ? '' : 's' }} selected · catch-up will be assigned only to checked students
                         </p>
                     </div>
                 </section>

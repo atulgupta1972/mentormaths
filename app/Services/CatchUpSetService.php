@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\GuidedAttemptQuestion;
 use App\Models\Question;
+use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\StudentEnrollment;
 use App\Models\SyllabusTopic;
@@ -37,8 +38,9 @@ class CatchUpSetService
         ?int $topicId = null,
     ): array {
         $grouped = $this->weakItemsByEnrollment($gradeLevelId, $chapterId, $topicId);
+        $pendingCatchUps = $this->pendingCatchUpCounts();
 
-        return $grouped->map(function (Collection $items, int $enrollmentId) {
+        return $grouped->map(function (Collection $items, int $enrollmentId) use ($pendingCatchUps) {
             $first = $items->first();
             $topics = $items->groupBy('topic_id')->map(function (Collection $topicItems) {
                 $row = $topicItems->first();
@@ -55,8 +57,10 @@ class CatchUpSetService
                 'student_enrollment_id' => $enrollmentId,
                 'student_id' => $first['student_id'],
                 'student_name' => $first['student_name'],
+                'grade_level_id' => $first['grade_level_id'],
                 'grade_name' => $first['grade_name'],
                 'weak_count' => $items->count(),
+                'pending_catch_up_count' => (int) ($pendingCatchUps->get($enrollmentId) ?? 0),
                 'topics' => $topics,
                 'items' => $items->values()->all(),
             ];
@@ -542,12 +546,27 @@ PROMPT;
                 'worksheet_id' => $practiceSet->id,
                 'tier' => $practiceSet->tier,
                 'reason' => $reason,
+                'grade_level_id' => (int) $enrollment->grade_level_id,
                 'student_id' => $enrollment->student_id,
                 'student_name' => $enrollment->student?->name ?? 'Student',
             ];
         }
 
         return collect($byEnrollment)->map(fn (array $items) => collect(array_values($items)));
+    }
+
+    /**
+     * @return Collection<int, int> enrollment_id => pending catch-up assignment count
+     */
+    private function pendingCatchUpCounts(): Collection
+    {
+        return SetAssignment::query()
+            ->selectRaw('student_enrollment_id, count(*) as pending_count')
+            ->whereIn('status', [SetAssignment::STATUS_ASSIGNED, SetAssignment::STATUS_IN_PROGRESS])
+            ->whereHas('practiceSet', fn ($q) => $q->where('purpose', WorksheetPurpose::CATCH_UP))
+            ->groupBy('student_enrollment_id')
+            ->pluck('pending_count', 'student_enrollment_id')
+            ->map(fn ($count) => (int) $count);
     }
 
     /**

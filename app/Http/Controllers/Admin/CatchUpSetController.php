@@ -26,6 +26,7 @@ class CatchUpSetController extends Controller
         $grade = $this->gradeContext->resolve($request);
         $topicId = $request->integer('syllabus_topic_id') ?: null;
         $chapterId = $request->integer('syllabus_chapter_id') ?: null;
+        $studentEnrollmentId = $request->integer('student_enrollment_id') ?: null;
 
         if ($topicId && ! $chapterId) {
             $chapterId = SyllabusTopic::query()->whereKey($topicId)->value('syllabus_chapter_id');
@@ -39,11 +40,39 @@ class CatchUpSetController extends Controller
                 ->get(['id', 'name'])
             : collect();
 
-        $weakStudents = $this->catchUpSetService->weakStudentsOverview(
+        $weakStudentsForClass = $this->catchUpSetService->weakStudentsOverview(
             $grade?->id,
             $chapterId,
             $topicId,
         );
+
+        $weakStudents = $studentEnrollmentId
+            ? array_values(array_filter(
+                $weakStudentsForClass,
+                fn (array $row) => (int) $row['student_enrollment_id'] === $studentEnrollmentId,
+            ))
+            : $weakStudentsForClass;
+
+        $overviewForClassCounts = $this->catchUpSetService->weakStudentsOverview(null, $chapterId, $topicId);
+        $countsByGrade = collect($overviewForClassCounts)->groupBy('grade_level_id')->map->count();
+        $gradeLevels = $this->gradeContext->classLevels()
+            ->map(fn ($level) => [
+                'id' => $level->id,
+                'name' => $level->name,
+                'weak_student_count' => (int) ($countsByGrade->get($level->id) ?? 0),
+            ])
+            ->filter(fn (array $level) => $level['weak_student_count'] > 0)
+            ->values();
+
+        $studentOptions = collect($weakStudentsForClass)
+            ->map(fn (array $row) => [
+                'student_enrollment_id' => $row['student_enrollment_id'],
+                'student_name' => $row['student_name'],
+                'grade_name' => $row['grade_name'],
+            ])
+            ->sortBy('student_name')
+            ->values()
+            ->all();
 
         $recentCatchUps = Worksheet::query()
             ->where('purpose', WorksheetPurpose::CATCH_UP)
@@ -69,9 +98,13 @@ class CatchUpSetController extends Controller
 
         return Inertia::render('Admin/PracticeSets/CatchUp', [
             'selectedGrade' => $grade?->only(['id', 'name']),
+            'gradeLevels' => $gradeLevels,
+            'studentOptions' => $studentOptions,
             'chapters' => $chapters,
             'topics' => $topics,
             'filters' => [
+                'grade_level_id' => $grade?->id,
+                'student_enrollment_id' => $studentEnrollmentId,
                 'syllabus_chapter_id' => $chapterId,
                 'syllabus_topic_id' => $topicId,
             ],
@@ -108,6 +141,10 @@ class CatchUpSetController extends Controller
 
         return redirect()
             ->route('admin.catch-up.index', array_filter([
+                'grade_level_id' => $grade?->id,
+                'student_enrollment_id' => count($validated['enrollment_ids']) === 1
+                    ? (int) $validated['enrollment_ids'][0]
+                    : null,
                 'syllabus_chapter_id' => $chapterId,
                 'syllabus_topic_id' => $topicId,
             ]))
@@ -151,6 +188,7 @@ class CatchUpSetController extends Controller
 
         return redirect()
             ->route('admin.catch-up.index', array_filter([
+                'grade_level_id' => $grade?->id,
                 'syllabus_chapter_id' => $chapterId,
                 'syllabus_topic_id' => $topicId,
             ]))
