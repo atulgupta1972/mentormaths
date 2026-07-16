@@ -90,6 +90,123 @@ class CatchUpSetServiceTest extends TestCase
         $this->assertSame([], $weakAfter);
     }
 
+    public function test_catch_up_set_codes_stay_unique_across_students(): void
+    {
+        [$topic, $enrollmentA, $sourceQuestionA, $assigner] = $this->seedWeakGuidedContext();
+
+        Worksheet::query()->create([
+            'title' => 'Existing catch-up',
+            'set_number' => 99,
+            'set_code' => 'S711-PC1',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::TOPIC,
+            'syllabus_topic_id' => $topic->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'purpose' => WorksheetPurpose::CATCH_UP,
+            'catch_up_for_enrollment_id' => $enrollmentA->id,
+            'catch_up_source_question_ids' => [999],
+            'created_by' => $assigner->id,
+        ]);
+
+        $studentB = Student::query()->create([
+            'name' => 'Vishvesh',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543211',
+            'school_name' => 'School',
+        ]);
+
+        $enrollmentB = StudentEnrollment::query()->create([
+            'student_id' => $studentB->id,
+            'academic_year_id' => $enrollmentA->academic_year_id,
+            'board_id' => $enrollmentA->board_id,
+            'grade_level_id' => $enrollmentA->grade_level_id,
+            'school_name' => 'School',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        $worksheet = Worksheet::query()->where('set_code', 'S711')->firstOrFail();
+        $questionB = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'question_text' => 'What is 5 + 5?',
+            'explanation' => '5 + 5 = 10',
+            'method_hint' => 'Add the two whole numbers.',
+            'type' => Question::TYPE_MCQ,
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+        QuestionOption::query()->create([
+            'question_id' => $questionB->id,
+            'option_text' => '9',
+            'is_correct' => false,
+            'sort_order' => 1,
+        ]);
+        QuestionOption::query()->create([
+            'question_id' => $questionB->id,
+            'option_text' => '10',
+            'is_correct' => true,
+            'sort_order' => 2,
+        ]);
+        $worksheet->questions()->attach($questionB->id, ['sort_order' => 2]);
+
+        $assignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollmentB->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $assigner->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek(),
+            'status' => SetAssignment::STATUS_COMPLETED,
+        ]);
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_GUIDED,
+            'started_at' => now()->subHour(),
+            'completed_at' => now(),
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'score' => 0,
+            'max_score' => 1,
+        ]);
+
+        GuidedAttemptQuestion::query()->create([
+            'set_attempt_id' => $attempt->id,
+            'question_id' => $questionB->id,
+            'sort_order' => 0,
+            'phase' => GuidedAttemptQuestion::PHASE_DONE,
+            'wrong_before_explanation' => 1,
+            'first_try_correct' => false,
+            'corrected_after_help' => true,
+            'used_early_hint' => true,
+            'final_is_correct' => true,
+        ]);
+
+        $json = json_encode([
+            'students' => [[
+                'student_enrollment_id' => $enrollmentB->id,
+                'variants' => [[
+                    'source_question_id' => $questionB->id,
+                    'syllabus_topic_id' => $topic->id,
+                    'type' => 'mcq',
+                    'question' => 'What is 6 + 6?',
+                    'options' => ['10', '11', '12', '13'],
+                    'correct_index' => 2,
+                    'method_hint' => 'Add the whole numbers.',
+                    'explanation' => '6 + 6 = 12',
+                    'difficulty' => 'Easy',
+                ]],
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $result = app(CatchUpSetService::class)->importAndCreate(
+            $json,
+            [$enrollmentB->id],
+            $assigner,
+            now()->addWeek()->toDateString(),
+        );
+
+        $this->assertSame('S711-PC2', $result['created'][0]['set_code']);
+        $this->assertNotSame($sourceQuestionA->id, $questionB->id);
+    }
+
     /**
      * @return array{0: SyllabusTopic, 1: StudentEnrollment, 2: Question, 3: User}
      */

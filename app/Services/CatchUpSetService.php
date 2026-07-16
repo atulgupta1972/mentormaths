@@ -366,7 +366,7 @@ PROMPT;
             ?? PracticeSetTier::STARTER);
 
         $enrollmentId = (int) $enrollment->id;
-        $setCode = $this->nextCatchUpCode($parentCode, $enrollmentId, $topic->id);
+        $setCode = $this->nextCatchUpCode($parentCode);
         $setNumber = $this->practiceSetService->nextSetNumber($topic->id);
         $studentName = $enrollment->student?->name ?? 'Student';
 
@@ -539,26 +539,34 @@ PROMPT;
         return collect($byEnrollment)->map(fn (array $items) => collect(array_values($items)));
     }
 
-    private function nextCatchUpCode(string $parentCode, int $enrollmentId, int $topicId): string
+    /**
+     * Globally unique catch-up codes (worksheets.set_code is unique).
+     * Example: SF711-PC1, SF711-PC2 across all students.
+     */
+    private function nextCatchUpCode(string $parentCode): string
     {
         $parentCode = preg_replace('/-PC\d+$/i', '', trim($parentCode)) ?: 'SET';
         $prefix = $parentCode.'-PC';
 
         $existing = Worksheet::query()
-            ->where('purpose', WorksheetPurpose::CATCH_UP)
-            ->where('catch_up_for_enrollment_id', $enrollmentId)
-            ->where('syllabus_topic_id', $topicId)
             ->where('set_code', 'like', $prefix.'%')
             ->pluck('set_code');
 
         $max = 0;
         foreach ($existing as $code) {
-            if (preg_match('/-PC(\d+)$/i', (string) $code, $m)) {
+            if (preg_match('/^'.preg_quote($prefix, '/').'(\d+)$/i', (string) $code, $m)) {
                 $max = max($max, (int) $m[1]);
             }
         }
 
-        return $prefix.($max + 1);
+        $seq = $max + 1;
+
+        // Safety: skip any collision (e.g. concurrent import / odd legacy codes).
+        while (Worksheet::query()->where('set_code', $prefix.$seq)->exists()) {
+            $seq++;
+        }
+
+        return $prefix.$seq;
     }
 
     /**
