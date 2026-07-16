@@ -35,12 +35,15 @@ class CatchUpSetServiceTest extends TestCase
 
         $service = app(CatchUpSetService::class);
         $weak = $service->weakStudentsForTopic($topic);
+        $overview = $service->weakStudentsOverview();
 
         $this->assertCount(1, $weak);
+        $this->assertCount(1, $overview);
         $this->assertSame($enrollment->id, $weak[0]['student_enrollment_id']);
         $this->assertSame(1, $weak[0]['weak_count']);
+        $this->assertSame($enrollment->id, $overview[0]['student_enrollment_id']);
 
-        $prompt = $service->buildBatchPrompt($topic, [$enrollment->id]);
+        $prompt = $service->buildBatchPrompt([$enrollment->id]);
         $this->assertStringContainsString((string) $sourceQuestion->id, $prompt);
         $this->assertStringContainsString('student_enrollment_id='.$enrollment->id, $prompt);
 
@@ -49,6 +52,7 @@ class CatchUpSetServiceTest extends TestCase
                 'student_enrollment_id' => $enrollment->id,
                 'variants' => [[
                     'source_question_id' => $sourceQuestion->id,
+                    'syllabus_topic_id' => $topic->id,
                     'type' => 'mcq',
                     'question' => 'What is 3 + 5?',
                     'options' => ['6', '7', '8', '9'],
@@ -61,7 +65,6 @@ class CatchUpSetServiceTest extends TestCase
         ], JSON_THROW_ON_ERROR);
 
         $result = $service->importAndCreate(
-            $topic,
             $json,
             [$enrollment->id],
             $assigner,

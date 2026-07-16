@@ -8,7 +8,6 @@ const props = defineProps({
     chapters: { type: Array, default: () => [] },
     topics: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
-    topic: Object,
     weakStudents: { type: Array, default: () => [] },
     recentCatchUps: { type: Array, default: () => [] },
     cursorPrompt: { type: String, default: null },
@@ -30,8 +29,14 @@ const selectedIds = ref(
 watch(
     () => props.weakStudents,
     (rows) => {
-        if (!props.selectedEnrollmentIds?.length) {
-            selectedIds.value = rows.map((s) => s.student_enrollment_id);
+        const ids = rows.map((s) => s.student_enrollment_id);
+        if (props.selectedEnrollmentIds?.length) {
+            selectedIds.value = props.selectedEnrollmentIds.filter((id) => ids.includes(id));
+            if (!selectedIds.value.length) {
+                selectedIds.value = ids;
+            }
+        } else {
+            selectedIds.value = ids;
         }
     },
 );
@@ -44,13 +49,15 @@ const dueDateDefault = () => {
 };
 
 const promptForm = useForm({
-    syllabus_topic_id: props.filters.syllabus_topic_id || '',
     enrollment_ids: selectedIds.value,
+    syllabus_chapter_id: props.filters.syllabus_chapter_id || '',
+    syllabus_topic_id: props.filters.syllabus_topic_id || '',
 });
 
 const importForm = useForm({
-    syllabus_topic_id: props.filters.syllabus_topic_id || '',
     enrollment_ids: selectedIds.value,
+    syllabus_chapter_id: props.filters.syllabus_chapter_id || '',
+    syllabus_topic_id: props.filters.syllabus_topic_id || '',
     json: '',
     due_date: dueDateDefault(),
 });
@@ -65,20 +72,30 @@ const applyFilters = () => {
     });
 };
 
-watch(chapterId, () => {
+watch(chapterId, (value, oldValue) => {
+    if (value === oldValue) {
+        return;
+    }
     topicId.value = '';
     applyFilters();
 });
 
-watch(topicId, () => {
-    if (topicId.value) {
-        applyFilters();
+watch(topicId, (value, oldValue) => {
+    if (value === oldValue) {
+        return;
     }
+    applyFilters();
 });
 
 const allSelected = computed(() =>
     props.weakStudents.length > 0
     && props.weakStudents.every((s) => selectedIds.value.includes(s.student_enrollment_id)),
+);
+
+const selectedWeakCount = computed(() =>
+    props.weakStudents
+        .filter((s) => selectedIds.value.includes(s.student_enrollment_id))
+        .reduce((sum, s) => sum + s.weak_count, 0),
 );
 
 const toggleAll = () => {
@@ -96,10 +113,12 @@ const toggleStudent = (id) => {
 };
 
 const syncForms = () => {
-    promptForm.syllabus_topic_id = topicId.value;
     promptForm.enrollment_ids = selectedIds.value;
-    importForm.syllabus_topic_id = topicId.value;
+    promptForm.syllabus_chapter_id = chapterId.value || '';
+    promptForm.syllabus_topic_id = topicId.value || '';
     importForm.enrollment_ids = selectedIds.value;
+    importForm.syllabus_chapter_id = chapterId.value || '';
+    importForm.syllabus_topic_id = topicId.value || '';
 };
 
 const generatePrompt = () => {
@@ -130,6 +149,12 @@ const reasonLabel = (reason) => ({
     corrected_after_help: 'Corrected after help',
     wrong_first_try: 'Wrong first try',
 }[reason] || reason);
+
+const clearFilters = () => {
+    chapterId.value = '';
+    topicId.value = '';
+    router.get(route('admin.catch-up.index'), {}, { preserveState: true, replace: true });
+};
 </script>
 
 <template>
@@ -141,9 +166,10 @@ const reasonLabel = (reason) => ({
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Catch-up Sets</h2>
                     <p class="text-sm text-gray-500">
-                        Topic-wise variants for students who got wrong, used a hint, or asked for help — one Cursor prompt for all selected students.
+                        Pick students who need more practice — all selected by default — then generate one Cursor prompt.
                     </p>
                     <p v-if="selectedGrade" class="text-sm text-indigo-600">Showing: {{ selectedGrade.name }}</p>
+                    <p v-else class="text-sm text-amber-700">Tip: choose a class in the nav to narrow the list.</p>
                 </div>
                 <Link :href="route('admin.practice-sets.index')" class="text-sm text-indigo-600 hover:underline">
                     ← Practice sets
@@ -166,16 +192,36 @@ const reasonLabel = (reason) => ({
                     {{ flashError }}
                 </div>
 
-                <section class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                    <h3 class="text-sm font-semibold text-gray-900">1. Choose topic</h3>
-                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                <section class="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                            <label class="block text-xs font-medium uppercase text-gray-500">Chapter</label>
+                            <h3 class="text-sm font-semibold text-gray-900">
+                                1. Students needing catch-up · {{ weakStudents.length }}
+                            </h3>
+                            <p class="text-xs text-gray-500">
+                                Wrong first try, used hint, or asked for help — and not yet covered by a catch-up set.
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                v-if="weakStudents.length"
+                                type="button"
+                                class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                @click="toggleAll"
+                            >
+                                {{ allSelected ? 'Clear all' : 'Select all' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 grid gap-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
+                        <div>
+                            <label class="block text-xs font-medium uppercase text-gray-500">Filter chapter (optional)</label>
                             <select
                                 v-model="chapterId"
                                 class="mt-1 w-full rounded-md border-gray-300 text-sm shadow-sm"
                             >
-                                <option value="">Select chapter</option>
+                                <option value="">All chapters</option>
                                 <option
                                     v-for="ch in chapters"
                                     :key="ch.id"
@@ -186,46 +232,42 @@ const reasonLabel = (reason) => ({
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-medium uppercase text-gray-500">Topic</label>
-                            <select
-                                v-model="topicId"
-                                class="mt-1 w-full rounded-md border-gray-300 text-sm shadow-sm"
-                                :disabled="!chapterId"
-                            >
-                                <option value="">Select topic</option>
-                                <option
-                                    v-for="t in topics"
-                                    :key="t.id"
-                                    :value="t.id"
+                            <label class="block text-xs font-medium uppercase text-gray-500">Filter topic (optional)</label>
+                            <div class="mt-1 flex gap-2">
+                                <select
+                                    v-model="topicId"
+                                    class="w-full rounded-md border-gray-300 text-sm shadow-sm"
+                                    :disabled="!chapterId"
                                 >
-                                    {{ t.name }}
-                                </option>
-                            </select>
+                                    <option value="">All topics</option>
+                                    <option
+                                        v-for="t in topics"
+                                        :key="t.id"
+                                        :value="t.id"
+                                    >
+                                        {{ t.name }}
+                                    </option>
+                                </select>
+                                <button
+                                    v-if="chapterId || topicId"
+                                    type="button"
+                                    class="shrink-0 text-xs font-semibold text-indigo-600 hover:underline"
+                                    @click="clearFilters"
+                                >
+                                    Clear
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </section>
 
-                <section v-if="topic" class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                            <h3 class="text-sm font-semibold text-gray-900">2. Students with weak sums</h3>
-                            <p class="text-xs text-gray-500">{{ topic.chapter_name }} — {{ topic.name }}</p>
-                        </div>
-                        <button
-                            v-if="weakStudents.length"
-                            type="button"
-                            class="text-xs font-semibold text-indigo-600 hover:underline"
-                            @click="toggleAll"
-                        >
-                            {{ allSelected ? 'Clear all' : 'Select all' }}
-                        </button>
-                    </div>
-
-                    <div v-if="weakStudents.length" class="mt-3 space-y-2">
+                    <div v-if="weakStudents.length" class="mt-4 space-y-2">
                         <label
                             v-for="student in weakStudents"
                             :key="student.student_enrollment_id"
-                            class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 hover:border-indigo-200"
+                            class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition"
+                            :class="selectedIds.includes(student.student_enrollment_id)
+                                ? 'border-indigo-300 bg-indigo-50/60'
+                                : 'border-gray-100 bg-gray-50 hover:border-indigo-200'"
                         >
                             <input
                                 type="checkbox"
@@ -234,13 +276,25 @@ const reasonLabel = (reason) => ({
                                 @change="toggleStudent(student.student_enrollment_id)"
                             >
                             <div class="min-w-0 flex-1">
-                                <p class="text-sm font-semibold text-gray-900">
-                                    {{ student.student_name }}
-                                    <span class="ml-1 font-normal text-gray-500">· {{ student.weak_count }} sum{{ student.weak_count === 1 ? '' : 's' }}</span>
+                                <div class="flex flex-wrap items-baseline gap-2">
+                                    <p class="text-sm font-semibold text-gray-900">{{ student.student_name }}</p>
+                                    <span v-if="student.grade_name" class="text-xs text-gray-500">{{ student.grade_name }}</span>
+                                    <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-200">
+                                        {{ student.weak_count }} weak sum{{ student.weak_count === 1 ? '' : 's' }}
+                                    </span>
+                                </div>
+                                <p class="mt-1 text-xs text-gray-600">
+                                    <span
+                                        v-for="(topic, idx) in student.topics"
+                                        :key="topic.topic_id"
+                                    >
+                                        <span v-if="idx > 0"> · </span>
+                                        {{ topic.chapter_name ? `${topic.chapter_name} / ` : '' }}{{ topic.topic_name }} ({{ topic.weak_count }})
+                                    </span>
                                 </p>
-                                <ul class="mt-1 space-y-1">
+                                <ul class="mt-2 space-y-1">
                                     <li
-                                        v-for="item in student.items"
+                                        v-for="item in student.items.slice(0, 4)"
                                         :key="item.question_id"
                                         class="text-xs text-gray-600"
                                     >
@@ -248,31 +302,43 @@ const reasonLabel = (reason) => ({
                                         · {{ reasonLabel(item.reason) }}
                                         · <span class="line-clamp-1 inline">{{ item.question_text }}</span>
                                     </li>
+                                    <li v-if="student.items.length > 4" class="text-xs text-gray-400">
+                                        +{{ student.items.length - 4 }} more
+                                    </li>
                                 </ul>
                             </div>
                         </label>
                     </div>
 
-                    <p v-else class="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-500">
-                        No pending weak sums for this topic (or catch-up already covers them).
-                    </p>
+                    <div
+                        v-else
+                        class="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center"
+                    >
+                        <p class="text-sm font-medium text-gray-700">No students need catch-up right now</p>
+                        <p class="mt-1 text-xs text-gray-500">
+                            After students finish practice with wrongs / hints / help, they will appear here.
+                            Use the class selector in the nav if you expect to see someone.
+                        </p>
+                    </div>
 
-                    <div class="mt-4 flex flex-wrap items-center gap-3">
+                    <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
                         <button
                             type="button"
                             class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                             :disabled="!selectedIds.length || promptForm.processing"
                             @click="generatePrompt"
                         >
-                            {{ promptForm.processing ? 'Building…' : 'Generate one prompt for selected' }}
+                            {{ promptForm.processing ? 'Building…' : `Generate prompt for ${selectedIds.length || 0} student${selectedIds.length === 1 ? '' : 's'}` }}
                         </button>
-                        <p class="text-xs text-gray-500">Creates one Cursor prompt covering all selected students.</p>
+                        <p class="text-xs text-gray-500">
+                            {{ selectedWeakCount }} weak sum{{ selectedWeakCount === 1 ? '' : 's' }} selected · one Cursor prompt for all
+                        </p>
                     </div>
                 </section>
 
                 <section v-if="cursorPrompt" class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 shadow-sm">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                        <h3 class="text-sm font-semibold text-indigo-950">3. Copy prompt → Cursor → paste JSON</h3>
+                        <h3 class="text-sm font-semibold text-indigo-950">2. Copy prompt → Cursor → paste JSON</h3>
                         <button
                             type="button"
                             class="rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"

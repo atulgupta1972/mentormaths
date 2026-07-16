@@ -39,8 +39,11 @@ class CatchUpSetController extends Controller
                 ->get(['id', 'name'])
             : collect();
 
-        $topic = $topicId ? SyllabusTopic::with('chapter')->find($topicId) : null;
-        $weakStudents = $topic ? $this->catchUpSetService->weakStudentsForTopic($topic) : [];
+        $weakStudents = $this->catchUpSetService->weakStudentsOverview(
+            $grade?->id,
+            $chapterId,
+            $topicId,
+        );
 
         $recentCatchUps = Worksheet::query()
             ->where('purpose', WorksheetPurpose::CATCH_UP)
@@ -72,11 +75,6 @@ class CatchUpSetController extends Controller
                 'syllabus_chapter_id' => $chapterId,
                 'syllabus_topic_id' => $topicId,
             ],
-            'topic' => $topic ? [
-                'id' => $topic->id,
-                'name' => $topic->name,
-                'chapter_name' => $topic->chapter?->name,
-            ] : null,
             'weakStudents' => $weakStudents,
             'recentCatchUps' => $recentCatchUps,
             'cursorPrompt' => session('catch_up_cursor_prompt'),
@@ -87,24 +85,32 @@ class CatchUpSetController extends Controller
     public function prompt(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'syllabus_topic_id' => ['required', 'exists:syllabus_topics,id'],
             'enrollment_ids' => ['required', 'array', 'min:1'],
             'enrollment_ids.*' => ['integer', 'exists:student_enrollments,id'],
+            'syllabus_chapter_id' => ['nullable', 'exists:syllabus_chapters,id'],
+            'syllabus_topic_id' => ['nullable', 'exists:syllabus_topics,id'],
         ]);
 
-        $topic = SyllabusTopic::findOrFail($validated['syllabus_topic_id']);
+        $grade = $this->gradeContext->resolve($request);
+        $chapterId = ! empty($validated['syllabus_chapter_id']) ? (int) $validated['syllabus_chapter_id'] : null;
+        $topicId = ! empty($validated['syllabus_topic_id']) ? (int) $validated['syllabus_topic_id'] : null;
 
         try {
-            $prompt = $this->catchUpSetService->buildBatchPrompt($topic, $validated['enrollment_ids']);
+            $prompt = $this->catchUpSetService->buildBatchPrompt(
+                $validated['enrollment_ids'],
+                $grade?->id,
+                $chapterId,
+                $topicId,
+            );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
         return redirect()
-            ->route('admin.catch-up.index', [
-                'syllabus_chapter_id' => $topic->syllabus_chapter_id,
-                'syllabus_topic_id' => $topic->id,
-            ])
+            ->route('admin.catch-up.index', array_filter([
+                'syllabus_chapter_id' => $chapterId,
+                'syllabus_topic_id' => $topicId,
+            ]))
             ->with('catch_up_cursor_prompt', $prompt)
             ->with('catch_up_enrollment_ids', array_map('intval', $validated['enrollment_ids']))
             ->with('success', 'Catch-up prompt ready — copy into Cursor, then paste the JSON below.');
@@ -113,22 +119,27 @@ class CatchUpSetController extends Controller
     public function import(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'syllabus_topic_id' => ['required', 'exists:syllabus_topics,id'],
             'enrollment_ids' => ['required', 'array', 'min:1'],
             'enrollment_ids.*' => ['integer', 'exists:student_enrollments,id'],
+            'syllabus_chapter_id' => ['nullable', 'exists:syllabus_chapters,id'],
+            'syllabus_topic_id' => ['nullable', 'exists:syllabus_topics,id'],
             'json' => ['required', 'string'],
             'due_date' => ['required', 'date'],
         ]);
 
-        $topic = SyllabusTopic::findOrFail($validated['syllabus_topic_id']);
+        $grade = $this->gradeContext->resolve($request);
+        $chapterId = ! empty($validated['syllabus_chapter_id']) ? (int) $validated['syllabus_chapter_id'] : null;
+        $topicId = ! empty($validated['syllabus_topic_id']) ? (int) $validated['syllabus_topic_id'] : null;
 
         try {
             $result = $this->catchUpSetService->importAndCreate(
-                $topic,
                 $validated['json'],
                 $validated['enrollment_ids'],
                 $request->user(),
                 $validated['due_date'],
+                $grade?->id,
+                $chapterId,
+                $topicId,
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage())->withInput();
@@ -139,13 +150,12 @@ class CatchUpSetController extends Controller
         $request->session()->forget(['catch_up_cursor_prompt', 'catch_up_enrollment_ids']);
 
         return redirect()
-            ->route('admin.catch-up.index', [
-                'syllabus_chapter_id' => $topic->syllabus_chapter_id,
-                'syllabus_topic_id' => $topic->id,
-            ])
+            ->route('admin.catch-up.index', array_filter([
+                'syllabus_chapter_id' => $chapterId,
+                'syllabus_topic_id' => $topicId,
+            ]))
             ->with('success', 'Created catch-up sets: '.$codes.'. Students can open them under Catch-up Sets on their dashboard.');
     }
-
 
     private function chapterOptions(?int $gradeLevelId)
     {
