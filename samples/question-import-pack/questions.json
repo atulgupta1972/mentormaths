@@ -1,0 +1,24 @@
+{
+  "questions": [
+    {
+      "topic": "Related Angles",
+      "question": "In the figure, lines AB and CD intersect at O. If ∠AOC = 58°, then the vertically opposite angle ∠BOD = ____°.",
+      "diagram_file": "q1.jpg",
+      "answer_format": "integer",
+      "correct_answer": "58",
+      "method_hint": "Vertically opposite angles formed by two intersecting lines are equal.",
+      "explanation": "∠AOC and ∠BOD are vertically opposite angles, so ∠BOD = 58°.",
+      "difficulty": "Medium"
+    },
+    {
+      "topic": "Parallel Lines & Transversal",
+      "question": "In the figure, l ∥ m and t is a transversal. If ∠1 = 65° (corresponding angles), then ∠5 = ____°.",
+      "diagram_file": "q2.jpg",
+      "answer_format": "integer",
+      "correct_answer": "65",
+      "method_hint": "Corresponding angles are equal when lines are parallel.",
+      "explanation": "∠1 and ∠5 are corresponding angles with l ∥ m, so ∠5 = 65°.",
+      "difficulty": "Medium"
+    }
+  ]
+}

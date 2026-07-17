@@ -18,6 +18,7 @@ use App\Services\PdfWorksheetImportService;
 use App\Services\QuestionDiagramService;
 use App\Services\QuestionMethodHintService;
 use App\Services\QuestionSaveConfirmation;
+use App\Services\QuestionZipImportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -34,6 +35,7 @@ class QuestionController extends Controller
         private AdminGradeContext $gradeContext,
         private QuestionMethodHintService $methodHintService,
         private QuestionSaveConfirmation $saveConfirmation,
+        private QuestionZipImportService $zipImportService,
     ) {}
 
     public function topicIndex(Request $request, SyllabusTopic $topic): Response
@@ -203,6 +205,67 @@ class QuestionController extends Controller
                     ->value('syllabus_chapter_id'),
             ]))
             ->with('import_rows', $rows);
+    }
+
+    public function importZipPack(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'pack' => ['required', 'file', 'mimes:zip', 'max:51200'],
+            'scope' => ['required', 'in:topic,chapter'],
+            'syllabus_topic_id' => ['required_if:scope,topic', 'nullable', 'exists:syllabus_topics,id'],
+            'syllabus_chapter_id' => ['required_if:scope,chapter', 'nullable', 'exists:syllabus_chapters,id'],
+            'bank_purpose' => ['nullable', 'in:'.implode(',', QuestionBankPurpose::all())],
+        ], [
+            'pack.required' => 'Choose a .zip file containing questions.json and diagram images.',
+            'pack.mimes' => 'Upload a .zip file (questions.json + JPG/PNG images).',
+            'pack.max' => 'Zip file must be smaller than 50 MB.',
+        ]);
+
+        $topic = ! empty($validated['syllabus_topic_id'])
+            ? SyllabusTopic::query()->with('chapter')->findOrFail($validated['syllabus_topic_id'])
+            : null;
+        $chapter = ! empty($validated['syllabus_chapter_id'])
+            ? SyllabusChapter::query()->with('topics')->findOrFail($validated['syllabus_chapter_id'])
+            : null;
+
+        try {
+            $result = $this->zipImportService->importPack(
+                $request->file('pack'),
+                $request->user(),
+                $topic,
+                $chapter,
+                QuestionBankPurpose::normalize($validated['bank_purpose'] ?? QuestionBankPurpose::PRACTICE_SET),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $saved = $result['saved'];
+        $typeLabel = $result['type'] === QuestionZipImportService::TYPE_FILL_IN_BLANK
+            ? 'fill-in-the-blank'
+            : 'MCQ';
+        $message = count($saved)." {$typeLabel} question(s) imported from zip.";
+        if ($result['diagram_count'] > 0) {
+            $message .= " {$result['diagram_count']} diagram(s) attached.";
+        }
+
+        $bankPurpose = QuestionBankPurpose::normalize($validated['bank_purpose'] ?? QuestionBankPurpose::PRACTICE_SET);
+        if ($chapter) {
+            $confirmation = $this->saveConfirmation->build($saved, $bankPurpose, $chapter);
+
+            return redirect()
+                ->route('admin.questions.chapters.show', $chapter->id)
+                ->with('success', $message)
+                ->with('save_confirmation', $confirmation);
+        }
+
+        $topic?->load('chapter');
+        $confirmation = $this->saveConfirmation->build($saved, $bankPurpose, topic: $topic);
+
+        return redirect()
+            ->route('admin.questions.chapters.show', $topic?->syllabus_chapter_id)
+            ->with('success', $message)
+            ->with('save_confirmation', $confirmation);
     }
 
     public function storeBulkFillBlank(Request $request): RedirectResponse

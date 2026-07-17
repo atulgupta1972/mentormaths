@@ -75,6 +75,49 @@ const saveForm = useForm({
     rows: [],
 });
 
+const zipPackInput = ref(null);
+const zipImportForm = useForm({
+    pack: null,
+    scope: scopeMode.value,
+    syllabus_chapter_id: '',
+    syllabus_topic_id: '',
+});
+
+const onZipPackSelected = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    if (!chapterFilter.value) {
+        previewError.value = 'Select a chapter first.';
+        event.target.value = '';
+
+        return;
+    }
+
+    if (isTopicScope.value && !selectedTopic.value) {
+        previewError.value = 'Select a topic first.';
+        event.target.value = '';
+
+        return;
+    }
+
+    zipImportForm.pack = file;
+    zipImportForm.scope = scopeMode.value;
+    zipImportForm.syllabus_chapter_id = isChapterScope.value ? chapterFilter.value : '';
+    zipImportForm.syllabus_topic_id = isTopicScope.value ? selectedTopic.value : '';
+
+    zipImportForm.post(route('admin.questions.import-zip-pack'), {
+        forceFormData: true,
+        onError: (errors) => {
+            previewError.value = errors.pack || errors.syllabus_chapter_id || errors.syllabus_topic_id || 'Could not import zip pack.';
+        },
+    });
+
+    event.target.value = '';
+};
+
 const difficultySum = computed(
     () => Number(promptSettings.value.easy) + Number(promptSettings.value.medium) + Number(promptSettings.value.hard),
 );
@@ -454,6 +497,34 @@ onMounted(() => {
                         </select>
                         <p v-if="chapterTopics.length === 0" class="mt-1 text-xs text-amber-700">No topics in this chapter.</p>
                     </div>
+                </div>
+
+                <div v-if="chapterFilter" class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
+                    <h3 class="font-semibold text-emerald-950">Quick import — one .zip file</h3>
+                    <p class="mt-1 text-sm text-emerald-900">
+                        Upload a zip containing <strong>questions.json</strong> plus diagram images (<strong>q1.jpg</strong>, <strong>q2.jpg</strong>, … or names in <strong>diagram_file</strong>).
+                        Questions and diagrams are saved to the bank in one step.
+                    </p>
+                    <p class="mt-2 text-xs text-emerald-800">
+                        Example zip layout: <span class="font-mono">questions.json, q1.jpg, q2.jpg, …</span>
+                    </p>
+                    <div class="mt-4 flex flex-wrap items-center gap-3">
+                        <PrimaryButton
+                            type="button"
+                            :disabled="zipImportForm.processing || (isTopicScope && !selectedTopic)"
+                            @click="zipPackInput?.click()"
+                        >
+                            {{ zipImportForm.processing ? 'Importing…' : 'Upload .zip pack → save to bank' }}
+                        </PrimaryButton>
+                        <InputError :message="zipImportForm.errors.pack" />
+                    </div>
+                    <input
+                        ref="zipPackInput"
+                        type="file"
+                        accept=".zip,application/zip"
+                        class="hidden"
+                        @change="onZipPackSelected"
+                    />
                 </div>
 
                 <ChapterQuestionPlan

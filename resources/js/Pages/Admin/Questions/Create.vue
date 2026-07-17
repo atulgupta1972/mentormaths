@@ -59,6 +59,51 @@ const bankPurpose = ref('practice_set');
 const showSavePurposeModal = ref(false);
 const generatingChapterPrompt = ref(false);
 
+const zipPackInput = ref(null);
+const zipImportForm = useForm({
+    pack: null,
+    scope: scopeMode.value,
+    syllabus_chapter_id: '',
+    syllabus_topic_id: '',
+    bank_purpose: bankPurpose.value,
+});
+
+const onZipPackSelected = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    if (isChapterScope.value && !chapterFilter.value) {
+        previewError.value = 'Select a chapter first.';
+        event.target.value = '';
+
+        return;
+    }
+
+    if (isTopicScope.value && !selectedTopic.value) {
+        previewError.value = 'Select a topic first.';
+        event.target.value = '';
+
+        return;
+    }
+
+    zipImportForm.pack = file;
+    zipImportForm.scope = scopeMode.value;
+    zipImportForm.syllabus_chapter_id = isChapterScope.value ? chapterFilter.value : '';
+    zipImportForm.syllabus_topic_id = isTopicScope.value ? selectedTopic.value : '';
+    zipImportForm.bank_purpose = bankPurpose.value;
+
+    zipImportForm.post(route('admin.questions.import-zip-pack'), {
+        forceFormData: true,
+        onError: (errors) => {
+            previewError.value = errors.pack || errors.syllabus_chapter_id || errors.syllabus_topic_id || 'Could not import zip pack.';
+        },
+    });
+
+    event.target.value = '';
+};
+
 const bankPurposeOptions = [
     {
         value: 'practice_set',
@@ -894,6 +939,34 @@ watch(() => props.initialImportRows, (importRows) => {
                     <p class="mt-2 text-xs text-indigo-800">
                         Each question in the JSON must include a <strong>topic</strong> field matching a topic name in this chapter.
                     </p>
+                </div>
+
+                <div
+                    v-if="(isChapterScope && chapterFilter) || (isTopicScope && topic)"
+                    class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm"
+                >
+                    <h3 class="font-semibold text-emerald-950">Quick import — one .zip file</h3>
+                    <p class="mt-1 text-sm text-emerald-900">
+                        Upload a zip with <strong>questions.json</strong> + diagram images (<strong>q1.jpg</strong>, <strong>q2.jpg</strong>, …).
+                        Saves questions and attaches diagrams in one step.
+                    </p>
+                    <div class="mt-4 flex flex-wrap items-center gap-3">
+                        <PrimaryButton
+                            type="button"
+                            :disabled="zipImportForm.processing"
+                            @click="zipPackInput?.click()"
+                        >
+                            {{ zipImportForm.processing ? 'Importing…' : 'Upload .zip pack → save to bank' }}
+                        </PrimaryButton>
+                        <InputError :message="zipImportForm.errors.pack" />
+                    </div>
+                    <input
+                        ref="zipPackInput"
+                        type="file"
+                        accept=".zip,application/zip"
+                        class="hidden"
+                        @change="onZipPackSelected"
+                    />
                 </div>
 
                 <div v-if="isChapterScope" class="rounded-lg bg-white p-6 shadow-sm">
