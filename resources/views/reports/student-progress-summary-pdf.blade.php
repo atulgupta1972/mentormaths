@@ -16,6 +16,12 @@
         .chart-block { margin-top: 16px; page-break-inside: avoid; }
         .chart-box { border: 1px solid #e5e7eb; padding: 8px; margin-top: 8px; }
         .chart-img { width: 100%; max-width: 500px; height: auto; }
+        .bar-track { background: #e5e7eb; height: 14px; width: 100%; }
+        .bar-fill { background: #4f46e5; height: 14px; }
+        .line-grid { width: 100%; border-collapse: collapse; height: 130px; border-bottom: 1px solid #d1d5db; }
+        .line-grid td { border: none; vertical-align: bottom; text-align: center; padding: 2px; }
+        .line-dot { width: 10px; background: #059669; margin: 0 auto; }
+        .line-label { font-size: 8px; color: #374151; }
     </style>
 </head>
 <body>
@@ -104,12 +110,32 @@
         </table>
     @endif
 
-    @if (! empty($summary['charts']['chapter_bar_chart'] ?? null))
+    @if (! empty($chartPaths['chapter_bar_chart'] ?? null))
         <div class="chart-block">
             <h2>Chapter performance chart</h2>
             <p class="muted">Overall % by chapter</p>
             <div class="chart-box">
-                <img src="{{ $summary['charts']['chapter_bar_chart'] }}" alt="Chapter performance chart" class="chart-img" />
+                <img src="{{ $chartPaths['chapter_bar_chart'] }}" alt="Chapter performance chart" class="chart-img" />
+            </div>
+        </div>
+    @elseif (count($summary['chapter_performance'] ?? []) > 0)
+        <div class="chart-block">
+            <h2>Chapter performance chart</h2>
+            <p class="muted">Overall % by chapter</p>
+            <div class="chart-box">
+                <table style="width:100%; border:none;">
+                    @foreach ($summary['chapter_performance'] as $row)
+                        <tr>
+                            <td style="width:34%; border:none; padding:4px 8px 4px 0;">{{ $row['chapter_name'] }}</td>
+                            <td style="border:none; padding:4px 0;">
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width: {{ max(0, min(100, (int) ($row['percent'] ?? 0))) }}%;"></div>
+                                </div>
+                            </td>
+                            <td style="width:12%; border:none; text-align:right; padding-left:8px;">{{ $row['percent'] ?? '—' }}%</td>
+                        </tr>
+                    @endforeach
+                </table>
             </div>
         </div>
     @endif
@@ -144,12 +170,35 @@
         </div>
     @endif
 
-    @if (! empty($summary['charts']['date_line_chart'] ?? null))
+    @if (! empty($chartPaths['date_line_chart'] ?? null))
         <div class="chart-block">
             <h2>Date-wise performance chart</h2>
             <p class="muted">Trend of overall % by submission date</p>
             <div class="chart-box">
-                <img src="{{ $summary['charts']['date_line_chart'] }}" alt="Date-wise performance chart" class="chart-img" />
+                <img src="{{ $chartPaths['date_line_chart'] }}" alt="Date-wise performance chart" class="chart-img" />
+            </div>
+        </div>
+    @elseif (count($summary['date_performance'] ?? []) > 0)
+        <div class="chart-block">
+            <h2>Date-wise performance chart</h2>
+            <p class="muted">Trend of overall % by submission date</p>
+            <div class="chart-box">
+                <table class="line-grid">
+                    <tr>
+                        @foreach ($summary['date_performance'] as $row)
+                            @php($height = max(6, min(100, (int) ($row['percent'] ?? 0))))
+                            <td>
+                                <div class="line-label">{{ $row['percent'] ?? '—' }}%</div>
+                                <div class="line-dot" style="height: {{ $height }}px;"></div>
+                            </td>
+                        @endforeach
+                    </tr>
+                    <tr>
+                        @foreach ($summary['date_performance'] as $row)
+                            <td class="line-label">{{ $row['date_label'] }}</td>
+                        @endforeach
+                    </tr>
+                </table>
             </div>
         </div>
     @endif

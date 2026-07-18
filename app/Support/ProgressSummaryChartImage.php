@@ -132,7 +132,7 @@ class ProgressSummaryChartImage
         foreach ([0, 25, 50, 75, 100] as $tick) {
             $y = (int) ($margin['top'] + $plotHeight - (($tick / 100) * $plotHeight));
             imageline($img, $margin['left'], $y, $margin['left'] + $plotWidth, $y, $gridColor);
-            imagestring($img, 1, 8, $y - 4, (string) $tick, $labelColor);
+            imagestring($img, 1, 4, $y - 4, str_pad((string) $tick, 3, ' ', STR_PAD_LEFT), $labelColor);
         }
     }
 
