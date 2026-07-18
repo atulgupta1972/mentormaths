@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
 use App\Services\DashboardService;
+use App\Support\StudentWeeklyReportEmails;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,10 +26,14 @@ class DashboardController extends Controller
 
         $enrollment = $user->student?->currentEnrollment();
         $studentData = $this->dashboardService->forStudent($enrollment);
+        $student = $user->student;
 
         return Inertia::render('Dashboard', [
             'isAdmin' => false,
             'activeYear' => AcademicYear::active()?->only(['id', 'name']),
+            'weeklyReportEmails' => $student
+                ? StudentWeeklyReportEmails::display($student->parent1_email, $student->parent2_email)
+                : '',
             ...$studentData,
         ]);
     }

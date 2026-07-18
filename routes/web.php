@@ -228,6 +228,8 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::patch('/profile/student-contacts', [StudentProfileController::class, 'updateContacts'])
         ->name('profile.student-contacts.update');
+    Route::patch('/profile/weekly-report-emails', [StudentProfileController::class, 'updateWeeklyReportEmails'])
+        ->name('profile.weekly-report-emails.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 

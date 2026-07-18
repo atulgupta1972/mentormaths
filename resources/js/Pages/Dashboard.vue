@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
+import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref } from 'vue';
@@ -25,6 +26,7 @@ const props = defineProps({
     helpRequests: { type: Array, default: () => [] },
     resolutionItems: { type: Array, default: () => [] },
     resolutionCount: { type: Number, default: 0 },
+    weeklyReportEmails: { type: String, default: '' },
 });
 
 const showManageExams = ref(false);
@@ -534,6 +536,8 @@ const adminSetStatusClass = (set) => {
                             </Link>
                         </div>
                     </div>
+
+                    <StudentWeeklyReportEmailsPanel :initial-emails="weeklyReportEmails" />
 
                     <!-- Main row: exams (LHS) · to do (RHS) -->
                     <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
