@@ -127,8 +127,8 @@ class StudentProgressSummaryTest extends TestCase
 
         $this->assertNotEmpty($summary['chapter_performance']);
         $this->assertNotEmpty($summary['date_performance']);
-        $this->assertStringContainsString('<svg', $summary['charts']['chapter_bar_svg']);
-        $this->assertStringContainsString('<polyline', $summary['charts']['date_line_svg']);
+        $this->assertStringStartsWith('data:image/png;base64,', $summary['charts']['chapter_bar_chart']);
+        $this->assertStringStartsWith('data:image/png;base64,', $summary['charts']['date_line_chart']);
     }
 
     public function test_whatsapp_message_includes_completed_and_pending_lines(): void

@@ -9,7 +9,7 @@ use App\Support\AssignmentProgress;
 use App\Support\AttemptResultSummary;
 use App\Support\DateLabels;
 use App\Support\ProgressSummaryAnalytics;
-use App\Support\ProgressSummaryChartSvg;
+use App\Support\ProgressSummaryChartImage;
 use App\Support\ProgressSummaryTable;
 use App\Support\ScoreLabel;
 use Carbon\Carbon;
@@ -126,7 +126,7 @@ class StudentProgressSummaryService
             'chapter_performance' => $chapterPerformance,
             'date_performance' => $datePerformance,
             'charts' => [
-                'chapter_bar_svg' => ProgressSummaryChartSvg::barChart(
+                'chapter_bar_chart' => ProgressSummaryChartImage::barChartDataUri(
                     collect($chapterPerformance)
                         ->map(fn (array $row) => [
                             'label' => $row['chapter_name'],
@@ -134,7 +134,7 @@ class StudentProgressSummaryService
                         ])
                         ->all(),
                 ),
-                'date_line_svg' => ProgressSummaryChartSvg::lineChart(
+                'date_line_chart' => ProgressSummaryChartImage::lineChartDataUri(
                     collect($datePerformance)
                         ->map(fn (array $row) => [
                             'label' => $row['date_label'],

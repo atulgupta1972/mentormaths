@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Support\ProgressSummaryAnalytics;
+use App\Support\ProgressSummaryChartImage;
 use App\Support\ProgressSummaryChartSvg;
 use Tests\TestCase;
 
@@ -84,5 +85,23 @@ class ProgressSummaryAnalyticsTest extends TestCase
         $this->assertStringContainsString('<rect', $bar);
         $this->assertStringContainsString('<polyline', $line);
         $this->assertStringContainsString('<circle', $line);
+    }
+
+    public function test_chart_image_generates_png_data_uris_for_pdf(): void
+    {
+        if (! function_exists('imagecreatetruecolor')) {
+            $this->markTestSkipped('GD extension not available.');
+        }
+
+        $series = [
+            ['label' => 'Chapter A', 'percent' => 80],
+            ['label' => 'Chapter B', 'percent' => 65],
+        ];
+
+        $bar = ProgressSummaryChartImage::barChartDataUri($series);
+        $line = ProgressSummaryChartImage::lineChartDataUri($series);
+
+        $this->assertStringStartsWith('data:image/png;base64,', $bar);
+        $this->assertStringStartsWith('data:image/png;base64,', $line);
     }
 }

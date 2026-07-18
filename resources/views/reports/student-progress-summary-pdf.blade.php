@@ -15,6 +15,7 @@
         .stats { margin: 10px 0; }
         .chart-block { margin-top: 16px; page-break-inside: avoid; }
         .chart-box { border: 1px solid #e5e7eb; padding: 8px; margin-top: 8px; }
+        .chart-img { width: 100%; max-width: 500px; height: auto; }
     </style>
 </head>
 <body>
@@ -103,11 +104,13 @@
         </table>
     @endif
 
-    @if (! empty($summary['charts']['chapter_bar_svg'] ?? null))
+    @if (! empty($summary['charts']['chapter_bar_chart'] ?? null))
         <div class="chart-block">
             <h2>Chapter performance chart</h2>
             <p class="muted">Overall % by chapter</p>
-            <div class="chart-box">{!! $summary['charts']['chapter_bar_svg'] !!}</div>
+            <div class="chart-box">
+                <img src="{{ $summary['charts']['chapter_bar_chart'] }}" alt="Chapter performance chart" class="chart-img" />
+            </div>
         </div>
     @endif
 
@@ -141,11 +144,13 @@
         </div>
     @endif
 
-    @if (! empty($summary['charts']['date_line_svg'] ?? null))
+    @if (! empty($summary['charts']['date_line_chart'] ?? null))
         <div class="chart-block">
             <h2>Date-wise performance chart</h2>
             <p class="muted">Trend of overall % by submission date</p>
-            <div class="chart-box">{!! $summary['charts']['date_line_svg'] !!}</div>
+            <div class="chart-box">
+                <img src="{{ $summary['charts']['date_line_chart'] }}" alt="Date-wise performance chart" class="chart-img" />
+            </div>
         </div>
     @endif
 
