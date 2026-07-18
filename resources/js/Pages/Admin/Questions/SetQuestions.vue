@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
+import DangerButton from '@/Components/DangerButton.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
@@ -42,6 +43,19 @@ const assignForm = useForm({
     target_date: '',
     notes: '',
 });
+
+const deleteSetForm = useForm({});
+
+const destroySet = () => {
+    const code = props.practiceSet?.set_code || 'this set';
+    const message = `Delete practice set ${code}? Assignments for this set will be removed. Questions stay in the chapter bank until you delete them from the chapter sets page.`;
+
+    if (!window.confirm(message)) {
+        return;
+    }
+
+    deleteSetForm.delete(route('admin.practice-sets.destroy', props.practiceSet.id));
+};
 
 const filteredStudents = computed(() => {
     const students = props.assignmentPanel?.students ?? [];
@@ -281,6 +295,21 @@ const generateHints = () => {
                     >
                         Sets & assign
                     </Link>
+                    <Link
+                        v-if="topic?.chapter_id"
+                        :href="route('admin.questions.chapters.show', topic.chapter_id)"
+                        class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                        Chapter sets
+                    </Link>
+                    <DangerButton
+                        type="button"
+                        class="!py-2 !text-xs"
+                        :disabled="deleteSetForm.processing"
+                        @click="destroySet"
+                    >
+                        Delete set
+                    </DangerButton>
                 </div>
             </div>
         </template>

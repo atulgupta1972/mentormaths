@@ -106,6 +106,31 @@ class StudentProgressSummaryTest extends TestCase
         $this->assertSame('S902', $summary['pending'][0]['set_code']);
     }
 
+    public function test_summary_includes_chapter_and_date_performance_charts(): void
+    {
+        [$enrollment, $completedAssignment] = $this->seedAssignments();
+
+        SetAttempt::query()->create([
+            'set_assignment_id' => $completedAssignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subHour(),
+            'completed_at' => now()->subMinutes(30),
+            'score' => 8,
+            'max_score' => 10,
+            'time_seconds' => 120,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+
+        $summary = app(StudentProgressSummaryService::class)->build($enrollment, now());
+
+        $this->assertNotEmpty($summary['chapter_performance']);
+        $this->assertNotEmpty($summary['date_performance']);
+        $this->assertStringContainsString('<svg', $summary['charts']['chapter_bar_svg']);
+        $this->assertStringContainsString('<polyline', $summary['charts']['date_line_svg']);
+    }
+
     public function test_whatsapp_message_includes_completed_and_pending_lines(): void
     {
         [$enrollment, $completedAssignment] = $this->seedAssignments();

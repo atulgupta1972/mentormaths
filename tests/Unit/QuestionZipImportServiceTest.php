@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\QuestionZipImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -57,6 +58,7 @@ class QuestionZipImportServiceTest extends TestCase
         $this->assertNotNull($question);
         $this->assertSame($topic->id, $question->syllabus_topic_id);
         $this->assertNotNull($question->diagram_path);
+        $this->assertTrue(Storage::disk('public')->exists($question->diagram_path));
         $this->assertTrue($question->isFillInBlank());
     }
 

@@ -8,6 +8,8 @@ use App\Models\StudentEnrollment;
 use App\Support\AssignmentProgress;
 use App\Support\AttemptResultSummary;
 use App\Support\DateLabels;
+use App\Support\ProgressSummaryAnalytics;
+use App\Support\ProgressSummaryChartSvg;
 use App\Support\ProgressSummaryTable;
 use App\Support\ScoreLabel;
 use Carbon\Carbon;
@@ -88,6 +90,9 @@ class StudentProgressSummaryService
         $pending = $this->sortByTargetDateAsc($pending);
         $overdue = $this->sortByTargetDateAsc($overdue);
         $overall = ScoreLabel::aggregateFromRows($completed);
+        $chapterPerformance = ProgressSummaryAnalytics::chapterPerformance($completed);
+        $dateSource = ($periodStart && $recentlyCompleted !== []) ? $recentlyCompleted : $completed;
+        $datePerformance = ProgressSummaryAnalytics::datePerformance($dateSource);
 
         return [
             'student_name' => $enrollment->student?->name ?? 'Student',
@@ -117,6 +122,26 @@ class StudentProgressSummaryService
                 'overall_max_total' => $overall['max_total'],
                 'overall_percent' => $overall['percent'],
                 'overall_score_label' => $overall['label'],
+            ],
+            'chapter_performance' => $chapterPerformance,
+            'date_performance' => $datePerformance,
+            'charts' => [
+                'chapter_bar_svg' => ProgressSummaryChartSvg::barChart(
+                    collect($chapterPerformance)
+                        ->map(fn (array $row) => [
+                            'label' => $row['chapter_name'],
+                            'percent' => $row['percent'],
+                        ])
+                        ->all(),
+                ),
+                'date_line_svg' => ProgressSummaryChartSvg::lineChart(
+                    collect($datePerformance)
+                        ->map(fn (array $row) => [
+                            'label' => $row['date_label'],
+                            'percent' => $row['percent'],
+                        ])
+                        ->all(),
+                ),
             ],
             'dashboard_url' => route('dashboard'),
         ];

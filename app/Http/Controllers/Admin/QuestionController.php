@@ -111,6 +111,12 @@ class QuestionController extends Controller
 
     public function clearChapterPracticeBank(SyllabusChapter $chapter): RedirectResponse
     {
+        $packagedCount = Question::query()
+            ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
+            ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+            ->whereHas('worksheets')
+            ->count();
+
         $questions = Question::query()
             ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
             ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
@@ -118,9 +124,13 @@ class QuestionController extends Controller
             ->get();
 
         if ($questions->isEmpty()) {
+            $message = $packagedCount > 0
+                ? "Questions are still inside a packaged set ({$packagedCount} locked). Delete the practice set first, then use Delete all here."
+                : 'No practice-set questions to delete in this chapter.';
+
             return redirect()
                 ->back()
-                ->with('warning', 'No practice-set questions to delete in this chapter.');
+                ->with('warning', $message);
         }
 
         $count = $questions->count();

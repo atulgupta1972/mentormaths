@@ -21,7 +21,12 @@ class QuestionDiagramService
         $filename = Str::uuid()->toString().'.'.$extension;
         $destination = self::DIRECTORY.'/'.$question->id.'/'.$filename;
 
-        Storage::disk(self::DISK)->copy($sourcePath, $destination);
+        $contents = file_get_contents($sourcePath);
+        if ($contents === false) {
+            throw new \RuntimeException('Could not read diagram file.');
+        }
+
+        Storage::disk(self::DISK)->put($destination, $contents);
         $question->update(['diagram_path' => $destination]);
 
         return $destination;

@@ -1,0 +1,204 @@
+{
+    "questions": [
+        {
+            "topic": "Related Angles",
+            "question": "In the figure, lines AB and CD intersect at O. If ∠AOC = 58°, then the vertically opposite angle ∠BOD = ____°.",
+            "diagram_file": "q1.jpg",
+            "answer_format": "integer",
+            "correct_answer": "58",
+            "method_hint": "Vertically opposite angles formed by two intersecting lines are equal.",
+            "explanation": "∠AOC and ∠BOD are vertically opposite angles, so ∠BOD = 58°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Related Angles",
+            "question": "In the figure, POQ is a straight line. If ∠POR = 47°, then ∠ROQ = ____°.",
+            "diagram_file": "q2.jpg",
+            "answer_format": "integer",
+            "correct_answer": "133",
+            "method_hint": "Angles forming a linear pair on a straight line add up to 180°.",
+            "explanation": "∠ROQ = 180° − 47° = 133°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Related Angles",
+            "question": "In the figure, ∠A and ∠B form a linear pair. If ∠A = 112°, then ∠B = ____°.",
+            "diagram_file": "q3.jpg",
+            "answer_format": "integer",
+            "correct_answer": "68",
+            "method_hint": "A linear pair sums to 180°.",
+            "explanation": "∠B = 180° − 112° = 68°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Related Angles",
+            "question": "In the figure, two lines intersect. If one angle is 39°, then its vertically opposite angle is ____°.",
+            "diagram_file": "q4.jpg",
+            "answer_format": "integer",
+            "correct_answer": "39",
+            "method_hint": "Vertically opposite angles are equal.",
+            "explanation": "The vertically opposite angle is 39°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Pairs of Lines",
+            "question": "In the figure, lines l and m intersect at P. If ∠1 = 90°, then ∠1 is a ____° angle.",
+            "diagram_file": "q5.jpg",
+            "answer_format": "integer",
+            "correct_answer": "90",
+            "method_hint": "An angle of 90° is called a right angle.",
+            "explanation": "The angle marked is 90°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Pairs of Lines",
+            "question": "In the figure, lines AB and CD intersect at O. If ∠AOC = 36°, then ∠AOD = ____°.",
+            "diagram_file": "q6.jpg",
+            "answer_format": "integer",
+            "correct_answer": "144",
+            "method_hint": "Adjacent angles on a straight line form a linear pair and sum to 180°.",
+            "explanation": "∠AOD = 180° − 36° = 144°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Pairs of Lines",
+            "question": "In the figure, OP ⊥ OQ. The measure of ∠POQ is ____°.",
+            "diagram_file": "q7.jpg",
+            "answer_format": "integer",
+            "correct_answer": "90",
+            "method_hint": "Perpendicular lines intersect at 90°.",
+            "explanation": "OP ⟂ OQ, so ∠POQ = 90°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Pairs of Lines",
+            "question": "In the figure, lines intersect and ∠x = 71°. The angle adjacent to ∠x on the straight line is ____°.",
+            "diagram_file": "q8.jpg",
+            "answer_format": "integer",
+            "correct_answer": "109",
+            "method_hint": "Adjacent angles on a straight line add to 180°.",
+            "explanation": "Required angle = 180° − 71° = 109°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, l ∥ m and t is a transversal. If ∠1 = 65° (corresponding angles), then ∠5 = ____°.",
+            "diagram_file": "q9.jpg",
+            "answer_format": "integer",
+            "correct_answer": "65",
+            "method_hint": "Corresponding angles are equal when lines are parallel.",
+            "explanation": "∠5 = 65°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, l ∥ m and line t is a transversal. If ∠3 = 52° (alternate interior angles), then ∠6 = ____°.",
+            "diagram_file": "q10.jpg",
+            "answer_format": "integer",
+            "correct_answer": "52",
+            "method_hint": "Alternate interior angles are equal for parallel lines.",
+            "explanation": "∠6 = 52°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, l ∥ m. If ∠4 = 118° (co-interior angles), then ∠5 = ____°.",
+            "diagram_file": "q11.jpg",
+            "answer_format": "integer",
+            "correct_answer": "62",
+            "method_hint": "Co-interior angles are supplementary when lines are parallel.",
+            "explanation": "∠5 = 180° − 118° = 62°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, l ∥ m and t is a transversal. If ∠2 = 44° (corresponding angles), then ∠6 = ____°.",
+            "diagram_file": "q12.jpg",
+            "answer_format": "integer",
+            "correct_answer": "44",
+            "method_hint": "Corresponding angles are equal when the lines are parallel.",
+            "explanation": "∠6 = 44°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, AB ∥ CD and EF is a transversal. If ∠AEF = 73°, then the alternate interior angle ∠EFD = ____°.",
+            "diagram_file": "q13.jpg",
+            "answer_format": "integer",
+            "correct_answer": "73",
+            "method_hint": "Alternate interior angles are equal between parallel lines.",
+            "explanation": "∠EFD = 73°.",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, l ∥ m. The co-interior angles on one side of transversal t are 105° and x. Then x = ____°.",
+            "diagram_file": "q14.jpg",
+            "answer_format": "integer",
+            "correct_answer": "75",
+            "method_hint": "Co-interior angles between parallel lines add up to 180°.",
+            "explanation": "x = 180° − 105° = 75°.",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, l ∥ m. If an acute angle formed by the transversal is 28°, then another acute angle in the alternate interior position is ____°.",
+            "diagram_file": "q15.jpg",
+            "answer_format": "integer",
+            "correct_answer": "28",
+            "method_hint": "Alternate interior angles are equal when lines are parallel.",
+            "explanation": "The alternate interior acute angle is 28°.",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, l ∥ m. If ∠7 = 132°, then the co-interior angle ∠4 on the same side of the transversal is ____°.",
+            "diagram_file": "q16.jpg",
+            "answer_format": "integer",
+            "correct_answer": "48",
+            "method_hint": "Co-interior angles are supplementary for parallel lines.",
+            "explanation": "∠4 = 180° − 132° = 48°.",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, lines l and m are cut by transversal t. If corresponding angles ∠1 and ∠5 are both 81°, then ∠1 − ∠5 = ____°.",
+            "diagram_file": "q17.jpg",
+            "answer_format": "integer",
+            "correct_answer": "0",
+            "method_hint": "Equal corresponding angles mean the lines are parallel.",
+            "explanation": "81° − 81° = 0°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, transversal t cuts lines l and m. If alternate interior angles are 54° and x, and the lines are parallel, then x = ____°.",
+            "diagram_file": "q18.jpg",
+            "answer_format": "integer",
+            "correct_answer": "54",
+            "method_hint": "Parallel lines give equal alternate interior angles.",
+            "explanation": "x = 54°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, corresponding angles measure 76° and 76°. The common measure is ____°.",
+            "diagram_file": "q19.jpg",
+            "answer_format": "integer",
+            "correct_answer": "76",
+            "method_hint": "Equal corresponding angles indicate parallel lines.",
+            "explanation": "Both angles are 76°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, co-interior angles are 111° and y. If the lines are parallel, then y = ____°.",
+            "diagram_file": "q20.jpg",
+            "answer_format": "integer",
+            "correct_answer": "69",
+            "method_hint": "Co-interior angles are supplementary when lines are parallel.",
+            "explanation": "y = 180° − 111° = 69°.",
+            "difficulty": "Medium"
+        }
+    ]
+}
