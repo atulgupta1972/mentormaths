@@ -4,11 +4,14 @@ namespace App\Models;
 
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
+use App\Support\WrittenSheetStatus;
+use App\Support\WorksheetDeliveryMode;
 use App\Support\WorksheetPurpose;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Worksheet extends Model
 {
@@ -31,6 +34,11 @@ class Worksheet extends Model
         'catch_up_parent_worksheet_id',
         'catch_up_for_enrollment_id',
         'catch_up_source_question_ids',
+        'delivery_mode',
+        'written_status',
+        'written_pdf_path',
+        'written_verified_at',
+        'written_verified_by',
     ];
 
     protected $appends = [
@@ -43,6 +51,7 @@ class Worksheet extends Model
     {
         return [
             'catch_up_source_question_ids' => 'array',
+            'written_verified_at' => 'datetime',
         ];
     }
 
@@ -74,6 +83,30 @@ class Worksheet extends Model
     public function isCatchUp(): bool
     {
         return ($this->purpose ?? WorksheetPurpose::STANDARD) === WorksheetPurpose::CATCH_UP;
+    }
+
+    public function isWritten(): bool
+    {
+        return ($this->delivery_mode ?? WorksheetDeliveryMode::ONLINE) === WorksheetDeliveryMode::WRITTEN;
+    }
+
+    public function isWrittenVerified(): bool
+    {
+        return $this->isWritten()
+            && $this->written_status === WrittenSheetStatus::VERIFIED
+            && $this->written_pdf_path;
+    }
+
+    public function writtenPdfUrl(): ?string
+    {
+        return $this->written_pdf_path
+            ? Storage::disk('public')->url($this->written_pdf_path)
+            : null;
+    }
+
+    public function verifier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'written_verified_by');
     }
 
     public function creator(): BelongsTo

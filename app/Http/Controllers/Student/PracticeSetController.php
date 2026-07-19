@@ -35,6 +35,10 @@ class PracticeSetController extends Controller
             'attempts' => fn ($q) => $q->orderByDesc('attempt_number'),
         ]);
 
+        if ($assignment->practiceSet->isWritten()) {
+            return redirect()->route('student.written-assignments.show', $assignment);
+        }
+
         $inProgress = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_IN_PROGRESS);
         $latestSubmitted = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_SUBMITTED);
         $practiceSet = $assignment->practiceSet;

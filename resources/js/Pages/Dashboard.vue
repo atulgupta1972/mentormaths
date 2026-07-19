@@ -134,9 +134,19 @@ const formatDateTime = (value) => {
     });
 };
 
-const completedAssignmentHref = (set) => (
-    set.latest_attempt_id
+const completedAssignmentHref = (set) => {
+    if (set.delivery_mode === 'written') {
+        return route('student.written-assignments.show', set.assignment_id);
+    }
+
+    return set.latest_attempt_id
         ? route('student.attempts.result', set.latest_attempt_id)
+        : route('student.assignments.show', set.assignment_id);
+};
+
+const assignmentHref = (set) => (
+    set.delivery_mode === 'written'
+        ? route('student.written-assignments.show', set.assignment_id)
         : route('student.assignments.show', set.assignment_id)
 );
 
@@ -269,6 +279,18 @@ const pendingButtonClass = (set) => {
 };
 
 const pendingButtonLabel = (set) => {
+    if (set.delivery_mode === 'written') {
+        if (set.written_submission_status === 'processing' || set.written_submission_status === 'uploaded') {
+            return 'Checking…';
+        }
+
+        if (set.written_submission_status === 'failed') {
+            return 'Upload again';
+        }
+
+        return set.written_submission_status === 'graded' ? 'View result' : 'Upload work';
+    }
+
     if (set.status === 'yellow') {
         return 'Continue';
     }
@@ -712,7 +734,7 @@ const adminSetStatusClass = (set) => {
                                         </div>
                                     </div>
                                     <Link
-                                        :href="route('student.assignments.show', set.assignment_id)"
+                                        :href="assignmentHref(set)"
                                         class="mt-2 block w-full rounded-md py-2 text-center text-xs font-semibold text-white shadow sm:mt-1.5 sm:w-auto sm:px-3 sm:py-1.5"
                                         :class="pendingButtonClass(set)"
                                     >
@@ -754,7 +776,7 @@ const adminSetStatusClass = (set) => {
                                         </div>
                                     </div>
                                     <Link
-                                        :href="route('student.assignments.show', set.assignment_id)"
+                                        :href="assignmentHref(set)"
                                         class="mt-2 block w-full rounded-md py-2 text-center text-xs font-semibold text-white shadow sm:mt-1.5 sm:w-auto sm:px-3 sm:py-1.5"
                                         :class="pendingButtonClass(set)"
                                     >

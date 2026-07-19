@@ -48,7 +48,8 @@ const teachingGroup = computed(() => ({
     active:
         route().current('admin.classes.*')
         || route().current('admin.practice-sets.*')
-        || route().current('admin.catch-up.*'),
+        || route().current('admin.catch-up.*')
+        || route().current('admin.written-sheets.*'),
     items: [
         {
             label: 'Classes',
@@ -78,6 +79,12 @@ const teachingGroup = computed(() => ({
             label: 'Catch-up sets',
             href: route('admin.catch-up.index'),
             active: route().current('admin.catch-up.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Written sheets',
+            href: route('admin.written-sheets.index'),
+            active: route().current('admin.written-sheets.*'),
             show: isAdmin.value,
         },
     ],

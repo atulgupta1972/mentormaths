@@ -28,6 +28,10 @@ class SetAssignmentService
             throw new \InvalidArgumentException('Only published practice sets can be assigned.');
         }
 
+        if ($practiceSet->isWritten() && ! $practiceSet->isWrittenVerified()) {
+            throw new \InvalidArgumentException('Written sheet must be verified by admin before assigning.');
+        }
+
         $existing = SetAssignment::query()
             ->where('student_enrollment_id', $enrollment->id)
             ->where('worksheet_id', $practiceSet->id)

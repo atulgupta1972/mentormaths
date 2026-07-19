@@ -160,12 +160,21 @@ class SetAttemptService
             ->with([
                 'practiceSet' => fn ($q) => $q->withCount('questions'),
                 'attempts' => fn ($q) => $q->orderByDesc('attempt_number')->limit(1),
+                'writtenSubmissions' => fn ($q) => $q->latest('id')->limit(1),
             ])
             ->where('student_enrollment_id', $enrollment->id)
+            ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
             ->whereHas('practiceSet', fn ($q) => $q->where('status', 'published'))
             ->get();
 
         return $assignments->map(function (SetAssignment $assignment) {
+            if ($assignment->practiceSet->isWritten()) {
+                return AssignmentProgress::formatWrittenStudentDashboardSummary(
+                    $assignment,
+                    $assignment->writtenSubmissions->first(),
+                );
+            }
+
             $latest = $assignment->attempts->first();
 
             return AssignmentProgress::formatStudentDashboardSummary($assignment, $latest);

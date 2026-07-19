@@ -68,6 +68,16 @@ class SetAssignment extends Model
         return $this->hasMany(SetAttempt::class)->orderBy('attempt_number');
     }
 
+    public function writtenSubmissions(): HasMany
+    {
+        return $this->hasMany(WrittenSubmission::class, 'set_assignment_id');
+    }
+
+    public function latestWrittenSubmission(): ?WrittenSubmission
+    {
+        return $this->writtenSubmissions()->latest('id')->first();
+    }
+
     public function latestAttempt(): ?SetAttempt
     {
         return $this->attempts()->latest('attempt_number')->first();

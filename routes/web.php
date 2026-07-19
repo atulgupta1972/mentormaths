@@ -19,11 +19,13 @@ use App\Http\Controllers\Admin\SetAssignmentController;
 use App\Http\Controllers\Admin\StudentController;
 use App\Http\Controllers\Admin\SyllabusVersionController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\WrittenSheetController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
 use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
 use App\Http\Controllers\Student\PracticeSetController as StudentPracticeSetController;
+use App\Http\Controllers\Student\WrittenAssignmentController as StudentWrittenAssignmentController;
 use App\Http\Controllers\StudentProfileController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -190,6 +192,15 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/catch-up/prompt', [CatchUpSetController::class, 'prompt'])->name('catch-up.prompt');
     Route::post('/catch-up/import', [CatchUpSetController::class, 'import'])->name('catch-up.import');
 
+    Route::get('/written-sheets', [WrittenSheetController::class, 'index'])->name('written-sheets.index');
+    Route::get('/written-sheets/create', [WrittenSheetController::class, 'create'])->name('written-sheets.create');
+    Route::post('/written-sheets', [WrittenSheetController::class, 'store'])->name('written-sheets.store');
+    Route::get('/written-sheets/{worksheet}', [WrittenSheetController::class, 'show'])->name('written-sheets.show');
+    Route::post('/written-sheets/{worksheet}/regenerate', [WrittenSheetController::class, 'regenerate'])->name('written-sheets.regenerate');
+    Route::post('/written-sheets/{worksheet}/verify', [WrittenSheetController::class, 'verify'])->name('written-sheets.verify');
+    Route::post('/written-sheets/{worksheet}/reject', [WrittenSheetController::class, 'reject'])->name('written-sheets.reject');
+    Route::get('/written-sheets/{worksheet}/download', [WrittenSheetController::class, 'download'])->name('written-sheets.download');
+
     Route::post('/practice-sets/{worksheet}/assign', [SetAssignmentController::class, 'store'])->name('practice-sets.assign');
     Route::post('/practice-sets/{worksheet}/assign-bulk', [SetAssignmentController::class, 'storeBulk'])->name('practice-sets.assign-bulk');
     Route::post('/practice-sets/{worksheet}/assign-students', [SetAssignmentController::class, 'storeStudents'])->name('practice-sets.assign-students');
@@ -209,6 +220,9 @@ Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->gr
 
     Route::get('/assignments/{assignment}', [StudentPracticeSetController::class, 'showAssignment'])->name('assignments.show');
     Route::post('/assignments/{assignment}/start', [StudentPracticeSetController::class, 'startAttempt'])->name('assignments.start');
+    Route::get('/written-assignments/{assignment}', [StudentWrittenAssignmentController::class, 'show'])->name('written-assignments.show');
+    Route::post('/written-assignments/{assignment}/upload', [StudentWrittenAssignmentController::class, 'storeUpload'])->name('written-assignments.upload');
+    Route::get('/written-assignments/{assignment}/download', [StudentWrittenAssignmentController::class, 'download'])->name('written-assignments.download');
     Route::get('/attempts/{attempt}', [StudentPracticeSetController::class, 'showAttempt'])->name('attempts.show');
     Route::post('/attempts/{attempt}/guided/answer', [StudentPracticeSetController::class, 'guidedAnswer'])->name('attempts.guided.answer');
     Route::post('/attempts/{attempt}/guided/request-hint', [StudentPracticeSetController::class, 'guidedRequestHint'])->name('attempts.guided.request-hint');

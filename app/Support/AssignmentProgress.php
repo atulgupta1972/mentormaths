@@ -94,6 +94,58 @@ class AssignmentProgress
     }
 
     /**
+     * Student-facing summary for written homework assignments.
+     */
+    public static function formatWrittenStudentDashboardSummary(SetAssignment $assignment, ?\App\Models\WrittenSubmission $submission): array
+    {
+        $overdue = self::isOverdue($assignment);
+        $practiceSet = $assignment->practiceSet;
+
+        $status = 'yellow';
+        $latestScore = null;
+        $latestMaxScore = null;
+        $latestScoreLabel = null;
+
+        if ($submission?->status === \App\Models\WrittenSubmission::STATUS_GRADED) {
+            $status = 'green';
+            $latestScore = $submission->score;
+            $latestMaxScore = $submission->max_score;
+            $latestScoreLabel = ScoreLabel::format($submission->score, $submission->max_score);
+        } elseif ($submission?->status === \App\Models\WrittenSubmission::STATUS_FAILED) {
+            $status = 'overdue';
+        } elseif ($overdue) {
+            $status = 'overdue';
+        } elseif ($submission && in_array($submission->status, [
+            \App\Models\WrittenSubmission::STATUS_UPLOADED,
+            \App\Models\WrittenSubmission::STATUS_PROCESSING,
+        ], true)) {
+            $status = 'yellow';
+        }
+
+        return [
+            'assignment_id' => $assignment->id,
+            'set_code' => $practiceSet->set_code,
+            'set_number' => $practiceSet->set_number,
+            'kind_label' => $practiceSet->isChapterTest() ? 'Written test' : 'Written practice',
+            'delivery_mode' => 'written',
+            'is_catch_up' => false,
+            'scope' => $practiceSet->scope ?? 'topic',
+            'target_date' => $assignment->due_date?->toDateString(),
+            'is_overdue' => $overdue,
+            'latest_score' => $latestScore,
+            'latest_max_score' => $latestMaxScore,
+            'latest_score_percent' => ScoreLabel::percent($latestScore, $latestMaxScore),
+            'latest_score_label' => $latestScoreLabel,
+            'submitted_at' => $submission?->graded_at?->toDateTimeString(),
+            'latest_time_seconds' => null,
+            'submission_timing' => null,
+            'status' => $status,
+            'latest_attempt_id' => null,
+            'written_submission_status' => $submission?->status,
+        ];
+    }
+
+    /**
      * Student-facing summary: set code and assignment status only (no syllabus / bank details).
      */
     public static function formatStudentDashboardSummary(SetAssignment $assignment, ?SetAttempt $latest): array
@@ -105,6 +157,7 @@ class AssignmentProgress
             'set_code' => $summary['set_code'],
             'set_number' => $summary['set_number'],
             'kind_label' => $summary['kind_label'],
+            'delivery_mode' => $assignment->practiceSet->delivery_mode ?? 'online',
             'is_catch_up' => $summary['is_catch_up'],
             'scope' => $summary['scope'],
             'target_date' => $summary['target_date'],
@@ -118,6 +171,7 @@ class AssignmentProgress
             'submission_timing' => $summary['submission_timing'],
             'status' => $summary['status'],
             'latest_attempt_id' => $latest?->status === SetAttempt::STATUS_SUBMITTED ? $latest->id : null,
+            'written_submission_status' => null,
         ];
     }
 }

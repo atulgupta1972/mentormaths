@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+        'grading_model' => env('OPENAI_GRADING_MODEL', 'gpt-4o-mini'),
+    ],
+
 ];

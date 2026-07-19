@@ -1,0 +1,195 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Question;
+use App\Models\SetAssignment;
+use App\Models\WrittenSubmission;
+use App\Models\WrittenSubmissionItem;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+
+class WrittenGradingService
+{
+    public function __construct(private WrittenSheetPdfService $pdfService) {}
+
+    public function grade(WrittenSubmission $submission): WrittenSubmission
+    {
+        $submission->load([
+            'assignment.practiceSet.questions.options',
+            'assignment.practiceSet.questions.blankAnswer',
+        ]);
+
+        $assignment = $submission->assignment;
+        $worksheet = $assignment->practiceSet;
+        $apiKey = config('services.openai.api_key');
+
+        if (! $apiKey) {
+            throw new \RuntimeException('OPENAI_API_KEY is not configured on the server.');
+        }
+
+        $submission->update(['status' => WrittenSubmission::STATUS_PROCESSING]);
+
+        $questions = $worksheet->questions->values()->map(function (Question $question, int $index) {
+            $correct = $question->isMcq()
+                ? $this->pdfService->plainText($question->options->firstWhere('is_correct', true)?->option_text)
+                : $question->blankAnswer?->answer_text;
+
+            return [
+                'number' => $index + 1,
+                'text' => $this->pdfService->plainText($question->question_text),
+                'type' => $question->type,
+                'correct_answer' => $correct,
+                'method_hint' => $this->pdfService->plainText($question->method_hint),
+                'explanation' => $this->pdfService->plainText($question->explanation),
+            ];
+        })->all();
+
+        $imageParts = [];
+
+        foreach ($submission->upload_paths ?? [] as $path) {
+            $absolute = Storage::disk('public')->path($path);
+            if (! is_file($absolute)) {
+                continue;
+            }
+
+            $mime = mime_content_type($absolute) ?: 'image/jpeg';
+            $encoded = base64_encode((string) file_get_contents($absolute));
+            $imageParts[] = [
+                'type' => 'image_url',
+                'image_url' => [
+                    'url' => "data:{$mime};base64,{$encoded}",
+                ],
+            ];
+        }
+
+        if ($imageParts === []) {
+            throw new \RuntimeException('Uploaded files could not be read.');
+        }
+
+        $prompt = $this->buildPrompt($questions, $worksheet->set_code);
+
+        $response = Http::withToken($apiKey)
+            ->timeout(120)
+            ->post('https://api.openai.com/v1/chat/completions', [
+                'model' => config('services.openai.grading_model', 'gpt-4o-mini'),
+                'response_format' => ['type' => 'json_object'],
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You grade handwritten school maths homework. Return strict JSON only.',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => array_merge(
+                            [['type' => 'text', 'text' => $prompt]],
+                            $imageParts,
+                        ),
+                    ],
+                ],
+            ]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('AI grading failed: '.$response->body());
+        }
+
+        $content = data_get($response->json(), 'choices.0.message.content');
+
+        if (! is_string($content) || $content === '') {
+            throw new \RuntimeException('AI grading returned an empty response.');
+        }
+
+        /** @var array<string, mixed> $payload */
+        $payload = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+
+        return $this->persistResults($submission, $assignment, $worksheet->questions->values()->all(), $payload);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $questions
+     */
+    private function buildPrompt(array $questions, string $setCode): string
+    {
+        $lines = [
+            "Grade handwritten work for sheet {$setCode}.",
+            'For each question, read the student handwriting from the photos.',
+            'Check working steps, method, and final answer.',
+            'Return JSON with keys:',
+            '- summary: short overall feedback for the student/parent',
+            '- items: array of objects with question_number, extracted_answer, step_feedback, score (0 or 1), is_correct (boolean), confidence (0 to 1), needs_review (boolean when handwriting unclear)',
+            '',
+            'Questions and marking scheme:',
+        ];
+
+        foreach ($questions as $question) {
+            $lines[] = "Q{$question['number']}: {$question['text']}";
+            $lines[] = "Type: {$question['type']}";
+            $lines[] = "Correct answer: {$question['correct_answer']}";
+            if ($question['method_hint']) {
+                $lines[] = "Method hint: {$question['method_hint']}";
+            }
+            if ($question['explanation']) {
+                $lines[] = "Marking notes: {$question['explanation']}";
+            }
+            $lines[] = '';
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param  list<Question>  $questions
+     * @param  array<string, mixed>  $payload
+     */
+    private function persistResults(
+        WrittenSubmission $submission,
+        SetAssignment $assignment,
+        array $questions,
+        array $payload,
+    ): WrittenSubmission {
+        $submission->items()->delete();
+
+        $items = collect($payload['items'] ?? []);
+        $totalScore = 0;
+        $maxScore = count($questions);
+
+        foreach ($questions as $index => $question) {
+            $number = $index + 1;
+            $row = $items->firstWhere('question_number', $number)
+                ?? $items->get($index)
+                ?? [];
+
+            $score = (int) ($row['score'] ?? 0);
+            $score = max(0, min(1, $score));
+            $totalScore += $score;
+
+            WrittenSubmissionItem::create([
+                'written_submission_id' => $submission->id,
+                'question_id' => $question->id,
+                'question_number' => $number,
+                'extracted_answer' => isset($row['extracted_answer']) ? (string) $row['extracted_answer'] : null,
+                'step_feedback' => isset($row['step_feedback']) ? (string) $row['step_feedback'] : null,
+                'score' => $score,
+                'max_score' => 1,
+                'is_correct' => (bool) ($row['is_correct'] ?? ($score === 1)),
+                'confidence' => isset($row['confidence']) ? (float) $row['confidence'] : null,
+                'needs_review' => (bool) ($row['needs_review'] ?? false),
+            ]);
+        }
+
+        $submission->update([
+            'status' => WrittenSubmission::STATUS_GRADED,
+            'score' => $totalScore,
+            'max_score' => $maxScore,
+            'ai_summary' => isset($payload['summary']) ? (string) $payload['summary'] : null,
+            'grading_error' => null,
+            'graded_at' => now(),
+        ]);
+
+        $assignment->update([
+            'status' => SetAssignment::STATUS_COMPLETED,
+        ]);
+
+        return $submission->fresh(['items']);
+    }
+}
