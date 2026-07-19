@@ -411,7 +411,7 @@ const chapterRowClass = (chapter) => (chapter.is_extra ? 'bg-violet-50/70' : '')
                             </th>
                             <th
                                 class="sticky px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide text-gray-600"
-                                :class="showAllChapters ? 'left-[120px] z-10 bg-slate-100' : 'left-0 z-10 bg-slate-100'"
+                                :class="showAllChapters ? 'left-[132px] z-10 bg-slate-100' : 'left-0 z-10 bg-slate-100'"
                             >
                                 Set
                             </th>
@@ -451,7 +451,7 @@ const chapterRowClass = (chapter) => (chapter.is_extra ? 'bg-violet-50/70' : '')
                             >
                                 <td
                                     v-if="showAllChapters"
-                                    class="sticky left-0 z-10 max-w-[120px] bg-white px-2 py-1.5 text-[10px] font-medium text-gray-600"
+                                    class="sticky left-0 z-10 max-w-[132px] bg-white px-2 py-1.5 text-xs font-medium text-gray-900"
                                     :class="chapter.is_extra ? '!bg-violet-50/70' : ''"
                                 >
                                     <span class="line-clamp-2" :title="chapter.chapter_label">
@@ -459,11 +459,13 @@ const chapterRowClass = (chapter) => (chapter.is_extra ? 'bg-violet-50/70' : '')
                                     </span>
                                 </td>
                                 <td
-                                    class="sticky max-w-[140px] bg-white px-2 py-1.5"
-                                    :class="[showAllChapters ? 'left-[120px] z-10' : 'left-0 z-10', chapter.is_extra ? '!bg-violet-50/70' : '']"
+                                    class="sticky max-w-[160px] bg-white px-2 py-1.5"
+                                    :class="[showAllChapters ? 'left-[132px] z-10' : 'left-0 z-10', chapter.is_extra ? '!bg-violet-50/70' : '']"
                                 >
-                                    <div class="font-mono text-sm font-bold leading-none text-indigo-600">{{ set.set_code }}</div>
-                                    <div class="mt-0.5 truncate text-[10px] text-gray-500" :title="setMeta(set)">
+                                    <div class="font-mono text-sm font-bold leading-none text-indigo-600">
+                                        {{ set.set_code }}<span v-if="set.questions_count" class="font-semibold text-indigo-500"> ({{ set.questions_count }})</span>
+                                    </div>
+                                    <div class="mt-0.5 truncate text-xs text-gray-900" :title="setMeta(set)">
                                         {{ setMeta(set) }}
                                     </div>
                                     <span
