@@ -1,6 +1,8 @@
 <script setup>
+import DangerButton from '@/Components/DangerButton.vue';
 import { formatDate } from '@/utils/dates';
 import { formatScoreLabel } from '@/utils/scores';
+import { useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 const props = defineProps({
@@ -8,7 +10,13 @@ const props = defineProps({
         type: Object,
         default: null,
     },
+    canDeassign: {
+        type: Boolean,
+        default: false,
+    },
 });
+
+const deassignForm = useForm({});
 
 const detailLabel = (row) => {
     if (row.topic_name) {
@@ -36,6 +44,21 @@ const reviewLabel = (row) => {
 
 const stats = computed(() => props.summary?.stats || {});
 const hasSummary = computed(() => Boolean(props.summary));
+
+const canRemoveAssignment = (row) =>
+    props.canDeassign
+    && row.assignment_id
+    && ['assigned', 'in_progress'].includes(row.assignment_status);
+
+const deassign = (row) => {
+    if (!confirm(`Remove ${row.set_code}? The student will no longer see this assignment.`)) {
+        return;
+    }
+
+    deassignForm.delete(route('admin.set-assignments.destroy', row.assignment_id), {
+        preserveScroll: true,
+    });
+};
 </script>
 
 <template>
@@ -106,6 +129,7 @@ const hasSummary = computed(() => Boolean(props.summary));
                             <th class="px-3 py-2">Type</th>
                             <th class="px-3 py-2">Topic</th>
                             <th class="px-3 py-2">Due date</th>
+                            <th v-if="canDeassign" class="px-3 py-2">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
@@ -114,6 +138,17 @@ const hasSummary = computed(() => Boolean(props.summary));
                             <td class="whitespace-nowrap px-3 py-2 text-gray-700">{{ row.kind_label }}</td>
                             <td class="px-3 py-2 text-gray-700">{{ detailLabel(row) }}</td>
                             <td class="whitespace-nowrap px-3 py-2 text-gray-700">{{ targetDate(row) }}</td>
+                            <td v-if="canDeassign" class="whitespace-nowrap px-3 py-2">
+                                <DangerButton
+                                    v-if="canRemoveAssignment(row)"
+                                    type="button"
+                                    class="!px-2 !py-1 !text-xs"
+                                    :disabled="deassignForm.processing"
+                                    @click="deassign(row)"
+                                >
+                                    Remove
+                                </DangerButton>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -138,6 +173,7 @@ const hasSummary = computed(() => Boolean(props.summary));
                             <th class="px-3 py-2">Type</th>
                             <th class="px-3 py-2">Topic</th>
                             <th class="px-3 py-2">Target date</th>
+                            <th v-if="canDeassign" class="px-3 py-2">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
@@ -146,6 +182,17 @@ const hasSummary = computed(() => Boolean(props.summary));
                             <td class="whitespace-nowrap px-3 py-2 text-gray-700">{{ row.kind_label }}</td>
                             <td class="px-3 py-2 text-gray-700">{{ detailLabel(row) }}</td>
                             <td class="whitespace-nowrap px-3 py-2 text-gray-700">{{ targetDate(row) }}</td>
+                            <td v-if="canDeassign" class="whitespace-nowrap px-3 py-2">
+                                <DangerButton
+                                    v-if="canRemoveAssignment(row)"
+                                    type="button"
+                                    class="!px-2 !py-1 !text-xs"
+                                    :disabled="deassignForm.processing"
+                                    @click="deassign(row)"
+                                >
+                                    Remove
+                                </DangerButton>
+                            </td>
                         </tr>
                     </tbody>
                 </table>

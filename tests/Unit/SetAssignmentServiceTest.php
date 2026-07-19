@@ -110,6 +110,43 @@ class SetAssignmentServiceTest extends TestCase
         $this->assertSame(1, SetAssignment::query()->where('student_enrollment_id', $enrollment->id)->count());
     }
 
+    public function test_cancel_removes_pending_assignment(): void
+    {
+        [$enrollment, $worksheet, $assigner] = $this->seedAssignmentContext();
+
+        $assignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $assigner->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek(),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        $service = app(SetAssignmentService::class);
+        $cancelled = $service->cancel($assignment);
+
+        $this->assertSame(SetAssignment::STATUS_CANCELLED, $cancelled->status);
+    }
+
+    public function test_cancel_rejects_completed_assignment(): void
+    {
+        [$enrollment, $worksheet, $assigner] = $this->seedAssignmentContext();
+
+        $assignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $assigner->id,
+            'assigned_at' => now()->subWeek(),
+            'due_date' => now()->subDay(),
+            'status' => SetAssignment::STATUS_COMPLETED,
+        ]);
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        app(SetAssignmentService::class)->cancel($assignment);
+    }
+
     public function test_can_reuse_student_profile_without_login(): void
     {
         $student = Student::query()->create([

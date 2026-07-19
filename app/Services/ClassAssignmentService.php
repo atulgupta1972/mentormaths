@@ -106,12 +106,15 @@ class ClassAssignmentService
      */
     public function assignableChapters(SyllabusVersion $syllabusVersion): array
     {
+        $syllabusVersion->loadMissing('gradeLevel:id,name');
+        $viewingGrade = $syllabusVersion->gradeLevel;
+
         $chapters = SyllabusChapter::query()
             ->where('syllabus_version_id', $syllabusVersion->id)
             ->orderBy('sort_order')
             ->get(['id', 'chapter_number', 'name', 'sort_order']);
 
-        return $chapters->map(function (SyllabusChapter $chapter) {
+        return $chapters->map(function (SyllabusChapter $chapter) use ($viewingGrade) {
             $topicSets = Worksheet::query()
                 ->where('status', Worksheet::STATUS_PUBLISHED)
                 ->where('scope', PracticeSetScope::TOPIC)
@@ -120,7 +123,7 @@ class ClassAssignmentService
                 ->withCount('questions')
                 ->orderBy('set_number')
                 ->get()
-                ->map(fn (Worksheet $set) => $this->worksheetSummary($set, 'Practice'))
+                ->map(fn (Worksheet $set) => $this->worksheetSummary($set, 'Practice', $viewingGrade))
                 ->values()
                 ->all();
 
@@ -131,7 +134,7 @@ class ClassAssignmentService
                 ->withCount('questions')
                 ->orderBy('set_number')
                 ->get()
-                ->map(fn (Worksheet $set) => $this->worksheetSummary($set, 'Test'))
+                ->map(fn (Worksheet $set) => $this->worksheetSummary($set, 'Test', $viewingGrade))
                 ->values()
                 ->all();
 
@@ -307,11 +310,10 @@ class ClassAssignmentService
             ->unique()
             ->values();
 
-        $assignmentsGrouped = $worksheetIds->isEmpty()
+        $assignmentsGrouped = $enrollments->isEmpty()
             ? collect()
             : SetAssignment::query()
                 ->whereIn('student_enrollment_id', $enrollments->pluck('id'))
-                ->whereIn('worksheet_id', $worksheetIds)
                 ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
                 ->with([
                     'practiceSet' => fn ($query) => $query->withCount('questions'),
@@ -321,55 +323,189 @@ class ClassAssignmentService
                 ->get()
                 ->groupBy(fn (SetAssignment $assignment) => "{$assignment->worksheet_id}:{$assignment->student_enrollment_id}");
 
-        $chapterRows = $chapters->map(function (array $chapter) use ($enrollments, $assignmentsGrouped) {
+        $chapterRows = $chapters->map(function (array $chapter) use ($enrollments, $assignmentsGrouped, $gradeLevel) {
             $sets = [];
 
             foreach (array_merge($chapter['topic_sets'] ?? [], $chapter['chapter_tests'] ?? []) as $set) {
-                $studentRows = $enrollments->map(function (StudentEnrollment $enrollment) use ($set, $assignmentsGrouped) {
-                    $assignment = $this->resolveCurrentAssignment(
-                        $assignmentsGrouped->get("{$set['id']}:{$enrollment->id}", collect()),
-                    );
-                    $latest = $assignment?->attempts->first();
-                    $progress = $assignment
-                        ? AssignmentProgress::formatAssignmentSummary($assignment, $latest)
-                        : null;
-
-                    return [
-                        'student_id' => $enrollment->student_id,
-                        'student_name' => $enrollment->student->name,
-                        'progress' => $progress,
-                    ];
-                })->values()->all();
-
-                $sets[] = [
-                    ...$set,
-                    'chapter_label' => $chapter['chapter_label'],
-                    'students' => $studentRows,
-                    'assigned_count' => collect($studentRows)->filter(
-                        fn (array $row) => $row['progress'] !== null
-                            && in_array($row['progress']['assignment_status'] ?? null, [
-                                SetAssignment::STATUS_ASSIGNED,
-                                SetAssignment::STATUS_IN_PROGRESS,
-                                SetAssignment::STATUS_COMPLETED,
-                            ], true),
-                    )->count(),
-                    'completed_count' => collect($studentRows)->filter(
-                        fn (array $row) => ($row['progress']['assignment_status'] ?? null) === SetAssignment::STATUS_COMPLETED,
-                    )->count(),
-                ];
+                $sets[] = $this->buildSetStatusRow($set, $chapter['chapter_label'], $enrollments, $assignmentsGrouped, $gradeLevel);
             }
 
             return [
                 'chapter_id' => $chapter['chapter_id'],
                 'chapter_label' => $chapter['chapter_label'],
+                'is_extra' => false,
                 'sets' => $sets,
             ];
         })->values()->all();
+
+        $extraChapter = $this->extraAssignmentChapter(
+            $enrollments,
+            $assignmentsGrouped,
+            $worksheetIds,
+            $gradeLevel,
+            $chapterId,
+        );
+
+        if ($extraChapter !== null) {
+            $chapterRows[] = $extraChapter;
+        }
 
         return [
             'students' => $students,
             'chapters' => $chapterRows,
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $setSummary
+     * @param  \Illuminate\Support\Collection<int, StudentEnrollment>  $enrollments
+     * @param  \Illuminate\Support\Collection<string, \Illuminate\Support\Collection<int, SetAssignment>>  $assignmentsGrouped
+     * @return array<string, mixed>
+     */
+    private function buildSetStatusRow(
+        array $setSummary,
+        string $chapterLabel,
+        $enrollments,
+        $assignmentsGrouped,
+        GradeLevel $viewingGrade,
+    ): array {
+        $studentRows = $enrollments->map(function (StudentEnrollment $enrollment) use ($setSummary, $assignmentsGrouped) {
+            $assignment = $this->resolveCurrentAssignment(
+                $assignmentsGrouped->get("{$setSummary['id']}:{$enrollment->id}", collect()),
+            );
+            $latest = $assignment?->attempts->first();
+            $progress = $assignment
+                ? AssignmentProgress::formatAssignmentSummary($assignment, $latest)
+                : null;
+
+            return [
+                'student_id' => $enrollment->student_id,
+                'student_name' => $enrollment->student->name,
+                'progress' => $progress,
+            ];
+        })->values()->all();
+
+        return [
+            ...$setSummary,
+            'chapter_label' => $chapterLabel,
+            'students' => $studentRows,
+            'assigned_count' => collect($studentRows)->filter(
+                fn (array $row) => $row['progress'] !== null
+                    && in_array($row['progress']['assignment_status'] ?? null, [
+                        SetAssignment::STATUS_ASSIGNED,
+                        SetAssignment::STATUS_IN_PROGRESS,
+                        SetAssignment::STATUS_COMPLETED,
+                    ], true),
+            )->count(),
+            'completed_count' => collect($studentRows)->filter(
+                fn (array $row) => ($row['progress']['assignment_status'] ?? null) === SetAssignment::STATUS_COMPLETED,
+            )->count(),
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, StudentEnrollment>  $enrollments
+     * @param  \Illuminate\Support\Collection<string, \Illuminate\Support\Collection<int, SetAssignment>>  $assignmentsGrouped
+     * @param  \Illuminate\Support\Collection<int, int>  $syllabusWorksheetIds
+     * @return array<string, mixed>|null
+     */
+    private function extraAssignmentChapter(
+        $enrollments,
+        $assignmentsGrouped,
+        $syllabusWorksheetIds,
+        GradeLevel $viewingGrade,
+        ?int $chapterId,
+    ): ?array {
+        if ($chapterId) {
+            return null;
+        }
+
+        $extraWorksheetIds = $assignmentsGrouped
+            ->flatMap(fn ($group) => $group)
+            ->pluck('worksheet_id')
+            ->unique()
+            ->diff($syllabusWorksheetIds)
+            ->values();
+
+        if ($extraWorksheetIds->isEmpty()) {
+            return null;
+        }
+
+        $worksheets = Worksheet::query()
+            ->whereIn('id', $extraWorksheetIds)
+            ->where('status', Worksheet::STATUS_PUBLISHED)
+            ->with([
+                'topic:id,name,syllabus_chapter_id',
+                'topic.chapter:id,name,chapter_number,syllabus_version_id',
+                'topic.chapter.syllabusVersion.gradeLevel:id,name',
+                'chapter:id,name,chapter_number,syllabus_version_id',
+                'chapter.syllabusVersion.gradeLevel:id,name',
+                'catchUpParent.topic.chapter.syllabusVersion.gradeLevel:id,name',
+                'catchUpParent.chapter.syllabusVersion.gradeLevel:id,name',
+            ])
+            ->withCount('questions')
+            ->orderBy('set_code')
+            ->get();
+
+        if ($worksheets->isEmpty()) {
+            return null;
+        }
+
+        $sets = $worksheets->map(function (Worksheet $worksheet) use ($enrollments, $assignmentsGrouped, $viewingGrade) {
+            $summary = $this->worksheetSummary($worksheet, null, $viewingGrade);
+            $chapterLabel = $this->worksheetChapterLabel($worksheet);
+
+            return $this->buildSetStatusRow($summary, $chapterLabel, $enrollments, $assignmentsGrouped, $viewingGrade);
+        })->values()->all();
+
+        return [
+            'chapter_id' => null,
+            'chapter_label' => 'Other grade & extra sheets',
+            'is_extra' => true,
+            'sets' => $sets,
+        ];
+    }
+
+    private function worksheetChapterLabel(Worksheet $worksheet): string
+    {
+        if ($worksheet->isCatchUp()) {
+            $parent = $worksheet->catchUpParent;
+            if ($parent) {
+                return $this->worksheetChapterLabel($parent).' · Catch-up';
+            }
+
+            return 'Catch-up set';
+        }
+
+        $chapter = $worksheet->isChapterScope()
+            ? $worksheet->chapter
+            : $worksheet->topic?->chapter;
+
+        if (! $chapter) {
+            return 'Extra sheet';
+        }
+
+        return ExamPlanService::chapterLabel($chapter);
+    }
+
+    private function worksheetGradeLevel(Worksheet $worksheet): ?GradeLevel
+    {
+        if ($worksheet->isCatchUp()) {
+            $worksheet->loadMissing([
+                'catchUpParent.topic.chapter.syllabusVersion.gradeLevel',
+                'catchUpParent.chapter.syllabusVersion.gradeLevel',
+            ]);
+
+            if ($worksheet->catchUpParent) {
+                return $this->worksheetGradeLevel($worksheet->catchUpParent);
+            }
+        }
+
+        $chapter = $worksheet->isChapterScope()
+            ? $worksheet->chapter
+            : $worksheet->topic?->chapter;
+
+        return $chapter?->syllabusVersion?->gradeLevel;
     }
 
     /**
@@ -399,16 +535,24 @@ class ClassAssignmentService
     /**
      * @return array<string, mixed>
      */
-    private function worksheetSummary(Worksheet $set, string $kindLabel): array
+    private function worksheetSummary(Worksheet $set, ?string $kindLabel = null, ?GradeLevel $viewingGrade = null): array
     {
+        $sheetGrade = $this->worksheetGradeLevel($set);
+        $resolvedKind = $kindLabel
+            ?? ($set->isCatchUp() ? 'Catch-up' : ($set->isChapterTest() ? 'Test' : 'Practice'));
+
         return [
             'id' => $set->id,
             'set_code' => $set->set_code,
             'tier_label' => $set->tier_label,
             'topic_name' => $set->topic?->name,
             'questions_count' => $set->questions_count,
-            'kind_label' => $kindLabel,
+            'kind_label' => $resolvedKind,
             'scope' => $set->scope ?? PracticeSetScope::TOPIC,
+            'is_catch_up' => $set->isCatchUp(),
+            'sheet_grade_level_id' => $sheetGrade?->id,
+            'sheet_grade_name' => $sheetGrade?->name,
+            'is_cross_grade' => $sheetGrade && $viewingGrade && $sheetGrade->id !== $viewingGrade->id,
         ];
     }
 }

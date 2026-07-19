@@ -41,6 +41,7 @@ class StudentProgressSummaryService
                 'attempts' => fn ($query) => $query->orderByDesc('attempt_number'),
             ])
             ->where('student_enrollment_id', $enrollment->id)
+            ->whereNot('status', SetAssignment::STATUS_CANCELLED)
             ->where('assigned_at', '<=', $asOf)
             ->whereHas('practiceSet', fn ($query) => $query->where('status', 'published'))
             ->get()

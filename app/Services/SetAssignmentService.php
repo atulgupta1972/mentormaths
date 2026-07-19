@@ -114,6 +114,25 @@ class SetAssignmentService
         return $this->assignBulk($practiceSet, $query->get(), $assigner, $dueDate, $notes);
     }
 
+    public function cancel(SetAssignment $assignment): SetAssignment
+    {
+        if ($assignment->status === SetAssignment::STATUS_CANCELLED) {
+            throw new \InvalidArgumentException('This assignment was already removed.');
+        }
+
+        if ($assignment->status === SetAssignment::STATUS_COMPLETED) {
+            throw new \InvalidArgumentException('Cannot remove a completed assignment. Use re-assign if the student should attempt again.');
+        }
+
+        $assignment->attempts()->where('status', 'in_progress')->delete();
+
+        $assignment->update([
+            'status' => SetAssignment::STATUS_CANCELLED,
+        ]);
+
+        return $assignment->fresh();
+    }
+
     public function reassign(
         SetAssignment $assignment,
         User $assigner,

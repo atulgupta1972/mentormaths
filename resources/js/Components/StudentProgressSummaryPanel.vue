@@ -210,7 +210,7 @@ const downloadPdf = () => {
                     <p v-if="previewLoading" class="text-xs text-gray-500">Loading…</p>
                 </div>
                 <p v-if="previewError" class="mb-2 text-sm text-rose-700">{{ previewError }}</p>
-                <ProgressSummaryTables :summary="previewSummary" />
+                <ProgressSummaryTables :summary="previewSummary" :can-deassign="true" />
             </div>
 
             <div v-if="form.send_email" class="rounded-lg border border-indigo-100 bg-indigo-50/50 p-4">

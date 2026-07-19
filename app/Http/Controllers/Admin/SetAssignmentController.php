@@ -213,6 +213,22 @@ class SetAssignmentController extends Controller
         return $redirect;
     }
 
+    public function destroy(SetAssignment $assignment): RedirectResponse
+    {
+        $assignment->load(['enrollment.student', 'practiceSet']);
+
+        try {
+            $this->assignmentService->cancel($assignment);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $studentName = $assignment->enrollment->student->name;
+        $setCode = $assignment->practiceSet->set_code;
+
+        return back()->with('success', "Removed {$setCode} assignment for {$studentName}.");
+    }
+
     public function reassign(Request $request, SetAssignment $assignment): RedirectResponse
     {
         $validated = $request->validate([
