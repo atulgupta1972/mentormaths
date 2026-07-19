@@ -13,6 +13,7 @@ const props = defineProps({
     activeYear: Object,
     setCards: Array,
     chapterTests: Array,
+    writtenSheets: { type: Array, default: () => [] },
     stats: Object,
     board: Object,
 });
@@ -118,7 +119,7 @@ const clearBank = (card) => {
                     {{ boardCode }} {{ gradeLevel?.name }} · Ch {{ chapter.chapter_number }} · {{ chapter.name }}
                 </p>
                 <h2 class="text-xl font-semibold text-gray-800">Practice sets & chapter tests</h2>
-                <p class="mt-1 text-xs text-gray-500">S821 = MCQ practice · SF821 = fill-in-blank practice · T821 = chapter test</p>
+                <p class="mt-1 text-xs text-gray-500">S821 = MCQ practice · SF821 = fill-in-blank · T821 = chapter test · S821-W = written homework</p>
             </div>
             <div class="flex flex-wrap gap-2">
                 <Link
@@ -149,6 +150,13 @@ const clearBank = (card) => {
                 >
                     Chapter tests
                 </Link>
+                <Link
+                    v-if="isAdmin"
+                    :href="route('admin.written-sheets.create', { chapter_id: chapter.id })"
+                    class="rounded-md border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-900 hover:bg-violet-100"
+                >
+                    Written sheet
+                </Link>
             </div>
             </div>
         </template>
@@ -168,10 +176,14 @@ const clearBank = (card) => {
                 >
                     {{ usePage().props.flash.error }}
                 </div>
-                <div class="grid gap-4 sm:grid-cols-4">
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-sky-600">{{ stats.chapter_tests_count || 0 }}</p>
                         <p class="text-xs text-gray-500">Chapter tests</p>
+                    </div>
+                    <div class="rounded-lg bg-white p-4 text-center shadow-sm">
+                        <p class="text-2xl font-bold text-violet-600">{{ stats.written_sheets_count || 0 }}</p>
+                        <p class="text-xs text-gray-500">Written sheets</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ topicSetCards.length + chapterPracticeBankCards.length + chapterBankCards.length }}</p>
@@ -184,6 +196,24 @@ const clearBank = (card) => {
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.sets_count }}</p>
                         <p class="text-xs text-gray-500">Packaged sets</p>
+                    </div>
+                </div>
+
+                <div v-if="writtenSheets?.length" class="space-y-3">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-violet-700">Written homework sheets</h3>
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <Link
+                            v-for="sheet in writtenSheets"
+                            :key="`written-${sheet.id}`"
+                            :href="route('admin.written-sheets.show', sheet.id)"
+                            class="rounded-xl border border-violet-300 bg-violet-50 p-5 shadow-sm transition hover:border-violet-500"
+                        >
+                            <p class="font-mono text-3xl font-bold tracking-wide text-violet-800">{{ sheet.set_code }}</p>
+                            <p class="mt-2 text-sm font-semibold text-gray-900">Written {{ sheet.kind_label.toLowerCase() }}</p>
+                            <p v-if="sheet.topic_name" class="mt-1 text-xs text-gray-700">{{ sheet.topic_name }}</p>
+                            <p class="mt-2 text-sm text-gray-800">{{ sheet.questions_count }} questions</p>
+                            <p class="mt-2 text-xs font-medium text-violet-800">{{ sheet.written_status_label }}</p>
+                        </Link>
                     </div>
                 </div>
 
@@ -328,12 +358,14 @@ const clearBank = (card) => {
                     </div>
                 </div>
 
-                <div v-if="!topicSetCards.length && !chapterPracticeBankCards.length && !chapterBankCards.length && !chapterTests?.length" class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
+                <div v-if="!topicSetCards.length && !chapterPracticeBankCards.length && !chapterBankCards.length && !chapterTests?.length && !writtenSheets?.length" class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
                     No questions or sets in this chapter yet.
                     <span v-if="isAdmin">
                         <Link :href="route('admin.questions.create-fill-in-blank', { syllabus_chapter_id: chapter.id })" class="text-emerald-700 hover:underline">Add fill in the blanks</Link>
                         or
                         <Link :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })" class="text-indigo-600 hover:underline">Add MCQs</Link>
+                        or
+                        <Link :href="route('admin.written-sheets.create', { chapter_id: chapter.id })" class="text-violet-700 hover:underline">Create written sheet</Link>
                     </span>
                 </div>
             </div>

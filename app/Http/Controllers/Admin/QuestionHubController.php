@@ -21,6 +21,8 @@ use App\Services\SetCodeLookupService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
+use App\Support\WorksheetDeliveryMode;
+use App\Support\WrittenSheetStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -321,6 +323,28 @@ class QuestionHubController extends Controller
             ]);
         }
 
+        $writtenSheets = Worksheet::query()
+            ->where('delivery_mode', WorksheetDeliveryMode::WRITTEN)
+            ->where(function (Builder $query) use ($chapter) {
+                $query->where('syllabus_chapter_id', $chapter->id)
+                    ->orWhereHas('topic', fn (Builder $inner) => $inner->where('syllabus_chapter_id', $chapter->id));
+            })
+            ->with('topic:id,name')
+            ->withCount('questions')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (Worksheet $sheet) => [
+                'id' => $sheet->id,
+                'set_code' => $sheet->set_code,
+                'kind_label' => $sheet->isChapterTest() ? 'Test' : 'Practice',
+                'topic_name' => $sheet->topic?->name,
+                'questions_count' => $sheet->questions_count,
+                'written_status' => $sheet->written_status,
+                'written_status_label' => WrittenSheetStatus::label($sheet->written_status ?? WrittenSheetStatus::DRAFT),
+            ])
+            ->values()
+            ->all();
+
         return Inertia::render('Admin/Questions/Hub/Topics', [
             'chapter' => [
                 'id' => $chapter->id,
@@ -333,11 +357,13 @@ class QuestionHubController extends Controller
             'activeYear' => $chapter->syllabusVersion?->academicYear?->only(['id', 'name']),
             'setCards' => $setCards->values()->all(),
             'chapterTests' => $chapterTests->values()->all(),
+            'writtenSheets' => $writtenSheets,
             'stats' => [
                 'topics_count' => $topicModels->count(),
                 'questions_count' => $topicModels->sum('questions_count'),
                 'sets_count' => $setCards->where('type', 'set')->count(),
                 'chapter_tests_count' => $chapterTests->count(),
+                'written_sheets_count' => count($writtenSheets),
             ],
         ]);
     }
