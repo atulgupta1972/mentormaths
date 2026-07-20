@@ -849,13 +849,14 @@ const submit = () => {
                     <div v-if="form.chapter_id" class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
                         <h3 class="font-semibold text-emerald-950">Diagram sums — upload .zip pack</h3>
                         <p class="mt-1 text-sm text-emerald-900">
-                            Zip with <strong>questions.json</strong> plus diagram images (<strong>q1.jpg</strong>, <strong>q2.jpg</strong>, …).
-                            In JSON, set <strong>"needs_diagram": true</strong> and <strong>"diagram_file": "q1.jpg"</strong> for geometry sums
+                            Zip with <strong>questions.json</strong> plus diagram images (<strong>q1.png</strong>, <strong>q2.png</strong>, …).
+                            In JSON, set <strong>"needs_diagram": true</strong> and <strong>"diagram_file": "q1.png"</strong> for geometry sums
                             <span v-if="supportsDiagrams">(this chapter supports diagrams)</span>.
                             For algebra sums, omit <strong>needs_diagram</strong> — the system ignores it.
                         </p>
                         <p class="mt-2 text-xs text-emerald-800">
-                            Layout: <span class="font-mono">questions.json, q1.jpg, q2.jpg, …</span>
+                            Layout: <span class="font-mono">questions.json, q1.png, q2.png, …</span>.
+                            For crispest diagrams, draw in GeoGebra or PowerPoint and export PNG (~800×500 px).
                         </p>
                         <div class="mt-3 flex flex-wrap items-center gap-3">
                             <PrimaryButton

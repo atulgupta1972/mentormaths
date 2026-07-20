@@ -28,7 +28,7 @@
         .questions { margin: 0; padding: 0; }
         .question { margin: 0 0 5px; padding: 0; page-break-inside: auto; }
         .q-head { font-weight: bold; margin: 0; }
-        .diagram { max-width: 160px; max-height: 100px; margin: 2px 0; display: block; }
+        .diagram { max-width: 100%; width: 320px; max-height: 180px; margin: 4px 0 2px; display: block; object-fit: contain; }
         .options { margin: 2px 0 0 12px; }
         .option { margin: 0; line-height: 1.3; }
         .footer {
