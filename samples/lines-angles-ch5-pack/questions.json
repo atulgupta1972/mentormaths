@@ -3,6 +3,7 @@
         {
             "topic": "Related Angles",
             "question": "In the figure, lines AB and CD intersect at O. If ∠AOC = 58°, then the vertically opposite angle ∠BOD = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q1.jpg",
             "answer_format": "integer",
             "correct_answer": "58",
@@ -13,6 +14,7 @@
         {
             "topic": "Related Angles",
             "question": "In the figure, POQ is a straight line. If ∠POR = 47°, then ∠ROQ = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q2.jpg",
             "answer_format": "integer",
             "correct_answer": "133",
@@ -23,6 +25,7 @@
         {
             "topic": "Related Angles",
             "question": "In the figure, ∠A and ∠B form a linear pair. If ∠A = 112°, then ∠B = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q3.jpg",
             "answer_format": "integer",
             "correct_answer": "68",
@@ -33,6 +36,7 @@
         {
             "topic": "Related Angles",
             "question": "In the figure, two lines intersect. If one angle is 39°, then its vertically opposite angle is ____°.",
+            "needs_diagram": true,
             "diagram_file": "q4.jpg",
             "answer_format": "integer",
             "correct_answer": "39",
@@ -43,6 +47,7 @@
         {
             "topic": "Pairs of Lines",
             "question": "In the figure, lines l and m intersect at P. If ∠1 = 90°, then ∠1 is a ____° angle.",
+            "needs_diagram": true,
             "diagram_file": "q5.jpg",
             "answer_format": "integer",
             "correct_answer": "90",
@@ -53,6 +58,7 @@
         {
             "topic": "Pairs of Lines",
             "question": "In the figure, lines AB and CD intersect at O. If ∠AOC = 36°, then ∠AOD = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q6.jpg",
             "answer_format": "integer",
             "correct_answer": "144",
@@ -63,6 +69,7 @@
         {
             "topic": "Pairs of Lines",
             "question": "In the figure, OP ⊥ OQ. The measure of ∠POQ is ____°.",
+            "needs_diagram": true,
             "diagram_file": "q7.jpg",
             "answer_format": "integer",
             "correct_answer": "90",
@@ -73,6 +80,7 @@
         {
             "topic": "Pairs of Lines",
             "question": "In the figure, lines intersect and ∠x = 71°. The angle adjacent to ∠x on the straight line is ____°.",
+            "needs_diagram": true,
             "diagram_file": "q8.jpg",
             "answer_format": "integer",
             "correct_answer": "109",
@@ -83,6 +91,7 @@
         {
             "topic": "Parallel Lines & Transversal",
             "question": "In the figure, l ∥ m and t is a transversal. If ∠1 = 65° (corresponding angles), then ∠5 = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q9.jpg",
             "answer_format": "integer",
             "correct_answer": "65",
@@ -93,6 +102,7 @@
         {
             "topic": "Parallel Lines & Transversal",
             "question": "In the figure, l ∥ m and line t is a transversal. If ∠3 = 52° (alternate interior angles), then ∠6 = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q10.jpg",
             "answer_format": "integer",
             "correct_answer": "52",
@@ -103,6 +113,7 @@
         {
             "topic": "Parallel Lines & Transversal",
             "question": "In the figure, l ∥ m. If ∠4 = 118° (co-interior angles), then ∠5 = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q11.jpg",
             "answer_format": "integer",
             "correct_answer": "62",
@@ -113,6 +124,7 @@
         {
             "topic": "Parallel Lines & Transversal",
             "question": "In the figure, l ∥ m and t is a transversal. If ∠2 = 44° (corresponding angles), then ∠6 = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q12.jpg",
             "answer_format": "integer",
             "correct_answer": "44",
@@ -123,6 +135,7 @@
         {
             "topic": "Parallel Lines & Transversal",
             "question": "In the figure, AB ∥ CD and EF is a transversal. If ∠AEF = 73°, then the alternate interior angle ∠EFD = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q13.jpg",
             "answer_format": "integer",
             "correct_answer": "73",
@@ -133,6 +146,7 @@
         {
             "topic": "Parallel Lines & Transversal",
             "question": "In the figure, l ∥ m. The co-interior angles on one side of transversal t are 105° and x. Then x = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q14.jpg",
             "answer_format": "integer",
             "correct_answer": "75",
@@ -143,6 +157,7 @@
         {
             "topic": "Parallel Lines & Transversal",
             "question": "In the figure, l ∥ m. If an acute angle formed by the transversal is 28°, then another acute angle in the alternate interior position is ____°.",
+            "needs_diagram": true,
             "diagram_file": "q15.jpg",
             "answer_format": "integer",
             "correct_answer": "28",
@@ -153,6 +168,7 @@
         {
             "topic": "Parallel Lines & Transversal",
             "question": "In the figure, l ∥ m. If ∠7 = 132°, then the co-interior angle ∠4 on the same side of the transversal is ____°.",
+            "needs_diagram": true,
             "diagram_file": "q16.jpg",
             "answer_format": "integer",
             "correct_answer": "48",
@@ -163,6 +179,7 @@
         {
             "topic": "Checking Parallel Lines",
             "question": "In the figure, lines l and m are cut by transversal t. If corresponding angles ∠1 and ∠5 are both 81°, then ∠1 − ∠5 = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q17.jpg",
             "answer_format": "integer",
             "correct_answer": "0",
@@ -173,6 +190,7 @@
         {
             "topic": "Checking Parallel Lines",
             "question": "In the figure, transversal t cuts lines l and m. If alternate interior angles are 54° and x, and the lines are parallel, then x = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q18.jpg",
             "answer_format": "integer",
             "correct_answer": "54",
@@ -183,6 +201,7 @@
         {
             "topic": "Checking Parallel Lines",
             "question": "In the figure, corresponding angles measure 76° and 76°. The common measure is ____°.",
+            "needs_diagram": true,
             "diagram_file": "q19.jpg",
             "answer_format": "integer",
             "correct_answer": "76",
@@ -193,12 +212,123 @@
         {
             "topic": "Checking Parallel Lines",
             "question": "In the figure, co-interior angles are 111° and y. If the lines are parallel, then y = ____°.",
+            "needs_diagram": true,
             "diagram_file": "q20.jpg",
             "answer_format": "integer",
             "correct_answer": "69",
             "method_hint": "Co-interior angles are supplementary when lines are parallel.",
             "explanation": "y = 180° − 111° = 69°.",
             "difficulty": "Medium"
+        },
+        {
+            "topic": "Related Angles",
+            "question": "In the figure, ray OX stands on line PQ. If ∠POX = 61°, then ∠XOQ = ____°.",
+            "needs_diagram": true,
+            "diagram_file": "q21.jpg",
+            "answer_format": "integer",
+            "correct_answer": "119",
+            "method_hint": "Angles on a straight line sum to 180°.",
+            "explanation": "∠XOQ = 180° − 61° = 119°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Pairs of Lines",
+            "question": "In the figure, lines AB and CD intersect at O. If ∠BOD = 127°, then ∠AOC = ____°.",
+            "needs_diagram": true,
+            "diagram_file": "q22.jpg",
+            "answer_format": "integer",
+            "correct_answer": "127",
+            "method_hint": "Vertically opposite angles are equal.",
+            "explanation": "∠AOC and ∠BOD are vertically opposite, so ∠AOC = 127°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, l ∥ m and t is a transversal. If ∠8 = 57°, then the corresponding angle ∠4 = ____°.",
+            "needs_diagram": true,
+            "diagram_file": "q23.jpg",
+            "answer_format": "integer",
+            "correct_answer": "57",
+            "method_hint": "Corresponding angles are equal for parallel lines.",
+            "explanation": "∠4 = 57°.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "In the figure, l ∥ m. Co-interior angles are (2x + 20)° and (3x − 10)°. Then x = ____.",
+            "needs_diagram": true,
+            "diagram_file": "q24.jpg",
+            "answer_format": "integer",
+            "correct_answer": "34",
+            "method_hint": "Co-interior angles sum to 180°.",
+            "explanation": "2x + 20 + 3x − 10 = 180 ⇒ 5x + 10 = 180 ⇒ x = 34.",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, alternate exterior angles are 49° and 49°. The lines are parallel. (Answer 1 for yes, 0 for no.)",
+            "needs_diagram": true,
+            "diagram_file": "q25.jpg",
+            "answer_format": "integer",
+            "correct_answer": "1",
+            "method_hint": "Equal alternate exterior angles imply parallel lines.",
+            "explanation": "Both angles are 49°, so the lines are parallel. Answer: 1.",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, corresponding angles are (4x − 12)° and (2x + 18)°. For parallel lines, x = ____.",
+            "needs_diagram": true,
+            "diagram_file": "q26.jpg",
+            "answer_format": "integer",
+            "correct_answer": "15",
+            "method_hint": "Set corresponding angles equal.",
+            "explanation": "4x − 12 = 2x + 18 ⇒ 2x = 30 ⇒ x = 15.",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, alternate interior angles are (5y − 20)° and (3y + 10)°. For parallel lines, y = ____.",
+            "needs_diagram": true,
+            "diagram_file": "q27.jpg",
+            "answer_format": "integer",
+            "correct_answer": "15",
+            "method_hint": "Alternate interior angles must be equal.",
+            "explanation": "5y − 20 = 3y + 10 ⇒ 2y = 30 ⇒ y = 15.",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, co-interior angles are (2p + 35)° and (3p − 5)°. For parallel lines, p = ____.",
+            "needs_diagram": true,
+            "diagram_file": "q28.jpg",
+            "answer_format": "integer",
+            "correct_answer": "30",
+            "method_hint": "Co-interior angles sum to 180°.",
+            "explanation": "2p + 35 + 3p − 5 = 180 ⇒ 5p + 30 = 180 ⇒ p = 30.",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, corresponding angles are (6m − 50)° and (4m + 10)°. For parallel lines, m = ____.",
+            "needs_diagram": true,
+            "diagram_file": "q29.jpg",
+            "answer_format": "integer",
+            "correct_answer": "30",
+            "method_hint": "Equal corresponding angles give a linear equation.",
+            "explanation": "6m − 50 = 4m + 10 ⇒ 2m = 60 ⇒ m = 30.",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "In the figure, alternate interior angles are (7n + 5)° and (5n + 29)°. For parallel lines, n = ____.",
+            "needs_diagram": true,
+            "diagram_file": "q30.jpg",
+            "answer_format": "integer",
+            "correct_answer": "12",
+            "method_hint": "Set alternate interior angles equal for parallel lines.",
+            "explanation": "7n + 5 = 5n + 29 ⇒ 2n = 24 ⇒ n = 12.",
+            "difficulty": "Hard"
         }
     ]
 }

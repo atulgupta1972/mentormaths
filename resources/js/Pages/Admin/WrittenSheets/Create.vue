@@ -24,6 +24,7 @@ const props = defineProps({
     chapterPlan: { type: Array, default: () => [] },
     manualQuestionsDraft: { type: Array, default: () => [] },
     selectedQuestionIds: { type: Array, default: () => [] },
+    supportsDiagrams: { type: Boolean, default: false },
 });
 
 const page = usePage();
@@ -58,6 +59,7 @@ const chapterPlanRows = ref(
 
 const generatingChapterPrompt = ref(false);
 const zipPackInput = ref(null);
+const writtenSheetZipInput = ref(null);
 const zipImportForm = useForm({
     pack: null,
     scope: 'chapter',
@@ -66,6 +68,14 @@ const zipImportForm = useForm({
     after_import: 'written_sheet',
     written_sheet_kind: '',
     written_topic_scope: '',
+});
+const writtenSheetZipForm = useForm({
+    pack: null,
+    chapter_id: '',
+    sheet_kind: '',
+    topic_id: '',
+    topic_scope: '',
+    notes: '',
 });
 
 const form = useForm({
@@ -583,6 +593,44 @@ const canImportZipPack = computed(() => {
     return true;
 });
 
+const canImportWrittenSheetZip = computed(() => {
+    if (!form.chapter_id) {
+        return false;
+    }
+
+    if (form.sheet_kind === 'test' || isMultipleTopicScope.value) {
+        return true;
+    }
+
+    return isOneTopicScope.value && Boolean(form.topic_id);
+});
+
+const onWrittenSheetZipSelected = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    if (!canImportWrittenSheetZip.value) {
+        event.target.value = '';
+
+        return;
+    }
+
+    writtenSheetZipForm.pack = file;
+    writtenSheetZipForm.chapter_id = form.chapter_id;
+    writtenSheetZipForm.sheet_kind = form.sheet_kind;
+    writtenSheetZipForm.topic_id = form.topic_id || '';
+    writtenSheetZipForm.topic_scope = topicScope.value;
+    writtenSheetZipForm.notes = form.notes;
+
+    writtenSheetZipForm.post(route('admin.written-sheets.import-zip-pack'), {
+        forceFormData: true,
+    });
+
+    event.target.value = '';
+};
+
 const onZipPackSelected = (event) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -674,6 +722,9 @@ const submit = () => {
                     </div>
                     <div v-if="page.props.flash?.success" class="rounded-md bg-green-50 p-4 text-sm text-green-800">
                         {{ page.props.flash.success }}
+                    </div>
+                    <div v-if="page.props.flash?.warning" class="rounded-md bg-amber-50 p-4 text-sm text-amber-900">
+                        {{ page.props.flash.warning }}
                     </div>
 
                     <div v-if="formErrorEntries.length" class="rounded-md bg-rose-50 p-4 text-sm text-rose-800">
@@ -796,28 +847,43 @@ const submit = () => {
                     </div>
 
                     <div v-if="form.chapter_id" class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
-                        <h3 class="font-semibold text-emerald-950">Diagram questions — upload .zip pack</h3>
+                        <h3 class="font-semibold text-emerald-950">Diagram sums — upload .zip pack</h3>
                         <p class="mt-1 text-sm text-emerald-900">
-                            Zip with <strong>questions.json</strong> plus diagram images (<strong>q1.jpg</strong>, <strong>q2.jpg</strong>, … or names in <strong>diagram_file</strong>).
-                            Questions save to the bank with diagrams, then appear here for selection.
+                            Zip with <strong>questions.json</strong> plus diagram images (<strong>q1.jpg</strong>, <strong>q2.jpg</strong>, …).
+                            In JSON, set <strong>"needs_diagram": true</strong> and <strong>"diagram_file": "q1.jpg"</strong> for geometry sums
+                            <span v-if="supportsDiagrams">(this chapter supports diagrams)</span>.
+                            For algebra sums, omit <strong>needs_diagram</strong> — the system ignores it.
                         </p>
                         <p class="mt-2 text-xs text-emerald-800">
-                            Example: <span class="font-mono">questions.json, q1.jpg, q2.jpg, …</span>
-                            — see <span class="font-mono">samples/lines-angles-ch5-pack/</span> in the repo.
+                            Layout: <span class="font-mono">questions.json, q1.jpg, q2.jpg, …</span>
                         </p>
                         <div class="mt-3 flex flex-wrap items-center gap-3">
                             <PrimaryButton
                                 type="button"
+                                :disabled="!canImportWrittenSheetZip || writtenSheetZipForm.processing"
+                                @click="writtenSheetZipInput?.click()"
+                            >
+                                {{ writtenSheetZipForm.processing ? 'Creating…' : 'Upload zip → generate written PDF' }}
+                            </PrimaryButton>
+                            <SecondaryButton
+                                type="button"
                                 :disabled="!canImportZipPack || zipImportForm.processing"
                                 @click="zipPackInput?.click()"
                             >
-                                {{ zipImportForm.processing ? 'Importing…' : 'Upload .zip with diagrams' }}
-                            </PrimaryButton>
-                            <InputError :message="zipImportForm.errors.pack" />
+                                {{ zipImportForm.processing ? 'Importing…' : 'Import zip to bank only' }}
+                            </SecondaryButton>
+                            <InputError :message="writtenSheetZipForm.errors.pack || zipImportForm.errors.pack" />
                         </div>
-                        <p v-if="!canImportZipPack" class="mt-2 text-xs text-amber-800">
+                        <p v-if="!canImportWrittenSheetZip" class="mt-2 text-xs text-amber-800">
                             Select chapter{{ isOneTopicScope && form.sheet_kind === 'practice' ? ' and topic' : '' }} first.
                         </p>
+                        <input
+                            ref="writtenSheetZipInput"
+                            type="file"
+                            accept=".zip,application/zip"
+                            class="hidden"
+                            @change="onWrittenSheetZipSelected"
+                        >
                         <input
                             ref="zipPackInput"
                             type="file"
@@ -970,6 +1036,9 @@ const submit = () => {
                             <p v-if="validManualRows.length && useChapterCursorPlan" class="mt-2 text-xs text-emerald-800">
                                 {{ validManualRows.length }} question(s) imported. Chapter plan totals updated from JSON.
                             </p>
+                            <p class="mt-2 text-xs text-gray-500">
+                                For geometry sums with figures, include <strong>needs_diagram</strong> in JSON and upload images via the zip pack above.
+                            </p>
                         </div>
 
                         <div class="space-y-3">
@@ -1004,6 +1073,12 @@ const submit = () => {
                                             </option>
                                         </select>
                                         <InputError :message="manualRowError(index, 'answer_format')" class="mt-1" />
+                                    </div>
+                                    <div v-if="supportsDiagrams" class="sm:col-span-2">
+                                        <label class="inline-flex items-center gap-2 text-xs font-medium text-gray-700">
+                                            <input v-model="row.needs_diagram" type="checkbox" class="rounded border-gray-300 text-indigo-600">
+                                            Needs diagram (use zip upload for the image; ignored for algebra chapters)
+                                        </label>
                                     </div>
                                     <div v-if="form.sheet_kind === 'test' || isMultipleTopicScope" class="sm:col-span-2">
                                         <label class="text-xs font-medium text-gray-700">Topic name</label>

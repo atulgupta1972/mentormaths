@@ -261,6 +261,9 @@ class QuestionController extends Controller
         if ($result['diagram_count'] > 0) {
             $message .= " {$result['diagram_count']} diagram(s) attached.";
         }
+        if (($result['missing_diagram_count'] ?? 0) > 0) {
+            $message .= " Warning: {$result['missing_diagram_count']} geometry sum(s) marked needs_diagram but had no image in the zip.";
+        }
 
         if (($validated['after_import'] ?? null) === 'written_sheet') {
             $chapterId = $chapter?->id ?? $topic?->syllabus_chapter_id;

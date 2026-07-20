@@ -6,6 +6,7 @@ use App\Models\Question;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\User;
+use App\Support\DiagramQuestionSupport;
 use App\Support\QuestionBankPurpose;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
@@ -26,7 +27,7 @@ class QuestionZipImportService
     ) {}
 
     /**
-     * @return array{type: string, saved: list<Question>, diagram_count: int, temp_dir: string}
+     * @return array{type: string, saved: list<Question>, diagram_count: int, missing_diagram_count: int, temp_dir: string}
      */
     public function importPack(
         UploadedFile $zip,
@@ -75,11 +76,22 @@ class QuestionZipImportService
             };
 
             $diagramCount = 0;
+            $missingDiagramCount = 0;
+            $geometryChapter = $chapter ?? $topic?->chapter;
+
             foreach ($saved as $index => $question) {
                 $path = $extracted['diagram_paths'][$index] ?? null;
+                $rawItem = $extracted['items'][$index] ?? [];
+
                 if ($path && is_file($path)) {
                     $this->diagramService->attachFromPath($question, $path);
                     $diagramCount++;
+
+                    continue;
+                }
+
+                if (DiagramQuestionSupport::shouldExpectDiagram($rawItem, $geometryChapter)) {
+                    $missingDiagramCount++;
                 }
             }
 
@@ -87,6 +99,7 @@ class QuestionZipImportService
                 'type' => $extracted['type'],
                 'saved' => $saved,
                 'diagram_count' => $diagramCount,
+                'missing_diagram_count' => $missingDiagramCount,
                 'temp_dir' => $extracted['temp_dir'],
             ];
         } finally {
@@ -99,6 +112,7 @@ class QuestionZipImportService
      *     type: string,
      *     rows: list<array<string, mixed>>,
      *     diagram_paths: array<int, string|null>,
+     *     items: list<array<string, mixed>>,
      *     temp_dir: string
      * }
      */
@@ -160,11 +174,14 @@ class QuestionZipImportService
 
         $rows = [];
         $diagramPaths = [];
+        $rawItems = [];
 
         foreach (array_values($items) as $index => $item) {
             if (! is_array($item)) {
                 continue;
             }
+
+            $rawItems[] = $item;
 
             if ($type === self::TYPE_FILL_IN_BLANK) {
                 $rows[] = $this->fillBlankImport->parseJson(json_encode(['questions' => [$item]]))[0];
@@ -185,6 +202,7 @@ class QuestionZipImportService
             'type' => $type,
             'rows' => $rows,
             'diagram_paths' => $diagramPaths,
+            'items' => $rawItems,
             'temp_dir' => $tempDir,
         ];
     }

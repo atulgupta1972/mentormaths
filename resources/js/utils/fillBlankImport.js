@@ -86,6 +86,7 @@ function normalizeItem(item, index) {
         explanation: String(item.explanation ?? '').trim(),
         method_hint: String(item.method_hint ?? item.hint ?? '').trim(),
         difficulty: String(item.difficulty ?? '').trim(),
+        needs_diagram: Boolean(item.needs_diagram ?? item.with_figure ?? false),
     };
 }
 
@@ -117,6 +118,7 @@ export function rowsFromImportData(importRows) {
         explanation: row.explanation || '',
         method_hint: row.method_hint || '',
         difficulty: row.difficulty || '',
+        needs_diagram: Boolean(row.needs_diagram),
     }));
 }
 
@@ -131,6 +133,7 @@ export function defaultFillBlankRow(topicName = '') {
         explanation: '',
         method_hint: '',
         difficulty: 'Medium',
+        needs_diagram: false,
     };
 }
 

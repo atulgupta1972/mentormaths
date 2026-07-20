@@ -13,8 +13,10 @@ use App\Models\SyllabusVersion;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\FillBlankImportService;
+use App\Services\QuestionZipImportService;
 use App\Services\SetAssignmentService;
 use App\Services\WrittenSheetService;
+use App\Support\DiagramQuestionSupport;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -31,6 +33,7 @@ class WrittenSheetController extends Controller
         private AdminGradeContext $gradeContext,
         private FillBlankImportService $fillBlankImportService,
         private SetAssignmentService $assignmentService,
+        private QuestionZipImportService $zipImportService,
     ) {}
 
     public function index(Request $request): Response
@@ -156,6 +159,7 @@ class WrittenSheetController extends Controller
             'chapters' => $chapters,
             'topics' => $topics,
             'questions' => $questions,
+            'supportsDiagrams' => $chapter ? DiagramQuestionSupport::looksLikeGeometryChapter($chapter) : false,
             'filters' => [
                 'chapter_id' => $chapterId,
                 'topic_id' => $topicId,
@@ -193,7 +197,7 @@ class WrittenSheetController extends Controller
         $chapter = SyllabusChapter::query()->findOrFail($validated['chapter_id']);
 
         try {
-            $prompt = $this->fillBlankImportService->cursorPromptForChapter($chapter, $validated['plan']);
+            $prompt = $this->fillBlankImportService->cursorPromptForWrittenChapter($chapter, $validated['plan']);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -327,6 +331,89 @@ class WrittenSheetController extends Controller
         return redirect()
             ->route('admin.written-sheets.show', $worksheet)
             ->with('success', 'Written sheet created. Review the PDF, then verify to allow assigning.');
+    }
+
+    public function importZipPack(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'pack' => ['required', 'file', 'mimes:zip', 'max:51200'],
+            'chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'sheet_kind' => ['nullable', 'in:practice,test'],
+            'topic_id' => ['nullable', 'exists:syllabus_topics,id'],
+            'topic_scope' => ['nullable', 'in:one,multiple'],
+            'notes' => ['nullable', 'string'],
+        ], [
+            'pack.required' => 'Choose a .zip file containing questions.json and diagram images.',
+            'pack.mimes' => 'Upload a .zip file (questions.json + JPG/PNG images).',
+        ]);
+
+        $chapter = SyllabusChapter::query()->with('topics')->findOrFail($validated['chapter_id']);
+        $sheetKind = $validated['sheet_kind'] ?? 'test';
+        $topicScope = ($validated['topic_scope'] ?? 'one') === 'multiple' ? 'multiple' : 'one';
+        $topic = ! empty($validated['topic_id'])
+            ? $chapter->topics->firstWhere('id', (int) $validated['topic_id'])
+            : null;
+
+        if ($sheetKind === 'practice' && $topicScope === 'one' && ! $topic) {
+            return back()->with('error', 'Select a topic for a written practice sheet zip import.');
+        }
+
+        try {
+            $scopeTopic = ($sheetKind === 'practice' && $topicScope === 'one') ? $topic : null;
+
+            $result = $this->zipImportService->importPack(
+                $request->file('pack'),
+                $request->user(),
+                $scopeTopic,
+                $scopeTopic ? null : $chapter,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $questionIds = collect($result['saved'])->pluck('id')->all();
+
+        if ($questionIds === []) {
+            return back()->with('error', 'No questions could be imported from the zip file.');
+        }
+
+        try {
+            if ($sheetKind === 'test' || $topicScope === 'multiple' || ! $topic) {
+                $worksheet = $this->writtenSheetService->createChapterTest(
+                    $chapter,
+                    $questionIds,
+                    $request->user(),
+                    $validated['notes'] ?? null,
+                );
+            } else {
+                $worksheet = $this->writtenSheetService->createFromTopic(
+                    $topic,
+                    $questionIds,
+                    $request->user(),
+                    $validated['notes'] ?? null,
+                );
+            }
+
+            $this->writtenSheetService->generatePdf($worksheet);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not generate the written sheet PDF. '.$e->getMessage());
+        }
+
+        $message = count($questionIds).' question(s) imported and written sheet PDF generated.';
+        if ($result['diagram_count'] > 0) {
+            $message .= " {$result['diagram_count']} diagram(s) attached.";
+        }
+        if (($result['missing_diagram_count'] ?? 0) > 0) {
+            $message .= " Warning: {$result['missing_diagram_count']} geometry sum(s) marked needs_diagram but had no image in the zip.";
+        }
+
+        return redirect()
+            ->route('admin.written-sheets.show', $worksheet)
+            ->with($result['missing_diagram_count'] > 0 ? 'warning' : 'success', $message);
     }
 
     public function show(Request $request, Worksheet $worksheet): Response

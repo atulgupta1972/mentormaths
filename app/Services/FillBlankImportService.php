@@ -6,6 +6,7 @@ use App\Models\Question;
 use App\Models\QuestionBlankAnswer;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
+use App\Support\DiagramQuestionSupport;
 use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
 use Illuminate\Support\Facades\DB;
@@ -82,6 +83,31 @@ PROMPT;
     /**
      * @param  list<array{topic_id: int, topic_name?: string, easy?: int, medium?: int, hard?: int}>  $planRows
      */
+    public function cursorPromptForWrittenChapter(SyllabusChapter $chapter, array $planRows): string
+    {
+        $prompt = $this->cursorPromptForChapter($chapter, $planRows);
+
+        if (! DiagramQuestionSupport::looksLikeGeometryChapter($chapter)) {
+            return $prompt;
+        }
+
+        return $prompt.$this->diagramPromptBlock();
+    }
+
+    private function diagramPromptBlock(): string
+    {
+        return <<<'PROMPT'
+
+Diagram sums (geometry chapters only):
+- For every sum that needs a figure, set "needs_diagram": true and "diagram_file": "qN.jpg" (N = question order: q1.jpg, q2.jpg, …)
+- Start the question with "In the figure, …" when needs_diagram is true
+- For algebra/number-only sums, omit needs_diagram or set it to false (diagram fields are ignored without images in the zip)
+PROMPT;
+    }
+
+    /**
+     * @param  list<array{topic_id: int, topic_name?: string, easy?: int, medium?: int, hard?: int}>  $planRows
+     */
     public function cursorPromptForChapter(SyllabusChapter $chapter, array $planRows): string
     {
         $chapter->loadMissing([
@@ -148,7 +174,9 @@ JSON format:
   "questions": [
     {
       "topic": "Exact topic name from plan",
-      "question": "(-12) + 8 = ____",
+      "question": "In the figure, … = ____",
+      "needs_diagram": true,
+      "diagram_file": "q1.jpg",
       "answer_format": "integer",
       "correct_answer": "-4",
       "method_hint": "Add integers with different signs by subtracting and keeping the sign of the larger absolute value.",
@@ -358,6 +386,7 @@ PROMPT;
             'explanation' => trim((string) ($item['explanation'] ?? '')),
             'method_hint' => trim((string) ($item['method_hint'] ?? $item['hint'] ?? '')),
             'difficulty' => trim((string) ($item['difficulty'] ?? '')),
+            'needs_diagram' => DiagramQuestionSupport::needsDiagram($item),
         ];
     }
 
