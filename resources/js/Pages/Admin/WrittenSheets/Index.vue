@@ -62,9 +62,18 @@ defineProps({
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 text-right">
-                                    <Link :href="route('admin.written-sheets.show', sheet.id)" class="text-indigo-600 hover:underline">
-                                        Open
-                                    </Link>
+                                    <div class="flex flex-wrap items-center justify-end gap-3">
+                                        <Link :href="route('admin.written-sheets.show', sheet.id)" class="text-indigo-600 hover:underline">
+                                            Open
+                                        </Link>
+                                        <Link
+                                            v-if="sheet.can_assign"
+                                            :href="`${route('admin.written-sheets.show', sheet.id)}#assign`"
+                                            class="font-medium text-emerald-700 hover:underline"
+                                        >
+                                            Assign
+                                        </Link>
+                                    </div>
                                 </td>
                             </tr>
                             <tr v-if="!sheets.length">

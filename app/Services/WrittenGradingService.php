@@ -33,7 +33,7 @@ class WrittenGradingService
         $questions = $worksheet->questions->values()->map(function (Question $question, int $index) {
             $correct = $question->isMcq()
                 ? $this->pdfService->plainText($question->options->firstWhere('is_correct', true)?->option_text)
-                : $question->blankAnswer?->answer_text;
+                : $question->blankAnswer?->correct_answer;
 
             return [
                 'number' => $index + 1,
@@ -112,11 +112,13 @@ class WrittenGradingService
     {
         $lines = [
             "Grade handwritten work for sheet {$setCode}.",
-            'For each question, read the student handwriting from the photos.',
-            'Check working steps, method, and final answer.',
+            'The question sheet has no answer spaces. Students write answers on a separate answer sheet.',
+            'Match each answer to a question by the label written on the answer sheet (Q1, Q2, Q3, …).',
+            'Read the uploaded photo(s) of the answer sheet. Ignore rough-work pages unless they show the labelled final answer.',
+            'For each question number, extract the student answer, check working/method where visible, and compare to the correct answer.',
             'Return JSON with keys:',
             '- summary: short overall feedback for the student/parent',
-            '- items: array of objects with question_number, extracted_answer, step_feedback, score (0 or 1), is_correct (boolean), confidence (0 to 1), needs_review (boolean when handwriting unclear)',
+            '- items: array of objects with question_number, extracted_answer, step_feedback, score (0 or 1), is_correct (boolean), confidence (0 to 1), needs_review (boolean when handwriting or question label unclear)',
             '',
             'Questions and marking scheme:',
         ];

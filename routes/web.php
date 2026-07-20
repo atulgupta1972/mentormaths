@@ -194,6 +194,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/written-sheets', [WrittenSheetController::class, 'index'])->name('written-sheets.index');
     Route::get('/written-sheets/create', [WrittenSheetController::class, 'create'])->name('written-sheets.create');
+    Route::post('/written-sheets/chapter-prompt', [WrittenSheetController::class, 'chapterPrompt'])->name('written-sheets.chapter-prompt');
     Route::post('/written-sheets', [WrittenSheetController::class, 'store'])->name('written-sheets.store');
     Route::get('/written-sheets/{worksheet}', [WrittenSheetController::class, 'show'])->name('written-sheets.show');
     Route::post('/written-sheets/{worksheet}/regenerate', [WrittenSheetController::class, 'regenerate'])->name('written-sheets.regenerate');

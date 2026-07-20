@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
+use App\Models\WrittenSubmission;
 use Carbon\Carbon;
 
 class AssignmentProgress
@@ -91,6 +92,60 @@ class AssignmentProgress
         }
 
         return 'grey';
+    }
+
+    /**
+     * Admin summary for a written homework assignment (upload + AI grade, not online attempts).
+     */
+    public static function formatWrittenAssignmentSummary(SetAssignment $assignment, ?WrittenSubmission $submission = null): array
+    {
+        $submission ??= $assignment->relationLoaded('writtenSubmissions')
+            ? $assignment->writtenSubmissions->first()
+            : $assignment->latestWrittenSubmission();
+
+        $overdue = self::isOverdue($assignment);
+        $practiceSet = $assignment->practiceSet;
+
+        $latestScore = null;
+        $latestMaxScore = null;
+        $latestScoreLabel = null;
+        $submittedAt = null;
+        $status = 'yellow';
+
+        if ($submission?->status === WrittenSubmission::STATUS_GRADED) {
+            $latestScore = $submission->score;
+            $latestMaxScore = $submission->max_score;
+            $latestScoreLabel = ScoreLabel::format($submission->score, $submission->max_score);
+            $submittedAt = $submission->graded_at?->toDateTimeString();
+            $status = 'green';
+        } elseif ($submission && in_array($submission->status, [
+            WrittenSubmission::STATUS_UPLOADED,
+            WrittenSubmission::STATUS_PROCESSING,
+        ], true)) {
+            $submittedAt = $submission->uploaded_at?->toDateTimeString();
+            $status = 'yellow';
+        } elseif ($submission?->status === WrittenSubmission::STATUS_FAILED) {
+            $status = 'overdue';
+        } elseif ($overdue) {
+            $status = 'overdue';
+        }
+
+        return [
+            'assignment_id' => $assignment->id,
+            'practice_set_id' => $assignment->worksheet_id,
+            'set_code' => $practiceSet->set_code,
+            'assignment_status' => $assignment->status,
+            'target_date' => $assignment->due_date?->toDateString(),
+            'assigned_at' => $assignment->assigned_at?->toDateTimeString(),
+            'reassigned_at' => $assignment->reassigned_at?->toDateTimeString(),
+            'is_overdue' => $overdue,
+            'latest_score' => $latestScore,
+            'latest_max_score' => $latestMaxScore,
+            'latest_score_label' => $latestScoreLabel,
+            'submitted_at' => $submittedAt,
+            'written_submission_status' => $submission?->status,
+            'status' => $status,
+        ];
     }
 
     /**

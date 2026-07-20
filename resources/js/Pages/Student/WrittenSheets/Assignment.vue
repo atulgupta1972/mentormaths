@@ -118,7 +118,8 @@ const statusLabel = computed(() => {
                     </div>
 
                     <p class="mt-4 text-sm text-gray-600">
-                        Do the work on paper, take clear photos (or one PDF), then upload below for AI checking.
+                        Print the question sheet and do the sums on paper. Write every answer on a <strong>separate answer sheet</strong>
+                        with the question number (Q1, Q2, …). Take a clear photo of your answer sheet and upload it below for AI checking.
                     </p>
                 </div>
 

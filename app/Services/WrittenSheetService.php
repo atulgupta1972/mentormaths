@@ -7,8 +7,12 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\User;
 use App\Models\Worksheet;
+use App\Services\FillBlankImportService;
+use App\Services\PracticeSetService;
+use App\Services\WrittenSheetPdfService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
+use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
 use Illuminate\Support\Collection;
@@ -18,6 +22,7 @@ class WrittenSheetService
     public function __construct(
         private PracticeSetService $practiceSetService,
         private WrittenSheetPdfService $pdfService,
+        private FillBlankImportService $fillBlankImportService,
     ) {}
 
     /**
@@ -135,6 +140,123 @@ class WrittenSheetService
         return $worksheet->loadCount('questions');
     }
 
+    /**
+     * Create fill-in-blank questions from manual / Cursor rows, then build the written sheet.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     */
+    public function createFromManualQuestions(
+        SyllabusChapter $chapter,
+        ?SyllabusTopic $topic,
+        string $sheetKind,
+        array $rows,
+        User $creator,
+        ?string $notes = null,
+    ): Worksheet {
+        $rows = array_values(array_filter($rows, fn (array $row) => trim((string) ($row['question_text'] ?? '')) !== ''));
+
+        if ($rows === []) {
+            throw new \InvalidArgumentException('Add at least one question.');
+        }
+
+        if ($sheetKind === 'test' || $topic === null) {
+            $bankPurpose = $sheetKind === 'test'
+                ? QuestionBankPurpose::CHAPTER_TEST
+                : QuestionBankPurpose::PRACTICE_SET;
+
+            $saved = $this->fillBlankImportService->saveChapterRows(
+                $chapter,
+                $this->normalizeManualRowsForChapter($chapter, $topic, $rows),
+                $creator->id,
+                Question::SOURCE_MANUAL,
+                $bankPurpose,
+            );
+            $questionIds = collect($saved)->pluck('id')->all();
+
+            if ($questionIds === []) {
+                throw new \InvalidArgumentException('Add at least one valid question.');
+            }
+
+            return $this->createChapterTest($chapter, $questionIds, $creator, $notes);
+        }
+
+        if (! $topic) {
+            throw new \InvalidArgumentException('Select a topic for a written practice sheet.');
+        }
+
+        $saved = $this->fillBlankImportService->saveRows(
+            $topic,
+            $this->normalizeManualRowsForTopic($topic, $rows),
+            $creator->id,
+            Question::SOURCE_MANUAL,
+            QuestionBankPurpose::PRACTICE_SET,
+        );
+        $questionIds = collect($saved)->pluck('id')->all();
+
+        return $this->createFromTopic($topic, $questionIds, $creator, $notes);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function normalizeManualRowsForTopic(SyllabusTopic $topic, array $rows): array
+    {
+        return array_map(function (array $row) use ($topic) {
+            return [
+                'question_text' => trim((string) ($row['question_text'] ?? '')),
+                'answer_format' => $row['answer_format'] ?? 'text',
+                'correct_answer' => trim((string) ($row['correct_answer'] ?? '')),
+                'decimal_places' => $row['decimal_places'] ?? null,
+                'explanation' => $row['explanation'] ?? null,
+                'method_hint' => $row['method_hint'] ?? null,
+                'difficulty' => $row['difficulty'] ?? null,
+            ];
+        }, $rows);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function normalizeManualRowsForChapter(SyllabusChapter $chapter, ?SyllabusTopic $defaultTopic, array $rows): array
+    {
+        $chapter->loadMissing('topics');
+
+        return array_map(function (array $row) use ($chapter, $defaultTopic) {
+            $topicId = $row['syllabus_topic_id'] ?? $row['topic_id'] ?? null;
+            $topicName = trim((string) ($row['topic_name'] ?? $row['topic'] ?? ''));
+
+            if (! $topicId && $topicName !== '') {
+                $topicId = $chapter->topics->first(
+                    fn (SyllabusTopic $chapterTopic) => mb_strtolower($chapterTopic->name) === mb_strtolower($topicName),
+                )?->id;
+            }
+
+            if (! $topicId && $defaultTopic) {
+                $topicId = $defaultTopic->id;
+                $topicName = $defaultTopic->name;
+            }
+
+            if (! $topicId && $chapter->topics->isNotEmpty()) {
+                $topicId = $chapter->topics->first()->id;
+                $topicName = $chapter->topics->first()->name;
+            }
+
+            return [
+                'question_text' => trim((string) ($row['question_text'] ?? '')),
+                'topic_name' => $topicName,
+                'syllabus_topic_id' => $topicId,
+                'answer_format' => $row['answer_format'] ?? 'text',
+                'correct_answer' => trim((string) ($row['correct_answer'] ?? '')),
+                'decimal_places' => $row['decimal_places'] ?? null,
+                'explanation' => $row['explanation'] ?? null,
+                'method_hint' => $row['method_hint'] ?? null,
+                'difficulty' => $row['difficulty'] ?? null,
+            ];
+        }, $rows);
+    }
+
     public function generatePdf(Worksheet $worksheet): Worksheet
     {
         if (! $worksheet->isWritten()) {
@@ -219,6 +341,7 @@ class WrittenSheetService
                 ?? $worksheet->topic?->chapter?->syllabusVersion?->gradeLevel?->name,
             'verified_at' => $worksheet->written_verified_at?->toDateTimeString(),
             'verified_by' => $worksheet->verifier?->name,
+            'can_assign' => $worksheet->isWrittenVerified(),
         ];
     }
 
@@ -246,7 +369,8 @@ class WrittenSheetService
                     'type' => $question->type,
                     'correct_answer' => $question->isMcq()
                         ? $question->options->firstWhere('is_correct', true)?->option_text
-                        : $question->blankAnswer?->answer_text,
+                        : $question->blankAnswer?->correct_answer,
+                    'source' => $question->source,
                 ];
             })->all(),
         ];

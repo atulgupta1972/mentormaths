@@ -34,7 +34,7 @@ class WrittenSheetPdfService
 
             return [
                 'number' => $index + 1,
-                'text' => $this->plainText($question->question_text),
+                'text' => $this->questionTextForSheet($question->question_text),
                 'diagram_path' => $question->diagram_path
                     ? storage_path('app/public/'.$question->diagram_path)
                     : null,
@@ -57,7 +57,7 @@ class WrittenSheetPdfService
             'chapterName' => $chapter?->name,
             'topicName' => $worksheet->topic?->name,
             'kindLabel' => $worksheet->isChapterTest() ? 'Test' : 'Practice',
-        ]);
+        ])->setPaper('a4', 'portrait');
 
         $directory = 'written-sheets/'.$worksheet->id;
         Storage::disk('public')->makeDirectory($directory);
@@ -81,6 +81,19 @@ class WrittenSheetPdfService
         }
 
         $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
+
+        return trim($text);
+    }
+
+    /**
+     * Question text for the printable sheet: no blanks or answer gaps on the page.
+     */
+    public function questionTextForSheet(?string $html): string
+    {
+        $text = $this->plainText($html);
+        $text = preg_replace('/\s*=\s*_{2,}/u', '', $text) ?? $text;
+        $text = preg_replace('/_{2,}/u', '', $text) ?? $text;
         $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
 
         return trim($text);

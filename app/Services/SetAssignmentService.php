@@ -349,4 +349,51 @@ class SetAssignmentService
             })
             ->values();
     }
+
+    public function studentProgressForWorksheet(int $enrollmentId, int $worksheetId): ?array
+    {
+        $assignment = SetAssignment::query()
+            ->with([
+                'practiceSet' => fn ($q) => $q->withCount('questions'),
+                'writtenSubmissions' => fn ($q) => $q->orderByDesc('id'),
+            ])
+            ->where('student_enrollment_id', $enrollmentId)
+            ->where('worksheet_id', $worksheetId)
+            ->whereNot('status', SetAssignment::STATUS_CANCELLED)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $assignment) {
+            return null;
+        }
+
+        return AssignmentProgress::formatWrittenAssignmentSummary($assignment);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function assignmentsForWorksheet(int $worksheetId): Collection
+    {
+        return SetAssignment::query()
+            ->with([
+                'enrollment.student:id,name',
+                'practiceSet:id,set_code',
+                'writtenSubmissions' => fn ($q) => $q->orderByDesc('id'),
+            ])
+            ->where('worksheet_id', $worksheetId)
+            ->whereNot('status', SetAssignment::STATUS_CANCELLED)
+            ->orderByDesc('assigned_at')
+            ->get()
+            ->map(function (SetAssignment $assignment) {
+                $summary = AssignmentProgress::formatWrittenAssignmentSummary($assignment);
+
+                return [
+                    ...$summary,
+                    'student_id' => $assignment->enrollment->student->id,
+                    'student_name' => $assignment->enrollment->student->name,
+                ];
+            })
+            ->values();
+    }
 }

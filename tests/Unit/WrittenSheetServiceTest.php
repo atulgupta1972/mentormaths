@@ -53,6 +53,71 @@ class WrittenSheetServiceTest extends TestCase
         $this->assertNotNull($verified->written_verified_at);
     }
 
+    public function test_create_written_sheet_from_manual_rows(): void
+    {
+        [$topic, , $admin] = $this->seedTopicQuestion();
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->generatePdf(
+            $service->createFromManualQuestions(
+                $topic->chapter,
+                $topic,
+                'practice',
+                [[
+                    'question_text' => 'Write 5 multiples of 3.',
+                    'correct_answer' => '3,6,9,12,15',
+                    'answer_format' => 'text',
+                ]],
+                $admin,
+            ),
+        );
+
+        $this->assertSame(1, $worksheet->questions()->count());
+        $this->assertDatabaseHas('questions', [
+            'syllabus_topic_id' => $topic->id,
+            'question_text' => 'Write 5 multiples of 3.',
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+    }
+
+    public function test_create_written_sheet_from_manual_chapter_rows(): void
+    {
+        [$topic, , $admin] = $this->seedTopicQuestion();
+        $chapter = $topic->chapter;
+        $secondTopic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->id,
+            'name' => 'Division',
+            'sort_order' => 2,
+        ]);
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->generatePdf(
+            $service->createFromManualQuestions(
+                $chapter,
+                null,
+                'practice',
+                [
+                    [
+                        'question_text' => 'What is 1/2 + 1/4?',
+                        'topic_name' => $topic->name,
+                        'correct_answer' => '3/4',
+                        'answer_format' => 'fraction',
+                    ],
+                    [
+                        'question_text' => 'What is 2/3 of 9?',
+                        'topic_name' => $secondTopic->name,
+                        'correct_answer' => '6',
+                        'answer_format' => 'integer',
+                    ],
+                ],
+                $admin,
+            ),
+        );
+
+        $this->assertSame(2, $worksheet->questions()->count());
+        $this->assertNotNull($worksheet->written_pdf_path);
+    }
+
     /**
      * @return array{0: SyllabusTopic, 1: Question, 2: User}
      */
