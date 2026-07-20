@@ -23,6 +23,7 @@ const props = defineProps({
     promptOptions: { type: Object, default: () => ({}) },
     chapterPlan: { type: Array, default: () => [] },
     manualQuestionsDraft: { type: Array, default: () => [] },
+    selectedQuestionIds: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -56,6 +57,16 @@ const chapterPlanRows = ref(
 );
 
 const generatingChapterPrompt = ref(false);
+const zipPackInput = ref(null);
+const zipImportForm = useForm({
+    pack: null,
+    scope: 'chapter',
+    syllabus_chapter_id: '',
+    syllabus_topic_id: '',
+    after_import: 'written_sheet',
+    written_sheet_kind: '',
+    written_topic_scope: '',
+});
 
 const form = useForm({
     source_mode: props.filters.source_mode || 'bank',
@@ -64,7 +75,9 @@ const form = useForm({
     topic_scope: props.filters.topic_scope || 'one',
     topic_id: props.filters.topic_id || '',
     topic_ids: (props.filters.topic_ids || []).map((id) => Number(id)),
-    question_ids: [],
+    question_ids: props.selectedQuestionIds?.length
+        ? [...props.selectedQuestionIds]
+        : (props.filters.question_ids?.length ? [...props.filters.question_ids] : []),
     manual_questions: props.manualQuestionsDraft?.length
         ? props.manualQuestionsDraft
         : [defaultFillBlankRow()],
@@ -549,6 +562,53 @@ const formErrorEntries = computed(() =>
 );
 
 const manualRowError = (index, field) => form.errors[`manual_questions.${index}.${field}`] ?? '';
+
+const zipImportScope = computed(() => {
+    if (form.sheet_kind === 'test' || isMultipleTopicScope.value) {
+        return 'chapter';
+    }
+
+    return isOneTopicScope.value && form.topic_id ? 'topic' : 'chapter';
+});
+
+const canImportZipPack = computed(() => {
+    if (!form.chapter_id) {
+        return false;
+    }
+
+    if (zipImportScope.value === 'topic') {
+        return Boolean(form.topic_id);
+    }
+
+    return true;
+});
+
+const onZipPackSelected = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    if (!canImportZipPack.value) {
+        event.target.value = '';
+
+        return;
+    }
+
+    zipImportForm.pack = file;
+    zipImportForm.scope = zipImportScope.value;
+    zipImportForm.syllabus_chapter_id = zipImportScope.value === 'chapter' ? form.chapter_id : '';
+    zipImportForm.syllabus_topic_id = zipImportScope.value === 'topic' ? form.topic_id : '';
+    zipImportForm.written_sheet_kind = form.sheet_kind;
+    zipImportForm.written_topic_scope = topicScope.value;
+
+    zipImportForm.post(route('admin.questions.import-zip-pack'), {
+        forceFormData: true,
+    });
+
+    event.target.value = '';
+};
+
 const validManualRows = computed(() =>
     form.manual_questions
         .map(sanitizeManualRow)
@@ -611,6 +671,9 @@ const submit = () => {
                 <form class="space-y-6 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200" @submit.prevent="submit">
                     <div v-if="page.props.flash?.error" class="rounded-md bg-rose-50 p-4 text-sm text-rose-800">
                         {{ page.props.flash.error }}
+                    </div>
+                    <div v-if="page.props.flash?.success" class="rounded-md bg-green-50 p-4 text-sm text-green-800">
+                        {{ page.props.flash.success }}
                     </div>
 
                     <div v-if="formErrorEntries.length" class="rounded-md bg-rose-50 p-4 text-sm text-rose-800">
@@ -732,6 +795,38 @@ const submit = () => {
                         </p>
                     </div>
 
+                    <div v-if="form.chapter_id" class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
+                        <h3 class="font-semibold text-emerald-950">Diagram questions — upload .zip pack</h3>
+                        <p class="mt-1 text-sm text-emerald-900">
+                            Zip with <strong>questions.json</strong> plus diagram images (<strong>q1.jpg</strong>, <strong>q2.jpg</strong>, … or names in <strong>diagram_file</strong>).
+                            Questions save to the bank with diagrams, then appear here for selection.
+                        </p>
+                        <p class="mt-2 text-xs text-emerald-800">
+                            Example: <span class="font-mono">questions.json, q1.jpg, q2.jpg, …</span>
+                            — see <span class="font-mono">samples/lines-angles-ch5-pack/</span> in the repo.
+                        </p>
+                        <div class="mt-3 flex flex-wrap items-center gap-3">
+                            <PrimaryButton
+                                type="button"
+                                :disabled="!canImportZipPack || zipImportForm.processing"
+                                @click="zipPackInput?.click()"
+                            >
+                                {{ zipImportForm.processing ? 'Importing…' : 'Upload .zip with diagrams' }}
+                            </PrimaryButton>
+                            <InputError :message="zipImportForm.errors.pack" />
+                        </div>
+                        <p v-if="!canImportZipPack" class="mt-2 text-xs text-amber-800">
+                            Select chapter{{ isOneTopicScope && form.sheet_kind === 'practice' ? ' and topic' : '' }} first.
+                        </p>
+                        <input
+                            ref="zipPackInput"
+                            type="file"
+                            accept=".zip,application/zip"
+                            class="hidden"
+                            @change="onZipPackSelected"
+                        >
+                    </div>
+
                     <div v-if="isBankMode && questions.length">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <InputLabel :value="`Select questions (${form.question_ids.length} selected)`" />
@@ -756,7 +851,10 @@ const submit = () => {
                                     @change="toggleQuestion(question.id)"
                                 >
                                 <span>
-                                    <span class="text-xs font-medium text-gray-700">{{ question.topic_name }} · {{ question.type }}</span>
+                                    <span class="text-xs font-medium text-gray-700">
+                                        {{ question.topic_name }} · {{ question.type }}
+                                        <span v-if="question.has_diagram" class="ml-1 rounded bg-sky-100 px-1.5 py-0.5 text-sky-800">diagram</span>
+                                    </span>
                                     <span class="block text-sm font-medium text-gray-900">{{ question.question_text }}</span>
                                 </span>
                             </label>

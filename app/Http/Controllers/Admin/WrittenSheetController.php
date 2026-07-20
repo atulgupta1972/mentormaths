@@ -108,7 +108,19 @@ class WrittenSheetController extends Controller
                 'topic_name' => $question->topic?->name,
                 'type' => $question->type,
                 'question_text' => strip_tags((string) $question->question_text),
+                'has_diagram' => (bool) $question->diagram_path,
             ])->values()->all();
+        }
+
+        $selectedQuestionIds = collect($request->input('question_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->values()
+            ->all();
+
+        if ($selectedQuestionIds !== [] && $questions !== []) {
+            $validQuestionIds = collect($questions)->pluck('id')->all();
+            $selectedQuestionIds = array_values(array_intersect($selectedQuestionIds, $validQuestionIds));
         }
 
         $promptOptions = [
@@ -151,7 +163,9 @@ class WrittenSheetController extends Controller
                 'topic_ids' => $topicIds,
                 'sheet_kind' => $sheetKind,
                 'source_mode' => $request->string('source_mode')->toString() ?: 'bank',
+                'question_ids' => $selectedQuestionIds,
             ],
+            'selectedQuestionIds' => $selectedQuestionIds,
             'cursorPrompt' => $cursorPrompt,
             'promptOptions' => $promptOptions,
             'chapterPlan' => session('written_sheet_chapter_plan', []),

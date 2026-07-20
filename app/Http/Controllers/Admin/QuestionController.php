@@ -225,6 +225,9 @@ class QuestionController extends Controller
             'syllabus_topic_id' => ['required_if:scope,topic', 'nullable', 'exists:syllabus_topics,id'],
             'syllabus_chapter_id' => ['required_if:scope,chapter', 'nullable', 'exists:syllabus_chapters,id'],
             'bank_purpose' => ['nullable', 'in:'.implode(',', QuestionBankPurpose::all())],
+            'after_import' => ['nullable', 'in:written_sheet'],
+            'written_sheet_kind' => ['nullable', 'in:practice,test'],
+            'written_topic_scope' => ['nullable', 'in:one,multiple'],
         ], [
             'pack.required' => 'Choose a .zip file containing questions.json and diagram images.',
             'pack.mimes' => 'Upload a .zip file (questions.json + JPG/PNG images).',
@@ -257,6 +260,30 @@ class QuestionController extends Controller
         $message = count($saved)." {$typeLabel} question(s) imported from zip.";
         if ($result['diagram_count'] > 0) {
             $message .= " {$result['diagram_count']} diagram(s) attached.";
+        }
+
+        if (($validated['after_import'] ?? null) === 'written_sheet') {
+            $chapterId = $chapter?->id ?? $topic?->syllabus_chapter_id;
+            $sheetKind = $validated['written_sheet_kind'] ?? 'practice';
+            $topicScope = ($validated['written_topic_scope'] ?? 'one') === 'multiple' ? 'multiple' : 'one';
+            $query = array_filter([
+                'chapter_id' => $chapterId,
+                'sheet_kind' => $sheetKind,
+                'source_mode' => 'bank',
+                'topic_scope' => $topicScope,
+                'topic_id' => $topicScope === 'one' ? $topic?->id : null,
+                'question_ids' => collect($saved)->pluck('id')->values()->all(),
+            ], fn ($value) => $value !== null && $value !== []);
+
+            if ($topicScope === 'multiple' && $chapter) {
+                $query['topic_ids'] = $chapter->topics->pluck('id')->all();
+            }
+
+            $message .= ' Select them below and create the written sheet.';
+
+            return redirect()
+                ->route('admin.written-sheets.create', $query)
+                ->with('success', $message);
         }
 
         $bankPurpose = QuestionBankPurpose::normalize($validated['bank_purpose'] ?? QuestionBankPurpose::PRACTICE_SET);
