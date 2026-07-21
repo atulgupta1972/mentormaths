@@ -11,8 +11,13 @@ use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
+use App\Services\WrittenSheetPdfImportService;
 use App\Support\WorksheetDeliveryMode;
+use App\Support\WrittenSheetStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class WrittenSheetStoreTest extends TestCase
@@ -145,6 +150,96 @@ class WrittenSheetStoreTest extends TestCase
 
         $response->assertRedirect();
         $response->assertSessionHasNoErrors();
+    }
+
+    public function test_admin_can_create_written_sheet_from_uploaded_pdf_and_answer_key(): void
+    {
+        Storage::fake('public');
+        [$chapter, $topics, $admin] = $this->seedChapterWithTopics();
+
+        $token = '550e8400-e29b-41d4-a716-446655440000';
+        $pdfPath = "temp/pdf-imports/written-sheet-pdf/{$token}/source.pdf";
+        Storage::disk('public')->put($pdfPath, '%PDF-1.4 fake worksheet');
+
+        Cache::put("written_sheet_pdf:{$token}", [
+            'token' => $token,
+            'pdf_path' => $pdfPath,
+            'original_name' => 'chapter-5.pdf',
+        ], now()->addHour());
+
+        $response = $this->actingAs($admin)->post(route('admin.written-sheets.store'), [
+            'source_mode' => 'pdf',
+            'pdf_import_token' => $token,
+            'sheet_kind' => 'practice',
+            'chapter_id' => $chapter->id,
+            'topic_scope' => 'one',
+            'topic_id' => $topics[0]->id,
+            'answer_key' => [
+                [
+                    'correct_answer' => '42',
+                    'answer_format' => 'integer',
+                    'method_hint' => 'Add first',
+                ],
+                [
+                    'correct_answer' => '3/4',
+                    'answer_format' => 'fraction',
+                ],
+            ],
+            'notes' => 'Uploaded chapter PDF',
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHasNoErrors();
+
+        $worksheet = Worksheet::query()->where('delivery_mode', WorksheetDeliveryMode::WRITTEN)->first();
+        $this->assertNotNull($worksheet);
+        $this->assertSame(WrittenSheetStatus::PENDING_REVIEW, $worksheet->written_status);
+        $this->assertNotNull($worksheet->written_pdf_path);
+        $this->assertTrue(Storage::disk('public')->exists($worksheet->written_pdf_path));
+        $this->assertSame(2, $worksheet->questions()->count());
+        $this->assertSame('Q1 — see worksheet PDF', $worksheet->questions()->orderBy('worksheet_question.sort_order')->first()->question_text);
+        $this->assertNull(Cache::get("written_sheet_pdf:{$token}"));
+    }
+
+    public function test_admin_can_stage_written_sheet_pdf(): void
+    {
+        Storage::fake('public');
+        [, , $admin] = $this->seedChapterWithTopics();
+
+        $response = $this->actingAs($admin)->postJson(route('admin.written-sheets.stage-pdf'), [
+            'pdf' => UploadedFile::fake()->create('worksheet.pdf', 100, 'application/pdf'),
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonStructure(['token', 'pdf_url']);
+        $this->assertNotNull(Cache::get('written_sheet_pdf:'.$response->json('token')));
+    }
+
+    public function test_admin_can_parse_answer_sheet_pdf(): void
+    {
+        [, , $admin] = $this->seedChapterWithTopics();
+
+        $this->mock(WrittenSheetPdfImportService::class, function ($mock): void {
+            $mock->shouldReceive('parseAnswerSheet')
+                ->once()
+                ->andReturn([
+                    'answer_key' => [
+                        ['correct_answer' => '42', 'answer_format' => 'integer', 'method_hint' => null],
+                        ['correct_answer' => '3/4', 'answer_format' => 'fraction', 'method_hint' => null],
+                    ],
+                    'parsed_count' => 2,
+                    'warnings' => [],
+                    'extracted_preview' => '1. 42',
+                ]);
+        });
+
+        $response = $this->actingAs($admin)->postJson(route('admin.written-sheets.parse-answer-pdf'), [
+            'pdf' => UploadedFile::fake()->create('answers.pdf', 100, 'application/pdf'),
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('parsed_count', 2);
+        $response->assertJsonPath('answer_key.0.correct_answer', '42');
     }
 
     /**

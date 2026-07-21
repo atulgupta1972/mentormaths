@@ -5,7 +5,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { formatScoreLabel } from '@/utils/scores';
 
 const props = defineProps({
@@ -33,11 +33,59 @@ const selectedStudent = ref(props.selectedStudentId || '');
 const targetDate = ref(defaultTargetDate());
 const bulkTargetDate = ref(defaultTargetDate());
 const assignStudentId = ref('');
-const bulkGradeId = ref('');
+const selectedGradeLevelId = ref('');
+const selectedStudentIds = ref([]);
+const assignNotes = ref('');
 
 const assignForm = useForm({ student_id: '', target_date: '', notes: '' });
-const bulkForm = useForm({ grade_level_id: '', target_date: '', notes: '' });
+const bulkForm = useForm({ student_ids: [], target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
+
+const filteredStudents = computed(() => {
+    if (!selectedGradeLevelId.value) {
+        return [];
+    }
+
+    return props.students.filter(
+        (student) => String(student.grade_level_id) === String(selectedGradeLevelId.value),
+    );
+});
+
+const existingByStudentId = computed(() => {
+    const map = {};
+
+    props.assignments.forEach((row) => {
+        map[row.student_id] = row;
+    });
+
+    return map;
+});
+
+const selectAllFiltered = () => {
+    selectedStudentIds.value = filteredStudents.value.map((student) => student.id);
+};
+
+const clearSelectedStudents = () => {
+    selectedStudentIds.value = [];
+};
+
+const toggleStudent = (studentId) => {
+    const index = selectedStudentIds.value.indexOf(studentId);
+
+    if (index === -1) {
+        selectedStudentIds.value.push(studentId);
+    } else {
+        selectedStudentIds.value.splice(index, 1);
+    }
+};
+
+watch(selectedGradeLevelId, (value) => {
+    if (value) {
+        selectAllFiltered();
+    } else {
+        clearSelectedStudents();
+    }
+});
 
 const regenerate = () => {
     regenerateForm.post(route('admin.written-sheets.regenerate', props.sheet.id), { preserveScroll: true });
@@ -69,10 +117,11 @@ const assignSheet = () => {
     assignForm.post(route('admin.practice-sets.assign', props.sheet.id), { preserveScroll: true });
 };
 
-const assignBulk = () => {
-    bulkForm.grade_level_id = bulkGradeId.value || '';
+const assignSelected = () => {
+    bulkForm.student_ids = selectedStudentIds.value;
     bulkForm.target_date = bulkTargetDate.value;
-    bulkForm.post(route('admin.practice-sets.assign-bulk', props.sheet.id), { preserveScroll: true });
+    bulkForm.notes = assignNotes.value;
+    bulkForm.post(route('admin.practice-sets.assign-students', props.sheet.id), { preserveScroll: true });
 };
 
 const reassign = (assignmentId) => {
@@ -174,9 +223,17 @@ const progressLabel = (p) => {
                         >
                             Verify sheet
                         </PrimaryButton>
-                        <SecondaryButton type="button" :disabled="regenerateForm.processing" @click="regenerate">
+                        <SecondaryButton
+                            v-if="!sheet.uses_uploaded_pdf"
+                            type="button"
+                            :disabled="regenerateForm.processing"
+                            @click="regenerate"
+                        >
                             Regenerate PDF
                         </SecondaryButton>
+                        <p v-if="sheet.uses_uploaded_pdf" class="w-full text-sm text-gray-600">
+                            This sheet uses your uploaded PDF. To change the file, create a new written sheet.
+                        </p>
                         <DangerButton
                             v-if="sheet.written_status !== 'draft'"
                             type="button"
@@ -199,13 +256,107 @@ const progressLabel = (p) => {
                 >
                     <h3 class="font-semibold text-gray-900">Assign to students</h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Pick a student and target date, or assign in bulk to a class. Students download the PDF, write answers on a numbered answer sheet, then upload for AI checking.
+                        Pick a class to load students (all selected by default), deselect anyone who should not get this sheet, then assign. Or assign one student quickly below.
                     </p>
 
                     <div class="mt-4 grid gap-6 lg:grid-cols-3">
                         <div class="lg:col-span-2 space-y-4">
                             <div class="rounded-md border border-gray-200 p-4">
-                                <div class="flex flex-wrap items-end gap-3">
+                                <div class="flex flex-wrap items-end gap-4">
+                                    <div>
+                                        <InputLabel value="Class" class="!text-xs" />
+                                        <select
+                                            v-model="selectedGradeLevelId"
+                                            class="mt-1 rounded-md border-gray-300 text-sm"
+                                        >
+                                            <option value="">Select class</option>
+                                            <option v-for="g in gradeLevels" :key="g.id" :value="g.id">{{ g.name }}</option>
+                                        </select>
+                                    </div>
+                                    <div v-if="selectedGradeLevelId" class="flex flex-wrap gap-2">
+                                        <SecondaryButton type="button" class="!py-1.5 !text-xs" @click="selectAllFiltered">
+                                            Select all ({{ filteredStudents.length }})
+                                        </SecondaryButton>
+                                        <SecondaryButton type="button" class="!py-1.5 !text-xs" @click="clearSelectedStudents">
+                                            Clear
+                                        </SecondaryButton>
+                                    </div>
+                                </div>
+
+                                <p v-if="selectedGradeLevelId" class="mt-2 text-xs text-gray-500">
+                                    {{ filteredStudents.length }} student(s) in this class · {{ selectedStudentIds.length }} selected
+                                </p>
+                                <p v-else class="mt-2 text-xs text-gray-500">
+                                    Choose a class to see students with checkboxes.
+                                </p>
+
+                                <div
+                                    v-if="selectedGradeLevelId && !filteredStudents.length"
+                                    class="mt-3 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500"
+                                >
+                                    No active students in this class.
+                                </div>
+
+                                <div
+                                    v-else-if="selectedGradeLevelId"
+                                    class="mt-3 max-h-72 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100"
+                                >
+                                    <label
+                                        v-for="student in filteredStudents"
+                                        :key="student.id"
+                                        class="flex cursor-pointer items-start gap-3 px-4 py-3 hover:bg-gray-50"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="mt-0.5 rounded border-gray-300 text-indigo-600"
+                                            :checked="selectedStudentIds.includes(student.id)"
+                                            @change="toggleStudent(student.id)"
+                                        >
+                                        <span class="min-w-0 flex-1">
+                                            <span class="block text-sm font-medium text-gray-900">{{ student.name }}</span>
+                                            <span class="mt-0.5 block text-xs text-gray-500">
+                                                {{ student.class_name }}
+                                                <span v-if="student.board_code"> · {{ student.board_code }}</span>
+                                            </span>
+                                            <span
+                                                v-if="existingByStudentId[student.id]"
+                                                class="mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+                                                :class="progressLabel(existingByStudentId[student.id]).class"
+                                            >
+                                                Already: {{ progressLabel(existingByStudentId[student.id]).label }}
+                                            </span>
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div class="mt-4 flex flex-wrap items-end gap-3 border-t border-gray-100 pt-4">
+                                    <div>
+                                        <InputLabel value="Target date" class="!text-xs" />
+                                        <input v-model="bulkTargetDate" type="date" class="mt-1 rounded-md border-gray-300 text-sm" />
+                                    </div>
+                                    <div class="min-w-[12rem] flex-1">
+                                        <InputLabel value="Note (optional)" class="!text-xs" />
+                                        <input
+                                            v-model="assignNotes"
+                                            type="text"
+                                            class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                                            placeholder="e.g. Complete before test"
+                                        >
+                                    </div>
+                                    <PrimaryButton
+                                        type="button"
+                                        class="!py-2"
+                                        :disabled="!selectedGradeLevelId || !selectedStudentIds.length || !bulkTargetDate || bulkForm.processing"
+                                        @click="assignSelected"
+                                    >
+                                        Assign {{ selectedStudentIds.length || '' }} student{{ selectedStudentIds.length === 1 ? '' : 's' }}
+                                    </PrimaryButton>
+                                </div>
+                            </div>
+
+                            <div class="rounded-md border border-dashed border-gray-200 p-4">
+                                <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Quick assign one student</p>
+                                <div class="mt-3 flex flex-wrap items-end gap-3">
                                     <div>
                                         <InputLabel value="Student" class="!text-xs" />
                                         <select v-model="assignStudentId" class="mt-1 rounded-md border-gray-300 text-sm">
@@ -225,28 +376,6 @@ const progressLabel = (p) => {
                                     >
                                         Assign
                                     </PrimaryButton>
-                                </div>
-
-                                <div class="mt-4 flex flex-wrap items-end gap-3 border-t border-gray-100 pt-4">
-                                    <div>
-                                        <InputLabel value="Bulk class" class="!text-xs" />
-                                        <select v-model="bulkGradeId" class="mt-1 rounded-md border-gray-300 text-sm">
-                                            <option value="">All students</option>
-                                            <option v-for="g in gradeLevels" :key="g.id" :value="g.id">{{ g.name }}</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <InputLabel value="Target date" class="!text-xs" />
-                                        <input v-model="bulkTargetDate" type="date" class="mt-1 rounded-md border-gray-300 text-sm" />
-                                    </div>
-                                    <SecondaryButton
-                                        type="button"
-                                        class="!py-2"
-                                        :disabled="!bulkTargetDate || bulkForm.processing"
-                                        @click="assignBulk"
-                                    >
-                                        Assign bulk
-                                    </SecondaryButton>
                                 </div>
                             </div>
 

@@ -23,6 +23,7 @@ class WrittenSheetService
         private PracticeSetService $practiceSetService,
         private WrittenSheetPdfService $pdfService,
         private FillBlankImportService $fillBlankImportService,
+        private WrittenSheetPdfImportService $pdfImportService,
     ) {}
 
     /**
@@ -197,6 +198,85 @@ class WrittenSheetService
     }
 
     /**
+     * Save answer-key rows for an externally uploaded worksheet PDF.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     */
+    public function createFromAnswerKey(
+        SyllabusChapter $chapter,
+        ?SyllabusTopic $topic,
+        string $sheetKind,
+        array $rows,
+        User $creator,
+        ?string $notes = null,
+    ): Worksheet {
+        $rows = array_values(array_filter($rows, fn (array $row) => trim((string) ($row['correct_answer'] ?? '')) !== ''));
+
+        if ($rows === []) {
+            throw new \InvalidArgumentException('Add at least one answer.');
+        }
+
+        $manualRows = [];
+
+        foreach ($rows as $index => $row) {
+            $questionText = trim((string) ($row['question_text'] ?? ''));
+
+            if ($questionText === '') {
+                $questionText = 'Q'.($index + 1).' — see worksheet PDF';
+            }
+
+            $manualRows[] = [
+                ...$row,
+                'question_text' => $questionText,
+            ];
+        }
+
+        return $this->createFromManualQuestions(
+            $chapter,
+            $topic,
+            $sheetKind,
+            $manualRows,
+            $creator,
+            $notes,
+        );
+    }
+
+    public function attachUploadedPdf(Worksheet $worksheet, string $sourcePath, ?string $token = null): Worksheet
+    {
+        if (! $worksheet->isWritten()) {
+            throw new \InvalidArgumentException('This is not a written sheet.');
+        }
+
+        $path = $this->pdfImportService->attachToWorksheet($worksheet, $sourcePath);
+
+        $worksheet->update([
+            'written_pdf_path' => $path,
+            'written_status' => WrittenSheetStatus::PENDING_REVIEW,
+            'written_verified_at' => null,
+            'written_verified_by' => null,
+        ]);
+
+        if ($token) {
+            $this->pdfImportService->cleanupTokenDirectory($token);
+        }
+
+        return $worksheet->fresh();
+    }
+
+    public function usesUploadedPdf(Worksheet $worksheet): bool
+    {
+        $worksheet->loadMissing('questions');
+
+        if ($worksheet->questions->isEmpty()) {
+            return false;
+        }
+
+        return $worksheet->questions->every(
+            fn (Question $question) => (bool) preg_match('/^Q\d+\s*[—-]\s*see worksheet PDF$/u', trim((string) $question->question_text)),
+        );
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $rows
      * @return list<array<string, mixed>>
      */
@@ -335,6 +415,7 @@ class WrittenSheetService
             'written_status_label' => WrittenSheetStatus::label($worksheet->written_status ?? WrittenSheetStatus::DRAFT),
             'status' => $worksheet->status,
             'written_pdf_url' => $worksheet->writtenPdfUrl(),
+            'uses_uploaded_pdf' => $this->usesUploadedPdf($worksheet),
             'chapter_name' => $chapter?->name,
             'topic_name' => $worksheet->topic?->name,
             'class_name' => $chapter?->syllabusVersion?->gradeLevel?->name

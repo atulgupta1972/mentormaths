@@ -5,6 +5,7 @@ import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import {
@@ -23,6 +24,7 @@ const props = defineProps({
     promptOptions: { type: Object, default: () => ({}) },
     chapterPlan: { type: Array, default: () => [] },
     manualQuestionsDraft: { type: Array, default: () => [] },
+    answerKeyDraft: { type: Array, default: () => [] },
     selectedQuestionIds: { type: Array, default: () => [] },
     supportsDiagrams: { type: Boolean, default: false },
 });
@@ -78,6 +80,31 @@ const writtenSheetZipForm = useForm({
     notes: '',
 });
 
+const defaultAnswerKeyRow = (topicName = '') => ({
+    correct_answer: '',
+    answer_format: 'integer',
+    method_hint: '',
+    topic_name: topicName,
+    syllabus_topic_id: '',
+});
+
+const pdfInput = ref(null);
+const answerPdfInput = ref(null);
+const selectedPdfName = ref('');
+const selectedAnswerPdfName = ref('');
+const pdfImportToken = ref('');
+const pdfPreviewUrl = ref('');
+const pdfStageWarning = ref('');
+const pdfStaging = ref(false);
+const pdfStageError = ref('');
+const answerPdfParsing = ref(false);
+const answerPdfError = ref('');
+const answerPdfWarnings = ref([]);
+const answerPdfParsedCount = ref(0);
+const worksheetEstimatedQuestions = ref(null);
+const answerKeyJsonInput = ref('');
+const answerKeyJsonError = ref('');
+
 const form = useForm({
     source_mode: props.filters.source_mode || 'bank',
     sheet_kind: props.filters.sheet_kind || 'practice',
@@ -91,6 +118,10 @@ const form = useForm({
     manual_questions: props.manualQuestionsDraft?.length
         ? props.manualQuestionsDraft
         : [defaultFillBlankRow()],
+    answer_key: props.answerKeyDraft?.length
+        ? props.answerKeyDraft
+        : [defaultAnswerKeyRow()],
+    pdf_import_token: '',
     chapter_plan: [],
     notes: '',
 });
@@ -125,6 +156,7 @@ const allTopicsSelected = computed(() =>
 const showTopicPicker = computed(() => form.sheet_kind === 'practice');
 const isBankMode = computed(() => form.source_mode === 'bank');
 const isManualMode = computed(() => form.source_mode === 'manual');
+const isPdfMode = computed(() => form.source_mode === 'pdf');
 const useChapterCursorPlan = computed(() =>
     isManualMode.value
     && form.chapter_id
@@ -351,6 +383,17 @@ watch(
 );
 
 watch(
+    () => props.answerKeyDraft,
+    (rows) => {
+        if (rows?.length) {
+            form.answer_key = rows;
+            answerPdfParsedCount.value = rows.filter((row) => String(row.correct_answer || '').trim()).length;
+        }
+    },
+    { immediate: true },
+);
+
+watch(
     () => form.chapter_id,
     (chapterId, previousId) => {
         if (!chapterId || chapterId === previousId) {
@@ -424,14 +467,23 @@ watch(topicScope, (scope) => {
 });
 
 watch(selectedTopicName, (name) => {
-    if (form.source_mode !== 'manual' || !name || !isOneTopicScope.value) {
+    if (!name || !isOneTopicScope.value) {
         return;
     }
 
-    form.manual_questions = form.manual_questions.map((row) => ({
-        ...row,
-        topic_name: row.topic_name || name,
-    }));
+    if (form.source_mode === 'manual') {
+        form.manual_questions = form.manual_questions.map((row) => ({
+            ...row,
+            topic_name: row.topic_name || name,
+        }));
+    }
+
+    if (form.source_mode === 'pdf') {
+        form.answer_key = form.answer_key.map((row) => ({
+            ...row,
+            topic_name: row.topic_name || name,
+        }));
+    }
 });
 
 const toggleTopic = (topicId) => {
@@ -477,6 +529,20 @@ const toggleSelectAll = () => {
 
 const addManualRow = () => {
     form.manual_questions.push(defaultFillBlankRow(selectedTopicName.value));
+};
+
+const addAnswerKeyRow = () => {
+    form.answer_key.push(defaultAnswerKeyRow(selectedTopicName.value));
+};
+
+const removeAnswerKeyRow = (index) => {
+    if (form.answer_key.length === 1) {
+        form.answer_key[0] = defaultAnswerKeyRow(selectedTopicName.value);
+
+        return;
+    }
+
+    form.answer_key.splice(index, 1);
 };
 
 const removeManualRow = (index) => {
@@ -572,6 +638,217 @@ const formErrorEntries = computed(() =>
 );
 
 const manualRowError = (index, field) => form.errors[`manual_questions.${index}.${field}`] ?? '';
+
+const sanitizeAnswerKeyRow = (row) => {
+    const topicId = row.syllabus_topic_id ? String(row.syllabus_topic_id) : '';
+    const answerFormat = fillBlankFormats.includes(row.answer_format) ? row.answer_format : 'text';
+
+    return {
+        ...row,
+        answer_format: answerFormat,
+        syllabus_topic_id: validTopicIds.value.has(topicId) ? Number(topicId) : '',
+    };
+};
+
+const validAnswerKeyRows = computed(() =>
+    form.answer_key
+        .map(sanitizeAnswerKeyRow)
+        .filter((row) => String(row.correct_answer || '').trim()),
+);
+
+const answerKeyRowError = (index, field) => form.errors[`answer_key.${index}.${field}`] ?? '';
+
+const importAnswerKeyJson = () => {
+    answerKeyJsonError.value = '';
+
+    try {
+        let rows;
+
+        try {
+            rows = parseFillBlankJson(answerKeyJsonInput.value).map((row) => sanitizeAnswerKeyRow({
+                ...defaultAnswerKeyRow(row.topic_name || selectedTopicName.value),
+                correct_answer: row.correct_answer,
+                answer_format: row.answer_format,
+                method_hint: row.method_hint,
+                topic_name: row.topic_name || selectedTopicName.value,
+                syllabus_topic_id: row.syllabus_topic_id || '',
+            }));
+        } catch {
+            const cleaned = answerKeyJsonInput.value.trim()
+                .replace(/^```(?:json)?\s*/i, '')
+                .replace(/\s*```$/i, '');
+            const data = JSON.parse(cleaned);
+            const items = Array.isArray(data?.questions) ? data.questions : (Array.isArray(data) ? data : []);
+
+            if (!items.length) {
+                throw new Error('No answers found in JSON.');
+            }
+
+            rows = items.map((item, index) => {
+                const correctAnswer = String(item.correct_answer ?? item.answer ?? '').trim();
+
+                if (!correctAnswer) {
+                    throw new Error(`Answer ${index + 1} is missing correct_answer.`);
+                }
+
+                const answerFormat = String(item.answer_format ?? item.format ?? 'integer').trim().toLowerCase();
+
+                return sanitizeAnswerKeyRow({
+                    ...defaultAnswerKeyRow(String(item.topic ?? item.topic_name ?? selectedTopicName.value)),
+                    correct_answer: correctAnswer,
+                    answer_format: fillBlankFormats.includes(answerFormat) ? answerFormat : 'text',
+                    method_hint: String(item.method_hint ?? item.hint ?? '').trim(),
+                    topic_name: String(item.topic ?? item.topic_name ?? selectedTopicName.value).trim(),
+                    syllabus_topic_id: item.syllabus_topic_id ?? item.topic_id ?? '',
+                });
+            });
+        }
+
+        form.answer_key = rows;
+        answerKeyJsonInput.value = '';
+    } catch (error) {
+        answerKeyJsonError.value = error.message || 'Could not parse JSON.';
+    }
+};
+
+const onPdfSelected = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    selectedPdfName.value = file?.name ?? '';
+    pdfStageError.value = '';
+    pdfImportToken.value = '';
+    pdfPreviewUrl.value = '';
+    pdfStageWarning.value = '';
+    worksheetEstimatedQuestions.value = null;
+    form.pdf_import_token = '';
+    selectedAnswerPdfName.value = '';
+    answerPdfParsedCount.value = 0;
+    answerPdfWarnings.value = [];
+    if (answerPdfInput.value) {
+        answerPdfInput.value.value = '';
+    }
+};
+
+const stageUploadedPdf = async () => {
+    const file = pdfInput.value?.files?.[0];
+
+    if (!file) {
+        pdfStageError.value = 'Choose a PDF file first.';
+
+        return;
+    }
+
+    pdfStaging.value = true;
+    pdfStageError.value = '';
+
+    try {
+        const formData = new FormData();
+        formData.append('pdf', file);
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+        const response = await fetch(route('admin.written-sheets.stage-pdf'), {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrf,
+            },
+            body: formData,
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            pdfStageError.value = payload.error || 'Could not upload PDF.';
+
+            return;
+        }
+
+        pdfImportToken.value = payload.token;
+        pdfPreviewUrl.value = payload.pdf_url;
+        pdfStageWarning.value = payload.warning || '';
+        worksheetEstimatedQuestions.value = payload.estimated_question_count ?? null;
+        form.pdf_import_token = payload.token;
+    } catch {
+        pdfStageError.value = 'Could not upload PDF.';
+    } finally {
+        pdfStaging.value = false;
+    }
+};
+
+const onAnswerPdfSelected = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    selectedAnswerPdfName.value = file?.name ?? '';
+    answerPdfError.value = '';
+    answerPdfWarnings.value = [];
+    answerPdfParsedCount.value = 0;
+};
+
+const parseAnswerSheetPdf = async () => {
+    const file = answerPdfInput.value?.files?.[0];
+
+    if (!file) {
+        answerPdfError.value = 'Choose an answer sheet PDF first.';
+
+        return;
+    }
+
+    answerPdfParsing.value = true;
+    answerPdfError.value = '';
+    answerPdfWarnings.value = [];
+
+    try {
+        const formData = new FormData();
+        formData.append('pdf', file);
+
+        if (form.pdf_import_token) {
+            formData.append('worksheet_pdf_token', form.pdf_import_token);
+        }
+
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+        const response = await fetch(route('admin.written-sheets.parse-answer-pdf'), {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrf,
+            },
+            body: formData,
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            answerPdfError.value = payload.error || 'Could not read the answer sheet PDF.';
+
+            return;
+        }
+
+        form.answer_key = (payload.answer_key || []).map((row) => sanitizeAnswerKeyRow({
+            ...defaultAnswerKeyRow(selectedTopicName.value),
+            ...row,
+            topic_name: row.topic_name || selectedTopicName.value,
+        }));
+        answerPdfParsedCount.value = payload.parsed_count || form.answer_key.length;
+        answerPdfWarnings.value = payload.warnings || [];
+    } catch {
+        answerPdfError.value = 'Could not read the answer sheet PDF.';
+    } finally {
+        answerPdfParsing.value = false;
+    }
+};
+
+const mcqImportLink = computed(() => {
+    const params = {
+        mode: 'pdf_worksheet',
+    };
+
+    if (form.chapter_id) {
+        params.syllabus_chapter_id = form.chapter_id;
+    }
+
+    if (form.topic_id) {
+        params.syllabus_topic_id = form.topic_id;
+    }
+
+    return route('admin.questions.create', params);
+});
 
 const zipImportScope = computed(() => {
     if (form.sheet_kind === 'test' || isMultipleTopicScope.value) {
@@ -670,7 +947,7 @@ const hasTopicSelection = computed(() => {
         return Boolean(form.chapter_id);
     }
 
-    if (isManualMode.value && isMultipleTopicScope.value) {
+    if ((isManualMode.value || isPdfMode.value) && isMultipleTopicScope.value) {
         return Boolean(form.chapter_id);
     }
 
@@ -681,24 +958,93 @@ const hasTopicSelection = computed(() => {
     return selectedTopicIds.value.length > 0;
 });
 
+const hasWorksheetPdfToken = computed(() => Boolean(pdfImportToken.value || form.pdf_import_token));
+
+const pdfReadiness = computed(() => ({
+    chapter: Boolean(form.chapter_id),
+    topic: hasTopicSelection.value,
+    worksheetPdf: hasWorksheetPdfToken.value,
+    answers: validAnswerKeyRows.value.length > 0,
+}));
+
+const submitBlockedReason = computed(() => {
+    if (!isPdfMode.value || canSubmit.value) {
+        return '';
+    }
+
+    if (!form.chapter_id) {
+        return 'Select a chapter first.';
+    }
+
+    if (!hasTopicSelection.value) {
+        return form.sheet_kind === 'test'
+            ? 'Select a chapter for this test sheet.'
+            : 'Select a topic for this practice sheet.';
+    }
+
+    if (!hasWorksheetPdfToken.value) {
+        return 'Upload the worksheet PDF first (click “Upload PDF preview” in the green/blue box above).';
+    }
+
+    if (validAnswerKeyRows.value.length === 0) {
+        return 'Add at least one answer — upload an answer sheet PDF or fill in the answer rows.';
+    }
+
+    return 'Complete all steps above before saving.';
+});
+
 const canSubmit = computed(() => {
     if (isBankMode.value) {
         return form.question_ids.length > 0 && hasTopicSelection.value;
     }
 
+    if (isPdfMode.value) {
+        return hasWorksheetPdfToken.value
+            && validAnswerKeyRows.value.length > 0
+            && hasTopicSelection.value;
+    }
+
     return validManualRows.value.length > 0 && hasTopicSelection.value;
+});
+
+const submitLabel = computed(() => {
+    if (isPdfMode.value) {
+        return 'Save uploaded PDF for review';
+    }
+
+    return 'Generate PDF for review';
 });
 
 const submit = () => {
     syncFormTopicFields();
 
-    form.transform((data) => ({
-        ...data,
-        manual_questions: isManualMode.value ? validManualRows.value : [],
-        question_ids: isBankMode.value ? data.question_ids : [],
-        chapter_plan: useChapterCursorPlan.value ? chapterPlanRows.value : [],
-    })).post(route('admin.written-sheets.store'), {
+    if (isPdfMode.value) {
+        form.pdf_import_token = pdfImportToken.value || form.pdf_import_token;
+        form.answer_key = validAnswerKeyRows.value.map((row) => ({ ...row }));
+        form.manual_questions = [];
+        form.question_ids = [];
+    } else if (isManualMode.value) {
+        form.manual_questions = validManualRows.value.map((row) => ({ ...row }));
+        form.answer_key = [];
+        form.pdf_import_token = '';
+        form.question_ids = [];
+    } else {
+        form.manual_questions = [];
+        form.answer_key = [];
+        form.pdf_import_token = '';
+    }
+
+    form.chapter_plan = useChapterCursorPlan.value ? chapterPlanRows.value : [];
+
+    if (!canSubmit.value) {
+        return;
+    }
+
+    form.post(route('admin.written-sheets.store'), {
         preserveScroll: true,
+        onError: () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
     });
 };
 </script>
@@ -751,7 +1097,16 @@ const submit = () => {
                                 <input v-model="form.source_mode" type="radio" value="manual" class="text-indigo-600">
                                 Type manually / paste from Cursor
                             </label>
+                            <label class="inline-flex items-center gap-2">
+                                <input v-model="form.source_mode" type="radio" value="pdf" class="text-indigo-600">
+                                Upload your PDF + answer key
+                            </label>
                         </div>
+                        <p v-if="isPdfMode" class="mt-2 text-xs text-gray-600">
+                            Use your existing chapter PDF as the written worksheet. Upload a separate answer sheet PDF or enter answers manually — the system maps them to Q1, Q2, … for AI checking when students upload photos.
+                            For online MCQ from the same PDF, use
+                            <Link :href="mcqImportLink" class="font-medium text-indigo-700 hover:underline">Question bank → PDF worksheet</Link>.
+                        </p>
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
@@ -812,7 +1167,7 @@ const submit = () => {
                             <InputError :message="form.errors.topic_id" class="mt-1" />
                         </div>
 
-                        <div v-else-if="!isManualMode" class="mt-4">
+                        <div v-else-if="!isManualMode && !isPdfMode" class="mt-4">
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <InputLabel :value="`Selected topics (${selectedTopicIds.length})`" />
                                 <button
@@ -841,9 +1196,54 @@ const submit = () => {
                             <p v-if="topics.length === 0" class="mt-2 text-xs text-amber-700">No topics in this chapter.</p>
                         </div>
 
-                        <p v-else class="mt-4 text-sm text-gray-600">
+                        <p v-else-if="isManualMode" class="mt-4 text-sm text-gray-600">
                             Set easy / medium / hard per topic in the chapter plan below, then generate the Cursor prompt.
                         </p>
+                        <p v-else-if="isPdfMode" class="mt-4 text-sm text-gray-600">
+                            For chapter tests or multi-topic practice sheets, you can set a topic name per answer row below.
+                        </p>
+                    </div>
+
+                    <div v-if="isPdfMode && form.chapter_id" class="rounded-lg border-2 border-sky-300 bg-sky-50 p-4">
+                        <h3 class="font-semibold text-sky-950">Upload worksheet PDF</h3>
+                        <p class="mt-1 text-sm text-sky-900">
+                            Upload the PDF you already use in class (diagrams, layout, branding). Students download this file; AI grading uses your answer key below.
+                        </p>
+
+                        <input
+                            ref="pdfInput"
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            class="mt-4 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-sky-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-sky-800"
+                            @change="onPdfSelected"
+                        >
+
+                        <p v-if="selectedPdfName" class="mt-2 text-sm font-medium text-gray-700">
+                            Selected: {{ selectedPdfName }}
+                        </p>
+
+                        <p v-if="pdfStageError" class="mt-2 text-sm text-rose-700">{{ pdfStageError }}</p>
+                        <InputError :message="form.errors.pdf_import_token" class="mt-2" />
+
+                        <PrimaryButton
+                            type="button"
+                            class="mt-4"
+                            :disabled="pdfStaging || !selectedPdfName"
+                            @click="stageUploadedPdf"
+                        >
+                            {{ pdfStaging ? 'Uploading…' : pdfImportToken ? 'PDF uploaded — choose another to replace' : 'Upload PDF preview' }}
+                        </PrimaryButton>
+
+                        <p v-if="pdfStageWarning" class="mt-2 text-xs text-amber-800">{{ pdfStageWarning }}</p>
+                        <p v-if="pdfImportToken" class="mt-2 text-xs text-emerald-800">PDF ready. Add answer rows below, then save for review.</p>
+
+                        <WorksheetPdfViewer
+                            v-if="pdfPreviewUrl"
+                            class="mt-6"
+                            :url="pdfPreviewUrl"
+                            title="Uploaded worksheet preview"
+                            helper-text="This is the PDF students will download. Match each answer row to question numbers in the PDF."
+                        />
                     </div>
 
                     <div v-if="form.chapter_id" class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
@@ -1099,15 +1499,161 @@ const submit = () => {
                         <InputError :message="form.errors.manual_questions" class="mt-1" />
                     </div>
 
+                    <div v-if="isPdfMode" class="space-y-4 rounded-lg border border-sky-200 bg-sky-50/40 p-4">
+                        <p class="text-sm text-gray-700">
+                            Upload a separate answer sheet PDF and the system maps numbered answers to Q1, Q2, … You can still edit rows below before saving.
+                        </p>
+
+                        <div class="rounded-lg border border-violet-200 bg-white p-4">
+                            <InputLabel value="Answer sheet PDF" />
+                            <p class="mt-1 text-xs text-gray-600">
+                                Use a text-based PDF with lines like <span class="font-mono">1. 42</span>, <span class="font-mono">Q2: 3/4</span>, or
+                                <span class="font-mono">Answer key: 1. a 2. b</span>. Upload the worksheet PDF first so the system can warn if counts do not match.
+                            </p>
+
+                            <input
+                                ref="answerPdfInput"
+                                type="file"
+                                accept="application/pdf,.pdf"
+                                class="mt-4 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-violet-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-violet-800"
+                                @change="onAnswerPdfSelected"
+                            >
+
+                            <p v-if="selectedAnswerPdfName" class="mt-2 text-sm font-medium text-gray-700">
+                                Selected: {{ selectedAnswerPdfName }}
+                            </p>
+
+                            <PrimaryButton
+                                type="button"
+                                class="mt-4"
+                                :disabled="answerPdfParsing || !selectedAnswerPdfName || !hasWorksheetPdfToken"
+                                @click="parseAnswerSheetPdf"
+                            >
+                                {{ answerPdfParsing ? 'Reading answer sheet…' : 'Upload answer sheet → map answers' }}
+                            </PrimaryButton>
+
+                            <p v-if="!hasWorksheetPdfToken" class="mt-2 text-xs text-amber-800">
+                                Upload the worksheet PDF first, then upload the answer sheet.
+                            </p>
+
+                            <p v-if="answerPdfError" class="mt-2 text-sm text-rose-700">{{ answerPdfError }}</p>
+                            <p v-if="answerPdfParsedCount" class="mt-2 text-sm text-emerald-800">
+                                {{ answerPdfParsedCount }} answer(s) mapped to question numbers. Review below, then save.
+                            </p>
+                            <p v-for="(warning, index) in answerPdfWarnings" :key="`answer-warning-${index}`" class="mt-2 text-xs text-amber-800">
+                                {{ warning }}
+                            </p>
+                            <p v-if="worksheetEstimatedQuestions && !answerPdfParsedCount" class="mt-2 text-xs text-gray-600">
+                                Worksheet PDF looks like it has about {{ worksheetEstimatedQuestions }} question(s).
+                            </p>
+                        </div>
+
+                        <div>
+                            <InputLabel value="Paste answer JSON (optional)" />
+                            <textarea
+                                v-model="answerKeyJsonInput"
+                                rows="3"
+                                class="mt-1 block w-full rounded-md border-gray-300 font-mono text-xs"
+                                placeholder='{"questions":[{"correct_answer":"42","answer_format":"integer"},{"correct_answer":"3/4","answer_format":"fraction"}]}'
+                            />
+                            <div class="mt-2 flex gap-2">
+                                <SecondaryButton type="button" @click="importAnswerKeyJson">Import answers</SecondaryButton>
+                            </div>
+                            <p v-if="answerKeyJsonError" class="mt-2 text-sm text-rose-700">{{ answerKeyJsonError }}</p>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <InputLabel :value="`Answer key (${validAnswerKeyRows.length} ready)`" />
+                                <button type="button" class="text-xs font-medium text-indigo-600 hover:underline" @click="addAnswerKeyRow">
+                                    + Add answer
+                                </button>
+                            </div>
+
+                            <div
+                                v-for="(row, index) in form.answer_key"
+                                :key="`answer-key-${index}`"
+                                class="rounded-lg border border-gray-200 bg-white p-3"
+                            >
+                                <p class="text-xs font-medium text-gray-500">Question {{ index + 1 }}</p>
+                                <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-700">Correct answer</label>
+                                        <input v-model="row.correct_answer" type="text" class="mt-1 block w-full rounded-md border-gray-300 text-sm" :class="{ 'border-rose-400 ring-1 ring-rose-300': answerKeyRowError(index, 'correct_answer') }" />
+                                        <InputError :message="answerKeyRowError(index, 'correct_answer')" class="mt-1" />
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-medium text-gray-700">Answer format</label>
+                                        <select v-model="row.answer_format" class="mt-1 block w-full rounded-md border-gray-300 text-sm" :class="{ 'border-rose-400 ring-1 ring-rose-300': answerKeyRowError(index, 'answer_format') }">
+                                            <option v-for="format in fillBlankFormats" :key="format" :value="format">
+                                                {{ format }}
+                                            </option>
+                                        </select>
+                                        <InputError :message="answerKeyRowError(index, 'answer_format')" class="mt-1" />
+                                    </div>
+                                    <div v-if="form.sheet_kind === 'test' || isMultipleTopicScope" class="sm:col-span-2">
+                                        <label class="text-xs font-medium text-gray-700">Topic name</label>
+                                        <input v-model="row.topic_name" type="text" class="mt-1 block w-full rounded-md border-gray-300 text-sm" :placeholder="selectedTopicName || 'Topic name'" />
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <label class="text-xs font-medium text-gray-700">Method hint (optional, helps AI grading)</label>
+                                        <input v-model="row.method_hint" type="text" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
+                                    </div>
+                                </div>
+                                <button type="button" class="mt-2 text-xs font-medium text-rose-700 hover:underline" @click="removeAnswerKeyRow(index)">
+                                    Remove
+                                </button>
+                            </div>
+                        </div>
+                        <InputError :message="form.errors.answer_key" class="mt-1" />
+
+                        <div class="rounded-lg border border-gray-200 bg-white p-4">
+                            <p class="text-sm font-medium text-gray-900">Ready to save?</p>
+                            <ul class="mt-2 space-y-1 text-sm text-gray-700">
+                                <li :class="pdfReadiness.chapter ? 'text-emerald-800' : 'text-amber-800'">
+                                    {{ pdfReadiness.chapter ? '✓' : '○' }} Chapter selected
+                                </li>
+                                <li :class="pdfReadiness.topic ? 'text-emerald-800' : 'text-amber-800'">
+                                    {{ pdfReadiness.topic ? '✓' : '○' }} Topic selected
+                                </li>
+                                <li :class="pdfReadiness.worksheetPdf ? 'text-emerald-800' : 'text-amber-800'">
+                                    {{ pdfReadiness.worksheetPdf ? '✓' : '○' }} Worksheet PDF uploaded
+                                </li>
+                                <li :class="pdfReadiness.answers ? 'text-emerald-800' : 'text-amber-800'">
+                                    {{ pdfReadiness.answers ? '✓' : '○' }} Answers mapped ({{ validAnswerKeyRows.length }})
+                                </li>
+                            </ul>
+
+                            <p v-if="submitBlockedReason" class="mt-3 text-sm text-amber-800">
+                                {{ submitBlockedReason }}
+                            </p>
+
+                            <PrimaryButton
+                                type="submit"
+                                class="mt-4"
+                                :disabled="form.processing"
+                                :class="{ 'opacity-50 cursor-not-allowed': !canSubmit && !form.processing }"
+                            >
+                                {{ form.processing ? 'Saving…' : submitLabel }}
+                            </PrimaryButton>
+                        </div>
+                    </div>
+
                     <div>
                         <InputLabel value="Notes (optional)" />
                         <textarea v-model="form.notes" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
                     </div>
 
-                    <div class="flex gap-2">
-                        <PrimaryButton :disabled="form.processing || !canSubmit">
-                            Generate PDF for review
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <PrimaryButton
+                            v-if="!isPdfMode"
+                            :disabled="form.processing || !canSubmit"
+                        >
+                            {{ submitLabel }}
                         </PrimaryButton>
+                        <p v-if="!isPdfMode && submitBlockedReason" class="text-sm text-amber-800">
+                            {{ submitBlockedReason }}
+                        </p>
                         <Link :href="route('admin.written-sheets.index')">
                             <SecondaryButton type="button">Cancel</SecondaryButton>
                         </Link>

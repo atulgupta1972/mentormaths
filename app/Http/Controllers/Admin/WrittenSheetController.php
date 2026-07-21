@@ -15,13 +15,19 @@ use App\Services\AdminGradeContext;
 use App\Services\FillBlankImportService;
 use App\Services\QuestionZipImportService;
 use App\Services\SetAssignmentService;
+use App\Services\WrittenSheetPdfImportService;
 use App\Services\WrittenSheetService;
+use App\Services\WrittenSheetAnswerKeyParser;
 use App\Support\DiagramQuestionSupport;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -34,6 +40,7 @@ class WrittenSheetController extends Controller
         private FillBlankImportService $fillBlankImportService,
         private SetAssignmentService $assignmentService,
         private QuestionZipImportService $zipImportService,
+        private WrittenSheetPdfImportService $pdfImportService,
     ) {}
 
     public function index(Request $request): Response
@@ -174,6 +181,7 @@ class WrittenSheetController extends Controller
             'promptOptions' => $promptOptions,
             'chapterPlan' => session('written_sheet_chapter_plan', []),
             'manualQuestionsDraft' => session('manual_questions_draft', []),
+            'answerKeyDraft' => session('answer_key_draft', []),
         ]);
     }
 
@@ -182,7 +190,7 @@ class WrittenSheetController extends Controller
         $validated = $request->validate([
             'chapter_id' => ['required', 'exists:syllabus_chapters,id'],
             'sheet_kind' => ['nullable', 'in:practice,test'],
-            'source_mode' => ['nullable', 'in:bank,manual'],
+            'source_mode' => ['nullable', 'in:bank,manual,pdf'],
             'topic_scope' => ['nullable', 'in:one,multiple'],
             'topic_ids' => ['nullable', 'array'],
             'topic_ids.*' => ['integer', 'exists:syllabus_topics,id'],
@@ -223,17 +231,36 @@ class WrittenSheetController extends Controller
     {
         $this->sanitizeWrittenSheetInput($request);
 
+        $sourceMode = $request->input('source_mode');
+
         $validator = Validator::make($request->all(), [
-            'source_mode' => ['required', 'in:bank,manual'],
+            'source_mode' => ['required', 'in:bank,manual,pdf'],
             'sheet_kind' => ['required', 'in:practice,test'],
             'chapter_id' => ['required', 'exists:syllabus_chapters,id'],
             'topic_scope' => ['nullable', 'in:one,multiple'],
             'topic_id' => ['nullable', 'exists:syllabus_topics,id'],
             'topic_ids' => ['nullable', 'array'],
             'topic_ids.*' => ['integer', 'exists:syllabus_topics,id'],
-            'question_ids' => ['exclude_if:source_mode,manual', 'required_if:source_mode,bank', 'array', 'min:1'],
+            'pdf_import_token' => ['exclude_unless:source_mode,pdf', 'required', 'uuid'],
+            'answer_key' => ['exclude_unless:source_mode,pdf', 'required', 'array', 'min:1'],
+            'answer_key.*.correct_answer' => ['required', 'string', 'max:'.WrittenSheetAnswerKeyParser::MAX_ANSWER_LENGTH],
+            'answer_key.*.answer_format' => ['nullable', 'in:integer,decimal,fraction,text'],
+            'answer_key.*.method_hint' => ['nullable', 'string'],
+            'answer_key.*.topic_name' => ['nullable', 'string'],
+            'answer_key.*.syllabus_topic_id' => ['nullable', 'integer'],
+            'question_ids' => [
+                Rule::excludeIf(fn () => in_array($sourceMode, ['manual', 'pdf'], true)),
+                'required_if:source_mode,bank',
+                'array',
+                'min:1',
+            ],
             'question_ids.*' => ['integer', 'exists:questions,id'],
-            'manual_questions' => ['exclude_if:source_mode,bank', 'required_if:source_mode,manual', 'array', 'min:1'],
+            'manual_questions' => [
+                Rule::excludeIf(fn () => in_array($sourceMode, ['bank', 'pdf'], true)),
+                'required_if:source_mode,manual',
+                'array',
+                'min:1',
+            ],
             'manual_questions.*.question_text' => ['required', 'string'],
             'manual_questions.*.correct_answer' => ['required', 'string'],
             'manual_questions.*.answer_format' => ['nullable', 'in:integer,decimal,fraction,text'],
@@ -251,6 +278,7 @@ class WrittenSheetController extends Controller
 
         if ($validator->fails()) {
             $request->session()->flash('manual_questions_draft', $request->input('manual_questions', []));
+            $request->session()->flash('answer_key_draft', $request->input('answer_key', []));
             $request->session()->flash('written_sheet_chapter_plan', $request->input('chapter_plan', []));
 
             throw new ValidationException($validator);
@@ -276,7 +304,38 @@ class WrittenSheetController extends Controller
             $useChapterScope = $validated['sheet_kind'] === 'test'
                 || ($validated['sheet_kind'] === 'practice' && $topicScope === 'multiple');
 
-            if ($validated['source_mode'] === 'manual') {
+            if ($validated['source_mode'] === 'pdf' && ! $useChapterScope && ! $topic) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'Select a topic for a written practice sheet.')
+                    ->with('answer_key_draft', $validated['answer_key'] ?? []);
+            }
+
+            if ($validated['source_mode'] === 'pdf') {
+                $pdfImport = $this->pdfImportService->pull($validated['pdf_import_token']);
+
+                if ($pdfImport === null) {
+                    return back()
+                        ->withInput()
+                        ->with('error', 'PDF upload expired. Upload your worksheet PDF again.')
+                        ->with('answer_key_draft', $validated['answer_key'] ?? []);
+                }
+
+                $worksheet = $this->writtenSheetService->createFromAnswerKey(
+                    $chapter,
+                    $useChapterScope ? null : $topic,
+                    $validated['sheet_kind'],
+                    $validated['answer_key'],
+                    $request->user(),
+                    $validated['notes'] ?? null,
+                );
+
+                $this->writtenSheetService->attachUploadedPdf(
+                    $worksheet,
+                    $pdfImport['pdf_path'],
+                    $validated['pdf_import_token'],
+                );
+            } elseif ($validated['source_mode'] === 'manual') {
                 $worksheet = $this->writtenSheetService->createFromManualQuestions(
                     $chapter,
                     $useChapterScope ? null : $topic,
@@ -298,6 +357,7 @@ class WrittenSheetController extends Controller
                         ->withInput()
                         ->with('error', 'Select a topic for a written practice sheet.')
                         ->with('manual_questions_draft', $validated['manual_questions'] ?? [])
+                        ->with('answer_key_draft', $validated['answer_key'] ?? [])
                         ->with('written_sheet_chapter_plan', $validated['chapter_plan'] ?? session('written_sheet_chapter_plan', []));
                 }
 
@@ -309,28 +369,103 @@ class WrittenSheetController extends Controller
                 );
             }
 
-            $this->writtenSheetService->generatePdf($worksheet);
+            if ($validated['source_mode'] !== 'pdf') {
+                $this->writtenSheetService->generatePdf($worksheet);
+            }
 
-            $request->session()->forget(['manual_questions_draft']);
+            $request->session()->forget(['manual_questions_draft', 'answer_key_draft']);
         } catch (\InvalidArgumentException $e) {
             return back()
                 ->withInput()
                 ->with('error', $e->getMessage())
                 ->with('manual_questions_draft', $validated['manual_questions'] ?? [])
+                ->with('answer_key_draft', $validated['answer_key'] ?? [])
                 ->with('written_sheet_chapter_plan', $validated['chapter_plan'] ?? session('written_sheet_chapter_plan', []));
         } catch (\Throwable $e) {
             report($e);
 
+            $errorMessage = $validated['source_mode'] === 'pdf'
+                ? 'Could not save the uploaded PDF worksheet. '
+                : 'Could not generate the PDF. ';
+
             return back()
                 ->withInput()
-                ->with('error', 'Could not generate the PDF. '.$e->getMessage())
+                ->with('error', $errorMessage.$e->getMessage())
                 ->with('manual_questions_draft', $validated['manual_questions'] ?? [])
+                ->with('answer_key_draft', $validated['answer_key'] ?? [])
                 ->with('written_sheet_chapter_plan', $validated['chapter_plan'] ?? session('written_sheet_chapter_plan', []));
         }
 
+        $successMessage = $validated['source_mode'] === 'pdf'
+            ? 'Uploaded worksheet PDF saved. Review it below, then verify to allow assigning.'
+            : 'Written sheet created. Review the PDF, then verify to allow assigning.';
+
         return redirect()
             ->route('admin.written-sheets.show', $worksheet)
-            ->with('success', 'Written sheet created. Review the PDF, then verify to allow assigning.');
+            ->with('success', $successMessage);
+    }
+
+    public function stagePdf(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'pdf' => ['required', 'file', 'max:20480'],
+        ], [
+            'pdf.required' => 'Choose a PDF file first.',
+            'pdf.max' => 'PDF must be smaller than 20 MB.',
+        ]);
+
+        if (! $this->isPdfUpload($request->file('pdf'))) {
+            return response()->json([
+                'error' => 'Please upload a valid PDF file (.pdf).',
+            ], 422);
+        }
+
+        try {
+            $result = $this->pdfImportService->stage($request->file('pdf'));
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json($result);
+    }
+
+    public function parseAnswerPdf(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'pdf' => ['required', 'file', 'max:10240'],
+            'worksheet_pdf_token' => ['nullable', 'uuid'],
+        ], [
+            'pdf.required' => 'Choose an answer sheet PDF first.',
+            'pdf.max' => 'Answer sheet PDF must be smaller than 10 MB.',
+        ]);
+
+        if (! $this->isPdfUpload($request->file('pdf'))) {
+            return response()->json([
+                'error' => 'Please upload a valid PDF file (.pdf).',
+            ], 422);
+        }
+
+        if (! empty($validated['worksheet_pdf_token'])
+            && $this->pdfImportService->peek($validated['worksheet_pdf_token']) === null) {
+            return response()->json([
+                'error' => 'Worksheet PDF upload expired. Upload the worksheet PDF again, then upload the answer sheet.',
+            ], 422);
+        }
+
+        try {
+            $result = $this->pdfImportService->parseAnswerSheet(
+                $request->file('pdf'),
+                $validated['worksheet_pdf_token'] ?? null,
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json($result);
     }
 
     public function importZipPack(Request $request): RedirectResponse
@@ -455,6 +590,10 @@ class WrittenSheetController extends Controller
     {
         abort_unless($worksheet->isWritten(), 404);
 
+        if ($this->writtenSheetService->usesUploadedPdf($worksheet)) {
+            return back()->with('error', 'This sheet uses your uploaded PDF. Create a new sheet to change the PDF file.');
+        }
+
         try {
             $this->writtenSheetService->generatePdf($worksheet);
         } catch (\InvalidArgumentException $e) {
@@ -498,11 +637,41 @@ class WrittenSheetController extends Controller
 
     private function sanitizeWrittenSheetInput(Request $request): void
     {
+        $sourceMode = match ($request->input('source_mode')) {
+            'manual' => 'manual',
+            'pdf' => 'pdf',
+            default => 'bank',
+        };
+
         $validFormats = ['integer', 'decimal', 'fraction', 'text'];
         $chapterId = (int) $request->input('chapter_id');
         $validTopicIds = $chapterId > 0
             ? SyllabusChapter::query()->with('topics:id,syllabus_chapter_id')->find($chapterId)?->topics->pluck('id')->all() ?? []
             : [];
+
+        $sanitizeAnswerRow = function (array $row) use ($validFormats, $validTopicIds): array {
+            $format = strtolower(trim((string) ($row['answer_format'] ?? 'text')));
+            if (! in_array($format, $validFormats, true)) {
+                $format = 'text';
+            }
+
+            $topicId = $row['syllabus_topic_id'] ?? null;
+            if ($topicId === '' || $topicId === 0 || $topicId === '0') {
+                $topicId = null;
+            } elseif ($topicId !== null && ! in_array((int) $topicId, $validTopicIds, true)) {
+                $topicId = null;
+            }
+
+            return [
+                'correct_answer' => $this->normalizeStoredAnswer(trim((string) ($row['correct_answer'] ?? ''))),
+                'answer_format' => $format,
+                'method_hint' => array_key_exists('method_hint', $row) && $row['method_hint'] !== null
+                    ? trim((string) $row['method_hint'])
+                    : null,
+                'topic_name' => trim((string) ($row['topic_name'] ?? $row['topic'] ?? '')),
+                'syllabus_topic_id' => $topicId,
+            ];
+        };
 
         $manualQuestions = collect($request->input('manual_questions', []))
             ->filter(fn ($row) => is_array($row))
@@ -538,7 +707,12 @@ class WrittenSheetController extends Controller
             ->values()
             ->all();
 
-        $sourceMode = $request->input('source_mode') === 'manual' ? 'manual' : 'bank';
+        $answerKey = collect($request->input('answer_key', []))
+            ->filter(fn ($row) => is_array($row))
+            ->map($sanitizeAnswerRow)
+            ->filter(fn (array $row) => $row['correct_answer'] !== '')
+            ->values()
+            ->all();
 
         $payload = [
             'chapter_id' => $chapterId > 0 ? $chapterId : $request->input('chapter_id'),
@@ -549,10 +723,41 @@ class WrittenSheetController extends Controller
         if ($sourceMode === 'manual') {
             $payload['manual_questions'] = $manualQuestions;
             $payload['question_ids'] = null;
+            $payload['answer_key'] = null;
+        } elseif ($sourceMode === 'pdf') {
+            $payload['answer_key'] = $answerKey;
+            $payload['manual_questions'] = null;
+            $payload['question_ids'] = null;
         } else {
             $payload['manual_questions'] = null;
+            $payload['answer_key'] = null;
         }
 
         $request->merge($payload);
+    }
+
+    private function isPdfUpload(?UploadedFile $file): bool
+    {
+        if (! $file) {
+            return false;
+        }
+
+        $extension = strtolower($file->getClientOriginalExtension());
+        $mime = strtolower((string) $file->getMimeType());
+
+        return $extension === 'pdf' || str_contains($mime, 'pdf');
+    }
+
+    private function normalizeStoredAnswer(string $answer): string
+    {
+        if (preg_match('/\bcorrect\s*answer\s*:?\s*(.+?)(?:\s+explanation\s*:|$)/iu', $answer, $match)) {
+            $answer = trim($match[1]);
+        }
+
+        if (mb_strlen($answer) > WrittenSheetAnswerKeyParser::MAX_ANSWER_LENGTH) {
+            $answer = trim(mb_substr($answer, 0, WrittenSheetAnswerKeyParser::MAX_ANSWER_LENGTH));
+        }
+
+        return $answer;
     }
 }

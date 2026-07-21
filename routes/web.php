@@ -195,6 +195,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/written-sheets', [WrittenSheetController::class, 'index'])->name('written-sheets.index');
     Route::get('/written-sheets/create', [WrittenSheetController::class, 'create'])->name('written-sheets.create');
     Route::post('/written-sheets/chapter-prompt', [WrittenSheetController::class, 'chapterPrompt'])->name('written-sheets.chapter-prompt');
+    Route::post('/written-sheets/stage-pdf', [WrittenSheetController::class, 'stagePdf'])->name('written-sheets.stage-pdf');
+    Route::post('/written-sheets/parse-answer-pdf', [WrittenSheetController::class, 'parseAnswerPdf'])->name('written-sheets.parse-answer-pdf');
     Route::post('/written-sheets', [WrittenSheetController::class, 'store'])->name('written-sheets.store');
     Route::post('/written-sheets/import-zip-pack', [WrittenSheetController::class, 'importZipPack'])->name('written-sheets.import-zip-pack');
     Route::get('/written-sheets/{worksheet}', [WrittenSheetController::class, 'show'])->name('written-sheets.show');
