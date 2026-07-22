@@ -625,6 +625,53 @@ class WrittenSheetController extends Controller
         return back()->with('success', 'Written sheet sent back to draft.');
     }
 
+    public function replacePdf(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        abort_unless($worksheet->isWritten(), 404);
+
+        $validated = $request->validate([
+            'pdf_import_token' => ['required', 'uuid'],
+        ]);
+
+        $pdfImport = $this->pdfImportService->pull($validated['pdf_import_token']);
+
+        if ($pdfImport === null) {
+            return back()->with('error', 'PDF upload expired. Upload the replacement PDF again.');
+        }
+
+        try {
+            $this->writtenSheetService->replacePdf(
+                $worksheet,
+                $pdfImport['pdf_path'],
+                $validated['pdf_import_token'],
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $message = $worksheet->isWrittenVerified()
+            ? 'Worksheet PDF replaced. Existing assignments stay active — students who have not uploaded yet will get the new PDF.'
+            : 'Worksheet PDF replaced. Review it below, then verify if needed.';
+
+        return back()->with('success', $message);
+    }
+
+    public function removePdf(Worksheet $worksheet): RedirectResponse
+    {
+        abort_unless($worksheet->isWritten(), 404);
+
+        try {
+            $this->writtenSheetService->removePdf($worksheet);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with(
+            'success',
+            'Worksheet PDF removed. Upload a replacement PDF below, then verify again before assigning new students.',
+        );
+    }
+
     public function download(Worksheet $worksheet): StreamedResponse
     {
         abort_unless($worksheet->isWritten() && $worksheet->written_pdf_path, 404);

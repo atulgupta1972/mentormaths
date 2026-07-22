@@ -1,4 +1,5 @@
 <script setup>
+import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -22,6 +23,15 @@ const page = usePage();
 const regenerateForm = useForm({});
 const verifyForm = useForm({});
 const rejectForm = useForm({});
+const replacePdfForm = useForm({ pdf_import_token: '' });
+const removePdfForm = useForm({});
+
+const replacePdfInput = ref(null);
+const selectedReplacePdfName = ref('');
+const replacePdfPreviewUrl = ref('');
+const replacePdfStaging = ref(false);
+const replacePdfError = ref('');
+const replacePdfToken = ref('');
 
 const defaultTargetDate = () => {
     const d = new Date();
@@ -133,6 +143,89 @@ const reassign = (assignmentId) => {
     reassignForm.post(route('admin.set-assignments.reassign', assignmentId), { preserveScroll: true });
 };
 
+const onReplacePdfSelected = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    selectedReplacePdfName.value = file?.name ?? '';
+    replacePdfError.value = '';
+    replacePdfToken.value = '';
+    replacePdfPreviewUrl.value = '';
+};
+
+const stageReplacementPdf = async () => {
+    const file = replacePdfInput.value?.files?.[0];
+
+    if (!file) {
+        replacePdfError.value = 'Choose a replacement PDF first.';
+
+        return;
+    }
+
+    replacePdfStaging.value = true;
+    replacePdfError.value = '';
+
+    try {
+        const formData = new FormData();
+        formData.append('pdf', file);
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+        const response = await fetch(route('admin.written-sheets.stage-pdf'), {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrf,
+            },
+            body: formData,
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            replacePdfError.value = payload.error || 'Could not upload PDF.';
+
+            return;
+        }
+
+        replacePdfToken.value = payload.token;
+        replacePdfPreviewUrl.value = payload.pdf_url;
+    } catch {
+        replacePdfError.value = 'Could not upload PDF.';
+    } finally {
+        replacePdfStaging.value = false;
+    }
+};
+
+const submitReplacePdf = () => {
+    if (!replacePdfToken.value) {
+        replacePdfError.value = 'Upload the replacement PDF first.';
+
+        return;
+    }
+
+    if (!confirm('Replace the worksheet PDF? Students who have not uploaded yet will download the new file.')) {
+        return;
+    }
+
+    replacePdfForm.pdf_import_token = replacePdfToken.value;
+    replacePdfForm.post(route('admin.written-sheets.replace-pdf', props.sheet.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            selectedReplacePdfName.value = '';
+            replacePdfToken.value = '';
+            replacePdfPreviewUrl.value = '';
+            if (replacePdfInput.value) {
+                replacePdfInput.value.value = '';
+            }
+        },
+    });
+};
+
+const removePdf = () => {
+    if (!confirm('Remove this worksheet PDF? You can upload a replacement below. You will need to verify again.')) {
+        return;
+    }
+
+    removePdfForm.post(route('admin.written-sheets.remove-pdf', props.sheet.id), { preserveScroll: true });
+};
+
 const formatDate = (d) => {
     if (!d) {
         return '—';
@@ -232,7 +325,7 @@ const progressLabel = (p) => {
                             Regenerate PDF
                         </SecondaryButton>
                         <p v-if="sheet.uses_uploaded_pdf" class="w-full text-sm text-gray-600">
-                            This sheet uses your uploaded PDF. To change the file, create a new written sheet.
+                            This sheet uses an uploaded PDF. Use the replace panel below to swap the file if needed.
                         </p>
                         <DangerButton
                             v-if="sheet.written_status !== 'draft'"
@@ -247,6 +340,66 @@ const progressLabel = (p) => {
                     <p class="mt-3 text-sm text-gray-600">
                         Step 2: check the PDF below. Step 3: verify, then assign to students below (same as online practice sets).
                     </p>
+
+                    <div v-if="sheet.has_student_submissions" class="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        At least one student has uploaded written work — the worksheet PDF can no longer be changed.
+                    </div>
+
+                    <div v-else-if="sheet.can_manage_pdf" class="mt-4 rounded-lg border border-sky-200 bg-sky-50/50 p-4">
+                        <h4 class="text-sm font-semibold text-sky-950">
+                            {{ sheet.written_pdf_url ? 'Replace worksheet PDF' : 'Upload worksheet PDF' }}
+                        </h4>
+                        <p class="mt-1 text-sm text-sky-900">
+                            PDF not right? Upload a replacement — works even after assigning, as long as no student has uploaded their answers yet.
+                        </p>
+
+                        <input
+                            ref="replacePdfInput"
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            class="mt-3 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-sky-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-sky-800"
+                            @change="onReplacePdfSelected"
+                        >
+
+                        <p v-if="selectedReplacePdfName" class="mt-2 text-sm font-medium text-gray-700">
+                            Selected: {{ selectedReplacePdfName }}
+                        </p>
+
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <SecondaryButton
+                                type="button"
+                                :disabled="replacePdfStaging || !selectedReplacePdfName"
+                                @click="stageReplacementPdf"
+                            >
+                                {{ replacePdfStaging ? 'Uploading…' : 'Preview replacement PDF' }}
+                            </SecondaryButton>
+                            <PrimaryButton
+                                type="button"
+                                :disabled="!replacePdfToken || replacePdfForm.processing"
+                                @click="submitReplacePdf"
+                            >
+                                {{ replacePdfForm.processing ? 'Saving…' : (sheet.written_pdf_url ? 'Save replacement PDF' : 'Save PDF') }}
+                            </PrimaryButton>
+                            <DangerButton
+                                v-if="sheet.written_pdf_url"
+                                type="button"
+                                :disabled="removePdfForm.processing"
+                                @click="removePdf"
+                            >
+                                Remove PDF
+                            </DangerButton>
+                        </div>
+
+                        <p v-if="replacePdfError" class="mt-2 text-sm text-rose-700">{{ replacePdfError }}</p>
+
+                        <WorksheetPdfViewer
+                            v-if="replacePdfPreviewUrl"
+                            class="mt-4"
+                            :url="replacePdfPreviewUrl"
+                            title="Replacement PDF preview"
+                            helper-text="Click Save replacement PDF to swap this in for students who have not uploaded yet."
+                        />
+                    </div>
                 </div>
 
                 <div

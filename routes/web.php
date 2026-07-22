@@ -201,6 +201,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/written-sheets/import-zip-pack', [WrittenSheetController::class, 'importZipPack'])->name('written-sheets.import-zip-pack');
     Route::get('/written-sheets/{worksheet}', [WrittenSheetController::class, 'show'])->name('written-sheets.show');
     Route::post('/written-sheets/{worksheet}/regenerate', [WrittenSheetController::class, 'regenerate'])->name('written-sheets.regenerate');
+    Route::post('/written-sheets/{worksheet}/replace-pdf', [WrittenSheetController::class, 'replacePdf'])->name('written-sheets.replace-pdf');
+    Route::post('/written-sheets/{worksheet}/remove-pdf', [WrittenSheetController::class, 'removePdf'])->name('written-sheets.remove-pdf');
     Route::post('/written-sheets/{worksheet}/verify', [WrittenSheetController::class, 'verify'])->name('written-sheets.verify');
     Route::post('/written-sheets/{worksheet}/reject', [WrittenSheetController::class, 'reject'])->name('written-sheets.reject');
     Route::get('/written-sheets/{worksheet}/download', [WrittenSheetController::class, 'download'])->name('written-sheets.download');

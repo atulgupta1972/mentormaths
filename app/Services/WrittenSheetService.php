@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Models\Question;
+use App\Models\SetAssignment;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\User;
 use App\Models\Worksheet;
+use App\Models\WrittenSubmission;
 use App\Services\FillBlankImportService;
 use App\Services\PracticeSetService;
 use App\Services\WrittenSheetPdfService;
@@ -16,6 +18,7 @@ use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 
 class WrittenSheetService
 {
@@ -395,6 +398,92 @@ class WrittenSheetService
         return $worksheet->fresh();
     }
 
+    public function hasStudentSubmissions(Worksheet $worksheet): bool
+    {
+        return WrittenSubmission::query()
+            ->whereHas('assignment', fn ($query) => $query
+                ->where('worksheet_id', $worksheet->id)
+                ->whereNot('status', SetAssignment::STATUS_CANCELLED))
+            ->exists();
+    }
+
+    public function canReplacePdf(Worksheet $worksheet): bool
+    {
+        return $worksheet->isWritten()
+            && $worksheet->written_pdf_path
+            && ! $this->hasStudentSubmissions($worksheet);
+    }
+
+    public function canManagePdf(Worksheet $worksheet): bool
+    {
+        return $worksheet->isWritten() && ! $this->hasStudentSubmissions($worksheet);
+    }
+
+    public function replacePdf(Worksheet $worksheet, string $sourcePath, ?string $token = null): Worksheet
+    {
+        if (! $worksheet->isWritten()) {
+            throw new \InvalidArgumentException('This is not a written sheet.');
+        }
+
+        if ($this->hasStudentSubmissions($worksheet)) {
+            throw new \InvalidArgumentException(
+                'Cannot replace the worksheet PDF after a student has uploaded their written work.',
+            );
+        }
+
+        $oldPath = $worksheet->written_pdf_path;
+        $newPath = $this->pdfImportService->attachToWorksheet($worksheet, $sourcePath);
+
+        if ($oldPath && $oldPath !== $newPath) {
+            Storage::disk('public')->delete($oldPath);
+        }
+
+        if ($token) {
+            $this->pdfImportService->cleanupTokenDirectory($token);
+        }
+
+        $updates = [
+            'written_pdf_path' => $newPath,
+        ];
+
+        if (! $worksheet->isWrittenVerified()) {
+            $updates['written_status'] = WrittenSheetStatus::PENDING_REVIEW;
+        }
+
+        $worksheet->update($updates);
+
+        return $worksheet->fresh();
+    }
+
+    public function removePdf(Worksheet $worksheet): Worksheet
+    {
+        if (! $worksheet->isWritten()) {
+            throw new \InvalidArgumentException('This is not a written sheet.');
+        }
+
+        if ($this->hasStudentSubmissions($worksheet)) {
+            throw new \InvalidArgumentException(
+                'Cannot remove the worksheet PDF after a student has uploaded their written work.',
+            );
+        }
+
+        if (! $worksheet->written_pdf_path) {
+            throw new \InvalidArgumentException('This sheet has no PDF to remove.');
+        }
+
+        Storage::disk('public')->delete($worksheet->written_pdf_path);
+
+        $worksheet->update([
+            'written_pdf_path' => null,
+            'written_status' => WrittenSheetStatus::PENDING_REVIEW,
+            'written_verified_at' => null,
+            'written_verified_by' => null,
+            'status' => Worksheet::STATUS_DRAFT,
+        ]);
+
+        return $worksheet->fresh();
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -423,6 +512,9 @@ class WrittenSheetService
             'verified_at' => $worksheet->written_verified_at?->toDateTimeString(),
             'verified_by' => $worksheet->verifier?->name,
             'can_assign' => $worksheet->isWrittenVerified(),
+            'can_replace_pdf' => $this->canReplacePdf($worksheet),
+            'can_manage_pdf' => $this->canManagePdf($worksheet),
+            'has_student_submissions' => $this->hasStudentSubmissions($worksheet),
         ];
     }
 

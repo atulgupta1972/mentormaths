@@ -6,17 +6,22 @@ use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Question;
+use App\Models\SetAssignment;
+use App\Models\Student;
+use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
+use App\Models\WrittenSubmission;
 use App\Services\WrittenSheetService;
 use App\Support\PracticeSetScope;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class WrittenSheetServiceTest extends TestCase
@@ -116,6 +121,93 @@ class WrittenSheetServiceTest extends TestCase
 
         $this->assertSame(2, $worksheet->questions()->count());
         $this->assertNotNull($worksheet->written_pdf_path);
+    }
+
+    public function test_can_replace_pdf_when_assigned_but_no_student_uploads(): void
+    {
+        Storage::fake('public');
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->verify(
+            $service->generatePdf($service->createFromTopic($topic, [$question->id], $admin)),
+            $admin,
+        );
+
+        $enrollment = $this->seedEnrollment($topic);
+        SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $admin->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek()->toDateString(),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        $this->assertTrue($service->canManagePdf($worksheet));
+
+        $token = '550e8400-e29b-41d4-a716-446655440001';
+        $oldPath = $worksheet->written_pdf_path;
+        $newSource = "temp/pdf-imports/written-sheet-pdf/{$token}/source.pdf";
+        Storage::disk('public')->put($oldPath, 'old pdf');
+        Storage::disk('public')->put($newSource, 'new pdf');
+
+        $replaced = $service->replacePdf($worksheet, $newSource, $token);
+
+        $this->assertNotSame($oldPath, $replaced->written_pdf_path);
+        $this->assertFalse(Storage::disk('public')->exists($oldPath));
+        $this->assertTrue(Storage::disk('public')->exists($replaced->written_pdf_path));
+        $this->assertSame(WrittenSheetStatus::VERIFIED, $replaced->written_status);
+    }
+
+    public function test_cannot_replace_pdf_after_student_upload(): void
+    {
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->generatePdf($service->createFromTopic($topic, [$question->id], $admin));
+        $enrollment = $this->seedEnrollment($topic);
+
+        $assignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $admin->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek()->toDateString(),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        WrittenSubmission::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'status' => WrittenSubmission::STATUS_UPLOADED,
+            'upload_paths' => ['written-submissions/test.jpg'],
+            'uploaded_at' => now(),
+        ]);
+
+        $this->assertFalse($service->canManagePdf($worksheet));
+
+        $this->expectException(\InvalidArgumentException::class);
+        $service->replacePdf($worksheet, 'temp/pdf-imports/written-sheet-pdf/x/source.pdf');
+    }
+
+    private function seedEnrollment(SyllabusTopic $topic): StudentEnrollment
+    {
+        $student = Student::query()->create([
+            'name' => 'Test Student',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543210',
+            'school_name' => 'School',
+        ]);
+        $syllabus = $topic->chapter->syllabusVersion;
+
+        return StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $syllabus->academic_year_id,
+            'grade_level_id' => $syllabus->grade_level_id,
+            'board_id' => $syllabus->board_id,
+            'school_name' => 'School',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
     }
 
     /**
