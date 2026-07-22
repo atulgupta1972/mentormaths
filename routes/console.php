@@ -11,3 +11,7 @@ Artisan::command('inspire', function () {
 Schedule::command('students:send-weekly-summaries')
     ->weeklyOn(6, '08:00')
     ->timezone('Asia/Kolkata');
+
+Schedule::command('written-submissions:grade-pending')
+    ->everyMinute()
+    ->withoutOverlapping();

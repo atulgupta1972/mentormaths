@@ -2,10 +2,11 @@
 
 namespace App\Services;
 
-use App\Jobs\GradeWrittenSubmissionJob;
 use App\Models\SetAssignment;
 use App\Models\WrittenSubmission;
+use App\Services\WrittenGradingService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -94,9 +95,56 @@ class WrittenSubmissionService
             $assignment->update(['status' => SetAssignment::STATUS_IN_PROGRESS]);
         }
 
-        GradeWrittenSubmissionJob::dispatch($submission->id);
+        $this->scheduleGrading($submission);
 
         return $submission;
+    }
+
+    public function runGrading(int $submissionId): bool
+    {
+        @set_time_limit(180);
+        ignore_user_abort(true);
+
+        $submission = WrittenSubmission::query()->find($submissionId);
+
+        if (! $submission || ! in_array($submission->status, [
+            WrittenSubmission::STATUS_UPLOADED,
+            WrittenSubmission::STATUS_PROCESSING,
+        ], true)) {
+            return false;
+        }
+
+        if ($submission->status === WrittenSubmission::STATUS_PROCESSING
+            && $submission->updated_at?->greaterThan(now()->subMinutes(5))) {
+            return false;
+        }
+
+        try {
+            app(WrittenGradingService::class)->grade($submission);
+
+            return true;
+        } catch (\Throwable $exception) {
+            Log::error('Written submission grading failed', [
+                'submission_id' => $submissionId,
+                'message' => $exception->getMessage(),
+            ]);
+
+            $submission->update([
+                'status' => WrittenSubmission::STATUS_FAILED,
+                'grading_error' => $exception->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    private function scheduleGrading(WrittenSubmission $submission): void
+    {
+        $submissionId = $submission->id;
+
+        app()->terminating(static function () use ($submissionId): void {
+            app(WrittenSubmissionService::class)->runGrading($submissionId);
+        });
     }
 
     /**
