@@ -17,6 +17,7 @@ use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
@@ -27,6 +28,7 @@ class WrittenSheetService
         private WrittenSheetPdfService $pdfService,
         private FillBlankImportService $fillBlankImportService,
         private WrittenSheetPdfImportService $pdfImportService,
+        private QuestionZipImportService $zipImportService,
     ) {}
 
     /**
@@ -419,6 +421,91 @@ class WrittenSheetService
         return $worksheet->isWritten() && ! $this->hasStudentSubmissions($worksheet);
     }
 
+    public function canReimportZip(Worksheet $worksheet): bool
+    {
+        if (! $this->canManagePdf($worksheet) || $this->usesUploadedPdf($worksheet)) {
+            return false;
+        }
+
+        $worksheet->loadMissing(['topic.chapter', 'chapter']);
+
+        return $worksheet->isChapterScope()
+            ? $worksheet->chapter !== null
+            : $worksheet->topic !== null;
+    }
+
+    public function canResetSheet(Worksheet $worksheet): bool
+    {
+        if (! $this->canManagePdf($worksheet)) {
+            return false;
+        }
+
+        return $worksheet->written_pdf_path !== null || $worksheet->questions()->exists();
+    }
+
+    /**
+     * @return array{type: string, saved: list<Question>, diagram_count: int, missing_diagram_count: int}
+     */
+    public function reimportZipPack(Worksheet $worksheet, UploadedFile $zip, User $user): array
+    {
+        if (! $this->canReimportZip($worksheet)) {
+            throw new \InvalidArgumentException(
+                'Cannot re-import a zip for this sheet (student uploads exist, or this sheet uses an external PDF).',
+            );
+        }
+
+        $this->resetSheet($worksheet);
+
+        $worksheet->load(['topic', 'chapter']);
+        [$topic, $chapter, $bankPurpose] = $this->resolveZipImportScope($worksheet);
+
+        $result = $this->zipImportService->importPack($zip, $user, $topic, $chapter, $bankPurpose);
+        $questionIds = collect($result['saved'])->pluck('id')->all();
+
+        if ($questionIds === []) {
+            throw new \InvalidArgumentException('No questions could be imported from the zip file.');
+        }
+
+        foreach (array_values($questionIds) as $index => $questionId) {
+            $worksheet->questions()->attach($questionId, ['sort_order' => $index + 1]);
+        }
+
+        $this->generatePdf($worksheet->fresh());
+
+        return $result;
+    }
+
+    public function resetSheet(Worksheet $worksheet): Worksheet
+    {
+        if (! $worksheet->isWritten()) {
+            throw new \InvalidArgumentException('This is not a written sheet.');
+        }
+
+        if ($this->hasStudentSubmissions($worksheet)) {
+            throw new \InvalidArgumentException(
+                'Cannot reset this sheet after a student has uploaded their written work.',
+            );
+        }
+
+        if ($worksheet->written_pdf_path) {
+            Storage::disk('public')->delete($worksheet->written_pdf_path);
+        }
+
+        Storage::disk('public')->deleteDirectory('written-sheets/'.$worksheet->id);
+
+        $this->deleteQuestionsExclusiveToWorksheet($worksheet);
+
+        $worksheet->update([
+            'written_pdf_path' => null,
+            'written_status' => WrittenSheetStatus::DRAFT,
+            'written_verified_at' => null,
+            'written_verified_by' => null,
+            'status' => Worksheet::STATUS_DRAFT,
+        ]);
+
+        return $worksheet->fresh();
+    }
+
     public function replacePdf(Worksheet $worksheet, string $sourcePath, ?string $token = null): Worksheet
     {
         if (! $worksheet->isWritten()) {
@@ -457,31 +544,57 @@ class WrittenSheetService
 
     public function removePdf(Worksheet $worksheet): Worksheet
     {
-        if (! $worksheet->isWritten()) {
-            throw new \InvalidArgumentException('This is not a written sheet.');
+        if (! $this->canResetSheet($worksheet)) {
+            if (! $this->canManagePdf($worksheet)) {
+                throw new \InvalidArgumentException(
+                    'Cannot reset this sheet after a student has uploaded their written work.',
+                );
+            }
+
+            throw new \InvalidArgumentException('This sheet is already empty.');
         }
 
-        if ($this->hasStudentSubmissions($worksheet)) {
-            throw new \InvalidArgumentException(
-                'Cannot remove the worksheet PDF after a student has uploaded their written work.',
-            );
+        return $this->resetSheet($worksheet);
+    }
+
+    /**
+     * @return array{0: ?SyllabusTopic, 1: ?SyllabusChapter, 2: string}
+     */
+    private function resolveZipImportScope(Worksheet $worksheet): array
+    {
+        if ($worksheet->isChapterScope()) {
+            return [
+                null,
+                $worksheet->chapter,
+                $worksheet->isChapterTest()
+                    ? QuestionBankPurpose::CHAPTER_TEST
+                    : QuestionBankPurpose::PRACTICE_SET,
+            ];
         }
 
-        if (! $worksheet->written_pdf_path) {
-            throw new \InvalidArgumentException('This sheet has no PDF to remove.');
+        return [
+            $worksheet->topic,
+            null,
+            QuestionBankPurpose::PRACTICE_SET,
+        ];
+    }
+
+    private function deleteQuestionsExclusiveToWorksheet(Worksheet $worksheet): void
+    {
+        $worksheet->load('questions');
+        $questionIds = $worksheet->questions->pluck('id')->all();
+
+        $worksheet->questions()->detach();
+
+        foreach ($questionIds as $questionId) {
+            $stillUsed = Worksheet::query()
+                ->whereHas('questions', fn ($query) => $query->where('questions.id', $questionId))
+                ->exists();
+
+            if (! $stillUsed) {
+                Question::query()->whereKey($questionId)->delete();
+            }
         }
-
-        Storage::disk('public')->delete($worksheet->written_pdf_path);
-
-        $worksheet->update([
-            'written_pdf_path' => null,
-            'written_status' => WrittenSheetStatus::PENDING_REVIEW,
-            'written_verified_at' => null,
-            'written_verified_by' => null,
-            'status' => Worksheet::STATUS_DRAFT,
-        ]);
-
-        return $worksheet->fresh();
     }
 
     /**
@@ -514,6 +627,8 @@ class WrittenSheetService
             'can_assign' => $worksheet->isWrittenVerified(),
             'can_replace_pdf' => $this->canReplacePdf($worksheet),
             'can_manage_pdf' => $this->canManagePdf($worksheet),
+            'can_reimport_zip' => $this->canReimportZip($worksheet),
+            'can_reset_sheet' => $this->canResetSheet($worksheet),
             'has_student_submissions' => $this->hasStudentSubmissions($worksheet),
         ];
     }

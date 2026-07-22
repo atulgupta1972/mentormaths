@@ -668,7 +668,49 @@ class WrittenSheetController extends Controller
 
         return back()->with(
             'success',
-            'Worksheet PDF removed. Upload a replacement PDF below, then verify again before assigning new students.',
+            'Sheet cleared — PDF and all questions removed. Re-import a zip or upload a new PDF to start again.',
+        );
+    }
+
+    public function reimportZipPack(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        abort_unless($worksheet->isWritten(), 404);
+
+        $validated = $request->validate([
+            'pack' => ['required', 'file', 'mimes:zip', 'max:51200'],
+        ], [
+            'pack.required' => 'Choose a .zip file containing questions.json and diagram images.',
+            'pack.mimes' => 'Upload a .zip file (questions.json + JPG/PNG images).',
+        ]);
+
+        try {
+            $result = $this->writtenSheetService->reimportZipPack(
+                $worksheet,
+                $request->file('pack'),
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not re-import the zip pack. '.$e->getMessage());
+        }
+
+        $questionCount = count($result['saved']);
+        $message = "{$questionCount} question(s) re-imported and written sheet PDF regenerated.";
+
+        if ($result['diagram_count'] > 0) {
+            $message .= " {$result['diagram_count']} diagram(s) attached.";
+        }
+
+        if (($result['missing_diagram_count'] ?? 0) > 0) {
+            $message .= " Warning: {$result['missing_diagram_count']} geometry sum(s) marked needs_diagram but had no image in the zip.";
+        }
+
+        return back()->with(
+            ($result['missing_diagram_count'] ?? 0) > 0 ? 'warning' : 'success',
+            $message,
         );
     }
 

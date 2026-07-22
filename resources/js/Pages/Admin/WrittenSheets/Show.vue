@@ -25,8 +25,10 @@ const verifyForm = useForm({});
 const rejectForm = useForm({});
 const replacePdfForm = useForm({ pdf_import_token: '' });
 const removePdfForm = useForm({});
+const reimportZipForm = useForm({ pack: null });
 
 const replacePdfInput = ref(null);
+const reimportZipInput = ref(null);
 const selectedReplacePdfName = ref('');
 const replacePdfPreviewUrl = ref('');
 const replacePdfStaging = ref(false);
@@ -218,12 +220,37 @@ const submitReplacePdf = () => {
     });
 };
 
-const removePdf = () => {
-    if (!confirm('Remove this worksheet PDF? You can upload a replacement below. You will need to verify again.')) {
+const clearSheet = () => {
+    if (!confirm('Clear this sheet completely? The PDF and all questions will be removed so you can start over.')) {
         return;
     }
 
     removePdfForm.post(route('admin.written-sheets.remove-pdf', props.sheet.id), { preserveScroll: true });
+};
+
+const onReimportZipSelected = (event) => {
+    reimportZipForm.pack = event.target.files?.[0] ?? null;
+};
+
+const submitReimportZip = () => {
+    if (!reimportZipForm.pack) {
+        return;
+    }
+
+    if (!confirm('Replace all questions and the PDF with this zip? The current sheet content will be deleted first.')) {
+        return;
+    }
+
+    reimportZipForm.post(route('admin.written-sheets.reimport-zip-pack', props.sheet.id), {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            reimportZipForm.reset();
+            if (reimportZipInput.value) {
+                reimportZipInput.value.value = '';
+            }
+        },
+    });
 };
 
 const formatDate = (d) => {
@@ -317,7 +344,7 @@ const progressLabel = (p) => {
                             Verify sheet
                         </PrimaryButton>
                         <SecondaryButton
-                            v-if="!sheet.uses_uploaded_pdf"
+                            v-if="!sheet.uses_uploaded_pdf && sheet.questions_count"
                             type="button"
                             :disabled="regenerateForm.processing"
                             @click="regenerate"
@@ -342,10 +369,43 @@ const progressLabel = (p) => {
                     </p>
 
                     <div v-if="sheet.has_student_submissions" class="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                        At least one student has uploaded written work — the worksheet PDF can no longer be changed.
+                        At least one student has uploaded written work — the worksheet PDF and questions can no longer be changed.
                     </div>
 
-                    <div v-else-if="sheet.can_manage_pdf" class="mt-4 rounded-lg border border-sky-200 bg-sky-50/50 p-4">
+                    <div v-else-if="sheet.can_reimport_zip" class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+                        <h4 class="text-sm font-semibold text-emerald-950">Re-import zip pack</h4>
+                        <p class="mt-1 text-sm text-emerald-900">
+                            Zip had wrong questions or diagrams? Upload a corrected .zip (questions.json + images) to replace everything and regenerate the PDF.
+                        </p>
+
+                        <input
+                            ref="reimportZipInput"
+                            type="file"
+                            accept="application/zip,.zip"
+                            class="mt-3 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-emerald-800"
+                            @change="onReimportZipSelected"
+                        >
+
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <PrimaryButton
+                                type="button"
+                                :disabled="!reimportZipForm.pack || reimportZipForm.processing"
+                                @click="submitReimportZip"
+                            >
+                                {{ reimportZipForm.processing ? 'Re-importing…' : 'Re-import zip & regenerate PDF' }}
+                            </PrimaryButton>
+                            <DangerButton
+                                v-if="sheet.can_reset_sheet"
+                                type="button"
+                                :disabled="removePdfForm.processing"
+                                @click="clearSheet"
+                            >
+                                Clear sheet & start over
+                            </DangerButton>
+                        </div>
+                    </div>
+
+                    <div v-else-if="sheet.uses_uploaded_pdf && sheet.can_manage_pdf" class="mt-4 rounded-lg border border-sky-200 bg-sky-50/50 p-4">
                         <h4 class="text-sm font-semibold text-sky-950">
                             {{ sheet.written_pdf_url ? 'Replace worksheet PDF' : 'Upload worksheet PDF' }}
                         </h4>
@@ -381,12 +441,12 @@ const progressLabel = (p) => {
                                 {{ replacePdfForm.processing ? 'Saving…' : (sheet.written_pdf_url ? 'Save replacement PDF' : 'Save PDF') }}
                             </PrimaryButton>
                             <DangerButton
-                                v-if="sheet.written_pdf_url"
+                                v-if="sheet.can_reset_sheet"
                                 type="button"
                                 :disabled="removePdfForm.processing"
-                                @click="removePdf"
+                                @click="clearSheet"
                             >
-                                Remove PDF
+                                Clear sheet & start over
                             </DangerButton>
                         </div>
 
@@ -399,6 +459,21 @@ const progressLabel = (p) => {
                             title="Replacement PDF preview"
                             helper-text="Click Save replacement PDF to swap this in for students who have not uploaded yet."
                         />
+                    </div>
+
+                    <div v-else-if="sheet.can_reset_sheet" class="mt-4 rounded-lg border border-rose-200 bg-rose-50/50 p-4">
+                        <h4 class="text-sm font-semibold text-rose-950">Clear sheet</h4>
+                        <p class="mt-1 text-sm text-rose-900">
+                            Remove the PDF and all questions so you can re-import or rebuild from scratch.
+                        </p>
+                        <DangerButton
+                            class="mt-3"
+                            type="button"
+                            :disabled="removePdfForm.processing"
+                            @click="clearSheet"
+                        >
+                            Clear sheet & start over
+                        </DangerButton>
                     </div>
                 </div>
 

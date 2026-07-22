@@ -190,6 +190,43 @@ class WrittenSheetServiceTest extends TestCase
         $service->replacePdf($worksheet, 'temp/pdf-imports/written-sheet-pdf/x/source.pdf');
     }
 
+    public function test_reset_sheet_clears_pdf_and_questions(): void
+    {
+        Storage::fake('public');
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->generatePdf($service->createFromTopic($topic, [$question->id], $admin));
+        $questionId = $question->id;
+        $pdfPath = $worksheet->written_pdf_path;
+        Storage::disk('public')->put($pdfPath, 'pdf content');
+
+        $reset = $service->resetSheet($worksheet);
+
+        $this->assertNull($reset->written_pdf_path);
+        $this->assertSame(WrittenSheetStatus::DRAFT, $reset->written_status);
+        $this->assertSame(0, $reset->questions()->count());
+        $this->assertFalse(Storage::disk('public')->exists($pdfPath));
+        $this->assertNull(Question::query()->find($questionId));
+    }
+
+    public function test_reset_sheet_keeps_questions_used_on_other_worksheets(): void
+    {
+        Storage::fake('public');
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+
+        $service = app(WrittenSheetService::class);
+        $worksheetA = $service->generatePdf($service->createFromTopic($topic, [$question->id], $admin));
+        $worksheetB = $service->createFromTopic($topic, [$question->id], $admin);
+        Storage::disk('public')->put($worksheetA->written_pdf_path, 'pdf content');
+
+        $service->resetSheet($worksheetA);
+
+        $this->assertSame(0, $worksheetA->fresh()->questions()->count());
+        $this->assertSame(1, $worksheetB->fresh()->questions()->count());
+        $this->assertNotNull(Question::query()->find($question->id));
+    }
+
     private function seedEnrollment(SyllabusTopic $topic): StudentEnrollment
     {
         $student = Student::query()->create([
