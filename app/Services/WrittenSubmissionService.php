@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\SetAssignment;
 use App\Models\WrittenSubmission;
+use App\Models\WrittenSubmissionItem;
 use App\Services\WrittenGradingService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
@@ -102,13 +103,16 @@ class WrittenSubmissionService
     }
 
     /**
-     * Teacher enters overall marks and feedback (for weekly parent reports).
+     * Teacher ticks each question correct/wrong; totals are calculated for weekly reports.
      *
-     * @param  array{score: int, max_score: int, feedback?: string|null}  $data
+     * @param  array{
+     *     feedback?: string|null,
+     *     items: list<array{question_id: int, is_correct: bool, note?: string|null}>
+     * }  $data
      */
     public function applyManualGrade(SetAssignment $assignment, array $data): WrittenSubmission
     {
-        $assignment->loadMissing('practiceSet');
+        $assignment->loadMissing(['practiceSet.questions']);
 
         if (! $assignment->practiceSet?->isWritten()) {
             throw new \InvalidArgumentException('This assignment is not a written homework sheet.');
@@ -118,17 +122,26 @@ class WrittenSubmissionService
             throw new \InvalidArgumentException('This assignment was cancelled.');
         }
 
-        $score = (int) $data['score'];
-        $maxScore = (int) $data['max_score'];
+        $questions = $assignment->practiceSet->questions->values();
+        if ($questions->isEmpty()) {
+            throw new \InvalidArgumentException('This sheet has no questions to mark.');
+        }
+
+        $itemRows = collect($data['items'] ?? []);
+        if ($itemRows->count() !== $questions->count()) {
+            throw new \InvalidArgumentException('Mark every question as correct or wrong.');
+        }
+
+        $byQuestionId = $itemRows->keyBy(fn (array $row) => (int) $row['question_id']);
+        foreach ($questions as $question) {
+            if (! $byQuestionId->has($question->id)) {
+                throw new \InvalidArgumentException('Mark every question as correct or wrong.');
+            }
+        }
+
         $feedback = isset($data['feedback']) ? trim((string) $data['feedback']) : '';
-
-        if ($maxScore < 1) {
-            throw new \InvalidArgumentException('Total marks must be at least 1.');
-        }
-
-        if ($score < 0 || $score > $maxScore) {
-            throw new \InvalidArgumentException('Marks obtained must be between 0 and total marks.');
-        }
+        $score = 0;
+        $maxScore = $questions->count();
 
         $submission = WrittenSubmission::query()
             ->where('set_assignment_id', $assignment->id)
@@ -139,7 +152,7 @@ class WrittenSubmissionService
             $submission->items()->delete();
             $submission->update([
                 'status' => WrittenSubmission::STATUS_GRADED,
-                'score' => $score,
+                'score' => 0,
                 'max_score' => $maxScore,
                 'ai_summary' => $feedback !== '' ? $feedback : null,
                 'grading_error' => null,
@@ -150,7 +163,7 @@ class WrittenSubmissionService
                 'set_assignment_id' => $assignment->id,
                 'status' => WrittenSubmission::STATUS_GRADED,
                 'upload_paths' => [],
-                'score' => $score,
+                'score' => 0,
                 'max_score' => $maxScore,
                 'ai_summary' => $feedback !== '' ? $feedback : null,
                 'uploaded_at' => now(),
@@ -158,9 +171,35 @@ class WrittenSubmissionService
             ]);
         }
 
+        foreach ($questions as $index => $question) {
+            $row = $byQuestionId->get($question->id);
+            $isCorrect = (bool) ($row['is_correct'] ?? false);
+            $note = isset($row['note']) ? trim((string) $row['note']) : '';
+            $itemScore = $isCorrect ? 1 : 0;
+            $score += $itemScore;
+
+            WrittenSubmissionItem::query()->create([
+                'written_submission_id' => $submission->id,
+                'question_id' => $question->id,
+                'question_number' => $index + 1,
+                'extracted_answer' => null,
+                'step_feedback' => $note !== '' ? $note : ($isCorrect ? 'Correct' : 'Incorrect'),
+                'score' => $itemScore,
+                'max_score' => 1,
+                'is_correct' => $isCorrect,
+                'confidence' => null,
+                'needs_review' => false,
+            ]);
+        }
+
+        $submission->update([
+            'score' => $score,
+            'max_score' => $maxScore,
+        ]);
+
         $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
 
-        return $submission->fresh();
+        return $submission->fresh(['items']);
     }
 
     public function runGrading(int $submissionId): bool

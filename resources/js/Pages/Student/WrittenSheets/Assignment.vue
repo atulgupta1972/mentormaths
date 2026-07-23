@@ -179,20 +179,22 @@ const isAwaitingGrade = computed(() => {
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th class="px-4 py-3 text-left">Q</th>
-                                    <th class="px-4 py-3 text-left">Your answer</th>
-                                    <th class="px-4 py-3 text-left">Feedback</th>
-                                    <th class="px-4 py-3 text-left">Score</th>
+                                    <th class="px-4 py-3 text-left">Result</th>
+                                    <th class="px-4 py-3 text-left">Note</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
                                 <tr v-for="item in submission.items" :key="item.question_number">
                                     <td class="px-4 py-3 font-semibold">{{ item.question_number }}</td>
-                                    <td class="px-4 py-3">{{ item.extracted_answer || '—' }}</td>
-                                    <td class="px-4 py-3">{{ item.step_feedback || '—' }}</td>
                                     <td class="px-4 py-3">
-                                        {{ item.score }}/{{ item.max_score }}
-                                        <span v-if="item.needs_review" class="text-xs text-amber-600"> · review</span>
+                                        <span
+                                            class="rounded-full px-2 py-0.5 text-xs font-semibold"
+                                            :class="item.is_correct ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'"
+                                        >
+                                            {{ item.is_correct ? '✓ Correct' : '✗ Wrong' }}
+                                        </span>
                                     </td>
+                                    <td class="px-4 py-3">{{ item.step_feedback || '—' }}</td>
                                 </tr>
                             </tbody>
                         </table>

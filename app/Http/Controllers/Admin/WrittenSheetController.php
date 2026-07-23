@@ -733,28 +733,23 @@ class WrittenSheetController extends Controller
         abort_unless($assignment->practiceSet?->isWritten(), 404);
 
         $validated = $request->validate([
-            'score' => ['required', 'integer', 'min:0'],
-            'max_score' => ['required', 'integer', 'min:1'],
             'feedback' => ['nullable', 'string', 'max:2000'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.question_id' => ['required', 'integer', 'exists:questions,id'],
+            'items.*.is_correct' => ['required', 'boolean'],
+            'items.*.note' => ['nullable', 'string', 'max:500'],
         ]);
-
-        if ((int) $validated['score'] > (int) $validated['max_score']) {
-            throw ValidationException::withMessages([
-                'score' => 'Marks obtained cannot be more than total marks.',
-            ]);
-        }
 
         try {
             $this->submissionService->applyManualGrade($assignment, [
-                'score' => (int) $validated['score'],
-                'max_score' => (int) $validated['max_score'],
                 'feedback' => $validated['feedback'] ?? null,
+                'items' => $validated['items'],
             ]);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Marks and feedback saved. They will appear in the weekly parent report.');
+        return back()->with('success', 'Question ticks saved. Score calculated for the weekly parent report.');
     }
 
     private function sanitizeWrittenSheetInput(Request $request): void

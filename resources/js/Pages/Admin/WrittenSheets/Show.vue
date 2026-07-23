@@ -52,14 +52,43 @@ const assignNotes = ref('');
 const assignForm = useForm({ student_id: '', target_date: '', notes: '' });
 const bulkForm = useForm({ student_ids: [], target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
-const gradeForm = useForm({ score: '', max_score: '', feedback: '' });
+const gradeForm = useForm({ feedback: '', items: [] });
 const gradingAssignmentId = ref(null);
+
+const gradeSheetQuestions = computed(() => props.sheet.questions || []);
+
+const gradeCorrectCount = computed(() =>
+    gradeForm.items.filter((item) => item.is_correct === true).length,
+);
+
+const gradeMarkedCount = computed(() =>
+    gradeForm.items.filter((item) => item.is_correct === true || item.is_correct === false).length,
+);
+
+const allQuestionsMarked = computed(() =>
+    gradeForm.items.length > 0 && gradeMarkedCount.value === gradeForm.items.length,
+);
 
 const openGrade = (row) => {
     gradingAssignmentId.value = row.assignment_id;
-    gradeForm.score = row.latest_score ?? '';
-    gradeForm.max_score = row.latest_max_score ?? (props.sheet.questions_count || '');
+
+    const existingById = {};
+    (row.question_results || []).forEach((result) => {
+        existingById[result.question_id] = result;
+    });
+
     gradeForm.feedback = row.written_feedback || '';
+    gradeForm.items = gradeSheetQuestions.value.map((question) => {
+        const existing = existingById[question.id];
+
+        return {
+            question_id: question.id,
+            is_correct: existing ? existing.is_correct : null,
+            note: existing?.note && existing.note !== 'Correct' && existing.note !== 'Incorrect'
+                ? existing.note
+                : '',
+        };
+    });
     gradeForm.clearErrors();
 };
 
@@ -69,12 +98,44 @@ const cancelGrade = () => {
     gradeForm.clearErrors();
 };
 
+const setQuestionResult = (questionId, isCorrect) => {
+    const item = gradeForm.items.find((row) => row.question_id === questionId);
+    if (item) {
+        item.is_correct = isCorrect;
+    }
+};
+
+const markAllCorrect = () => {
+    gradeForm.items.forEach((item) => {
+        item.is_correct = true;
+    });
+};
+
+const markAllWrong = () => {
+    gradeForm.items.forEach((item) => {
+        item.is_correct = false;
+    });
+};
+
 const submitGrade = () => {
     if (!gradingAssignmentId.value) {
         return;
     }
 
-    gradeForm.post(route('admin.written-assignments.manual-grade', gradingAssignmentId.value), {
+    if (!allQuestionsMarked.value) {
+        gradeForm.setError('items', 'Tick every question as correct or wrong.');
+
+        return;
+    }
+
+    gradeForm.transform((data) => ({
+        feedback: data.feedback,
+        items: data.items.map((item) => ({
+            question_id: item.question_id,
+            is_correct: item.is_correct === true,
+            note: item.note || null,
+        })),
+    })).post(route('admin.written-assignments.manual-grade', gradingAssignmentId.value), {
         preserveScroll: true,
         onSuccess: () => cancelGrade(),
     });
@@ -687,7 +748,7 @@ const progressLabel = (p) => {
                     <div v-if="assignments.length" class="mt-6">
                         <h4 class="text-sm font-semibold text-gray-800">Current assignments ({{ assignments.length }})</h4>
                         <p class="mt-1 text-xs text-gray-500">
-                            Check the student’s work, then enter marks and feedback for the weekly parent report. AI PDF scoring comes later.
+                            Tick each sum correct or wrong — the score is calculated automatically for the weekly parent report.
                         </p>
                         <div class="mt-2 overflow-hidden rounded-md border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -724,9 +785,17 @@ const progressLabel = (p) => {
                                         <tr v-if="gradingAssignmentId === row.assignment_id">
                                             <td colspan="4" class="bg-indigo-50/50 px-3 py-4">
                                                 <div class="space-y-3">
-                                                    <p class="text-sm font-medium text-gray-900">
-                                                        Marks for {{ row.student_name }}
-                                                    </p>
+                                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                                        <p class="text-sm font-medium text-gray-900">
+                                                            Marks for {{ row.student_name }}
+                                                        </p>
+                                                        <p class="text-sm font-semibold text-indigo-800">
+                                                            Score: {{ gradeCorrectCount }}/{{ gradeForm.items.length || gradeSheetQuestions.length }}
+                                                            <span v-if="!allQuestionsMarked" class="ml-1 text-xs font-normal text-amber-700">
+                                                                ({{ gradeMarkedCount }}/{{ gradeForm.items.length }} marked)
+                                                            </span>
+                                                        </p>
+                                                    </div>
                                                     <div v-if="row.upload_urls?.length" class="flex flex-wrap gap-2">
                                                         <a
                                                             v-for="(url, index) in row.upload_urls"
@@ -739,45 +808,75 @@ const progressLabel = (p) => {
                                                         </a>
                                                     </div>
                                                     <p v-else class="text-xs text-amber-800">
-                                                        No photo/PDF uploaded yet — you can still enter marks after checking the paper offline.
+                                                        No photo/PDF uploaded yet — you can still tick questions after checking the paper offline.
                                                     </p>
-                                                    <div class="grid gap-3 sm:grid-cols-3">
-                                                        <div>
-                                                            <InputLabel value="Marks obtained" class="!text-xs" />
-                                                            <input
-                                                                v-model="gradeForm.score"
-                                                                type="number"
-                                                                min="0"
-                                                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
-                                                            >
-                                                            <p v-if="gradeForm.errors.score" class="mt-1 text-xs text-rose-600">{{ gradeForm.errors.score }}</p>
+
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <SecondaryButton type="button" class="!py-1 !text-xs" @click="markAllCorrect">
+                                                            All correct
+                                                        </SecondaryButton>
+                                                        <SecondaryButton type="button" class="!py-1 !text-xs" @click="markAllWrong">
+                                                            All wrong
+                                                        </SecondaryButton>
+                                                    </div>
+
+                                                    <div class="overflow-hidden rounded-md border border-indigo-100 bg-white">
+                                                        <div
+                                                            v-for="(question, index) in gradeSheetQuestions"
+                                                            :key="question.id"
+                                                            class="border-b border-gray-100 px-3 py-2 last:border-b-0"
+                                                        >
+                                                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                                                <div class="min-w-0 flex-1 text-sm">
+                                                                    <p class="font-semibold text-gray-900">Q{{ question.number || index + 1 }}</p>
+                                                                    <p class="mt-0.5 text-gray-700" v-html="question.question_text" />
+                                                                    <p class="mt-1 text-xs text-gray-500">
+                                                                        Answer: {{ question.correct_answer || '—' }}
+                                                                    </p>
+                                                                </div>
+                                                                <div class="flex shrink-0 gap-2">
+                                                                    <button
+                                                                        type="button"
+                                                                        class="rounded-md px-3 py-1.5 text-xs font-bold"
+                                                                        :class="gradeForm.items[index]?.is_correct === true
+                                                                            ? 'bg-emerald-600 text-white'
+                                                                            : 'border border-emerald-300 bg-emerald-50 text-emerald-800'"
+                                                                        @click="setQuestionResult(question.id, true)"
+                                                                    >
+                                                                        ✓ Correct
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        class="rounded-md px-3 py-1.5 text-xs font-bold"
+                                                                        :class="gradeForm.items[index]?.is_correct === false
+                                                                            ? 'bg-rose-600 text-white'
+                                                                            : 'border border-rose-300 bg-rose-50 text-rose-800'"
+                                                                        @click="setQuestionResult(question.id, false)"
+                                                                    >
+                                                                        ✗ Wrong
+                                                                    </button>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <div>
-                                                            <InputLabel value="Total marks" class="!text-xs" />
-                                                            <input
-                                                                v-model="gradeForm.max_score"
-                                                                type="number"
-                                                                min="1"
-                                                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
-                                                            >
-                                                            <p v-if="gradeForm.errors.max_score" class="mt-1 text-xs text-rose-600">{{ gradeForm.errors.max_score }}</p>
-                                                        </div>
-                                                        <div class="sm:col-span-3">
-                                                            <InputLabel value="Feedback for weekly report (optional)" class="!text-xs" />
-                                                            <textarea
-                                                                v-model="gradeForm.feedback"
-                                                                rows="2"
-                                                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
-                                                                placeholder="e.g. Good working on fractions; revise Q3."
-                                                            />
-                                                            <p v-if="gradeForm.errors.feedback" class="mt-1 text-xs text-rose-600">{{ gradeForm.errors.feedback }}</p>
-                                                        </div>
+                                                    </div>
+
+                                                    <p v-if="gradeForm.errors.items" class="text-xs text-rose-600">{{ gradeForm.errors.items }}</p>
+
+                                                    <div>
+                                                        <InputLabel value="Overall feedback for weekly report (optional)" class="!text-xs" />
+                                                        <textarea
+                                                            v-model="gradeForm.feedback"
+                                                            rows="2"
+                                                            class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                                                            placeholder="e.g. Good working on fractions; revise Q3."
+                                                        />
+                                                        <p v-if="gradeForm.errors.feedback" class="mt-1 text-xs text-rose-600">{{ gradeForm.errors.feedback }}</p>
                                                     </div>
                                                     <div class="flex flex-wrap gap-2">
                                                         <PrimaryButton
                                                             type="button"
                                                             class="!py-1.5 !text-xs"
-                                                            :disabled="gradeForm.processing"
+                                                            :disabled="gradeForm.processing || !allQuestionsMarked"
                                                             @click="submitGrade"
                                                         >
                                                             {{ gradeForm.processing ? 'Saving…' : 'Save marks' }}

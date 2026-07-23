@@ -165,9 +165,31 @@ class AssignmentProgress
             'written_submission_id' => $submission?->id,
             'written_submission_status' => $submission?->status,
             'written_feedback' => $submission?->ai_summary,
+            'question_results' => self::writtenQuestionResults($submission),
             'upload_urls' => $submission?->uploadUrls() ?? [],
             'status' => $status,
         ];
+    }
+
+    /**
+     * @return list<array{question_id: int, question_number: int, is_correct: bool|null, note: string|null}>
+     */
+    private static function writtenQuestionResults(?WrittenSubmission $submission): array
+    {
+        if (! $submission) {
+            return [];
+        }
+
+        $items = $submission->relationLoaded('items')
+            ? $submission->items
+            : $submission->items()->orderBy('question_number')->get();
+
+        return $items->map(fn ($item) => [
+            'question_id' => $item->question_id,
+            'question_number' => $item->question_number,
+            'is_correct' => $item->is_correct,
+            'note' => $item->step_feedback,
+        ])->values()->all();
     }
 
     /**

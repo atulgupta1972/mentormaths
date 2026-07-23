@@ -56,37 +56,77 @@ class WrittenSubmissionGradingTest extends TestCase
     public function test_teacher_can_apply_manual_grade_and_feedback(): void
     {
         [$assignment] = $this->seedWrittenAssignment();
+        $questionId = $assignment->practiceSet->questions()->first()->id;
 
         $submission = app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
-            'score' => 7,
-            'max_score' => 10,
             'feedback' => 'Revise fractions.',
+            'items' => [
+                ['question_id' => $questionId, 'is_correct' => true],
+            ],
         ]);
 
         $this->assertSame(WrittenSubmission::STATUS_GRADED, $submission->status);
-        $this->assertSame(7, $submission->score);
-        $this->assertSame(10, $submission->max_score);
+        $this->assertSame(1, $submission->score);
+        $this->assertSame(1, $submission->max_score);
         $this->assertSame('Revise fractions.', $submission->ai_summary);
+        $this->assertTrue($submission->items->first()->is_correct);
         $this->assertSame(SetAssignment::STATUS_COMPLETED, $assignment->fresh()->status);
+    }
+
+    public function test_manual_grade_calculates_score_from_question_ticks(): void
+    {
+        [$assignment] = $this->seedWrittenAssignment();
+        $topic = $assignment->practiceSet->topic;
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $q2 = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_FILL_IN_BLANK,
+            'question_text' => 'What is 3 + 1?',
+            'source' => Question::SOURCE_MANUAL,
+            'created_by' => $admin->id,
+        ]);
+        QuestionBlankAnswer::query()->create([
+            'question_id' => $q2->id,
+            'correct_answer' => '4',
+            'answer_format' => 'integer',
+        ]);
+        $assignment->practiceSet->questions()->attach($q2->id, ['sort_order' => 2]);
+        $assignment->load('practiceSet.questions');
+
+        $q1Id = $assignment->practiceSet->questions->first()->id;
+
+        $submission = app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
+            'items' => [
+                ['question_id' => $q1Id, 'is_correct' => true],
+                ['question_id' => $q2->id, 'is_correct' => false],
+            ],
+        ]);
+
+        $this->assertSame(1, $submission->score);
+        $this->assertSame(2, $submission->max_score);
+        $this->assertSame(2, $submission->items->count());
     }
 
     public function test_weekly_summary_includes_manual_written_grade(): void
     {
         [$assignment] = $this->seedWrittenAssignment();
         $enrollment = $assignment->enrollment;
+        $questionId = $assignment->practiceSet->questions()->first()->id;
 
         app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
-            'score' => 8,
-            'max_score' => 10,
             'feedback' => 'Neat work.',
+            'items' => [
+                ['question_id' => $questionId, 'is_correct' => true],
+            ],
         ]);
 
         $summary = app(\App\Services\StudentProgressSummaryService::class)->build($enrollment, now());
 
         $this->assertSame(1, $summary['stats']['completed_count']);
         $this->assertSame('C7-INT-ADD-P1-W', $summary['completed'][0]['set_code']);
-        $this->assertSame(8, $summary['completed'][0]['latest_score']);
-        $this->assertSame(10, $summary['completed'][0]['latest_max_score']);
+        $this->assertSame(1, $summary['completed'][0]['latest_score']);
+        $this->assertSame(1, $summary['completed'][0]['latest_max_score']);
         $this->assertStringContainsString('Neat work.', $summary['completed'][0]['review_items'][0]['label']);
     }
 

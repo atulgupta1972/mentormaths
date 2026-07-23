@@ -357,7 +357,7 @@ class SetAssignmentService
                 'practiceSet' => fn ($q) => $q
                     ->withCount('questions')
                     ->with(['chapter:id,name', 'topic.chapter:id,name']),
-                'writtenSubmissions' => fn ($q) => $q->orderByDesc('id'),
+                'writtenSubmissions' => fn ($q) => $q->orderByDesc('id')->with('items'),
             ])
             ->where('student_enrollment_id', $enrollmentId)
             ->where('worksheet_id', $worksheetId)
@@ -383,7 +383,7 @@ class SetAssignmentService
                 'practiceSet' => fn ($q) => $q
                     ->withCount('questions')
                     ->with(['chapter:id,name', 'topic.chapter:id,name']),
-                'writtenSubmissions' => fn ($q) => $q->orderByDesc('id'),
+                'writtenSubmissions' => fn ($q) => $q->orderByDesc('id')->with('items'),
             ])
             ->where('worksheet_id', $worksheetId)
             ->whereNot('status', SetAssignment::STATUS_CANCELLED)
