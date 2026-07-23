@@ -645,6 +645,18 @@ const adminSetStatusClass = (set) => {
                             <div v-else class="rounded-lg border border-dashed border-violet-300 bg-white/70 p-4 text-center text-xs text-violet-900">
                                 No upcoming exams yet. Click <strong>Add / edit exams</strong> to add your test date.
                             </div>
+
+                            <div v-if="showManageExams" class="mt-4 rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
+                                <ExamPlanPanel
+                                    :plans="allExamPlans"
+                                    :syllabus-chapters="syllabusChapters"
+                                    :exam-type-options="examTypeOptions"
+                                    :highlight-plan-id="highlightedExamPlanId"
+                                    :auto-open-create="!allExamPlans.length"
+                                    context="student"
+                                    compact
+                                />
+                            </div>
                         </section>
 
                         <!-- Help queue — rose zone -->
@@ -825,16 +837,6 @@ const adminSetStatusClass = (set) => {
                                 <p class="mt-1 truncate text-[10px] text-gray-500">{{ chapterList(plan) }}</p>
                             </div>
                         </div>
-                    </section>
-
-                    <section v-if="showManageExams" class="rounded-xl bg-white p-4 shadow-sm">
-                        <ExamPlanPanel
-                            :plans="allExamPlans"
-                            :syllabus-chapters="syllabusChapters"
-                            :exam-type-options="examTypeOptions"
-                            :highlight-plan-id="highlightedExamPlanId"
-                            context="student"
-                        />
                     </section>
 
                     <!-- Completed sets — green zone -->

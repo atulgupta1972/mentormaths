@@ -43,6 +43,8 @@ const emptyForm = () => ({
 const form = useForm(emptyForm());
 const chapterSelections = ref({});
 const expandedChapters = ref({});
+const submitProcessing = ref(false);
+const submitErrors = ref({});
 const assignForm = useForm({
     student_id: '',
     target_date: '',
@@ -50,7 +52,15 @@ const assignForm = useForm({
     notes: '',
 });
 
-const canManage = computed(() => props.syllabusChapters.length > 0);
+const canAddExam = computed(() => props.syllabusChapters.length > 0);
+const canEditPlans = computed(() => canAddExam.value || props.plans.length > 0);
+const canManage = computed(() => {
+    if (isAdminContext.value) {
+        return Boolean(props.studentId);
+    }
+
+    return true;
+});
 
 const formatDate = (d) => {
     if (!d) {
@@ -311,6 +321,23 @@ const cancelForm = () => {
 
 const submit = () => {
     syncFormSelections();
+    submitErrors.value = {};
+
+    if (!editingPlan.value && form.chapter_selections.length === 0) {
+        submitErrors.value = {
+            chapter_selections: 'Select at least one chapter for this exam.',
+        };
+
+        return;
+    }
+
+    if (editingPlan.value && form.chapter_selections.length === 0) {
+        submitErrors.value = {
+            chapter_selections: 'This exam must include at least one chapter.',
+        };
+
+        return;
+    }
 
     const payload = {
         ...form.data(),
@@ -318,19 +345,26 @@ const submit = () => {
         total_marks: form.total_marks === '' ? null : Number(form.total_marks),
     };
 
+    const options = {
+        preserveScroll: true,
+        onSuccess: () => cancelForm(),
+        onError: (errors) => {
+            submitErrors.value = errors;
+        },
+        onFinish: () => {
+            submitProcessing.value = false;
+        },
+    };
+
+    submitProcessing.value = true;
+
     if (editingPlan.value) {
-        form.transform(() => payload).put(route(`${props.context}.exam-plans.update`, editingPlan.value.id), {
-            preserveScroll: true,
-            onSuccess: () => cancelForm(),
-        });
+        router.put(route(`${props.context}.exam-plans.update`, editingPlan.value.id), payload, options);
 
         return;
     }
 
-    form.transform(() => payload).post(route(`${props.context}.exam-plans.store`), {
-        preserveScroll: true,
-        onSuccess: () => cancelForm(),
-    });
+    router.post(route(`${props.context}.exam-plans.store`), payload, options);
 };
 
 const removePlan = (plan) => {
@@ -346,8 +380,24 @@ const removePlan = (plan) => {
 watch(
     () => props.autoOpenCreate,
     (shouldOpen) => {
-        if (shouldOpen && canManage.value && !showForm.value) {
+        if (shouldOpen && canAddExam.value && !showForm.value) {
             openCreate();
+        }
+    },
+    { immediate: true },
+);
+
+watch(
+    () => props.highlightPlanId,
+    (planId) => {
+        if (!planId || showForm.value) {
+            return;
+        }
+
+        const plan = props.plans.find((row) => String(row.id) === String(planId));
+
+        if (plan) {
+            openEdit(plan);
         }
     },
     { immediate: true },
@@ -374,12 +424,12 @@ watch(
                     Add your school test date and chapters. Your teacher's assigned prep will show here.
                 </p>
             </div>
-            <PrimaryButton v-if="canManage && !showForm" type="button" @click="openCreate">
+            <PrimaryButton v-if="canAddExam && !showForm" type="button" @click="openCreate">
                 Add exam date
             </PrimaryButton>
         </div>
 
-        <div v-if="compact && canManage" class="flex flex-wrap items-center justify-between gap-3">
+        <div v-if="compact && canAddExam" class="flex flex-wrap items-center justify-between gap-3">
             <p class="text-sm text-gray-600">
                 {{ isAdminContext ? 'Edit exam or assign chapter practice / tests.' : 'Add your upcoming exam.' }}
             </p>
@@ -388,7 +438,7 @@ watch(
             </PrimaryButton>
         </div>
 
-        <div v-if="!canManage" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div v-if="!canAddExam && !canEditPlans" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <template v-if="isAdminContext">
                 Import the class syllabus first, then you can enter exam dates here.
             </template>
