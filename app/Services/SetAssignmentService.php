@@ -354,7 +354,9 @@ class SetAssignmentService
     {
         $assignment = SetAssignment::query()
             ->with([
-                'practiceSet' => fn ($q) => $q->withCount('questions'),
+                'practiceSet' => fn ($q) => $q
+                    ->withCount('questions')
+                    ->with(['chapter:id,name', 'topic.chapter:id,name']),
                 'writtenSubmissions' => fn ($q) => $q->orderByDesc('id'),
             ])
             ->where('student_enrollment_id', $enrollmentId)
@@ -378,7 +380,9 @@ class SetAssignmentService
         return SetAssignment::query()
             ->with([
                 'enrollment.student:id,name',
-                'practiceSet:id,set_code',
+                'practiceSet' => fn ($q) => $q
+                    ->withCount('questions')
+                    ->with(['chapter:id,name', 'topic.chapter:id,name']),
                 'writtenSubmissions' => fn ($q) => $q->orderByDesc('id'),
             ])
             ->where('worksheet_id', $worksheetId)

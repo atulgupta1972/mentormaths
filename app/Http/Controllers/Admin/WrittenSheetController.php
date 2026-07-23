@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\GradeLevel;
 use App\Models\Question;
+use App\Models\SetAssignment;
 use App\Models\Student;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
@@ -18,6 +19,7 @@ use App\Services\SetAssignmentService;
 use App\Services\WrittenSheetPdfImportService;
 use App\Services\WrittenSheetService;
 use App\Services\WrittenSheetAnswerKeyParser;
+use App\Services\WrittenSubmissionService;
 use App\Support\DiagramQuestionSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -41,6 +43,7 @@ class WrittenSheetController extends Controller
         private SetAssignmentService $assignmentService,
         private QuestionZipImportService $zipImportService,
         private WrittenSheetPdfImportService $pdfImportService,
+        private WrittenSubmissionService $submissionService,
     ) {}
 
     public function index(Request $request): Response
@@ -722,6 +725,36 @@ class WrittenSheetController extends Controller
             $worksheet->written_pdf_path,
             ($worksheet->set_code ?: 'written-sheet').'.pdf',
         );
+    }
+
+    public function manualGrade(Request $request, SetAssignment $assignment): RedirectResponse
+    {
+        $assignment->loadMissing('practiceSet');
+        abort_unless($assignment->practiceSet?->isWritten(), 404);
+
+        $validated = $request->validate([
+            'score' => ['required', 'integer', 'min:0'],
+            'max_score' => ['required', 'integer', 'min:1'],
+            'feedback' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        if ((int) $validated['score'] > (int) $validated['max_score']) {
+            throw ValidationException::withMessages([
+                'score' => 'Marks obtained cannot be more than total marks.',
+            ]);
+        }
+
+        try {
+            $this->submissionService->applyManualGrade($assignment, [
+                'score' => (int) $validated['score'],
+                'max_score' => (int) $validated['max_score'],
+                'feedback' => $validated['feedback'] ?? null,
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Marks and feedback saved. They will appear in the weekly parent report.');
     }
 
     private function sanitizeWrittenSheetInput(Request $request): void

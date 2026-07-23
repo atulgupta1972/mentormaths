@@ -52,6 +52,33 @@ const assignNotes = ref('');
 const assignForm = useForm({ student_id: '', target_date: '', notes: '' });
 const bulkForm = useForm({ student_ids: [], target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
+const gradeForm = useForm({ score: '', max_score: '', feedback: '' });
+const gradingAssignmentId = ref(null);
+
+const openGrade = (row) => {
+    gradingAssignmentId.value = row.assignment_id;
+    gradeForm.score = row.latest_score ?? '';
+    gradeForm.max_score = row.latest_max_score ?? (props.sheet.questions_count || '');
+    gradeForm.feedback = row.written_feedback || '';
+    gradeForm.clearErrors();
+};
+
+const cancelGrade = () => {
+    gradingAssignmentId.value = null;
+    gradeForm.reset();
+    gradeForm.clearErrors();
+};
+
+const submitGrade = () => {
+    if (!gradingAssignmentId.value) {
+        return;
+    }
+
+    gradeForm.post(route('admin.written-assignments.manual-grade', gradingAssignmentId.value), {
+        preserveScroll: true,
+        onSuccess: () => cancelGrade(),
+    });
+};
 
 const filteredStudents = computed(() => {
     if (!selectedGradeLevelId.value) {
@@ -273,12 +300,12 @@ const progressLabel = (p) => {
         };
     }
 
-    if (p.written_submission_status === 'processing' || p.written_submission_status === 'uploaded') {
-        return { label: 'AI checking…', class: 'bg-yellow-100 text-yellow-800' };
+    if (p.written_submission_status === 'uploaded' || p.written_submission_status === 'processing') {
+        return { label: 'Uploaded — enter marks', class: 'bg-amber-100 text-amber-900' };
     }
 
     if (p.written_submission_status === 'failed') {
-        return { label: 'Check failed', class: 'bg-rose-100 text-rose-800' };
+        return { label: 'Upload issue', class: 'bg-rose-100 text-rose-800' };
     }
 
     if (p.is_overdue) {
@@ -627,13 +654,22 @@ const progressLabel = (p) => {
                                         <dd class="font-medium">{{ studentProgress.submitted_at ? formatDate(studentProgress.submitted_at.slice(0, 10)) : '—' }}</dd>
                                     </div>
                                 </dl>
-                                <button
-                                    type="button"
-                                    class="mt-3 text-indigo-600 hover:underline"
-                                    @click="reassign(studentProgress.assignment_id)"
-                                >
-                                    Re-assign
-                                </button>
+                                <div class="mt-3 flex flex-wrap gap-3">
+                                    <button
+                                        type="button"
+                                        class="text-indigo-600 hover:underline"
+                                        @click="openGrade(studentProgress)"
+                                    >
+                                        {{ studentProgress.written_submission_status === 'graded' ? 'Edit marks' : 'Enter marks' }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="text-gray-600 hover:underline"
+                                        @click="reassign(studentProgress.assignment_id)"
+                                    >
+                                        Re-assign
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -650,6 +686,9 @@ const progressLabel = (p) => {
 
                     <div v-if="assignments.length" class="mt-6">
                         <h4 class="text-sm font-semibold text-gray-800">Current assignments ({{ assignments.length }})</h4>
+                        <p class="mt-1 text-xs text-gray-500">
+                            Check the student’s work, then enter marks and feedback for the weekly parent report. AI PDF scoring comes later.
+                        </p>
                         <div class="mt-2 overflow-hidden rounded-md border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
                                 <thead class="bg-gray-50">
@@ -661,23 +700,96 @@ const progressLabel = (p) => {
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
-                                    <tr v-for="row in assignments" :key="row.assignment_id">
-                                        <td class="px-3 py-2">{{ row.student_name }}</td>
-                                        <td class="px-3 py-2">{{ formatDate(row.target_date) }}</td>
-                                        <td class="px-3 py-2">
-                                            <span
-                                                class="rounded-full px-2 py-0.5 text-xs font-medium"
-                                                :class="progressLabel(row).class"
-                                            >
-                                                {{ progressLabel(row).label }}
-                                            </span>
-                                        </td>
-                                        <td class="px-3 py-2 text-right">
-                                            <button type="button" class="text-indigo-600 hover:underline" @click="reassign(row.assignment_id)">
-                                                Re-assign
-                                            </button>
-                                        </td>
-                                    </tr>
+                                    <template v-for="row in assignments" :key="row.assignment_id">
+                                        <tr>
+                                            <td class="px-3 py-2">{{ row.student_name }}</td>
+                                            <td class="px-3 py-2">{{ formatDate(row.target_date) }}</td>
+                                            <td class="px-3 py-2">
+                                                <span
+                                                    class="rounded-full px-2 py-0.5 text-xs font-medium"
+                                                    :class="progressLabel(row).class"
+                                                >
+                                                    {{ progressLabel(row).label }}
+                                                </span>
+                                            </td>
+                                            <td class="px-3 py-2 text-right space-x-3">
+                                                <button type="button" class="text-indigo-600 hover:underline" @click="openGrade(row)">
+                                                    {{ row.written_submission_status === 'graded' ? 'Edit marks' : 'Enter marks' }}
+                                                </button>
+                                                <button type="button" class="text-gray-600 hover:underline" @click="reassign(row.assignment_id)">
+                                                    Re-assign
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="gradingAssignmentId === row.assignment_id">
+                                            <td colspan="4" class="bg-indigo-50/50 px-3 py-4">
+                                                <div class="space-y-3">
+                                                    <p class="text-sm font-medium text-gray-900">
+                                                        Marks for {{ row.student_name }}
+                                                    </p>
+                                                    <div v-if="row.upload_urls?.length" class="flex flex-wrap gap-2">
+                                                        <a
+                                                            v-for="(url, index) in row.upload_urls"
+                                                            :key="url"
+                                                            :href="url"
+                                                            target="_blank"
+                                                            class="rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                                                        >
+                                                            View upload {{ index + 1 }}
+                                                        </a>
+                                                    </div>
+                                                    <p v-else class="text-xs text-amber-800">
+                                                        No photo/PDF uploaded yet — you can still enter marks after checking the paper offline.
+                                                    </p>
+                                                    <div class="grid gap-3 sm:grid-cols-3">
+                                                        <div>
+                                                            <InputLabel value="Marks obtained" class="!text-xs" />
+                                                            <input
+                                                                v-model="gradeForm.score"
+                                                                type="number"
+                                                                min="0"
+                                                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                                                            >
+                                                            <p v-if="gradeForm.errors.score" class="mt-1 text-xs text-rose-600">{{ gradeForm.errors.score }}</p>
+                                                        </div>
+                                                        <div>
+                                                            <InputLabel value="Total marks" class="!text-xs" />
+                                                            <input
+                                                                v-model="gradeForm.max_score"
+                                                                type="number"
+                                                                min="1"
+                                                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                                                            >
+                                                            <p v-if="gradeForm.errors.max_score" class="mt-1 text-xs text-rose-600">{{ gradeForm.errors.max_score }}</p>
+                                                        </div>
+                                                        <div class="sm:col-span-3">
+                                                            <InputLabel value="Feedback for weekly report (optional)" class="!text-xs" />
+                                                            <textarea
+                                                                v-model="gradeForm.feedback"
+                                                                rows="2"
+                                                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                                                                placeholder="e.g. Good working on fractions; revise Q3."
+                                                            />
+                                                            <p v-if="gradeForm.errors.feedback" class="mt-1 text-xs text-rose-600">{{ gradeForm.errors.feedback }}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <PrimaryButton
+                                                            type="button"
+                                                            class="!py-1.5 !text-xs"
+                                                            :disabled="gradeForm.processing"
+                                                            @click="submitGrade"
+                                                        >
+                                                            {{ gradeForm.processing ? 'Saving…' : 'Save marks' }}
+                                                        </PrimaryButton>
+                                                        <SecondaryButton type="button" class="!py-1.5 !text-xs" @click="cancelGrade">
+                                                            Cancel
+                                                        </SecondaryButton>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
                                 </tbody>
                             </table>
                         </div>

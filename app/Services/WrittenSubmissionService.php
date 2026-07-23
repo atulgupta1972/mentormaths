@@ -95,9 +95,72 @@ class WrittenSubmissionService
             $assignment->update(['status' => SetAssignment::STATUS_IN_PROGRESS]);
         }
 
-        $this->scheduleGrading($submission);
+        // AI PDF grading is deferred — teachers enter marks manually for now.
+        // Re-enable scheduleGrading($submission) when the AI phase is ready.
 
         return $submission;
+    }
+
+    /**
+     * Teacher enters overall marks and feedback (for weekly parent reports).
+     *
+     * @param  array{score: int, max_score: int, feedback?: string|null}  $data
+     */
+    public function applyManualGrade(SetAssignment $assignment, array $data): WrittenSubmission
+    {
+        $assignment->loadMissing('practiceSet');
+
+        if (! $assignment->practiceSet?->isWritten()) {
+            throw new \InvalidArgumentException('This assignment is not a written homework sheet.');
+        }
+
+        if ($assignment->status === SetAssignment::STATUS_CANCELLED) {
+            throw new \InvalidArgumentException('This assignment was cancelled.');
+        }
+
+        $score = (int) $data['score'];
+        $maxScore = (int) $data['max_score'];
+        $feedback = isset($data['feedback']) ? trim((string) $data['feedback']) : '';
+
+        if ($maxScore < 1) {
+            throw new \InvalidArgumentException('Total marks must be at least 1.');
+        }
+
+        if ($score < 0 || $score > $maxScore) {
+            throw new \InvalidArgumentException('Marks obtained must be between 0 and total marks.');
+        }
+
+        $submission = WrittenSubmission::query()
+            ->where('set_assignment_id', $assignment->id)
+            ->latest('id')
+            ->first();
+
+        if ($submission) {
+            $submission->items()->delete();
+            $submission->update([
+                'status' => WrittenSubmission::STATUS_GRADED,
+                'score' => $score,
+                'max_score' => $maxScore,
+                'ai_summary' => $feedback !== '' ? $feedback : null,
+                'grading_error' => null,
+                'graded_at' => now(),
+            ]);
+        } else {
+            $submission = WrittenSubmission::query()->create([
+                'set_assignment_id' => $assignment->id,
+                'status' => WrittenSubmission::STATUS_GRADED,
+                'upload_paths' => [],
+                'score' => $score,
+                'max_score' => $maxScore,
+                'ai_summary' => $feedback !== '' ? $feedback : null,
+                'uploaded_at' => now(),
+                'graded_at' => now(),
+            ]);
+        }
+
+        $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
+
+        return $submission->fresh();
     }
 
     public function runGrading(int $submissionId): bool

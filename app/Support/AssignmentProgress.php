@@ -134,6 +134,24 @@ class AssignmentProgress
             'assignment_id' => $assignment->id,
             'practice_set_id' => $assignment->worksheet_id,
             'set_code' => $practiceSet->set_code,
+            'set_number' => $practiceSet->set_number,
+            'tier' => $practiceSet->tier,
+            'tier_label' => $practiceSet->tier_label,
+            'display_title' => $practiceSet->display_title,
+            'topic_id' => $practiceSet->syllabus_topic_id,
+            'topic_name' => $practiceSet->isChapterTest()
+                ? 'Chapter test · '.$practiceSet->chapter?->name
+                : ($practiceSet->isChapterPractice()
+                    ? 'Chapter practice · '.$practiceSet->chapter?->name
+                    : $practiceSet->topic?->name),
+            'chapter_name' => $practiceSet->isChapterScope()
+                ? $practiceSet->chapter?->name
+                : $practiceSet->topic?->chapter?->name,
+            'scope' => $practiceSet->scope ?? 'topic',
+            'is_catch_up' => $practiceSet->isCatchUp(),
+            'kind_label' => $practiceSet->isChapterTest() ? 'Written test' : 'Written practice',
+            'delivery_mode' => 'written',
+            'question_count' => $practiceSet->questions_count ?? $practiceSet->questions()->count(),
             'assignment_status' => $assignment->status,
             'target_date' => $assignment->due_date?->toDateString(),
             'assigned_at' => $assignment->assigned_at?->toDateTimeString(),
@@ -141,9 +159,13 @@ class AssignmentProgress
             'is_overdue' => $overdue,
             'latest_score' => $latestScore,
             'latest_max_score' => $latestMaxScore,
+            'latest_score_percent' => ScoreLabel::percent($latestScore, $latestMaxScore),
             'latest_score_label' => $latestScoreLabel,
             'submitted_at' => $submittedAt,
+            'written_submission_id' => $submission?->id,
             'written_submission_status' => $submission?->status,
+            'written_feedback' => $submission?->ai_summary,
+            'upload_urls' => $submission?->uploadUrls() ?? [],
             'status' => $status,
         ];
     }

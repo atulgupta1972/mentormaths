@@ -34,37 +34,11 @@ class WrittenSubmissionGradingTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_upload_grades_submission_after_response(): void
+    public function test_upload_stays_pending_for_manual_teacher_marks(): void
     {
         Storage::fake('public');
-        config(['services.openai.api_key' => 'test-key']);
 
-        Http::fake([
-            'api.openai.com/*' => Http::response([
-                'choices' => [
-                    [
-                        'message' => [
-                            'content' => json_encode([
-                                'summary' => 'Good work.',
-                                'items' => [
-                                    [
-                                        'question_number' => 1,
-                                        'extracted_answer' => '4',
-                                        'step_feedback' => 'Correct.',
-                                        'score' => 1,
-                                        'is_correct' => true,
-                                        'confidence' => 0.95,
-                                        'needs_review' => false,
-                                    ],
-                                ],
-                            ]),
-                        ],
-                    ],
-                ],
-            ]),
-        ]);
-
-        [$assignment, $studentUser] = $this->seedWrittenAssignment();
+        [$assignment] = $this->seedWrittenAssignment();
 
         $service = app(WrittenSubmissionService::class);
         $file = UploadedFile::fake()->image('answer.jpg');
@@ -75,9 +49,45 @@ class WrittenSubmissionGradingTest extends TestCase
         app()->terminate();
 
         $submission->refresh();
+        $this->assertSame(WrittenSubmission::STATUS_UPLOADED, $submission->status);
+        $this->assertNull($submission->score);
+    }
+
+    public function test_teacher_can_apply_manual_grade_and_feedback(): void
+    {
+        [$assignment] = $this->seedWrittenAssignment();
+
+        $submission = app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
+            'score' => 7,
+            'max_score' => 10,
+            'feedback' => 'Revise fractions.',
+        ]);
+
         $this->assertSame(WrittenSubmission::STATUS_GRADED, $submission->status);
-        $this->assertSame(1, $submission->score);
-        $this->assertSame(1, $submission->max_score);
+        $this->assertSame(7, $submission->score);
+        $this->assertSame(10, $submission->max_score);
+        $this->assertSame('Revise fractions.', $submission->ai_summary);
+        $this->assertSame(SetAssignment::STATUS_COMPLETED, $assignment->fresh()->status);
+    }
+
+    public function test_weekly_summary_includes_manual_written_grade(): void
+    {
+        [$assignment] = $this->seedWrittenAssignment();
+        $enrollment = $assignment->enrollment;
+
+        app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
+            'score' => 8,
+            'max_score' => 10,
+            'feedback' => 'Neat work.',
+        ]);
+
+        $summary = app(\App\Services\StudentProgressSummaryService::class)->build($enrollment, now());
+
+        $this->assertSame(1, $summary['stats']['completed_count']);
+        $this->assertSame('C7-INT-ADD-P1-W', $summary['completed'][0]['set_code']);
+        $this->assertSame(8, $summary['completed'][0]['latest_score']);
+        $this->assertSame(10, $summary['completed'][0]['latest_max_score']);
+        $this->assertStringContainsString('Neat work.', $summary['completed'][0]['review_items'][0]['label']);
     }
 
     public function test_pdf_upload_is_converted_to_images_before_grading(): void

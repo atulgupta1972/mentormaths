@@ -281,7 +281,7 @@ const pendingButtonClass = (set) => {
 const pendingButtonLabel = (set) => {
     if (set.delivery_mode === 'written') {
         if (set.written_submission_status === 'processing' || set.written_submission_status === 'uploaded') {
-            return 'Checking…';
+            return 'Awaiting marks';
         }
 
         if (set.written_submission_status === 'failed') {

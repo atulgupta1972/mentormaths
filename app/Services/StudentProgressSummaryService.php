@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\StudentEnrollment;
+use App\Models\WrittenSubmission;
 use App\Support\AssignmentProgress;
 use App\Support\AttemptResultSummary;
 use App\Support\DateLabels;
@@ -12,6 +13,7 @@ use App\Support\ProgressSummaryAnalytics;
 use App\Support\ProgressSummaryChartImage;
 use App\Support\ProgressSummaryTable;
 use App\Support\ScoreLabel;
+use App\Support\WorksheetDeliveryMode;
 use Carbon\Carbon;
 
 class StudentProgressSummaryService
@@ -39,6 +41,7 @@ class StudentProgressSummaryService
                     ->withCount('questions')
                     ->with(['chapter:id,name', 'topic.chapter:id,name']),
                 'attempts' => fn ($query) => $query->orderByDesc('attempt_number'),
+                'writtenSubmissions' => fn ($query) => $query->orderByDesc('id'),
             ])
             ->where('student_enrollment_id', $enrollment->id)
             ->whereNot('status', SetAssignment::STATUS_CANCELLED)
@@ -57,6 +60,35 @@ class StudentProgressSummaryService
         $recentlyCompleted = [];
 
         foreach ($assignments as $assignment) {
+            if ($assignment->practiceSet?->delivery_mode === WorksheetDeliveryMode::WRITTEN) {
+                $submission = $this->latestGradedWrittenAsOf($assignment, $asOf);
+                $row = AssignmentProgress::formatWrittenAssignmentSummary($assignment, $submission);
+                $row['review_items'] = $this->reviewItemsForWritten($submission);
+                $row['latest_attempt_number'] = null;
+
+                $isCompleted = $submission !== null;
+
+                if ($isCompleted) {
+                    $completed[] = $row;
+
+                    if ($periodStart && $submission->graded_at?->between($periodStart, $asOf)) {
+                        $recentlyCompleted[] = $row;
+                    }
+
+                    continue;
+                }
+
+                if ($assignment->due_date && $assignment->due_date->lt($asOf->copy()->startOfDay())) {
+                    $overdue[] = $row;
+
+                    continue;
+                }
+
+                $pending[] = $row;
+
+                continue;
+            }
+
             $latest = $this->latestSubmittedAttemptAsOf($assignment, $asOf);
             $row = AssignmentProgress::formatAssignmentSummary($assignment, $latest);
             $row['review_items'] = $latest
@@ -156,6 +188,35 @@ class StudentProgressSummaryService
                     && $attempt->completed_at
                     && $attempt->completed_at->lte($asOf);
             });
+    }
+
+    private function latestGradedWrittenAsOf(SetAssignment $assignment, Carbon $asOf): ?WrittenSubmission
+    {
+        return $assignment->writtenSubmissions
+            ->first(function (WrittenSubmission $submission) use ($asOf) {
+                return $submission->status === WrittenSubmission::STATUS_GRADED
+                    && $submission->graded_at
+                    && $submission->graded_at->lte($asOf);
+            });
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function reviewItemsForWritten(?WrittenSubmission $submission): array
+    {
+        $feedback = trim((string) ($submission?->ai_summary ?? ''));
+
+        if ($feedback === '') {
+            return [];
+        }
+
+        return [
+            [
+                'label' => 'Teacher feedback — '.$feedback,
+                'help_asked_label' => null,
+            ],
+        ];
     }
 
     /**
