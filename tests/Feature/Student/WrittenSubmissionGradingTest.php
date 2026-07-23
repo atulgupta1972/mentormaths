@@ -17,6 +17,8 @@ use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Models\WrittenSubmission;
+use App\Services\PdfPageImageService;
+use App\Services\WrittenGradingService;
 use App\Services\WrittenSubmissionService;
 use App\Support\PracticeSetScope;
 use App\Support\WorksheetDeliveryMode;
@@ -25,6 +27,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Mockery;
 use Tests\TestCase;
 
 class WrittenSubmissionGradingTest extends TestCase
@@ -75,6 +78,95 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertSame(WrittenSubmission::STATUS_GRADED, $submission->status);
         $this->assertSame(1, $submission->score);
         $this->assertSame(1, $submission->max_score);
+    }
+
+    public function test_pdf_upload_is_converted_to_images_before_grading(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'summary' => 'Checked PDF.',
+                                'items' => [
+                                    [
+                                        'question_number' => 1,
+                                        'extracted_answer' => '4',
+                                        'step_feedback' => 'Correct.',
+                                        'score' => 1,
+                                        'is_correct' => true,
+                                        'confidence' => 0.9,
+                                        'needs_review' => false,
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $pdfPath = 'written-submissions/'.$assignment->id.'/answers.pdf';
+        Storage::disk('public')->put($pdfPath, '%PDF-1.4 fake');
+
+        $pagePath = 'temp/written-grading/page-1.png';
+        Storage::disk('public')->put($pagePath, base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+        ));
+
+        $pages = Mockery::mock(PdfPageImageService::class);
+        $pages->shouldReceive('isAvailable')->andReturn(true);
+        $pages->shouldReceive('renderPages')
+            ->once()
+            ->with($pdfPath, Mockery::type('string'))
+            ->andReturn([$pagePath]);
+        $this->app->instance(PdfPageImageService::class, $pages);
+
+        $submission = WrittenSubmission::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'status' => WrittenSubmission::STATUS_UPLOADED,
+            'upload_paths' => [$pdfPath],
+            'uploaded_at' => now(),
+        ]);
+
+        app(WrittenGradingService::class)->grade($submission);
+
+        $submission->refresh();
+        $this->assertSame(WrittenSubmission::STATUS_GRADED, $submission->status);
+        $this->assertSame(1, $submission->score);
+    }
+
+    public function test_pdf_upload_fails_clearly_without_ghostscript(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $pdfPath = 'written-submissions/'.$assignment->id.'/answers.pdf';
+        Storage::disk('public')->put($pdfPath, '%PDF-1.4 fake');
+
+        $pages = Mockery::mock(PdfPageImageService::class);
+        $pages->shouldReceive('isAvailable')->andReturn(false);
+        $this->app->instance(PdfPageImageService::class, $pages);
+
+        $submission = WrittenSubmission::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'status' => WrittenSubmission::STATUS_UPLOADED,
+            'upload_paths' => [$pdfPath],
+            'uploaded_at' => now(),
+        ]);
+
+        $ok = app(WrittenSubmissionService::class)->runGrading($submission->id);
+
+        $this->assertFalse($ok);
+        $submission->refresh();
+        $this->assertSame(WrittenSubmission::STATUS_FAILED, $submission->status);
+        $this->assertStringContainsString('Ghostscript', (string) $submission->grading_error);
     }
 
     public function test_grade_pending_command_processes_stuck_upload(): void

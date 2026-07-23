@@ -158,7 +158,8 @@ onBeforeUnmount(() => {
 
                     <p class="mt-4 text-sm text-gray-600">
                         Print the question sheet and do the sums on paper. Write every answer on a <strong>separate answer sheet</strong>
-                        with the question number (Q1, Q2, …). Take a clear photo of your answer sheet and upload it below for AI checking.
+                        with the question number (Q1, Q2, …). Take a clear <strong>photo</strong> (JPG/PNG) of your answer sheet and upload it below for AI checking.
+                        PDF uploads also work if the server can convert PDF pages.
                     </p>
                 </div>
 

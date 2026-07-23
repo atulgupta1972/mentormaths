@@ -11,7 +11,10 @@ use Illuminate\Support\Facades\Storage;
 
 class WrittenGradingService
 {
-    public function __construct(private WrittenSheetPdfService $pdfService) {}
+    public function __construct(
+        private WrittenSheetPdfService $pdfService,
+        private PdfPageImageService $pageImageService,
+    ) {}
 
     public function grade(WrittenSubmission $submission): WrittenSubmission
     {
@@ -45,23 +48,7 @@ class WrittenGradingService
             ];
         })->all();
 
-        $imageParts = [];
-
-        foreach ($submission->upload_paths ?? [] as $path) {
-            $absolute = Storage::disk('public')->path($path);
-            if (! is_file($absolute)) {
-                continue;
-            }
-
-            $mime = mime_content_type($absolute) ?: 'image/jpeg';
-            $encoded = base64_encode((string) file_get_contents($absolute));
-            $imageParts[] = [
-                'type' => 'image_url',
-                'image_url' => [
-                    'url' => "data:{$mime};base64,{$encoded}",
-                ],
-            ];
-        }
+        $imageParts = $this->buildImageParts($submission);
 
         if ($imageParts === []) {
             throw new \RuntimeException('Uploaded files could not be read.');
@@ -103,6 +90,77 @@ class WrittenGradingService
         $payload = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
 
         return $this->persistResults($submission, $assignment, $worksheet->questions->values()->all(), $payload);
+    }
+
+    /**
+     * @return list<array{type: string, image_url: array{url: string}}>
+     */
+    private function buildImageParts(WrittenSubmission $submission): array
+    {
+        $imageParts = [];
+        $tempDirs = [];
+
+        try {
+            foreach ($submission->upload_paths ?? [] as $path) {
+                $absolute = Storage::disk('public')->path($path);
+                if (! is_file($absolute)) {
+                    continue;
+                }
+
+                $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                $mime = mime_content_type($absolute) ?: 'image/jpeg';
+
+                if ($extension === 'pdf' || str_contains($mime, 'pdf')) {
+                    if (! $this->pageImageService->isAvailable()) {
+                        throw new \RuntimeException(
+                            'PDF answer sheets need Ghostscript on the server. Install Ghostscript, or upload a JPG/PNG photo instead.',
+                        );
+                    }
+
+                    $outputDirectory = 'temp/written-grading/'.$submission->id.'/'.md5($path);
+                    $tempDirs[] = $outputDirectory;
+                    $pagePaths = $this->pageImageService->renderPages($path, $outputDirectory);
+
+                    foreach ($pagePaths as $pagePath) {
+                        $imageParts[] = $this->imagePartFromPath($pagePath);
+                    }
+
+                    continue;
+                }
+
+                if (! in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)
+                    && ! str_starts_with($mime, 'image/')) {
+                    throw new \RuntimeException(
+                        'Unsupported file type for AI grading. Upload JPG, PNG, WEBP, or PDF.',
+                    );
+                }
+
+                $imageParts[] = $this->imagePartFromPath($path);
+            }
+        } finally {
+            foreach ($tempDirs as $directory) {
+                Storage::disk('public')->deleteDirectory($directory);
+            }
+        }
+
+        return $imageParts;
+    }
+
+    /**
+     * @return array{type: string, image_url: array{url: string}}
+     */
+    private function imagePartFromPath(string $path): array
+    {
+        $absolute = Storage::disk('public')->path($path);
+        $mime = mime_content_type($absolute) ?: 'image/jpeg';
+        $encoded = base64_encode((string) file_get_contents($absolute));
+
+        return [
+            'type' => 'image_url',
+            'image_url' => [
+                'url' => "data:{$mime};base64,{$encoded}",
+            ],
+        ];
     }
 
     /**
