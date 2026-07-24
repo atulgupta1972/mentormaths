@@ -104,7 +104,8 @@ class WrittenSheetAnswerKeyParser
     private function normalize(string $text): string
     {
         $text = str_replace(["\r\n", "\r"], "\n", $text);
-        $text = preg_replace('/[ \t]+/u', ' ', $text) ?? $text;
+        // Keep tabs — answer-key tables are often "Q\tQuestion\tAnswer".
+        $text = preg_replace('/[ ]+/u', ' ', $text) ?? $text;
         $text = preg_replace('/\n{3,}/u', "\n\n", $text) ?? $text;
 
         return trim($text);
@@ -128,6 +129,12 @@ class WrittenSheetAnswerKeyParser
      */
     private function extractNumberedAnswers(string $text): array
     {
+        $tableAnswers = $this->extractTabularAnswers($text);
+
+        if ($tableAnswers !== []) {
+            return $tableAnswers;
+        }
+
         $answers = [];
 
         preg_match_all('/(\d{1,3})\.\s*([a-d])\b/iu', $text, $mcqMatches, PREG_SET_ORDER);
@@ -174,7 +181,8 @@ class WrittenSheetAnswerKeyParser
                 continue;
             }
 
-            if (preg_match('/^(?:Q(?:uestion)?\s*)?(\d{1,3})\s*[.):\-]\s*(.+)$/iu', $line, $match)) {
+            // Do not treat "-" as a number delimiter — answers like "-18 + …" start with a minus.
+            if (preg_match('/^(?:Q(?:uestion)?\s*)?(\d{1,3})\s*[.):]\s*(.+)$/iu', $line, $match)) {
                 $number = (int) $match[1];
 
                 if (isset($answers[$number])) {
@@ -222,6 +230,56 @@ class WrittenSheetAnswerKeyParser
     }
 
     /**
+     * Parse table rows like: 1\t11 + 12 - (-12)\t54
+     *
+     * @return array<int, array{answer: string, method_hint: string|null}>
+     */
+    private function extractTabularAnswers(string $text): array
+    {
+        $answers = [];
+
+        foreach (preg_split('/\n+/u', $text) ?: [] as $line) {
+            $line = trim($line);
+
+            if ($line === '' || preg_match('/^note\s*:/iu', $line)) {
+                continue;
+            }
+
+            if (preg_match('/^q\.?\s*\t+\s*question\s*\t+\s*answer\s*$/iu', $line)) {
+                continue;
+            }
+
+            // Strict tab-separated: number | question/expression | answer
+            if (preg_match('/^(\d{1,3})\t([^\t]+)\t([^\t]+)$/u', $line, $match)) {
+                $answer = $this->cleanAnswer(trim($match[3]));
+
+                if ($answer !== '') {
+                    $answers[(int) $match[1]] = [
+                        'answer' => $answer,
+                        'method_hint' => null,
+                    ];
+                }
+
+                continue;
+            }
+
+            // Fallback: 2+ spaces / columns collapsed — take last short token as answer.
+            if (preg_match('/^(\d{1,3})\s{2,}(.+?)\s{2,}(\S{1,32})$/u', $line, $match)) {
+                $answer = $this->cleanAnswer(trim($match[3]));
+
+                if ($answer !== '' && ! str_contains($answer, '?')) {
+                    $answers[(int) $match[1]] = [
+                        'answer' => $answer,
+                        'method_hint' => null,
+                    ];
+                }
+            }
+        }
+
+        return $answers;
+    }
+
+    /**
      * @return array{0: string, 1: string|null}
      */
     private function extractAnswerAndHint(string $content): array
@@ -252,7 +310,8 @@ class WrittenSheetAnswerKeyParser
         $value = trim($value);
         $value = preg_replace('/\s*(?:marks?|mark|pts?)\s*:?\s*\d+\s*$/iu', '', $value) ?? $value;
         $value = preg_replace('/^(?:ans(?:wer)?|correct(?:\s+answer)?)\s*:?\s*/iu', '', $value) ?? $value;
-        $value = trim($value, " \t.-");
+        $value = trim($value);
+        $value = preg_replace('/^[.\s]+|[.\s]+$/u', '', $value) ?? $value;
 
         if (preg_match('/^([a-d])\s*[\).:-]?\s*$/iu', $value, $letterOnly)) {
             return strtolower($letterOnly[1]);
