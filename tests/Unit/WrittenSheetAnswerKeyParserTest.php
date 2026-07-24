@@ -75,6 +75,39 @@ TXT;
         $this->assertSame('20', $result['rows'][5]['correct_answer']);
     }
 
+    public function test_parses_flattened_whitespace_answer_table(): void
+    {
+        $text = 'T712-W — Answer Key Class 7 · CBSE · Chapter: Integers · Sheet: T712-W Q. Question Answer '
+            .'1 11 + 12 - (-12 - 11) + 8 54 '
+            .'2 -18 + [12 - (-7 + 5)] - [(-9) - 6] 11 '
+            .'3 25 - [8 - (-6 + 4)] + [-12 - (-5 - 3)] 11 '
+            .'4 -32 - [15 - (-8 - 7)] + [6 - (-4 + 9)] -61 '
+            .'5 40 - [18 - {(-7) - (-12 + 5)}] + (-9) 13 '
+            .'6 (-4) x [7 - (-3 + 5)] + (-6) x 2 -32 '
+            .'7 (-3) x [8 - (-2 x 4)] - 5 x (-6) -18 '
+            .'8 [(-5) x (-4)] - [3 x {(-6) + 2}] + (-8) x 2 16 '
+            .'9 (-144) / [6 x (-4)] + 18 / (-3) 0 '
+            .'10 (-96) / [(-8) + 4] - [36 / (-6)] 30 '
+            .'11 120 / [(-5) x (-3)] + (-72) / 8 - 4 -5 '
+            .'12 (-180) / [9 - (-6)] + [(-84) / (-7)] - 5 -5 '
+            .'13 (-240) / [(-4) x 5] - [(-96) / 12] + 7 27 '
+            .'14 (-24) / 6 x (-3) + 5 - [8 - (-2)] 7 '
+            .'15 [(-6) x 8] / (-4) + [(-15) / 3] x (-2) 22 '
+            .'16 (-5) x [18 / (-3) + 4] - [(-8) x 2] 26 '
+            .'17 [(-72) / 8] x [(-5) + 2] + 6 x (-4) 3 '
+            .'18 36 / [(-3) x (-2)] - [(-4) x 5] + 18 / (-3) 20 '
+            .'Note: Work through each question yourself first.';
+
+        $result = $this->parser->parse($text);
+
+        $this->assertSame(18, $result['parsed_count']);
+        $this->assertSame('54', $result['rows'][0]['correct_answer']);
+        $this->assertSame('-61', $result['rows'][3]['correct_answer']);
+        $this->assertSame('-32', $result['rows'][5]['correct_answer']);
+        $this->assertSame('-5', $result['rows'][10]['correct_answer']);
+        $this->assertSame('20', $result['rows'][17]['correct_answer']);
+    }
+
     public function test_parses_real_t712_answer_key_pdf_when_available(): void
     {
         $path = 'C:/Users/Atul.Gupta/scmapp_imports/tests/T712-W_Answer_Key.pdf';

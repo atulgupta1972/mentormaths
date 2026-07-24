@@ -231,10 +231,25 @@ class WrittenSheetAnswerKeyParser
 
     /**
      * Parse table rows like: 1\t11 + 12 - (-12)\t54
+     * Also handles space-separated rows and fully flattened one-line tables.
      *
      * @return array<int, array{answer: string, method_hint: string|null}>
      */
     private function extractTabularAnswers(string $text): array
+    {
+        $answers = $this->extractTabularAnswersFromLines($text);
+
+        if ($answers !== []) {
+            return $answers;
+        }
+
+        return $this->extractTabularAnswersFromFlattenedText($text);
+    }
+
+    /**
+     * @return array<int, array{answer: string, method_hint: string|null}>
+     */
+    private function extractTabularAnswersFromLines(string $text): array
     {
         $answers = [];
 
@@ -245,7 +260,7 @@ class WrittenSheetAnswerKeyParser
                 continue;
             }
 
-            if (preg_match('/^q\.?\s*\t+\s*question\s*\t+\s*answer\s*$/iu', $line)) {
+            if (preg_match('/^q\.?\b.*\banswer\b/iu', $line) && ! preg_match('/^\d/u', $line)) {
                 continue;
             }
 
@@ -263,20 +278,113 @@ class WrittenSheetAnswerKeyParser
                 continue;
             }
 
-            // Fallback: 2+ spaces / columns collapsed — take last short token as answer.
-            if (preg_match('/^(\d{1,3})\s{2,}(.+?)\s{2,}(\S{1,32})$/u', $line, $match)) {
-                $answer = $this->cleanAnswer(trim($match[3]));
+            // Space-separated table row: Qn + expression + short final answer token
+            if (preg_match('/^(\d{1,3})\s+(.+)$/u', $line, $match)) {
+                $number = (int) $match[1];
+                $rest = trim($match[2]);
 
-                if ($answer !== '' && ! str_contains($answer, '?')) {
-                    $answers[(int) $match[1]] = [
-                        'answer' => $answer,
-                        'method_hint' => null,
-                    ];
+                if (preg_match('/^(.*)\s+(\S{1,32})$/u', $rest, $parts)) {
+                    $candidate = $this->cleanAnswer(trim($parts[2]));
+
+                    if ($this->looksLikeShortTableAnswer($candidate)) {
+                        $answers[$number] = [
+                            'answer' => $candidate,
+                            'method_hint' => null,
+                        ];
+                    }
                 }
             }
         }
 
         return $answers;
+    }
+
+    /**
+     * When PDF extraction flattened all whitespace into one line.
+     * Walk Q1, Q2, … in order and take the last token of each chunk as the answer.
+     *
+     * @return array<int, array{answer: string, method_hint: string|null}>
+     */
+    private function extractTabularAnswersFromFlattenedText(string $text): array
+    {
+        $flat = trim((string) preg_replace('/\s+/u', ' ', $text));
+
+        if (! preg_match('/\bAnswer\b/iu', $flat) || ! preg_match('/\bQuestion\b/iu', $flat)) {
+            return [];
+        }
+
+        if (! preg_match('/\bAnswer\b\s*(.+)$/iu', $flat, $afterHeader)) {
+            return [];
+        }
+
+        $body = trim($afterHeader[1]);
+        $body = preg_replace('/\s+Note:.*$/iu', '', $body) ?? $body;
+
+        $answers = [];
+        $offset = 0;
+
+        for ($number = 1; $number <= 200; $number++) {
+            if (! preg_match('/(?:^|\s)'.$number.'\s+/u', $body, $startMatch, PREG_OFFSET_CAPTURE, $offset)) {
+                break;
+            }
+
+            $contentStart = $startMatch[0][1] + strlen($startMatch[0][0]);
+            $nextNumber = $number + 1;
+            $contentEnd = strlen($body);
+
+            if (preg_match(
+                '/\s'.$nextNumber.'\s+(?=(?:-?\d|\(|\[))/u',
+                $body,
+                $nextMatch,
+                PREG_OFFSET_CAPTURE,
+                $contentStart,
+            )) {
+                $contentEnd = $nextMatch[0][1];
+                $offset = $nextMatch[0][1];
+            } else {
+                $offset = strlen($body);
+            }
+
+            $chunk = trim(substr($body, $contentStart, $contentEnd - $contentStart));
+
+            if (! preg_match('/(\S+)$/u', $chunk, $tokenMatch)) {
+                break;
+            }
+
+            $answer = $this->cleanAnswer($tokenMatch[1]);
+
+            if (! $this->looksLikeShortTableAnswer($answer)) {
+                break;
+            }
+
+            $answers[$number] = [
+                'answer' => $answer,
+                'method_hint' => null,
+            ];
+
+            if ($offset >= strlen($body)) {
+                break;
+            }
+        }
+
+        return $answers;
+    }
+
+    private function looksLikeShortTableAnswer(string $value): bool
+    {
+        if ($value === '' || mb_strlen($value) > 32) {
+            return false;
+        }
+
+        if (str_contains($value, '?')) {
+            return false;
+        }
+
+        // Prefer numeric / fraction / short MCQ-style answers for table keys.
+        return (bool) preg_match(
+            '/^(?:-?\d+(?:\.\d+)?|-?\d+\s*\/\s*\d+|-?\d+\s+\d+\s*\/\s*\d+|[a-d]|[<=>≤≥≠]+|°|[A-Za-z]\s*=\s*-?\d+(?:\.\d+)?)$/u',
+            $value,
+        );
     }
 
     /**
