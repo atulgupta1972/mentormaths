@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Question;
+use App\Models\QuestionBlankAnswer;
 use App\Models\SetAssignment;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
@@ -188,6 +189,27 @@ class WrittenSheetServiceTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $service->replacePdf($worksheet, 'temp/pdf-imports/written-sheet-pdf/x/source.pdf');
+    }
+
+    public function test_update_answer_key_replaces_blank_answers_in_sheet_order(): void
+    {
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+        QuestionBlankAnswer::query()->create([
+            'question_id' => $question->id,
+            'correct_answer' => 'wrong',
+            'answer_format' => 'text',
+        ]);
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->createFromTopic($topic, [$question->id], $admin);
+
+        $service->updateAnswerKey($worksheet, [
+            ['correct_answer' => '4', 'answer_format' => 'integer'],
+        ]);
+
+        $this->assertSame('4', $question->fresh()->blankAnswer->correct_answer);
+        $this->assertSame('integer', $question->fresh()->blankAnswer->answer_format);
+        $this->assertTrue($service->canUpdateAnswers($worksheet));
     }
 
     public function test_reset_sheet_clears_pdf_and_questions(): void

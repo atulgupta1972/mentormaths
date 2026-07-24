@@ -74,13 +74,11 @@ class WrittenSheetPdfImportService
      *     extracted_preview: string,
      * }
      */
-    public function parseAnswerSheet(UploadedFile $file, ?string $worksheetToken = null): array
+    public function parseAnswerSheet(UploadedFile $file, ?string $worksheetToken = null, ?int $expectedCount = null): array
     {
         $text = $this->textService->extract($file);
 
-        $expectedCount = null;
-
-        if ($worksheetToken !== null) {
+        if ($expectedCount === null && $worksheetToken !== null) {
             $cached = Cache::get("written_sheet_pdf:{$worksheetToken}");
 
             if (is_array($cached) && ! empty($cached['estimated_question_count'])) {

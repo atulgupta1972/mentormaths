@@ -597,6 +597,80 @@ class WrittenSheetService
         }
     }
 
+    public function canUpdateAnswers(Worksheet $worksheet): bool
+    {
+        if (! $worksheet->isWritten()) {
+            return false;
+        }
+
+        $worksheet->loadMissing('questions');
+
+        return $worksheet->questions->contains(fn (Question $question) => $question->isFillInBlank());
+    }
+
+    /**
+     * Replace correct answers on existing sheet questions (by sheet order).
+     *
+     * @param  list<array{correct_answer: string, answer_format?: string, method_hint?: string|null}>  $rows
+     */
+    public function updateAnswerKey(Worksheet $worksheet, array $rows): Worksheet
+    {
+        if (! $worksheet->isWritten()) {
+            throw new \InvalidArgumentException('This is not a written sheet.');
+        }
+
+        $worksheet->load(['questions.blankAnswer']);
+        $questions = $worksheet->questions->values();
+
+        if ($questions->isEmpty()) {
+            throw new \InvalidArgumentException('This sheet has no questions.');
+        }
+
+        $rows = array_values(array_filter(
+            $rows,
+            fn (array $row) => trim((string) ($row['correct_answer'] ?? '')) !== '',
+        ));
+
+        if (count($rows) !== $questions->count()) {
+            throw new \InvalidArgumentException(
+                'Answer count ('.count($rows).') must match the sheet ('.$questions->count().' questions).',
+            );
+        }
+
+        foreach ($questions as $index => $question) {
+            if (! $question->isFillInBlank()) {
+                throw new \InvalidArgumentException(
+                    "Q".($index + 1)." is not a fill-in-blank question, so its answer cannot be updated this way.",
+                );
+            }
+
+            $row = $rows[$index];
+            $answer = mb_substr(trim((string) $row['correct_answer']), 0, 64);
+            $format = $row['answer_format'] ?? 'text';
+            if (! in_array($format, ['integer', 'decimal', 'fraction', 'text'], true)) {
+                $format = 'text';
+            }
+
+            $question->blankAnswer()->updateOrCreate(
+                ['question_id' => $question->id],
+                [
+                    'correct_answer' => $answer,
+                    'answer_format' => $format,
+                    'decimal_places' => $row['decimal_places'] ?? null,
+                ],
+            );
+
+            if (array_key_exists('method_hint', $row)) {
+                $hint = trim((string) ($row['method_hint'] ?? ''));
+                $question->update([
+                    'method_hint' => $hint !== '' ? $hint : null,
+                ]);
+            }
+        }
+
+        return $worksheet->fresh();
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -629,6 +703,7 @@ class WrittenSheetService
             'can_manage_pdf' => $this->canManagePdf($worksheet),
             'can_reimport_zip' => $this->canReimportZip($worksheet),
             'can_reset_sheet' => $this->canResetSheet($worksheet),
+            'can_update_answers' => $this->canUpdateAnswers($worksheet),
             'has_student_submissions' => $this->hasStudentSubmissions($worksheet),
         ];
     }
@@ -658,6 +733,7 @@ class WrittenSheetService
                     'correct_answer' => $question->isMcq()
                         ? $question->options->firstWhere('is_correct', true)?->option_text
                         : $question->blankAnswer?->correct_answer,
+                    'answer_format' => $question->blankAnswer?->answer_format ?? 'text',
                     'source' => $question->source,
                 ];
             })->all(),

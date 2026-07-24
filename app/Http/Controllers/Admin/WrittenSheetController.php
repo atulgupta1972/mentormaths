@@ -439,6 +439,7 @@ class WrittenSheetController extends Controller
         $validated = $request->validate([
             'pdf' => ['required', 'file', 'max:10240'],
             'worksheet_pdf_token' => ['nullable', 'uuid'],
+            'expected_count' => ['nullable', 'integer', 'min:1', 'max:200'],
         ], [
             'pdf.required' => 'Choose an answer sheet PDF first.',
             'pdf.max' => 'Answer sheet PDF must be smaller than 10 MB.',
@@ -461,6 +462,7 @@ class WrittenSheetController extends Controller
             $result = $this->pdfImportService->parseAnswerSheet(
                 $request->file('pdf'),
                 $validated['worksheet_pdf_token'] ?? null,
+                isset($validated['expected_count']) ? (int) $validated['expected_count'] : null,
             );
         } catch (InvalidArgumentException $e) {
             return response()->json([
@@ -469,6 +471,32 @@ class WrittenSheetController extends Controller
         }
 
         return response()->json($result);
+    }
+
+    public function updateAnswers(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        abort_unless($worksheet->isWritten(), 404);
+
+        $validated = $request->validate([
+            'answers' => ['required', 'array', 'min:1'],
+            'answers.*.correct_answer' => ['required', 'string', 'max:64'],
+            'answers.*.answer_format' => ['nullable', 'in:integer,decimal,fraction,text'],
+        ]);
+
+        $rows = array_map(function (array $row) {
+            return [
+                'correct_answer' => $this->normalizeStoredAnswer(trim((string) $row['correct_answer'])),
+                'answer_format' => $row['answer_format'] ?? 'text',
+            ];
+        }, $validated['answers']);
+
+        try {
+            $this->writtenSheetService->updateAnswerKey($worksheet, $rows);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Answers updated for this written sheet.');
     }
 
     public function importZipPack(Request $request): RedirectResponse

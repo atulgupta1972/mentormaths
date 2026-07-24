@@ -54,6 +54,96 @@ const bulkForm = useForm({ student_ids: [], target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
 const gradeForm = useForm({ feedback: '', items: [] });
 const gradingAssignmentId = ref(null);
+const showAnswerEditor = ref(false);
+const answerPdfInput = ref(null);
+const answerPdfParsing = ref(false);
+const answerPdfError = ref('');
+const answerPdfWarnings = ref([]);
+const answersForm = useForm({
+    answers: [],
+});
+
+const openAnswerEditor = () => {
+    answersForm.answers = (props.sheet.questions || []).map((question) => ({
+        correct_answer: question.correct_answer || '',
+        answer_format: question.answer_format || 'text',
+    }));
+    answerPdfError.value = '';
+    answerPdfWarnings.value = [];
+    showAnswerEditor.value = true;
+};
+
+const cancelAnswerEditor = () => {
+    showAnswerEditor.value = false;
+    answersForm.reset();
+    answersForm.clearErrors();
+    answerPdfError.value = '';
+    answerPdfWarnings.value = [];
+    if (answerPdfInput.value) {
+        answerPdfInput.value.value = '';
+    }
+};
+
+const parseAnswerPdfForSheet = async () => {
+    const file = answerPdfInput.value?.files?.[0];
+    if (!file) {
+        answerPdfError.value = 'Choose an answer sheet PDF first.';
+
+        return;
+    }
+
+    answerPdfParsing.value = true;
+    answerPdfError.value = '';
+    answerPdfWarnings.value = [];
+
+    try {
+        const formData = new FormData();
+        formData.append('pdf', file);
+        formData.append('expected_count', String(props.sheet.questions_count || props.sheet.questions?.length || 0));
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+        const response = await fetch(route('admin.written-sheets.parse-answer-pdf'), {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrf,
+            },
+            body: formData,
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            answerPdfError.value = payload.error || 'Could not read the answer sheet PDF.';
+
+            return;
+        }
+
+        const parsed = payload.answer_key || [];
+        answersForm.answers = (props.sheet.questions || []).map((question, index) => ({
+            correct_answer: parsed[index]?.correct_answer || answersForm.answers[index]?.correct_answer || '',
+            answer_format: parsed[index]?.answer_format || answersForm.answers[index]?.answer_format || 'text',
+        }));
+        answerPdfWarnings.value = payload.warnings || [];
+
+        if (parsed.length !== (props.sheet.questions || []).length) {
+            answerPdfWarnings.value = [
+                ...answerPdfWarnings.value,
+                `Parsed ${parsed.length} answers; this sheet has ${(props.sheet.questions || []).length}. Check and edit before saving.`,
+            ];
+        }
+    } catch {
+        answerPdfError.value = 'Could not read the answer sheet PDF.';
+    } finally {
+        answerPdfParsing.value = false;
+    }
+};
+
+const submitAnswers = () => {
+    answersForm.post(route('admin.written-sheets.update-answers', props.sheet.id), {
+        preserveScroll: true,
+        onSuccess: () => cancelAnswerEditor(),
+    });
+};
 
 const gradeSheetQuestions = computed(() => props.sheet.questions || []);
 
@@ -904,8 +994,91 @@ const progressLabel = (p) => {
                 </div>
 
                 <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
-                    <h3 class="font-medium text-gray-900">Questions on this sheet</h3>
-                    <ol class="mt-3 space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <h3 class="font-medium text-gray-900">Questions on this sheet</h3>
+                        <SecondaryButton
+                            v-if="sheet.can_update_answers && !showAnswerEditor"
+                            type="button"
+                            class="!py-1.5 !text-xs"
+                            @click="openAnswerEditor"
+                        >
+                            Re-upload / edit answers
+                        </SecondaryButton>
+                    </div>
+
+                    <div v-if="showAnswerEditor" class="mt-4 rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+                        <h4 class="text-sm font-semibold text-amber-950">Update answer key</h4>
+                        <p class="mt-1 text-sm text-amber-900">
+                            Answers wrong? Edit them below, or upload a corrected answer-sheet PDF to fill the rows, then save.
+                        </p>
+
+                        <input
+                            ref="answerPdfInput"
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            class="mt-3 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-amber-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-amber-900"
+                        >
+
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <SecondaryButton
+                                type="button"
+                                :disabled="answerPdfParsing"
+                                @click="parseAnswerPdfForSheet"
+                            >
+                                {{ answerPdfParsing ? 'Reading PDF…' : 'Fill from answer PDF' }}
+                            </SecondaryButton>
+                        </div>
+
+                        <p v-if="answerPdfError" class="mt-2 text-sm text-rose-700">{{ answerPdfError }}</p>
+                        <ul v-if="answerPdfWarnings.length" class="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">
+                            <li v-for="(warning, index) in answerPdfWarnings" :key="index">{{ warning }}</li>
+                        </ul>
+
+                        <div class="mt-4 space-y-3">
+                            <div
+                                v-for="(question, index) in sheet.questions"
+                                :key="question.id"
+                                class="rounded-md border border-amber-100 bg-white p-3"
+                            >
+                                <p class="text-sm font-semibold text-gray-900">Q{{ question.number }}</p>
+                                <p class="mt-1 text-sm text-gray-700" v-html="question.question_text" />
+                                <div class="mt-2 grid gap-2 sm:grid-cols-3">
+                                    <div class="sm:col-span-2">
+                                        <InputLabel value="Correct answer" class="!text-xs" />
+                                        <input
+                                            v-model="answersForm.answers[index].correct_answer"
+                                            type="text"
+                                            maxlength="64"
+                                            class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                                        >
+                                        <p v-if="answersForm.errors[`answers.${index}.correct_answer`]" class="mt-1 text-xs text-rose-600">
+                                            {{ answersForm.errors[`answers.${index}.correct_answer`] }}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <InputLabel value="Format" class="!text-xs" />
+                                        <select v-model="answersForm.answers[index].answer_format" class="mt-1 w-full rounded-md border-gray-300 text-sm">
+                                            <option value="text">Text</option>
+                                            <option value="integer">Integer</option>
+                                            <option value="decimal">Decimal</option>
+                                            <option value="fraction">Fraction</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p v-if="answersForm.errors.answers" class="mt-2 text-sm text-rose-700">{{ answersForm.errors.answers }}</p>
+
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <PrimaryButton type="button" :disabled="answersForm.processing" @click="submitAnswers">
+                                {{ answersForm.processing ? 'Saving…' : 'Save answers' }}
+                            </PrimaryButton>
+                            <SecondaryButton type="button" @click="cancelAnswerEditor">Cancel</SecondaryButton>
+                        </div>
+                    </div>
+
+                    <ol v-else class="mt-3 space-y-3">
                         <li v-for="question in sheet.questions" :key="question.id" class="text-sm">
                             <span class="font-semibold text-gray-900">Q{{ question.number }}.</span>
                             <span class="text-gray-700" v-html="question.question_text" />
