@@ -59,13 +59,28 @@ class WrittenAssignmentController extends Controller
             'files.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
         ]);
 
+        $wasRevision = WrittenSubmission::query()
+            ->where('set_assignment_id', $assignment->id)
+            ->whereIn('status', [
+                WrittenSubmission::STATUS_GRADED,
+                WrittenSubmission::STATUS_FAILED,
+                WrittenSubmission::STATUS_UPLOADED,
+                WrittenSubmission::STATUS_PROCESSING,
+            ])
+            ->exists();
+
         try {
             $this->submissionService->store($assignment, $validated['files']);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Work uploaded. AI is checking your answers — this page will update shortly.');
+        return back()->with(
+            'success',
+            $wasRevision
+                ? 'Revised sheet uploaded. AI is checking again — this page will update shortly.'
+                : 'Work uploaded. AI is checking your answers — this page will update shortly.',
+        );
     }
 
     public function download(Request $request, SetAssignment $assignment): StreamedResponse

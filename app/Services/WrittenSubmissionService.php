@@ -303,6 +303,7 @@ class WrittenSubmissionService
             'uploaded_at' => $submission->uploaded_at?->toDateTimeString(),
             'graded_at' => $submission->graded_at?->toDateTimeString(),
             'upload_urls' => $submission->uploadUrls(),
+            'upload_files' => $submission->uploadFiles(),
             'can_retry' => in_array($submission->status, [
                 WrittenSubmission::STATUS_GRADED,
                 WrittenSubmission::STATUS_FAILED,

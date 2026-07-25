@@ -21,6 +21,13 @@ const uploadForm = useForm({
 
 const setLabel = computed(() => props.assignment.practice_set.set_code || 'Written sheet');
 const submission = computed(() => props.assignment.submission);
+const uploadFiles = computed(() => submission.value?.upload_files || []);
+const canUpload = computed(() => {
+    const status = submission.value?.status;
+
+    return !status || status === 'failed' || status === 'uploaded' || submission.value?.can_retry;
+});
+const isRevision = computed(() => submission.value?.status === 'graded' || (uploadFiles.value.length > 0 && submission.value?.can_retry));
 
 const onFilesChange = (event) => {
     selectedFiles.value = [...(event.target.files || [])];
@@ -164,14 +171,61 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div
-                    v-if="!submission || submission.status === 'failed' || submission.status === 'uploaded' || submission.can_retry"
+                    v-if="uploadFiles.length"
+                    class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200"
+                >
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h3 class="font-medium text-gray-900">Your uploaded answer sheet</h3>
+                        <a
+                            v-if="uploadFiles.length === 1"
+                            :href="uploadFiles[0].url"
+                            target="_blank"
+                            class="text-sm text-indigo-600 hover:underline"
+                        >
+                            Open full size
+                        </a>
+                    </div>
+                    <div class="mt-4 space-y-4">
+                        <div
+                            v-for="(file, index) in uploadFiles"
+                            :key="file.url"
+                            class="overflow-hidden rounded-md border border-gray-200 bg-gray-50"
+                        >
+                            <div class="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2">
+                                <p class="text-xs font-medium text-gray-600">{{ file.label || `Page ${index + 1}` }}</p>
+                                <a :href="file.url" target="_blank" class="text-xs text-indigo-600 hover:underline">Open</a>
+                            </div>
+                            <iframe
+                                v-if="file.kind === 'pdf'"
+                                :src="file.url"
+                                class="h-[480px] w-full bg-white"
+                                :title="file.label || `Upload ${index + 1}`"
+                            />
+                            <a v-else :href="file.url" target="_blank" class="block">
+                                <img
+                                    :src="file.url"
+                                    :alt="file.label || `Upload ${index + 1}`"
+                                    class="mx-auto max-h-[640px] w-auto max-w-full object-contain"
+                                >
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    v-if="canUpload"
                     class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200"
                 >
                     <h3 class="font-medium text-gray-900">
-                        {{ submission?.status === 'graded' ? 'Try again (re-upload)' : 'Upload completed work' }}
+                        {{ isRevision ? 'Upload revised answer sheet' : 'Upload completed work' }}
                     </h3>
-                    <p v-if="submission?.status === 'graded'" class="mt-1 text-sm text-gray-600">
-                        Check the correct answers below, then upload a new photo if you want AI to check again.
+                    <p class="mt-1 text-sm text-gray-600">
+                        <template v-if="isRevision">
+                            Upload a clearer or corrected photo/PDF. AI will check again, and your teacher can update marks.
+                        </template>
+                        <template v-else>
+                            Take a clear photo (JPG/PNG) of your answer sheet, or upload a PDF.
+                        </template>
                     </p>
                     <input
                         ref="fileInput"
@@ -188,7 +242,9 @@ onBeforeUnmount(() => {
                         :disabled="uploadForm.processing || !selectedFiles.length || submission?.status === 'processing'"
                         @click="submitUpload"
                     >
-                        {{ uploadForm.processing ? 'Uploading…' : (submission?.status === 'graded' ? 'Re-upload for AI check' : 'Upload for AI check') }}
+                        {{ uploadForm.processing
+                            ? 'Uploading…'
+                            : (isRevision ? 'Save revised upload for AI check' : 'Upload for AI check') }}
                     </PrimaryButton>
                 </div>
 

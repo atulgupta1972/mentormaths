@@ -122,6 +122,8 @@ class WrittenSubmissionGradingTest extends TestCase
 
         $payload = $service->payloadForAssignment($assignment->fresh());
         $this->assertTrue($payload['can_retry']);
+        $this->assertNotEmpty($payload['upload_files']);
+        $this->assertSame('image', $payload['upload_files'][0]['kind']);
         $this->assertSame('5', $payload['items'][0]['extracted_answer']);
         $this->assertSame('4', $payload['items'][0]['correct_answer']);
         $this->assertFalse($payload['items'][0]['is_correct']);
@@ -130,6 +132,72 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertSame(WrittenSubmission::STATUS_UPLOADED, $retry->status);
         $this->assertSame(SetAssignment::STATUS_IN_PROGRESS, $assignment->fresh()->status);
         $this->assertSame($submission->id, $retry->id);
+    }
+
+    public function test_admin_can_upload_revision_and_save_marks_again(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'summary' => 'Checked.',
+                                'items' => [
+                                    [
+                                        'question_number' => 1,
+                                        'extracted_answer' => '5',
+                                        'step_feedback' => 'Incorrect.',
+                                        'score' => 0,
+                                        'is_correct' => false,
+                                        'confidence' => 0.7,
+                                        'needs_review' => true,
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $questionId = $assignment->practiceSet->questions()->first()->id;
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        app(WrittenSubmissionService::class)->store($assignment, [UploadedFile::fake()->image('first.jpg')]);
+        app()->terminate();
+
+        $response = $this->actingAs($admin)->post(
+            route('admin.written-assignments.upload-revision', $assignment),
+            ['files' => [UploadedFile::fake()->image('revised.jpg')]],
+        );
+        $response->assertRedirect();
+
+        $submission = WrittenSubmission::query()->where('set_assignment_id', $assignment->id)->first();
+        $this->assertContains($submission->status, [
+            WrittenSubmission::STATUS_UPLOADED,
+            WrittenSubmission::STATUS_PROCESSING,
+            WrittenSubmission::STATUS_GRADED,
+        ]);
+        $this->assertNotEmpty($submission->uploadFiles());
+        $this->assertSame('image', $submission->uploadFiles()[0]['kind']);
+
+        $graded = app(WrittenSubmissionService::class)->applyManualGrade($assignment->fresh(), [
+            'handwriting_rating' => WrittenSubmission::HANDWRITING_GOOD,
+            'remarks' => 'Revised scan is clearer.',
+            'items' => [
+                ['question_id' => $questionId, 'is_correct' => true],
+            ],
+        ]);
+
+        $this->assertSame(WrittenSubmission::STATUS_GRADED, $graded->status);
+        $this->assertSame(1, $graded->score);
+        $this->assertSame('Revised scan is clearer.', $graded->teacher_remarks);
+        $this->assertSame(WrittenSubmission::HANDWRITING_GOOD, $graded->handwriting_rating);
     }
 
     public function test_manual_override_keeps_extracted_answer(): void

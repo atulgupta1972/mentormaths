@@ -54,6 +54,9 @@ const bulkForm = useForm({ student_ids: [], target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
 const gradeForm = useForm({ feedback: '', remarks: '', handwriting_rating: '', items: [] });
 const gradingAssignmentId = ref(null);
+const revisionForm = useForm({ files: [] });
+const revisionFileInput = ref(null);
+const revisionSelectedFiles = ref([]);
 
 const handwritingOptions = [
     { value: 'very_good', label: 'Very good' },
@@ -196,6 +199,41 @@ const cancelGrade = () => {
     gradingAssignmentId.value = null;
     gradeForm.reset();
     gradeForm.clearErrors();
+    revisionSelectedFiles.value = [];
+    revisionForm.reset();
+    revisionForm.clearErrors();
+    if (revisionFileInput.value) {
+        revisionFileInput.value.value = '';
+    }
+};
+
+const onRevisionFilesChange = (event) => {
+    revisionSelectedFiles.value = [...(event.target.files || [])];
+    revisionForm.files = revisionSelectedFiles.value;
+};
+
+const submitRevisionUpload = (assignmentId) => {
+    if (!assignmentId || !revisionSelectedFiles.value.length) {
+        return;
+    }
+
+    revisionForm.post(route('admin.written-assignments.upload-revision', assignmentId), {
+        preserveScroll: true,
+        forceFormData: true,
+        onSuccess: () => {
+            revisionSelectedFiles.value = [];
+            revisionForm.reset();
+            if (revisionFileInput.value) {
+                revisionFileInput.value.value = '';
+            }
+            // Keep marks panel open so teacher can tick/save again on the revised sheet.
+            const row = props.assignments.find((item) => item.assignment_id === assignmentId)
+                || (props.studentProgress?.assignment_id === assignmentId ? props.studentProgress : null);
+            if (row) {
+                openGrade(row);
+            }
+        },
+    });
 };
 
 const setQuestionResult = (questionId, isCorrect) => {
@@ -863,7 +901,7 @@ const progressLabel = (p) => {
                     <div v-if="assignments.length" class="mt-6">
                         <h4 class="text-sm font-semibold text-gray-800">Current assignments ({{ assignments.length }})</h4>
                         <p class="mt-1 text-xs text-gray-500">
-                            AI checks uploads automatically. Use <strong>Edit marks</strong> to override ticks, rate handwriting, and add sheet remarks. Students see correct answers, handwriting rating, and remarks.
+                            AI checks uploads automatically. Open <strong>Edit marks</strong> to view the uploaded sheet online, upload a revised scan, override ticks, rate handwriting, and save remarks.
                         </p>
                         <div class="mt-2 overflow-hidden rounded-md border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -916,23 +954,63 @@ const progressLabel = (p) => {
                                                             </span>
                                                         </p>
                                                     </div>
-                                                    <div v-if="row.upload_urls?.length" class="flex flex-wrap gap-2">
-                                                        <a
-                                                            v-for="(url, index) in row.upload_urls"
-                                                            :key="url"
-                                                            :href="url"
-                                                            target="_blank"
-                                                            class="rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                                                    <div v-if="(row.upload_files || []).length" class="space-y-3">
+                                                        <p class="text-xs font-semibold uppercase tracking-wide text-indigo-800">
+                                                            Uploaded answer sheet (view online)
+                                                        </p>
+                                                        <div
+                                                            v-for="(file, index) in row.upload_files"
+                                                            :key="file.url"
+                                                            class="overflow-hidden rounded-md border border-indigo-100 bg-white"
                                                         >
-                                                            View upload {{ index + 1 }}
-                                                        </a>
+                                                            <div class="flex items-center justify-between border-b border-gray-100 px-3 py-1.5">
+                                                                <p class="text-xs text-gray-600">{{ file.label || `Page ${index + 1}` }}</p>
+                                                                <a :href="file.url" target="_blank" class="text-xs text-indigo-600 hover:underline">Open full size</a>
+                                                            </div>
+                                                            <iframe
+                                                                v-if="file.kind === 'pdf'"
+                                                                :src="file.url"
+                                                                class="h-[360px] w-full"
+                                                                :title="file.label || `Upload ${index + 1}`"
+                                                            />
+                                                            <a v-else :href="file.url" target="_blank" class="block bg-gray-50">
+                                                                <img
+                                                                    :src="file.url"
+                                                                    :alt="file.label || `Upload ${index + 1}`"
+                                                                    class="mx-auto max-h-[420px] w-auto max-w-full object-contain"
+                                                                >
+                                                            </a>
+                                                        </div>
                                                     </div>
                                                     <p v-else class="text-xs text-amber-800">
                                                         No photo/PDF uploaded yet — you can still tick questions after checking the paper offline.
                                                     </p>
 
+                                                    <div class="rounded-md border border-dashed border-indigo-200 bg-white p-3">
+                                                        <p class="text-xs font-semibold text-gray-800">Upload revised sheet</p>
+                                                        <p class="mt-1 text-xs text-gray-600">
+                                                            Replace the student upload with a clearer scan, then save marks again below.
+                                                        </p>
+                                                        <input
+                                                            ref="revisionFileInput"
+                                                            type="file"
+                                                            accept="image/jpeg,image/png,image/webp,application/pdf"
+                                                            multiple
+                                                            class="mt-2 block w-full text-xs"
+                                                            @change="onRevisionFilesChange"
+                                                        >
+                                                        <SecondaryButton
+                                                            type="button"
+                                                            class="mt-2 !py-1 !text-xs"
+                                                            :disabled="revisionForm.processing || !revisionSelectedFiles.length"
+                                                            @click="submitRevisionUpload(row.assignment_id)"
+                                                        >
+                                                            {{ revisionForm.processing ? 'Uploading…' : 'Save revised upload' }}
+                                                        </SecondaryButton>
+                                                    </div>
+
                                                     <p class="text-xs text-indigo-900">
-                                                        Override AI if handwriting was misread — tick ✓ Correct or ✗ Wrong. Score updates automatically.
+                                                        Override AI if handwriting was misread — tick ✓ Correct or ✗ Wrong, rate handwriting, add remarks, then save marks.
                                                     </p>
 
                                                     <div class="flex flex-wrap gap-2">

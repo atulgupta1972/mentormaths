@@ -209,6 +209,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/written-sheets/{worksheet}/reject', [WrittenSheetController::class, 'reject'])->name('written-sheets.reject');
     Route::get('/written-sheets/{worksheet}/download', [WrittenSheetController::class, 'download'])->name('written-sheets.download');
     Route::post('/written-assignments/{assignment}/manual-grade', [WrittenSheetController::class, 'manualGrade'])->name('written-assignments.manual-grade');
+    Route::post('/written-assignments/{assignment}/upload-revision', [WrittenSheetController::class, 'uploadRevision'])->name('written-assignments.upload-revision');
 
     Route::post('/practice-sets/{worksheet}/assign', [SetAssignmentController::class, 'store'])->name('practice-sets.assign');
     Route::post('/practice-sets/{worksheet}/assign-bulk', [SetAssignmentController::class, 'storeBulk'])->name('practice-sets.assign-bulk');

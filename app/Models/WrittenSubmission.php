@@ -102,9 +102,29 @@ class WrittenSubmission extends Model
      */
     public function uploadUrls(): array
     {
-        return collect($this->upload_paths ?? [])
-            ->map(fn (string $path) => Storage::disk('public')->url($path))
+        return collect($this->uploadFiles())
+            ->pluck('url')
             ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array{url: string, kind: string, label: string}>
+     */
+    public function uploadFiles(): array
+    {
+        return collect($this->upload_paths ?? [])
+            ->values()
+            ->map(function (string $path, int $index) {
+                $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION) ?: '');
+                $kind = $extension === 'pdf' ? 'pdf' : 'image';
+
+                return [
+                    'url' => Storage::disk('public')->url($path),
+                    'kind' => $kind,
+                    'label' => 'Page '.($index + 1).($kind === 'pdf' ? ' (PDF)' : ''),
+                ];
+            })
             ->all();
     }
 }

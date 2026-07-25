@@ -784,6 +784,25 @@ class WrittenSheetController extends Controller
         return back()->with('success', 'Marks, handwriting rating, and remarks saved.');
     }
 
+    public function uploadRevision(Request $request, SetAssignment $assignment): RedirectResponse
+    {
+        $assignment->loadMissing('practiceSet');
+        abort_unless($assignment->practiceSet?->isWritten(), 404);
+
+        $validated = $request->validate([
+            'files' => ['required', 'array', 'min:1', 'max:5'],
+            'files.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
+        ]);
+
+        try {
+            $this->submissionService->store($assignment, $validated['files']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Revised sheet uploaded. AI will re-check; you can also edit and save marks now.');
+    }
+
     private function sanitizeWrittenSheetInput(Request $request): void
     {
         $sourceMode = match ($request->input('source_mode')) {

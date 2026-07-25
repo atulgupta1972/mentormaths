@@ -171,6 +171,7 @@ class AssignmentProgress
             'handwriting_label' => $submission?->handwritingLabel(),
             'question_results' => self::writtenQuestionResults($submission),
             'upload_urls' => $submission?->uploadUrls() ?? [],
+            'upload_files' => $submission?->uploadFiles() ?? [],
             'status' => $status,
         ];
     }
