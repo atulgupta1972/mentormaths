@@ -302,25 +302,36 @@ class FormulaBankService
     {
         $topic->loadMissing('chapter.syllabusVersion.gradeLevel');
 
-        $nextNumber = (int) Worksheet::query()
+        // Unique index is (syllabus_topic_id, set_number) across ALL worksheet purposes.
+        $nextNumber = 1;
+        while (
+            Worksheet::query()
+                ->where('syllabus_topic_id', $topic->id)
+                ->where('set_number', $nextNumber)
+                ->exists()
+        ) {
+            $nextNumber++;
+        }
+
+        $formulaOrdinal = (int) Worksheet::query()
             ->where('purpose', WorksheetPurpose::FORMULA)
-            ->where('scope', PracticeSetScope::TOPIC)
             ->where('syllabus_topic_id', $topic->id)
-            ->max('set_number') + 1;
+            ->count() + 1;
 
         $gradeSort = $topic->chapter?->syllabusVersion?->gradeLevel?->sort_order ?? 0;
         $chapterNumber = $topic->chapter?->chapter_number ?? $topic->chapter?->sort_order ?? 0;
-        $setCode = sprintf('F%d%d%d', $gradeSort, $chapterNumber, $nextNumber);
+        $codeSeq = $formulaOrdinal;
+        $setCode = sprintf('F%d%d%d', $gradeSort, $chapterNumber, $codeSeq);
 
         while (Worksheet::query()->where('set_code', $setCode)->exists()) {
-            $nextNumber++;
-            $setCode = sprintf('F%d%d%d', $gradeSort, $chapterNumber, $nextNumber);
+            $codeSeq++;
+            $setCode = sprintf('F%d%d%d', $gradeSort, $chapterNumber, $codeSeq);
         }
 
         return Worksheet::query()->create([
             'title' => $title !== null && trim($title) !== ''
                 ? trim($title)
-                : 'Formula set '.$nextNumber.' — '.$topic->name,
+                : 'Formula set '.$formulaOrdinal.' — '.$topic->name,
             'set_number' => $nextNumber,
             'set_code' => $setCode,
             'tier' => PracticeSetTier::STARTER,

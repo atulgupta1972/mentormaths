@@ -115,6 +115,42 @@ class FormulaBankTest extends TestCase
         $this->assertSame(1, $set->questions()->count());
     }
 
+    public function test_formula_set_avoids_practice_set_number_collision(): void
+    {
+        [$admin, $topic] = $this->seedTopic();
+
+        Worksheet::query()->create([
+            'title' => 'Practice set 1',
+            'set_number' => 1,
+            'set_code' => 'S711',
+            'tier' => 'starter',
+            'scope' => 'topic',
+            'syllabus_topic_id' => $topic->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'purpose' => WorksheetPurpose::STANDARD,
+            'delivery_mode' => 'online',
+            'created_by' => $admin->id,
+        ]);
+        Worksheet::query()->create([
+            'title' => 'Practice set 2',
+            'set_number' => 2,
+            'set_code' => 'S712',
+            'tier' => 'starter',
+            'scope' => 'topic',
+            'syllabus_topic_id' => $topic->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'purpose' => WorksheetPurpose::STANDARD,
+            'delivery_mode' => 'online',
+            'created_by' => $admin->id,
+        ]);
+
+        $set = app(\App\Services\FormulaBankService::class)->createSet($topic, $admin);
+
+        $this->assertSame(3, $set->set_number);
+        $this->assertSame(WorksheetPurpose::FORMULA, $set->purpose);
+        $this->assertStringContainsString('Formula set 1', $set->title);
+    }
+
     public function test_add_formulas_chapter_page_loads_from_question_hub(): void
     {
         $this->withoutVite();
