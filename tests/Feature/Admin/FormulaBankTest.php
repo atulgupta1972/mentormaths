@@ -68,6 +68,24 @@ class FormulaBankTest extends TestCase
             ->assertOk();
     }
 
+    public function test_topic_prompt_can_include_focus_description(): void
+    {
+        [$admin, $topic] = $this->seedTopic();
+
+        $response = $this->actingAs($admin)->post(route('admin.formula-bank.topics.prompt', $topic), [
+            'total' => 6,
+            'style' => 'formula_recall',
+            'focus' => '(a+b)^2 and a^2-b^2 identities as MCQs',
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('formula_bank_topic_prompt');
+        $prompt = session('formula_bank_topic_prompt');
+        $this->assertStringContainsString('FORMULA / CONCEPT', $prompt);
+        $this->assertStringContainsString('(a+b)^2 and a^2-b^2', $prompt);
+        $this->assertStringContainsString('Exactly 6 MCQ cards', $prompt);
+    }
+
     public function test_add_formulas_chapter_page_loads_from_question_hub(): void
     {
         $this->withoutVite();

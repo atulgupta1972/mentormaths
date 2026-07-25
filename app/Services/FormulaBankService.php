@@ -420,4 +420,171 @@ class FormulaBankService
                 ->all(),
         ];
     }
+
+    /**
+     * Cursor prompt for formula / concept revision MCQs on one topic.
+     *
+     * @param  array{total?: int, focus?: string, style?: string}  $options
+     */
+    public function cursorPromptForTopic(SyllabusTopic $topic, array $options = []): string
+    {
+        $topic->loadMissing([
+            'chapter.syllabusVersion.board',
+            'chapter.syllabusVersion.gradeLevel',
+            'chapter.syllabusVersion.academicYear',
+        ]);
+
+        $total = max(1, min(40, (int) ($options['total'] ?? 8)));
+        $focus = trim((string) ($options['focus'] ?? ''));
+        $style = trim((string) ($options['style'] ?? 'mixed'));
+
+        $styleGuide = match ($style) {
+            'formula_recall' => 'Mostly formula-recall cards: show a situation or ask "which formula…" / complete the identity.',
+            'concept' => 'Mostly concept cards: definitions, properties, when to use a rule, true/false style as MCQ.',
+            'identify' => 'Mostly identify / match cards: given an expression or figure description, pick the correct formula or concept name.',
+            default => 'Mix of formula recall, concept checks, and “which formula applies” MCQs.',
+        };
+
+        $focusBlock = $focus !== ''
+            ? "Teacher notes — cover these formulas / concepts (priority):\n{$focus}"
+            : 'Cover the key formulas and concepts for this topic at the class level.';
+
+        $context = $this->topicContext($topic);
+
+        return <<<PROMPT
+Create FORMULA / CONCEPT revision MCQs for 5-minute daily drill. Return ONLY valid JSON (no markdown fences).
+
+These are NOT calculation practice sums. Students pick the correct formula, identity, definition, or concept.
+
+Context:
+{$context}
+
+Requirements:
+- Exactly {$total} MCQ cards
+- {$styleGuide}
+- Class-appropriate CBSE/ICSE language
+- 4 options each, exactly one correct answer
+- Prefer short stems (one line when possible) so students can revise quickly
+- Wrong options should be common mix-ups (sign errors, wrong identity, confusing area/perimeter, etc.)
+- Include "explanation": one-line reminder of the correct formula/concept for the teacher
+- Set "difficulty" to Easy, Medium, or Hard
+- Do NOT invent off-syllabus formulas
+
+{$focusBlock}
+
+JSON format:
+{
+  "questions": [
+    {
+      "question": "Which identity equals (a + b)²?",
+      "options": ["a² + b²", "a² + 2ab + b²", "a² − 2ab + b²", "(a + b)(a − b)"],
+      "correct_index": 1,
+      "explanation": "(a + b)² = a² + 2ab + b²",
+      "difficulty": "Easy"
+    }
+  ]
+}
+PROMPT;
+    }
+
+    /**
+     * Cursor prompt for formula / concept MCQs across a chapter (topics named in each item).
+     *
+     * @param  array{total?: int, focus?: string, style?: string, topic_ids?: list<int>}  $options
+     */
+    public function cursorPromptForChapter(SyllabusChapter $chapter, array $options = []): string
+    {
+        $chapter->loadMissing([
+            'topics' => fn ($q) => $q->orderBy('sort_order'),
+            'syllabusVersion.board',
+            'syllabusVersion.gradeLevel',
+            'syllabusVersion.academicYear',
+        ]);
+
+        $total = max(1, min(60, (int) ($options['total'] ?? 12)));
+        $focus = trim((string) ($options['focus'] ?? ''));
+        $style = trim((string) ($options['style'] ?? 'mixed'));
+        $topicIds = collect($options['topic_ids'] ?? [])->filter()->map(fn ($id) => (int) $id)->all();
+
+        $topics = $chapter->topics;
+        if ($topicIds !== []) {
+            $topics = $topics->whereIn('id', $topicIds)->values();
+        }
+
+        if ($topics->isEmpty()) {
+            throw new InvalidArgumentException('Select at least one topic for the formula prompt.');
+        }
+
+        $topicLines = $topics->map(fn (SyllabusTopic $t) => '- '.$t->name)->implode("\n");
+        $styleGuide = match ($style) {
+            'formula_recall' => 'Mostly formula-recall cards.',
+            'concept' => 'Mostly concept / definition cards.',
+            'identify' => 'Mostly identify-which-formula cards.',
+            default => 'Mix of formula recall, concepts, and identify-which-formula MCQs.',
+        };
+
+        $focusBlock = $focus !== ''
+            ? "Teacher notes — cover these formulas / concepts (priority):\n{$focus}"
+            : 'Spread cards across the listed topics; emphasise core formulas students must memorise.';
+
+        $version = $chapter->syllabusVersion;
+        $context = collect([
+            $version ? "Board: {$version->board->code}" : null,
+            $version ? "Class: {$version->gradeLevel->name}" : null,
+            $version ? "Academic year: {$version->academicYear->name}" : null,
+            "Chapter: {$chapter->chapter_number} — {$chapter->name}",
+            "Topics to cover:\n{$topicLines}",
+        ])->filter()->implode("\n");
+
+        return <<<PROMPT
+Create FORMULA / CONCEPT revision MCQs for 5-minute daily drill. Return ONLY valid JSON (no markdown fences).
+
+These are NOT calculation practice sums. Students pick the correct formula, identity, definition, or concept.
+
+Context:
+{$context}
+
+Requirements:
+- Exactly {$total} MCQ cards total across the topics listed
+- Each question MUST include "topic" set to the exact topic name from the list above
+- {$styleGuide}
+- Class-appropriate CBSE/ICSE language
+- 4 options each, exactly one correct answer
+- Short stems for quick revision
+- Wrong options = common mix-ups
+- Include "explanation": one-line formula/concept reminder
+- Set "difficulty" to Easy, Medium, or Hard
+
+{$focusBlock}
+
+JSON format:
+{
+  "questions": [
+    {
+      "topic": "Exact topic name from list",
+      "question": "Area of a rectangle with length l and breadth b is:",
+      "options": ["2(l + b)", "l × b", "l + b", "πr²"],
+      "correct_index": 1,
+      "explanation": "Area of rectangle = l × b",
+      "difficulty": "Easy"
+    }
+  ]
+}
+PROMPT;
+    }
+
+    private function topicContext(SyllabusTopic $topic): string
+    {
+        $chapter = $topic->chapter;
+        $version = $chapter?->syllabusVersion;
+
+        return collect([
+            $version ? "Board: {$version->board->code}" : null,
+            $version ? "Class: {$version->gradeLevel->name}" : null,
+            $version ? "Academic year: {$version->academicYear->name}" : null,
+            $chapter ? "Chapter: {$chapter->chapter_number} — {$chapter->name}" : null,
+            "Topic: {$topic->name}",
+            $topic->learning_outcomes ? "Key concepts: {$topic->learning_outcomes}" : null,
+        ])->filter()->implode("\n");
+    }
 }

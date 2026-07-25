@@ -97,6 +97,13 @@ class FormulaBankController extends Controller
             'topics' => $topics,
             'formulas_count' => collect($topics)->sum('formulas_count'),
             'sets_count' => collect($topics)->sum('sets_count'),
+            'cursorPrompt' => session('formula_bank_chapter_prompt'),
+            'promptDefaults' => [
+                'total' => (int) session('formula_bank_chapter_prompt_total', 12),
+                'focus' => (string) session('formula_bank_chapter_prompt_focus', ''),
+                'style' => (string) session('formula_bank_chapter_prompt_style', 'mixed'),
+                'topic_ids' => session('formula_bank_chapter_prompt_topic_ids', collect($topics)->pluck('id')->all()),
+            ],
         ]);
     }
 
@@ -105,6 +112,12 @@ class FormulaBankController extends Controller
         return Inertia::render('Admin/FormulaBank/TopicShow', [
             'topic' => $this->formulaBank->topicDetail($topic),
             'sampleJson' => $this->sampleJson(),
+            'cursorPrompt' => session('formula_bank_topic_prompt'),
+            'promptDefaults' => [
+                'total' => (int) session('formula_bank_topic_prompt_total', 8),
+                'focus' => (string) session('formula_bank_topic_prompt_focus', ''),
+                'style' => (string) session('formula_bank_topic_prompt_style', 'mixed'),
+            ],
         ]);
     }
 
@@ -129,6 +142,60 @@ class FormulaBankController extends Controller
         return redirect()
             ->route('admin.formula-bank.sets.show', $set)
             ->with('success', 'Formula set '.$set->set_number.' created. Add formula / concept MCQs next.');
+    }
+
+    public function topicPrompt(Request $request, SyllabusTopic $topic): RedirectResponse
+    {
+        $validated = $request->validate([
+            'total' => ['required', 'integer', 'min:1', 'max:40'],
+            'focus' => ['nullable', 'string', 'max:4000'],
+            'style' => ['nullable', 'string', 'in:mixed,formula_recall,concept,identify'],
+        ]);
+
+        $prompt = $this->formulaBank->cursorPromptForTopic($topic, [
+            'total' => $validated['total'],
+            'focus' => $validated['focus'] ?? '',
+            'style' => $validated['style'] ?? 'mixed',
+        ]);
+
+        return back()->with([
+            'success' => 'Cursor prompt ready — copy and paste into Cursor chat.',
+            'formula_bank_topic_prompt' => $prompt,
+            'formula_bank_topic_prompt_total' => $validated['total'],
+            'formula_bank_topic_prompt_focus' => $validated['focus'] ?? '',
+            'formula_bank_topic_prompt_style' => $validated['style'] ?? 'mixed',
+        ]);
+    }
+
+    public function chapterPrompt(Request $request, SyllabusChapter $chapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'total' => ['required', 'integer', 'min:1', 'max:60'],
+            'focus' => ['nullable', 'string', 'max:4000'],
+            'style' => ['nullable', 'string', 'in:mixed,formula_recall,concept,identify'],
+            'topic_ids' => ['nullable', 'array'],
+            'topic_ids.*' => ['integer', 'exists:syllabus_topics,id'],
+        ]);
+
+        try {
+            $prompt = $this->formulaBank->cursorPromptForChapter($chapter, [
+                'total' => $validated['total'],
+                'focus' => $validated['focus'] ?? '',
+                'style' => $validated['style'] ?? 'mixed',
+                'topic_ids' => $validated['topic_ids'] ?? [],
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with([
+            'success' => 'Cursor prompt ready — copy and paste into Cursor chat.',
+            'formula_bank_chapter_prompt' => $prompt,
+            'formula_bank_chapter_prompt_total' => $validated['total'],
+            'formula_bank_chapter_prompt_focus' => $validated['focus'] ?? '',
+            'formula_bank_chapter_prompt_style' => $validated['style'] ?? 'mixed',
+            'formula_bank_chapter_prompt_topic_ids' => $validated['topic_ids'] ?? [],
+        ]);
     }
 
     public function importToTopic(Request $request, SyllabusTopic $topic): RedirectResponse

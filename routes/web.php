@@ -214,11 +214,13 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/formula-bank', [FormulaBankController::class, 'index'])->name('formula-bank.index');
     Route::get('/formula-bank/classes/{grade}', [FormulaBankController::class, 'classShow'])->name('formula-bank.classes.show');
-    Route::get('/formula-bank/chapters/{chapter}', [FormulaBankController::class, 'chapterShow'])->name('formula-bank.chapters.show');
     Route::get('/formula-bank/topics/{topic}', [FormulaBankController::class, 'topicShow'])->name('formula-bank.topics.show');
+    Route::post('/formula-bank/topics/{topic}/prompt', [FormulaBankController::class, 'topicPrompt'])->name('formula-bank.topics.prompt');
     Route::post('/formula-bank/topics/{topic}/sets', [FormulaBankController::class, 'storeSet'])->name('formula-bank.topics.sets.store');
     Route::post('/formula-bank/topics/{topic}/import', [FormulaBankController::class, 'importToTopic'])->name('formula-bank.topics.import');
     Route::post('/formula-bank/topics/{topic}/package', [FormulaBankController::class, 'packageTopic'])->name('formula-bank.topics.package');
+    Route::get('/formula-bank/chapters/{chapter}', [FormulaBankController::class, 'chapterShow'])->name('formula-bank.chapters.show');
+    Route::post('/formula-bank/chapters/{chapter}/prompt', [FormulaBankController::class, 'chapterPrompt'])->name('formula-bank.chapters.prompt');
     Route::get('/formula-bank/sets/{worksheet}', [FormulaBankController::class, 'setShow'])->name('formula-bank.sets.show');
     Route::post('/formula-bank/sets/{worksheet}/import', [FormulaBankController::class, 'importToSet'])->name('formula-bank.sets.import');
 

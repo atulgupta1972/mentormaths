@@ -1,20 +1,32 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
+import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     topic: { type: Object, required: true },
     sampleJson: { type: String, default: '' },
+    cursorPrompt: { type: String, default: null },
+    promptDefaults: { type: Object, default: () => ({}) },
 });
 
 const page = usePage();
 const showImport = ref(false);
+const copied = ref(false);
+const promptBox = ref(null);
+
+const cursorPromptText = computed(() => props.cursorPrompt || page.props.flash?.formula_bank_topic_prompt || '');
 
 const setForm = useForm({ title: '' });
+const promptForm = useForm({
+    total: props.promptDefaults?.total || 8,
+    focus: props.promptDefaults?.focus || '',
+    style: props.promptDefaults?.style || 'mixed',
+});
 const importForm = useForm({
     json: props.sampleJson || '',
     create_set: true,
@@ -22,11 +34,41 @@ const importForm = useForm({
 });
 const packageForm = useForm({});
 
+watch(
+    () => cursorPromptText.value,
+    (value) => {
+        if (value) {
+            copied.value = false;
+        }
+    },
+);
+
 const createSet = () => {
     setForm.post(route('admin.formula-bank.topics.sets.store', props.topic.id), {
         preserveScroll: true,
         onSuccess: () => setForm.reset(),
     });
+};
+
+const generatePrompt = () => {
+    promptForm.post(route('admin.formula-bank.topics.prompt', props.topic.id), {
+        preserveScroll: true,
+    });
+};
+
+const copyPrompt = async () => {
+    if (!cursorPromptText.value) {
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(cursorPromptText.value);
+        copied.value = true;
+    } catch {
+        promptBox.value?.select();
+        document.execCommand('copy');
+        copied.value = true;
+    }
 };
 
 const submitImport = () => {
@@ -56,11 +98,11 @@ const packageUnpacked = () => {
                     </p>
                 </div>
                 <Link
-                    v-if="topic.grade?.id"
-                    :href="`${route('admin.formula-bank.classes.show', topic.grade.id)}?board_id=${topic.board?.id}`"
+                    v-if="topic.chapter?.id"
+                    :href="route('admin.formula-bank.chapters.show', topic.chapter.id)"
                     class="text-sm text-indigo-600 hover:underline"
                 >
-                    ← Chapters
+                    ← Chapter formulas
                 </Link>
             </div>
         </template>
@@ -80,6 +122,74 @@ const packageUnpacked = () => {
                     {{ page.props.flash.error }}
                 </div>
 
+                <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
+                    <h3 class="font-medium text-amber-950">1. Generate Cursor prompt</h3>
+                    <p class="mt-1 text-sm text-amber-900">
+                        Describe which formulas / concepts you want as MCQs, then copy the prompt into Cursor chat.
+                    </p>
+
+                    <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <InputLabel value="How many cards?" class="!text-xs" />
+                            <input
+                                v-model.number="promptForm.total"
+                                type="number"
+                                min="1"
+                                max="40"
+                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                            >
+                            <InputError :message="promptForm.errors.total" class="mt-1" />
+                        </div>
+                        <div>
+                            <InputLabel value="Card style" class="!text-xs" />
+                            <select v-model="promptForm.style" class="mt-1 w-full rounded-md border-gray-300 text-sm">
+                                <option value="mixed">Mixed formulas + concepts</option>
+                                <option value="formula_recall">Mostly formula recall</option>
+                                <option value="concept">Mostly concepts / definitions</option>
+                                <option value="identify">Mostly “which formula?”</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <InputLabel value="Describe formulas / concepts to cover (optional)" class="!text-xs" />
+                        <textarea
+                            v-model="promptForm.focus"
+                            rows="4"
+                            class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                            placeholder="e.g. (a+b)², (a−b)², a²−b² · integer sign rules · perimeter vs area of rectangle/square · when to use each identity"
+                        />
+                        <InputError :message="promptForm.errors.focus" class="mt-1" />
+                    </div>
+
+                    <PrimaryButton
+                        type="button"
+                        class="mt-3 !bg-amber-700 hover:!bg-amber-800"
+                        :disabled="promptForm.processing"
+                        @click="generatePrompt"
+                    >
+                        {{ promptForm.processing ? 'Building…' : 'Generate Cursor prompt' }}
+                    </PrimaryButton>
+
+                    <div v-if="cursorPromptText" class="mt-4 rounded-md border border-amber-200 bg-white p-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">2. Copy → paste in Cursor</p>
+                            <SecondaryButton type="button" class="!py-1 !text-xs" @click="copyPrompt">
+                                {{ copied ? 'Copied!' : 'Copy prompt' }}
+                            </SecondaryButton>
+                        </div>
+                        <textarea
+                            ref="promptBox"
+                            :value="cursorPromptText"
+                            readonly
+                            rows="12"
+                            class="mt-2 w-full rounded-md border-gray-300 font-mono text-xs"
+                            @focus="$event.target.select()"
+                        />
+                        <p class="mt-1 text-xs text-gray-500">Then paste Cursor’s JSON below in step 3.</p>
+                    </div>
+                </div>
+
                 <div class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
@@ -88,7 +198,7 @@ const packageUnpacked = () => {
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <SecondaryButton type="button" class="!py-1.5 !text-xs" @click="showImport = !showImport">
-                                {{ showImport ? 'Hide import' : 'Import MCQs (JSON)' }}
+                                {{ showImport || cursorPromptText ? 'Hide import' : '3. Import JSON' }}
                             </SecondaryButton>
                             <PrimaryButton type="button" class="!py-1.5 !text-xs" :disabled="setForm.processing" @click="createSet">
                                 New empty set
@@ -96,9 +206,9 @@ const packageUnpacked = () => {
                         </div>
                     </div>
 
-                    <div v-if="showImport" class="mt-4 space-y-3 rounded-md border border-indigo-100 bg-indigo-50/40 p-4">
+                    <div v-if="showImport || cursorPromptText" class="mt-4 space-y-3 rounded-md border border-indigo-100 bg-indigo-50/40 p-4">
                         <p class="text-sm text-indigo-950">
-                            Paste formula / concept MCQs as JSON (question + options + correct_index). Tick “create set” to attach them to a new set.
+                            3. Paste formula / concept MCQ JSON from Cursor. Tick “create set” to attach them to a new set.
                         </p>
                         <label class="flex items-center gap-2 text-sm text-gray-800">
                             <input v-model="importForm.create_set" type="checkbox" class="rounded border-gray-300">
@@ -108,6 +218,7 @@ const packageUnpacked = () => {
                             v-model="importForm.json"
                             rows="14"
                             class="w-full rounded-md border-gray-300 font-mono text-xs"
+                            placeholder='{"questions":[{"question":"...","options":["A","B","C","D"],"correct_index":1}]}'
                         />
                         <InputError :message="importForm.errors.json" />
                         <PrimaryButton type="button" :disabled="importForm.processing" @click="submitImport">
@@ -129,7 +240,7 @@ const packageUnpacked = () => {
                             <span class="text-xs text-gray-500">{{ set.questions_count }} cards</span>
                         </Link>
                     </div>
-                    <p v-else class="mt-4 text-sm text-gray-500">No formula sets yet — create one or import JSON with “create set”.</p>
+                    <p v-else class="mt-4 text-sm text-gray-500">No formula sets yet — generate a prompt, import JSON, or create an empty set.</p>
                 </div>
 
                 <div
