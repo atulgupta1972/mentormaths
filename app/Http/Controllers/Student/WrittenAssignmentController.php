@@ -65,7 +65,7 @@ class WrittenAssignmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Work uploaded. Your teacher will check it and enter marks.');
+        return back()->with('success', 'Work uploaded. AI is checking your answers — this page will update shortly.');
     }
 
     public function download(Request $request, SetAssignment $assignment): StreamedResponse

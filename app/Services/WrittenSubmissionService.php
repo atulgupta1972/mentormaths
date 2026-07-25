@@ -96,8 +96,7 @@ class WrittenSubmissionService
             $assignment->update(['status' => SetAssignment::STATUS_IN_PROGRESS]);
         }
 
-        // AI PDF grading is deferred — teachers enter marks manually for now.
-        // Re-enable scheduleGrading($submission) when the AI phase is ready.
+        $this->scheduleGrading($submission);
 
         return $submission;
     }

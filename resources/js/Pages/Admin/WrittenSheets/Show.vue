@@ -452,7 +452,7 @@ const progressLabel = (p) => {
     }
 
     if (p.written_submission_status === 'uploaded' || p.written_submission_status === 'processing') {
-        return { label: 'Uploaded — enter marks', class: 'bg-amber-100 text-amber-900' };
+        return { label: 'AI checking…', class: 'bg-yellow-100 text-yellow-800' };
     }
 
     if (p.written_submission_status === 'failed') {
@@ -838,7 +838,7 @@ const progressLabel = (p) => {
                     <div v-if="assignments.length" class="mt-6">
                         <h4 class="text-sm font-semibold text-gray-800">Current assignments ({{ assignments.length }})</h4>
                         <p class="mt-1 text-xs text-gray-500">
-                            Tick each sum correct or wrong — the score is calculated automatically for the weekly parent report.
+                            AI checks uploads automatically. You can still tick each sum correct/wrong to override marks for the weekly parent report.
                         </p>
                         <div class="mt-2 overflow-hidden rounded-md border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">

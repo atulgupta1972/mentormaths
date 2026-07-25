@@ -4,8 +4,8 @@ import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { formatScoreLabel } from '@/utils/scores';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 const props = defineProps({
     assignment: { type: Object, required: true },
@@ -60,10 +60,10 @@ const statusLabel = computed(() => {
     }
 
     return ({
-        uploaded: 'Uploaded — waiting for teacher marks',
-        processing: 'Checking…',
+        uploaded: 'Uploaded — waiting for AI',
+        processing: 'AI is checking…',
         graded: 'Graded',
-        failed: 'Upload issue — try again',
+        failed: 'Checking failed — upload again or ask teacher',
     })[status] || status;
 });
 
@@ -71,6 +71,39 @@ const isAwaitingGrade = computed(() => {
     const status = submission.value?.status;
 
     return status === 'uploaded' || status === 'processing';
+});
+
+let pollTimer = null;
+
+const refreshSubmission = () => {
+    router.reload({
+        only: ['assignment'],
+        preserveScroll: true,
+        preserveState: true,
+    });
+};
+
+onMounted(() => {
+    if (!isAwaitingGrade.value) {
+        return;
+    }
+
+    pollTimer = window.setInterval(() => {
+        if (!isAwaitingGrade.value) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+
+            return;
+        }
+
+        refreshSubmission();
+    }, 8000);
+});
+
+onBeforeUnmount(() => {
+    if (pollTimer) {
+        window.clearInterval(pollTimer);
+    }
 });
 </script>
 
@@ -155,7 +188,7 @@ const isAwaitingGrade = computed(() => {
                 </div>
 
                 <div v-if="isAwaitingGrade" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    Your work is uploaded. Your teacher will check it and enter marks — results will show here and in the weekly parent report.
+                    AI is checking your work. This page refreshes automatically — usually ready within a minute.
                 </div>
 
                 <div v-if="submission?.status === 'failed'" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">

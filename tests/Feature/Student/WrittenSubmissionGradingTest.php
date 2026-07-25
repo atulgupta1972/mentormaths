@@ -34,9 +34,35 @@ class WrittenSubmissionGradingTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_upload_stays_pending_for_manual_teacher_marks(): void
+    public function test_upload_grades_submission_after_response(): void
     {
         Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'summary' => 'Good work.',
+                                'items' => [
+                                    [
+                                        'question_number' => 1,
+                                        'extracted_answer' => '4',
+                                        'step_feedback' => 'Correct.',
+                                        'score' => 1,
+                                        'is_correct' => true,
+                                        'confidence' => 0.95,
+                                        'needs_review' => false,
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
 
         [$assignment] = $this->seedWrittenAssignment();
 
@@ -49,8 +75,9 @@ class WrittenSubmissionGradingTest extends TestCase
         app()->terminate();
 
         $submission->refresh();
-        $this->assertSame(WrittenSubmission::STATUS_UPLOADED, $submission->status);
-        $this->assertNull($submission->score);
+        $this->assertSame(WrittenSubmission::STATUS_GRADED, $submission->status);
+        $this->assertSame(1, $submission->score);
+        $this->assertSame(1, $submission->max_score);
     }
 
     public function test_teacher_can_apply_manual_grade_and_feedback(): void
