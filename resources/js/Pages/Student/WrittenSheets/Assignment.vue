@@ -164,10 +164,15 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div
-                    v-if="!submission || submission.status === 'failed' || (submission.status !== 'graded' && submission.status !== 'processing')"
+                    v-if="!submission || submission.status === 'failed' || submission.status === 'uploaded' || submission.can_retry"
                     class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200"
                 >
-                    <h3 class="font-medium text-gray-900">Upload completed work</h3>
+                    <h3 class="font-medium text-gray-900">
+                        {{ submission?.status === 'graded' ? 'Try again (re-upload)' : 'Upload completed work' }}
+                    </h3>
+                    <p v-if="submission?.status === 'graded'" class="mt-1 text-sm text-gray-600">
+                        Check the correct answers below, then upload a new photo if you want AI to check again.
+                    </p>
                     <input
                         ref="fileInput"
                         type="file"
@@ -180,10 +185,10 @@ onBeforeUnmount(() => {
                     <InputError :message="uploadForm.errors['files.0']" class="mt-2" />
                     <PrimaryButton
                         class="mt-4"
-                        :disabled="uploadForm.processing || !selectedFiles.length"
+                        :disabled="uploadForm.processing || !selectedFiles.length || submission?.status === 'processing'"
                         @click="submitUpload"
                     >
-                        {{ uploadForm.processing ? 'Uploading…' : 'Upload for AI check' }}
+                        {{ uploadForm.processing ? 'Uploading…' : (submission?.status === 'graded' ? 'Re-upload for AI check' : 'Upload for AI check') }}
                     </PrimaryButton>
                 </div>
 
@@ -202,7 +207,7 @@ onBeforeUnmount(() => {
                         </p>
                         <p class="text-sm text-gray-600">Overall score</p>
                         <p v-if="submission.ai_summary" class="mt-3 text-sm text-gray-800">
-                            <span class="font-medium text-gray-700">Teacher feedback:</span>
+                            <span class="font-medium text-gray-700">Feedback:</span>
                             {{ submission.ai_summary }}
                         </p>
                     </div>
@@ -212,22 +217,29 @@ onBeforeUnmount(() => {
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th class="px-4 py-3 text-left">Q</th>
+                                    <th class="px-4 py-3 text-left">Your answer</th>
+                                    <th class="px-4 py-3 text-left">Correct answer</th>
                                     <th class="px-4 py-3 text-left">Result</th>
-                                    <th class="px-4 py-3 text-left">Note</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
                                 <tr v-for="item in submission.items" :key="item.question_number">
-                                    <td class="px-4 py-3 font-semibold">{{ item.question_number }}</td>
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 font-semibold align-top">{{ item.question_number }}</td>
+                                    <td class="px-4 py-3 align-top">{{ item.extracted_answer || '—' }}</td>
+                                    <td class="px-4 py-3 align-top font-medium text-emerald-800">
+                                        {{ item.correct_answer || '—' }}
+                                    </td>
+                                    <td class="px-4 py-3 align-top">
                                         <span
                                             class="rounded-full px-2 py-0.5 text-xs font-semibold"
                                             :class="item.is_correct ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'"
                                         >
                                             {{ item.is_correct ? '✓ Correct' : '✗ Wrong' }}
                                         </span>
+                                        <p v-if="item.step_feedback && item.step_feedback !== 'Correct' && item.step_feedback !== 'Incorrect'" class="mt-1 text-xs text-gray-500">
+                                            {{ item.step_feedback }}
+                                        </p>
                                     </td>
-                                    <td class="px-4 py-3">{{ item.step_feedback || '—' }}</td>
                                 </tr>
                             </tbody>
                         </table>

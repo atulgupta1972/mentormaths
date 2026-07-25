@@ -188,6 +188,7 @@ class AssignmentProgress
             'question_id' => $item->question_id,
             'question_number' => $item->question_number,
             'is_correct' => $item->is_correct,
+            'extracted_answer' => $item->extracted_answer,
             'note' => $item->step_feedback,
         ])->values()->all();
     }

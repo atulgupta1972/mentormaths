@@ -24,7 +24,12 @@ class WrittenSubmissionService
             throw new \InvalidArgumentException('This assignment is not a written homework sheet.');
         }
 
-        if (! in_array($assignment->status, [SetAssignment::STATUS_ASSIGNED, SetAssignment::STATUS_IN_PROGRESS], true)) {
+        // Completed is allowed so students can re-upload after seeing correct answers / AI misreads.
+        if (! in_array($assignment->status, [
+            SetAssignment::STATUS_ASSIGNED,
+            SetAssignment::STATUS_IN_PROGRESS,
+            SetAssignment::STATUS_COMPLETED,
+        ], true)) {
             throw new \InvalidArgumentException('This assignment is no longer open for upload.');
         }
 
@@ -59,13 +64,13 @@ class WrittenSubmissionService
                 WrittenSubmission::STATUS_UPLOADED,
                 WrittenSubmission::STATUS_PROCESSING,
                 WrittenSubmission::STATUS_GRADED,
+                WrittenSubmission::STATUS_FAILED,
             ])
             ->latest('id')
             ->first();
 
-        if ($existing && $existing->status === WrittenSubmission::STATUS_GRADED) {
-            throw new \InvalidArgumentException('This homework has already been graded.');
-        }
+        // Allow re-upload after graded so students can retry (e.g. after seeing correct answers
+        // or when handwriting was misread). Latest upload replaces the previous one.
 
         if ($existing) {
             foreach ($existing->upload_paths ?? [] as $oldPath) {
@@ -92,7 +97,7 @@ class WrittenSubmissionService
             ]);
         }
 
-        if ($assignment->status === SetAssignment::STATUS_ASSIGNED) {
+        if (in_array($assignment->status, [SetAssignment::STATUS_ASSIGNED, SetAssignment::STATUS_COMPLETED], true)) {
             $assignment->update(['status' => SetAssignment::STATUS_IN_PROGRESS]);
         }
 
@@ -147,7 +152,13 @@ class WrittenSubmissionService
             ->latest('id')
             ->first();
 
+        $previousExtracted = [];
         if ($submission) {
+            $previousExtracted = $submission->items()
+                ->get()
+                ->keyBy('question_id')
+                ->map(fn ($item) => $item->extracted_answer)
+                ->all();
             $submission->items()->delete();
             $submission->update([
                 'status' => WrittenSubmission::STATUS_GRADED,
@@ -181,7 +192,7 @@ class WrittenSubmissionService
                 'written_submission_id' => $submission->id,
                 'question_id' => $question->id,
                 'question_number' => $index + 1,
-                'extracted_answer' => null,
+                'extracted_answer' => $previousExtracted[$question->id] ?? null,
                 'step_feedback' => $note !== '' ? $note : ($isCorrect ? 'Correct' : 'Incorrect'),
                 'score' => $itemScore,
                 'max_score' => 1,
@@ -254,7 +265,10 @@ class WrittenSubmissionService
     public function payloadForAssignment(SetAssignment $assignment): ?array
     {
         $submission = WrittenSubmission::query()
-            ->with('items.question:id,question_text,type')
+            ->with([
+                'items.question.options',
+                'items.question.blankAnswer',
+            ])
             ->where('set_assignment_id', $assignment->id)
             ->latest('id')
             ->first();
@@ -273,16 +287,34 @@ class WrittenSubmissionService
             'uploaded_at' => $submission->uploaded_at?->toDateTimeString(),
             'graded_at' => $submission->graded_at?->toDateTimeString(),
             'upload_urls' => $submission->uploadUrls(),
-            'items' => $submission->items->map(fn ($item) => [
-                'question_number' => $item->question_number,
-                'extracted_answer' => $item->extracted_answer,
-                'step_feedback' => $item->step_feedback,
-                'score' => $item->score,
-                'max_score' => $item->max_score,
-                'is_correct' => $item->is_correct,
-                'confidence' => $item->confidence,
-                'needs_review' => $item->needs_review,
-            ])->values()->all(),
+            'can_retry' => in_array($submission->status, [
+                WrittenSubmission::STATUS_GRADED,
+                WrittenSubmission::STATUS_FAILED,
+            ], true),
+            'items' => $submission->items->map(function ($item) {
+                $question = $item->question;
+                $correctAnswer = null;
+
+                if ($question) {
+                    $correctAnswer = $question->isMcq()
+                        ? $question->options->firstWhere('is_correct', true)?->option_text
+                        : $question->blankAnswer?->correct_answer;
+                }
+
+                return [
+                    'question_id' => $item->question_id,
+                    'question_number' => $item->question_number,
+                    'question_text' => $question?->question_text,
+                    'extracted_answer' => $item->extracted_answer,
+                    'correct_answer' => $correctAnswer,
+                    'step_feedback' => $item->step_feedback,
+                    'score' => $item->score,
+                    'max_score' => $item->max_score,
+                    'is_correct' => $item->is_correct,
+                    'confidence' => $item->confidence,
+                    'needs_review' => $item->needs_review,
+                ];
+            })->values()->all(),
         ];
     }
 }

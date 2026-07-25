@@ -838,7 +838,7 @@ const progressLabel = (p) => {
                     <div v-if="assignments.length" class="mt-6">
                         <h4 class="text-sm font-semibold text-gray-800">Current assignments ({{ assignments.length }})</h4>
                         <p class="mt-1 text-xs text-gray-500">
-                            AI checks uploads automatically. You can still tick each sum correct/wrong to override marks for the weekly parent report.
+                            AI checks uploads automatically. Use <strong>Edit marks</strong> to override if handwriting was misread. Students see correct answers after grading and can re-upload to try again.
                         </p>
                         <div class="mt-2 overflow-hidden rounded-md border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -901,6 +901,10 @@ const progressLabel = (p) => {
                                                         No photo/PDF uploaded yet — you can still tick questions after checking the paper offline.
                                                     </p>
 
+                                                    <p class="text-xs text-indigo-900">
+                                                        Override AI if handwriting was misread — tick ✓ Correct or ✗ Wrong. Score updates automatically.
+                                                    </p>
+
                                                     <div class="flex flex-wrap gap-2">
                                                         <SecondaryButton type="button" class="!py-1 !text-xs" @click="markAllCorrect">
                                                             All correct
@@ -920,9 +924,20 @@ const progressLabel = (p) => {
                                                                 <div class="min-w-0 flex-1 text-sm">
                                                                     <p class="font-semibold text-gray-900">Q{{ question.number || index + 1 }}</p>
                                                                     <p class="mt-0.5 text-gray-700" v-html="question.question_text" />
-                                                                    <p class="mt-1 text-xs text-gray-500">
-                                                                        Answer: {{ question.correct_answer || '—' }}
-                                                                    </p>
+                                                                    <dl class="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                                                                        <div>
+                                                                            <dt class="text-gray-500">AI read</dt>
+                                                                            <dd class="font-medium text-gray-800">
+                                                                                {{ row.question_results?.find((r) => r.question_id === question.id)?.extracted_answer || '—' }}
+                                                                            </dd>
+                                                                        </div>
+                                                                        <div>
+                                                                            <dt class="text-gray-500">Correct answer</dt>
+                                                                            <dd class="font-medium text-emerald-800">
+                                                                                {{ question.correct_answer || '—' }}
+                                                                            </dd>
+                                                                        </div>
+                                                                    </dl>
                                                                 </div>
                                                                 <div class="flex shrink-0 gap-2">
                                                                     <button

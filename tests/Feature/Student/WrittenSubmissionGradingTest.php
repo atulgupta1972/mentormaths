@@ -80,6 +80,95 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertSame(1, $submission->max_score);
     }
 
+    public function test_graded_payload_includes_correct_answer_and_allows_retry_upload(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'summary' => 'Check Q1 again.',
+                                'items' => [
+                                    [
+                                        'question_number' => 1,
+                                        'extracted_answer' => '5',
+                                        'step_feedback' => 'Incorrect.',
+                                        'score' => 0,
+                                        'is_correct' => false,
+                                        'confidence' => 0.8,
+                                        'needs_review' => false,
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $service = app(WrittenSubmissionService::class);
+
+        $submission = $service->store($assignment, [UploadedFile::fake()->image('first.jpg')]);
+        app()->terminate();
+        $submission->refresh();
+
+        $this->assertSame(WrittenSubmission::STATUS_GRADED, $submission->status);
+        $this->assertSame(SetAssignment::STATUS_COMPLETED, $assignment->fresh()->status);
+
+        $payload = $service->payloadForAssignment($assignment->fresh());
+        $this->assertTrue($payload['can_retry']);
+        $this->assertSame('5', $payload['items'][0]['extracted_answer']);
+        $this->assertSame('4', $payload['items'][0]['correct_answer']);
+        $this->assertFalse($payload['items'][0]['is_correct']);
+
+        $retry = $service->store($assignment->fresh(), [UploadedFile::fake()->image('retry.jpg')]);
+        $this->assertSame(WrittenSubmission::STATUS_UPLOADED, $retry->status);
+        $this->assertSame(SetAssignment::STATUS_IN_PROGRESS, $assignment->fresh()->status);
+        $this->assertSame($submission->id, $retry->id);
+    }
+
+    public function test_manual_override_keeps_extracted_answer(): void
+    {
+        [$assignment] = $this->seedWrittenAssignment();
+        $questionId = $assignment->practiceSet->questions()->first()->id;
+
+        $submission = WrittenSubmission::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'status' => WrittenSubmission::STATUS_GRADED,
+            'upload_paths' => [],
+            'score' => 0,
+            'max_score' => 1,
+            'uploaded_at' => now(),
+            'graded_at' => now(),
+        ]);
+
+        $submission->items()->create([
+            'question_id' => $questionId,
+            'question_number' => 1,
+            'extracted_answer' => '4',
+            'step_feedback' => 'Incorrect',
+            'score' => 0,
+            'max_score' => 1,
+            'is_correct' => false,
+        ]);
+
+        $overridden = app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
+            'feedback' => 'Handwriting was clear — mark correct.',
+            'items' => [
+                ['question_id' => $questionId, 'is_correct' => true],
+            ],
+        ]);
+
+        $this->assertTrue($overridden->items->first()->is_correct);
+        $this->assertSame('4', $overridden->items->first()->extracted_answer);
+        $this->assertSame(1, $overridden->score);
+    }
+
     public function test_teacher_can_apply_manual_grade_and_feedback(): void
     {
         [$assignment] = $this->seedWrittenAssignment();
