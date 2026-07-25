@@ -33,12 +33,24 @@ class FormulaBankController extends Controller
         $boardId = $request->integer('board_id') ?: $boards->first()?->id;
         $board = $boardId ? $boards->firstWhere('id', $boardId) : null;
         $year = AcademicYear::active();
+        $matrix = $board ? $this->formulaBank->matrixForBoard($board, $year) : null;
+        $gradeId = $request->integer('grade_id') ?: null;
+
+        if ($matrix && $gradeId && ! collect($matrix['grades'])->contains('id', $gradeId)) {
+            $gradeId = null;
+        }
+
+        if ($matrix && ! $gradeId) {
+            $gradeId = collect($matrix['grades'])->firstWhere('sort_order', 7)['id']
+                ?? ($matrix['grades'][0]['id'] ?? null);
+        }
 
         return Inertia::render('Admin/FormulaBank/Index', [
             'boards' => $boards,
             'selectedBoardId' => $board?->id,
+            'selectedGradeId' => $gradeId,
             'activeYear' => $year?->only(['id', 'name']),
-            'matrix' => $board ? $this->formulaBank->matrixForBoard($board, $year) : null,
+            'matrix' => $matrix,
         ]);
     }
 
