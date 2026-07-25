@@ -205,18 +205,32 @@ class StudentProgressSummaryService
      */
     private function reviewItemsForWritten(?WrittenSubmission $submission): array
     {
-        $feedback = trim((string) ($submission?->ai_summary ?? ''));
+        $items = [];
 
-        if ($feedback === '') {
-            return [];
+        if ($submission?->handwriting_rating) {
+            $items[] = [
+                'label' => 'Handwriting — '.($submission->handwritingLabel() ?? $submission->handwriting_rating),
+                'help_asked_label' => null,
+            ];
         }
 
-        return [
-            [
-                'label' => 'Teacher feedback — '.$feedback,
+        $remarks = trim((string) ($submission?->teacher_remarks ?? ''));
+        if ($remarks !== '') {
+            $items[] = [
+                'label' => 'Teacher remarks — '.$remarks,
                 'help_asked_label' => null,
-            ],
-        ];
+            ];
+        } else {
+            $feedback = trim((string) ($submission?->ai_summary ?? ''));
+            if ($feedback !== '') {
+                $items[] = [
+                    'label' => 'Teacher feedback — '.$feedback,
+                    'help_asked_label' => null,
+                ];
+            }
+        }
+
+        return $items;
     }
 
     /**

@@ -206,7 +206,15 @@ onBeforeUnmount(() => {
                             {{ formatScoreLabel(submission.score, submission.max_score) }}
                         </p>
                         <p class="text-sm text-gray-600">Overall score</p>
-                        <p v-if="submission.ai_summary" class="mt-3 text-sm text-gray-800">
+                        <p v-if="submission.handwriting_label" class="mt-3 text-sm text-gray-800">
+                            <span class="font-medium text-gray-700">Handwriting:</span>
+                            {{ submission.handwriting_label }}
+                        </p>
+                        <p v-if="submission.teacher_remarks" class="mt-2 text-sm text-gray-800">
+                            <span class="font-medium text-gray-700">Teacher remarks:</span>
+                            {{ submission.teacher_remarks }}
+                        </p>
+                        <p v-else-if="submission.ai_summary" class="mt-3 text-sm text-gray-800">
                             <span class="font-medium text-gray-700">Feedback:</span>
                             {{ submission.ai_summary }}
                         </p>

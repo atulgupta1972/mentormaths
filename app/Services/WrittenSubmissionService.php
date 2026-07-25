@@ -83,6 +83,8 @@ class WrittenSubmissionService
                 'score' => null,
                 'max_score' => null,
                 'ai_summary' => null,
+                'handwriting_rating' => null,
+                'teacher_remarks' => null,
                 'grading_error' => null,
                 'uploaded_at' => now(),
                 'graded_at' => null,
@@ -111,6 +113,8 @@ class WrittenSubmissionService
      *
      * @param  array{
      *     feedback?: string|null,
+     *     remarks?: string|null,
+     *     handwriting_rating?: string|null,
      *     items: list<array{question_id: int, is_correct: bool, note?: string|null}>
      * }  $data
      */
@@ -143,7 +147,14 @@ class WrittenSubmissionService
             }
         }
 
-        $feedback = isset($data['feedback']) ? trim((string) $data['feedback']) : '';
+        $handwriting = isset($data['handwriting_rating']) ? trim((string) $data['handwriting_rating']) : '';
+        if ($handwriting === '' || ! in_array($handwriting, WrittenSubmission::handwritingRatings(), true)) {
+            throw new \InvalidArgumentException('Choose a handwriting rating (very good to very poor).');
+        }
+
+        $remarks = isset($data['remarks'])
+            ? trim((string) $data['remarks'])
+            : (isset($data['feedback']) ? trim((string) $data['feedback']) : '');
         $score = 0;
         $maxScore = $questions->count();
 
@@ -164,7 +175,8 @@ class WrittenSubmissionService
                 'status' => WrittenSubmission::STATUS_GRADED,
                 'score' => 0,
                 'max_score' => $maxScore,
-                'ai_summary' => $feedback !== '' ? $feedback : null,
+                'handwriting_rating' => $handwriting,
+                'teacher_remarks' => $remarks !== '' ? $remarks : null,
                 'grading_error' => null,
                 'graded_at' => now(),
             ]);
@@ -175,7 +187,8 @@ class WrittenSubmissionService
                 'upload_paths' => [],
                 'score' => 0,
                 'max_score' => $maxScore,
-                'ai_summary' => $feedback !== '' ? $feedback : null,
+                'handwriting_rating' => $handwriting,
+                'teacher_remarks' => $remarks !== '' ? $remarks : null,
                 'uploaded_at' => now(),
                 'graded_at' => now(),
             ]);
@@ -283,6 +296,9 @@ class WrittenSubmissionService
             'score' => $submission->score,
             'max_score' => $submission->max_score,
             'ai_summary' => $submission->ai_summary,
+            'handwriting_rating' => $submission->handwriting_rating,
+            'handwriting_label' => $submission->handwritingLabel(),
+            'teacher_remarks' => $submission->teacher_remarks,
             'grading_error' => $submission->grading_error,
             'uploaded_at' => $submission->uploaded_at?->toDateTimeString(),
             'graded_at' => $submission->graded_at?->toDateTimeString(),

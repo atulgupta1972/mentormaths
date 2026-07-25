@@ -12,6 +12,7 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\Worksheet;
+use App\Models\WrittenSubmission;
 use App\Services\AdminGradeContext;
 use App\Services\FillBlankImportService;
 use App\Services\QuestionZipImportService;
@@ -762,6 +763,8 @@ class WrittenSheetController extends Controller
 
         $validated = $request->validate([
             'feedback' => ['nullable', 'string', 'max:2000'],
+            'remarks' => ['nullable', 'string', 'max:2000'],
+            'handwriting_rating' => ['required', 'string', 'in:'.implode(',', WrittenSubmission::handwritingRatings())],
             'items' => ['required', 'array', 'min:1'],
             'items.*.question_id' => ['required', 'integer', 'exists:questions,id'],
             'items.*.is_correct' => ['required', 'boolean'],
@@ -770,14 +773,15 @@ class WrittenSheetController extends Controller
 
         try {
             $this->submissionService->applyManualGrade($assignment, [
-                'feedback' => $validated['feedback'] ?? null,
+                'remarks' => $validated['remarks'] ?? $validated['feedback'] ?? null,
+                'handwriting_rating' => $validated['handwriting_rating'],
                 'items' => $validated['items'],
             ]);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Question ticks saved. Score calculated for the weekly parent report.');
+        return back()->with('success', 'Marks, handwriting rating, and remarks saved.');
     }
 
     private function sanitizeWrittenSheetInput(Request $request): void

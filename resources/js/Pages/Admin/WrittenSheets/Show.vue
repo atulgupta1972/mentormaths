@@ -52,8 +52,16 @@ const assignNotes = ref('');
 const assignForm = useForm({ student_id: '', target_date: '', notes: '' });
 const bulkForm = useForm({ student_ids: [], target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
-const gradeForm = useForm({ feedback: '', items: [] });
+const gradeForm = useForm({ feedback: '', remarks: '', handwriting_rating: '', items: [] });
 const gradingAssignmentId = ref(null);
+
+const handwritingOptions = [
+    { value: 'very_good', label: 'Very good' },
+    { value: 'good', label: 'Good' },
+    { value: 'ok', label: 'OK' },
+    { value: 'poor', label: 'Poor' },
+    { value: 'very_poor', label: 'Very poor' },
+];
 const showAnswerEditor = ref(false);
 const answerPdfInput = ref(null);
 const answerPdfParsing = ref(false);
@@ -167,7 +175,9 @@ const openGrade = (row) => {
         existingById[result.question_id] = result;
     });
 
-    gradeForm.feedback = row.written_feedback || '';
+    gradeForm.remarks = row.teacher_remarks || row.written_feedback || '';
+    gradeForm.feedback = gradeForm.remarks;
+    gradeForm.handwriting_rating = row.handwriting_rating || '';
     gradeForm.items = gradeSheetQuestions.value.map((question) => {
         const existing = existingById[question.id];
 
@@ -218,8 +228,15 @@ const submitGrade = () => {
         return;
     }
 
+    if (!gradeForm.handwriting_rating) {
+        gradeForm.setError('handwriting_rating', 'Choose a handwriting rating.');
+
+        return;
+    }
+
     gradeForm.transform((data) => ({
-        feedback: data.feedback,
+        remarks: data.remarks || data.feedback || null,
+        handwriting_rating: data.handwriting_rating,
         items: data.items.map((item) => ({
             question_id: item.question_id,
             is_correct: item.is_correct === true,
@@ -804,6 +821,14 @@ const progressLabel = (p) => {
                                         <dt class="text-xs text-gray-500">Upload / graded</dt>
                                         <dd class="font-medium">{{ studentProgress.submitted_at ? formatDate(studentProgress.submitted_at.slice(0, 10)) : '—' }}</dd>
                                     </div>
+                                    <div v-if="studentProgress.handwriting_label">
+                                        <dt class="text-xs text-gray-500">Handwriting</dt>
+                                        <dd class="font-medium">{{ studentProgress.handwriting_label }}</dd>
+                                    </div>
+                                    <div v-if="studentProgress.teacher_remarks || studentProgress.written_feedback">
+                                        <dt class="text-xs text-gray-500">Remarks</dt>
+                                        <dd class="font-medium">{{ studentProgress.teacher_remarks || studentProgress.written_feedback }}</dd>
+                                    </div>
                                 </dl>
                                 <div class="mt-3 flex flex-wrap gap-3">
                                     <button
@@ -838,7 +863,7 @@ const progressLabel = (p) => {
                     <div v-if="assignments.length" class="mt-6">
                         <h4 class="text-sm font-semibold text-gray-800">Current assignments ({{ assignments.length }})</h4>
                         <p class="mt-1 text-xs text-gray-500">
-                            AI checks uploads automatically. Use <strong>Edit marks</strong> to override if handwriting was misread. Students see correct answers after grading and can re-upload to try again.
+                            AI checks uploads automatically. Use <strong>Edit marks</strong> to override ticks, rate handwriting, and add sheet remarks. Students see correct answers, handwriting rating, and remarks.
                         </p>
                         <div class="mt-2 overflow-hidden rounded-md border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -856,12 +881,17 @@ const progressLabel = (p) => {
                                             <td class="px-3 py-2">{{ row.student_name }}</td>
                                             <td class="px-3 py-2">{{ formatDate(row.target_date) }}</td>
                                             <td class="px-3 py-2">
-                                                <span
-                                                    class="rounded-full px-2 py-0.5 text-xs font-medium"
-                                                    :class="progressLabel(row).class"
-                                                >
-                                                    {{ progressLabel(row).label }}
-                                                </span>
+                                                <div class="space-y-1">
+                                                    <span
+                                                        class="rounded-full px-2 py-0.5 text-xs font-medium"
+                                                        :class="progressLabel(row).class"
+                                                    >
+                                                        {{ progressLabel(row).label }}
+                                                    </span>
+                                                    <p v-if="row.handwriting_label" class="text-xs text-gray-500">
+                                                        Handwriting: {{ row.handwriting_label }}
+                                                    </p>
+                                                </div>
                                             </td>
                                             <td class="px-3 py-2 text-right space-x-3">
                                                 <button type="button" class="text-indigo-600 hover:underline" @click="openGrade(row)">
@@ -968,14 +998,35 @@ const progressLabel = (p) => {
                                                     <p v-if="gradeForm.errors.items" class="text-xs text-rose-600">{{ gradeForm.errors.items }}</p>
 
                                                     <div>
-                                                        <InputLabel value="Overall feedback for weekly report (optional)" class="!text-xs" />
+                                                        <InputLabel value="Handwriting (required)" class="!text-xs" />
+                                                        <div class="mt-2 flex flex-wrap gap-2">
+                                                            <button
+                                                                v-for="option in handwritingOptions"
+                                                                :key="option.value"
+                                                                type="button"
+                                                                class="rounded-md px-3 py-1.5 text-xs font-semibold"
+                                                                :class="gradeForm.handwriting_rating === option.value
+                                                                    ? 'bg-indigo-600 text-white'
+                                                                    : 'border border-indigo-200 bg-white text-indigo-900'"
+                                                                @click="gradeForm.handwriting_rating = option.value"
+                                                            >
+                                                                {{ option.label }}
+                                                            </button>
+                                                        </div>
+                                                        <p v-if="gradeForm.errors.handwriting_rating" class="mt-1 text-xs text-rose-600">
+                                                            {{ gradeForm.errors.handwriting_rating }}
+                                                        </p>
+                                                    </div>
+
+                                                    <div>
+                                                        <InputLabel value="Remarks for this sheet (optional)" class="!text-xs" />
                                                         <textarea
-                                                            v-model="gradeForm.feedback"
+                                                            v-model="gradeForm.remarks"
                                                             rows="2"
                                                             class="mt-1 w-full rounded-md border-gray-300 text-sm"
-                                                            placeholder="e.g. Good working on fractions; revise Q3."
+                                                            placeholder="e.g. Neat layout; revise Q3 working. Shown to student and in weekly report."
                                                         />
-                                                        <p v-if="gradeForm.errors.feedback" class="mt-1 text-xs text-rose-600">{{ gradeForm.errors.feedback }}</p>
+                                                        <p v-if="gradeForm.errors.remarks" class="mt-1 text-xs text-rose-600">{{ gradeForm.errors.remarks }}</p>
                                                     </div>
                                                     <div class="flex flex-wrap gap-2">
                                                         <PrimaryButton

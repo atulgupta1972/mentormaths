@@ -158,7 +158,8 @@ class WrittenSubmissionGradingTest extends TestCase
         ]);
 
         $overridden = app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
-            'feedback' => 'Handwriting was clear — mark correct.',
+            'handwriting_rating' => WrittenSubmission::HANDWRITING_GOOD,
+            'remarks' => 'Handwriting was clear — mark correct.',
             'items' => [
                 ['question_id' => $questionId, 'is_correct' => true],
             ],
@@ -167,6 +168,8 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertTrue($overridden->items->first()->is_correct);
         $this->assertSame('4', $overridden->items->first()->extracted_answer);
         $this->assertSame(1, $overridden->score);
+        $this->assertSame(WrittenSubmission::HANDWRITING_GOOD, $overridden->handwriting_rating);
+        $this->assertSame('Handwriting was clear — mark correct.', $overridden->teacher_remarks);
     }
 
     public function test_teacher_can_apply_manual_grade_and_feedback(): void
@@ -175,7 +178,8 @@ class WrittenSubmissionGradingTest extends TestCase
         $questionId = $assignment->practiceSet->questions()->first()->id;
 
         $submission = app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
-            'feedback' => 'Revise fractions.',
+            'handwriting_rating' => WrittenSubmission::HANDWRITING_VERY_GOOD,
+            'remarks' => 'Revise fractions.',
             'items' => [
                 ['question_id' => $questionId, 'is_correct' => true],
             ],
@@ -184,7 +188,9 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertSame(WrittenSubmission::STATUS_GRADED, $submission->status);
         $this->assertSame(1, $submission->score);
         $this->assertSame(1, $submission->max_score);
-        $this->assertSame('Revise fractions.', $submission->ai_summary);
+        $this->assertSame('Revise fractions.', $submission->teacher_remarks);
+        $this->assertSame(WrittenSubmission::HANDWRITING_VERY_GOOD, $submission->handwriting_rating);
+        $this->assertSame('Very good', $submission->handwritingLabel());
         $this->assertTrue($submission->items->first()->is_correct);
         $this->assertSame(SetAssignment::STATUS_COMPLETED, $assignment->fresh()->status);
     }
@@ -213,6 +219,7 @@ class WrittenSubmissionGradingTest extends TestCase
         $q1Id = $assignment->practiceSet->questions->first()->id;
 
         $submission = app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
+            'handwriting_rating' => WrittenSubmission::HANDWRITING_OK,
             'items' => [
                 ['question_id' => $q1Id, 'is_correct' => true],
                 ['question_id' => $q2->id, 'is_correct' => false],
@@ -231,7 +238,8 @@ class WrittenSubmissionGradingTest extends TestCase
         $questionId = $assignment->practiceSet->questions()->first()->id;
 
         app(WrittenSubmissionService::class)->applyManualGrade($assignment, [
-            'feedback' => 'Neat work.',
+            'handwriting_rating' => WrittenSubmission::HANDWRITING_GOOD,
+            'remarks' => 'Neat work.',
             'items' => [
                 ['question_id' => $questionId, 'is_correct' => true],
             ],
@@ -243,7 +251,9 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertSame('C7-INT-ADD-P1-W', $summary['completed'][0]['set_code']);
         $this->assertSame(1, $summary['completed'][0]['latest_score']);
         $this->assertSame(1, $summary['completed'][0]['latest_max_score']);
-        $this->assertStringContainsString('Neat work.', $summary['completed'][0]['review_items'][0]['label']);
+        $labels = collect($summary['completed'][0]['review_items'])->pluck('label')->implode(' ');
+        $this->assertStringContainsString('Handwriting — Good', $labels);
+        $this->assertStringContainsString('Neat work.', $labels);
     }
 
     public function test_pdf_upload_is_converted_to_images_before_grading(): void
