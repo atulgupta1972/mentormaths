@@ -4,6 +4,7 @@ import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { formulaPreviewRowsToJson, parseFormulaImportPreview } from '@/utils/formulaImportPreview';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
@@ -21,8 +22,11 @@ const props = defineProps({
 const page = usePage();
 const copied = ref(false);
 const promptBox = ref(null);
+const previewRows = ref([]);
+const previewError = ref('');
 
 const cursorPromptText = computed(() => props.cursorPrompt || page.props.flash?.formula_bank_chapter_prompt || '');
+const unmatchedCount = computed(() => previewRows.value.filter((row) => row.topic && !row.topic_matched).length);
 
 const promptForm = useForm({
     total: props.promptDefaults?.total || 12,
@@ -77,12 +81,49 @@ const copyPrompt = async () => {
     }
 };
 
+const loadPreview = () => {
+    const result = parseFormulaImportPreview(importForm.json, props.topics);
+    previewError.value = result.error || '';
+    previewRows.value = result.rows;
+};
+
+const discardPreview = () => {
+    previewRows.value = [];
+    previewError.value = '';
+};
+
+const removePreviewRow = (index) => {
+    previewRows.value = previewRows.value.filter((_, i) => i !== index);
+};
+
+const setCorrectOption = (rowIndex, optionIndex) => {
+    const row = previewRows.value[rowIndex];
+    if (!row) {
+        return;
+    }
+    row.correct_index = optionIndex;
+};
+
 const submitImport = () => {
+    if (!previewRows.value.length) {
+        previewError.value = 'Preview formulas first, then save.';
+
+        return;
+    }
+
+    if (unmatchedCount.value > 0) {
+        previewError.value = `${unmatchedCount.value} card(s) have a topic name that does not match this chapter. Fix or remove them before saving.`;
+
+        return;
+    }
+
+    importForm.json = formulaPreviewRowsToJson(previewRows.value);
     importForm.post(route('admin.formula-bank.chapters.import', props.chapter.id), {
         preserveScroll: true,
         onSuccess: () => {
             importForm.reset('json');
             importForm.create_sets = true;
+            discardPreview();
         },
     });
 };
@@ -229,30 +270,100 @@ const submitImport = () => {
                 </div>
 
                 <div class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-5 shadow-sm">
-                    <h3 class="font-medium text-indigo-950">2. Paste / import JSON here</h3>
+                    <h3 class="font-medium text-indigo-950">2. Paste JSON → preview → save</h3>
                     <p class="mt-1 text-sm text-indigo-900">
-                        Paste the JSON from Cursor. Each question should include a <code class="rounded bg-white px-1">topic</code> name —
-                        cards are filed into the matching topics automatically.
+                        Paste Cursor JSON, click <strong>Preview formulas</strong>, verify each card, then save.
+                        Each question should include a <code class="rounded bg-white px-1">topic</code> name.
                     </p>
                     <label class="mt-3 flex items-center gap-2 text-sm text-gray-800">
                         <input v-model="importForm.create_sets" type="checkbox" class="rounded border-gray-300">
-                        Create a new formula set per topic and attach the cards
+                        Create a new formula set per topic when saving
                     </label>
                     <textarea
                         v-model="importForm.json"
-                        rows="14"
+                        rows="10"
                         class="mt-3 w-full rounded-md border-gray-300 font-mono text-xs"
                         placeholder='{"questions":[{"topic":"Introduction to Integers","question":"...","options":["A","B","C","D"],"correct_index":0}]}'
+                        @input="discardPreview"
                     />
                     <InputError :message="importForm.errors.json" class="mt-1" />
-                    <PrimaryButton
-                        type="button"
-                        class="mt-3"
-                        :disabled="importForm.processing || !importForm.json.trim()"
-                        @click="submitImport"
+                    <p v-if="previewError" class="mt-2 text-sm text-rose-700">{{ previewError }}</p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <SecondaryButton
+                            type="button"
+                            class="!py-1.5 !text-xs"
+                            :disabled="!importForm.json.trim()"
+                            @click="loadPreview"
+                        >
+                            Preview formulas
+                        </SecondaryButton>
+                        <PrimaryButton
+                            type="button"
+                            class="!py-1.5 !text-xs"
+                            :disabled="importForm.processing || !previewRows.length"
+                            @click="submitImport"
+                        >
+                            {{ importForm.processing ? 'Saving…' : `Save ${previewRows.length || ''} verified formula${previewRows.length === 1 ? '' : 's'}` }}
+                        </PrimaryButton>
+                        <SecondaryButton
+                            v-if="previewRows.length"
+                            type="button"
+                            class="!py-1.5 !text-xs"
+                            @click="discardPreview"
+                        >
+                            Discard preview
+                        </SecondaryButton>
+                    </div>
+                </div>
+
+                <div v-if="previewRows.length" class="space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h3 class="text-sm font-semibold uppercase tracking-wide text-indigo-800">
+                            Preview ({{ previewRows.length }}) — verify before saving
+                        </h3>
+                        <p v-if="unmatchedCount" class="text-xs font-medium text-rose-700">
+                            {{ unmatchedCount }} topic name(s) not found in this chapter
+                        </p>
+                    </div>
+                    <div
+                        v-for="(row, rowIndex) in previewRows"
+                        :key="row.key"
+                        class="rounded-lg bg-white p-4 shadow-sm ring-1"
+                        :class="row.topic && !row.topic_matched ? 'ring-rose-300' : 'ring-gray-200'"
                     >
-                        {{ importForm.processing ? 'Importing…' : 'Import formulas' }}
-                    </PrimaryButton>
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Card {{ rowIndex + 1 }}
+                                    <span v-if="row.topic" class="ml-2 normal-case text-indigo-700">· {{ row.topic }}</span>
+                                    <span v-if="row.topic && !row.topic_matched" class="ml-2 normal-case text-rose-700">· topic not found</span>
+                                </p>
+                                <p class="mt-1 font-medium text-gray-900">{{ row.question }}</p>
+                            </div>
+                            <button type="button" class="text-xs text-rose-600 hover:underline" @click="removePreviewRow(rowIndex)">
+                                Remove
+                            </button>
+                        </div>
+                        <ul class="mt-3 space-y-1.5 text-sm">
+                            <li
+                                v-for="(option, optionIndex) in row.options"
+                                :key="`${row.key}-${optionIndex}`"
+                            >
+                                <button
+                                    type="button"
+                                    class="w-full rounded-md px-3 py-1.5 text-left"
+                                    :class="row.correct_index === optionIndex
+                                        ? 'bg-emerald-50 font-medium text-emerald-900 ring-1 ring-emerald-200'
+                                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100'"
+                                    @click="setCorrectOption(rowIndex, optionIndex)"
+                                >
+                                    {{ String.fromCharCode(65 + optionIndex) }}. {{ option }}
+                                    <span v-if="row.correct_index === optionIndex" class="ml-1 text-xs">✓ correct</span>
+                                </button>
+                            </li>
+                        </ul>
+                        <p v-if="row.explanation" class="mt-2 text-xs text-gray-500">{{ row.explanation }}</p>
+                    </div>
                 </div>
 
                 <div class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
