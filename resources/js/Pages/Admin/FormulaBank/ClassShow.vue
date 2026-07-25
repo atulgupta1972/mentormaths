@@ -30,8 +30,11 @@ const switchBoard = (boardId) => {
                     <h2 class="text-xl font-semibold text-gray-800">{{ grade.name }} · {{ board.code }}</h2>
                     <p v-if="activeYear" class="text-sm text-gray-500">{{ activeYear.name }}</p>
                 </div>
-                <Link :href="route('admin.formula-bank.index', { board_id: board.id })" class="text-sm text-indigo-600 hover:underline">
-                    ← Matrix
+                <Link
+                    :href="route('admin.formula-bank.index', { board_id: board.id, grade_id: grade.id })"
+                    class="text-sm font-medium text-amber-800 hover:underline"
+                >
+                    ← Formula summary
                 </Link>
             </div>
         </template>

@@ -40,13 +40,22 @@ const submitImport = () => {
                         {{ set.grade?.name }} · {{ set.board?.code }} · {{ set.topic?.chapter_name }} · {{ set.topic?.name }}
                     </p>
                 </div>
-                <Link
-                    v-if="set.topic?.id"
-                    :href="route('admin.formula-bank.topics.show', set.topic.id)"
-                    class="text-sm text-indigo-600 hover:underline"
-                >
-                    ← Topic
-                </Link>
+                <div class="flex flex-wrap gap-3 text-sm">
+                    <Link
+                        v-if="set.grade?.id && set.board?.id"
+                        :href="route('admin.formula-bank.index', { board_id: set.board.id, grade_id: set.grade.id })"
+                        class="font-medium text-amber-800 hover:underline"
+                    >
+                        ← Formula summary
+                    </Link>
+                    <Link
+                        v-if="set.topic?.id"
+                        :href="route('admin.formula-bank.topics.show', set.topic.id)"
+                        class="text-gray-600 hover:underline"
+                    >
+                        Topic
+                    </Link>
+                </div>
             </div>
         </template>
 

@@ -158,16 +158,22 @@ const deleteCard = (card) => {
                 </div>
                 <div class="flex flex-wrap gap-3 text-sm">
                     <Link
-                        :href="route('admin.questions.chapters.show', chapter.id)"
-                        class="text-indigo-600 hover:underline"
+                        :href="route('admin.formula-bank.index', { board_id: board.id, grade_id: grade.id })"
+                        class="font-medium text-amber-800 hover:underline"
                     >
-                        ← Question bank chapter
+                        ← Formula summary
                     </Link>
                     <Link
                         :href="`${route('admin.formula-bank.classes.show', grade.id)}?board_id=${board.id}`"
                         class="text-gray-600 hover:underline"
                     >
-                        All chapters
+                        Class topics
+                    </Link>
+                    <Link
+                        :href="route('admin.questions.chapters.show', chapter.id)"
+                        class="text-gray-600 hover:underline"
+                    >
+                        Question bank
                     </Link>
                 </div>
             </div>

@@ -141,13 +141,22 @@ const packageUnpacked = () => {
                         {{ topic.grade?.name }} · {{ topic.board?.code }} · {{ topic.chapter?.name }}
                     </p>
                 </div>
-                <Link
-                    v-if="topic.chapter?.id"
-                    :href="route('admin.formula-bank.chapters.show', topic.chapter.id)"
-                    class="text-sm text-indigo-600 hover:underline"
-                >
-                    ← Chapter formulas
-                </Link>
+                <div class="flex flex-wrap gap-3 text-sm">
+                    <Link
+                        v-if="topic.grade?.id && topic.board?.id"
+                        :href="route('admin.formula-bank.index', { board_id: topic.board.id, grade_id: topic.grade.id })"
+                        class="font-medium text-amber-800 hover:underline"
+                    >
+                        ← Formula summary
+                    </Link>
+                    <Link
+                        v-if="topic.chapter?.id"
+                        :href="route('admin.formula-bank.chapters.show', topic.chapter.id)"
+                        class="text-gray-600 hover:underline"
+                    >
+                        Chapter formulas
+                    </Link>
+                </div>
             </div>
         </template>
 
