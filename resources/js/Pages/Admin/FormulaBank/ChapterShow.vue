@@ -189,59 +189,63 @@ const deleteCard = (card) => {
                 </div>
 
                 <div id="all-formulas" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
-                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
                         <div>
-                            <h3 class="font-semibold text-gray-900">All formula / concept cards</h3>
-                            <p class="text-xs text-gray-500">{{ cards.length }} cards · compact view · delete wrong / calculation ones</p>
+                            <h3 class="text-sm font-semibold text-gray-900">All formula / concept cards</h3>
+                            <p class="text-[11px] text-gray-500">{{ cards.length }} cards · delete wrong / calculation ones</p>
                         </div>
-                        <a href="#prompt-builder" class="text-xs font-medium text-amber-800 hover:underline">Add more ↓</a>
+                        <a href="#prompt-builder" class="text-[11px] font-medium text-amber-800 hover:underline">Add more ↓</a>
                     </div>
 
-                    <div v-if="!cards.length" class="px-4 py-6 text-sm text-gray-500">
+                    <div v-if="!cards.length" class="px-3 py-4 text-sm text-gray-500">
                         No cards yet — generate a Cursor prompt below, preview, then save.
                     </div>
 
                     <div v-else class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-100 text-sm">
-                            <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                        <table class="min-w-full text-xs leading-tight">
+                            <thead class="bg-gray-50 text-left text-[10px] uppercase tracking-wide text-gray-500">
                                 <tr>
-                                    <th class="px-3 py-2 w-10">#</th>
-                                    <th class="px-3 py-2">Topic</th>
-                                    <th class="px-3 py-2">Formula / concept</th>
-                                    <th class="px-3 py-2">Answer</th>
-                                    <th class="px-3 py-2 w-16"></th>
+                                    <th class="w-8 px-2 py-1">#</th>
+                                    <th class="px-2 py-1">Topic</th>
+                                    <th class="px-2 py-1">Formula / concept</th>
+                                    <th class="px-2 py-1">Answer</th>
+                                    <th class="w-12 px-2 py-1"></th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-50">
-                                <tr v-for="card in cards" :key="card.id" class="align-top hover:bg-amber-50/40">
-                                    <td class="px-3 py-2 text-xs text-gray-400">{{ card.number }}</td>
-                                    <td class="px-3 py-2 text-xs font-medium text-indigo-800 whitespace-nowrap">
+                            <tbody>
+                                <tr
+                                    v-for="card in cards"
+                                    :key="card.id"
+                                    class="border-t border-gray-100 hover:bg-amber-50/40"
+                                >
+                                    <td class="px-2 py-0.5 align-middle text-gray-400">{{ card.number }}</td>
+                                    <td class="max-w-[9rem] truncate px-2 py-0.5 align-middle font-medium text-indigo-800" :title="card.topic_name">
                                         {{ card.topic_name }}
                                     </td>
-                                    <td class="px-3 py-2 text-gray-900">
-                                        <p class="leading-snug">{{ card.question_text }}</p>
-                                        <p v-if="card.options?.length" class="mt-1 text-xs text-gray-500">
-                                            <span
-                                                v-for="(opt, i) in card.options"
-                                                :key="i"
-                                                class="mr-2"
-                                                :class="opt.is_correct ? 'font-semibold text-emerald-700' : ''"
-                                            >
-                                                {{ String.fromCharCode(65 + i) }}) {{ opt.text }}
-                                            </span>
-                                        </p>
+                                    <td class="px-2 py-0.5 align-middle text-gray-900">
+                                        <span class="line-clamp-1" :title="card.question_text">{{ card.question_text }}</span>
+                                        <span
+                                            v-if="card.options?.length"
+                                            class="mt-0.5 block truncate text-[10px] text-gray-500"
+                                            :title="card.options.map((opt, i) => `${String.fromCharCode(65 + i)}) ${opt.text}`).join(' · ')"
+                                        >
+                                            <template v-for="(opt, i) in card.options" :key="i">
+                                                <span :class="opt.is_correct ? 'font-semibold text-emerald-700' : ''">{{ String.fromCharCode(65 + i) }}) {{ opt.text }}</span>
+                                                <span v-if="i < card.options.length - 1"> · </span>
+                                            </template>
+                                        </span>
                                     </td>
-                                    <td class="px-3 py-2 text-xs font-semibold text-emerald-800 whitespace-nowrap">
+                                    <td class="max-w-[8rem] truncate px-2 py-0.5 align-middle font-semibold text-emerald-800" :title="card.correct_answer">
                                         {{ card.correct_answer || '—' }}
                                     </td>
-                                    <td class="px-3 py-2 text-right">
+                                    <td class="px-2 py-0.5 align-middle text-right">
                                         <button
                                             type="button"
-                                            class="text-xs font-medium text-rose-600 hover:underline"
+                                            class="text-[11px] font-medium text-rose-600 hover:underline"
                                             :disabled="deleteForm.processing"
                                             @click="deleteCard(card)"
                                         >
-                                            Delete
+                                            Del
                                         </button>
                                     </td>
                                 </tr>
