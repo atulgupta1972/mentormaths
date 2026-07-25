@@ -8,11 +8,14 @@ class QuestionBankPurpose
 
     public const CHAPTER_TEST = 'chapter_test';
 
+    public const FORMULA = 'formula';
+
     public static function all(): array
     {
         return [
             self::PRACTICE_SET,
             self::CHAPTER_TEST,
+            self::FORMULA,
         ];
     }
 
@@ -20,6 +23,7 @@ class QuestionBankPurpose
     {
         return match ($purpose) {
             self::CHAPTER_TEST => 'Chapter test',
+            self::FORMULA => 'Formula / concept',
             default => 'Practice set',
         };
     }
@@ -32,6 +36,11 @@ class QuestionBankPurpose
     public static function isPracticeSet(?string $purpose): bool
     {
         return $purpose === self::PRACTICE_SET;
+    }
+
+    public static function isFormula(?string $purpose): bool
+    {
+        return $purpose === self::FORMULA;
     }
 
     public static function normalize(?string $purpose): string

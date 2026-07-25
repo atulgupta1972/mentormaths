@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ClassAssignmentController;
 use App\Http\Controllers\Admin\ClassHubController;
 use App\Http\Controllers\Admin\ExamPlanController as AdminExamPlanController;
+use App\Http\Controllers\Admin\FormulaBankController;
 use App\Http\Controllers\Admin\GradeContextController;
 use App\Http\Controllers\Admin\GroupController;
 use App\Http\Controllers\Admin\PracticeSetController;
@@ -210,6 +211,15 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/written-sheets/{worksheet}/download', [WrittenSheetController::class, 'download'])->name('written-sheets.download');
     Route::post('/written-assignments/{assignment}/manual-grade', [WrittenSheetController::class, 'manualGrade'])->name('written-assignments.manual-grade');
     Route::post('/written-assignments/{assignment}/upload-revision', [WrittenSheetController::class, 'uploadRevision'])->name('written-assignments.upload-revision');
+
+    Route::get('/formula-bank', [FormulaBankController::class, 'index'])->name('formula-bank.index');
+    Route::get('/formula-bank/classes/{grade}', [FormulaBankController::class, 'classShow'])->name('formula-bank.classes.show');
+    Route::get('/formula-bank/topics/{topic}', [FormulaBankController::class, 'topicShow'])->name('formula-bank.topics.show');
+    Route::post('/formula-bank/topics/{topic}/sets', [FormulaBankController::class, 'storeSet'])->name('formula-bank.topics.sets.store');
+    Route::post('/formula-bank/topics/{topic}/import', [FormulaBankController::class, 'importToTopic'])->name('formula-bank.topics.import');
+    Route::post('/formula-bank/topics/{topic}/package', [FormulaBankController::class, 'packageTopic'])->name('formula-bank.topics.package');
+    Route::get('/formula-bank/sets/{worksheet}', [FormulaBankController::class, 'setShow'])->name('formula-bank.sets.show');
+    Route::post('/formula-bank/sets/{worksheet}/import', [FormulaBankController::class, 'importToSet'])->name('formula-bank.sets.import');
 
     Route::post('/practice-sets/{worksheet}/assign', [SetAssignmentController::class, 'store'])->name('practice-sets.assign');
     Route::post('/practice-sets/{worksheet}/assign-bulk', [SetAssignmentController::class, 'storeBulk'])->name('practice-sets.assign-bulk');

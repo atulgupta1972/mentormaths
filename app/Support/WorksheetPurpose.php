@@ -8,11 +8,14 @@ class WorksheetPurpose
 
     public const CATCH_UP = 'catch_up';
 
+    public const FORMULA = 'formula';
+
     public static function all(): array
     {
         return [
             self::STANDARD,
             self::CATCH_UP,
+            self::FORMULA,
         ];
     }
 
@@ -20,6 +23,7 @@ class WorksheetPurpose
     {
         return match ($purpose) {
             self::CATCH_UP => 'Catch-up',
+            self::FORMULA => 'Formula / concept',
             default => 'Practice',
         };
     }

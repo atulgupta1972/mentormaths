@@ -85,6 +85,11 @@ class Worksheet extends Model
         return ($this->purpose ?? WorksheetPurpose::STANDARD) === WorksheetPurpose::CATCH_UP;
     }
 
+    public function isFormula(): bool
+    {
+        return ($this->purpose ?? WorksheetPurpose::STANDARD) === WorksheetPurpose::FORMULA;
+    }
+
     public function isWritten(): bool
     {
         return ($this->delivery_mode ?? WorksheetDeliveryMode::ONLINE) === WorksheetDeliveryMode::WRITTEN;
@@ -164,6 +169,11 @@ class Worksheet extends Model
         if ($this->isCatchUp()) {
             return ($this->set_code ? $this->set_code.' · ' : '')
                 ."Catch-up · {$count} sums";
+        }
+
+        if ($this->isFormula()) {
+            return ($this->set_code ? $this->set_code.' · ' : '')
+                ."Formula set {$this->set_number} · {$count} cards";
         }
 
         $scopeLabel = $this->isChapterScope() ? 'Chapter test' : $this->tier_label;

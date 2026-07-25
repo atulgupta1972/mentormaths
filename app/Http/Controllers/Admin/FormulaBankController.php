@@ -1,0 +1,184 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\AcademicYear;
+use App\Models\Board;
+use App\Models\GradeLevel;
+use App\Models\SyllabusTopic;
+use App\Models\Worksheet;
+use App\Services\FormulaBankService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class FormulaBankController extends Controller
+{
+    public function __construct(private FormulaBankService $formulaBank) {}
+
+    public function index(Request $request): Response
+    {
+        $boards = Board::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'code', 'name']);
+
+        $boardId = $request->integer('board_id') ?: $boards->first()?->id;
+        $board = $boardId ? $boards->firstWhere('id', $boardId) : null;
+        $year = AcademicYear::active();
+
+        return Inertia::render('Admin/FormulaBank/Index', [
+            'boards' => $boards,
+            'selectedBoardId' => $board?->id,
+            'activeYear' => $year?->only(['id', 'name']),
+            'matrix' => $board ? $this->formulaBank->matrixForBoard($board, $year) : null,
+        ]);
+    }
+
+    public function classShow(Request $request, GradeLevel $grade): Response
+    {
+        $boards = Board::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']);
+        $boardId = $request->integer('board_id') ?: $boards->first()?->id;
+        $board = $boards->firstWhere('id', $boardId);
+        abort_unless($board, 404);
+
+        return Inertia::render('Admin/FormulaBank/ClassShow', [
+            'grade' => $grade->only(['id', 'name', 'sort_order']),
+            'board' => $board->only(['id', 'code', 'name']),
+            'boards' => $boards,
+            'activeYear' => AcademicYear::active()?->only(['id', 'name']),
+            'chapters' => $this->formulaBank->chaptersForClass($grade, $board),
+        ]);
+    }
+
+    public function topicShow(SyllabusTopic $topic): Response
+    {
+        return Inertia::render('Admin/FormulaBank/TopicShow', [
+            'topic' => $this->formulaBank->topicDetail($topic),
+            'sampleJson' => $this->sampleJson(),
+        ]);
+    }
+
+    public function setShow(Worksheet $worksheet): Response
+    {
+        abort_unless($worksheet->isFormula(), 404);
+
+        return Inertia::render('Admin/FormulaBank/SetShow', [
+            'set' => $this->formulaBank->setDetail($worksheet),
+            'sampleJson' => $this->sampleJson(),
+        ]);
+    }
+
+    public function storeSet(Request $request, SyllabusTopic $topic): RedirectResponse
+    {
+        $validated = $request->validate([
+            'title' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $set = $this->formulaBank->createSet($topic, $request->user(), $validated['title'] ?? null);
+
+        return redirect()
+            ->route('admin.formula-bank.sets.show', $set)
+            ->with('success', 'Formula set '.$set->set_number.' created. Add formula / concept MCQs next.');
+    }
+
+    public function importToTopic(Request $request, SyllabusTopic $topic): RedirectResponse
+    {
+        $validated = $request->validate([
+            'json' => ['required', 'string'],
+            'create_set' => ['nullable', 'boolean'],
+            'worksheet_id' => ['nullable', 'integer', 'exists:worksheets,id'],
+        ]);
+
+        $set = null;
+        if (! empty($validated['worksheet_id'])) {
+            $set = Worksheet::query()->findOrFail($validated['worksheet_id']);
+        } elseif ($request->boolean('create_set')) {
+            $set = $this->formulaBank->createSet($topic, $request->user());
+        }
+
+        try {
+            $result = $this->formulaBank->importJson(
+                $topic,
+                $validated['json'],
+                $request->user(),
+                $set,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $message = "Imported {$result['created']} formula / concept cards.";
+        if ($result['set']) {
+            return redirect()
+                ->route('admin.formula-bank.sets.show', $result['set'])
+                ->with('success', $message.' Attached to '.$result['set']->set_code.'.');
+        }
+
+        return back()->with('success', $message.' Package them into a set when ready.');
+    }
+
+    public function importToSet(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        abort_unless($worksheet->isFormula(), 404);
+        $worksheet->loadMissing('topic');
+        abort_unless($worksheet->topic, 404);
+
+        $validated = $request->validate([
+            'json' => ['required', 'string'],
+        ]);
+
+        try {
+            $result = $this->formulaBank->importJson(
+                $worksheet->topic,
+                $validated['json'],
+                $request->user(),
+                $worksheet,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Imported {$result['created']} formula / concept cards into this set.");
+    }
+
+    public function packageTopic(Request $request, SyllabusTopic $topic): RedirectResponse
+    {
+        try {
+            $set = $this->formulaBank->packageUnpacked($topic, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.formula-bank.sets.show', $set)
+            ->with('success', 'Packaged unpacked cards into '.$set->set_code.'.');
+    }
+
+    private function sampleJson(): string
+    {
+        return json_encode([
+            'questions' => [
+                [
+                    'question' => 'Which identity is correct for (a + b)²?',
+                    'options' => [
+                        'a² + b²',
+                        'a² + 2ab + b²',
+                        'a² − 2ab + b²',
+                        '(a + b)(a − b)',
+                    ],
+                    'correct_index' => 1,
+                    'explanation' => '(a + b)² = a² + 2ab + b²',
+                ],
+                [
+                    'question' => 'Area of a rectangle with length l and breadth b is:',
+                    'options' => ['2(l + b)', 'l × b', 'l + b', 'πl²'],
+                    'correct_index' => 1,
+                    'explanation' => 'Area = length × breadth',
+                ],
+            ],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    }
+}
