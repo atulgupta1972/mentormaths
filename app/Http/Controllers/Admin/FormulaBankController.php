@@ -6,9 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
+use App\Models\Question;
+use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\Worksheet;
 use App\Services\FormulaBankService;
+use App\Support\PracticeSetScope;
+use App\Support\QuestionBankPurpose;
+use App\Support\WorksheetPurpose;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -50,6 +55,48 @@ class FormulaBankController extends Controller
             'boards' => $boards,
             'activeYear' => AcademicYear::active()?->only(['id', 'name']),
             'chapters' => $this->formulaBank->chaptersForClass($grade, $board),
+        ]);
+    }
+
+    public function chapterShow(SyllabusChapter $chapter): Response
+    {
+        $chapter->load([
+            'syllabusVersion.gradeLevel',
+            'syllabusVersion.board',
+            'topics' => fn ($q) => $q->orderBy('sort_order'),
+        ]);
+
+        $grade = $chapter->syllabusVersion?->gradeLevel;
+        $board = $chapter->syllabusVersion?->board;
+        abort_unless($grade && $board, 404);
+
+        $topics = $chapter->topics->map(function (SyllabusTopic $topic) {
+            return [
+                'id' => $topic->id,
+                'name' => $topic->name,
+                'formulas_count' => Question::query()
+                    ->where('syllabus_topic_id', $topic->id)
+                    ->where('bank_purpose', QuestionBankPurpose::FORMULA)
+                    ->count(),
+                'sets_count' => Worksheet::query()
+                    ->where('purpose', WorksheetPurpose::FORMULA)
+                    ->where('scope', PracticeSetScope::TOPIC)
+                    ->where('syllabus_topic_id', $topic->id)
+                    ->count(),
+            ];
+        })->values()->all();
+
+        return Inertia::render('Admin/FormulaBank/ChapterShow', [
+            'chapter' => [
+                'id' => $chapter->id,
+                'name' => $chapter->name,
+                'chapter_number' => $chapter->chapter_number,
+            ],
+            'grade' => $grade->only(['id', 'name', 'sort_order']),
+            'board' => $board->only(['id', 'code', 'name']),
+            'topics' => $topics,
+            'formulas_count' => collect($topics)->sum('formulas_count'),
+            'sets_count' => collect($topics)->sum('sets_count'),
         ]);
     }
 

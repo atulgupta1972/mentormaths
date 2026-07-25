@@ -23,8 +23,8 @@ const classHref = (gradeId) =>
     `${route('admin.formula-bank.classes.show', gradeId)}?board_id=${props.selectedBoardId}`;
 
 const cellHref = (cell, gradeId) => {
-    if (!cell?.chapter_id) {
-        return classHref(gradeId);
+    if (cell?.chapter_id) {
+        return route('admin.formula-bank.chapters.show', cell.chapter_id);
     }
 
     return classHref(gradeId);

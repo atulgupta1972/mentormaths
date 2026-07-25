@@ -22,6 +22,7 @@ use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetDeliveryMode;
+use App\Support\WorksheetPurpose;
 use App\Support\WrittenSheetStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -220,11 +221,44 @@ class QuestionHubController extends Controller
         $topicModels = $chapter->topics()
             ->withCount('questions')
             ->with(['practiceSets' => fn ($q) => $q
+                ->where(function (Builder $inner) {
+                    $inner->whereNull('purpose')
+                        ->orWhere('purpose', WorksheetPurpose::STANDARD);
+                })
+                ->where(function (Builder $inner) {
+                    $inner->whereNull('delivery_mode')
+                        ->orWhere('delivery_mode', WorksheetDeliveryMode::ONLINE);
+                })
                 ->when($browseOnly, fn ($inner) => $inner->where('status', Worksheet::STATUS_PUBLISHED))
                 ->withCount('questions')
                 ->orderBy('set_number')])
             ->orderBy('sort_order')
             ->get();
+
+        $formulaSets = Worksheet::query()
+            ->where('purpose', WorksheetPurpose::FORMULA)
+            ->where('scope', PracticeSetScope::TOPIC)
+            ->whereHas('topic', fn (Builder $q) => $q->where('syllabus_chapter_id', $chapter->id))
+            ->with('topic:id,name')
+            ->withCount('questions')
+            ->orderBy('set_number')
+            ->get()
+            ->map(fn (Worksheet $set) => [
+                'id' => $set->id,
+                'set_code' => $set->set_code,
+                'set_number' => $set->set_number,
+                'topic_id' => $set->syllabus_topic_id,
+                'topic_name' => $set->topic?->name,
+                'questions_count' => $set->questions_count,
+                'status' => $set->status,
+            ])
+            ->values()
+            ->all();
+
+        $formulasCount = Question::query()
+            ->whereHas('topic', fn (Builder $q) => $q->where('syllabus_chapter_id', $chapter->id))
+            ->where('bank_purpose', QuestionBankPurpose::FORMULA)
+            ->count();
 
         $setCards = collect();
 
@@ -358,12 +392,15 @@ class QuestionHubController extends Controller
             'setCards' => $setCards->values()->all(),
             'chapterTests' => $chapterTests->values()->all(),
             'writtenSheets' => $writtenSheets,
+            'formulaSets' => $formulaSets,
             'stats' => [
                 'topics_count' => $topicModels->count(),
                 'questions_count' => $topicModels->sum('questions_count'),
                 'sets_count' => $setCards->where('type', 'set')->count(),
                 'chapter_tests_count' => $chapterTests->count(),
                 'written_sheets_count' => count($writtenSheets),
+                'formulas_count' => $formulasCount,
+                'formula_sets_count' => count($formulaSets),
             ],
         ]);
     }

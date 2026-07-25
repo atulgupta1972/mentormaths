@@ -14,12 +14,14 @@ const props = defineProps({
     setCards: Array,
     chapterTests: Array,
     writtenSheets: { type: Array, default: () => [] },
+    formulaSets: { type: Array, default: () => [] },
     stats: Object,
     board: Object,
 });
 
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 const classListUrl = computed(() => questionHubClassUrl(props.gradeLevel?.id, props.board?.id));
+const formulaBankHref = computed(() => route('admin.formula-bank.chapters.show', props.chapter.id));
 const page = usePage();
 const showSaveModal = ref(Boolean(page.props.flash?.save_confirmation));
 const saveConfirmation = computed(() => page.props.flash?.save_confirmation ?? null);
@@ -119,7 +121,7 @@ const clearBank = (card) => {
                     {{ boardCode }} {{ gradeLevel?.name }} · Ch {{ chapter.chapter_number }} · {{ chapter.name }}
                 </p>
                 <h2 class="text-xl font-semibold text-gray-800">Practice sets & chapter tests</h2>
-                <p class="mt-1 text-xs text-gray-500">S821 = MCQ practice · SF821 = fill-in-blank · T821 = chapter test · S821-W = written homework</p>
+                <p class="mt-1 text-xs text-gray-500">S821 = MCQ practice · SF821 = fill-in-blank · T821 = chapter test · S821-W = written · F711 = formula / concept</p>
             </div>
             <div class="flex flex-wrap gap-2">
                 <Link
@@ -157,6 +159,13 @@ const clearBank = (card) => {
                 >
                     Written sheet
                 </Link>
+                <Link
+                    v-if="isAdmin"
+                    :href="formulaBankHref"
+                    class="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-950 hover:bg-amber-100"
+                >
+                    Add formulas
+                </Link>
             </div>
             </div>
         </template>
@@ -176,7 +185,7 @@ const clearBank = (card) => {
                 >
                     {{ usePage().props.flash.error }}
                 </div>
-                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-sky-600">{{ stats.chapter_tests_count || 0 }}</p>
                         <p class="text-xs text-gray-500">Chapter tests</p>
@@ -184,6 +193,10 @@ const clearBank = (card) => {
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-violet-600">{{ stats.written_sheets_count || 0 }}</p>
                         <p class="text-xs text-gray-500">Written sheets</p>
+                    </div>
+                    <div class="rounded-lg bg-white p-4 text-center shadow-sm">
+                        <p class="text-2xl font-bold text-amber-700">{{ stats.formulas_count || 0 }}</p>
+                        <p class="text-xs text-gray-500">Formula cards</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ topicSetCards.length + chapterPracticeBankCards.length + chapterBankCards.length }}</p>
@@ -197,6 +210,36 @@ const clearBank = (card) => {
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.sets_count }}</p>
                         <p class="text-xs text-gray-500">Packaged sets</p>
                     </div>
+                </div>
+
+                <div v-if="formulaSets?.length" class="space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h3 class="text-sm font-semibold uppercase tracking-wide text-amber-800">Formula / concept sets</h3>
+                        <Link
+                            v-if="isAdmin"
+                            :href="formulaBankHref"
+                            class="text-xs font-medium text-amber-800 hover:underline"
+                        >
+                            Add more formulas
+                        </Link>
+                    </div>
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <Link
+                            v-for="set in formulaSets"
+                            :key="`formula-${set.id}`"
+                            :href="route('admin.formula-bank.sets.show', set.id)"
+                            class="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm transition hover:border-amber-500"
+                        >
+                            <p class="font-mono text-3xl font-bold tracking-wide text-amber-900">{{ set.set_code }}</p>
+                            <p class="mt-2 text-sm font-semibold text-gray-900">Formula set {{ set.set_number }}</p>
+                            <p v-if="set.topic_name" class="mt-1 text-xs text-gray-700">{{ set.topic_name }}</p>
+                            <p class="mt-2 text-sm text-gray-800">{{ set.questions_count }} cards</p>
+                        </Link>
+                    </div>
+                </div>
+                <div v-else-if="isAdmin" class="rounded-lg border border-dashed border-amber-300 bg-amber-50/40 p-4 text-sm text-amber-950">
+                    No formula / concept sets in this chapter yet.
+                    <Link :href="formulaBankHref" class="ml-1 font-medium text-amber-900 underline">Add formulas</Link>
                 </div>
 
                 <div v-if="writtenSheets?.length" class="space-y-3">

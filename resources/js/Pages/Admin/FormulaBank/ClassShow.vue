@@ -74,7 +74,7 @@ const switchBoard = (boardId) => {
                         </div>
                     </div>
 
-                    <div class="mt-4 divide-y divide-gray-100 rounded-md border border-gray-100">
+                <div class="divide-y divide-gray-100 rounded-md border border-gray-100">
                         <Link
                             v-for="topic in chapter.topics"
                             :key="topic.id"
@@ -85,6 +85,14 @@ const switchBoard = (boardId) => {
                             <span class="shrink-0 text-xs text-gray-500">
                                 {{ topic.formulas_count }} cards · {{ topic.sets_count }} sets
                             </span>
+                        </Link>
+                    </div>
+                    <div class="mt-3">
+                        <Link
+                            :href="route('admin.formula-bank.chapters.show', chapter.id)"
+                            class="text-xs font-medium text-indigo-600 hover:underline"
+                        >
+                            Open chapter formula bank →
                         </Link>
                     </div>
                 </div>

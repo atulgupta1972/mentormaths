@@ -68,6 +68,20 @@ class FormulaBankTest extends TestCase
             ->assertOk();
     }
 
+    public function test_add_formulas_chapter_page_loads_from_question_hub(): void
+    {
+        $this->withoutVite();
+        [$admin, $topic] = $this->seedTopic();
+        $chapter = $topic->chapter;
+
+        $this->actingAs($admin)
+            ->get(route('admin.formula-bank.chapters.show', $chapter))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/FormulaBank/ChapterShow')
+                ->has('topics', 1));
+    }
+
     /**
      * @return array{0: User, 1: SyllabusTopic}
      */
