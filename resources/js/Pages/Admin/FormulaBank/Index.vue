@@ -24,7 +24,9 @@ const classHref = (gradeId) =>
 
 const cellHref = (cell, gradeId) => {
     if (cell?.chapter_id) {
-        return route('admin.formula-bank.chapters.show', cell.chapter_id);
+        const base = route('admin.formula-bank.chapters.show', cell.chapter_id);
+
+        return cell.formulas_count > 0 ? `${base}#all-formulas` : base;
     }
 
     return classHref(gradeId);
@@ -104,7 +106,7 @@ const totalFormulas = computed(() => {
                         <h3 class="font-semibold text-gray-900">
                             {{ matrix.board?.code }} · Class × chapter
                         </h3>
-                        <p class="text-xs text-gray-500">Numbers = formula / concept cards. Click a class header to open topics and add sets.</p>
+                        <p class="text-xs text-gray-500">Numbers = formula / concept cards. Click a green count to view all cards in that chapter.</p>
                     </div>
 
                     <div v-if="!matrix.rows?.length" class="p-6 text-sm text-gray-600">

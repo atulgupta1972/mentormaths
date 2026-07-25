@@ -169,7 +169,7 @@ const packageUnpacked = () => {
                 <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
                     <h3 class="font-medium text-amber-950">1. Generate Cursor prompt</h3>
                     <p class="mt-1 text-sm text-amber-900">
-                        Describe which formulas / concepts you want as MCQs, then copy the prompt into Cursor chat.
+                        Describe which formulas / concepts / True-False you want. Prompt forbids calculation sums.
                     </p>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2">
@@ -187,10 +187,10 @@ const packageUnpacked = () => {
                         <div>
                             <InputLabel value="Card style" class="!text-xs" />
                             <select v-model="promptForm.style" class="mt-1 w-full rounded-md border-gray-300 text-sm">
-                                <option value="mixed">Mixed formulas + concepts</option>
-                                <option value="formula_recall">Mostly formula recall</option>
-                                <option value="concept">Mostly concepts / definitions</option>
-                                <option value="identify">Mostly “which formula?”</option>
+                                <option value="mixed">Formulas + concepts + True/False</option>
+                                <option value="formula_recall">Formulas / identities only</option>
+                                <option value="concept">Concepts / definitions only</option>
+                                <option value="true_false">True / False only</option>
                             </select>
                         </div>
                     </div>

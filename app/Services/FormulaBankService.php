@@ -486,6 +486,64 @@ class FormulaBankService
     }
 
     /**
+     * All formula / concept cards in a chapter (for compact review).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function chapterCards(SyllabusChapter $chapter): array
+    {
+        $topicIds = $chapter->topics()->pluck('id');
+
+        if ($topicIds->isEmpty()) {
+            return [];
+        }
+
+        return Question::query()
+            ->whereIn('syllabus_topic_id', $topicIds)
+            ->where('bank_purpose', QuestionBankPurpose::FORMULA)
+            ->with(['options', 'topic:id,name'])
+            ->orderBy('syllabus_topic_id')
+            ->orderBy('id')
+            ->get()
+            ->map(function (Question $question, int $index) {
+                $correct = $question->options->firstWhere('is_correct', true);
+
+                return [
+                    'id' => $question->id,
+                    'number' => $index + 1,
+                    'topic_id' => $question->syllabus_topic_id,
+                    'topic_name' => $question->topic?->name,
+                    'question_text' => $question->question_text,
+                    'correct_answer' => $correct?->option_text,
+                    'options' => $question->options
+                        ->sortBy('sort_order')
+                        ->values()
+                        ->map(fn ($opt) => [
+                            'text' => $opt->option_text,
+                            'is_correct' => (bool) $opt->is_correct,
+                        ])
+                        ->all(),
+                    'explanation' => $question->explanation,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    public function deleteCard(Question $question): void
+    {
+        if ($question->bank_purpose !== QuestionBankPurpose::FORMULA) {
+            throw new InvalidArgumentException('Only formula / concept cards can be deleted here.');
+        }
+
+        DB::transaction(function () use ($question) {
+            $question->worksheets()->detach();
+            $question->options()->delete();
+            $question->delete();
+        });
+    }
+
+    /**
      * Cursor prompt for formula / concept revision MCQs on one topic.
      *
      * @param  array{total?: int, focus?: string, style?: string}  $options
@@ -503,10 +561,10 @@ class FormulaBankService
         $style = trim((string) ($options['style'] ?? 'mixed'));
 
         $styleGuide = match ($style) {
-            'formula_recall' => 'Mostly formula-recall cards: show a situation or ask "which formula…" / complete the identity.',
-            'concept' => 'Mostly concept cards: definitions, properties, when to use a rule, true/false style as MCQ.',
-            'identify' => 'Mostly identify / match cards: given an expression or figure description, pick the correct formula or concept name.',
-            default => 'Mix of formula recall, concept checks, and “which formula applies” MCQs.',
+            'formula_recall' => 'Only formula / identity recall (complete the formula, pick the correct formula).',
+            'concept' => 'Only concept / definition / property cards.',
+            'true_false' => 'Only True/False style cards (options must be True and False, plus two short distractors OR just True/False with two extra wrong statements as options — prefer options: True, False, and two clear false statements if 4 options required). Better: use exactly 2 options ["True","False"] if allowed; otherwise 4 options with one correct True/False wording.',
+            default => 'Mix of formula recall, concept cards, and True/False — NO calculation sums.',
         };
 
         $focusBlock = $focus !== ''
@@ -516,23 +574,30 @@ class FormulaBankService
         $context = $this->topicContext($topic);
 
         return <<<PROMPT
-Create FORMULA / CONCEPT revision MCQs for 5-minute daily drill. Return ONLY valid JSON (no markdown fences).
+Create FORMULA / CONCEPT revision cards for 5-minute daily drill. Return ONLY valid JSON (no markdown fences).
 
-These are NOT calculation practice sums. Students pick the correct formula, identity, definition, or concept.
+STRICT — do NOT create calculation / word-problem / “find the value” questions.
+Allowed ONLY:
+1) Formula / identity recall (which formula is correct, complete the formula)
+2) Concept / definition / property
+3) True / False about a formula or concept
+
+Students must NOT need to compute a numeric answer.
 
 Context:
 {$context}
 
 Requirements:
-- Exactly {$total} MCQ cards
+- Exactly {$total} cards
 - {$styleGuide}
 - Class-appropriate CBSE/ICSE language
-- 4 options each, exactly one correct answer
-- Prefer short stems (one line when possible) so students can revise quickly
-- Wrong options should be common mix-ups (sign errors, wrong identity, confusing area/perimeter, etc.)
-- Include "explanation": one-line reminder of the correct formula/concept for the teacher
+- Prefer 4 options with exactly one correct answer (for True/False you may use options like ["True", "False", "Sometimes", "Never"] with one correct)
+- Short stems (one line)
+- Wrong options = common formula/concept mix-ups
+- Include "explanation": one-line correct formula/concept
 - Set "difficulty" to Easy, Medium, or Hard
 - Do NOT invent off-syllabus formulas
+- Ban examples of what NOT to write: "Evaluate (−3)×(−4)", "Find 15 + (−8)", "Simplify …", any sum that needs working
 
 {$focusBlock}
 
@@ -540,10 +605,17 @@ JSON format:
 {
   "questions": [
     {
-      "question": "Which identity equals (a + b)²?",
-      "options": ["a² + b²", "a² + 2ab + b²", "a² − 2ab + b²", "(a + b)(a − b)"],
+      "question": "(a + b)² equals:",
+      "options": ["a² + b²", "a² + 2ab + b²", "a² − 2ab + b²", "2(a + b)"],
       "correct_index": 1,
       "explanation": "(a + b)² = a² + 2ab + b²",
+      "difficulty": "Easy"
+    },
+    {
+      "question": "True or False: The product of two negative integers is positive.",
+      "options": ["True", "False", "Only if both are even", "Only if both are odd"],
+      "correct_index": 0,
+      "explanation": "Negative × negative = positive.",
       "difficulty": "Easy"
     }
   ]
@@ -581,10 +653,10 @@ PROMPT;
 
         $topicLines = $topics->map(fn (SyllabusTopic $t) => '- '.$t->name)->implode("\n");
         $styleGuide = match ($style) {
-            'formula_recall' => 'Mostly formula-recall cards.',
-            'concept' => 'Mostly concept / definition cards.',
-            'identify' => 'Mostly identify-which-formula cards.',
-            default => 'Mix of formula recall, concepts, and identify-which-formula MCQs.',
+            'formula_recall' => 'Only formula / identity recall.',
+            'concept' => 'Only concept / definition / property cards.',
+            'true_false' => 'Only True/False about formulas or concepts.',
+            default => 'Mix of formula recall, concepts, and True/False — NO calculation sums.',
         };
 
         $focusBlock = $focus !== ''
@@ -601,23 +673,29 @@ PROMPT;
         ])->filter()->implode("\n");
 
         return <<<PROMPT
-Create FORMULA / CONCEPT revision MCQs for 5-minute daily drill. Return ONLY valid JSON (no markdown fences).
+Create FORMULA / CONCEPT revision cards for 5-minute daily drill. Return ONLY valid JSON (no markdown fences).
 
-These are NOT calculation practice sums. Students pick the correct formula, identity, definition, or concept.
+STRICT — do NOT create calculation / word-problem / “find the value” questions.
+Allowed ONLY:
+1) Formula / identity recall
+2) Concept / definition / property
+3) True / False about a formula or concept
+
+Students must NOT need to compute a numeric answer.
 
 Context:
 {$context}
 
 Requirements:
-- Exactly {$total} MCQ cards total across the topics listed
-- Each question MUST include "topic" set to the exact topic name from the list above
+- Exactly {$total} cards total across the topics listed
+- Each card MUST include "topic" set to the exact topic name from the list above
 - {$styleGuide}
 - Class-appropriate CBSE/ICSE language
 - 4 options each, exactly one correct answer
 - Short stems for quick revision
-- Wrong options = common mix-ups
 - Include "explanation": one-line formula/concept reminder
 - Set "difficulty" to Easy, Medium, or Hard
+- Ban: Evaluate / Find / Simplify / Calculate / any numeric working
 
 {$focusBlock}
 
@@ -626,10 +704,18 @@ JSON format:
   "questions": [
     {
       "topic": "Exact topic name from list",
-      "question": "Area of a rectangle with length l and breadth b is:",
+      "question": "Area of a rectangle is:",
       "options": ["2(l + b)", "l × b", "l + b", "πr²"],
       "correct_index": 1,
       "explanation": "Area of rectangle = l × b",
+      "difficulty": "Easy"
+    },
+    {
+      "topic": "Exact topic name from list",
+      "question": "True or False: Perimeter of a square is 4 × side.",
+      "options": ["True", "False", "Only for unit square", "Only for rectangles"],
+      "correct_index": 0,
+      "explanation": "Perimeter of square = 4 × side.",
       "difficulty": "Easy"
     }
   ]

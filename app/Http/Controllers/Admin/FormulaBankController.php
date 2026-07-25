@@ -97,6 +97,7 @@ class FormulaBankController extends Controller
             'topics' => $topics,
             'formulas_count' => collect($topics)->sum('formulas_count'),
             'sets_count' => collect($topics)->sum('sets_count'),
+            'cards' => $this->formulaBank->chapterCards($chapter),
             'cursorPrompt' => session('formula_bank_chapter_prompt'),
             'promptDefaults' => [
                 'total' => (int) session('formula_bank_chapter_prompt_total', 12),
@@ -149,7 +150,7 @@ class FormulaBankController extends Controller
         $validated = $request->validate([
             'total' => ['required', 'integer', 'min:1', 'max:40'],
             'focus' => ['nullable', 'string', 'max:4000'],
-            'style' => ['nullable', 'string', 'in:mixed,formula_recall,concept,identify'],
+            'style' => ['nullable', 'string', 'in:mixed,formula_recall,concept,true_false'],
         ]);
 
         $prompt = $this->formulaBank->cursorPromptForTopic($topic, [
@@ -172,7 +173,7 @@ class FormulaBankController extends Controller
         $validated = $request->validate([
             'total' => ['required', 'integer', 'min:1', 'max:60'],
             'focus' => ['nullable', 'string', 'max:4000'],
-            'style' => ['nullable', 'string', 'in:mixed,formula_recall,concept,identify'],
+            'style' => ['nullable', 'string', 'in:mixed,formula_recall,concept,true_false'],
             'topic_ids' => ['nullable', 'array'],
             'topic_ids.*' => ['integer', 'exists:syllabus_topics,id'],
         ]);
@@ -196,6 +197,17 @@ class FormulaBankController extends Controller
             'formula_bank_chapter_prompt_style' => $validated['style'] ?? 'mixed',
             'formula_bank_chapter_prompt_topic_ids' => $validated['topic_ids'] ?? [],
         ]);
+    }
+
+    public function destroyCard(Question $question): RedirectResponse
+    {
+        try {
+            $this->formulaBank->deleteCard($question);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Formula / concept card deleted.');
     }
 
     public function importToChapter(Request $request, SyllabusChapter $chapter): RedirectResponse

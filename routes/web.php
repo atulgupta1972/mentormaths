@@ -222,6 +222,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/formula-bank/chapters/{chapter}', [FormulaBankController::class, 'chapterShow'])->name('formula-bank.chapters.show');
     Route::post('/formula-bank/chapters/{chapter}/prompt', [FormulaBankController::class, 'chapterPrompt'])->name('formula-bank.chapters.prompt');
     Route::post('/formula-bank/chapters/{chapter}/import', [FormulaBankController::class, 'importToChapter'])->name('formula-bank.chapters.import');
+    Route::delete('/formula-bank/cards/{question}', [FormulaBankController::class, 'destroyCard'])->name('formula-bank.cards.destroy');
     Route::get('/formula-bank/sets/{worksheet}', [FormulaBankController::class, 'setShow'])->name('formula-bank.sets.show');
     Route::post('/formula-bank/sets/{worksheet}/import', [FormulaBankController::class, 'importToSet'])->name('formula-bank.sets.import');
 

@@ -15,6 +15,7 @@ const props = defineProps({
     topics: { type: Array, default: () => [] },
     formulas_count: { type: Number, default: 0 },
     sets_count: { type: Number, default: 0 },
+    cards: { type: Array, default: () => [] },
     cursorPrompt: { type: String, default: null },
     promptDefaults: { type: Object, default: () => ({}) },
 });
@@ -24,6 +25,7 @@ const copied = ref(false);
 const promptBox = ref(null);
 const previewRows = ref([]);
 const previewError = ref('');
+const deleteForm = useForm({});
 
 const cursorPromptText = computed(() => props.cursorPrompt || page.props.flash?.formula_bank_chapter_prompt || '');
 const unmatchedCount = computed(() => previewRows.value.filter((row) => row.topic && !row.topic_matched).length);
@@ -127,6 +129,16 @@ const submitImport = () => {
         },
     });
 };
+
+const deleteCard = (card) => {
+    if (!confirm(`Delete this card?\n\n${card.question_text}`)) {
+        return;
+    }
+
+    deleteForm.delete(route('admin.formula-bank.cards.destroy', card.id), {
+        preserveScroll: true,
+    });
+};
 </script>
 
 <template>
@@ -176,10 +188,72 @@ const submitImport = () => {
                     {{ page.props.flash.error }}
                 </div>
 
-                <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
+                <div id="all-formulas" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+                        <div>
+                            <h3 class="font-semibold text-gray-900">All formula / concept cards</h3>
+                            <p class="text-xs text-gray-500">{{ cards.length }} cards · compact view · delete wrong / calculation ones</p>
+                        </div>
+                        <a href="#prompt-builder" class="text-xs font-medium text-amber-800 hover:underline">Add more ↓</a>
+                    </div>
+
+                    <div v-if="!cards.length" class="px-4 py-6 text-sm text-gray-500">
+                        No cards yet — generate a Cursor prompt below, preview, then save.
+                    </div>
+
+                    <div v-else class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-100 text-sm">
+                            <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                                <tr>
+                                    <th class="px-3 py-2 w-10">#</th>
+                                    <th class="px-3 py-2">Topic</th>
+                                    <th class="px-3 py-2">Formula / concept</th>
+                                    <th class="px-3 py-2">Answer</th>
+                                    <th class="px-3 py-2 w-16"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-50">
+                                <tr v-for="card in cards" :key="card.id" class="align-top hover:bg-amber-50/40">
+                                    <td class="px-3 py-2 text-xs text-gray-400">{{ card.number }}</td>
+                                    <td class="px-3 py-2 text-xs font-medium text-indigo-800 whitespace-nowrap">
+                                        {{ card.topic_name }}
+                                    </td>
+                                    <td class="px-3 py-2 text-gray-900">
+                                        <p class="leading-snug">{{ card.question_text }}</p>
+                                        <p v-if="card.options?.length" class="mt-1 text-xs text-gray-500">
+                                            <span
+                                                v-for="(opt, i) in card.options"
+                                                :key="i"
+                                                class="mr-2"
+                                                :class="opt.is_correct ? 'font-semibold text-emerald-700' : ''"
+                                            >
+                                                {{ String.fromCharCode(65 + i) }}) {{ opt.text }}
+                                            </span>
+                                        </p>
+                                    </td>
+                                    <td class="px-3 py-2 text-xs font-semibold text-emerald-800 whitespace-nowrap">
+                                        {{ card.correct_answer || '—' }}
+                                    </td>
+                                    <td class="px-3 py-2 text-right">
+                                        <button
+                                            type="button"
+                                            class="text-xs font-medium text-rose-600 hover:underline"
+                                            :disabled="deleteForm.processing"
+                                            @click="deleteCard(card)"
+                                        >
+                                            Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="prompt-builder" class="rounded-lg border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
                     <h3 class="font-medium text-amber-950">Generate Cursor prompt for this chapter</h3>
                     <p class="mt-1 text-sm text-amber-900">
-                        Describe the formulas / concepts, choose topics, copy the prompt into Cursor, then open a topic to import the JSON.
+                        Prompt asks only for <strong>formulas, concepts, and True/False</strong> — no calculation sums.
                     </p>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2">
@@ -197,10 +271,10 @@ const submitImport = () => {
                         <div>
                             <InputLabel value="Card style" class="!text-xs" />
                             <select v-model="promptForm.style" class="mt-1 w-full rounded-md border-gray-300 text-sm">
-                                <option value="mixed">Mixed formulas + concepts</option>
-                                <option value="formula_recall">Mostly formula recall</option>
-                                <option value="concept">Mostly concepts / definitions</option>
-                                <option value="identify">Mostly “which formula?”</option>
+                                <option value="mixed">Formulas + concepts + True/False</option>
+                                <option value="formula_recall">Formulas / identities only</option>
+                                <option value="concept">Concepts / definitions only</option>
+                                <option value="true_false">True / False only</option>
                             </select>
                         </div>
                     </div>

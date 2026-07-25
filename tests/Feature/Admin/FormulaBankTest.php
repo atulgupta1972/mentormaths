@@ -83,7 +83,8 @@ class FormulaBankTest extends TestCase
         $prompt = session('formula_bank_topic_prompt');
         $this->assertStringContainsString('FORMULA / CONCEPT', $prompt);
         $this->assertStringContainsString('(a+b)^2 and a^2-b^2', $prompt);
-        $this->assertStringContainsString('Exactly 6 MCQ cards', $prompt);
+        $this->assertStringContainsString('Exactly 6 cards', $prompt);
+        $this->assertStringContainsString('do NOT create calculation', $prompt);
     }
 
     public function test_chapter_import_pastes_json_into_topics_and_sets(): void
@@ -151,6 +152,26 @@ class FormulaBankTest extends TestCase
         $this->assertStringContainsString('Formula set 1', $set->title);
     }
 
+    public function test_can_delete_formula_card(): void
+    {
+        [$admin, $topic] = $this->seedTopic();
+
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Bad calculation sum',
+            'bank_purpose' => QuestionBankPurpose::FORMULA,
+            'source' => Question::SOURCE_MANUAL,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.formula-bank.cards.destroy', $question))
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('questions', ['id' => $question->id]);
+    }
+
     public function test_add_formulas_chapter_page_loads_from_question_hub(): void
     {
         $this->withoutVite();
@@ -162,7 +183,8 @@ class FormulaBankTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/FormulaBank/ChapterShow')
-                ->has('topics', 1));
+                ->has('topics', 1)
+                ->has('cards'));
     }
 
     /**
