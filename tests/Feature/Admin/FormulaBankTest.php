@@ -86,6 +86,35 @@ class FormulaBankTest extends TestCase
         $this->assertStringContainsString('Exactly 6 MCQ cards', $prompt);
     }
 
+    public function test_chapter_import_pastes_json_into_topics_and_sets(): void
+    {
+        [$admin, $topic] = $this->seedTopic();
+        $chapter = $topic->chapter;
+
+        $json = json_encode([
+            'questions' => [
+                [
+                    'topic' => $topic->name,
+                    'question' => 'Which is true for integers?',
+                    'options' => ['0 is positive', '0 is neither', '0 is negative', '0 is even only'],
+                    'correct_index' => 1,
+                    'explanation' => '0 is neither positive nor negative.',
+                ],
+            ],
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('admin.formula-bank.chapters.import', $chapter), [
+            'json' => $json,
+            'create_sets' => true,
+        ]);
+        $response->assertRedirect();
+
+        $this->assertSame(1, Question::query()->where('bank_purpose', QuestionBankPurpose::FORMULA)->count());
+        $this->assertSame(1, Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->count());
+        $set = Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->first();
+        $this->assertSame(1, $set->questions()->count());
+    }
+
     public function test_add_formulas_chapter_page_loads_from_question_hub(): void
     {
         $this->withoutVite();

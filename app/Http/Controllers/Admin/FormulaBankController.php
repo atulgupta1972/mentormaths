@@ -198,6 +198,33 @@ class FormulaBankController extends Controller
         ]);
     }
 
+    public function importToChapter(Request $request, SyllabusChapter $chapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'json' => ['required', 'string'],
+            'create_sets' => ['nullable', 'boolean'],
+        ]);
+
+        try {
+            $result = $this->formulaBank->importChapterJson(
+                $chapter,
+                $validated['json'],
+                $request->user(),
+                $request->boolean('create_sets', true),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $message = "Imported {$result['created']} formula / concept cards";
+        if ($result['sets_created'] > 0) {
+            $message .= " into {$result['sets_created']} new set".($result['sets_created'] === 1 ? '' : 's');
+        }
+        $message .= '.';
+
+        return back()->with('success', $message);
+    }
+
     public function importToTopic(Request $request, SyllabusTopic $topic): RedirectResponse
     {
         $validated = $request->validate([

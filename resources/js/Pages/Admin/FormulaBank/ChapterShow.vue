@@ -33,6 +33,11 @@ const promptForm = useForm({
         : props.topics.map((topic) => topic.id),
 });
 
+const importForm = useForm({
+    json: '',
+    create_sets: true,
+});
+
 watch(
     () => cursorPromptText.value,
     (value) => {
@@ -70,6 +75,16 @@ const copyPrompt = async () => {
         document.execCommand('copy');
         copied.value = true;
     }
+};
+
+const submitImport = () => {
+    importForm.post(route('admin.formula-bank.chapters.import', props.chapter.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            importForm.reset('json');
+            importForm.create_sets = true;
+        },
+    });
 };
 </script>
 
@@ -208,14 +223,41 @@ const copyPrompt = async () => {
                             @focus="$event.target.select()"
                         />
                         <p class="mt-2 text-xs text-gray-600">
-                            After Cursor returns JSON, open a topic below and use <strong>Import JSON</strong>.
+                            After Cursor returns JSON, paste it in step 2 below (no need to open each topic).
                         </p>
                     </div>
                 </div>
 
+                <div class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-5 shadow-sm">
+                    <h3 class="font-medium text-indigo-950">2. Paste / import JSON here</h3>
+                    <p class="mt-1 text-sm text-indigo-900">
+                        Paste the JSON from Cursor. Each question should include a <code class="rounded bg-white px-1">topic</code> name —
+                        cards are filed into the matching topics automatically.
+                    </p>
+                    <label class="mt-3 flex items-center gap-2 text-sm text-gray-800">
+                        <input v-model="importForm.create_sets" type="checkbox" class="rounded border-gray-300">
+                        Create a new formula set per topic and attach the cards
+                    </label>
+                    <textarea
+                        v-model="importForm.json"
+                        rows="14"
+                        class="mt-3 w-full rounded-md border-gray-300 font-mono text-xs"
+                        placeholder='{"questions":[{"topic":"Introduction to Integers","question":"...","options":["A","B","C","D"],"correct_index":0}]}'
+                    />
+                    <InputError :message="importForm.errors.json" class="mt-1" />
+                    <PrimaryButton
+                        type="button"
+                        class="mt-3"
+                        :disabled="importForm.processing || !importForm.json.trim()"
+                        @click="submitImport"
+                    >
+                        {{ importForm.processing ? 'Importing…' : 'Import formulas' }}
+                    </PrimaryButton>
+                </div>
+
                 <div class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <p class="text-sm text-gray-600">
-                        Pick a topic to import cards into Set 1 / Set 2.
+                        Topics in this chapter (open one to edit sets or add more cards).
                     </p>
                 </div>
 
@@ -232,7 +274,7 @@ const copyPrompt = async () => {
                     >
                         <div>
                             <p class="font-medium text-gray-900">{{ topic.name }}</p>
-                            <p class="text-xs text-gray-500">Open to import JSON / create formula sets</p>
+                            <p class="text-xs text-gray-500">Open to review / add more formula sets</p>
                         </div>
                         <span class="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
                             {{ topic.formulas_count }} cards · {{ topic.sets_count }} sets

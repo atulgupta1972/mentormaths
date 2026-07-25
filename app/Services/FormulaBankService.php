@@ -401,6 +401,59 @@ class FormulaBankService
     }
 
     /**
+     * Import chapter formula JSON (each item has topic name) into topics; optionally package into sets.
+     *
+     * @return array{created: int, by_topic: array<int, int>, sets_created: int}
+     */
+    public function importChapterJson(SyllabusChapter $chapter, string $json, User $user, bool $createSets = true): array
+    {
+        $chapter->loadMissing(['topics']);
+        $rows = $this->mcqImport->parseJson($json);
+
+        return DB::transaction(function () use ($chapter, $rows, $user, $createSets) {
+            $questions = $this->mcqImport->saveChapterRows(
+                $chapter,
+                $rows,
+                $user->id,
+                Question::SOURCE_MANUAL,
+                QuestionBankPurpose::FORMULA,
+            );
+
+            $byTopic = [];
+            foreach ($questions as $question) {
+                $topicId = (int) $question->syllabus_topic_id;
+                $byTopic[$topicId] = ($byTopic[$topicId] ?? 0) + 1;
+            }
+
+            $setsCreated = 0;
+            if ($createSets && $questions !== []) {
+                $grouped = collect($questions)->groupBy('syllabus_topic_id');
+                foreach ($grouped as $topicId => $topicQuestions) {
+                    $topic = $chapter->topics->firstWhere('id', (int) $topicId)
+                        ?? SyllabusTopic::query()->find((int) $topicId);
+                    if (! $topic) {
+                        continue;
+                    }
+
+                    $set = $this->createSet($topic, $user);
+                    $attach = [];
+                    foreach ($topicQuestions->values() as $index => $question) {
+                        $attach[$question->id] = ['sort_order' => $index + 1];
+                    }
+                    $set->questions()->attach($attach);
+                    $setsCreated++;
+                }
+            }
+
+            return [
+                'created' => count($questions),
+                'by_topic' => $byTopic,
+                'sets_created' => $setsCreated,
+            ];
+        });
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function questionPayload(Question $question): array
