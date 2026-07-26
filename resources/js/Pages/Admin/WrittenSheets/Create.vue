@@ -1015,12 +1015,42 @@ const submitLabel = computed(() => {
     return 'Generate PDF for review';
 });
 
+const defaultTopicForRows = () => {
+    if (form.topic_id) {
+        const selected = props.topics.find((topic) => String(topic.id) === String(form.topic_id));
+
+        return {
+            id: selected?.id || Number(form.topic_id),
+            name: selected?.name || selectedTopicName.value || '',
+        };
+    }
+
+    const firstSelectedId = selectedTopicIds.value[0];
+    if (firstSelectedId) {
+        const selected = props.topics.find((topic) => String(topic.id) === String(firstSelectedId));
+
+        return {
+            id: selected?.id || Number(firstSelectedId),
+            name: selected?.name || '',
+        };
+    }
+
+    const first = props.topics[0];
+
+    return first ? { id: first.id, name: first.name } : { id: '', name: '' };
+};
+
 const submit = () => {
     syncFormTopicFields();
 
     if (isPdfMode.value) {
+        const fallbackTopic = defaultTopicForRows();
         form.pdf_import_token = pdfImportToken.value || form.pdf_import_token;
-        form.answer_key = validAnswerKeyRows.value.map((row) => ({ ...row }));
+        form.answer_key = validAnswerKeyRows.value.map((row) => ({
+            ...row,
+            topic_name: row.topic_name || fallbackTopic.name,
+            syllabus_topic_id: row.syllabus_topic_id || fallbackTopic.id || '',
+        }));
         form.manual_questions = [];
         form.question_ids = [];
     } else if (isManualMode.value) {
@@ -1200,7 +1230,7 @@ const submit = () => {
                             Set easy / medium / hard per topic in the chapter plan below, then generate the Cursor prompt.
                         </p>
                         <p v-else-if="isPdfMode" class="mt-4 text-sm text-gray-600">
-                            For chapter tests or multi-topic practice sheets, you can set a topic name per answer row below.
+                            Topic names on answer rows are optional — blank rows use the selected topic (or the chapter’s first topic).
                         </p>
                     </div>
 
@@ -1246,7 +1276,7 @@ const submit = () => {
                         />
                     </div>
 
-                    <div v-if="form.chapter_id" class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
+                    <div v-if="form.chapter_id && !isPdfMode" class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
                         <h3 class="font-semibold text-emerald-950">Diagram sums — upload .zip pack</h3>
                         <p class="mt-1 text-sm text-emerald-900">
                             Zip with <strong>questions.json</strong> plus diagram images (<strong>q1.png</strong>, <strong>q2.png</strong>, …).

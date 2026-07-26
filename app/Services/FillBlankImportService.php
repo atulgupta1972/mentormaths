@@ -327,27 +327,35 @@ PROMPT;
      */
     public function resolveTopicIdForChapterRow(SyllabusChapter $chapter, array $row): int
     {
+        $chapter->loadMissing('topics');
+
         if (! empty($row['syllabus_topic_id'])) {
             $topicId = (int) $row['syllabus_topic_id'];
-            if ($chapter->topics()->whereKey($topicId)->exists()) {
+            if ($topicId > 0 && $chapter->topics->contains('id', $topicId)) {
                 return $topicId;
             }
         }
 
         $name = trim((string) ($row['topic'] ?? $row['topic_name'] ?? ''));
-        if ($name === '') {
-            throw new InvalidArgumentException('Each question must include a topic name for chapter import.');
-        }
+        if ($name !== '') {
+            $topic = $chapter->topics->first(
+                fn (SyllabusTopic $chapterTopic) => mb_strtolower($chapterTopic->name) === mb_strtolower($name),
+            );
 
-        $topic = $chapter->topics()
-            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
-            ->first();
+            if ($topic) {
+                return $topic->id;
+            }
 
-        if (! $topic) {
             throw new InvalidArgumentException("Unknown topic \"{$name}\" for this chapter.");
         }
 
-        return $topic->id;
+        // Written PDF answer keys / multi-topic sheets often omit per-row topics.
+        $fallback = $chapter->topics->sortBy('sort_order')->first();
+        if ($fallback) {
+            return $fallback->id;
+        }
+
+        throw new InvalidArgumentException('This chapter has no topics. Add topics before importing.');
     }
 
     /**

@@ -152,6 +152,53 @@ class WrittenSheetStoreTest extends TestCase
         $response->assertSessionHasNoErrors();
     }
 
+    public function test_admin_can_create_chapter_pdf_written_sheet_without_topic_names(): void
+    {
+        Storage::fake('public');
+        [$chapter, $topics, $admin] = $this->seedChapterWithTopics();
+
+        $token = '550e8400-e29b-41d4-a716-446655440001';
+        $pdfPath = "temp/pdf-imports/written-sheet-pdf/{$token}/source.pdf";
+        Storage::disk('public')->put($pdfPath, '%PDF-1.4 fake worksheet');
+
+        Cache::put("written_sheet_pdf:{$token}", [
+            'token' => $token,
+            'pdf_path' => $pdfPath,
+            'original_name' => 'fractions-chapter.pdf',
+        ], now()->addHour());
+
+        $response = $this->actingAs($admin)->post(route('admin.written-sheets.store'), [
+            'source_mode' => 'pdf',
+            'pdf_import_token' => $token,
+            'sheet_kind' => 'practice',
+            'chapter_id' => $chapter->id,
+            'topic_scope' => 'multiple',
+            'topic_ids' => [$topics[0]->id, $topics[1]->id],
+            'answer_key' => [
+                [
+                    'correct_answer' => '3/4',
+                    'answer_format' => 'fraction',
+                ],
+                [
+                    'correct_answer' => '2',
+                    'answer_format' => 'integer',
+                ],
+            ],
+            'notes' => 'Chapter PDF without per-row topics',
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHasNoErrors();
+        $response->assertSessionMissing('error');
+
+        $worksheet = Worksheet::query()->where('delivery_mode', WorksheetDeliveryMode::WRITTEN)->latest('id')->first();
+        $this->assertNotNull($worksheet);
+        $this->assertSame(2, $worksheet->questions()->count());
+        $this->assertTrue(
+            $worksheet->questions->every(fn ($q) => (int) $q->syllabus_topic_id === (int) $topics[0]->id),
+        );
+    }
+
     public function test_admin_can_create_written_sheet_from_uploaded_pdf_and_answer_key(): void
     {
         Storage::fake('public');

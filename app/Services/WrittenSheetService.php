@@ -307,9 +307,18 @@ class WrittenSheetService
     private function normalizeManualRowsForChapter(SyllabusChapter $chapter, ?SyllabusTopic $defaultTopic, array $rows): array
     {
         $chapter->loadMissing('topics');
+        $defaultTopic ??= $chapter->topics->sortBy('sort_order')->first();
 
         return array_map(function (array $row) use ($chapter, $defaultTopic) {
-            $topicId = $row['syllabus_topic_id'] ?? $row['topic_id'] ?? null;
+            $rawTopicId = $row['syllabus_topic_id'] ?? $row['topic_id'] ?? null;
+            $topicId = null;
+            if ($rawTopicId !== null && $rawTopicId !== '') {
+                $candidate = (int) $rawTopicId;
+                if ($candidate > 0 && $chapter->topics->contains('id', $candidate)) {
+                    $topicId = $candidate;
+                }
+            }
+
             $topicName = trim((string) ($row['topic_name'] ?? $row['topic'] ?? ''));
 
             if (! $topicId && $topicName !== '') {
@@ -324,8 +333,9 @@ class WrittenSheetService
             }
 
             if (! $topicId && $chapter->topics->isNotEmpty()) {
-                $topicId = $chapter->topics->first()->id;
-                $topicName = $chapter->topics->first()->name;
+                $first = $chapter->topics->sortBy('sort_order')->first();
+                $topicId = $first->id;
+                $topicName = $first->name;
             }
 
             return [
