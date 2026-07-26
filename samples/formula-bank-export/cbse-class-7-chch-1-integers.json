@@ -1,0 +1,273 @@
+{
+    "meta": {
+        "board": "CBSE",
+        "grade": "Class 7",
+        "chapter_number": "Ch 1",
+        "chapter_name": "Integers",
+        "local_chapter_id": 16,
+        "card_count": 20,
+        "exported_at": "2026-07-26T04:48:05+00:00"
+    },
+    "questions": [
+        {
+            "topic": "Introduction to Integers",
+            "question": "On a number line, integers to the left of zero are:",
+            "options": [
+                "Positive integers",
+                "Negative integers",
+                "Zero only",
+                "Natural numbers only"
+            ],
+            "correct_index": 1,
+            "explanation": "Numbers to the left of 0 on the number line are negative integers",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Properties of Addition & Subtraction",
+            "question": "The additive inverse of −8 is:",
+            "options": [
+                "−8",
+                "0",
+                "8",
+                "1/8"
+            ],
+            "correct_index": 2,
+            "explanation": "Additive inverse of a is −a; −(−8) = 8, and 8 + (−8) = 0",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Properties of Addition & Subtraction",
+            "question": "For any integer a, a + 0 equals:",
+            "options": [
+                "0",
+                "a",
+                "−a",
+                "1"
+            ],
+            "correct_index": 1,
+            "explanation": "Zero is the additive identity: a + 0 = a for every integer a",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Properties of Addition & Subtraction",
+            "question": "Commutative property of addition means:",
+            "options": [
+                "a + b = b + a",
+                "a − b = b − a",
+                "a + 0 = a",
+                "a + (−a) = 0"
+            ],
+            "correct_index": 0,
+            "explanation": "Commutative property: order does not matter in addition — a + b = b + a",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Multiplication of Integers",
+            "question": "The product of a positive integer and a negative integer is always:",
+            "options": [
+                "Positive",
+                "Negative",
+                "Zero",
+                "One"
+            ],
+            "correct_index": 1,
+            "explanation": "Different signs → negative product: (+) × (−) = (−)",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Multiplication of Integers",
+            "question": "When two negative integers are multiplied, the product is:",
+            "options": [
+                "Negative",
+                "Positive",
+                "Zero",
+                "Cannot be determined"
+            ],
+            "correct_index": 1,
+            "explanation": "Same sign rule: (−) × (−) = (+)",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Division of Integers",
+            "question": "When a negative integer is divided by a positive integer, the quotient is:",
+            "options": [
+                "Positive",
+                "Negative",
+                "Zero",
+                "Not defined"
+            ],
+            "correct_index": 1,
+            "explanation": "Division sign rule matches multiplication: (−) ÷ (+) = (−)",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Division of Integers",
+            "question": "Division of any integer by zero is:",
+            "options": [
+                "Zero",
+                "One",
+                "The same integer",
+                "Not defined"
+            ],
+            "correct_index": 3,
+            "explanation": "Division by zero is undefined — no meaningful quotient exists",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Properties of Multiplication & Division",
+            "question": "For any integer a, a × 1 equals:",
+            "options": [
+                "0",
+                "1",
+                "a",
+                "−a"
+            ],
+            "correct_index": 2,
+            "explanation": "One is the multiplicative identity: a × 1 = a for every integer a",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Properties of Multiplication & Division",
+            "question": "Which property is shown by (−2) × [3 + (−5)] = (−2) × 3 + (−2) × (−5)?",
+            "options": [
+                "Commutative property",
+                "Associative property",
+                "Distributive property",
+                "Closure property"
+            ],
+            "correct_index": 2,
+            "explanation": "Distributive property: a × (b + c) = a × b + a × c",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Introduction to Integers",
+            "question": "The set of integers includes:",
+            "options": [
+                "Only positive whole numbers",
+                "Positive whole numbers, zero, and their negatives",
+                "Only fractions",
+                "Only numbers greater than zero"
+            ],
+            "correct_index": 1,
+            "explanation": "Integers = {..., −3, −2, −1, 0, 1, 2, 3, ...}",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Introduction to Integers",
+            "question": "On a number line, as we move from left to right, the value of integers:",
+            "options": [
+                "Decreases",
+                "Increases",
+                "Stays the same",
+                "Becomes zero"
+            ],
+            "correct_index": 1,
+            "explanation": "On a number line, values increase as we move right and decrease as we move left",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Properties of Addition & Subtraction",
+            "question": "For any integer a, a + (−a) equals:",
+            "options": [
+                "a",
+                "−a",
+                "0",
+                "1"
+            ],
+            "correct_index": 2,
+            "explanation": "A number plus its additive inverse gives zero: a + (−a) = 0",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Properties of Addition & Subtraction",
+            "question": "Subtraction of integers is NOT commutative because:",
+            "options": [
+                "a − b is not always equal to b − a",
+                "a + b = b + a",
+                "a + 0 = a",
+                "a × b = b × a"
+            ],
+            "correct_index": 0,
+            "explanation": "Commutative property does not hold for subtraction: a − b ≠ b − a in general",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Multiplication of Integers",
+            "question": "The sign rule for multiplying integers with the same sign is:",
+            "options": [
+                "Product is negative",
+                "Product is positive",
+                "Product is zero",
+                "Product is always 1"
+            ],
+            "correct_index": 1,
+            "explanation": "Same signs → positive product: (+)(+) = + and (−)(−) = +",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Multiplication of Integers",
+            "question": "The product of three negative integers is:",
+            "options": [
+                "Always positive",
+                "Always negative",
+                "Always zero",
+                "Always one"
+            ],
+            "correct_index": 1,
+            "explanation": "Odd number of negative factors → negative product; (−) × (−) × (−) = (−)",
+            "difficulty": "Hard"
+        },
+        {
+            "topic": "Division of Integers",
+            "question": "When a positive integer is divided by a negative integer, the quotient is:",
+            "options": [
+                "Positive",
+                "Negative",
+                "Zero",
+                "Not defined"
+            ],
+            "correct_index": 1,
+            "explanation": "Different signs in division give a negative quotient: (+) ÷ (−) = (−)",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Division of Integers",
+            "question": "For integers a, b, c (b ≠ 0), if a ÷ b = c, then:",
+            "options": [
+                "a = b + c",
+                "a = b × c",
+                "a = b − c",
+                "a = c − b"
+            ],
+            "correct_index": 1,
+            "explanation": "Division and multiplication are inverse operations: a ÷ b = c means a = b × c",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Properties of Multiplication & Division",
+            "question": "For any integer a, a × 0 equals:",
+            "options": [
+                "a",
+                "0",
+                "1",
+                "−a"
+            ],
+            "correct_index": 1,
+            "explanation": "Zero property of multiplication: any integer × 0 = 0",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Properties of Multiplication & Division",
+            "question": "Which property is shown by a × (b × c) = (a × b) × c?",
+            "options": [
+                "Commutative property",
+                "Associative property",
+                "Distributive property",
+                "Identity property"
+            ],
+            "correct_index": 1,
+            "explanation": "Associative property of multiplication: grouping of factors does not change the product",
+            "difficulty": "Hard"
+        }
+    ]
+}

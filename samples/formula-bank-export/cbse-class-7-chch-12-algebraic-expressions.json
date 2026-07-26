@@ -1,0 +1,143 @@
+{
+    "meta": {
+        "board": "CBSE",
+        "grade": "Class 7",
+        "chapter_number": "Ch 12",
+        "chapter_name": "Algebraic Expressions",
+        "local_chapter_id": 27,
+        "card_count": 10,
+        "exported_at": "2026-07-26T04:48:05+00:00"
+    },
+    "questions": [
+        {
+            "topic": "Terms, Factors, Coefficients",
+            "question": "In an algebraic expression, parts separated by + or - signs are called:",
+            "options": [
+                "Factors",
+                "Terms",
+                "Coefficients",
+                "Variables"
+            ],
+            "correct_index": 1,
+            "explanation": "Terms are the parts of an expression connected by + or - signs",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Terms, Factors, Coefficients",
+            "question": "In the term 5xy, the numerical coefficient is:",
+            "options": [
+                "x",
+                "y",
+                "5",
+                "xy"
+            ],
+            "correct_index": 2,
+            "explanation": "The numerical coefficient is the constant number multiplying the variables in a term",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Terms, Factors, Coefficients",
+            "question": "Quantities multiplied together to form a term are called its:",
+            "options": [
+                "Coefficients",
+                "Factors",
+                "Terms",
+                "Constants"
+            ],
+            "correct_index": 1,
+            "explanation": "Factors are the quantities that multiply together to make up a term",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Like & Unlike Terms",
+            "question": "Terms having the same algebraic factors (same variables with same powers) are called:",
+            "options": [
+                "Unlike terms",
+                "Like terms",
+                "Monomials",
+                "Coefficients"
+            ],
+            "correct_index": 1,
+            "explanation": "Like terms have identical variables raised to identical powers; only their coefficients may differ",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Like & Unlike Terms",
+            "question": "True or False: 3x² and 3x are like terms.",
+            "options": [
+                "True",
+                "False",
+                "Only if x = 1",
+                "Only in addition"
+            ],
+            "correct_index": 1,
+            "explanation": "3x² and 3x have different powers of x, so they are unlike terms",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Like & Unlike Terms",
+            "question": "Terms with different algebraic factors are called:",
+            "options": [
+                "Like terms",
+                "Unlike terms",
+                "Binomials",
+                "Constants"
+            ],
+            "correct_index": 1,
+            "explanation": "Unlike terms have different variables or different powers of variables",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Addition & Subtraction of Expressions",
+            "question": "While adding algebraic expressions, we combine:",
+            "options": [
+                "Only unlike terms",
+                "Only like terms",
+                "All terms regardless of type",
+                "Only constants"
+            ],
+            "correct_index": 1,
+            "explanation": "Only like terms can be added or subtracted by combining their coefficients",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Addition & Subtraction of Expressions",
+            "question": "True or False: Unlike terms can be combined into a single term by addition.",
+            "options": [
+                "True",
+                "False",
+                "Only if coefficients are equal",
+                "Only for monomials"
+            ],
+            "correct_index": 1,
+            "explanation": "Unlike terms cannot be combined; they remain separate terms in the result",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Finding Value of Expression",
+            "question": "Finding the value of an algebraic expression involves:",
+            "options": [
+                "Combining like terms only",
+                "Substituting given values for variables",
+                "Factorising the expression",
+                "Writing it in standard form"
+            ],
+            "correct_index": 1,
+            "explanation": "The value of an expression is found by substituting numerical values in place of its variables",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Finding Value of Expression",
+            "question": "True or False: The value of an expression can change depending on the value assigned to its variable.",
+            "options": [
+                "True",
+                "False",
+                "Only for constants",
+                "Only for like terms"
+            ],
+            "correct_index": 0,
+            "explanation": "Since expressions contain variables, their value depends on the values substituted for those variables",
+            "difficulty": "Easy"
+        }
+    ]
+}

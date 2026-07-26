@@ -1,0 +1,143 @@
+{
+    "meta": {
+        "board": "CBSE",
+        "grade": "Class 7",
+        "chapter_number": "Ch 13",
+        "chapter_name": "Exponents and Powers",
+        "local_chapter_id": 28,
+        "card_count": 10,
+        "exported_at": "2026-07-26T04:48:05+00:00"
+    },
+    "questions": [
+        {
+            "topic": "Exponents",
+            "question": "In the expression aⁿ, 'n' is called the:",
+            "options": [
+                "Base",
+                "Exponent (or power)",
+                "Coefficient",
+                "Product"
+            ],
+            "correct_index": 1,
+            "explanation": "In aⁿ, a is the base and n is the exponent, showing how many times a is multiplied by itself",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Exponents",
+            "question": "True or False: a⁰ = 1 for any non-zero number a.",
+            "options": [
+                "True",
+                "False",
+                "Only if a = 1",
+                "Only for negative a"
+            ],
+            "correct_index": 0,
+            "explanation": "Any non-zero number raised to the power 0 equals 1",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Laws of Exponents",
+            "question": "aᵐ × aⁿ is equal to:",
+            "options": [
+                "aᵐ⁺ⁿ",
+                "aᵐ⁻ⁿ",
+                "aᵐˣⁿ",
+                "aᵐ/ⁿ"
+            ],
+            "correct_index": 0,
+            "explanation": "When multiplying powers with the same base, add the exponents: aᵐ × aⁿ = aᵐ⁺ⁿ",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Laws of Exponents",
+            "question": "aᵐ ÷ aⁿ is equal to:",
+            "options": [
+                "aᵐˣⁿ",
+                "aᵐ⁺ⁿ",
+                "aᵐ⁻ⁿ",
+                "aⁿ⁻ᵐ"
+            ],
+            "correct_index": 2,
+            "explanation": "When dividing powers with the same base, subtract the exponents: aᵐ ÷ aⁿ = aᵐ⁻ⁿ",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Laws of Exponents",
+            "question": "(aᵐ)ⁿ is equal to:",
+            "options": [
+                "aᵐ⁺ⁿ",
+                "aᵐⁿ",
+                "aᵐ⁻ⁿ",
+                "aᵐ/ⁿ"
+            ],
+            "correct_index": 1,
+            "explanation": "Power raised to a power: multiply the exponents, (aᵐ)ⁿ = aᵐⁿ",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Laws of Exponents",
+            "question": "aᵐ × bᵐ is equal to:",
+            "options": [
+                "(a + b)ᵐ",
+                "(ab)ᵐ",
+                "(a/b)ᵐ",
+                "(a - b)ᵐ"
+            ],
+            "correct_index": 1,
+            "explanation": "When bases are different but exponents are the same, aᵐ × bᵐ = (ab)ᵐ",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Negative Exponents",
+            "question": "a⁻ⁿ is equal to:",
+            "options": [
+                "1/aⁿ",
+                "-aⁿ",
+                "aⁿ",
+                "-1/aⁿ"
+            ],
+            "correct_index": 0,
+            "explanation": "A negative exponent means take the reciprocal: a⁻ⁿ = 1/aⁿ",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Negative Exponents",
+            "question": "True or False: A negative exponent means the value of the expression is negative.",
+            "options": [
+                "True",
+                "False",
+                "Only for even exponents",
+                "Only for odd exponents"
+            ],
+            "correct_index": 1,
+            "explanation": "A negative exponent indicates a reciprocal, not a negative value",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Expressing Large Numbers",
+            "question": "A number written as a decimal between 1 and 10 multiplied by a power of 10 is called:",
+            "options": [
+                "Exponential form",
+                "Standard form (scientific notation)",
+                "Expanded form",
+                "Index form"
+            ],
+            "correct_index": 1,
+            "explanation": "Standard form expresses a large number as k × 10ⁿ where 1 ≤ k < 10",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Expressing Large Numbers",
+            "question": "In standard form k × 10ⁿ, the value of k must satisfy:",
+            "options": [
+                "0 < k < 1",
+                "1 ≤ k < 10",
+                "k ≥ 10",
+                "k can be any number"
+            ],
+            "correct_index": 1,
+            "explanation": "In scientific/standard form, k must be between 1 and 10 (including 1)",
+            "difficulty": "Hard"
+        }
+    ]
+}

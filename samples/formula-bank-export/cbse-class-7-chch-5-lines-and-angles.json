@@ -1,0 +1,143 @@
+{
+    "meta": {
+        "board": "CBSE",
+        "grade": "Class 7",
+        "chapter_number": "Ch 5",
+        "chapter_name": "Lines and Angles",
+        "local_chapter_id": 20,
+        "card_count": 10,
+        "exported_at": "2026-07-26T04:48:05+00:00"
+    },
+    "questions": [
+        {
+            "topic": "Related Angles",
+            "question": "Two angles are called complementary if their sum is:",
+            "options": [
+                "90°",
+                "180°",
+                "360°",
+                "100°"
+            ],
+            "correct_index": 0,
+            "explanation": "Complementary angles add up to 90°",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Related Angles",
+            "question": "Two angles are called supplementary if their sum is:",
+            "options": [
+                "90°",
+                "180°",
+                "270°",
+                "360°"
+            ],
+            "correct_index": 1,
+            "explanation": "Supplementary angles add up to 180°",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Related Angles",
+            "question": "True or False: Vertically opposite angles are always equal.",
+            "options": [
+                "True",
+                "False",
+                "Only if lines are perpendicular",
+                "Only for acute angles"
+            ],
+            "correct_index": 0,
+            "explanation": "Vertically opposite angles formed by two intersecting lines are always equal",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Related Angles",
+            "question": "Two adjacent angles that together form a straight line are called:",
+            "options": [
+                "Complementary angles",
+                "Vertically opposite angles",
+                "Linear pair",
+                "Corresponding angles"
+            ],
+            "correct_index": 2,
+            "explanation": "A linear pair of angles are adjacent and their sum is 180°",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Pairs of Lines",
+            "question": "Two lines in a plane that never meet, however far extended, are called:",
+            "options": [
+                "Intersecting lines",
+                "Parallel lines",
+                "Perpendicular lines",
+                "Transversal lines"
+            ],
+            "correct_index": 1,
+            "explanation": "Parallel lines lie in the same plane and never intersect",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Pairs of Lines",
+            "question": "Two lines that intersect each other at 90° are called:",
+            "options": [
+                "Parallel lines",
+                "Perpendicular lines",
+                "Skew lines",
+                "Transversal lines"
+            ],
+            "correct_index": 1,
+            "explanation": "Perpendicular lines meet at a right angle (90°)",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "A line that intersects two or more lines at distinct points is called:",
+            "options": [
+                "A perpendicular",
+                "A transversal",
+                "A bisector",
+                "A diagonal"
+            ],
+            "correct_index": 1,
+            "explanation": "A transversal is a line that cuts two or more lines at different points",
+            "difficulty": "Easy"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "True or False: Corresponding angles formed by a transversal with two parallel lines are equal.",
+            "options": [
+                "True",
+                "False",
+                "Only if the transversal is perpendicular",
+                "Only for alternate lines"
+            ],
+            "correct_index": 0,
+            "explanation": "Corresponding angles are equal when the lines cut by the transversal are parallel",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Parallel Lines & Transversal",
+            "question": "When a transversal cuts two parallel lines, the pair of alternate interior angles are:",
+            "options": [
+                "Supplementary",
+                "Equal",
+                "Complementary",
+                "Vertically opposite"
+            ],
+            "correct_index": 1,
+            "explanation": "Alternate interior angles are equal when the lines are parallel",
+            "difficulty": "Medium"
+        },
+        {
+            "topic": "Checking Parallel Lines",
+            "question": "Two lines cut by a transversal are parallel if the co-interior (allied) angles are:",
+            "options": [
+                "Equal",
+                "Supplementary (sum 180°)",
+                "Complementary (sum 90°)",
+                "Vertically opposite"
+            ],
+            "correct_index": 1,
+            "explanation": "Lines are parallel when co-interior angles add up to 180°",
+            "difficulty": "Hard"
+        }
+    ]
+}
