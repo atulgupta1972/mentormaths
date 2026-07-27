@@ -96,7 +96,26 @@ const completedAssignments = computed(() =>
 
 const chapterOrder = computed(() => props.syllabusChapters.map((chapter) => chapter.name));
 
-const groupByChapter = (rows) => {
+const sortChapterGroups = (groups) => groups.sort((left, right) => {
+    const leftIndex = chapterOrder.value.indexOf(left.chapter_name);
+    const rightIndex = chapterOrder.value.indexOf(right.chapter_name);
+
+    if (leftIndex === -1 && rightIndex === -1) {
+        return left.chapter_name.localeCompare(right.chapter_name);
+    }
+
+    if (leftIndex === -1) {
+        return 1;
+    }
+
+    if (rightIndex === -1) {
+        return -1;
+    }
+
+    return leftIndex - rightIndex;
+});
+
+const groupAssignmentsByChapter = (rows) => {
     const grouped = rows.reduce((acc, set) => {
         const chapterName = set.chapter_name || 'Other';
 
@@ -109,30 +128,28 @@ const groupByChapter = (rows) => {
         return acc;
     }, {});
 
-    return Object.entries(grouped)
-        .map(([chapter_name, sets]) => ({ chapter_name, sets }))
-        .sort((left, right) => {
-            const leftIndex = chapterOrder.value.indexOf(left.chapter_name);
-            const rightIndex = chapterOrder.value.indexOf(right.chapter_name);
-
-            if (leftIndex === -1 && rightIndex === -1) {
-                return left.chapter_name.localeCompare(right.chapter_name);
-            }
-
-            if (leftIndex === -1) {
-                return 1;
-            }
-
-            if (rightIndex === -1) {
-                return -1;
-            }
-
-            return leftIndex - rightIndex;
-        });
+    return sortChapterGroups(
+        Object.entries(grouped).map(([chapter_name, sets]) => ({
+            chapter_name,
+            sets: sortByDateKey(sets, sets[0]?.submitted_at ? 'submitted_at' : 'target_date'),
+        })),
+    );
 };
 
-const pendingByChapter = computed(() => groupByChapter(pendingAssignments.value));
-const completedByChapter = computed(() => groupByChapter(completedAssignments.value));
+const pendingByChapter = computed(() => groupAssignmentsByChapter(pendingAssignments.value));
+const completedByChapter = computed(() => groupAssignmentsByChapter(completedAssignments.value));
+
+const topicLabel = (set) => {
+    if (set.topic_name) {
+        return set.topic_name;
+    }
+
+    if (set.scope === 'chapter') {
+        return set.kind_label?.includes('Test') ? 'Chapter test' : 'Chapter practice';
+    }
+
+    return '—';
+};
 
 const formatDate = (d) => {
     if (!d) {
@@ -811,54 +828,68 @@ const adminSetStatusClass = (set) => {
                         <!-- Practice sets — amber/orange zone -->
                         <section class="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 p-4 shadow-sm">
                             <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-amber-900">
-                                Practice & tests · To do · {{ pendingAssignments.length }}
+                                Practice & tests · Pending · {{ pendingAssignments.length }}
                             </h3>
 
                             <div v-if="pendingAssignments.length" class="space-y-4">
                                 <div
                                     v-for="group in pendingByChapter"
                                     :key="`pending-${group.chapter_name}`"
+                                    class="overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm"
                                 >
-                                    <h4 class="mb-2 text-[11px] font-bold uppercase tracking-wide text-amber-800">
-                                        {{ group.chapter_name }}
-                                        <span class="font-normal normal-case text-amber-700">· {{ group.sets.length }}</span>
-                                    </h4>
-                                    <div class="grid gap-2 sm:grid-cols-2">
-                                        <div
-                                            v-for="set in group.sets"
-                                            :key="set.assignment_id"
-                                            class="rounded-lg border p-2.5 shadow-sm transition"
-                                            :class="pendingBorderClass(set)"
-                                        >
-                                            <div class="flex items-center justify-between gap-2">
-                                                <div class="min-w-0 flex-1">
-                                                    <div class="flex flex-wrap items-center gap-1">
-                                                        <span class="rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide" :class="pendingBadgeClass(set)">
+                                    <div class="border-b border-amber-100 bg-amber-50/80 px-3 py-2">
+                                        <h4 class="text-sm font-semibold text-amber-950">
+                                            {{ group.chapter_name }}
+                                            <span class="font-normal text-amber-800">· {{ group.sets.length }} pending</span>
+                                        </h4>
+                                    </div>
+                                    <div class="overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-amber-100 text-sm">
+                                            <thead class="bg-white">
+                                                <tr class="text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                                                    <th class="px-3 py-2">Topic</th>
+                                                    <th class="px-3 py-2">Set</th>
+                                                    <th class="px-3 py-2">Type</th>
+                                                    <th class="px-3 py-2">Due</th>
+                                                    <th class="px-3 py-2">Status</th>
+                                                    <th class="px-3 py-2 text-right">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-amber-50">
+                                                <tr
+                                                    v-for="set in group.sets"
+                                                    :key="set.assignment_id"
+                                                    class="hover:bg-amber-50/40"
+                                                >
+                                                    <td class="px-3 py-2.5 text-gray-800">{{ topicLabel(set) }}</td>
+                                                    <td class="px-3 py-2.5 font-mono font-semibold text-gray-900">{{ setLabel(set) }}</td>
+                                                    <td class="px-3 py-2.5 text-gray-600">
+                                                        {{ set.kind_label || (set.scope === 'chapter' ? 'Test' : 'Practice') }}
+                                                    </td>
+                                                    <td class="px-3 py-2.5 text-gray-600">
+                                                        <span v-if="set.target_date">{{ formatDate(set.target_date) }}</span>
+                                                        <span v-else>—</span>
+                                                    </td>
+                                                    <td class="px-3 py-2.5">
+                                                        <span
+                                                            class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                                                            :class="pendingBadgeClass(set)"
+                                                        >
                                                             {{ pendingStatusLabel(set) }}
                                                         </span>
-                                                        <span class="text-[8px] font-semibold uppercase text-gray-500">
-                                                            {{ set.kind_label || (set.scope === 'chapter' ? 'Test' : 'Practice') }}
-                                                        </span>
-                                                    </div>
-                                                    <p class="mt-0.5 font-mono text-lg font-bold leading-none tracking-wide text-gray-900 sm:text-xl">
-                                                        {{ setLabel(set) }}
-                                                    </p>
-                                                    <p v-if="set.topic_name" class="mt-0.5 truncate text-[10px] text-gray-600">
-                                                        {{ set.topic_name }}
-                                                    </p>
-                                                    <p v-if="set.target_date" class="mt-1 text-[9px] font-medium" :class="set.is_overdue ? 'text-rose-600' : 'text-gray-600'">
-                                                        Due {{ formatDate(set.target_date) }}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <Link
-                                                :href="assignmentHref(set)"
-                                                class="mt-2 block w-full rounded-md py-2 text-center text-xs font-semibold text-white shadow sm:mt-1.5 sm:w-auto sm:px-3 sm:py-1.5"
-                                                :class="pendingButtonClass(set)"
-                                            >
-                                                {{ pendingButtonLabel(set) }}
-                                            </Link>
-                                        </div>
+                                                    </td>
+                                                    <td class="px-3 py-2.5 text-right">
+                                                        <Link
+                                                            :href="assignmentHref(set)"
+                                                            class="inline-flex rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow"
+                                                            :class="pendingButtonClass(set)"
+                                                        >
+                                                            {{ pendingButtonLabel(set) }}
+                                                        </Link>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>
@@ -914,36 +945,50 @@ const adminSetStatusClass = (set) => {
                             <div
                                 v-for="group in completedByChapter"
                                 :key="`done-${group.chapter_name}`"
+                                class="overflow-hidden rounded-lg border border-emerald-200 bg-white shadow-sm"
                             >
-                                <h4 class="mb-2 text-[11px] font-bold uppercase tracking-wide text-emerald-800">
-                                    {{ group.chapter_name }}
-                                    <span class="font-normal normal-case text-emerald-700">· {{ group.sets.length }}</span>
-                                </h4>
-                                <div class="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-                                    <Link
-                                        v-for="set in group.sets"
-                                        :key="`done-${set.assignment_id}`"
-                                        :href="completedAssignmentHref(set)"
-                                        class="rounded-lg border border-emerald-300 bg-gradient-to-br from-emerald-50 to-green-100 p-2.5 shadow-sm transition hover:border-emerald-500"
-                                    >
-                                        <div class="min-w-0">
-                                            <div class="flex flex-wrap items-center gap-1">
-                                                <span class="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white">
-                                                    Done
-                                                </span>
-                                                <span class="text-[8px] font-semibold uppercase text-emerald-700">
+                                <div class="border-b border-emerald-100 bg-emerald-50/80 px-3 py-2">
+                                    <h4 class="text-sm font-semibold text-emerald-950">
+                                        {{ group.chapter_name }}
+                                        <span class="font-normal text-emerald-800">· {{ group.sets.length }} done</span>
+                                    </h4>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-emerald-100 text-sm">
+                                        <thead class="bg-white">
+                                            <tr class="text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                                                <th class="px-3 py-2">Topic</th>
+                                                <th class="px-3 py-2">Set</th>
+                                                <th class="px-3 py-2">Type</th>
+                                                <th class="px-3 py-2">Score</th>
+                                                <th class="px-3 py-2 text-right">View</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-emerald-50">
+                                            <tr
+                                                v-for="set in group.sets"
+                                                :key="`done-${set.assignment_id}`"
+                                                class="hover:bg-emerald-50/40"
+                                            >
+                                                <td class="px-3 py-2.5 text-gray-800">{{ topicLabel(set) }}</td>
+                                                <td class="px-3 py-2.5 font-mono font-semibold text-emerald-900">{{ setLabel(set) }}</td>
+                                                <td class="px-3 py-2.5 text-gray-600">
                                                     {{ set.kind_label || (set.scope === 'chapter' ? 'Test' : 'Practice') }}
-                                                </span>
-                                            </div>
-                                            <p class="mt-0.5 font-mono text-base font-bold tracking-wide text-emerald-900">{{ setLabel(set) }}</p>
-                                            <p v-if="set.topic_name" class="truncate text-[10px] text-emerald-800/80">
-                                                {{ set.topic_name }}
-                                            </p>
-                                            <p class="text-[11px] font-bold text-emerald-800">
-                                                {{ set.latest_score_label || formatScoreLabel(set.latest_score, set.latest_max_score) }}
-                                            </p>
-                                        </div>
-                                    </Link>
+                                                </td>
+                                                <td class="px-3 py-2.5 font-semibold text-emerald-800">
+                                                    {{ set.latest_score_label || formatScoreLabel(set.latest_score, set.latest_max_score) }}
+                                                </td>
+                                                <td class="px-3 py-2.5 text-right">
+                                                    <Link
+                                                        :href="completedAssignmentHref(set)"
+                                                        class="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
+                                                    >
+                                                        Open
+                                                    </Link>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>

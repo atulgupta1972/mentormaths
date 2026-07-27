@@ -239,7 +239,7 @@ class AssignmentProgress
                 ? $practiceSet->chapter?->name
                 : $practiceSet->topic?->chapter?->name,
             'topic_name' => $practiceSet->isChapterScope()
-                ? null
+                ? ($practiceSet->isChapterTest() ? 'Chapter test' : 'Chapter practice')
                 : $practiceSet->topic?->name,
             'target_date' => $assignment->due_date?->toDateString(),
             'is_overdue' => $overdue,
