@@ -75,6 +75,10 @@ const formatDate = (d) => {
 };
 
 const prepStatusClass = (prep) => {
+    if (prep.status === 'none' || prep.status === 'unassigned') {
+        return 'bg-gray-100 text-gray-600';
+    }
+
     if (prep.assignment_status === 'completed') {
         return prep.submission_timing === 'late' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-800';
     }
@@ -87,6 +91,116 @@ const prepStatusClass = (prep) => {
 
     return 'bg-indigo-50 text-indigo-800';
 };
+
+const prepByWorksheetId = (plan) => Object.fromEntries(
+    (plan.prep_assignments || []).map((prep) => [prep.practice_set_id, prep]),
+);
+
+const prepRowFromAssignment = (chapter, prep) => ({
+    chapter_id: chapter.chapter_id,
+    chapter_label: prep.chapter_label || chapter.chapter_label,
+    topic_label: prep.topic_name || '—',
+    topic_id: prep.topic_id || null,
+    set_code: prep.set_code,
+    kind_label: prep.kind_label,
+    practice_set_id: prep.practice_set_id,
+    assignment_id: prep.assignment_id,
+    progress_label: prep.progress_label,
+    status: prep.status,
+    assignment_status: prep.assignment_status,
+    is_overdue: prep.is_overdue,
+    target_date: prep.target_date,
+    submission_timing: prep.submission_timing,
+    is_assigned: true,
+    is_empty: false,
+});
+
+const chapterPrepRows = (plan) => {
+    const prepMap = prepByWorksheetId(plan);
+    const rows = [];
+
+    const chapters = plan.assignable_chapters?.length
+        ? plan.assignable_chapters
+        : (plan.chapters || []).map((chapter) => ({
+            chapter_id: chapter.id,
+            chapter_label: chapter.label,
+            topic_sets: [],
+            chapter_tests: [],
+        }));
+
+    for (const chapter of chapters) {
+        const sets = [
+            ...(chapter.topic_sets || []).map((set) => ({
+                ...set,
+                topic_label: set.topic_name || '—',
+            })),
+            ...(chapter.chapter_tests || []).map((set) => ({
+                ...set,
+                topic_label: 'Chapter test',
+                topic_id: null,
+            })),
+        ];
+
+        if (sets.length === 0) {
+            const chapterPreps = (plan.prep_assignments || []).filter(
+                (prep) => prep.chapter_id === chapter.chapter_id,
+            );
+
+            if (chapterPreps.length === 0) {
+                rows.push({
+                    chapter_id: chapter.chapter_id,
+                    chapter_label: chapter.chapter_label,
+                    topic_label: '—',
+                    set_code: null,
+                    kind_label: null,
+                    progress_label: 'No sets yet',
+                    status: 'none',
+                    target_date: null,
+                    practice_set_id: null,
+                    assignment_id: null,
+                    topic_id: null,
+                    is_assigned: false,
+                    is_empty: true,
+                });
+
+                continue;
+            }
+
+            for (const prep of chapterPreps) {
+                rows.push(prepRowFromAssignment(chapter, prep));
+            }
+
+            continue;
+        }
+
+        for (const set of sets) {
+            const prep = prepMap[set.id];
+
+            rows.push({
+                chapter_id: chapter.chapter_id,
+                chapter_label: chapter.chapter_label,
+                topic_label: set.topic_label,
+                topic_id: set.topic_id || null,
+                set_code: set.set_code,
+                kind_label: set.kind_label,
+                practice_set_id: set.id,
+                assignment_id: prep?.assignment_id || null,
+                progress_label: prep?.progress_label || (set.is_assigned ? 'Assigned · to do' : 'Not assigned'),
+                status: prep?.status || 'unassigned',
+                assignment_status: prep?.assignment_status || null,
+                is_overdue: prep?.is_overdue || false,
+                submission_timing: prep?.submission_timing || null,
+                target_date: prep?.target_date || null,
+                is_assigned: Boolean(prep) || set.is_assigned,
+                is_empty: false,
+            });
+        }
+    }
+
+    return rows;
+};
+
+const planHasChapterRows = (plan) => (plan.chapters || []).length > 0;
 
 const dueDateForPlan = (plan) => assignDueDates.value[plan.id] || plan.suggested_due_date || plan.exam_date;
 
@@ -594,14 +708,13 @@ watch(
                             <span class="text-base font-semibold text-gray-900">{{ plan.title }}</span>
                             <span class="text-xs text-gray-500">{{ plan.exam_type_label }}</span>
                         </div>
-                        <p v-if="(plan.chapter_names || []).length" class="mt-1.5 text-sm leading-snug text-gray-700">
-                            <span class="font-medium text-gray-500">Chapters:</span>
-                            {{ plan.chapter_names.join(' · ') }}
-                        </p>
-                        <p v-else class="mt-1 text-sm text-gray-400">No chapters selected</p>
                         <p v-if="plan.has_marks" class="mt-2 text-sm font-semibold text-emerald-700">
                             Result: {{ marksScoreLabel(plan) }}
                         </p>
+                        <p v-else-if="planHasChapterRows(plan)" class="mt-1 text-xs text-gray-500">
+                            {{ plan.chapter_names.length }} chapter{{ plan.chapter_names.length === 1 ? '' : 's' }} in scope
+                        </p>
+                        <p v-else class="mt-1 text-sm text-gray-400">No chapters selected</p>
                     </div>
                     <div v-if="canManage" class="flex shrink-0 flex-wrap justify-end gap-x-3 gap-y-1 text-sm">
                         <button type="button" class="text-indigo-600 hover:underline" @click="openEdit(plan)">
@@ -626,49 +739,139 @@ watch(
                     </div>
                 </div>
 
-                <div class="px-4 py-3">
-                    <div class="mb-2 flex items-center justify-between gap-2">
+                <div v-if="planHasChapterRows(plan)" class="px-4 py-3">
+                    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
                         <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                            Practice / tests
+                            Chapters · practice / tests
                         </p>
                         <p v-if="plan.prep_summary" class="text-xs text-gray-500">
                             {{ plan.prep_summary.completed }}/{{ plan.prep_summary.total }} done
                         </p>
                     </div>
 
-                    <div v-if="plan.prep_assignments?.length" class="overflow-x-auto">
-                        <table class="min-w-full text-xs">
-                            <thead>
-                                <tr class="border-b border-gray-200 text-left text-[10px] uppercase tracking-wide text-gray-400">
-                                    <th class="pb-1.5 pr-3 font-medium">Set</th>
-                                    <th class="pb-1.5 pr-3 font-medium">Type</th>
-                                    <th class="pb-1.5 pr-3 font-medium">Status</th>
-                                    <th class="pb-1.5 font-medium">Due</th>
+                    <div
+                        v-if="isAdminContext && assigningPlanId === plan.id"
+                        class="mb-3 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50/50 px-3 py-2"
+                    >
+                        <p class="text-xs text-gray-600">
+                            Assign practice or chapter tests below. Default due date is the day before the exam.
+                        </p>
+                        <div>
+                            <InputLabel value="Due date for new assignments" class="!text-xs" />
+                            <input
+                                v-model="assignDueDates[plan.id]"
+                                type="date"
+                                class="mt-1 rounded-md border-gray-300 text-sm"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="overflow-hidden rounded-lg border border-gray-200">
+                        <table class="w-full table-fixed text-xs">
+                            <colgroup>
+                                <col class="w-[26%]">
+                                <col class="w-[22%]">
+                                <col class="w-[11%]">
+                                <col class="w-[10%]">
+                                <col class="w-[17%]">
+                                <col class="w-[10%]">
+                                <col v-if="isAdminContext" class="w-[14%]">
+                            </colgroup>
+                            <thead class="bg-gray-50">
+                                <tr class="text-left text-[10px] uppercase tracking-wide text-gray-500">
+                                    <th class="px-2.5 py-2 font-semibold">Chapter</th>
+                                    <th class="px-2.5 py-2 font-semibold">Topic</th>
+                                    <th class="px-2.5 py-2 font-semibold">Set</th>
+                                    <th class="px-2.5 py-2 font-semibold">Type</th>
+                                    <th class="px-2.5 py-2 font-semibold">Status</th>
+                                    <th class="px-2.5 py-2 font-semibold">Due</th>
+                                    <th v-if="isAdminContext" class="px-2.5 py-2 font-semibold">Actions</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <tr v-for="prep in plan.prep_assignments" :key="prep.assignment_id">
-                                    <td class="py-1.5 pr-3 font-mono font-semibold text-gray-900">
-                                        {{ prep.set_code }}
+                                <tr
+                                    v-for="(row, rowIndex) in chapterPrepRows(plan)"
+                                    :key="`${plan.id}-${row.chapter_id}-${row.practice_set_id || rowIndex}`"
+                                    class="align-top"
+                                >
+                                    <td class="px-2.5 py-2 text-gray-800 break-words">
+                                        {{ row.chapter_label }}
                                     </td>
-                                    <td class="py-1.5 pr-3 text-gray-600">{{ prep.kind_label }}</td>
-                                    <td class="py-1.5 pr-3">
+                                    <td class="px-2.5 py-2 text-gray-700 break-words">
+                                        {{ row.topic_label }}
+                                    </td>
+                                    <td class="px-2.5 py-2 font-mono font-semibold text-gray-900">
+                                        {{ row.set_code || '—' }}
+                                    </td>
+                                    <td class="px-2.5 py-2 text-gray-600">
+                                        {{ row.kind_label || '—' }}
+                                    </td>
+                                    <td class="px-2.5 py-2">
                                         <span
-                                            class="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide whitespace-nowrap"
-                                            :class="prepStatusClass(prep)"
+                                            class="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+                                            :class="prepStatusClass(row)"
                                         >
-                                            {{ prep.progress_label }}
+                                            {{ row.progress_label }}
                                         </span>
                                     </td>
-                                    <td class="py-1.5 text-gray-500 whitespace-nowrap">
-                                        {{ prep.target_date ? formatDate(prep.target_date) : '—' }}
+                                    <td class="px-2.5 py-2 text-gray-500">
+                                        {{ row.target_date ? formatDate(row.target_date) : '—' }}
+                                    </td>
+                                    <td v-if="isAdminContext" class="px-2.5 py-2">
+                                        <div class="flex flex-col gap-1 text-[11px] font-medium leading-snug">
+                                            <Link
+                                                v-if="row.topic_id"
+                                                :href="route('admin.questions.topics.show', row.topic_id)"
+                                                class="text-indigo-600 hover:underline"
+                                            >
+                                                Topic questions
+                                            </Link>
+                                            <template v-else-if="row.is_empty">
+                                                <Link
+                                                    :href="route('admin.questions.chapters.show', row.chapter_id)"
+                                                    class="text-indigo-600 hover:underline"
+                                                >
+                                                    Question bank
+                                                </Link>
+                                                <Link
+                                                    :href="route('admin.questions.create', { syllabus_chapter_id: row.chapter_id, scope: 'chapter' })"
+                                                    class="text-indigo-600 hover:underline"
+                                                >
+                                                    Add MCQs
+                                                </Link>
+                                                <Link
+                                                    :href="route('admin.practice-sets.chapters.show', row.chapter_id)"
+                                                    class="text-indigo-600 hover:underline"
+                                                >
+                                                    Create test
+                                                </Link>
+                                            </template>
+                                            <Link
+                                                v-else-if="!row.topic_id && row.practice_set_id"
+                                                :href="route('admin.questions.chapters.show', row.chapter_id)"
+                                                class="text-indigo-600 hover:underline"
+                                            >
+                                                Chapter bank
+                                            </Link>
+                                            <PrimaryButton
+                                                v-if="assigningPlanId === plan.id && row.practice_set_id"
+                                                type="button"
+                                                class="!mt-1 !py-1 !text-[10px]"
+                                                :disabled="assignForm.processing"
+                                                @click="assignSet(plan, row.practice_set_id)"
+                                            >
+                                                {{ row.is_assigned ? 'Re-assign' : 'Assign' }}
+                                            </PrimaryButton>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                    <p v-else class="text-xs text-gray-400">
-                        {{ isAdminContext ? 'Click Assign sheets to add practice or tests.' : 'No prep assigned yet.' }}
+                </div>
+                <div v-else class="px-4 py-3">
+                    <p class="text-xs text-gray-400">
+                        {{ isAdminContext ? 'Edit the exam to select chapters, then assign practice or tests.' : 'No chapters selected yet.' }}
                     </p>
                 </div>
 
@@ -722,109 +925,6 @@ watch(
                     class="border-t border-gray-200 bg-emerald-50/40 px-4 py-3 text-sm text-emerald-800"
                 >
                     <span class="font-medium">School test result:</span> {{ marksScoreLabel(plan) }}
-                </div>
-
-                <div v-if="isAdminContext && assigningPlanId === plan.id" class="border-t border-gray-200 bg-slate-50 px-4 py-4">
-                    <div class="space-y-4">
-                        <div class="flex flex-wrap items-end justify-between gap-3">
-                            <div>
-                                <h4 class="text-sm font-medium text-gray-900">Assign practice / chapter tests</h4>
-                                <p class="mt-1 text-xs text-gray-500">
-                                    Sheets from the exam chapters only. Default due date is the day before the exam.
-                                </p>
-                            </div>
-                            <div>
-                                <InputLabel value="Due date for new assignments" class="!text-xs" />
-                                <input
-                                    v-model="assignDueDates[plan.id]"
-                                    type="date"
-                                    class="mt-1 rounded-md border-gray-300 text-sm"
-                                />
-                            </div>
-                        </div>
-
-                        <div
-                            v-for="chapter in plan.assignable_chapters || []"
-                            :key="chapter.chapter_id"
-                            class="rounded-lg border border-gray-200 bg-white p-4"
-                        >
-                            <h5 class="text-sm font-medium text-gray-900">{{ chapter.chapter_label }}</h5>
-
-                            <div v-if="!chapterHasSets(chapter)" class="mt-2 space-y-2">
-                                <p class="text-xs text-amber-700">No published sets for this chapter yet.</p>
-                                <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium">
-                                    <Link
-                                        :href="route('admin.questions.create', { syllabus_chapter_id: chapter.chapter_id, scope: 'chapter' })"
-                                        class="text-indigo-600 hover:underline"
-                                    >
-                                        Add MCQs
-                                    </Link>
-                                    <Link
-                                        :href="route('admin.questions.chapters.show', chapter.chapter_id)"
-                                        class="text-indigo-600 hover:underline"
-                                    >
-                                        Question bank
-                                    </Link>
-                                    <Link
-                                        :href="route('admin.practice-sets.chapters.show', chapter.chapter_id)"
-                                        class="text-indigo-600 hover:underline"
-                                    >
-                                        Create chapter test
-                                    </Link>
-                                </div>
-                            </div>
-
-                            <div v-if="chapter.topic_sets?.length" class="mt-3">
-                                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Topic practice</p>
-                                <ul class="mt-2 divide-y divide-gray-100">
-                                    <li
-                                        v-for="set in chapter.topic_sets"
-                                        :key="set.id"
-                                        class="flex flex-wrap items-center justify-between gap-3 py-2"
-                                    >
-                                        <div>
-                                            <span class="font-mono font-semibold text-indigo-600">{{ set.set_code }}</span>
-                                            <span class="ml-2 text-xs text-gray-600">{{ set.topic_name }}</span>
-                                            <span class="ml-2 text-xs text-gray-400">{{ set.tier_label }} · {{ set.questions_count }} Q</span>
-                                        </div>
-                                        <PrimaryButton
-                                            type="button"
-                                            class="!py-1.5 !text-xs"
-                                            :disabled="assignForm.processing"
-                                            @click="assignSet(plan, set.id)"
-                                        >
-                                            {{ set.is_assigned ? 'Re-assign' : 'Assign' }}
-                                        </PrimaryButton>
-                                    </li>
-                                </ul>
-                            </div>
-
-                            <div v-if="chapter.chapter_tests?.length" class="mt-3">
-                                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Chapter tests</p>
-                                <ul class="mt-2 divide-y divide-gray-100">
-                                    <li
-                                        v-for="set in chapter.chapter_tests"
-                                        :key="set.id"
-                                        class="flex flex-wrap items-center justify-between gap-3 py-2"
-                                    >
-                                        <div>
-                                            <span class="font-mono font-semibold text-indigo-600">{{ set.set_code }}</span>
-                                            <span class="ml-2 text-xs text-gray-600">Chapter test</span>
-                                            <span class="ml-2 text-xs text-gray-400">{{ set.questions_count }} Q</span>
-                                        </div>
-                                        <PrimaryButton
-                                            type="button"
-                                            class="!py-1.5 !text-xs"
-                                            :disabled="assignForm.processing"
-                                            @click="assignSet(plan, set.id)"
-                                        >
-                                            {{ set.is_assigned ? 'Re-assign' : 'Assign' }}
-                                        </PrimaryButton>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

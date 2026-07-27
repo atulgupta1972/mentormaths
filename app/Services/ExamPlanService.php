@@ -296,6 +296,7 @@ class ExamPlanService
                     'id' => $set->id,
                     'set_code' => $set->set_code,
                     'tier_label' => $set->tier_label,
+                    'topic_id' => $set->syllabus_topic_id,
                     'topic_name' => $set->topic?->name,
                     'questions_count' => $set->questions_count,
                     'kind_label' => 'Practice',
@@ -377,7 +378,8 @@ class ExamPlanService
             ->with([
                 'practiceSet' => fn ($q) => $q->withCount('questions')->with([
                     'topic:id,syllabus_chapter_id,name',
-                    'chapter:id,name',
+                    'topic.chapter:id,chapter_number,name,sort_order',
+                    'chapter:id,chapter_number,name,sort_order',
                 ]),
                 'attempts' => fn ($q) => $q->orderByDesc('attempt_number'),
             ])
@@ -401,12 +403,20 @@ class ExamPlanService
             ->map(function (SetAssignment $assignment) {
                 $latest = $assignment->attempts->first();
                 $summary = AssignmentProgress::formatAssignmentSummary($assignment, $latest);
+                $worksheet = $assignment->practiceSet;
+                $chapter = $worksheet->isChapterScope()
+                    ? $worksheet->chapter
+                    : $worksheet->topic?->chapter;
 
                 return [
                     'assignment_id' => $assignment->id,
                     'practice_set_id' => $assignment->worksheet_id,
                     'set_code' => $summary['set_code'],
                     'kind_label' => $summary['kind_label'],
+                    'chapter_id' => $chapter?->id,
+                    'chapter_label' => $chapter ? self::chapterLabel($chapter) : null,
+                    'topic_id' => $worksheet->syllabus_topic_id,
+                    'topic_name' => $summary['topic_name'],
                     'target_date' => $summary['target_date'],
                     'status' => $summary['status'],
                     'assignment_status' => $summary['assignment_status'],
