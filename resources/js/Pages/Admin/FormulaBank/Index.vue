@@ -15,7 +15,6 @@ const page = usePage();
 
 const selectedGradeId = ref(
     props.selectedGradeId
-    || props.matrix?.grades?.find((g) => g.sort_order === 7)?.id
     || props.matrix?.grades?.[0]?.id
     || null,
 );
@@ -36,7 +35,7 @@ watch(
             return;
         }
         if (!grades.some((g) => g.id === selectedGradeId.value)) {
-            selectedGradeId.value = grades.find((g) => g.sort_order === 7)?.id || grades[0].id;
+            selectedGradeId.value = grades[0]?.id ?? null;
         }
     },
 );

@@ -172,6 +172,41 @@ class FormulaBankTest extends TestCase
         $this->assertDatabaseMissing('questions', ['id' => $question->id]);
     }
 
+    public function test_formula_matrix_includes_all_classes_with_syllabus(): void
+    {
+        [$admin, $topic] = $this->seedTopic();
+        $board = Board::query()->first();
+        $year = AcademicYear::query()->first();
+        $subject = Subject::query()->where('code', 'MATHS')->first();
+
+        $grade6 = GradeLevel::query()->create([
+            'name' => 'Class 6',
+            'sort_order' => 6,
+            'is_active' => true,
+        ]);
+
+        $syllabus6 = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade6->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabus6->id,
+            'name' => 'Knowing Our Numbers',
+            'chapter_number' => 1,
+            'sort_order' => 1,
+        ]);
+
+        $matrix = app(\App\Services\FormulaBankService::class)->matrixForBoard($board, $year);
+
+        $gradeIds = collect($matrix['grades'])->pluck('id')->all();
+
+        $this->assertContains($grade6->id, $gradeIds);
+        $this->assertContains($topic->chapter->syllabusVersion->grade_level_id, $gradeIds);
+    }
+
     public function test_add_formulas_chapter_page_loads_from_question_hub(): void
     {
         $this->withoutVite();

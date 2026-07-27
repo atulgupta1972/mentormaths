@@ -41,8 +41,7 @@ class FormulaBankController extends Controller
         }
 
         if ($matrix && ! $gradeId) {
-            $gradeId = collect($matrix['grades'])->firstWhere('sort_order', 7)['id']
-                ?? ($matrix['grades'][0]['id'] ?? null);
+            $gradeId = $matrix['grades'][0]['id'] ?? null;
         }
 
         return Inertia::render('Admin/FormulaBank/Index', [

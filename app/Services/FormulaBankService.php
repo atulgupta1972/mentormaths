@@ -38,11 +38,7 @@ class FormulaBankService
         $year ??= AcademicYear::active();
         $maths = Subject::query()->where('code', 'MATHS')->first();
 
-        $grades = GradeLevel::query()
-            ->where('is_active', true)
-            ->whereBetween('sort_order', [7, 10])
-            ->orderBy('sort_order')
-            ->get(['id', 'name', 'sort_order']);
+        $grades = $this->gradesWithSyllabus($board, $year, $maths);
 
         if (! $year || ! $maths) {
             return [
@@ -129,6 +125,36 @@ class FormulaBankService
             'grades' => $grades->map->only(['id', 'name', 'sort_order'])->values()->all(),
             'rows' => $rows,
         ];
+    }
+
+    /**
+     * Active classes that have a maths syllabus for this board and year.
+     *
+     * @return \Illuminate\Support\Collection<int, GradeLevel>
+     */
+    private function gradesWithSyllabus(Board $board, ?AcademicYear $year, ?Subject $maths)
+    {
+        if (! $year || ! $maths) {
+            return collect();
+        }
+
+        $gradeIds = SyllabusVersion::query()
+            ->where('academic_year_id', $year->id)
+            ->where('board_id', $board->id)
+            ->where('subject_id', $maths->id)
+            ->pluck('grade_level_id')
+            ->unique()
+            ->values();
+
+        if ($gradeIds->isEmpty()) {
+            return collect();
+        }
+
+        return GradeLevel::query()
+            ->where('is_active', true)
+            ->whereIn('id', $gradeIds)
+            ->orderBy('sort_order')
+            ->get(['id', 'name', 'sort_order']);
     }
 
     /**
