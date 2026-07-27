@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\FormulaQuestionStat;
 use App\Models\Student;
+use App\Support\FormulaDrillSchema;
 use Illuminate\Support\Collection;
 
 class FormulaDrillReportService
@@ -13,10 +14,14 @@ class FormulaDrillReportService
     ) {}
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|null
      */
-    public function summaryForStudent(Student $student): array
+    public function summaryForStudent(Student $student): ?array
     {
+        if (! FormulaDrillSchema::isReady()) {
+            return null;
+        }
+
         $poolSize = $this->poolService->poolSize($student);
 
         $stats = FormulaQuestionStat::query()
@@ -43,6 +48,10 @@ class FormulaDrillReportService
      */
     public function weakFormulas(Student $student, int $limit = 10): array
     {
+        if (! FormulaDrillSchema::isReady()) {
+            return [];
+        }
+
         return FormulaQuestionStat::query()
             ->where('student_id', $student->id)
             ->where(function ($query) {

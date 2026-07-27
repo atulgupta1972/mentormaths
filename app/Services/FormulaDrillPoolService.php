@@ -9,6 +9,7 @@ use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Models\SyllabusTopic;
 use App\Models\WrittenSubmission;
+use App\Support\FormulaDrillSchema;
 use App\Support\FormulaDrillScope;
 use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetDeliveryMode;
@@ -25,6 +26,10 @@ class FormulaDrillPoolService
      */
     public function poolQuestionIds(Student $student): array
     {
+        if (! FormulaDrillSchema::isReady()) {
+            return [];
+        }
+
         $topicIds = $this->completedTopicIdsForStudent($student);
 
         if ($topicIds === []) {

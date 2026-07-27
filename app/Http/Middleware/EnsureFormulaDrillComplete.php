@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\FormulaDrillSessionService;
+use App\Support\FormulaDrillSchema;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -18,6 +19,10 @@ class EnsureFormulaDrillComplete
         $user = $request->user();
 
         if (! $user || $user->isAdmin() || ! $user->isStudent()) {
+            return $next($request);
+        }
+
+        if (! FormulaDrillSchema::isReady()) {
             return $next($request);
         }
 
