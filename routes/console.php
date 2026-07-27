@@ -12,6 +12,11 @@ Schedule::command('students:send-weekly-summaries')
     ->weeklyOn(6, '08:00')
     ->timezone('Asia/Kolkata');
 
+Schedule::command('students:send-daily-balance-reminders')
+    ->dailyAt(config('progress_summary.daily_balance_time', '14:00'))
+    ->timezone('Asia/Kolkata')
+    ->when(fn () => config('progress_summary.daily_balance_enabled', true));
+
 Schedule::command('written-submissions:grade-pending')
     ->everyMinute()
     ->withoutOverlapping();

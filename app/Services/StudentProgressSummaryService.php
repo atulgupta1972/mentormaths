@@ -180,6 +180,106 @@ class StudentProgressSummaryService
         ];
     }
 
+    /**
+     * Daily reminder payload: only balance work still to do (practice, test, written, corrections).
+     *
+     * @return array<string, mixed>
+     */
+    public function buildBalanceReminder(StudentEnrollment $enrollment, ?Carbon $asOf = null): array
+    {
+        $full = $this->build($enrollment, $asOf);
+
+        $pending = collect($full['pending'])
+            ->reject(fn (array $row) => $this->isWrittenAwaitingGrade($row))
+            ->values()
+            ->all();
+
+        $overdue = collect($full['overdue'])
+            ->reject(fn (array $row) => $this->isWrittenAwaitingGrade($row))
+            ->values()
+            ->all();
+
+        $helpRequests = $full['help_requests'];
+        $assignmentRows = array_merge($overdue, $pending);
+        $workTypes = $this->countByWorkType($assignmentRows);
+
+        return [
+            'student_name' => $full['student_name'],
+            'class_name' => $full['class_name'],
+            'as_of_date' => $full['as_of_date'],
+            'as_of_label' => $full['as_of_label'],
+            'pending' => $pending,
+            'pending_by_chapter' => ProgressSummaryTable::groupByChapter($pending, 'target_date'),
+            'overdue' => $overdue,
+            'overdue_by_chapter' => ProgressSummaryTable::groupByChapter($overdue, 'target_date'),
+            'help_requests' => $helpRequests,
+            'stats' => [
+                'pending_count' => count($pending),
+                'overdue_count' => count($overdue),
+                'help_count' => count($helpRequests),
+                'balance_count' => count($pending) + count($overdue) + count($helpRequests),
+                'practice_count' => $workTypes['practice'],
+                'test_count' => $workTypes['test'],
+                'written_count' => $workTypes['written'],
+                'correction_count' => count($helpRequests),
+            ],
+            'dashboard_url' => $full['dashboard_url'],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function isWrittenAwaitingGrade(array $row): bool
+    {
+        if (($row['delivery_mode'] ?? '') !== WorksheetDeliveryMode::WRITTEN) {
+            return false;
+        }
+
+        $status = $row['written_submission_status'] ?? null;
+
+        return in_array($status, [
+            WrittenSubmission::STATUS_UPLOADED,
+            WrittenSubmission::STATUS_PROCESSING,
+            WrittenSubmission::STATUS_GRADED,
+        ], true);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{practice: int, test: int, written: int}
+     */
+    private function countByWorkType(array $rows): array
+    {
+        $practice = 0;
+        $test = 0;
+        $written = 0;
+
+        foreach ($rows as $row) {
+            if (($row['delivery_mode'] ?? '') === WorksheetDeliveryMode::WRITTEN) {
+                $written++;
+
+                continue;
+            }
+
+            $kind = strtolower((string) ($row['kind_label'] ?? ''));
+
+            if (str_contains($kind, 'test')) {
+                $test++;
+
+                continue;
+            }
+
+            $practice++;
+        }
+
+        return [
+            'practice' => $practice,
+            'test' => $test,
+            'written' => $written,
+        ];
+    }
+
     private function latestSubmittedAttemptAsOf(SetAssignment $assignment, Carbon $asOf): ?SetAttempt
     {
         return $assignment->attempts
