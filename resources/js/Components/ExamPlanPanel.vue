@@ -258,9 +258,6 @@ const toggleAssign = (plan) => {
     }
 };
 
-const chapterHasSets = (chapter) =>
-    (chapter.topic_sets?.length || 0) + (chapter.chapter_tests?.length || 0) > 0;
-
 const initChapterSelections = (plan = null) => {
     const next = {};
     const expanded = {};
