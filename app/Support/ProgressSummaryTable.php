@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use Carbon\Carbon;
+
 class ProgressSummaryTable
 {
     public const FALLBACK_CHAPTER = 'Other';
@@ -117,5 +119,67 @@ class ProgressSummaryTable
         }
 
         return ' · Attempt '.$row['latest_attempt_number'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array{pending_days: ?int, pending_days_label: string}
+     */
+    public static function pendingDaysMeta(array $row, ?Carbon $asOf = null): array
+    {
+        $asOf = ($asOf ?? now())->copy()->startOfDay();
+
+        if (! empty($row['is_overdue']) && ! empty($row['target_date'])) {
+            $due = Carbon::parse((string) $row['target_date'])->startOfDay();
+            $days = (int) $due->diffInDays($asOf, false);
+
+            if ($days > 0) {
+                return [
+                    'pending_days' => $days,
+                    'pending_days_label' => $days === 1 ? '1 day overdue' : "{$days} days overdue",
+                ];
+            }
+
+            return [
+                'pending_days' => 0,
+                'pending_days_label' => 'Due today',
+            ];
+        }
+
+        $startAt = $row['reassigned_at'] ?? $row['assigned_at'] ?? null;
+
+        if ($startAt) {
+            $assigned = Carbon::parse(substr((string) $startAt, 0, 10))->startOfDay();
+            $days = (int) $assigned->diffInDays($asOf);
+
+            if ($days === 0) {
+                return [
+                    'pending_days' => 0,
+                    'pending_days_label' => 'Assigned today',
+                ];
+            }
+
+            return [
+                'pending_days' => $days,
+                'pending_days_label' => $days === 1 ? 'Pending 1 day' : "Pending {$days} days",
+            ];
+        }
+
+        if (! empty($row['target_date'])) {
+            $due = Carbon::parse((string) $row['target_date'])->startOfDay();
+            $daysUntilDue = (int) $asOf->diffInDays($due, false);
+
+            if ($daysUntilDue > 0) {
+                return [
+                    'pending_days' => $daysUntilDue,
+                    'pending_days_label' => $daysUntilDue === 1 ? 'Due in 1 day' : "Due in {$daysUntilDue} days",
+                ];
+            }
+        }
+
+        return [
+            'pending_days' => null,
+            'pending_days_label' => '—',
+        ];
     }
 }

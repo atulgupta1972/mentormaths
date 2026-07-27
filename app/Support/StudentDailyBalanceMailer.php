@@ -12,37 +12,49 @@ class StudentDailyBalanceMailer
 {
     /**
      * @param  array<string, mixed>  $summary
-     * @return array{sent: bool, emails: list<string>, error: ?string}
+     * @param  array{to?: list<string>, cc?: list<string>}|null  $recipients
+     * @return array{sent: bool, to: list<string>, cc: list<string>, error: ?string}
      */
-    public static function send(Student $student, array $summary): array
+    public static function send(Student $student, array $summary, ?array $recipients = null): array
     {
-        $emailService = app(StudentNotificationEmailService::class);
-        $emails = $emailService->emailAddressesForStudent($student);
+        $recipients ??= app(StudentNotificationEmailService::class)->balanceReminderRecipients($student);
 
-        if ($emails === []) {
-            return ['sent' => false, 'emails' => [], 'error' => 'no_email'];
+        $to = $recipients['to'] ?? [];
+        $cc = $recipients['cc'] ?? [];
+
+        if ($to === [] && $cc !== []) {
+            $to[] = array_shift($cc);
+        }
+
+        if ($to === []) {
+            return ['sent' => false, 'to' => [], 'cc' => [], 'error' => 'no_email'];
         }
 
         $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
 
-        try {
-            $pending = Mail::to($emails);
+        if ($adminEmail && ! self::includesEmail($to, $adminEmail) && ! self::includesEmail($cc, $adminEmail)) {
+            $cc[] = $adminEmail;
+        }
 
-            if ($adminEmail && ! self::includesEmail($emails, $adminEmail)) {
-                $pending->cc($adminEmail);
+        try {
+            $pending = Mail::to($to);
+
+            if ($cc !== []) {
+                $pending->cc($cc);
             }
 
             $pending->send(new StudentDailyBalanceReminder($student, $summary));
 
-            return ['sent' => true, 'emails' => $emails, 'error' => null];
+            return ['sent' => true, 'to' => $to, 'cc' => $cc, 'error' => null];
         } catch (\Throwable $e) {
             Log::error('Failed to send student daily balance reminder email.', [
                 'student_id' => $student->id,
-                'emails' => $emails,
+                'to' => $to,
+                'cc' => $cc,
                 'error' => $e->getMessage(),
             ]);
 
-            return ['sent' => false, 'emails' => $emails, 'error' => 'send_failed'];
+            return ['sent' => false, 'to' => $to, 'cc' => $cc, 'error' => 'send_failed'];
         }
     }
 

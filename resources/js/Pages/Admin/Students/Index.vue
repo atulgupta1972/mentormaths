@@ -1,11 +1,17 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
 import { Head, Link } from '@inertiajs/vue3';
 
 defineProps({
     students: Object,
     activeYear: Object,
     selectedGrade: Object,
+    mailSettings: Object,
+    gradeLevels: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 const enrollmentStatus = (student) => student.enrollments[0]?.status || '—';
@@ -38,7 +44,15 @@ const statusClass = (status) => {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
+                <PendingWorkEmailPanel
+                    v-if="mailSettings"
+                    :mail-settings="mailSettings"
+                    :active-year="activeYear"
+                    :selected-grade="selectedGrade"
+                    :grade-levels="gradeLevels"
+                />
+
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
+use App\Models\GradeLevel;
 use App\Services\DashboardService;
+use App\Support\MailConfigStatus;
 use App\Support\StudentWeeklyReportEmails;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,6 +22,11 @@ class DashboardController extends Controller
         if ($user->isAdmin()) {
             return Inertia::render('Dashboard', [
                 'isAdmin' => true,
+                'mailSettings' => MailConfigStatus::forAdmin(),
+                'gradeLevels' => GradeLevel::query()
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->get(['id', 'name']),
                 ...$this->dashboardService->forAdmin($request),
             ]);
         }

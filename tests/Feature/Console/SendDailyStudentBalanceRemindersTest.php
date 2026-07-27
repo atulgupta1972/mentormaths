@@ -91,6 +91,7 @@ class SendDailyStudentBalanceRemindersTest extends TestCase
         $this->assertSame(1, $summary['stats']['balance_count']);
         $this->assertSame(1, $summary['stats']['pending_count']);
         $this->assertSame(1, $summary['stats']['practice_count']);
+        $this->assertArrayHasKey('pending_days_label', $summary['pending'][0]);
     }
 
     public function test_command_sends_daily_balance_email_when_work_is_pending(): void

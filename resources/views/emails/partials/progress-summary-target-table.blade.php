@@ -9,6 +9,9 @@
             <th align="left">Type</th>
             <th align="left">Topic</th>
             <th align="left">{{ $dateLabel }}</th>
+            @if ($showPendingDays ?? false)
+                <th align="left">Pending</th>
+            @endif
         </tr>
     </thead>
     <tbody>
@@ -18,6 +21,9 @@
                 <td>{{ $row['kind_label'] }}</td>
                 <td>{{ ProgressSummaryTable::detailLabel($row) }}</td>
                 <td>{{ ProgressSummaryTable::targetDateLabel($row) }}</td>
+                @if ($showPendingDays ?? false)
+                    <td>{{ $row['pending_days_label'] ?? '—' }}</td>
+                @endif
             </tr>
         @endforeach
     </tbody>

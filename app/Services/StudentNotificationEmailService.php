@@ -79,6 +79,62 @@ class StudentNotificationEmailService
     }
 
     /**
+     * Pending-work emails: student in TO, parents CC when email is on file.
+     *
+     * @return array{to: list<string>, cc: list<string>}
+     */
+    public function balanceReminderRecipients(Student $student): array
+    {
+        $student->loadMissing('user:id,email');
+
+        $to = [];
+        $cc = [];
+
+        if (AssignmentMailer::isDeliverableEmail($student->email)) {
+            $to[] = $student->email;
+        }
+
+        $loginEmail = $student->user?->email;
+
+        if (AssignmentMailer::isDeliverableEmail($loginEmail) && ! $this->hasEmailInList($to, $loginEmail)) {
+            $to[] = $loginEmail;
+        }
+
+        foreach ([$student->parent1_email, $student->parent2_email] as $parentEmail) {
+            if (
+                AssignmentMailer::isDeliverableEmail($parentEmail)
+                && ! $this->hasEmailInList($to, $parentEmail)
+                && ! $this->hasEmailInList($cc, $parentEmail)
+            ) {
+                $cc[] = $parentEmail;
+            }
+        }
+
+        if ($to === [] && $cc !== []) {
+            $to[] = array_shift($cc);
+        }
+
+        return [
+            'to' => array_values(array_unique($to)),
+            'cc' => array_values(array_unique($cc)),
+        ];
+    }
+
+    /**
+     * @param  list<string>  $emails
+     */
+    private function hasEmailInList(array $emails, string $email): bool
+    {
+        foreach ($emails as $candidate) {
+            if (strcasecmp($candidate, $email) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param  list<array{key: string, label: string, email: string}>  $recipients
      */
     private function hasEmail(array $recipients, string $email): bool

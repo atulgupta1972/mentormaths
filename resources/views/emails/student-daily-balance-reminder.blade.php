@@ -28,6 +28,7 @@
         @include('emails.partials.progress-summary-target-table', [
             'rows' => $group['rows'],
             'dateLabel' => 'Due date',
+            'showPendingDays' => true,
         ])
     @endforeach
 @endif
@@ -40,6 +41,7 @@
         @include('emails.partials.progress-summary-target-table', [
             'rows' => $group['rows'],
             'dateLabel' => 'Target date',
+            'showPendingDays' => true,
         ])
     @endforeach
 @endif
@@ -53,6 +55,9 @@
                     {{ $item['set_code'] }} —
                 @endif
                 {{ $item['question_text'] ?? 'Needs explanation in class, then retry from dashboard' }}
+                @if (! empty($item['pending_days_label']) && $item['pending_days_label'] !== '—')
+                    · <em>{{ $item['pending_days_label'] }}</em>
+                @endif
             </li>
         @endforeach
     </ul>

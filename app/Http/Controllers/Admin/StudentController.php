@@ -11,6 +11,7 @@ use App\Services\AdminGradeContext;
 use App\Services\ExamPlanService;
 use App\Services\QuestionResolutionService;
 use App\Services\StudentAccountService;
+use App\Services\PendingWorkEmailService;
 use App\Services\StudentNotificationContactService;
 use App\Services\StudentNotificationEmailService;
 use App\Services\StudentProgressPdfService;
@@ -38,6 +39,7 @@ class StudentController extends Controller
         private StudentNotificationContactService $notificationContactService,
         private StudentNotificationEmailService $notificationEmailService,
         private StudentProgressPdfService $progressPdfService,
+        private PendingWorkEmailService $pendingWorkEmailService,
     ) {}
 
     public function index(Request $request): Response
@@ -65,6 +67,11 @@ class StudentController extends Controller
             'students' => $students,
             'activeYear' => $activeYear?->only(['id', 'name']),
             'selectedGrade' => $grade?->only(['id', 'name']),
+            'mailSettings' => \App\Support\MailConfigStatus::forAdmin(),
+            'gradeLevels' => GradeLevel::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->get(['id', 'name']),
         ]);
     }
 
@@ -331,6 +338,31 @@ class StudentController extends Controller
         }
 
         return $redirect;
+    }
+
+    public function sendPendingWork(Student $student): RedirectResponse
+    {
+        $result = $this->pendingWorkEmailService->sendToStudent($student);
+
+        if ($result['sent']) {
+            $recipientParts = ['to '.implode(', ', $result['to'])];
+
+            if ($result['cc'] !== []) {
+                $recipientParts[] = 'cc '.implode(', ', $result['cc']);
+            }
+
+            return back()->with(
+                'success',
+                "Pending worksheet email sent ({$result['balance_count']} item(s)) — ".implode('; ', $recipientParts).'.',
+            );
+        }
+
+        return match ($result['error']) {
+            'no_enrollment' => back()->with('error', 'Student has no active enrollment for the current year.'),
+            'no_work' => back()->with('warning', 'This student has no pending worksheets or corrections to email.'),
+            'no_email' => back()->with('warning', 'No deliverable email on file — add student or parent email first.'),
+            default => back()->with('warning', 'Email could not be sent. Check mail settings on the Notifications page.'),
+        };
     }
 
     public function progressSummaryPdf(Request $request, Student $student)

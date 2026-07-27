@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
+import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link } from '@inertiajs/vue3';
@@ -27,6 +28,8 @@ const props = defineProps({
     resolutionItems: { type: Array, default: () => [] },
     resolutionCount: { type: Number, default: 0 },
     weeklyReportEmails: { type: String, default: '' },
+    mailSettings: { type: Object, default: null },
+    gradeLevels: { type: Array, default: () => [] },
 });
 
 const showManageExams = ref(false);
@@ -353,6 +356,15 @@ const adminSetStatusClass = (set) => {
                             </div>
                         </div>
                     </div>
+
+                    <PendingWorkEmailPanel
+                        v-if="mailSettings"
+                        compact
+                        :mail-settings="mailSettings"
+                        :active-year="activeYear"
+                        :selected-grade="selectedGrade"
+                        :grade-levels="gradeLevels"
+                    />
 
                     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                         <div class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-2.5 text-center shadow-sm">

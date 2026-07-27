@@ -114,12 +114,24 @@ const sendEmailForm = useForm({
     send_whatsapp: false,
 });
 
+const pendingWorkForm = useForm({});
+
 const sendProgressEmailNow = () => {
     if (!confirm('Send progress report email now to all included addresses? Admin will be CC\'d and PDF attached.')) {
         return;
     }
 
     sendEmailForm.post(route('admin.students.send-progress-summary', props.student.id), {
+        preserveScroll: true,
+    });
+};
+
+const sendPendingWorkEmailNow = () => {
+    if (!confirm('Send pending worksheet email now? Lists chapter-wise work and pending days. Parents CC\'d when on file.')) {
+        return;
+    }
+
+    pendingWorkForm.post(route('admin.students.send-pending-work', props.student.id), {
         preserveScroll: true,
     });
 };
@@ -194,16 +206,23 @@ const sendProgressEmailNow = () => {
             <div class="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
                 <PrimaryButton
                     type="button"
+                    :disabled="pendingWorkForm.processing"
+                    @click="sendPendingWorkEmailNow"
+                >
+                    {{ pendingWorkForm.processing ? 'Sending…' : 'Send pending work email' }}
+                </PrimaryButton>
+                <PrimaryButton
+                    type="button"
                     :disabled="sendEmailForm.processing || notifyEnabledCount === 0"
                     @click="sendProgressEmailNow"
                 >
                     {{ sendEmailForm.processing ? 'Sending…' : 'Send progress email now' }}
                 </PrimaryButton>
                 <p v-if="notifyEnabledCount === 0" class="text-sm text-amber-800">
-                    Add at least one email and tick Include to send manually.
+                    Progress email needs at least one included address. Pending work uses student/parent emails on file.
                 </p>
                 <p v-else class="text-xs text-gray-500">
-                    Sends today's report with PDF to included addresses (admin CC'd).
+                    Pending work: student TO, parent CC. Progress report: included addresses with PDF.
                 </p>
             </div>
 

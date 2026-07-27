@@ -140,13 +140,19 @@ const contentGroup = computed(() => ({
 
 const setupGroup = computed(() => ({
     label: 'Setup',
-    active: route().current('admin.academic-years.*'),
+    active: route().current('admin.academic-years.*') || route().current('admin.notifications.*'),
     items: [
         {
             label: 'Academic years',
             href: route('admin.academic-years.index'),
             active: route().current('admin.academic-years.*'),
             show: isAdmin.value,
+        },
+        {
+            label: 'Email & notifications',
+            href: route('admin.notifications.index'),
+            active: route().current('admin.notifications.*'),
+            show: isAdmin.value && route().has('admin.notifications.index'),
         },
     ],
 }));

@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\ExamPlanController as AdminExamPlanController;
 use App\Http\Controllers\Admin\FormulaBankController;
 use App\Http\Controllers\Admin\GradeContextController;
 use App\Http\Controllers\Admin\GroupController;
+use App\Http\Controllers\Admin\NotificationSettingsController;
 use App\Http\Controllers\Admin\PracticeSetController;
 use App\Http\Controllers\Admin\PracticeSetTopicController;
 use App\Http\Controllers\Admin\QuestionAuditController;
@@ -107,6 +108,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('students.destroy');
     Route::patch('/students/{student}/contacts', [StudentController::class, 'updateContacts'])
         ->name('students.contacts.update');
+    Route::post('/students/{student}/send-pending-work', [StudentController::class, 'sendPendingWork'])
+        ->name('students.send-pending-work');
     Route::get('/students/{student}/progress-summary-preview', [StudentController::class, 'progressSummaryPreview'])
         ->name('students.progress-summary-preview');
     Route::post('/students/{student}/send-progress-summary', [StudentController::class, 'sendProgressSummary'])
@@ -119,6 +122,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('students.promote');
     Route::post('/students/bulk-promote', [StudentController::class, 'bulkPromote'])
         ->name('students.bulk-promote');
+
+    Route::get('/notifications', [NotificationSettingsController::class, 'index'])
+        ->name('notifications.index');
+    Route::post('/notifications/send-pending-work', [NotificationSettingsController::class, 'sendPendingWorkAll'])
+        ->name('notifications.send-pending-work');
 
     Route::get('/syllabus', [SyllabusVersionController::class, 'index'])
         ->name('syllabus.index');

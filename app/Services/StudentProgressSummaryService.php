@@ -187,6 +187,7 @@ class StudentProgressSummaryService
      */
     public function buildBalanceReminder(StudentEnrollment $enrollment, ?Carbon $asOf = null): array
     {
+        $asOf = ($asOf ?? now())->copy()->endOfDay();
         $full = $this->build($enrollment, $asOf);
 
         $pending = collect($full['pending'])
@@ -199,7 +200,24 @@ class StudentProgressSummaryService
             ->values()
             ->all();
 
-        $helpRequests = $full['help_requests'];
+        $pending = $this->enrichBalanceRows($pending, $asOf);
+        $overdue = $this->enrichBalanceRows($overdue, $asOf);
+
+        $helpRequests = array_map(function (array $item) use ($asOf) {
+            if (! empty($item['gave_up_at'])) {
+                $days = (int) Carbon::parse(substr((string) $item['gave_up_at'], 0, 10))
+                    ->startOfDay()
+                    ->diffInDays($asOf->copy()->startOfDay());
+
+                $item['pending_days_label'] = $days === 0
+                    ? 'Asked today'
+                    : ($days === 1 ? 'Waiting 1 day' : "Waiting {$days} days");
+            } else {
+                $item['pending_days_label'] = '—';
+            }
+
+            return $item;
+        }, $full['help_requests']);
         $assignmentRows = array_merge($overdue, $pending);
         $workTypes = $this->countByWorkType($assignmentRows);
 
@@ -225,6 +243,17 @@ class StudentProgressSummaryService
             ],
             'dashboard_url' => $full['dashboard_url'],
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function enrichBalanceRows(array $rows, Carbon $asOf): array
+    {
+        return array_map(function (array $row) use ($asOf) {
+            return array_merge($row, ProgressSummaryTable::pendingDaysMeta($row, $asOf));
+        }, $rows);
     }
 
     /**

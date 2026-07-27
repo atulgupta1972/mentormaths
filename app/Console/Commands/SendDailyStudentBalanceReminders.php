@@ -56,9 +56,9 @@ class SendDailyStudentBalanceReminders extends Command
                 continue;
             }
 
-            $emails = $emailService->emailAddressesForStudent($student);
+            $recipients = $emailService->balanceReminderRecipients($student);
 
-            if ($emails === []) {
+            if ($recipients['to'] === [] && $recipients['cc'] === []) {
                 $skipped++;
 
                 continue;
@@ -73,21 +73,27 @@ class SendDailyStudentBalanceReminders extends Command
             }
 
             if ($this->option('dry-run')) {
+                $allRecipients = array_merge($recipients['to'], $recipients['cc']);
                 $this->line(sprintf(
-                    'Would send to %s: %d item(s) (%s)',
+                    'Would send to %s: %d item(s) (to: %s%s)',
                     $student->name,
                     $summary['stats']['balance_count'],
-                    implode(', ', $emails),
+                    implode(', ', $recipients['to']),
+                    $recipients['cc'] !== [] ? '; cc: '.implode(', ', $recipients['cc']) : '',
                 ));
 
                 continue;
             }
 
-            $result = StudentDailyBalanceMailer::send($student, $summary);
+            $result = StudentDailyBalanceMailer::send($student, $summary, $recipients);
 
             if ($result['sent']) {
                 $sent++;
-                $this->info("Sent to {$student->name} (".implode(', ', $result['emails']).')');
+                $recipientLine = implode(', ', $result['to']);
+                if ($result['cc'] !== []) {
+                    $recipientLine .= ' (cc: '.implode(', ', $result['cc']).')';
+                }
+                $this->info("Sent to {$student->name} ({$recipientLine})");
             } elseif ($result['error'] === 'no_email') {
                 $skipped++;
             } else {
