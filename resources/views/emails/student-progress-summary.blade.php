@@ -79,6 +79,25 @@
     @endforeach
 @endif
 
+@if (! empty($summary['formula_drill']['weak_formulas']))
+    <p><strong>Formula memory — needs more practice</strong></p>
+    <p style="font-size: 14px;">
+        Pool: {{ $summary['formula_drill']['pool_size'] ?? 0 }} formulas ·
+        Mastered: {{ $summary['formula_drill']['mastered_count'] ?? 0 }} ·
+        Failures: {{ $summary['formula_drill']['total_failures'] ?? 0 }}
+    </p>
+    <ul>
+        @foreach ($summary['formula_drill']['weak_formulas'] as $row)
+            <li style="margin-bottom: 8px;">
+                {{ $row['question_text'] }}
+                @if (($row['total_failures'] ?? 0) > 0)
+                    · {{ $row['total_failures'] }} wrong attempt(s)
+                @endif
+            </li>
+        @endforeach
+    </ul>
+@endif
+
 <p>
     View dashboard:<br>
     <a href="{{ $summary['dashboard_url'] }}">{{ $summary['dashboard_url'] }}</a>

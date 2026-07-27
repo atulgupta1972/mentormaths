@@ -158,7 +158,9 @@ class SetAttemptService
     {
         $assignments = SetAssignment::query()
             ->with([
-                'practiceSet' => fn ($q) => $q->withCount('questions'),
+                'practiceSet' => fn ($q) => $q
+                    ->withCount('questions')
+                    ->with(['chapter:id,name,sort_order', 'topic:id,name,syllabus_chapter_id', 'topic.chapter:id,name,sort_order']),
                 'attempts' => fn ($q) => $q->orderByDesc('attempt_number')->limit(1),
                 'writtenSubmissions' => fn ($q) => $q->latest('id')->limit(1),
             ])

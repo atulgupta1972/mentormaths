@@ -11,6 +11,7 @@ use App\Services\AdminGradeContext;
 use App\Services\ExamPlanService;
 use App\Services\QuestionResolutionService;
 use App\Services\StudentAccountService;
+use App\Services\FormulaDrillReportService;
 use App\Services\PendingWorkEmailService;
 use App\Services\StudentNotificationContactService;
 use App\Services\StudentNotificationEmailService;
@@ -40,6 +41,7 @@ class StudentController extends Controller
         private StudentNotificationEmailService $notificationEmailService,
         private StudentProgressPdfService $progressPdfService,
         private PendingWorkEmailService $pendingWorkEmailService,
+        private FormulaDrillReportService $formulaDrillReport,
     ) {}
 
     public function index(Request $request): Response
@@ -124,6 +126,7 @@ class StudentController extends Controller
             'defaultSummaryEmail' => AssignmentMailer::resolveStudentEmail($student),
             'summaryEmailRecipients' => $this->notificationEmailService->recipientsForStudent($student),
             'whatsappRecipientCount' => count($this->notificationContactService->recipientsForStudent($student)),
+            'formulaDrillSummary' => $this->formulaDrillReport->summaryForStudent($student),
         ]);
     }
 

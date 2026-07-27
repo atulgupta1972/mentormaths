@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ContactNumbersPanel from '@/Components/ContactNumbersPanel.vue';
 import StudentEmailContactsPanel from '@/Components/StudentEmailContactsPanel.vue';
+import FormulaDrillStatsPanel from '@/Components/FormulaDrillStatsPanel.vue';
 import StudentProgressSummaryPanel from '@/Components/StudentProgressSummaryPanel.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
@@ -31,6 +32,7 @@ const props = defineProps({
     defaultSummaryEmail: { type: String, default: '' },
     summaryEmailRecipients: { type: Array, default: () => [] },
     whatsappRecipientCount: { type: Number, default: 0 },
+    formulaDrillSummary: { type: Object, default: null },
 });
 
 const contactFields = computed(() => [
@@ -167,6 +169,11 @@ const destroyStudent = () => {
                     :login-email="student.user?.email || ''"
                     :save-url="route('admin.students.emails.update', student.id)"
                     :summary-email-recipients="summaryEmailRecipients"
+                />
+
+                <FormulaDrillStatsPanel
+                    v-if="formulaDrillSummary"
+                    :summary="formulaDrillSummary"
                 />
 
                 <StudentProgressSummaryPanel

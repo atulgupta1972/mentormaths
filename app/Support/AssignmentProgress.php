@@ -235,6 +235,12 @@ class AssignmentProgress
             'delivery_mode' => 'written',
             'is_catch_up' => false,
             'scope' => $practiceSet->scope ?? 'topic',
+            'chapter_name' => $practiceSet->isChapterScope()
+                ? $practiceSet->chapter?->name
+                : $practiceSet->topic?->chapter?->name,
+            'topic_name' => $practiceSet->isChapterScope()
+                ? null
+                : $practiceSet->topic?->name,
             'target_date' => $assignment->due_date?->toDateString(),
             'is_overdue' => $overdue,
             'latest_score' => $latestScore,
@@ -265,6 +271,8 @@ class AssignmentProgress
             'delivery_mode' => $assignment->practiceSet->delivery_mode ?? 'online',
             'is_catch_up' => $summary['is_catch_up'],
             'scope' => $summary['scope'],
+            'chapter_name' => $summary['chapter_name'],
+            'topic_name' => $summary['topic_name'],
             'target_date' => $summary['target_date'],
             'is_overdue' => $summary['is_overdue'],
             'latest_score' => $summary['latest_score'],

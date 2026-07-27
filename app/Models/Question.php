@@ -35,6 +35,7 @@ class Question extends Model
         'difficulty',
         'source',
         'bank_purpose',
+        'formula_drill_scope',
         'created_by',
     ];
 

@@ -25,6 +25,7 @@ use App\Http\Controllers\Admin\WrittenSheetController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
+use App\Http\Controllers\Student\FormulaDrillController;
 use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
 use App\Http\Controllers\Student\PracticeSetController as StudentPracticeSetController;
 use App\Http\Controllers\Student\WrittenAssignmentController as StudentWrittenAssignmentController;
@@ -44,7 +45,7 @@ Route::get('/register/thank-you', [RegistrationRequestController::class, 'thankY
     ->name('registration.thank-you');
 
 Route::get('/dashboard', DashboardController::class)
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth', 'verified', 'formula.drill'])
     ->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function () {
@@ -246,7 +247,9 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::delete('/exam-plans/{examPlan}', [AdminExamPlanController::class, 'destroy'])->name('exam-plans.destroy');
 });
 
-Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->group(function () {
+Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->name('student.')->group(function () {
+    Route::get('/formula-drill', [FormulaDrillController::class, 'show'])->name('formula-drill.show');
+    Route::post('/formula-drill/items/{item}/answer', [FormulaDrillController::class, 'submitAnswer'])->name('formula-drill.answer');
     Route::post('/exam-plans', [StudentExamPlanController::class, 'store'])->name('exam-plans.store');
     Route::put('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'update'])->name('exam-plans.update');
     Route::delete('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'destroy'])->name('exam-plans.destroy');

@@ -58,11 +58,13 @@ class ExamPlanController extends Controller
 
     private function authorizeStudentPlan(Request $request, ExamPlan $examPlan): void
     {
+        $examPlan->loadMissing('enrollment');
         $studentId = $request->user()->student?->id;
 
         abort_unless(
             $studentId && $examPlan->enrollment?->student_id === $studentId,
             403,
+            'You can only manage your own exam plans.',
         );
     }
 
