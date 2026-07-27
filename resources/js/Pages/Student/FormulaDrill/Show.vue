@@ -160,11 +160,11 @@ const optionClass = (optionId) => {
                 </div>
 
                 <div v-if="question" class="overflow-hidden rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
-                    <QuestionBody :text="question.question_text" class="text-lg font-medium text-gray-900" />
+                    <QuestionBody :question-text="question.question_text" />
 
                     <div class="mt-5 space-y-2">
                         <button
-                            v-for="option in question.options"
+                            v-for="(option, optIndex) in question.options"
                             :key="option.id"
                             type="button"
                             class="block w-full rounded-lg border p-3 text-left transition"
@@ -172,7 +172,7 @@ const optionClass = (optionId) => {
                             :disabled="disabledOptions.includes(option.id) || submitting || feedback?.correct || feedback?.exhausted"
                             @click="selectOption(option.id)"
                         >
-                            <McqOptionLine :letter="option.letter" :text="option.option_text" />
+                            <McqOptionLine :index="optIndex" :text="option.option_text" />
                         </button>
                     </div>
 
