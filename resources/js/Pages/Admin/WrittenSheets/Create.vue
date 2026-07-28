@@ -53,9 +53,23 @@ const buildDefaultChapterPlan = () => props.topics.map((topic, index) => ({
     sort_order: index + 1,
 }));
 
+const hydrateChapterPlan = (rows) => {
+    if (!rows?.length) {
+        return buildDefaultChapterPlan();
+    }
+
+    return rows.map((row, index) => ({
+        ...row,
+        topic_name: row.topic_name
+            || props.topics.find((topic) => String(topic.id) === String(row.topic_id))?.name
+            || '',
+        sort_order: row.sort_order ?? index + 1,
+    }));
+};
+
 const chapterPlanRows = ref(
     props.chapterPlan?.length
-        ? props.chapterPlan
+        ? hydrateChapterPlan(props.chapterPlan)
         : buildDefaultChapterPlan(),
 );
 
@@ -296,7 +310,7 @@ const mergeChapterPlan = (incoming) => {
         return;
     }
 
-    chapterPlanRows.value = incoming;
+    chapterPlanRows.value = hydrateChapterPlan(incoming);
 };
 
 const resolveTopicIdForRow = (row) => {
@@ -403,7 +417,7 @@ watch(
         form.topic_id = '';
         selectedTopicIds.value = [];
         chapterPlanRows.value = props.chapterPlan?.length
-            ? props.chapterPlan
+            ? hydrateChapterPlan(props.chapterPlan)
             : buildDefaultChapterPlan();
     },
 );
@@ -426,8 +440,10 @@ watch(
 
         if (chapterPlanRows.value.length === 0) {
             chapterPlanRows.value = props.chapterPlan?.length
-                ? props.chapterPlan
+                ? hydrateChapterPlan(props.chapterPlan)
                 : buildDefaultChapterPlan();
+        } else {
+            chapterPlanRows.value = hydrateChapterPlan(chapterPlanRows.value);
         }
     },
     { immediate: true },

@@ -183,7 +183,10 @@ class WrittenSheetController extends Controller
             'selectedQuestionIds' => $selectedQuestionIds,
             'cursorPrompt' => $cursorPrompt,
             'promptOptions' => $promptOptions,
-            'chapterPlan' => session('written_sheet_chapter_plan', []),
+            'chapterPlan' => $this->hydrateWrittenSheetChapterPlan(
+                session('written_sheet_chapter_plan', []),
+                $topics,
+            ),
             'manualQuestionsDraft' => session('manual_questions_draft', []),
             'answerKeyDraft' => session('answer_key_draft', []),
         ]);
@@ -206,10 +209,17 @@ class WrittenSheetController extends Controller
             'plan.*.hard' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $chapter = SyllabusChapter::query()->findOrFail($validated['chapter_id']);
+        $chapter = SyllabusChapter::query()->with('topics')->findOrFail($validated['chapter_id']);
+
+        $topics = $chapter->topics->map(fn (SyllabusTopic $topic) => [
+            'id' => $topic->id,
+            'name' => $topic->name,
+        ])->values()->all();
+
+        $plan = $this->hydrateWrittenSheetChapterPlan($validated['plan'], $topics);
 
         try {
-            $prompt = $this->fillBlankImportService->cursorPromptForWrittenChapter($chapter, $validated['plan']);
+            $prompt = $this->fillBlankImportService->cursorPromptForWrittenChapter($chapter, $plan);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -228,7 +238,7 @@ class WrittenSheetController extends Controller
         return redirect()
             ->route('admin.written-sheets.create', $query)
             ->with('written_sheet_chapter_prompt', $prompt)
-            ->with('written_sheet_chapter_plan', $validated['plan']);
+            ->with('written_sheet_chapter_plan', $plan);
     }
 
     public function store(Request $request): RedirectResponse
@@ -274,6 +284,8 @@ class WrittenSheetController extends Controller
             'manual_questions.*.syllabus_topic_id' => ['nullable', 'integer'],
             'chapter_plan' => ['nullable', 'array'],
             'chapter_plan.*.topic_id' => ['nullable', 'integer', 'exists:syllabus_topics,id'],
+            'chapter_plan.*.topic_name' => ['nullable', 'string'],
+            'chapter_plan.*.sort_order' => ['nullable', 'integer', 'min:1'],
             'chapter_plan.*.easy' => ['nullable', 'integer', 'min:0'],
             'chapter_plan.*.medium' => ['nullable', 'integer', 'min:0'],
             'chapter_plan.*.hard' => ['nullable', 'integer', 'min:0'],
@@ -963,6 +975,35 @@ class WrittenSheetController extends Controller
         }
 
         return $answer;
+    }
+
+    /**
+     * @param  list<array{id: int, name: string}>  $topics
+     * @param  list<array<string, mixed>>  $plan
+     * @return list<array<string, mixed>>
+     */
+    private function hydrateWrittenSheetChapterPlan(array $plan, array $topics): array
+    {
+        if ($plan === []) {
+            return [];
+        }
+
+        $namesById = collect($topics)->keyBy('id');
+
+        return collect($plan)
+            ->values()
+            ->map(function (array $row, int $index) use ($namesById) {
+                $topicId = (int) ($row['topic_id'] ?? 0);
+
+                if ($topicId && empty($row['topic_name'])) {
+                    $row['topic_name'] = $namesById->get($topicId)['name'] ?? '';
+                }
+
+                $row['sort_order'] ??= $index + 1;
+
+                return $row;
+            })
+            ->all();
     }
 
     /**

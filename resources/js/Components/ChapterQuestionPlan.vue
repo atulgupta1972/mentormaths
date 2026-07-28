@@ -53,6 +53,14 @@ const columnTotals = computed(() => ({
 }));
 
 const canGenerate = computed(() => columnTotals.value.total > 0);
+
+const topicLabel = (row) => {
+    if (row.topic_name) {
+        return row.topic_name;
+    }
+
+    return props.topics.find((topic) => String(topic.id) === String(row.topic_id))?.name ?? '';
+};
 </script>
 
 <template>
@@ -76,7 +84,7 @@ const canGenerate = computed(() => columnTotals.value.total > 0);
                 <tbody>
                     <tr v-for="(row, index) in plan" :key="row.topic_id" class="border-b">
                         <td class="px-3 py-2 font-medium text-gray-800">
-                            {{ index + 1 }}. {{ row.topic_name }}
+                            {{ index + 1 }}. {{ topicLabel(row) }}
                         </td>
                         <td class="px-3 py-2">
                             <input
