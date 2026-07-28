@@ -295,6 +295,7 @@ class ExamPlanService
                 ->map(fn (Worksheet $set) => [
                     'id' => $set->id,
                     'set_code' => $set->set_code,
+                    'set_number' => $set->set_number,
                     'tier_label' => $set->tier_label,
                     'topic_id' => $set->syllabus_topic_id,
                     'topic_name' => $set->topic?->name,
@@ -315,6 +316,7 @@ class ExamPlanService
                 ->map(fn (Worksheet $set) => [
                     'id' => $set->id,
                     'set_code' => $set->set_code,
+                    'set_number' => $set->set_number,
                     'tier_label' => $set->tier_label,
                     'topic_name' => null,
                     'questions_count' => $set->questions_count,
@@ -412,6 +414,8 @@ class ExamPlanService
                     'assignment_id' => $assignment->id,
                     'practice_set_id' => $assignment->worksheet_id,
                     'set_code' => $summary['set_code'],
+                    'set_number' => $worksheet->set_number,
+                    'questions_count' => $worksheet->questions_count ?? $summary['question_count'],
                     'kind_label' => $summary['kind_label'],
                     'chapter_id' => $chapter?->id,
                     'chapter_label' => $chapter ? self::chapterLabel($chapter) : null,

@@ -80,28 +80,42 @@ const prepByWorksheetId = (plan) => Object.fromEntries(
     (plan.prep_assignments || []).map((prep) => [prep.practice_set_id, prep]),
 );
 
-const prepRowFromAssignment = (chapter, prep) => ({
-    chapter_id: chapter.chapter_id,
-    chapter_label: prep.chapter_label || chapter.chapter_label,
-    topic_label: prep.topic_name || '—',
-    topic_id: prep.topic_id || null,
+const setRowFromAssignable = (set, prep) => ({
+    set_code: set.set_code,
+    set_number: set.set_number,
+    questions_count: set.questions_count,
+    kind_label: set.kind_label,
+    topic_name: set.topic_name || null,
+    practice_set_id: set.id,
+    assignment_id: prep?.assignment_id || null,
+    progress_label: prep?.progress_label || (set.is_assigned ? 'To do' : 'Not assigned'),
+    status: prep?.status || 'unassigned',
+    assignment_status: prep?.assignment_status || null,
+    is_overdue: prep?.is_overdue || false,
+    submission_timing: prep?.submission_timing || null,
+    target_date: prep?.target_date || null,
+    is_assigned: Boolean(prep) || set.is_assigned,
+});
+
+const setRowFromPrep = (prep) => ({
     set_code: prep.set_code,
+    set_number: prep.set_number,
+    questions_count: prep.questions_count,
     kind_label: prep.kind_label,
+    topic_name: prep.topic_name || null,
     practice_set_id: prep.practice_set_id,
     assignment_id: prep.assignment_id,
     progress_label: prep.progress_label,
     status: prep.status,
     assignment_status: prep.assignment_status,
     is_overdue: prep.is_overdue,
-    target_date: prep.target_date,
     submission_timing: prep.submission_timing,
+    target_date: prep.target_date,
     is_assigned: true,
-    is_empty: false,
 });
 
-const chapterPrepRows = (plan) => {
+const chapterPrepGroups = (plan) => {
     const prepMap = prepByWorksheetId(plan);
-    const rows = [];
 
     const chapters = plan.assignable_chapters?.length
         ? plan.assignable_chapters
@@ -112,76 +126,27 @@ const chapterPrepRows = (plan) => {
             chapter_tests: [],
         }));
 
-    for (const chapter of chapters) {
-        const sets = [
-            ...(chapter.topic_sets || []).map((set) => ({
-                ...set,
-                topic_label: set.topic_name || '—',
-            })),
-            ...(chapter.chapter_tests || []).map((set) => ({
-                ...set,
-                topic_label: 'Chapter test',
-                topic_id: null,
-            })),
-        ];
+    return chapters.map((chapter) => {
+        const assignableSets = [
+            ...(chapter.topic_sets || []),
+            ...(chapter.chapter_tests || []),
+        ].sort((left, right) => (left.set_number || 0) - (right.set_number || 0));
+
+        let sets = assignableSets.map((set) => setRowFromAssignable(set, prepMap[set.id]));
 
         if (sets.length === 0) {
-            const chapterPreps = (plan.prep_assignments || []).filter(
-                (prep) => prep.chapter_id === chapter.chapter_id,
-            );
-
-            if (chapterPreps.length === 0) {
-                rows.push({
-                    chapter_id: chapter.chapter_id,
-                    chapter_label: chapter.chapter_label,
-                    topic_label: '—',
-                    set_code: null,
-                    kind_label: null,
-                    progress_label: 'No sets yet',
-                    status: 'none',
-                    target_date: null,
-                    practice_set_id: null,
-                    assignment_id: null,
-                    topic_id: null,
-                    is_assigned: false,
-                    is_empty: true,
-                });
-
-                continue;
-            }
-
-            for (const prep of chapterPreps) {
-                rows.push(prepRowFromAssignment(chapter, prep));
-            }
-
-            continue;
+            sets = (plan.prep_assignments || [])
+                .filter((prep) => prep.chapter_id === chapter.chapter_id)
+                .map(setRowFromPrep);
         }
 
-        for (const set of sets) {
-            const prep = prepMap[set.id];
-
-            rows.push({
-                chapter_id: chapter.chapter_id,
-                chapter_label: chapter.chapter_label,
-                topic_label: set.topic_label,
-                topic_id: set.topic_id || null,
-                set_code: set.set_code,
-                kind_label: set.kind_label,
-                practice_set_id: set.id,
-                assignment_id: prep?.assignment_id || null,
-                progress_label: prep?.progress_label || (set.is_assigned ? 'Assigned · to do' : 'Not assigned'),
-                status: prep?.status || 'unassigned',
-                assignment_status: prep?.assignment_status || null,
-                is_overdue: prep?.is_overdue || false,
-                submission_timing: prep?.submission_timing || null,
-                target_date: prep?.target_date || null,
-                is_assigned: Boolean(prep) || set.is_assigned,
-                is_empty: false,
-            });
-        }
-    }
-
-    return rows;
+        return {
+            chapter_id: chapter.chapter_id,
+            chapter_label: chapter.chapter_label,
+            sets,
+            is_empty: sets.length === 0,
+        };
+    });
 };
 
 const planHasChapterRows = (plan) => (plan.chapters || []).length > 0;
@@ -769,7 +734,7 @@ onUnmounted(() => {
                 <template v-if="!compact">
                     <ExamPlanChapterTable
                         :plan="plan"
-                        :rows="chapterPrepRows(plan)"
+                        :groups="chapterPrepGroups(plan)"
                         :has-chapters="planHasChapterRows(plan)"
                         :prep-summary="plan.prep_summary"
                         :is-admin-context="isAdminContext"
@@ -888,7 +853,7 @@ onUnmounted(() => {
                         <ExamPlanChapterTable
                             wide
                             :plan="expandedPlan"
-                            :rows="chapterPrepRows(expandedPlan)"
+                            :groups="chapterPrepGroups(expandedPlan)"
                             :has-chapters="planHasChapterRows(expandedPlan)"
                             :prep-summary="expandedPlan.prep_summary"
                             :is-admin-context="isAdminContext"
