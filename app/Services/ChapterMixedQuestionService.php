@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Question;
 use App\Models\SyllabusChapter;
 use App\Support\QuestionBankPurpose;
+use Illuminate\Support\Collection;
 
 class ChapterMixedQuestionService
 {
