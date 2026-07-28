@@ -132,9 +132,60 @@ class FormulaDrillTest extends TestCase
         ];
     }
 
+    /**
+     * @return array{student: Student, user: User, formulaQuestion: Question}
+     */
+    private function seedStudentWithAssignedChapter(): array
+    {
+        $data = $this->seedStudentWithCompletedChapter();
+
+        SetAssignment::query()
+            ->where('student_enrollment_id', $data['student']->currentEnrollment()?->id)
+            ->update(['status' => SetAssignment::STATUS_ASSIGNED]);
+
+        return $data;
+    }
+
     public function test_dashboard_redirects_to_formula_drill_before_completion(): void
     {
         ['student' => $student, 'user' => $user] = $this->seedStudentWithCompletedChapter();
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertRedirect(route('student.formula-drill.show'));
+    }
+
+    public function test_formula_drill_uses_assigned_chapters_when_none_completed_yet(): void
+    {
+        ['student' => $student, 'user' => $user, 'formulaQuestion' => $question] = $this->seedStudentWithAssignedChapter();
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertRedirect(route('student.formula-drill.show'));
+
+        $this->actingAs($user)
+            ->get(route('student.formula-drill.show'))
+            ->assertOk();
+
+        $this->assertDatabaseHas('formula_drill_sessions', [
+            'student_id' => $student->id,
+            'status' => FormulaDrillSession::STATUS_IN_PROGRESS,
+        ]);
+    }
+
+    public function test_skipped_session_retries_when_pool_becomes_available(): void
+    {
+        ['student' => $student, 'user' => $user] = $this->seedStudentWithAssignedChapter();
+
+        FormulaDrillSession::query()->create([
+            'student_id' => $student->id,
+            'drill_date' => now(config('formula_drill.timezone', 'Asia/Kolkata'))->startOfDay(),
+            'status' => FormulaDrillSession::STATUS_SKIPPED,
+            'questions_total' => 0,
+            'questions_completed' => 0,
+            'pool_size' => 0,
+            'completed_at' => now(),
+        ]);
 
         $this->actingAs($user)
             ->get(route('dashboard'))

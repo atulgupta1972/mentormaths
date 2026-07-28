@@ -30,22 +30,23 @@ class FormulaDrillPoolService
             return [];
         }
 
-        $topicIds = $this->completedTopicIdsForStudent($student);
+        $completedTopicIds = $this->completedTopicIdsForStudent($student);
+        $pool = $this->mergePools(
+            $this->formulaIdsForTopicIds($completedTopicIds),
+            $this->globalBasicsQuestionIds(),
+        );
 
-        if ($topicIds === []) {
-            return $this->globalBasicsQuestionIds();
+        if ($pool !== []) {
+            return $pool;
         }
 
-        $chapterQuestions = Question::query()
-            ->where('bank_purpose', QuestionBankPurpose::FORMULA)
-            ->whereIn('syllabus_topic_id', $topicIds)
-            ->whereHas('options')
-            ->pluck('id')
-            ->all();
+        $assignedTopicIds = $this->assignedTopicIdsForStudent($student);
 
-        $basics = $this->globalBasicsQuestionIds();
-
-        return array_values(array_unique(array_merge($chapterQuestions, $basics)));
+        return $this->mergePools(
+            $this->formulaIdsForTopicIds($assignedTopicIds),
+            $this->formulaIdsForTopicIds($this->currentSyllabusTopicIds($student)),
+            $this->globalBasicsQuestionIds(),
+        );
     }
 
     public function poolSize(Student $student): int
@@ -82,6 +83,39 @@ class FormulaDrillPoolService
     }
 
     /**
+     * @param  list<int>  $topicIds
+     * @return list<int>
+     */
+    private function formulaIdsForTopicIds(array $topicIds): array
+    {
+        if ($topicIds === []) {
+            return [];
+        }
+
+        return Question::query()
+            ->where('bank_purpose', QuestionBankPurpose::FORMULA)
+            ->whereIn('syllabus_topic_id', $topicIds)
+            ->whereHas('options')
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
+     * @param  list<list<int>>  $pools
+     * @return list<int>
+     */
+    private function mergePools(array ...$pools): array
+    {
+        $merged = [];
+
+        foreach ($pools as $pool) {
+            $merged = array_merge($merged, $pool);
+        }
+
+        return array_values(array_unique($merged));
+    }
+
+    /**
      * @return list<int>
      */
     private function completedTopicIdsForStudent(Student $student): array
@@ -100,22 +134,91 @@ class FormulaDrillPoolService
                 continue;
             }
 
-            $syllabusVersion = $this->examPlanService->syllabusVersionForEnrollment($enrollment);
-
-            if (! $syllabusVersion) {
-                continue;
-            }
-
-            $ids = SyllabusTopic::query()
-                ->whereIn('syllabus_chapter_id', $chapterIds)
-                ->whereHas('chapter', fn ($query) => $query->where('syllabus_version_id', $syllabusVersion->id))
-                ->pluck('id')
-                ->all();
-
-            $topicIds = array_merge($topicIds, $ids);
+            $topicIds = array_merge(
+                $topicIds,
+                $this->topicIdsForChapters($enrollment, $chapterIds),
+            );
         }
 
         return array_values(array_unique($topicIds));
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function assignedTopicIdsForStudent(Student $student): array
+    {
+        $enrollment = $student->currentEnrollment();
+
+        if (! $enrollment) {
+            return [];
+        }
+
+        $assignments = SetAssignment::query()
+            ->with(['practiceSet:id,syllabus_topic_id,syllabus_chapter_id'])
+            ->where('student_enrollment_id', $enrollment->id)
+            ->whereNot('status', SetAssignment::STATUS_CANCELLED)
+            ->get();
+
+        $chapterIds = [];
+
+        foreach ($assignments as $assignment) {
+            $chapterId = $this->resolveChapterId($assignment);
+
+            if ($chapterId) {
+                $chapterIds[] = $chapterId;
+            }
+        }
+
+        $chapterIds = array_values(array_unique($chapterIds));
+
+        if ($chapterIds === []) {
+            return [];
+        }
+
+        return $this->topicIdsForChapters($enrollment, $chapterIds);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function currentSyllabusTopicIds(Student $student): array
+    {
+        $enrollment = $student->currentEnrollment();
+
+        if (! $enrollment) {
+            return [];
+        }
+
+        $syllabusVersion = $this->examPlanService->syllabusVersionForEnrollment($enrollment);
+
+        if (! $syllabusVersion) {
+            return [];
+        }
+
+        return SyllabusTopic::query()
+            ->whereHas('chapter', fn ($query) => $query->where('syllabus_version_id', $syllabusVersion->id))
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
+     * @param  list<int>  $chapterIds
+     * @return list<int>
+     */
+    private function topicIdsForChapters(StudentEnrollment $enrollment, array $chapterIds): array
+    {
+        $syllabusVersion = $this->examPlanService->syllabusVersionForEnrollment($enrollment);
+
+        if (! $syllabusVersion) {
+            return [];
+        }
+
+        return SyllabusTopic::query()
+            ->whereIn('syllabus_chapter_id', $chapterIds)
+            ->whereHas('chapter', fn ($query) => $query->where('syllabus_version_id', $syllabusVersion->id))
+            ->pluck('id')
+            ->all();
     }
 
     private function isAssignmentCompleted(SetAssignment $assignment): bool

@@ -33,7 +33,15 @@ class FormulaDrillSessionService
     {
         $session = $this->todaysSession($student);
 
-        return $session?->isComplete() ?? false;
+        if (! $session) {
+            return false;
+        }
+
+        if ($session->status === FormulaDrillSession::STATUS_SKIPPED) {
+            return $this->poolService->poolSize($student) === 0;
+        }
+
+        return $session->isComplete();
     }
 
     public function getOrCreateTodaysSession(Student $student): FormulaDrillSession
@@ -41,7 +49,12 @@ class FormulaDrillSessionService
         $existing = $this->todaysSession($student);
 
         if ($existing) {
-            return $existing;
+            if ($existing->status === FormulaDrillSession::STATUS_SKIPPED
+                && $this->poolService->poolSize($student) > 0) {
+                $existing->delete();
+            } else {
+                return $existing;
+            }
         }
 
         $poolIds = $this->poolService->poolQuestionIds($student);
