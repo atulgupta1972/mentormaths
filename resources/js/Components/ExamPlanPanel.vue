@@ -1,12 +1,13 @@
 <script setup>
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
+import ExamPlanChapterTable from '@/Components/ExamPlanChapterTable.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { formatScoreLabel } from '@/utils/scores';
-import { useForm, Link, router } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { useForm, router } from '@inertiajs/vue3';
+import { computed, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
     plans: { type: Array, default: () => [] },
@@ -24,6 +25,7 @@ const isAdminContext = computed(() => props.context === 'admin');
 const showForm = ref(false);
 const editingPlan = ref(null);
 const assigningPlanId = ref(null);
+const expandedPlanId = ref(null);
 const assignDueDates = ref({});
 const marksDraft = ref({});
 const savingMarksPlanId = ref(null);
@@ -72,24 +74,6 @@ const formatDate = (d) => {
         month: 'short',
         year: 'numeric',
     });
-};
-
-const prepStatusClass = (prep) => {
-    if (prep.status === 'none' || prep.status === 'unassigned') {
-        return 'bg-gray-100 text-gray-600';
-    }
-
-    if (prep.assignment_status === 'completed') {
-        return prep.submission_timing === 'late' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-800';
-    }
-    if (prep.is_overdue) {
-        return 'bg-red-100 text-red-800';
-    }
-    if (prep.assignment_status === 'in_progress') {
-        return 'bg-yellow-100 text-yellow-800';
-    }
-
-    return 'bg-indigo-50 text-indigo-800';
 };
 
 const prepByWorksheetId = (plan) => Object.fromEntries(
@@ -202,6 +186,18 @@ const chapterPrepRows = (plan) => {
 
 const planHasChapterRows = (plan) => (plan.chapters || []).length > 0;
 
+const expandedPlan = computed(() => props.plans.find((plan) => plan.id === expandedPlanId.value) ?? null);
+
+const openPlanView = (plan) => {
+    expandedPlanId.value = plan.id;
+    document.body.style.overflow = 'hidden';
+};
+
+const closePlanView = () => {
+    expandedPlanId.value = null;
+    document.body.style.overflow = '';
+};
+
 const dueDateForPlan = (plan) => assignDueDates.value[plan.id] || plan.suggested_due_date || plan.exam_date;
 
 const marksScoreLabel = (plan) => plan.marks_score_label || formatScoreLabel(plan.obtained_marks, plan.total_marks);
@@ -255,6 +251,10 @@ const toggleAssign = (plan) => {
 
     if (!assignDueDates.value[plan.id]) {
         assignDueDates.value[plan.id] = plan.suggested_due_date || plan.exam_date;
+    }
+
+    if (props.compact) {
+        openPlanView(plan);
     }
 };
 
@@ -521,6 +521,25 @@ watch(
     },
     { immediate: true, deep: true },
 );
+
+const onEscape = (event) => {
+    if (event.key === 'Escape' && expandedPlanId.value !== null) {
+        closePlanView();
+    }
+};
+
+watch(expandedPlanId, (planId) => {
+    if (planId !== null) {
+        document.addEventListener('keydown', onEscape);
+    } else {
+        document.removeEventListener('keydown', onEscape);
+    }
+});
+
+onUnmounted(() => {
+    document.removeEventListener('keydown', onEscape);
+    document.body.style.overflow = '';
+});
 </script>
 
 <template>
@@ -695,25 +714,36 @@ watch(
                 v-for="plan in plans"
                 :id="`exam-plan-${plan.id}`"
                 :key="plan.id"
-                class="overflow-hidden rounded-lg border border-gray-200 bg-white scroll-mt-4"
-                :class="highlightPlanId === plan.id ? 'ring-2 ring-emerald-400' : ''"
+                class="scroll-mt-4 overflow-hidden rounded-lg border border-gray-200 bg-white"
+                :class="[
+                    highlightPlanId === plan.id ? 'ring-2 ring-emerald-400' : '',
+                    compact ? 'cursor-pointer transition hover:border-indigo-300 hover:shadow-sm' : '',
+                ]"
+                @click="compact ? openPlanView(plan) : undefined"
             >
-                <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-3">
+                <div
+                    class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 bg-gray-50"
+                    :class="compact ? 'px-3 py-2.5' : 'px-4 py-3'"
+                >
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                            <span class="text-sm font-semibold text-indigo-700">{{ formatDate(plan.exam_date) }}</span>
-                            <span class="text-base font-semibold text-gray-900">{{ plan.title }}</span>
+                            <span class="font-semibold text-indigo-700" :class="compact ? 'text-xs' : 'text-sm'">{{ formatDate(plan.exam_date) }}</span>
+                            <span class="font-semibold text-gray-900" :class="compact ? 'text-sm' : 'text-base'">{{ plan.title }}</span>
                             <span class="text-xs text-gray-500">{{ plan.exam_type_label }}</span>
                         </div>
-                        <p v-if="plan.has_marks" class="mt-2 text-sm font-semibold text-emerald-700">
+                        <p v-if="plan.has_marks" class="mt-1 font-semibold text-emerald-700" :class="compact ? 'text-xs' : 'text-sm'">
                             Result: {{ marksScoreLabel(plan) }}
                         </p>
                         <p v-else-if="planHasChapterRows(plan)" class="mt-1 text-xs text-gray-500">
-                            {{ plan.chapter_names.length }} chapter{{ plan.chapter_names.length === 1 ? '' : 's' }} in scope
+                            {{ plan.chapter_names.length }} chapter{{ plan.chapter_names.length === 1 ? '' : 's' }}
+                            <span v-if="plan.prep_summary"> · {{ plan.prep_summary.completed }}/{{ plan.prep_summary.total }} done</span>
                         </p>
                         <p v-else class="mt-1 text-sm text-gray-400">No chapters selected</p>
+                        <p v-if="compact && planHasChapterRows(plan)" class="mt-1 text-[11px] font-medium text-indigo-600">
+                            Click to open full chapter table
+                        </p>
                     </div>
-                    <div v-if="canManage" class="flex shrink-0 flex-wrap justify-end gap-x-3 gap-y-1 text-sm">
+                    <div v-if="canManage" class="flex shrink-0 flex-wrap justify-end gap-x-3 gap-y-1 text-sm" @click.stop>
                         <button type="button" class="text-indigo-600 hover:underline" @click="openEdit(plan)">
                             Edit
                         </button>
@@ -723,7 +753,7 @@ watch(
                             class="font-medium text-indigo-600 hover:underline"
                             @click="toggleAssign(plan)"
                         >
-                            {{ assigningPlanId === plan.id ? 'Close' : 'Assign sheets' }}
+                            {{ assigningPlanId === plan.id ? 'Close assign' : 'Assign sheets' }}
                         </button>
                         <button
                             v-else
@@ -736,194 +766,148 @@ watch(
                     </div>
                 </div>
 
-                <div v-if="planHasChapterRows(plan)" class="px-4 py-3">
-                    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-                        <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                            Chapters · practice / tests
+                <template v-if="!compact">
+                    <ExamPlanChapterTable
+                        :plan="plan"
+                        :rows="chapterPrepRows(plan)"
+                        :has-chapters="planHasChapterRows(plan)"
+                        :prep-summary="plan.prep_summary"
+                        :is-admin-context="isAdminContext"
+                        :assigning-plan-id="assigningPlanId"
+                        :assign-due-date="dueDateForPlan(plan)"
+                        :assign-processing="assignForm.processing"
+                        @update:assign-due-date="assignDueDates[plan.id] = $event"
+                        @assign-set="assignSet(plan, $event)"
+                    />
+
+                    <div
+                        v-if="!isAdminContext && marksDraft[plan.id]"
+                        class="border-t border-gray-200 bg-emerald-50/40 px-4 py-3"
+                    >
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+                            Your school test marks
                         </p>
-                        <p v-if="plan.prep_summary" class="text-xs text-gray-500">
-                            {{ plan.prep_summary.completed }}/{{ plan.prep_summary.total }} done
+                        <p class="mt-1 text-xs text-gray-600">
+                            Enter marks from your answer sheet — obtained and total for the test paper.
+                            Leave blank until you have the result.
                         </p>
+                        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <InputLabel value="Marks obtained" class="!text-xs" />
+                                <TextInput
+                                    v-model="marksDraft[plan.id].obtained_marks"
+                                    type="number"
+                                    min="0"
+                                    class="mt-1 block w-full text-sm"
+                                    placeholder="e.g. 42"
+                                />
+                            </div>
+                            <div>
+                                <InputLabel value="Total marks" class="!text-xs" />
+                                <TextInput
+                                    v-model="marksDraft[plan.id].total_marks"
+                                    type="number"
+                                    min="1"
+                                    class="mt-1 block w-full text-sm"
+                                    placeholder="e.g. 50"
+                                />
+                            </div>
+                        </div>
+                        <InputError class="mt-2" :message="marksErrors.obtained_marks" />
+                        <InputError class="mt-1" :message="marksErrors.total_marks" />
+                        <PrimaryButton
+                            type="button"
+                            class="mt-3 !py-1.5 !text-xs"
+                            :disabled="savingMarksPlanId === plan.id"
+                            @click="saveMarks(plan)"
+                        >
+                            {{ savingMarksPlanId === plan.id ? 'Saving…' : 'Save marks' }}
+                        </PrimaryButton>
                     </div>
 
                     <div
-                        v-if="isAdminContext && assigningPlanId === plan.id"
-                        class="mb-3 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50/50 px-3 py-2"
+                        v-else-if="isAdminContext && plan.has_marks"
+                        class="border-t border-gray-200 bg-emerald-50/40 px-4 py-3 text-sm text-emerald-800"
                     >
-                        <p class="text-xs text-gray-600">
-                            Assign practice or chapter tests below. Default due date is the day before the exam.
-                        </p>
-                        <div>
-                            <InputLabel value="Due date for new assignments" class="!text-xs" />
-                            <input
-                                v-model="assignDueDates[plan.id]"
-                                type="date"
-                                class="mt-1 rounded-md border-gray-300 text-sm"
-                            />
-                        </div>
+                        <span class="font-medium">School test result:</span> {{ marksScoreLabel(plan) }}
                     </div>
-
-                    <div class="overflow-hidden rounded-lg border border-gray-200">
-                        <table class="w-full table-fixed text-xs">
-                            <colgroup>
-                                <col class="w-[26%]">
-                                <col class="w-[22%]">
-                                <col class="w-[11%]">
-                                <col class="w-[10%]">
-                                <col class="w-[17%]">
-                                <col class="w-[10%]">
-                                <col v-if="isAdminContext" class="w-[14%]">
-                            </colgroup>
-                            <thead class="bg-gray-50">
-                                <tr class="text-left text-[10px] uppercase tracking-wide text-gray-500">
-                                    <th class="px-2.5 py-2 font-semibold">Chapter</th>
-                                    <th class="px-2.5 py-2 font-semibold">Topic</th>
-                                    <th class="px-2.5 py-2 font-semibold">Set</th>
-                                    <th class="px-2.5 py-2 font-semibold">Type</th>
-                                    <th class="px-2.5 py-2 font-semibold">Status</th>
-                                    <th class="px-2.5 py-2 font-semibold">Due</th>
-                                    <th v-if="isAdminContext" class="px-2.5 py-2 font-semibold">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100">
-                                <tr
-                                    v-for="(row, rowIndex) in chapterPrepRows(plan)"
-                                    :key="`${plan.id}-${row.chapter_id}-${row.practice_set_id || rowIndex}`"
-                                    class="align-top"
-                                >
-                                    <td class="px-2.5 py-2 text-gray-800 break-words">
-                                        {{ row.chapter_label }}
-                                    </td>
-                                    <td class="px-2.5 py-2 text-gray-700 break-words">
-                                        {{ row.topic_label }}
-                                    </td>
-                                    <td class="px-2.5 py-2 font-mono font-semibold text-gray-900">
-                                        {{ row.set_code || '—' }}
-                                    </td>
-                                    <td class="px-2.5 py-2 text-gray-600">
-                                        {{ row.kind_label || '—' }}
-                                    </td>
-                                    <td class="px-2.5 py-2">
-                                        <span
-                                            class="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-                                            :class="prepStatusClass(row)"
-                                        >
-                                            {{ row.progress_label }}
-                                        </span>
-                                    </td>
-                                    <td class="px-2.5 py-2 text-gray-500">
-                                        {{ row.target_date ? formatDate(row.target_date) : '—' }}
-                                    </td>
-                                    <td v-if="isAdminContext" class="px-2.5 py-2">
-                                        <div class="flex flex-col gap-1 text-[11px] font-medium leading-snug">
-                                            <Link
-                                                v-if="row.topic_id"
-                                                :href="route('admin.questions.topics.show', row.topic_id)"
-                                                class="text-indigo-600 hover:underline"
-                                            >
-                                                Topic questions
-                                            </Link>
-                                            <template v-else-if="row.is_empty">
-                                                <Link
-                                                    :href="route('admin.questions.chapters.show', row.chapter_id)"
-                                                    class="text-indigo-600 hover:underline"
-                                                >
-                                                    Question bank
-                                                </Link>
-                                                <Link
-                                                    :href="route('admin.questions.create', { syllabus_chapter_id: row.chapter_id, scope: 'chapter' })"
-                                                    class="text-indigo-600 hover:underline"
-                                                >
-                                                    Add MCQs
-                                                </Link>
-                                                <Link
-                                                    :href="route('admin.practice-sets.chapters.show', row.chapter_id)"
-                                                    class="text-indigo-600 hover:underline"
-                                                >
-                                                    Create test
-                                                </Link>
-                                            </template>
-                                            <Link
-                                                v-else-if="!row.topic_id && row.practice_set_id"
-                                                :href="route('admin.questions.chapters.show', row.chapter_id)"
-                                                class="text-indigo-600 hover:underline"
-                                            >
-                                                Chapter bank
-                                            </Link>
-                                            <PrimaryButton
-                                                v-if="assigningPlanId === plan.id && row.practice_set_id"
-                                                type="button"
-                                                class="!mt-1 !py-1 !text-[10px]"
-                                                :disabled="assignForm.processing"
-                                                @click="assignSet(plan, row.practice_set_id)"
-                                            >
-                                                {{ row.is_assigned ? 'Re-assign' : 'Assign' }}
-                                            </PrimaryButton>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div v-else class="px-4 py-3">
-                    <p class="text-xs text-gray-400">
-                        {{ isAdminContext ? 'Edit the exam to select chapters, then assign practice or tests.' : 'No chapters selected yet.' }}
-                    </p>
-                </div>
-
-                <div
-                    v-if="!isAdminContext && marksDraft[plan.id]"
-                    class="border-t border-gray-200 bg-emerald-50/40 px-4 py-3"
-                >
-                    <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
-                        Your school test marks
-                    </p>
-                    <p class="mt-1 text-xs text-gray-600">
-                        Enter marks from your answer sheet — obtained and total for the test paper.
-                        Leave blank until you have the result.
-                    </p>
-                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                        <div>
-                            <InputLabel value="Marks obtained" class="!text-xs" />
-                            <TextInput
-                                v-model="marksDraft[plan.id].obtained_marks"
-                                type="number"
-                                min="0"
-                                class="mt-1 block w-full text-sm"
-                                placeholder="e.g. 42"
-                            />
-                        </div>
-                        <div>
-                            <InputLabel value="Total marks" class="!text-xs" />
-                            <TextInput
-                                v-model="marksDraft[plan.id].total_marks"
-                                type="number"
-                                min="1"
-                                class="mt-1 block w-full text-sm"
-                                placeholder="e.g. 50"
-                            />
-                        </div>
-                    </div>
-                    <InputError class="mt-2" :message="marksErrors.obtained_marks" />
-                    <InputError class="mt-1" :message="marksErrors.total_marks" />
-                    <PrimaryButton
-                        type="button"
-                        class="mt-3 !py-1.5 !text-xs"
-                        :disabled="savingMarksPlanId === plan.id"
-                        @click="saveMarks(plan)"
-                    >
-                        {{ savingMarksPlanId === plan.id ? 'Saving…' : 'Save marks' }}
-                    </PrimaryButton>
-                </div>
-
-                <div
-                    v-else-if="isAdminContext && plan.has_marks"
-                    class="border-t border-gray-200 bg-emerald-50/40 px-4 py-3 text-sm text-emerald-800"
-                >
-                    <span class="font-medium">School test result:</span> {{ marksScoreLabel(plan) }}
-                </div>
+                </template>
             </div>
         </div>
+
+        <Teleport to="body">
+            <div
+                v-if="compact && expandedPlan"
+                class="fixed inset-0 z-[100] flex flex-col bg-slate-100"
+            >
+                <div class="border-b border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-8">
+                    <div class="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-4">
+                        <div class="min-w-0">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Exam plan</p>
+                            <h2 class="mt-1 text-xl font-semibold text-gray-900">{{ expandedPlan.title }}</h2>
+                            <p class="mt-1 text-sm text-gray-600">
+                                {{ formatDate(expandedPlan.exam_date) }}
+                                · {{ expandedPlan.exam_type_label }}
+                                <span v-if="expandedPlan.prep_summary">
+                                    · {{ expandedPlan.prep_summary.completed }}/{{ expandedPlan.prep_summary.total }} sets done
+                                </span>
+                            </p>
+                            <p v-if="expandedPlan.has_marks" class="mt-2 text-sm font-semibold text-emerald-700">
+                                Result: {{ marksScoreLabel(expandedPlan) }}
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                class="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                                @click="openEdit(expandedPlan)"
+                            >
+                                Edit
+                            </button>
+                            <button
+                                v-if="isAdminContext"
+                                type="button"
+                                class="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                                @click="toggleAssign(expandedPlan)"
+                            >
+                                {{ assigningPlanId === expandedPlan.id ? 'Close assign' : 'Assign sheets' }}
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                @click="closePlanView"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto px-4 py-4 sm:px-8">
+                    <div class="mx-auto max-w-7xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                        <ExamPlanChapterTable
+                            wide
+                            :plan="expandedPlan"
+                            :rows="chapterPrepRows(expandedPlan)"
+                            :has-chapters="planHasChapterRows(expandedPlan)"
+                            :prep-summary="expandedPlan.prep_summary"
+                            :is-admin-context="isAdminContext"
+                            :assigning-plan-id="assigningPlanId"
+                            :assign-due-date="dueDateForPlan(expandedPlan)"
+                            :assign-processing="assignForm.processing"
+                            @update:assign-due-date="assignDueDates[expandedPlan.id] = $event"
+                            @assign-set="assignSet(expandedPlan, $event)"
+                        />
+
+                        <div
+                            v-if="isAdminContext && expandedPlan.has_marks"
+                            class="border-t border-gray-200 bg-emerald-50/40 px-6 py-4 text-sm text-emerald-800"
+                        >
+                            <span class="font-medium">School test result:</span> {{ marksScoreLabel(expandedPlan) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
     </div>
 </template>
