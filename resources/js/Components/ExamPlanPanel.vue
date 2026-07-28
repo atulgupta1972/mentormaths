@@ -805,12 +805,12 @@ onUnmounted(() => {
                 v-if="compact && expandedPlan"
                 class="fixed inset-0 z-[100] flex flex-col bg-slate-100"
             >
-                <div class="border-b border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-8">
-                    <div class="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-4">
+                <div class="border-b border-gray-200 bg-white px-4 py-3 shadow-sm">
+                    <div class="mx-auto flex w-fit max-w-full flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0">
                             <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Exam plan</p>
-                            <h2 class="mt-1 text-xl font-semibold text-gray-900">{{ expandedPlan.title }}</h2>
-                            <p class="mt-1 text-sm text-gray-600">
+                            <h2 class="mt-0.5 text-lg font-semibold text-gray-900">{{ expandedPlan.title }}</h2>
+                            <p class="mt-0.5 text-xs text-gray-600">
                                 {{ formatDate(expandedPlan.exam_date) }}
                                 · {{ expandedPlan.exam_type_label }}
                                 <span v-if="expandedPlan.prep_summary">
@@ -848,10 +848,9 @@ onUnmounted(() => {
                     </div>
                 </div>
 
-                <div class="flex-1 overflow-y-auto px-4 py-4 sm:px-8">
-                    <div class="mx-auto max-w-7xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div class="flex flex-1 justify-center overflow-y-auto px-4 py-3">
+                    <div class="h-fit w-fit max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
                         <ExamPlanChapterTable
-                            wide
                             :plan="expandedPlan"
                             :groups="chapterPrepGroups(expandedPlan)"
                             :has-chapters="planHasChapterRows(expandedPlan)"
@@ -866,7 +865,7 @@ onUnmounted(() => {
 
                         <div
                             v-if="isAdminContext && expandedPlan.has_marks"
-                            class="border-t border-gray-200 bg-emerald-50/40 px-6 py-4 text-sm text-emerald-800"
+                            class="border-t border-gray-200 bg-emerald-50/40 px-3 py-2 text-xs text-emerald-800"
                         >
                             <span class="font-medium">School test result:</span> {{ marksScoreLabel(expandedPlan) }}
                         </div>

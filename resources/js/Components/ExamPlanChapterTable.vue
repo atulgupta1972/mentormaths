@@ -2,12 +2,10 @@
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
 
 const props = defineProps({
     plan: { type: Object, required: true },
     groups: { type: Array, default: () => [] },
-    wide: { type: Boolean, default: false },
     isAdminContext: { type: Boolean, default: false },
     assigningPlanId: { type: [Number, String], default: null },
     assignDueDate: { type: String, default: '' },
@@ -38,98 +36,84 @@ const prepStatusClass = (row) => {
     return 'bg-indigo-50 text-indigo-800';
 };
 
-const cellPad = computed(() => (props.wide ? 'px-4 py-2.5' : 'px-3 py-2'));
-const textSize = computed(() => (props.wide ? 'text-sm' : 'text-xs'));
-const headSize = computed(() => (props.wide ? 'text-xs' : 'text-[10px]'));
-
 const chapterHubHref = (chapterId) => route('admin.practice-sets.chapters.show', chapterId);
 </script>
 
 <template>
-    <div v-if="hasChapters" :class="wide ? 'px-6 py-4' : 'px-4 py-3'">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p class="font-semibold uppercase tracking-wide text-gray-500" :class="headSize">
+    <div v-if="hasChapters" class="px-3 py-2.5">
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                 Chapters · practice / tests
             </p>
-            <p v-if="prepSummary" class="text-gray-500" :class="textSize">
+            <p v-if="prepSummary" class="text-[11px] text-gray-500">
                 {{ prepSummary.completed }}/{{ prepSummary.total }} done
             </p>
         </div>
 
         <div
             v-if="isAdminContext && assigningPlanId === plan.id"
-            class="mb-4 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50/50 px-4 py-3"
+            class="mb-3 flex flex-wrap items-end gap-3 rounded-md border border-indigo-200 bg-indigo-50/50 px-2.5 py-2"
         >
-            <p class="text-sm text-gray-600">
-                Pick a due date, then assign sets below. Click a chapter name to create new practice or tests.
+            <p class="text-[11px] leading-snug text-gray-600">
+                Set due date, then assign. Click chapter name to create sets.
             </p>
             <div>
-                <InputLabel value="Due date for new assignments" class="!text-xs" />
+                <InputLabel value="Due date" class="!text-[10px]" />
                 <input
                     :value="assignDueDate"
                     type="date"
-                    class="mt-1 rounded-md border-gray-300 text-sm"
+                    class="mt-0.5 rounded-md border-gray-300 text-xs"
                     @input="emit('update:assignDueDate', $event.target.value)"
                 />
             </div>
         </div>
 
-        <div class="space-y-4">
+        <div class="space-y-2.5">
             <section
                 v-for="group in groups"
                 :key="`${plan.id}-chapter-${group.chapter_id}`"
-                class="overflow-hidden rounded-lg border border-gray-200"
+                class="inline-block max-w-full overflow-hidden rounded-md border border-gray-200"
             >
-                <div
-                    class="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 bg-indigo-50/80"
-                    :class="wide ? 'px-4 py-3' : 'px-3 py-2.5'"
-                >
-                    <div class="min-w-0">
-                        <Link
-                            v-if="isAdminContext"
-                            :href="chapterHubHref(group.chapter_id)"
-                            class="font-semibold text-indigo-800 hover:text-indigo-950 hover:underline"
-                            :class="wide ? 'text-base' : 'text-sm'"
-                        >
-                            {{ group.chapter_label }}
-                        </Link>
-                        <p v-else class="font-semibold text-gray-900" :class="wide ? 'text-base' : 'text-sm'">
-                            {{ group.chapter_label }}
-                        </p>
-                        <p v-if="isAdminContext" class="mt-0.5 text-[11px] text-indigo-700/80">
-                            Click chapter name to create sets &amp; add questions
-                        </p>
-                    </div>
+                <div class="flex items-center justify-between gap-2 border-b border-indigo-100 bg-indigo-50/80 px-2.5 py-1.5">
                     <Link
                         v-if="isAdminContext"
                         :href="chapterHubHref(group.chapter_id)"
-                        class="inline-flex shrink-0 items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
-                        :class="wide ? 'text-xs' : 'text-[10px]'"
+                        class="text-xs font-semibold text-indigo-800 hover:text-indigo-950 hover:underline"
+                    >
+                        {{ group.chapter_label }}
+                    </Link>
+                    <p v-else class="text-xs font-semibold text-gray-900">
+                        {{ group.chapter_label }}
+                    </p>
+                    <Link
+                        v-if="isAdminContext"
+                        :href="chapterHubHref(group.chapter_id)"
+                        class="shrink-0 text-[10px] font-semibold text-indigo-600 hover:underline"
                     >
                         + New set
                     </Link>
                 </div>
 
-                <div v-if="group.is_empty" class="bg-white px-4 py-4 text-sm text-gray-500">
-                    No sets for this chapter yet.
+                <div v-if="group.is_empty" class="bg-white px-2.5 py-2 text-[11px] text-gray-500">
+                    No sets yet.
                     <Link
                         v-if="isAdminContext"
                         :href="chapterHubHref(group.chapter_id)"
-                        class="font-medium text-indigo-600 hover:underline"
+                        class="font-semibold text-indigo-600 hover:underline"
                     >
-                        Create practice or test
+                        Create
                     </Link>
                 </div>
 
                 <div v-else class="overflow-x-auto bg-white">
-                    <table class="w-full min-w-[560px]" :class="textSize">
+                    <table class="w-max max-w-full table-auto border-collapse text-xs">
                         <thead class="border-b border-gray-100 bg-gray-50/80">
-                            <tr class="text-left uppercase tracking-wide text-gray-500" :class="headSize">
-                                <th class="whitespace-nowrap font-semibold" :class="cellPad">Set no</th>
-                                <th class="whitespace-nowrap font-semibold" :class="cellPad">Questions</th>
-                                <th class="whitespace-nowrap font-semibold" :class="cellPad">Type</th>
-                                <th class="font-semibold" :class="cellPad">Status</th>
-                                <th v-if="isAdminContext" class="whitespace-nowrap font-semibold text-right" :class="cellPad">
+                            <tr class="text-left text-[10px] uppercase tracking-wide text-gray-500">
+                                <th class="whitespace-nowrap px-2 py-1 font-semibold">Set no</th>
+                                <th class="whitespace-nowrap px-2 py-1 font-semibold">Qs</th>
+                                <th class="whitespace-nowrap px-2 py-1 font-semibold">Type</th>
+                                <th class="whitespace-nowrap px-2 py-1 font-semibold">Status</th>
+                                <th v-if="isAdminContext" class="whitespace-nowrap px-2 py-1 text-right font-semibold">
                                     Assign
                                 </th>
                             </tr>
@@ -139,36 +123,36 @@ const chapterHubHref = (chapterId) => route('admin.practice-sets.chapters.show',
                                 v-for="(set, setIndex) in group.sets"
                                 :key="`${group.chapter_id}-${set.practice_set_id || setIndex}`"
                             >
-                                <td class="font-mono font-semibold text-gray-900" :class="cellPad">
-                                    {{ set.set_code || '—' }}
+                                <td class="px-2 py-1 align-top">
+                                    <span class="whitespace-nowrap font-mono font-semibold text-gray-900">
+                                        {{ set.set_code || '—' }}
+                                    </span>
                                     <span
                                         v-if="set.topic_name"
-                                        class="mt-0.5 block font-sans font-normal text-gray-400"
-                                        :class="wide ? 'text-xs' : 'text-[10px]'"
+                                        class="mt-0.5 block whitespace-nowrap text-[11px] font-semibold text-gray-700"
                                     >
                                         {{ set.topic_name }}
                                     </span>
                                 </td>
-                                <td class="text-gray-700" :class="cellPad">
+                                <td class="whitespace-nowrap px-2 py-1 text-center text-gray-700">
                                     {{ set.questions_count ?? '—' }}
                                 </td>
-                                <td class="whitespace-nowrap text-gray-600" :class="cellPad">
+                                <td class="whitespace-nowrap px-2 py-1 text-gray-600">
                                     {{ set.kind_label || '—' }}
                                 </td>
-                                <td :class="cellPad">
+                                <td class="px-2 py-1">
                                     <span
-                                        class="inline-block rounded-full px-2.5 py-0.5 font-medium uppercase tracking-wide"
-                                        :class="[prepStatusClass(set), wide ? 'text-xs' : 'text-[10px]']"
+                                        class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+                                        :class="prepStatusClass(set)"
                                     >
                                         {{ set.progress_label }}
                                     </span>
                                 </td>
-                                <td v-if="isAdminContext" class="text-right" :class="cellPad">
+                                <td v-if="isAdminContext" class="whitespace-nowrap px-2 py-1 text-right">
                                     <PrimaryButton
                                         v-if="set.practice_set_id"
                                         type="button"
-                                        class="!py-1"
-                                        :class="wide ? '!text-xs' : '!text-[10px]'"
+                                        class="!px-2 !py-0.5 !text-[10px]"
                                         :disabled="assignProcessing"
                                         @click="emit('assign-set', set.practice_set_id)"
                                     >
@@ -182,8 +166,8 @@ const chapterHubHref = (chapterId) => route('admin.practice-sets.chapters.show',
             </section>
         </div>
     </div>
-    <div v-else :class="wide ? 'px-6 py-4' : 'px-4 py-3'">
-        <p class="text-gray-400" :class="textSize">
+    <div v-else class="px-3 py-2.5">
+        <p class="text-xs text-gray-400">
             {{ isAdminContext ? 'Edit the exam to select chapters, then assign practice or tests.' : 'No chapters selected yet.' }}
         </p>
     </div>
