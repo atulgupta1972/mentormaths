@@ -186,6 +186,9 @@ class WrittenSheetController extends Controller
             'chapterPlan' => $this->hydrateWrittenSheetChapterPlan(
                 session('written_sheet_chapter_plan', []),
                 $topics,
+                $topicIds,
+                $topicScope,
+                $sheetKind,
             ),
             'manualQuestionsDraft' => session('manual_questions_draft', []),
             'answerKeyDraft' => session('answer_key_draft', []),
@@ -216,7 +219,13 @@ class WrittenSheetController extends Controller
             'name' => $topic->name,
         ])->values()->all();
 
-        $plan = $this->hydrateWrittenSheetChapterPlan($validated['plan'], $topics);
+        $plan = $this->hydrateWrittenSheetChapterPlan(
+            $validated['plan'],
+            $topics,
+            $validated['topic_ids'] ?? [],
+            ($validated['topic_scope'] ?? 'multiple') === 'multiple' ? 'multiple' : 'one',
+            $validated['sheet_kind'] ?? 'practice',
+        );
 
         try {
             $prompt = $this->fillBlankImportService->cursorPromptForWrittenChapter($chapter, $plan);
@@ -979,31 +988,68 @@ class WrittenSheetController extends Controller
 
     /**
      * @param  list<array{id: int, name: string}>  $topics
+     * @param  list<int>  $selectedTopicIds
      * @param  list<array<string, mixed>>  $plan
      * @return list<array<string, mixed>>
      */
-    private function hydrateWrittenSheetChapterPlan(array $plan, array $topics): array
-    {
-        if ($plan === []) {
-            return [];
+    private function hydrateWrittenSheetChapterPlan(
+        array $plan,
+        array $topics,
+        array $selectedTopicIds = [],
+        string $topicScope = 'multiple',
+        string $sheetKind = 'practice',
+    ): array {
+        if ($topics === []) {
+            return $plan;
         }
 
-        $namesById = collect($topics)->keyBy('id');
+        $scopeTopics = $topics;
 
-        return collect($plan)
-            ->values()
-            ->map(function (array $row, int $index) use ($namesById) {
-                $topicId = (int) ($row['topic_id'] ?? 0);
+        if ($sheetKind === 'practice' && $topicScope === 'multiple' && $selectedTopicIds !== []) {
+            $selected = array_flip($selectedTopicIds);
+            $scopeTopics = array_values(array_filter(
+                $topics,
+                fn (array $topic) => isset($selected[$topic['id']]),
+            ));
+        } elseif ($sheetKind === 'practice' && $topicScope === 'one' && count($selectedTopicIds) === 1) {
+            $onlyId = $selectedTopicIds[0];
+            $scopeTopics = array_values(array_filter(
+                $topics,
+                fn (array $topic) => $topic['id'] === $onlyId,
+            ));
+        }
 
-                if ($topicId && empty($row['topic_name'])) {
-                    $row['topic_name'] = $namesById->get($topicId)['name'] ?? '';
-                }
+        if ($scopeTopics === []) {
+            $scopeTopics = $topics;
+        }
 
-                $row['sort_order'] ??= $index + 1;
+        $planById = [];
 
-                return $row;
-            })
-            ->all();
+        foreach ($plan as $index => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $topicId = (int) ($row['topic_id'] ?? 0);
+
+            if ($topicId > 0) {
+                $planById[$topicId] = $row;
+            }
+        }
+
+        return collect($scopeTopics)->values()->map(function (array $topic, int $index) use ($planById, $plan) {
+            $topicId = $topic['id'];
+            $saved = $planById[$topicId] ?? (is_array($plan[$index] ?? null) ? $plan[$index] : []);
+
+            return [
+                'topic_id' => $topicId,
+                'topic_name' => $topic['name'],
+                'easy' => (int) ($saved['easy'] ?? 0),
+                'medium' => (int) ($saved['medium'] ?? 0),
+                'hard' => (int) ($saved['hard'] ?? 0),
+                'sort_order' => $index + 1,
+            ];
+        })->all();
     }
 
     /**

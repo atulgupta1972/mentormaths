@@ -44,35 +44,6 @@ const selectedTopicIds = ref(
     (props.filters.topic_ids || []).map((id) => String(id)),
 );
 
-const buildDefaultChapterPlan = () => props.topics.map((topic, index) => ({
-    topic_id: topic.id,
-    topic_name: topic.name,
-    easy: 0,
-    medium: 0,
-    hard: 0,
-    sort_order: index + 1,
-}));
-
-const hydrateChapterPlan = (rows) => {
-    if (!rows?.length) {
-        return buildDefaultChapterPlan();
-    }
-
-    return rows.map((row, index) => ({
-        ...row,
-        topic_name: row.topic_name
-            || props.topics.find((topic) => String(topic.id) === String(row.topic_id))?.name
-            || '',
-        sort_order: row.sort_order ?? index + 1,
-    }));
-};
-
-const chapterPlanRows = ref(
-    props.chapterPlan?.length
-        ? hydrateChapterPlan(props.chapterPlan)
-        : buildDefaultChapterPlan(),
-);
-
 const generatingChapterPrompt = ref(false);
 const zipPackInput = ref(null);
 const writtenSheetZipInput = ref(null);
@@ -162,6 +133,64 @@ const difficultyMismatch = computed(
 
 const isOneTopicScope = computed(() => topicScope.value === 'one');
 const isMultipleTopicScope = computed(() => topicScope.value === 'multiple');
+
+const planTopics = computed(() => {
+    if (form.sheet_kind === 'test') {
+        return props.topics;
+    }
+
+    if (isMultipleTopicScope.value && selectedTopicIds.value.length > 0) {
+        const selected = new Set(selectedTopicIds.value.map(String));
+
+        return props.topics.filter((topic) => selected.has(String(topic.id)));
+    }
+
+    if (isOneTopicScope.value && form.topic_id) {
+        const topic = props.topics.find((item) => String(item.id) === String(form.topic_id));
+
+        return topic ? [topic] : props.topics;
+    }
+
+    return props.topics;
+});
+
+const normalizeChapterPlan = (incoming) => {
+    const topics = planTopics.value;
+
+    if (!topics.length) {
+        return Array.isArray(incoming) ? incoming : [];
+    }
+
+    const incomingRows = Array.isArray(incoming) ? incoming : [];
+    const byTopicId = new Map(
+        incomingRows
+            .filter((row) => row?.topic_id)
+            .map((row) => [String(row.topic_id), row]),
+    );
+
+    return topics.map((topic, index) => {
+        const saved = byTopicId.get(String(topic.id)) || incomingRows[index] || {};
+
+        return {
+            topic_id: topic.id,
+            topic_name: topic.name,
+            easy: Number(saved.easy) || 0,
+            medium: Number(saved.medium) || 0,
+            hard: Number(saved.hard) || 0,
+            sort_order: index + 1,
+        };
+    });
+};
+
+const buildDefaultChapterPlan = () => normalizeChapterPlan([]);
+
+const hydrateChapterPlan = (rows) => normalizeChapterPlan(rows);
+
+const chapterPlanRows = ref(
+    props.chapterPlan?.length
+        ? hydrateChapterPlan(props.chapterPlan)
+        : buildDefaultChapterPlan(),
+);
 
 const allTopicsSelected = computed(() =>
     props.topics.length > 0 && selectedTopicIds.value.length === props.topics.length,
@@ -306,11 +335,9 @@ const planHasCounts = (rows) => rows.some(
 );
 
 const mergeChapterPlan = (incoming) => {
-    if (!incoming?.length) {
-        return;
-    }
-
-    chapterPlanRows.value = hydrateChapterPlan(incoming);
+    chapterPlanRows.value = normalizeChapterPlan(
+        incoming?.length ? incoming : chapterPlanRows.value,
+    );
 };
 
 const resolveTopicIdForRow = (row) => {
@@ -438,15 +465,22 @@ watch(
             selectedTopicIds.value = topics.map((topic) => String(topic.id));
         }
 
-        if (chapterPlanRows.value.length === 0) {
-            chapterPlanRows.value = props.chapterPlan?.length
-                ? hydrateChapterPlan(props.chapterPlan)
-                : buildDefaultChapterPlan();
-        } else {
-            chapterPlanRows.value = hydrateChapterPlan(chapterPlanRows.value);
-        }
+        chapterPlanRows.value = normalizeChapterPlan(
+            props.chapterPlan?.length ? props.chapterPlan : chapterPlanRows.value,
+        );
     },
     { immediate: true },
+);
+
+watch(
+    [planTopics, selectedTopicIds],
+    () => {
+        if (!planTopics.value.length) {
+            return;
+        }
+
+        chapterPlanRows.value = normalizeChapterPlan(chapterPlanRows.value);
+    },
 );
 
 watch(
@@ -1386,9 +1420,9 @@ const submit = () => {
                         </p>
 
                         <ChapterQuestionPlan
-                            v-if="useChapterCursorPlan && topics.length"
+                            v-if="useChapterCursorPlan && planTopics.length"
                             v-model="editableChapterPlan"
-                            :topics="topics"
+                            :topics="planTopics"
                             :generating="generatingChapterPrompt"
                             question-label="written sums"
                             @generate-prompt="generateChapterPrompt"
