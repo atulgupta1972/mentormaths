@@ -37,6 +37,14 @@ const prepStatusClass = (row) => {
 };
 
 const chapterHubHref = (chapterId) => route('admin.practice-sets.chapters.show', chapterId);
+
+const setHref = (set) => {
+    if (!props.isAdminContext || !set.practice_set_id) {
+        return null;
+    }
+
+    return route('admin.questions.sets.show', set.practice_set_id);
+};
 </script>
 
 <template>
@@ -124,7 +132,14 @@ const chapterHubHref = (chapterId) => route('admin.practice-sets.chapters.show',
                                 :key="`${group.chapter_id}-${set.practice_set_id || setIndex}`"
                             >
                                 <td class="px-2 py-1 align-top">
-                                    <span class="whitespace-nowrap font-mono font-semibold text-gray-900">
+                                    <Link
+                                        v-if="setHref(set)"
+                                        :href="setHref(set)"
+                                        class="whitespace-nowrap font-mono font-semibold text-indigo-700 hover:text-indigo-950 hover:underline"
+                                    >
+                                        {{ set.set_code }}
+                                    </Link>
+                                    <span v-else class="whitespace-nowrap font-mono font-semibold text-gray-900">
                                         {{ set.set_code || '—' }}
                                     </span>
                                     <span
