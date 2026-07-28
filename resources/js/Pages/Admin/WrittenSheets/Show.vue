@@ -8,9 +8,15 @@ import DangerButton from '@/Components/DangerButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import { formatScoreLabel } from '@/utils/scores';
+import {
+    defaultFillBlankRow,
+    fillBlankFormats,
+    parseFillBlankJson,
+} from '@/utils/fillBlankImport';
 
 const props = defineProps({
     sheet: { type: Object, required: true },
+    topics: { type: Array, default: () => [] },
     students: { type: Array, default: () => [] },
     selectedStudentId: { type: [Number, null], default: null },
     studentProgress: { type: Object, default: null },
@@ -26,9 +32,13 @@ const rejectForm = useForm({});
 const replacePdfForm = useForm({ pdf_import_token: '' });
 const removePdfForm = useForm({});
 const reimportZipForm = useForm({ pack: null });
+const reimportJsonForm = useForm({ manual_questions: [] });
 
 const replacePdfInput = ref(null);
 const reimportZipInput = ref(null);
+const reimportJsonFileInput = ref(null);
+const reimportJsonText = ref('');
+const reimportJsonError = ref('');
 const selectedReplacePdfName = ref('');
 const replacePdfPreviewUrl = ref('');
 const replacePdfStaging = ref(false);
@@ -465,6 +475,105 @@ const onReimportZipSelected = (event) => {
     reimportZipForm.pack = event.target.files?.[0] ?? null;
 };
 
+const defaultTopicName = computed(() => props.sheet.topic_name || '');
+
+const validTopicIds = computed(() => new Set(props.topics.map((topic) => String(topic.id))));
+
+const resolveTopicIdForRow = (row) => {
+    if (row.syllabus_topic_id) {
+        return row.syllabus_topic_id;
+    }
+
+    const name = String(row.topic_name || row.topic || '').trim().toLowerCase();
+    if (!name) {
+        return null;
+    }
+
+    return props.topics.find((topic) => topic.name.toLowerCase() === name)?.id ?? null;
+};
+
+const sanitizeManualRow = (row) => {
+    const topicId = row.syllabus_topic_id ? String(row.syllabus_topic_id) : '';
+    const answerFormat = fillBlankFormats.includes(row.answer_format) ? row.answer_format : 'text';
+
+    return {
+        ...row,
+        answer_format: answerFormat,
+        syllabus_topic_id: validTopicIds.value.has(topicId) ? Number(topicId) : '',
+    };
+};
+
+const buildManualRowsFromJson = (text) => parseFillBlankJson(text).map((row) => {
+    const topicId = resolveTopicIdForRow(row);
+    const topicName = row.topic_name
+        || props.topics.find((topic) => topic.id === topicId)?.name
+        || defaultTopicName.value;
+
+    return sanitizeManualRow({
+        ...defaultFillBlankRow(topicName),
+        ...row,
+        topic_name: topicName,
+        syllabus_topic_id: topicId || '',
+    });
+});
+
+const onReimportJsonFileSelected = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    reimportJsonError.value = '';
+
+    try {
+        reimportJsonText.value = await file.text();
+    } catch {
+        reimportJsonError.value = 'Could not read the JSON file.';
+    }
+};
+
+const submitReimportJson = () => {
+    reimportJsonError.value = '';
+
+    if (!reimportJsonText.value.trim()) {
+        reimportJsonError.value = 'Paste JSON or choose a .json file first.';
+
+        return;
+    }
+
+    let rows;
+
+    try {
+        rows = buildManualRowsFromJson(reimportJsonText.value);
+    } catch (error) {
+        reimportJsonError.value = error.message || 'Could not parse JSON.';
+
+        return;
+    }
+
+    if (!rows.length) {
+        reimportJsonError.value = 'Add at least one question in the JSON.';
+
+        return;
+    }
+
+    if (!confirm('Replace all questions and the PDF with this JSON? The current sheet content will be deleted first.')) {
+        return;
+    }
+
+    reimportJsonForm.manual_questions = rows;
+    reimportJsonForm.post(route('admin.written-sheets.reimport-json', props.sheet.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            reimportJsonText.value = '';
+            reimportJsonForm.reset();
+            if (reimportJsonFileInput.value) {
+                reimportJsonFileInput.value.value = '';
+            }
+        },
+    });
+};
+
 const submitReimportZip = () => {
     if (!reimportZipForm.pack) {
         return;
@@ -605,36 +714,78 @@ const progressLabel = (p) => {
                         At least one student has uploaded written work — the worksheet PDF and questions can no longer be changed.
                     </div>
 
-                    <div v-else-if="sheet.can_reimport_zip" class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
-                        <h4 class="text-sm font-semibold text-emerald-950">Re-import zip pack</h4>
-                        <p class="mt-1 text-sm text-emerald-900">
-                            Zip had wrong questions or diagrams? Upload a corrected .zip (questions.json + images) to replace everything and regenerate the PDF.
-                        </p>
+                    <div v-else-if="sheet.can_reimport_json" class="mt-4 space-y-4">
+                        <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+                            <h4 class="text-sm font-semibold text-emerald-950">Re-import JSON</h4>
+                            <p class="mt-1 text-sm text-emerald-900">
+                                Gaps or mistakes in the generated PDF? Paste corrected JSON from Cursor (same format as create) to replace all questions and regenerate the PDF.
+                            </p>
 
-                        <input
-                            ref="reimportZipInput"
-                            type="file"
-                            accept="application/zip,.zip"
-                            class="mt-3 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-emerald-800"
-                            @change="onReimportZipSelected"
-                        >
+                            <div class="mt-3">
+                                <InputLabel value="Paste JSON" />
+                                <textarea
+                                    v-model="reimportJsonText"
+                                    rows="5"
+                                    class="mt-1 block w-full rounded-md border-gray-300 font-mono text-xs"
+                                    placeholder='{"questions":[{"question":"...","correct_answer":"...","answer_format":"integer"}]}'
+                                />
+                            </div>
 
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <PrimaryButton
-                                type="button"
-                                :disabled="!reimportZipForm.pack || reimportZipForm.processing"
-                                @click="submitReimportZip"
+                            <div class="mt-3">
+                                <InputLabel value="Or upload a .json file" />
+                                <input
+                                    ref="reimportJsonFileInput"
+                                    type="file"
+                                    accept="application/json,.json"
+                                    class="mt-1 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-emerald-800"
+                                    @change="onReimportJsonFileSelected"
+                                >
+                            </div>
+
+                            <p v-if="reimportJsonError" class="mt-2 text-sm text-rose-700">{{ reimportJsonError }}</p>
+
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <PrimaryButton
+                                    type="button"
+                                    :disabled="!reimportJsonText.trim() || reimportJsonForm.processing"
+                                    @click="submitReimportJson"
+                                >
+                                    {{ reimportJsonForm.processing ? 'Re-importing…' : 'Re-import JSON & regenerate PDF' }}
+                                </PrimaryButton>
+                            </div>
+                        </div>
+
+                        <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+                            <h4 class="text-sm font-semibold text-emerald-950">Re-import zip pack</h4>
+                            <p class="mt-1 text-sm text-emerald-900">
+                                For geometry sums with figures, upload a corrected .zip (<strong>questions.json</strong> + diagram images) instead.
+                            </p>
+
+                            <input
+                                ref="reimportZipInput"
+                                type="file"
+                                accept="application/zip,.zip"
+                                class="mt-3 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-emerald-800"
+                                @change="onReimportZipSelected"
                             >
-                                {{ reimportZipForm.processing ? 'Re-importing…' : 'Re-import zip & regenerate PDF' }}
-                            </PrimaryButton>
-                            <DangerButton
-                                v-if="sheet.can_reset_sheet"
-                                type="button"
-                                :disabled="removePdfForm.processing"
-                                @click="clearSheet"
-                            >
-                                Clear sheet & start over
-                            </DangerButton>
+
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <PrimaryButton
+                                    type="button"
+                                    :disabled="!reimportZipForm.pack || reimportZipForm.processing"
+                                    @click="submitReimportZip"
+                                >
+                                    {{ reimportZipForm.processing ? 'Re-importing…' : 'Re-import zip & regenerate PDF' }}
+                                </PrimaryButton>
+                                <DangerButton
+                                    v-if="sheet.can_reset_sheet"
+                                    type="button"
+                                    :disabled="removePdfForm.processing"
+                                    @click="clearSheet"
+                                >
+                                    Clear sheet & start over
+                                </DangerButton>
+                            </div>
                         </div>
                     </div>
 

@@ -485,6 +485,76 @@ class WrittenSheetService
         return $result;
     }
 
+    /**
+     * Replace questions from manual / Cursor JSON and regenerate the PDF.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     */
+    public function reimportManualQuestions(Worksheet $worksheet, array $rows, User $user): Worksheet
+    {
+        if (! $this->canReimportZip($worksheet)) {
+            throw new \InvalidArgumentException(
+                'Cannot re-import JSON for this sheet (student uploads exist, or this sheet uses an external PDF).',
+            );
+        }
+
+        $worksheet->load(['topic', 'chapter']);
+        $chapter = $worksheet->chapter ?? $worksheet->topic?->chapter;
+
+        if (! $chapter) {
+            throw new \InvalidArgumentException('This sheet is missing chapter context.');
+        }
+
+        $this->resetSheet($worksheet);
+        $worksheet->refresh()->load(['topic', 'chapter']);
+
+        $rows = array_values(array_filter($rows, fn (array $row) => trim((string) ($row['question_text'] ?? '')) !== ''));
+
+        if ($rows === []) {
+            throw new \InvalidArgumentException('Add at least one question in the JSON.');
+        }
+
+        if ($worksheet->isChapterScope()) {
+            $bankPurpose = $worksheet->isChapterTest()
+                ? QuestionBankPurpose::CHAPTER_TEST
+                : QuestionBankPurpose::PRACTICE_SET;
+
+            $saved = $this->fillBlankImportService->saveChapterRows(
+                $chapter,
+                $this->normalizeManualRowsForChapter($chapter, $worksheet->topic, $rows),
+                $user->id,
+                Question::SOURCE_MANUAL,
+                $bankPurpose,
+            );
+        } else {
+            if (! $worksheet->topic) {
+                throw new \InvalidArgumentException('This sheet is missing topic context.');
+            }
+
+            $saved = $this->fillBlankImportService->saveRows(
+                $worksheet->topic,
+                $this->normalizeManualRowsForTopic($worksheet->topic, $rows),
+                $user->id,
+                Question::SOURCE_MANUAL,
+                QuestionBankPurpose::PRACTICE_SET,
+            );
+        }
+
+        $questionIds = collect($saved)->pluck('id')->all();
+
+        if ($questionIds === []) {
+            throw new \InvalidArgumentException('No valid questions could be imported from the JSON.');
+        }
+
+        foreach (array_values($questionIds) as $index => $questionId) {
+            $worksheet->questions()->attach($questionId, ['sort_order' => $index + 1]);
+        }
+
+        $this->generatePdf($worksheet->fresh());
+
+        return $worksheet->fresh()->loadCount('questions');
+    }
+
     public function resetSheet(Worksheet $worksheet): Worksheet
     {
         if (! $worksheet->isWritten()) {
@@ -712,6 +782,7 @@ class WrittenSheetService
             'can_replace_pdf' => $this->canReplacePdf($worksheet),
             'can_manage_pdf' => $this->canManagePdf($worksheet),
             'can_reimport_zip' => $this->canReimportZip($worksheet),
+            'can_reimport_json' => $this->canReimportZip($worksheet),
             'can_reset_sheet' => $this->canResetSheet($worksheet),
             'can_update_answers' => $this->canUpdateAnswers($worksheet),
             'has_student_submissions' => $this->hasStudentSubmissions($worksheet),

@@ -609,6 +609,7 @@ class WrittenSheetController extends Controller
 
         return Inertia::render('Admin/WrittenSheets/Show', [
             'sheet' => $this->writtenSheetService->detail($worksheet),
+            'topics' => $this->topicsForWrittenSheet($worksheet),
             'students' => $students,
             'selectedStudentId' => $selectedStudentId,
             'studentProgress' => $studentProgress,
@@ -700,7 +701,7 @@ class WrittenSheetController extends Controller
 
         return back()->with(
             'success',
-            'Sheet cleared — PDF and all questions removed. Re-import a zip or upload a new PDF to start again.',
+            'Sheet cleared — PDF and all questions removed. Re-import JSON, a zip pack, or upload a new PDF to start again.',
         );
     }
 
@@ -743,6 +744,41 @@ class WrittenSheetController extends Controller
         return back()->with(
             ($result['missing_diagram_count'] ?? 0) > 0 ? 'warning' : 'success',
             $message,
+        );
+    }
+
+    public function reimportJson(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        abort_unless($worksheet->isWritten(), 404);
+
+        $validated = $request->validate([
+            'manual_questions' => ['required', 'array', 'min:1'],
+            'manual_questions.*.question_text' => ['required', 'string'],
+            'manual_questions.*.correct_answer' => ['required', 'string'],
+            'manual_questions.*.answer_format' => ['nullable', 'in:integer,decimal,fraction,text'],
+            'manual_questions.*.method_hint' => ['nullable', 'string'],
+            'manual_questions.*.explanation' => ['nullable', 'string'],
+            'manual_questions.*.topic_name' => ['nullable', 'string'],
+            'manual_questions.*.syllabus_topic_id' => ['nullable', 'integer'],
+        ]);
+
+        try {
+            $worksheet = $this->writtenSheetService->reimportManualQuestions(
+                $worksheet,
+                $validated['manual_questions'],
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not re-import the JSON. '.$e->getMessage());
+        }
+
+        return back()->with(
+            'success',
+            "{$worksheet->questions_count} question(s) re-imported and written sheet PDF regenerated.",
         );
     }
 
@@ -927,5 +963,24 @@ class WrittenSheetController extends Controller
         }
 
         return $answer;
+    }
+
+    /**
+     * @return list<array{id: int, name: string}>
+     */
+    private function topicsForWrittenSheet(Worksheet $worksheet): array
+    {
+        $worksheet->loadMissing(['topic.chapter.topics', 'chapter.topics']);
+
+        $chapter = $worksheet->chapter ?? $worksheet->topic?->chapter;
+
+        if (! $chapter) {
+            return [];
+        }
+
+        return $chapter->topics->map(fn (SyllabusTopic $topic) => [
+            'id' => $topic->id,
+            'name' => $topic->name,
+        ])->values()->all();
     }
 }
