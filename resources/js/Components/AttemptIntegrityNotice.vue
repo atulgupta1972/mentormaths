@@ -23,7 +23,6 @@ defineProps({
         <p class="mt-1 text-xs leading-relaxed opacity-90">
             Copy, paste, right-click, and text selection are disabled on questions.
             If you switch tabs or apps, questions are hidden until you return — each switch is counted.
-            <span v-if="mode === 'strict'"> Chapter tests also run in fullscreen.</span>
         </p>
     </div>
 </template>

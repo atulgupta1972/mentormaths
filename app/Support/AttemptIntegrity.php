@@ -27,7 +27,7 @@ class AttemptIntegrity
             return [
                 'enabled' => true,
                 'mode' => 'strict',
-                'require_fullscreen' => true,
+                'require_fullscreen' => false,
                 'track_tab_leaves' => true,
             ];
         }

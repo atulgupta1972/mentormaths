@@ -26,7 +26,7 @@ const submit = () => {
     <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h3 class="text-sm font-semibold text-gray-900">Attempt protection</h3>
         <p class="mt-1 text-xs text-gray-600">
-            Control anti-copy and tab-leave tracking for this class. Tests also require fullscreen.
+            Control anti-copy and tab-leave tracking for this class.
             Practice blocks copy/paste and records tab switches.
         </p>
 
@@ -37,7 +37,7 @@ const submit = () => {
                     @update:checked="form.protect_test_attempts = $event"
                 />
                 <span>
-                    <strong>Chapter tests</strong> — strict protection, fullscreen required, tab leaves recorded
+                    <strong>Chapter tests</strong> — strict protection, tab leaves recorded
                 </span>
             </label>
 
@@ -47,7 +47,7 @@ const submit = () => {
                     @update:checked="form.protect_practice_attempts = $event"
                 />
                 <span>
-                    <strong>Guided practice</strong> — copy blocked, tab switches recorded (no fullscreen)
+                    <strong>Guided practice</strong> — copy blocked, tab switches recorded
                 </span>
             </label>
 
