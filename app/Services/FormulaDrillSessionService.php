@@ -122,23 +122,46 @@ class FormulaDrillSessionService
         }
 
         $alreadySelected = collect($selected);
-        $poolCollection = collect($poolIds);
+
+        $shownQuestionIds = FormulaQuestionStat::query()
+            ->where('student_id', $student->id)
+            ->whereIn('question_id', $poolIds)
+            ->where('times_shown', '>', 0)
+            ->pluck('question_id')
+            ->all();
+
+        $neverShownIds = collect($poolIds)
+            ->diff($alreadySelected)
+            ->diff($shownQuestionIds)
+            ->shuffle()
+            ->values();
+
+        foreach ($neverShownIds as $questionId) {
+            if (count($selected) >= $limit) {
+                return $selected;
+            }
+
+            $selected[] = $questionId;
+        }
+
+        if (count($selected) >= $limit) {
+            return $selected;
+        }
 
         $leastRecentlyShown = FormulaQuestionStat::query()
             ->where('student_id', $student->id)
             ->whereIn('question_id', $poolIds)
-            ->orderByRaw('last_shown_date IS NULL DESC')
             ->orderBy('last_shown_date')
             ->orderBy('times_shown')
             ->pluck('question_id');
 
-        $orderedCandidates = $leastRecentlyShown
-            ->merge($poolCollection->shuffle())
+        $repeatCandidates = $leastRecentlyShown
+            ->merge(collect($poolIds)->shuffle())
             ->unique()
-            ->reject(fn (int $id) => $alreadySelected->contains($id))
+            ->reject(fn (int $id) => collect($selected)->contains($id))
             ->values();
 
-        foreach ($orderedCandidates as $questionId) {
+        foreach ($repeatCandidates as $questionId) {
             if (count($selected) >= $limit) {
                 break;
             }

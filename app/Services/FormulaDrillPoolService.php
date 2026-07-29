@@ -2,15 +2,17 @@
 
 namespace App\Services;
 
+use App\Models\GradeLevel;
 use App\Models\Question;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
+use App\Models\Subject;
 use App\Models\SyllabusTopic;
+use App\Models\SyllabusVersion;
 use App\Models\WrittenSubmission;
 use App\Support\FormulaDrillSchema;
-use App\Support\FormulaDrillScope;
 use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetDeliveryMode;
 use Illuminate\Support\Collection;
@@ -22,6 +24,9 @@ class FormulaDrillPoolService
     ) {}
 
     /**
+     * Formula inventory: all formulas from the previous grade syllabus, plus formulas
+     * from topics the student has completed or been assigned in their current enrollment.
+     *
      * @return list<int>
      */
     public function poolQuestionIds(Student $student): array
@@ -30,22 +35,26 @@ class FormulaDrillPoolService
             return [];
         }
 
-        $completedTopicIds = $this->completedTopicIdsForStudent($student);
-        $pool = $this->mergePools(
-            $this->formulaIdsForTopicIds($completedTopicIds),
-            $this->globalBasicsQuestionIds(),
-        );
+        $enrollment = $student->currentEnrollment();
 
-        if ($pool !== []) {
-            return $pool;
+        if (! $enrollment) {
+            return [];
         }
 
-        $assignedTopicIds = $this->assignedTopicIdsForStudent($student);
+        $enrollment->loadMissing('gradeLevel');
+
+        $previousGradeTopicIds = $this->previousGradeTopicIds($enrollment);
+        $completedTopicIds = $this->completedTopicIdsForEnrollment($enrollment);
+        $assignedTopicIds = $this->assignedTopicIdsForEnrollment($enrollment);
+
+        $currentGradeTopicIds = array_values(array_unique(array_merge(
+            $completedTopicIds,
+            $assignedTopicIds,
+        )));
 
         return $this->mergePools(
-            $this->formulaIdsForTopicIds($assignedTopicIds),
-            $this->formulaIdsForTopicIds($this->currentSyllabusTopicIds($student)),
-            $this->globalBasicsQuestionIds(),
+            $this->formulaIdsForTopicIds($previousGradeTopicIds),
+            $this->formulaIdsForTopicIds($currentGradeTopicIds),
         );
     }
 
@@ -118,42 +127,65 @@ class FormulaDrillPoolService
     /**
      * @return list<int>
      */
-    private function completedTopicIdsForStudent(Student $student): array
+    private function previousGradeTopicIds(StudentEnrollment $enrollment): array
     {
-        $enrollments = $student->enrollments()
-            ->with('gradeLevel:id,sort_order')
-            ->get()
-            ->sortBy(fn (StudentEnrollment $enrollment) => $enrollment->gradeLevel?->sort_order ?? 999);
+        $sortOrder = $enrollment->gradeLevel?->sort_order;
 
-        $topicIds = [];
-
-        foreach ($enrollments as $enrollment) {
-            $chapterIds = $this->completedChapterIdsForEnrollment($enrollment);
-
-            if ($chapterIds === []) {
-                continue;
-            }
-
-            $topicIds = array_merge(
-                $topicIds,
-                $this->topicIdsForChapters($enrollment, $chapterIds),
-            );
+        if ($sortOrder === null || $sortOrder <= 1) {
+            return [];
         }
 
-        return array_values(array_unique($topicIds));
+        $previousGrade = GradeLevel::query()
+            ->where('is_active', true)
+            ->where('sort_order', $sortOrder - 1)
+            ->first();
+
+        if (! $previousGrade) {
+            return [];
+        }
+
+        $mathsSubjectId = Subject::query()->where('code', 'MATHS')->value('id');
+
+        if (! $mathsSubjectId) {
+            return [];
+        }
+
+        $syllabusVersion = SyllabusVersion::query()
+            ->where('academic_year_id', $enrollment->academic_year_id)
+            ->where('grade_level_id', $previousGrade->id)
+            ->where('board_id', $enrollment->board_id)
+            ->where('subject_id', $mathsSubjectId)
+            ->first();
+
+        if (! $syllabusVersion) {
+            return [];
+        }
+
+        return SyllabusTopic::query()
+            ->whereHas('chapter', fn ($query) => $query->where('syllabus_version_id', $syllabusVersion->id))
+            ->pluck('id')
+            ->all();
     }
 
     /**
      * @return list<int>
      */
-    private function assignedTopicIdsForStudent(Student $student): array
+    private function completedTopicIdsForEnrollment(StudentEnrollment $enrollment): array
     {
-        $enrollment = $student->currentEnrollment();
+        $chapterIds = $this->completedChapterIdsForEnrollment($enrollment);
 
-        if (! $enrollment) {
+        if ($chapterIds === []) {
             return [];
         }
 
+        return $this->topicIdsForChapters($enrollment, $chapterIds);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function assignedTopicIdsForEnrollment(StudentEnrollment $enrollment): array
+    {
         $assignments = SetAssignment::query()
             ->with(['practiceSet:id,syllabus_topic_id,syllabus_chapter_id'])
             ->where('student_enrollment_id', $enrollment->id)
@@ -177,29 +209,6 @@ class FormulaDrillPoolService
         }
 
         return $this->topicIdsForChapters($enrollment, $chapterIds);
-    }
-
-    /**
-     * @return list<int>
-     */
-    private function currentSyllabusTopicIds(Student $student): array
-    {
-        $enrollment = $student->currentEnrollment();
-
-        if (! $enrollment) {
-            return [];
-        }
-
-        $syllabusVersion = $this->examPlanService->syllabusVersionForEnrollment($enrollment);
-
-        if (! $syllabusVersion) {
-            return [];
-        }
-
-        return SyllabusTopic::query()
-            ->whereHas('chapter', fn ($query) => $query->where('syllabus_version_id', $syllabusVersion->id))
-            ->pluck('id')
-            ->all();
     }
 
     /**
@@ -263,19 +272,6 @@ class FormulaDrillPoolService
         }
 
         return null;
-    }
-
-    /**
-     * @return list<int>
-     */
-    private function globalBasicsQuestionIds(): array
-    {
-        return Question::query()
-            ->where('bank_purpose', QuestionBankPurpose::FORMULA)
-            ->where('formula_drill_scope', FormulaDrillScope::GLOBAL_BASICS)
-            ->whereHas('options')
-            ->pluck('id')
-            ->all();
     }
 
     /**
