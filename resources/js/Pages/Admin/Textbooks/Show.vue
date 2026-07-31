@@ -5,7 +5,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { safeRoute } from '@/utils/routes';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     chapter: { type: Object, required: true },
@@ -24,14 +24,38 @@ const importForm = useForm({ json: '' });
 const draftForm = useForm({ items: items.value });
 const publishForm = useForm({ items: items.value });
 
-const awaitingImport = computed(() => props.chapter.status === 'draft' && !items.value.length);
-const canEdit = computed(() => ['review', 'published', 'failed'].includes(props.chapter.status) || items.value.length > 0);
-const approvedCount = computed(() => items.value.filter((item) => item.approved !== false).length);
-
 const syncForms = () => {
     draftForm.items = items.value;
     publishForm.items = items.value;
 };
+
+const applyItemsFromProps = () => {
+    items.value = cloneItems(props.chapter.items);
+    syncForms();
+};
+
+applyItemsFromProps();
+
+watch(
+    () => props.chapter.items,
+    () => {
+        applyItemsFromProps();
+    },
+    { deep: true },
+);
+
+watch(
+    () => props.chapter.status,
+    () => {
+        applyItemsFromProps();
+    },
+);
+
+const hasItems = computed(() => items.value.length > 0);
+const awaitingImport = computed(() => props.chapter.status === 'draft' && !hasItems.value);
+const canEdit = computed(() => ['review', 'published', 'failed'].includes(props.chapter.status) || hasItems.value);
+const showImportSteps = computed(() => awaitingImport.value || (canEdit.value && !hasItems.value));
+const approvedCount = computed(() => items.value.filter((item) => item.approved !== false).length);
 
 const copyPrompt = async () => {
     await navigator.clipboard.writeText(props.mcqImport.prompt || '');
@@ -47,6 +71,7 @@ const importMcq = () => {
         preserveScroll: true,
         onSuccess: () => {
             jsonInput.value = '';
+            applyItemsFromProps();
         },
     });
 };
@@ -108,73 +133,16 @@ const publish = () => {
                     {{ page.props.flash.error }}
                 </div>
 
-                <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-950">
-                    <h3 class="font-semibold">Textbook MCQ workflow</h3>
-                    <ol class="mt-2 list-decimal space-y-1 pl-5">
-                        <li>PDF is stored on the server (download link above — or upload the same PDF to Claude/Gemini).</li>
-                        <li>Copy the AI prompt → paste in Cursor, Claude, or Gemini with the chapter PDF.</li>
-                        <li>Paste the JSON reply below → <strong>Import MCQs</strong>.</li>
-                        <li>Review → <strong>Publish</strong> as <strong>{{ chapter.mcq_set_code }}</strong>.</li>
-                    </ol>
+                <div v-if="hasItems && canEdit" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                    <strong>Review {{ items.length }} MCQ(s)</strong> — then publish as {{ chapter.mcq_set_code }}.
+                    <SecondaryButton type="button" class="ml-3 !py-1 !text-xs" @click="resetImport">
+                        Re-import JSON
+                    </SecondaryButton>
                 </div>
 
-                <div v-if="awaitingImport || canEdit" class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <h3 class="font-semibold text-gray-900">Step 2 — AI prompt</h3>
-                            <p class="mt-1 text-sm text-gray-600">Copy this into Claude/Cursor/Gemini along with the chapter PDF.</p>
-                        </div>
-                        <SecondaryButton type="button" @click="copyPrompt">
-                            {{ copied ? 'Copied!' : 'Copy prompt' }}
-                        </SecondaryButton>
-                    </div>
-                    <textarea
-                        :value="mcqImport.prompt"
-                        rows="12"
-                        readonly
-                        class="w-full rounded-md border-gray-200 bg-gray-50 font-mono text-xs text-gray-800"
-                    />
-
-                    <details class="text-sm text-gray-600">
-                        <summary class="cursor-pointer font-medium text-gray-800">Sample JSON format</summary>
-                        <pre class="mt-2 overflow-x-auto rounded-md bg-gray-50 p-3 text-xs">{{ mcqImport.sample_json }}</pre>
-                    </details>
-                </div>
-
-                <div v-if="awaitingImport || canEdit" class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
-                    <div>
-                        <h3 class="font-semibold text-gray-900">Step 3 — Import MCQ JSON</h3>
-                        <p class="mt-1 text-sm text-gray-600">
-                            Paste AI output here (JSON only, or text with JSON — preamble lines are OK).
-                            Publishing creates set <strong>{{ mcqImport.mcq_set_code }}</strong>.
-                        </p>
-                    </div>
-                    <textarea
-                        v-model="jsonInput"
-                        rows="10"
-                        class="w-full rounded-md border-gray-300 font-mono text-xs"
-                        placeholder='{"questions": [ ... ]}'
-                    />
-                    <InputError :message="importForm.errors.json" />
-                    <div class="flex flex-wrap gap-2">
-                        <PrimaryButton type="button" :disabled="importForm.processing || !jsonInput.trim()" @click="importMcq">
-                            {{ importForm.processing ? 'Importing…' : 'Import MCQs' }}
-                        </PrimaryButton>
-                        <SecondaryButton v-if="items.length" type="button" @click="resetImport">
-                            Clear &amp; re-import
-                        </SecondaryButton>
-                    </div>
-                </div>
-
-                <div v-if="chapter.status === 'published'" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-                    Published MCQ set <strong>{{ chapter.mcq_set_code }}</strong>.
-                    Assign from
-                    <Link :href="safeRoute('admin.classes.index', null, '/admin/classes')" class="font-semibold underline">Classes → Assign</Link>.
-                </div>
-
-                <div v-if="canEdit && items.length" class="flex flex-wrap items-center justify-between gap-3">
+                <div v-if="canEdit && hasItems" class="flex flex-wrap items-center justify-between gap-3">
                     <p class="text-sm text-gray-600">
-                        {{ approvedCount }} of {{ items.length }} approved · then publish as {{ chapter.mcq_set_code }}.
+                        {{ approvedCount }} of {{ items.length }} approved · publish as {{ chapter.mcq_set_code }}.
                     </p>
                     <div class="flex flex-wrap gap-2">
                         <SecondaryButton :disabled="draftForm.processing" @click="saveDraft">Save draft</SecondaryButton>
@@ -184,7 +152,7 @@ const publish = () => {
                     </div>
                 </div>
 
-                <div v-if="canEdit && items.length" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+                <div v-if="canEdit && hasItems" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-gray-50">
                             <tr>
@@ -217,6 +185,71 @@ const publish = () => {
                     <InputError :message="draftForm.errors.items" class="px-4 py-2" />
                     <InputError :message="publishForm.errors.items" class="px-4 py-2" />
                 </div>
+
+                <div v-if="chapter.status === 'published'" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                    Published MCQ set <strong>{{ chapter.mcq_set_code }}</strong>.
+                    Assign from
+                    <Link :href="safeRoute('admin.classes.index', null, '/admin/classes')" class="font-semibold underline">Classes → Assign</Link>.
+                </div>
+
+                <div v-if="!hasItems" class="rounded-lg border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-950">
+                    <h3 class="font-semibold">Textbook MCQ workflow</h3>
+                    <ol class="mt-2 list-decimal space-y-1 pl-5">
+                        <li>PDF is stored on the server (download link above — or upload the same PDF to Claude/Gemini).</li>
+                        <li>Copy the AI prompt → paste in Cursor, Claude, or Gemini with the chapter PDF.</li>
+                        <li>Paste the JSON reply below → <strong>Import MCQs</strong>.</li>
+                        <li>Review → <strong>Publish</strong> as <strong>{{ chapter.mcq_set_code }}</strong>.</li>
+                    </ol>
+                </div>
+
+                <div v-if="showImportSteps" class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Step 2 — AI prompt</h3>
+                            <p class="mt-1 text-sm text-gray-600">Copy this into Claude/Cursor/Gemini along with the chapter PDF.</p>
+                        </div>
+                        <SecondaryButton type="button" @click="copyPrompt">
+                            {{ copied ? 'Copied!' : 'Copy prompt' }}
+                        </SecondaryButton>
+                    </div>
+                    <textarea
+                        :value="mcqImport.prompt"
+                        rows="12"
+                        readonly
+                        class="w-full rounded-md border-gray-200 bg-gray-50 font-mono text-xs text-gray-800"
+                    />
+
+                    <details class="text-sm text-gray-600">
+                        <summary class="cursor-pointer font-medium text-gray-800">Sample JSON format</summary>
+                        <pre class="mt-2 overflow-x-auto rounded-md bg-gray-50 p-3 text-xs">{{ mcqImport.sample_json }}</pre>
+                    </details>
+                </div>
+
+                <div v-if="showImportSteps" class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
+                    <div>
+                        <h3 class="font-semibold text-gray-900">Step 3 — Import MCQ JSON</h3>
+                        <p class="mt-1 text-sm text-gray-600">
+                            Paste AI output here (JSON only, or text with JSON — preamble lines are OK).
+                            Publishing creates set <strong>{{ mcqImport.mcq_set_code }}</strong>.
+                        </p>
+                    </div>
+                    <textarea
+                        v-model="jsonInput"
+                        rows="10"
+                        class="w-full rounded-md border-gray-300 font-mono text-xs"
+                        placeholder='{"questions": [ ... ]}'
+                    />
+                    <InputError :message="importForm.errors.json" />
+                    <div class="flex flex-wrap gap-2">
+                        <PrimaryButton type="button" :disabled="importForm.processing || !jsonInput.trim()" @click="importMcq">
+                            {{ importForm.processing ? 'Importing…' : 'Import MCQs' }}
+                        </PrimaryButton>
+                        <SecondaryButton v-if="items.length" type="button" @click="resetImport">
+                            Clear &amp; re-import
+                        </SecondaryButton>
+                    </div>
+                </div>
+
             </div>
         </div>
     </AuthenticatedLayout>
