@@ -11,9 +11,12 @@ use Illuminate\Support\Facades\Storage;
 
 class WrittenGradingService
 {
+    private const MAX_GRADING_PAGES = 10;
+
     public function __construct(
         private WrittenSheetPdfService $pdfService,
         private PdfPageImageService $pageImageService,
+        private WrittenUploadOptimizer $uploadOptimizer,
     ) {}
 
     public function grade(WrittenSubmission $submission): WrittenSubmission
@@ -57,7 +60,7 @@ class WrittenGradingService
         $prompt = $this->buildPrompt($questions, $worksheet->set_code);
 
         $response = Http::withToken($apiKey)
-            ->timeout(120)
+            ->timeout(180)
             ->post('https://api.openai.com/v1/chat/completions', [
                 'model' => config('services.openai.grading_model', 'gpt-4o-mini'),
                 'response_format' => ['type' => 'json_object'],
@@ -120,6 +123,7 @@ class WrittenGradingService
                     $outputDirectory = 'temp/written-grading/'.$submission->id.'/'.md5($path);
                     $tempDirs[] = $outputDirectory;
                     $pagePaths = $this->pageImageService->renderPages($path, $outputDirectory);
+                    $pagePaths = array_slice($pagePaths, 0, self::MAX_GRADING_PAGES);
 
                     foreach ($pagePaths as $pagePath) {
                         $imageParts[] = $this->imagePartFromPath($pagePath);
@@ -151,7 +155,8 @@ class WrittenGradingService
      */
     private function imagePartFromPath(string $path): array
     {
-        $absolute = Storage::disk('public')->path($path);
+        $gradingPath = $this->uploadOptimizer->gradingCopyPath($path);
+        $absolute = Storage::disk('public')->path($gradingPath);
         $mime = mime_content_type($absolute) ?: 'image/jpeg';
         $encoded = base64_encode((string) file_get_contents($absolute));
 

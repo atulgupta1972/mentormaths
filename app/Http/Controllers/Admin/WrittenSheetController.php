@@ -21,7 +21,7 @@ use App\Services\WrittenSheetPdfImportService;
 use App\Services\WrittenSheetService;
 use App\Services\WrittenSheetAnswerKeyParser;
 use App\Services\WrittenSubmissionService;
-use App\Support\DiagramQuestionSupport;
+use App\Support\WrittenSubmissionLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,7 +30,6 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use InvalidArgumentException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -637,6 +636,10 @@ class WrittenSheetController extends Controller
             'assignments' => $assignments,
             'activeYear' => $activeYear?->only(['id', 'name']),
             'gradeLevels' => GradeLevel::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name']),
+            'uploadLimits' => [
+                'max_files' => WrittenSubmissionLimits::MAX_FILES,
+                'max_file_mb' => (int) (WrittenSubmissionLimits::MAX_FILE_KB / 1024),
+            ],
         ]);
     }
 
@@ -847,17 +850,29 @@ class WrittenSheetController extends Controller
         abort_unless($assignment->practiceSet?->isWritten(), 404);
 
         $validated = $request->validate([
-            'files' => ['required', 'array', 'min:1', 'max:5'],
-            'files.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
+            'files' => ['required', 'array', 'min:1', WrittenSubmissionLimits::maxFilesRule()],
+            'files.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', WrittenSubmissionLimits::maxFileSizeRule()],
+            'skip_ai' => ['sometimes', 'boolean'],
         ]);
 
         try {
-            $this->submissionService->store($assignment, $validated['files']);
+            $this->submissionService->store($assignment, $validated['files'], [
+                'schedule_ai' => ! ($validated['skip_ai'] ?? false),
+            ]);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Revised sheet uploaded. AI will re-check; you can also edit and save marks now.');
+        if ($validated['skip_ai'] ?? false) {
+            return back()->with('success', 'Answer sheet uploaded. Open Enter marks to tick questions and save.');
+        }
+
+        return back()->with('success', 'Answer sheet uploaded. AI will check it shortly — you can also enter marks now.');
+    }
+
+    public function uploadWork(Request $request, SetAssignment $assignment): RedirectResponse
+    {
+        return $this->uploadRevision($request, $assignment);
     }
 
     private function sanitizeWrittenSheetInput(Request $request): void

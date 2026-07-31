@@ -172,6 +172,11 @@ class AssignmentProgress
             'question_results' => self::writtenQuestionResults($submission),
             'upload_urls' => $submission?->uploadUrls() ?? [],
             'upload_files' => $submission?->uploadFiles() ?? [],
+            'checking_minutes' => $submission && in_array($submission->status, [
+                WrittenSubmission::STATUS_UPLOADED,
+                WrittenSubmission::STATUS_PROCESSING,
+            ], true) ? $submission->uploaded_at?->diffInMinutes(now()) : null,
+            'grading_error' => $submission?->grading_error,
             'status' => $status,
         ];
     }

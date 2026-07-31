@@ -128,7 +128,9 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertSame('4', $payload['items'][0]['correct_answer']);
         $this->assertFalse($payload['items'][0]['is_correct']);
 
-        $retry = $service->store($assignment->fresh(), [UploadedFile::fake()->image('retry.jpg')]);
+        $retry = $service->store($assignment->fresh(), [UploadedFile::fake()->image('retry.jpg')], [
+            'schedule_ai' => false,
+        ]);
         $this->assertSame(WrittenSubmission::STATUS_UPLOADED, $retry->status);
         $this->assertSame(SetAssignment::STATUS_IN_PROGRESS, $assignment->fresh()->status);
         $this->assertSame($submission->id, $retry->id);
@@ -458,6 +460,92 @@ class WrittenSubmissionGradingTest extends TestCase
 
         $submission->refresh();
         $this->assertSame(WrittenSubmission::STATUS_GRADED, $submission->status);
+    }
+
+    public function test_admin_can_upload_seven_page_answer_sheet(): void
+    {
+        Storage::fake('public');
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $files = [];
+        foreach (glob(base_path('tests/WhatsApp Image 2026-07-31*.jpeg')) ?: [] as $path) {
+            $files[] = new UploadedFile($path, basename($path), 'image/jpeg', null, true);
+        }
+
+        $this->assertCount(7, $files);
+
+        $this->actingAs($admin)->post(
+            route('admin.written-assignments.upload-work', $assignment),
+            [
+                'files' => $files,
+                'skip_ai' => true,
+            ],
+        )->assertRedirect();
+
+        $submission = WrittenSubmission::query()->where('set_assignment_id', $assignment->id)->firstOrFail();
+        $this->assertSame(WrittenSubmission::STATUS_UPLOADED, $submission->status);
+        $this->assertCount(7, $submission->upload_paths ?? []);
+        $this->assertCount(7, $submission->uploadFiles());
+    }
+
+    public function test_admin_can_upload_work_without_ai_and_save_marks(): void
+    {
+        Storage::fake('public');
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $questionId = $assignment->practiceSet->questions()->first()->id;
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $this->actingAs($admin)->post(
+            route('admin.written-assignments.upload-work', $assignment),
+            [
+                'files' => [UploadedFile::fake()->image('scan.jpg')],
+                'skip_ai' => true,
+            ],
+        )->assertRedirect();
+
+        $submission = WrittenSubmission::query()->where('set_assignment_id', $assignment->id)->firstOrFail();
+        $this->assertSame(WrittenSubmission::STATUS_UPLOADED, $submission->status);
+        $this->assertNotEmpty($submission->uploadFiles());
+
+        $graded = app(WrittenSubmissionService::class)->applyManualGrade($assignment->fresh(), [
+            'handwriting_rating' => WrittenSubmission::HANDWRITING_GOOD,
+            'remarks' => 'Marked from admin upload.',
+            'items' => [
+                ['question_id' => $questionId, 'is_correct' => true],
+            ],
+        ]);
+
+        $this->assertSame(WrittenSubmission::STATUS_GRADED, $graded->status);
+        $this->assertSame(1, $graded->score);
+    }
+
+    public function test_stale_processing_is_marked_failed_after_fifteen_minutes(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $path = 'written-submissions/'.$assignment->id.'/test.jpg';
+        Storage::disk('public')->put($path, 'image');
+
+        $submission = WrittenSubmission::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'status' => WrittenSubmission::STATUS_PROCESSING,
+            'upload_paths' => [$path],
+            'uploaded_at' => now()->subMinutes(20),
+        ]);
+        $submission->updated_at = now()->subMinutes(16);
+        $submission->saveQuietly();
+
+        $ok = app(WrittenSubmissionService::class)->runGrading($submission->id);
+
+        $this->assertFalse($ok);
+        $submission->refresh();
+        $this->assertSame(WrittenSubmission::STATUS_FAILED, $submission->status);
+        $this->assertStringContainsString('teacher can mark', (string) $submission->grading_error);
     }
 
     /**

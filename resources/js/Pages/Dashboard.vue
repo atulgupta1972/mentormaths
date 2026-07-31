@@ -340,12 +340,16 @@ const pendingButtonClass = (set) => {
 
 const pendingButtonLabel = (set) => {
     if (set.delivery_mode === 'written') {
-        if (set.written_submission_status === 'processing' || set.written_submission_status === 'uploaded') {
-            return 'AI checking…';
+        if (set.written_submission_status === 'processing') {
+            return 'Checking…';
+        }
+
+        if (set.written_submission_status === 'uploaded') {
+            return 'Uploaded';
         }
 
         if (set.written_submission_status === 'failed') {
-            return 'Upload again';
+            return 'View / upload';
         }
 
         return set.written_submission_status === 'graded' ? 'View result' : 'Upload work';

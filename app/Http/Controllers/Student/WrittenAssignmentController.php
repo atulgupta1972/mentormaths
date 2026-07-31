@@ -7,6 +7,7 @@ use App\Models\SetAssignment;
 use App\Models\Worksheet;
 use App\Models\WrittenSubmission;
 use App\Services\WrittenSubmissionService;
+use App\Support\WrittenSubmissionLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -47,6 +48,10 @@ class WrittenAssignmentController extends Controller
                 ],
                 'submission' => $this->submissionService->payloadForAssignment($assignment),
             ],
+            'upload_limits' => [
+                'max_files' => WrittenSubmissionLimits::MAX_FILES,
+                'max_file_mb' => (int) (WrittenSubmissionLimits::MAX_FILE_KB / 1024),
+            ],
         ]);
     }
 
@@ -55,8 +60,8 @@ class WrittenAssignmentController extends Controller
         $this->authorizeAssignment($request, $assignment);
 
         $validated = $request->validate([
-            'files' => ['required', 'array', 'min:1', 'max:5'],
-            'files.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
+            'files' => ['required', 'array', 'min:1', WrittenSubmissionLimits::maxFilesRule()],
+            'files.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', WrittenSubmissionLimits::maxFileSizeRule()],
         ]);
 
         $wasRevision = WrittenSubmission::query()
@@ -78,8 +83,8 @@ class WrittenAssignmentController extends Controller
         return back()->with(
             'success',
             $wasRevision
-                ? 'Revised sheet uploaded. AI is checking again — this page will update shortly.'
-                : 'Work uploaded. AI is checking your answers — this page will update shortly.',
+                ? 'Revised sheet uploaded. Checking will start shortly — this page updates automatically.'
+                : 'Work uploaded. Checking will start shortly — this page updates automatically.',
         );
     }
 

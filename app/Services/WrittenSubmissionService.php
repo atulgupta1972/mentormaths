@@ -2,22 +2,28 @@
 
 namespace App\Services;
 
+use App\Jobs\GradeWrittenSubmissionJob;
 use App\Models\SetAssignment;
 use App\Models\WrittenSubmission;
 use App\Models\WrittenSubmissionItem;
-use App\Services\WrittenGradingService;
+use App\Support\WrittenSubmissionLimits;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class WrittenSubmissionService
 {
+    public function __construct(
+        private WrittenUploadOptimizer $uploadOptimizer,
+    ) {}
+
     /**
      * @param  list<UploadedFile>  $files
+     * @param  array{schedule_ai?: bool}  $options
      */
-    public function store(SetAssignment $assignment, array $files): WrittenSubmission
+    public function store(SetAssignment $assignment, array $files, array $options = []): WrittenSubmission
     {
+        $scheduleAi = $options['schedule_ai'] ?? true;
         $assignment->loadMissing('practiceSet');
 
         if (! $assignment->practiceSet?->isWritten()) {
@@ -39,11 +45,14 @@ class WrittenSubmissionService
             throw new \InvalidArgumentException('Upload at least one photo or PDF of your completed work.');
         }
 
-        if (count($files) > 5) {
-            throw new \InvalidArgumentException('Upload up to 5 files.');
+        if (count($files) > WrittenSubmissionLimits::MAX_FILES) {
+            throw new \InvalidArgumentException(
+                'Upload up to '.WrittenSubmissionLimits::MAX_FILES.' files (photos or PDFs).',
+            );
         }
 
         $paths = [];
+        $directory = 'written-submissions/'.$assignment->id;
 
         foreach ($files as $file) {
             $extension = strtolower($file->getClientOriginalExtension() ?: 'jpg');
@@ -51,11 +60,7 @@ class WrittenSubmissionService
                 throw new \InvalidArgumentException('Only JPG, PNG, WEBP, or PDF files are allowed.');
             }
 
-            $directory = 'written-submissions/'.$assignment->id;
-            Storage::disk('public')->makeDirectory($directory);
-
-            $filename = Str::uuid().'.'.$extension;
-            $paths[] = $file->storeAs($directory, $filename, 'public');
+            $paths[] = $this->uploadOptimizer->storeOptimized($file, $directory);
         }
 
         $existing = WrittenSubmission::query()
@@ -103,7 +108,9 @@ class WrittenSubmissionService
             $assignment->update(['status' => SetAssignment::STATUS_IN_PROGRESS]);
         }
 
-        $this->scheduleGrading($submission);
+        if ($scheduleAi) {
+            $this->scheduleGrading($submission);
+        }
 
         return $submission;
     }
@@ -227,7 +234,7 @@ class WrittenSubmissionService
 
     public function runGrading(int $submissionId): bool
     {
-        @set_time_limit(180);
+        @set_time_limit(300);
         ignore_user_abort(true);
 
         $submission = WrittenSubmission::query()->find($submissionId);
@@ -239,9 +246,21 @@ class WrittenSubmissionService
             return false;
         }
 
-        if ($submission->status === WrittenSubmission::STATUS_PROCESSING
-            && $submission->updated_at?->greaterThan(now()->subMinutes(5))) {
-            return false;
+        if ($submission->status === WrittenSubmission::STATUS_PROCESSING) {
+            $minutesProcessing = $submission->updated_at?->diffInMinutes(now()) ?? 0;
+
+            if ($minutesProcessing < 3) {
+                return false;
+            }
+
+            if ($minutesProcessing >= 15) {
+                $submission->update([
+                    'status' => WrittenSubmission::STATUS_FAILED,
+                    'grading_error' => 'AI checking took too long for this upload. Your teacher can mark it manually — no need to upload again.',
+                ]);
+
+                return false;
+            }
         }
 
         try {
@@ -267,8 +286,18 @@ class WrittenSubmissionService
     {
         $submissionId = $submission->id;
 
+        GradeWrittenSubmissionJob::dispatch($submissionId);
+
+        if (config('queue.default') === 'sync') {
+            return;
+        }
+
         app()->terminating(static function () use ($submissionId): void {
-            app(WrittenSubmissionService::class)->runGrading($submissionId);
+            $submission = WrittenSubmission::query()->find($submissionId);
+
+            if ($submission?->status === WrittenSubmission::STATUS_UPLOADED) {
+                app(WrittenSubmissionService::class)->runGrading($submissionId);
+            }
         });
     }
 
@@ -302,6 +331,11 @@ class WrittenSubmissionService
             'grading_error' => $submission->grading_error,
             'uploaded_at' => $submission->uploaded_at?->toDateTimeString(),
             'graded_at' => $submission->graded_at?->toDateTimeString(),
+            'uploaded_minutes_ago' => $submission->uploaded_at?->diffInMinutes(now()),
+            'checking_minutes' => in_array($submission->status, [
+                WrittenSubmission::STATUS_UPLOADED,
+                WrittenSubmission::STATUS_PROCESSING,
+            ], true) ? $submission->uploaded_at?->diffInMinutes(now()) : null,
             'upload_urls' => $submission->uploadUrls(),
             'upload_files' => $submission->uploadFiles(),
             'can_retry' => in_array($submission->status, [

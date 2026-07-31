@@ -23,6 +23,10 @@ const props = defineProps({
     assignments: { type: Array, default: () => [] },
     activeYear: { type: Object, default: null },
     gradeLevels: { type: Array, default: () => [] },
+    uploadLimits: {
+        type: Object,
+        default: () => ({ max_files: 15, max_file_mb: 20 }),
+    },
 });
 
 const page = usePage();
@@ -64,9 +68,10 @@ const bulkForm = useForm({ student_ids: [], target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
 const gradeForm = useForm({ feedback: '', remarks: '', handwriting_rating: '', items: [] });
 const gradingAssignmentId = ref(null);
-const revisionForm = useForm({ files: [] });
+const revisionForm = useForm({ files: [], skip_ai: false });
 const revisionFileInput = ref(null);
 const revisionSelectedFiles = ref([]);
+const revisionUploadError = ref('');
 
 const handwritingOptions = [
     { value: 'very_good', label: 'Very good' },
@@ -211,6 +216,7 @@ const cancelGrade = () => {
     gradeForm.clearErrors();
     revisionSelectedFiles.value = [];
     revisionForm.reset();
+    revisionForm.skip_ai = false;
     revisionForm.clearErrors();
     if (revisionFileInput.value) {
         revisionFileInput.value.value = '';
@@ -218,8 +224,13 @@ const cancelGrade = () => {
 };
 
 const onRevisionFilesChange = (event) => {
+    revisionUploadError.value = '';
     revisionSelectedFiles.value = [...(event.target.files || [])];
     revisionForm.files = revisionSelectedFiles.value;
+
+    if (revisionSelectedFiles.value.length > props.uploadLimits.max_files) {
+        revisionUploadError.value = `Select up to ${props.uploadLimits.max_files} files. You chose ${revisionSelectedFiles.value.length}.`;
+    }
 };
 
 const submitRevisionUpload = (assignmentId) => {
@@ -227,9 +238,21 @@ const submitRevisionUpload = (assignmentId) => {
         return;
     }
 
-    revisionForm.post(route('admin.written-assignments.upload-revision', assignmentId), {
+    if (revisionSelectedFiles.value.length > props.uploadLimits.max_files) {
+        revisionUploadError.value = `Upload up to ${props.uploadLimits.max_files} photos or PDFs at once.`;
+
+        return;
+    }
+
+    revisionUploadError.value = '';
+    revisionForm.post(route('admin.written-assignments.upload-work', assignmentId), {
         preserveScroll: true,
         forceFormData: true,
+        onError: () => {
+            revisionUploadError.value = revisionForm.errors.files
+                || revisionForm.errors['files.0']
+                || 'Upload failed. Check file count and size, then try again.';
+        },
         onSuccess: () => {
             revisionSelectedFiles.value = [];
             revisionForm.reset();
@@ -603,6 +626,10 @@ const formatDate = (d) => {
     return new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+const openUpload = (row) => {
+    openGrade(row);
+};
+
 const progressLabel = (p) => {
     if (!p) {
         return { label: 'Not assigned', class: 'bg-gray-100 text-gray-600' };
@@ -615,12 +642,26 @@ const progressLabel = (p) => {
         };
     }
 
-    if (p.written_submission_status === 'uploaded' || p.written_submission_status === 'processing') {
-        return { label: 'AI checking…', class: 'bg-yellow-100 text-yellow-800' };
+    if (p.written_submission_status === 'processing') {
+        const minutes = p.checking_minutes ?? 0;
+
+        return {
+            label: minutes >= 5 ? `Checking… (${minutes}m)` : 'Checking…',
+            class: 'bg-yellow-100 text-yellow-800',
+        };
+    }
+
+    if (p.written_submission_status === 'uploaded') {
+        const minutes = p.checking_minutes ?? 0;
+
+        return {
+            label: minutes >= 3 ? 'Uploaded — waiting' : 'Uploaded — queued',
+            class: 'bg-yellow-100 text-yellow-800',
+        };
     }
 
     if (p.written_submission_status === 'failed') {
-        return { label: 'Upload issue', class: 'bg-rose-100 text-rose-800' };
+        return { label: 'Needs teacher mark', class: 'bg-rose-100 text-rose-800' };
     }
 
     if (p.is_overdue) {
@@ -1023,6 +1064,13 @@ const progressLabel = (p) => {
                                     <button
                                         type="button"
                                         class="text-indigo-600 hover:underline"
+                                        @click="openUpload(studentProgress)"
+                                    >
+                                        Upload work
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="text-indigo-600 hover:underline"
                                         @click="openGrade(studentProgress)"
                                     >
                                         {{ studentProgress.written_submission_status === 'graded' ? 'Edit marks' : 'Enter marks' }}
@@ -1052,7 +1100,7 @@ const progressLabel = (p) => {
                     <div v-if="assignments.length" class="mt-6">
                         <h4 class="text-sm font-semibold text-gray-800">Current assignments ({{ assignments.length }})</h4>
                         <p class="mt-1 text-xs text-gray-500">
-                            AI checks uploads automatically. Open <strong>Edit marks</strong> to view the uploaded sheet online, upload a revised scan, override ticks, rate handwriting, and save remarks.
+                            Uploads are checked automatically. For large photos, open <strong>Upload work</strong> to upload on behalf of a student or mark manually without waiting for AI.
                         </p>
                         <div class="mt-2 overflow-hidden rounded-md border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -1083,6 +1131,9 @@ const progressLabel = (p) => {
                                                 </div>
                                             </td>
                                             <td class="px-3 py-2 text-right space-x-3">
+                                                <button type="button" class="text-indigo-600 hover:underline" @click="openUpload(row)">
+                                                    Upload work
+                                                </button>
                                                 <button type="button" class="text-indigo-600 hover:underline" @click="openGrade(row)">
                                                     {{ row.written_submission_status === 'graded' ? 'Edit marks' : 'Enter marks' }}
                                                 </button>
@@ -1138,9 +1189,10 @@ const progressLabel = (p) => {
                                                     </p>
 
                                                     <div class="rounded-md border border-dashed border-indigo-200 bg-white p-3">
-                                                        <p class="text-xs font-semibold text-gray-800">Upload revised sheet</p>
+                                                        <p class="text-xs font-semibold text-gray-800">Upload answer sheet</p>
                                                         <p class="mt-1 text-xs text-gray-600">
-                                                            Replace the student upload with a clearer scan, then save marks again below.
+                                                            Upload the student&apos;s completed work (photo or PDF).
+                                                            Up to {{ uploadLimits.max_files }} files, {{ uploadLimits.max_file_mb }} MB each.
                                                         </p>
                                                         <input
                                                             ref="revisionFileInput"
@@ -1150,13 +1202,26 @@ const progressLabel = (p) => {
                                                             class="mt-2 block w-full text-xs"
                                                             @change="onRevisionFilesChange"
                                                         >
+                                                        <p v-if="revisionSelectedFiles.length" class="mt-2 text-xs text-gray-700">
+                                                            Selected: {{ revisionSelectedFiles.length }} file{{ revisionSelectedFiles.length === 1 ? '' : 's' }}
+                                                        </p>
+                                                        <p v-if="revisionUploadError" class="mt-2 text-xs text-rose-700">{{ revisionUploadError }}</p>
+                                                        <p v-else-if="revisionForm.errors.files" class="mt-2 text-xs text-rose-700">{{ revisionForm.errors.files }}</p>
+                                                        <label class="mt-3 flex items-start gap-2 text-xs text-gray-700">
+                                                            <input
+                                                                v-model="revisionForm.skip_ai"
+                                                                type="checkbox"
+                                                                class="mt-0.5 rounded border-gray-300 text-indigo-600"
+                                                            >
+                                                            <span>Skip AI — I will mark this manually (recommended for large or unclear scans)</span>
+                                                        </label>
                                                         <SecondaryButton
                                                             type="button"
                                                             class="mt-2 !py-1 !text-xs"
                                                             :disabled="revisionForm.processing || !revisionSelectedFiles.length"
                                                             @click="submitRevisionUpload(row.assignment_id)"
                                                         >
-                                                            {{ revisionForm.processing ? 'Uploading…' : 'Save revised upload' }}
+                                                            {{ revisionForm.processing ? 'Uploading…' : 'Save upload' }}
                                                         </SecondaryButton>
                                                     </div>
 

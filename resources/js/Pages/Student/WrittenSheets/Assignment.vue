@@ -9,11 +9,16 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 const props = defineProps({
     assignment: { type: Object, required: true },
+    upload_limits: {
+        type: Object,
+        default: () => ({ max_files: 15, max_file_mb: 20 }),
+    },
 });
 
 const page = usePage();
 const fileInput = ref(null);
 const selectedFiles = ref([]);
+const uploadError = ref('');
 
 const uploadForm = useForm({
     files: [],
@@ -30,11 +35,22 @@ const canUpload = computed(() => {
 const isRevision = computed(() => submission.value?.status === 'graded' || (uploadFiles.value.length > 0 && submission.value?.can_retry));
 
 const onFilesChange = (event) => {
+    uploadError.value = '';
     selectedFiles.value = [...(event.target.files || [])];
     uploadForm.files = selectedFiles.value;
+
+    if (selectedFiles.value.length > props.upload_limits.max_files) {
+        uploadError.value = `Select up to ${props.upload_limits.max_files} files. You chose ${selectedFiles.value.length}.`;
+    }
 };
 
 const submitUpload = () => {
+    if (selectedFiles.value.length > props.upload_limits.max_files) {
+        uploadError.value = `Upload up to ${props.upload_limits.max_files} photos or PDFs at once.`;
+
+        return;
+    }
+
     uploadForm.post(route('student.written-assignments.upload', props.assignment.id), {
         preserveScroll: true,
         forceFormData: true,
@@ -67,11 +83,29 @@ const statusLabel = computed(() => {
     }
 
     return ({
-        uploaded: 'Uploaded — waiting for AI',
-        processing: 'AI is checking…',
+        uploaded: 'Uploaded — waiting to be marked',
+        processing: 'Being checked…',
         graded: 'Graded',
-        failed: 'Checking failed — upload again or ask teacher',
+        failed: 'Checking could not finish — your teacher will mark it',
     })[status] || status;
+});
+
+const checkingMessage = computed(() => {
+    const minutes = submission.value?.checking_minutes ?? 0;
+
+    if (!isAwaitingGrade.value) {
+        return '';
+    }
+
+    if (minutes >= 10) {
+        return 'This is taking longer than usual for a large upload. You can close this page — your teacher can mark it manually and your result will appear on the dashboard.';
+    }
+
+    if (minutes >= 3) {
+        return 'Large photos can take a few minutes. This page refreshes automatically.';
+    }
+
+    return 'Checking usually finishes within a minute. This page refreshes automatically.';
 });
 
 const isAwaitingGrade = computed(() => {
@@ -226,6 +260,7 @@ onBeforeUnmount(() => {
                         <template v-else>
                             Take a clear photo (JPG/PNG) of your answer sheet, or upload a PDF.
                         </template>
+                        Up to {{ upload_limits.max_files }} files, {{ upload_limits.max_file_mb }} MB each.
                     </p>
                     <input
                         ref="fileInput"
@@ -235,6 +270,10 @@ onBeforeUnmount(() => {
                         class="mt-3 block w-full text-sm"
                         @change="onFilesChange"
                     >
+                    <p v-if="selectedFiles.length" class="mt-2 text-sm text-gray-700">
+                        Selected: {{ selectedFiles.length }} file{{ selectedFiles.length === 1 ? '' : 's' }}
+                    </p>
+                    <InputError :message="uploadError" class="mt-2" />
                     <InputError :message="uploadForm.errors.files" class="mt-2" />
                     <InputError :message="uploadForm.errors['files.0']" class="mt-2" />
                     <PrimaryButton
@@ -249,11 +288,11 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div v-if="isAwaitingGrade" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    AI is checking your work. This page refreshes automatically — usually ready within a minute.
+                    {{ checkingMessage }}
                 </div>
 
                 <div v-if="submission?.status === 'failed'" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
-                    {{ submission.grading_error || 'Checking failed. Please upload again.' }}
+                    {{ submission.grading_error || 'Checking could not finish. Your teacher can mark your work — you can also upload a clearer photo if needed.' }}
                 </div>
 
                 <div v-if="submission?.status === 'graded'" class="space-y-4">
