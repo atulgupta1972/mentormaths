@@ -20,12 +20,28 @@ const form = useForm({
     pdf: null,
 });
 
+const uploadError = ref('');
+
 const selectedChapter = computed(() =>
     props.syllabusChapters.find((chapter) => String(chapter.id) === String(form.syllabus_chapter_id)),
 );
 
+const formatMb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
 const onPdfChange = (event) => {
-    form.pdf = event.target.files?.[0] || null;
+    uploadError.value = '';
+    const file = event.target.files?.[0] || null;
+    form.pdf = file;
+
+    if (!file) {
+        return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+        uploadError.value = 'PDF must be under 50 MB.';
+    } else if (file.size > 2 * 1024 * 1024) {
+        uploadError.value = `Selected file is ${formatMb(file.size)}. If upload fails, the server PHP limit may still be 2 MB — ask hosting to set upload_max_filesize to 20M or higher.`;
+    }
 };
 
 const submit = () => {
@@ -107,6 +123,7 @@ const submit = () => {
                         <p v-if="selectedChapter" class="mt-1 text-xs text-gray-500">
                             Selected syllabus chapter: {{ selectedChapter.name }}
                         </p>
+                        <InputError :message="uploadError" class="mt-1" />
                         <InputError :message="form.errors.pdf" class="mt-1" />
                     </div>
 

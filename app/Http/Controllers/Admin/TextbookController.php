@@ -11,6 +11,7 @@ use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Services\AdminGradeContext;
 use App\Services\TextbookChapterPublishService;
+use App\Support\UploadedFileDiagnostics;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -84,7 +85,7 @@ class TextbookController extends Controller
                 'id' => $chapter->id,
                 'chapter_number' => $chapter->chapter_number,
                 'name' => $chapter->name,
-                'label' => "Ch {$chapter->chapter_number} — {$chapter->name}",
+                'label' => self::chapterLabel($chapter),
             ])->values()->all() ?? [];
 
             $books = Textbook::query()
@@ -107,11 +108,21 @@ class TextbookController extends Controller
 
         abort_unless($gradeLevel, 422, 'Select a class from the top bar first.');
 
+        $uploadedPdf = $request->file('pdf');
+        if ($uploadedPdf) {
+            UploadedFileDiagnostics::assertValid($uploadedPdf, 'pdf');
+        }
+
         $validated = $request->validate([
             'book_name' => ['required', 'string', 'max:255'],
             'book_code' => ['required', 'string', 'max:32', 'alpha_dash'],
             'syllabus_chapter_id' => ['required', 'integer', Rule::exists('syllabus_chapters', 'id')],
             'pdf' => ['required', 'file', 'mimes:pdf', 'max:51200'],
+        ], [
+            'pdf.required' => 'Choose a chapter PDF file.',
+            'pdf.mimes' => 'Only PDF files are allowed.',
+            'pdf.max' => 'Each chapter PDF must be under 50 MB.',
+            'pdf.uploaded' => 'The PDF is too large for the server upload limit. Set PHP upload_max_filesize and post_max_size to at least 20M on the server.',
         ]);
 
         $syllabusChapter = SyllabusChapter::query()->findOrFail($validated['syllabus_chapter_id']);
@@ -254,5 +265,17 @@ class TextbookController extends Controller
             $textbookChapter->pdf_path,
             ($textbookChapter->textbook?->code ?: 'textbook').'-ch'.$textbookChapter->chapter_number.'.pdf',
         );
+    }
+
+    private static function chapterLabel(SyllabusChapter $chapter): string
+    {
+        $name = trim($chapter->name);
+        $prefix = 'Ch '.ltrim((string) $chapter->chapter_number, '0');
+
+        if (preg_match('/^Ch\s*\d+/i', $name)) {
+            return $name;
+        }
+
+        return "{$prefix} — {$name}";
     }
 }
