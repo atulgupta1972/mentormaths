@@ -6,6 +6,7 @@ use App\Models\Question;
 use App\Models\SetAssignment;
 use App\Models\WrittenSubmission;
 use App\Models\WrittenSubmissionItem;
+use App\Support\WrittenSubmissionMailer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
@@ -177,6 +178,8 @@ class WrittenGradingService
             "Grade handwritten work for sheet {$setCode}.",
             'The question sheet has no answer spaces. Students write answers on a separate answer sheet.',
             'Match each answer to a question by the label written on the answer sheet (Q1, Q2, Q3, …).',
+            'Answers should appear on the sheet in ascending question order (Q1 at the top, then Q2, then Q3, …).',
+            'Uploaded images are in page order — read them sequentially when matching answers.',
             'Read the uploaded photo(s) of the answer sheet. Ignore rough-work pages unless they show the labelled final answer.',
             'For each question number, extract the student answer, check working/method where visible, and compare to the correct answer.',
             'Return JSON with keys:',
@@ -255,6 +258,9 @@ class WrittenGradingService
             'status' => SetAssignment::STATUS_COMPLETED,
         ]);
 
-        return $submission->fresh(['items']);
+        $submission = $submission->fresh(['items']);
+        WrittenSubmissionMailer::sendGraded($submission);
+
+        return $submission;
     }
 }

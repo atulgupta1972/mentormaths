@@ -4,8 +4,10 @@ import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref } from 'vue';
+
+const page = usePage();
 
 const props = defineProps({
     isAdmin: { type: Boolean, default: false },
@@ -67,11 +69,19 @@ const sortByDateKey = (rows, key) => rows.slice().sort((a, b) => {
     return String(left).localeCompare(String(right));
 });
 
+const checkingAssignments = computed(() =>
+    sortByDateKey(
+        props.assignments.filter((a) => a.status === 'checking'),
+        'submitted_at',
+    ),
+);
+
 const pendingAssignments = computed(() =>
     sortByDateKey(
         props.assignments.filter((a) =>
             a.status !== 'green'
             && a.status !== 'green-late'
+            && a.status !== 'checking'
             && !a.is_catch_up),
         'target_date',
     ),
@@ -137,6 +147,7 @@ const groupAssignmentsByChapter = (rows) => {
 };
 
 const pendingByChapter = computed(() => groupAssignmentsByChapter(pendingAssignments.value));
+const checkingByChapter = computed(() => groupAssignmentsByChapter(checkingAssignments.value));
 const completedByChapter = computed(() => groupAssignmentsByChapter(completedAssignments.value));
 
 const topicLabel = (set) => {
@@ -202,6 +213,14 @@ const completedAssignmentHref = (set) => {
     return set.latest_attempt_id
         ? route('student.attempts.result', set.latest_attempt_id)
         : route('student.assignments.show', set.assignment_id);
+};
+
+const completedLinkLabel = (set) => {
+    if (set.delivery_mode === 'written' && set.written_submission_status === 'graded') {
+        return 'View / re-upload';
+    }
+
+    return 'Open';
 };
 
 const assignmentHref = (set) => (
@@ -352,7 +371,7 @@ const pendingButtonLabel = (set) => {
             return 'View / upload';
         }
 
-        return set.written_submission_status === 'graded' ? 'View result' : 'Upload work';
+        return set.written_submission_status === 'graded' ? 'View / re-upload' : 'Upload work';
     }
 
     if (set.status === 'yellow') {
@@ -634,6 +653,10 @@ const adminSetStatusClass = (set) => {
 
                     <StudentWeeklyReportEmailsPanel :initial-emails="weeklyReportEmails" />
 
+                    <div v-if="page.props.flash?.success" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                        {{ page.props.flash.success }}
+                    </div>
+
                     <!-- Main row: exams (LHS) · to do (RHS) -->
                     <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
                         <!-- Upcoming exams — violet zone -->
@@ -908,6 +931,71 @@ const adminSetStatusClass = (set) => {
                         </section>
                     </div>
 
+                    <!-- Submitted — AI checking -->
+                    <section
+                        v-if="checkingAssignments.length"
+                        class="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-indigo-50 to-sky-50 p-4 shadow-sm"
+                    >
+                        <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-900">
+                            Submitted — being checked · {{ checkingAssignments.length }}
+                        </h3>
+                        <p class="mb-3 text-xs text-violet-800">
+                            We will email you when checking is finished. You can continue with other work below.
+                        </p>
+                        <div class="space-y-4">
+                            <div
+                                v-for="group in checkingByChapter"
+                                :key="`checking-${group.chapter_name}`"
+                                class="overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm"
+                            >
+                                <div class="border-b border-violet-100 bg-violet-50/80 px-3 py-2">
+                                    <h4 class="text-sm font-semibold text-violet-950">
+                                        {{ group.chapter_name }}
+                                        <span class="font-normal text-violet-800">· {{ group.sets.length }} checking</span>
+                                    </h4>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-violet-100 text-sm">
+                                        <thead class="bg-white">
+                                            <tr class="text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                                                <th class="px-3 py-2">Topic</th>
+                                                <th class="px-3 py-2">Set</th>
+                                                <th class="px-3 py-2">Type</th>
+                                                <th class="px-3 py-2">Submitted</th>
+                                                <th class="px-3 py-2 text-right">View</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-violet-50">
+                                            <tr
+                                                v-for="set in group.sets"
+                                                :key="`checking-${set.assignment_id}`"
+                                                class="hover:bg-violet-50/40"
+                                            >
+                                                <td class="px-3 py-2.5 text-gray-800">{{ topicLabel(set) }}</td>
+                                                <td class="px-3 py-2.5 font-mono font-semibold text-gray-900">{{ setLabel(set) }}</td>
+                                                <td class="px-3 py-2.5 text-gray-600">
+                                                    {{ set.kind_label || (set.scope === 'chapter' ? 'Test' : 'Practice') }}
+                                                </td>
+                                                <td class="px-3 py-2.5 text-gray-600">
+                                                    <span v-if="set.submitted_at">{{ formatDate(set.submitted_at) }}</span>
+                                                    <span v-else>—</span>
+                                                </td>
+                                                <td class="px-3 py-2.5 text-right">
+                                                    <Link
+                                                        :href="assignmentHref(set)"
+                                                        class="inline-flex rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-violet-700"
+                                                    >
+                                                        View upload
+                                                    </Link>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                     <!-- Completed exams -->
                     <section v-if="examPlans.past?.length">
                         <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -987,7 +1075,7 @@ const adminSetStatusClass = (set) => {
                                                         :href="completedAssignmentHref(set)"
                                                         class="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
                                                     >
-                                                        Open
+                                                        {{ completedLinkLabel(set) }}
                                                     </Link>
                                                 </td>
                                             </tr>

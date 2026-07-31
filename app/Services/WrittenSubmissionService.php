@@ -7,6 +7,7 @@ use App\Models\SetAssignment;
 use App\Models\WrittenSubmission;
 use App\Models\WrittenSubmissionItem;
 use App\Support\WrittenSubmissionLimits;
+use App\Support\WrittenSubmissionMailer;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -229,7 +230,10 @@ class WrittenSubmissionService
 
         $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
 
-        return $submission->fresh(['items']);
+        $submission = $submission->fresh(['items']);
+        WrittenSubmissionMailer::sendGraded($submission);
+
+        return $submission;
     }
 
     public function runGrading(int $submissionId): bool
@@ -258,6 +262,7 @@ class WrittenSubmissionService
                     'status' => WrittenSubmission::STATUS_FAILED,
                     'grading_error' => 'AI checking took too long for this upload. Your teacher can mark it manually — no need to upload again.',
                 ]);
+                WrittenSubmissionMailer::sendCheckFailed($submission->fresh());
 
                 return false;
             }
@@ -277,6 +282,8 @@ class WrittenSubmissionService
                 'status' => WrittenSubmission::STATUS_FAILED,
                 'grading_error' => $exception->getMessage(),
             ]);
+
+            WrittenSubmissionMailer::sendCheckFailed($submission->fresh());
 
             return false;
         }

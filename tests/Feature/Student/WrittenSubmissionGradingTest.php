@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Student;
 
+use App\Mail\WrittenWorkCheckFailed;
+use App\Mail\WrittenWorkGraded;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Question;
 use App\Models\QuestionBlankAnswer;
+use App\Models\FormulaDrillSession;
 use App\Models\SetAssignment;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
@@ -26,6 +29,7 @@ use App\Support\WrittenSheetStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Mockery;
 use Tests\TestCase;
@@ -524,10 +528,12 @@ class WrittenSubmissionGradingTest extends TestCase
 
     public function test_stale_processing_is_marked_failed_after_fifteen_minutes(): void
     {
+        Mail::fake();
         Storage::fake('public');
         config(['services.openai.api_key' => 'test-key']);
 
         [$assignment] = $this->seedWrittenAssignment();
+        $assignment->enrollment->student->update(['email' => 'student@example.com']);
         $path = 'written-submissions/'.$assignment->id.'/test.jpg';
         Storage::disk('public')->put($path, 'image');
 
@@ -546,6 +552,178 @@ class WrittenSubmissionGradingTest extends TestCase
         $submission->refresh();
         $this->assertSame(WrittenSubmission::STATUS_FAILED, $submission->status);
         $this->assertStringContainsString('teacher can mark', (string) $submission->grading_error);
+        Mail::assertSent(WrittenWorkCheckFailed::class);
+    }
+
+    public function test_ai_grading_sends_result_email_to_student(): void
+    {
+        Mail::fake();
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'summary' => 'Good work.',
+                                'items' => [
+                                    [
+                                        'question_number' => 1,
+                                        'extracted_answer' => '4',
+                                        'step_feedback' => 'Correct.',
+                                        'score' => 1,
+                                        'is_correct' => true,
+                                        'confidence' => 0.95,
+                                        'needs_review' => false,
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $assignment->enrollment->student->update(['email' => 'student@example.com']);
+
+        $submission = app(WrittenSubmissionService::class)->store(
+            $assignment,
+            [UploadedFile::fake()->image('answer.jpg')],
+            ['schedule_ai' => false],
+        );
+
+        app(WrittenSubmissionService::class)->runGrading($submission->id);
+
+        Mail::assertSent(WrittenWorkGraded::class, function (WrittenWorkGraded $mail) {
+            return $mail->hasTo('student@example.com')
+                && $mail->summary['set_code'] === 'C7-INT-ADD-P1-W'
+                && str_contains((string) $mail->summary['score_label'], '1/1');
+        });
+    }
+
+    public function test_student_upload_redirects_to_dashboard_with_message(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'summary' => 'Done.',
+                                'items' => [
+                                    [
+                                        'question_number' => 1,
+                                        'extracted_answer' => '4',
+                                        'step_feedback' => 'Correct.',
+                                        'score' => 1,
+                                        'is_correct' => true,
+                                        'confidence' => 0.9,
+                                        'needs_review' => false,
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        [$assignment, $studentUser] = $this->seedWrittenAssignment();
+        $student = $assignment->enrollment->student;
+
+        FormulaDrillSession::query()->create([
+            'student_id' => $student->id,
+            'drill_date' => now(config('formula_drill.timezone', 'Asia/Kolkata'))->startOfDay(),
+            'status' => FormulaDrillSession::STATUS_COMPLETED,
+            'questions_total' => 1,
+            'questions_completed' => 1,
+            'pool_size' => 1,
+            'completed_at' => now(),
+        ]);
+
+        $this->actingAs($studentUser)->post(
+            route('student.written-assignments.upload', $assignment),
+            ['files' => [UploadedFile::fake()->image('answer.jpg')]],
+        )
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('success');
+    }
+
+    public function test_student_can_reupload_after_graded_result(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'summary' => 'Check order.',
+                                'items' => [
+                                    [
+                                        'question_number' => 1,
+                                        'extracted_answer' => '5',
+                                        'step_feedback' => 'Incorrect.',
+                                        'score' => 0,
+                                        'is_correct' => false,
+                                        'confidence' => 0.8,
+                                        'needs_review' => false,
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        [$assignment, $studentUser] = $this->seedWrittenAssignment();
+        $student = $assignment->enrollment->student;
+
+        FormulaDrillSession::query()->create([
+            'student_id' => $student->id,
+            'drill_date' => now(config('formula_drill.timezone', 'Asia/Kolkata'))->startOfDay(),
+            'status' => FormulaDrillSession::STATUS_COMPLETED,
+            'questions_total' => 1,
+            'questions_completed' => 1,
+            'pool_size' => 1,
+            'completed_at' => now(),
+        ]);
+
+        app(WrittenSubmissionService::class)->store(
+            $assignment,
+            [UploadedFile::fake()->image('first.jpg')],
+            ['schedule_ai' => false],
+        );
+        app(WrittenSubmissionService::class)->runGrading(
+            WrittenSubmission::query()->where('set_assignment_id', $assignment->id)->firstOrFail()->id,
+        );
+
+        $this->actingAs($studentUser)->post(
+            route('student.written-assignments.upload', $assignment),
+            ['files' => [UploadedFile::fake()->image('reordered.jpg')]],
+        )
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas(
+                'success',
+                'Re-upload received. Write answers in Q1, Q2, Q3… order on your sheet and upload photos in page order. We will email you when checking is finished.',
+            );
+
+        $submission = WrittenSubmission::query()->where('set_assignment_id', $assignment->id)->firstOrFail();
+        $this->assertContains($submission->status, [
+            WrittenSubmission::STATUS_UPLOADED,
+            WrittenSubmission::STATUS_PROCESSING,
+            WrittenSubmission::STATUS_GRADED,
+        ]);
+        $this->assertNotEmpty($submission->upload_paths);
     }
 
     /**

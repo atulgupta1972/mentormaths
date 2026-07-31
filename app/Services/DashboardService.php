@@ -156,7 +156,7 @@ class DashboardService
             'upcoming_exams' => count($examPlans['upcoming']),
             'past_exams' => count($examPlans['past']),
             'sets_todo' => $assignmentsCollection->filter(
-                fn (array $row) => ! in_array($row['status'], ['green', 'green-late'], true),
+                fn (array $row) => ! in_array($row['status'], ['green', 'green-late', 'checking'], true),
             )->count(),
             'sets_done' => $assignmentsCollection->filter(
                 fn (array $row) => in_array($row['status'], ['green', 'green-late'], true),

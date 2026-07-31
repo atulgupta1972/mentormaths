@@ -69,13 +69,11 @@ class WrittenAssignmentController extends Controller
             'files.*.mimes' => 'Only JPG, PNG, WEBP, or PDF files are allowed.',
         ]);
 
-        $wasRevision = WrittenSubmission::query()
+        $hadCheckedResult = WrittenSubmission::query()
             ->where('set_assignment_id', $assignment->id)
             ->whereIn('status', [
                 WrittenSubmission::STATUS_GRADED,
                 WrittenSubmission::STATUS_FAILED,
-                WrittenSubmission::STATUS_UPLOADED,
-                WrittenSubmission::STATUS_PROCESSING,
             ])
             ->exists();
 
@@ -85,12 +83,11 @@ class WrittenAssignmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with(
-            'success',
-            $wasRevision
-                ? 'Revised sheet uploaded. Checking will start shortly — this page updates automatically.'
-                : 'Work uploaded. Checking will start shortly — this page updates automatically.',
-        );
+        $message = $hadCheckedResult
+            ? 'Re-upload received. Write answers in Q1, Q2, Q3… order on your sheet and upload photos in page order. We will email you when checking is finished.'
+            : 'Work uploaded. We will email you when checking is finished — continue with your other work on the dashboard.';
+
+        return redirect()->route('dashboard')->with('success', $message);
     }
 
     public function download(Request $request, SetAssignment $assignment): StreamedResponse

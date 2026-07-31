@@ -56,7 +56,7 @@
     </div>
 
     <p class="instructions">
-        <strong>How to answer:</strong> Questions only — write each answer on a separate sheet labelled Q1, Q2, Q3, … then upload a photo for AI checking.
+        <strong>How to answer:</strong> Write each answer on a separate sheet in order — Q1, then Q2, then Q3, … (one below the other). Upload photo(s) in page order for AI checking.
     </p>
 
     <div class="questions">

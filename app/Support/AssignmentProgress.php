@@ -229,7 +229,7 @@ class AssignmentProgress
             \App\Models\WrittenSubmission::STATUS_UPLOADED,
             \App\Models\WrittenSubmission::STATUS_PROCESSING,
         ], true)) {
-            $status = 'yellow';
+            $status = 'checking';
         }
 
         return [
@@ -252,7 +252,8 @@ class AssignmentProgress
             'latest_max_score' => $latestMaxScore,
             'latest_score_percent' => ScoreLabel::percent($latestScore, $latestMaxScore),
             'latest_score_label' => $latestScoreLabel,
-            'submitted_at' => $submission?->graded_at?->toDateTimeString(),
+            'submitted_at' => $submission?->graded_at?->toDateTimeString()
+                ?? $submission?->uploaded_at?->toDateTimeString(),
             'latest_time_seconds' => null,
             'submission_timing' => null,
             'status' => $status,

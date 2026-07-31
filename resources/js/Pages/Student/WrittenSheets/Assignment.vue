@@ -2,10 +2,9 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     assignment: { type: Object, required: true },
@@ -33,7 +32,14 @@ const canUpload = computed(() => {
 
     return !status || status === 'failed' || status === 'uploaded' || submission.value?.can_retry;
 });
-const isRevision = computed(() => submission.value?.status === 'graded' || (uploadFiles.value.length > 0 && submission.value?.can_retry));
+
+const showReuploadSection = computed(() => {
+    const status = submission.value?.status;
+
+    return submission.value?.can_retry && (status === 'graded' || status === 'failed');
+});
+
+const showInitialUpload = computed(() => canUpload.value && !showReuploadSection.value);
 
 const onFilesChange = (event) => {
     uploadError.value = '';
@@ -78,7 +84,6 @@ const submitUpload = () => {
             if (fileInput.value) {
                 fileInput.value.value = '';
             }
-            router.reload({ only: ['assignment'], preserveScroll: true });
         },
         onError: (errors) => {
             uploadError.value = errors.files
@@ -108,7 +113,7 @@ const statusLabel = computed(() => {
     }
 
     return ({
-        uploaded: 'Uploaded — waiting to be marked',
+        uploaded: 'Submitted — being checked',
         processing: 'Being checked…',
         graded: 'Graded',
         failed: 'Checking could not finish — your teacher will mark it',
@@ -116,60 +121,17 @@ const statusLabel = computed(() => {
 });
 
 const checkingMessage = computed(() => {
-    const minutes = submission.value?.checking_minutes ?? 0;
-
     if (!isAwaitingGrade.value) {
         return '';
     }
 
-    if (minutes >= 10) {
-        return 'This is taking longer than usual for a large upload. You can close this page — your teacher can mark it manually and your result will appear on the dashboard.';
-    }
-
-    if (minutes >= 3) {
-        return 'Large photos can take a few minutes. This page refreshes automatically.';
-    }
-
-    return 'Checking usually finishes within a minute. This page refreshes automatically.';
+    return 'Your work is being checked. We will email you when it is ready — you can go to the dashboard and continue with other sets.';
 });
 
 const isAwaitingGrade = computed(() => {
     const status = submission.value?.status;
 
     return status === 'uploaded' || status === 'processing';
-});
-
-let pollTimer = null;
-
-const refreshSubmission = () => {
-    router.reload({
-        only: ['assignment'],
-        preserveScroll: true,
-        preserveState: true,
-    });
-};
-
-onMounted(() => {
-    if (!isAwaitingGrade.value) {
-        return;
-    }
-
-    pollTimer = window.setInterval(() => {
-        if (!isAwaitingGrade.value) {
-            window.clearInterval(pollTimer);
-            pollTimer = null;
-
-            return;
-        }
-
-        refreshSubmission();
-    }, 8000);
-});
-
-onBeforeUnmount(() => {
-    if (pollTimer) {
-        window.clearInterval(pollTimer);
-    }
 });
 </script>
 
@@ -222,11 +184,18 @@ onBeforeUnmount(() => {
                         </a>
                     </div>
 
-                    <p class="mt-4 text-sm text-gray-600">
-                        Print the question sheet and do the sums on paper. Write every answer on a <strong>separate answer sheet</strong>
-                        with the question number (Q1, Q2, …). Take a clear <strong>photo</strong> (JPG/PNG) of your answer sheet and upload it below for AI checking.
-                        PDF uploads also work if the server can convert PDF pages.
-                    </p>
+                    <div class="mt-4 space-y-3 text-sm text-gray-600">
+                        <p>
+                            Print the question sheet and do the sums on paper. Write every answer on a
+                            <strong>separate answer sheet</strong>, one below the other, in order:
+                        </p>
+                        <ul class="list-disc space-y-1 pl-5">
+                            <li>Label each answer clearly — <strong>Q1</strong>, then <strong>Q2</strong>, then <strong>Q3</strong>, and so on.</li>
+                            <li>Do not skip around the page — keep answers in question order so the photo matches the sheet.</li>
+                            <li>If you need more than one photo, upload pages <strong>in order</strong> (page 1 first, then page 2, …).</li>
+                        </ul>
+                        <p>Take a clear <strong>photo</strong> (JPG/PNG) of your answer sheet and upload below for AI checking. PDF uploads also work.</p>
+                    </div>
                 </div>
 
                 <div
@@ -272,19 +241,12 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div
-                    v-if="canUpload"
+                    v-if="showInitialUpload"
                     class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200"
                 >
-                    <h3 class="font-medium text-gray-900">
-                        {{ isRevision ? 'Upload revised answer sheet' : 'Upload completed work' }}
-                    </h3>
+                    <h3 class="font-medium text-gray-900">Upload completed work</h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        <template v-if="isRevision">
-                            Upload a clearer or corrected photo/PDF. AI will check again, and your teacher can update marks.
-                        </template>
-                        <template v-else>
-                            Take a clear photo (JPG/PNG) of your answer sheet, or upload a PDF.
-                        </template>
+                        Take a clear photo (JPG/PNG) of your answer sheet with Q1, Q2, Q3… in order, or upload a PDF.
                         Up to {{ upload_limits.max_files }} files, {{ upload_limits.max_file_mb }} MB each.
                     </p>
                     <input
@@ -306,14 +268,21 @@ onBeforeUnmount(() => {
                         :disabled="uploadSubmitting || !selectedFiles.length || submission?.status === 'processing'"
                         @click="submitUpload"
                     >
-                        {{ uploadSubmitting
-                            ? 'Uploading…'
-                            : (isRevision ? 'Save revised upload for checking' : 'Upload for checking') }}
+                        {{ uploadSubmitting ? 'Uploading…' : 'Upload for checking' }}
                     </PrimaryButton>
                 </div>
 
-                <div v-if="isAwaitingGrade" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    {{ checkingMessage }}
+                <div v-if="isAwaitingGrade" class="rounded-lg border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">
+                    <p>{{ checkingMessage }}</p>
+                    <p v-if="showInitialUpload" class="mt-2 text-violet-800">
+                        Wrong order on your sheet? Replace the upload above before checking finishes — use Q1, Q2, Q3… in order.
+                    </p>
+                    <Link
+                        :href="route('dashboard')"
+                        class="mt-3 inline-flex rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+                    >
+                        Go to dashboard
+                    </Link>
                 </div>
 
                 <div v-if="submission?.status === 'failed'" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
@@ -321,6 +290,14 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div v-if="submission?.status === 'graded'" class="space-y-4">
+                    <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                        <p class="font-medium">Answers out of order or AI misread your sheet?</p>
+                        <p class="mt-1">
+                            Re-upload below with every answer labelled and written in order — Q1, then Q2, then Q3, …
+                            If you use more than one photo, select them in page order.
+                        </p>
+                    </div>
+
                     <div class="rounded-lg bg-indigo-50 p-6">
                         <p class="text-3xl font-bold text-indigo-700">
                             {{ formatScoreLabel(submission.score, submission.max_score) }}
@@ -372,6 +349,43 @@ onBeforeUnmount(() => {
                             </tbody>
                         </table>
                     </div>
+                </div>
+
+                <div
+                    v-if="showReuploadSection"
+                    class="rounded-lg border border-indigo-200 bg-white p-6 shadow-sm ring-1 ring-indigo-100"
+                >
+                    <h3 class="font-medium text-gray-900">Re-upload in order</h3>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Write each answer on your answer sheet in question order, with clear labels (Q1, Q2, Q3, …).
+                        Upload a new photo or PDF — this replaces your previous upload and AI will check again.
+                    </p>
+                    <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">
+                        <li>One answer block per question, top to bottom in order.</li>
+                        <li>Multiple photos: choose files in page order (page 1, then page 2, …).</li>
+                    </ul>
+                    <input
+                        ref="fileInput"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        multiple
+                        class="mt-4 block w-full text-sm"
+                        @change="onFilesChange"
+                    >
+                    <p v-if="selectedFiles.length" class="mt-2 text-sm text-gray-700">
+                        Selected: {{ selectedFiles.length }} file{{ selectedFiles.length === 1 ? '' : 's' }}
+                        <span v-if="selectedFiles.length > 1" class="text-gray-500">— we will check them in the order you selected</span>
+                    </p>
+                    <InputError :message="uploadError" class="mt-2" />
+                    <InputError :message="uploadForm.errors.files" class="mt-2" />
+                    <InputError :message="uploadForm.errors['files.0']" class="mt-2" />
+                    <PrimaryButton
+                        class="mt-4"
+                        :disabled="uploadSubmitting || !selectedFiles.length || submission?.status === 'processing'"
+                        @click="submitUpload"
+                    >
+                        {{ uploadSubmitting ? 'Uploading…' : 'Re-upload in order for checking' }}
+                    </PrimaryButton>
                 </div>
             </div>
         </div>
