@@ -50,6 +50,7 @@ const teachingGroup = computed(() => ({
         || route().current('admin.practice-sets.*')
         || route().current('admin.catch-up.*')
         || route().current('admin.written-sheets.*')
+        || route().current('admin.textbooks.*')
         || route().current('admin.formula-bank.*'),
     items: [
         {
@@ -86,6 +87,12 @@ const teachingGroup = computed(() => ({
             label: 'Written sheets',
             href: route('admin.written-sheets.index'),
             active: route().current('admin.written-sheets.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Textbook content',
+            href: route('admin.textbooks.index'),
+            active: route().current('admin.textbooks.*'),
             show: isAdmin.value,
         },
         {

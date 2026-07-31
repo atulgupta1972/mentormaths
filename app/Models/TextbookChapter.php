@@ -1,0 +1,89 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
+
+class TextbookChapter extends Model
+{
+    public const STATUS_DRAFT = 'draft';
+
+    public const STATUS_EXTRACTING = 'extracting';
+
+    public const STATUS_REVIEW = 'review';
+
+    public const STATUS_PUBLISHED = 'published';
+
+    public const STATUS_FAILED = 'failed';
+
+    protected $fillable = [
+        'textbook_id',
+        'syllabus_chapter_id',
+        'chapter_number',
+        'title',
+        'pdf_path',
+        'status',
+        'extraction_items',
+        'extraction_error',
+        'extracted_at',
+        'mcq_worksheet_id',
+        'written_worksheet_id',
+        'published_at',
+        'published_by',
+        'created_by',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'extraction_items' => 'array',
+            'extracted_at' => 'datetime',
+            'published_at' => 'datetime',
+        ];
+    }
+
+    public function textbook(): BelongsTo
+    {
+        return $this->belongsTo(Textbook::class);
+    }
+
+    public function syllabusChapter(): BelongsTo
+    {
+        return $this->belongsTo(SyllabusChapter::class);
+    }
+
+    public function mcqWorksheet(): BelongsTo
+    {
+        return $this->belongsTo(Worksheet::class, 'mcq_worksheet_id');
+    }
+
+    public function writtenWorksheet(): BelongsTo
+    {
+        return $this->belongsTo(Worksheet::class, 'written_worksheet_id');
+    }
+
+    public function publisher(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'published_by');
+    }
+
+    public function pdfUrl(): ?string
+    {
+        return $this->pdf_path
+            ? Storage::disk('public')->url($this->pdf_path)
+            : null;
+    }
+
+    public function statusLabel(): string
+    {
+        return match ($this->status) {
+            self::STATUS_EXTRACTING => 'Extracting…',
+            self::STATUS_REVIEW => 'Ready for review',
+            self::STATUS_PUBLISHED => 'Published',
+            self::STATUS_FAILED => 'Extraction failed',
+            default => 'Draft',
+        };
+    }
+}

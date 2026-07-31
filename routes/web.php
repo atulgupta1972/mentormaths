@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\RegistrationRequestController as AdminRegistratio
 use App\Http\Controllers\Admin\SetAssignmentController;
 use App\Http\Controllers\Admin\StudentController;
 use App\Http\Controllers\Admin\SyllabusVersionController;
+use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WrittenSheetController;
 use App\Http\Controllers\DashboardController;
@@ -222,6 +223,15 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/written-assignments/{assignment}/manual-grade', [WrittenSheetController::class, 'manualGrade'])->name('written-assignments.manual-grade');
     Route::post('/written-assignments/{assignment}/upload-revision', [WrittenSheetController::class, 'uploadRevision'])->name('written-assignments.upload-revision');
     Route::post('/written-assignments/{assignment}/upload-work', [WrittenSheetController::class, 'uploadWork'])->name('written-assignments.upload-work');
+
+    Route::get('/textbooks', [TextbookController::class, 'index'])->name('textbooks.index');
+    Route::get('/textbooks/create', [TextbookController::class, 'create'])->name('textbooks.create');
+    Route::post('/textbooks', [TextbookController::class, 'store'])->name('textbooks.store');
+    Route::get('/textbooks/chapters/{textbookChapter}', [TextbookController::class, 'show'])->name('textbooks.show');
+    Route::post('/textbooks/chapters/{textbookChapter}/draft', [TextbookController::class, 'updateDraft'])->name('textbooks.draft');
+    Route::post('/textbooks/chapters/{textbookChapter}/publish', [TextbookController::class, 'publish'])->name('textbooks.publish');
+    Route::post('/textbooks/chapters/{textbookChapter}/reextract', [TextbookController::class, 'reextract'])->name('textbooks.reextract');
+    Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');
 
     Route::get('/formula-bank', [FormulaBankController::class, 'index'])->name('formula-bank.index');
     Route::get('/formula-bank/classes/{grade}', [FormulaBankController::class, 'classShow'])->name('formula-bank.classes.show');
