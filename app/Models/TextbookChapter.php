@@ -87,8 +87,8 @@ class TextbookChapter extends Model
             self::STATUS_EXTRACTING => 'Extracting…',
             self::STATUS_REVIEW => 'Ready for review',
             self::STATUS_PUBLISHED => 'Published',
-            self::STATUS_FAILED => 'Extraction failed',
-            default => 'Draft',
+            self::STATUS_FAILED => 'Import failed',
+            default => 'Awaiting MCQ import',
         };
     }
 }

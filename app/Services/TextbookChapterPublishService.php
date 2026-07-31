@@ -23,6 +23,7 @@ class TextbookChapterPublishService
 {
     public function __construct(
         private WrittenSheetService $writtenSheetService,
+        private TextbookSetCodeService $setCodeService,
     ) {}
 
     /**
@@ -46,10 +47,9 @@ class TextbookChapterPublishService
         }
 
         $topic = $this->textbookTopic($syllabusChapter);
-        $gradeCode = $this->gradeCode($syllabusChapter);
-        $chapterNum = str_pad((string) $chapter->chapter_number, 2, '0', STR_PAD_LEFT);
-        $mcqCode = "{$gradeCode}-TB{$chapterNum}-M";
-        $writtenCode = "{$gradeCode}-TB{$chapterNum}-W";
+        $codes = $this->setCodeService->codes($chapter);
+        $mcqCode = $codes['mcq'];
+        $writtenCode = $codes['written'];
 
         return DB::transaction(function () use ($chapter, $approved, $publisher, $topic, $syllabusChapter, $mcqCode, $writtenCode) {
             if ($chapter->mcq_worksheet_id) {
@@ -150,17 +150,6 @@ class TextbookChapterPublishService
         );
     }
 
-    private function gradeCode(SyllabusChapter $chapter): string
-    {
-        $chapter->loadMissing('syllabusVersion.gradeLevel');
-        $name = $chapter->syllabusVersion?->gradeLevel?->name ?? 'C0';
-        if (preg_match('/(\d+)/', $name, $matches)) {
-            return 'C'.$matches[1];
-        }
-
-        return 'C0';
-    }
-
     /**
      * @param  array<string, mixed>  $item
      */
@@ -196,7 +185,9 @@ class TextbookChapterPublishService
             'type' => Question::TYPE_MCQ,
             'question_text' => trim((string) $item['question_text']),
             'explanation' => QuestionMethodHint::sanitizeExplanation($item['explanation'] ?? null),
-            'method_hint' => QuestionMethodHint::inferFromQuestionText(trim((string) $item['question_text'])),
+            'method_hint' => filled($item['method_hint'] ?? null)
+                ? trim((string) $item['method_hint'])
+                : QuestionMethodHint::inferFromQuestionText(trim((string) $item['question_text'])),
             'source' => Question::SOURCE_PDF,
             'bank_purpose' => QuestionBankPurpose::PRACTICE_SET,
             'created_by' => $userId,

@@ -26,76 +26,48 @@ class TextbookChapterTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_can_upload_chapter_and_publish_extracted_sets(): void
+    public function test_admin_can_upload_chapter_import_mcq_json_and_publish(): void
     {
         Storage::fake('public');
-        config(['services.openai.api_key' => 'test-key']);
-
-        Http::fake([
-            'api.openai.com/*' => Http::response([
-                'choices' => [
-                    [
-                        'message' => [
-                            'content' => json_encode([
-                                'items' => [
-                                    [
-                                        'id' => 'ex-1',
-                                        'kind' => 'example',
-                                        'label' => 'Example 1',
-                                        'source_page' => 4,
-                                        'question_text' => 'Find the 5th odd number using u_n = 2n - 1.',
-                                        'correct_answer' => '9',
-                                        'answer_format' => 'integer',
-                                        'explanation' => 'u_5 = 2(5) - 1 = 9',
-                                        'needs_diagram' => false,
-                                        'include_in_mcq' => true,
-                                        'include_in_written' => true,
-                                        'mcq_options' => [
-                                            ['text' => '9', 'is_correct' => true],
-                                            ['text' => '10', 'is_correct' => false],
-                                            ['text' => '7', 'is_correct' => false],
-                                            ['text' => '11', 'is_correct' => false],
-                                        ],
-                                    ],
-                                ],
-                            ]),
-                        ],
-                    ],
-                ],
-            ]),
-        ]);
 
         [$grade, $chapter, $admin] = $this->seedClassNineChapterEight();
 
-        $samplePdf = base_path('tests/class 9/iemh108.pdf');
-        $upload = file_exists($samplePdf)
-            ? new UploadedFile($samplePdf, 'iemh108.pdf', 'application/pdf', null, true)
-            : UploadedFile::fake()->create('chapter.pdf', 100, 'application/pdf');
+        $upload = UploadedFile::fake()->create('chapter.pdf', 100, 'application/pdf');
 
         $this->actingAs($admin)
             ->withSession(['admin_grade_level_id' => $grade->id])
             ->post(route('admin.textbooks.store'), [
-                'book_name' => 'Ganita Manjari Part I',
-                'book_code' => 'iemh1',
+                'book_name' => 'Ganita Prakash Part I',
+                'book_code' => 'GP',
                 'syllabus_chapter_id' => $chapter->id,
                 'pdf' => $upload,
             ])
             ->assertRedirect();
 
         $textbookChapter = TextbookChapter::query()->firstOrFail();
-        $this->assertContains($textbookChapter->status, [
-            TextbookChapter::STATUS_DRAFT,
-            TextbookChapter::STATUS_EXTRACTING,
-            TextbookChapter::STATUS_REVIEW,
+        $this->assertSame(TextbookChapter::STATUS_DRAFT, $textbookChapter->status);
+
+        $json = json_encode([
+            'questions' => [
+                [
+                    'topic' => 'Explicit rule',
+                    'question' => 'Find the 5th term of tₙ = 2n − 1.',
+                    'options' => ['7', '9', '11', '13'],
+                    'correct_index' => 1,
+                    'hint' => 'Substitute n = 5.',
+                    'explanation' => '2(5) − 1 = 9',
+                    'difficulty' => 'Easy',
+                ],
+            ],
         ]);
 
-        if ($textbookChapter->status !== TextbookChapter::STATUS_REVIEW) {
-            (new ExtractTextbookChapterJob($textbookChapter->id))->handle(app(\App\Services\TextbookChapterExtractionService::class));
-            $textbookChapter->refresh();
-        }
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.import-mcq', $textbookChapter), ['json' => $json])
+            ->assertRedirect(route('admin.textbooks.show', $textbookChapter));
 
+        $textbookChapter->refresh();
         $this->assertSame(TextbookChapter::STATUS_REVIEW, $textbookChapter->status);
-        $this->assertNotEmpty($textbookChapter->extraction_items);
+        $this->assertCount(1, $textbookChapter->extraction_items);
 
         $this->actingAs($admin)
             ->post(route('admin.textbooks.publish', $textbookChapter), [
@@ -106,15 +78,11 @@ class TextbookChapterTest extends TestCase
         $textbookChapter->refresh();
         $this->assertSame(TextbookChapter::STATUS_PUBLISHED, $textbookChapter->status);
         $this->assertNotNull($textbookChapter->mcq_worksheet_id);
-        $this->assertNotNull($textbookChapter->written_worksheet_id);
+        $this->assertNull($textbookChapter->written_worksheet_id);
 
         $mcq = Worksheet::query()->findOrFail($textbookChapter->mcq_worksheet_id);
-        $written = Worksheet::query()->findOrFail($textbookChapter->written_worksheet_id);
-
-        $this->assertSame('C9-TB08-M', $mcq->set_code);
-        $this->assertSame('C9-TB08-W', $written->set_code);
+        $this->assertSame('C9-GP-CH08-M', $mcq->set_code);
         $this->assertSame(1, $mcq->questions()->count());
-        $this->assertSame(1, $written->questions()->count());
     }
 
     public function test_admin_can_view_textbook_chapter_show_page(): void
@@ -124,8 +92,8 @@ class TextbookChapterTest extends TestCase
 
         $textbook = Textbook::query()->create([
             'grade_level_id' => $grade->id,
-            'name' => 'Ganita Manjari Part I',
-            'code' => 'iemh1',
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'GP',
             'created_by' => $admin->id,
         ]);
 
@@ -135,7 +103,7 @@ class TextbookChapterTest extends TestCase
             'chapter_number' => 8,
             'title' => $syllabusChapter->name,
             'pdf_path' => 'textbooks/1/chapters/8/chapter.pdf',
-            'status' => TextbookChapter::STATUS_EXTRACTING,
+            'status' => TextbookChapter::STATUS_DRAFT,
             'created_by' => $admin->id,
         ]);
 
@@ -146,8 +114,15 @@ class TextbookChapterTest extends TestCase
                 ->component('Admin/Textbooks/Show')
                 ->has('chapter', fn ($chapterPage) => $chapterPage
                     ->where('id', $chapter->id)
-                    ->where('status', TextbookChapter::STATUS_EXTRACTING)
+                    ->where('status', TextbookChapter::STATUS_DRAFT)
+                    ->where('mcq_set_code', 'C9-GP-CH08-M')
                     ->has('book')
+                    ->etc()
+                )
+                ->has('mcqImport', fn ($import) => $import
+                    ->has('prompt')
+                    ->has('sample_json')
+                    ->where('mcq_set_code', 'C9-GP-CH08-M')
                     ->etc()
                 )
             );
@@ -206,8 +181,8 @@ class TextbookChapterTest extends TestCase
 
         $textbook = Textbook::query()->create([
             'grade_level_id' => $grade->id,
-            'name' => 'Ganita Manjari Part I',
-            'code' => 'iemh1',
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'GP',
             'created_by' => $admin->id,
         ]);
 
@@ -236,8 +211,8 @@ class TextbookChapterTest extends TestCase
 
         $textbook = Textbook::query()->create([
             'grade_level_id' => $grade->id,
-            'name' => 'Ganita Manjari Part I',
-            'code' => 'iemh1',
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'GP',
             'created_by' => $admin->id,
         ]);
 
@@ -287,8 +262,8 @@ class TextbookChapterTest extends TestCase
 
         $textbook = Textbook::query()->create([
             'grade_level_id' => $grade->id,
-            'name' => 'Ganita Manjari Part I',
-            'code' => 'iemh1',
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'GP',
             'created_by' => $admin->id,
         ]);
 

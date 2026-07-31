@@ -230,7 +230,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/textbooks/chapters/{textbookChapter}', [TextbookController::class, 'show'])->name('textbooks.show');
     Route::post('/textbooks/chapters/{textbookChapter}/draft', [TextbookController::class, 'updateDraft'])->name('textbooks.draft');
     Route::post('/textbooks/chapters/{textbookChapter}/publish', [TextbookController::class, 'publish'])->name('textbooks.publish');
-    Route::post('/textbooks/chapters/{textbookChapter}/reextract', [TextbookController::class, 'reextract'])->name('textbooks.reextract');
+    Route::post('/textbooks/chapters/{textbookChapter}/import-mcq', [TextbookController::class, 'importMcq'])->name('textbooks.import-mcq');
+    Route::post('/textbooks/chapters/{textbookChapter}/reset-import', [TextbookController::class, 'resetImport'])->name('textbooks.reset-import');
     Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');
 
     Route::get('/formula-bank', [FormulaBankController::class, 'index'])->name('formula-bank.index');

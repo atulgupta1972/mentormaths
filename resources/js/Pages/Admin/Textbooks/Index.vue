@@ -20,7 +20,7 @@ const page = usePage();
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Textbook content</h2>
                     <p class="text-sm text-gray-500">
-                        Upload chapter PDFs → AI extracts examples &amp; exercises → publish MCQ + written sets.
+                        Upload chapter PDFs → copy AI prompt → paste MCQ JSON → publish sets like <strong>C9-GP-CH08-M</strong>.
                     </p>
                 </div>
                 <Link :href="route('admin.textbooks.create')">

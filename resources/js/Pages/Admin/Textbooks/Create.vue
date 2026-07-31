@@ -14,8 +14,8 @@ const props = defineProps({
 });
 
 const form = useForm({
-    book_name: props.books[0]?.name || 'Ganita Manjari Part I',
-    book_code: props.books[0]?.code || 'iemh1',
+    book_name: props.books[0]?.name || 'Ganita Prakash Part I',
+    book_code: props.books[0]?.code || 'GP',
     syllabus_chapter_id: '',
     pdf: null,
 });
@@ -78,7 +78,7 @@ const submit = () => {
                 >
                     <div class="rounded-md bg-sky-50 px-4 py-3 text-sm text-sky-900">
                         Uploading for <strong>{{ gradeLevel.name }}</strong>.
-                        AI will extract examples, inline exercises, and end-of-chapter questions (not Think &amp; Reflect).
+                        Step 1: store the chapter PDF here. Step 2: use the AI prompt on the next page with Claude/Cursor/Gemini.
                     </div>
 
                     <div>
@@ -90,7 +90,7 @@ const submit = () => {
                     <div>
                         <InputLabel for="book_code" value="Book code" />
                         <TextInput id="book_code" v-model="form.book_code" class="mt-1 block w-full" required />
-                        <p class="mt-1 text-xs text-gray-500">e.g. iemh1 for Ganita Manjari Part I — chapter file iemh108.pdf is Ch 8.</p>
+                        <p class="mt-1 text-xs text-gray-500">Short book code for set names — e.g. <strong>GP</strong> (Ganita Prakash) → set <strong>C9-GP-CH08-M</strong>.</p>
                         <InputError :message="form.errors.book_code" class="mt-1" />
                     </div>
 

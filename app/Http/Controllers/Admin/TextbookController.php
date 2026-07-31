@@ -3,13 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\ExtractTextbookChapterJob;
 use App\Models\AcademicYear;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Services\AdminGradeContext;
+use App\Services\TextbookChapterMcqImportService;
+use App\Services\TextbookChapterMcqPromptService;
 use App\Services\TextbookChapterPublishService;
 use App\Support\UploadedFileDiagnostics;
 use Illuminate\Http\RedirectResponse;
@@ -24,6 +25,8 @@ class TextbookController extends Controller
     public function __construct(
         private AdminGradeContext $gradeContext,
         private TextbookChapterPublishService $publishService,
+        private TextbookChapterMcqPromptService $mcqPromptService,
+        private TextbookChapterMcqImportService $mcqImportService,
     ) {}
 
     public function index(Request $request): Response
@@ -167,11 +170,9 @@ class TextbookController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        ExtractTextbookChapterJob::dispatch($chapter->id);
-
         return redirect()
-            ->route('admin.textbooks.index')
-            ->with('success', 'Chapter PDF uploaded. AI extraction is running in the background — we will email you when it is ready to review (usually 5–10 minutes).');
+            ->route('admin.textbooks.show', $chapter)
+            ->with('success', 'Chapter PDF uploaded. Copy the AI prompt, generate MCQ JSON in Claude/Cursor/Gemini, then paste it below.');
     }
 
     public function show(TextbookChapter $textbookChapter): Response
@@ -182,6 +183,8 @@ class TextbookController extends Controller
             'mcqWorksheet',
             'writtenWorksheet',
         ]);
+
+        $aiPrompt = $this->mcqPromptService->payload($textbookChapter);
 
         return Inertia::render('Admin/Textbooks/Show', [
             'chapter' => [
@@ -202,10 +205,30 @@ class TextbookController extends Controller
                 'items' => $textbookChapter->extraction_items ?? [],
                 'mcq_worksheet_id' => $textbookChapter->mcq_worksheet_id,
                 'written_worksheet_id' => $textbookChapter->written_worksheet_id,
-                'mcq_set_code' => $textbookChapter->mcqWorksheet?->set_code,
-                'written_set_code' => $textbookChapter->writtenWorksheet?->set_code,
+                'mcq_set_code' => $textbookChapter->mcqWorksheet?->set_code ?? $aiPrompt['mcq_set_code'],
+                'written_set_code' => $textbookChapter->writtenWorksheet?->set_code ?? $aiPrompt['written_set_code'],
             ],
+            'mcqImport' => $aiPrompt,
         ]);
+    }
+
+    public function importMcq(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'json' => ['required', 'string'],
+        ]);
+
+        try {
+            $chapter = $this->mcqImportService->import($textbookChapter, $validated['json']);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $count = count($chapter->extraction_items ?? []);
+
+        return redirect()
+            ->route('admin.textbooks.show', $chapter)
+            ->with('success', "{$count} MCQ(s) imported. Review below, then publish as {$this->mcqPromptService->payload($chapter)['mcq_set_code']}.");
     }
 
     public function updateDraft(Request $request, TextbookChapter $textbookChapter): RedirectResponse
@@ -246,18 +269,16 @@ class TextbookController extends Controller
             ->with('success', 'Published — MCQ and written sets are ready to assign.');
     }
 
-    public function reextract(TextbookChapter $textbookChapter): RedirectResponse
+    public function resetImport(TextbookChapter $textbookChapter): RedirectResponse
     {
         $textbookChapter->update([
             'status' => TextbookChapter::STATUS_DRAFT,
+            'extraction_items' => null,
             'extraction_error' => null,
+            'extracted_at' => null,
         ]);
 
-        ExtractTextbookChapterJob::dispatch($textbookChapter->id);
-
-        return redirect()
-            ->route('admin.textbooks.index')
-            ->with('success', 'Re-extraction started in the background — we will email you when it is ready to review.');
+        return back()->with('success', 'Cleared imported MCQs — paste fresh JSON to import again.');
     }
 
     public function download(TextbookChapter $textbookChapter)
