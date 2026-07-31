@@ -114,6 +114,42 @@ class TextbookChapterTest extends TestCase
         $this->assertSame(1, $written->questions()->count());
     }
 
+    public function test_admin_can_view_textbook_chapter_show_page(): void
+    {
+        Storage::fake('public');
+        [$grade, $syllabusChapter, $admin] = $this->seedClassNineChapterEight();
+
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Manjari Part I',
+            'code' => 'iemh1',
+            'created_by' => $admin->id,
+        ]);
+
+        $chapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => $syllabusChapter->name,
+            'pdf_path' => 'textbooks/1/chapters/8/chapter.pdf',
+            'status' => TextbookChapter::STATUS_EXTRACTING,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.textbooks.show', $chapter))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Textbooks/Show')
+                ->has('chapter', fn ($chapterPage) => $chapterPage
+                    ->where('id', $chapter->id)
+                    ->where('status', TextbookChapter::STATUS_EXTRACTING)
+                    ->has('book')
+                    ->etc()
+                )
+            );
+    }
+
     /**
      * @return array{0: GradeLevel, 1: SyllabusChapter, 2: User}
      */

@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { safeRoute } from '@/utils/routes';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -10,13 +11,15 @@ const props = defineProps({
     chapter: { type: Object, required: true },
 });
 
+const cloneItems = (items) => JSON.parse(JSON.stringify(items ?? []));
+
 const page = usePage();
-const items = ref(structuredClone(props.chapter.items || []));
+const items = ref(cloneItems(props.chapter.items));
 
 watch(
     () => props.chapter.items,
     (newItems) => {
-        items.value = structuredClone(newItems || []);
+        items.value = cloneItems(newItems);
     },
     { deep: true },
 );
@@ -39,21 +42,21 @@ const syncForms = () => {
 
 const saveDraft = () => {
     syncForms();
-    draftForm.post(route('admin.textbooks.draft', props.chapter.id), {
+    draftForm.post(safeRoute('admin.textbooks.draft', props.chapter.id, '#'), {
         preserveScroll: true,
         onSuccess: () => {
-            items.value = structuredClone(page.props.chapter.items || items.value);
+            items.value = cloneItems(page.props.chapter?.items ?? items.value);
         },
     });
 };
 
 const publish = () => {
     syncForms();
-    publishForm.post(route('admin.textbooks.publish', props.chapter.id));
+    publishForm.post(safeRoute('admin.textbooks.publish', props.chapter.id, '#'));
 };
 
 const reextract = () => {
-    router.post(route('admin.textbooks.reextract', props.chapter.id));
+    router.post(safeRoute('admin.textbooks.reextract', props.chapter.id, '#'));
 };
 
 const approvedCount = computed(() => items.value.filter((item) => item.approved !== false).length);
@@ -66,7 +69,7 @@ onMounted(() => {
     }
 
     pollTimer = window.setInterval(() => {
-        router.reload({ only: ['chapter'], preserveScroll: true, preserveState: true });
+        router.reload({ only: ['chapter'], preserveScroll: true });
     }, 8000);
 });
 
@@ -85,7 +88,7 @@ onBeforeUnmount(() => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">
-                        {{ chapter.book.grade_name }} · {{ chapter.book.name }}
+                        {{ chapter.book?.grade_name || 'Class' }} · {{ chapter.book?.name || 'Textbook' }}
                     </h2>
                     <p class="text-sm text-gray-500">
                         Ch {{ chapter.chapter_number }} — {{ chapter.title }}
@@ -95,12 +98,12 @@ onBeforeUnmount(() => {
                 <div class="flex flex-wrap gap-2">
                     <a
                         v-if="chapter.pdf_url"
-                        :href="route('admin.textbooks.download', chapter.id)"
+                        :href="safeRoute('admin.textbooks.download', chapter.id, chapter.pdf_url)"
                         class="text-sm text-indigo-600 hover:underline"
                     >
                         Download PDF
                     </a>
-                    <Link :href="route('admin.textbooks.index')" class="text-sm text-gray-600 hover:underline">All chapters</Link>
+                    <Link :href="safeRoute('admin.textbooks.index', null, '/admin/textbooks')" class="text-sm text-gray-600 hover:underline">All chapters</Link>
                 </div>
             </div>
         </template>
@@ -128,7 +131,7 @@ onBeforeUnmount(() => {
                     <span v-if="chapter.mcq_set_code">MCQ set <strong>{{ chapter.mcq_set_code }}</strong>.</span>
                     <span v-if="chapter.written_set_code">Written set <strong>{{ chapter.written_set_code }}</strong>.</span>
                     Assign from
-                    <Link :href="route('admin.classes.index')" class="font-semibold underline">Classes → Assign</Link>.
+                    <Link :href="safeRoute('admin.classes.index', null, '/admin/classes')" class="font-semibold underline">Classes → Assign</Link>.
                     You can still edit questions below and re-publish.
                 </div>
 
