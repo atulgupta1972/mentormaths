@@ -38,6 +38,9 @@ return [
     'openai' => [
         'api_key' => env('OPENAI_API_KEY'),
         'grading_model' => env('OPENAI_GRADING_MODEL', 'gpt-4o-mini'),
+        'textbook_extraction_model' => env('OPENAI_TEXTBOOK_EXTRACTION_MODEL', 'gpt-4o-mini'),
+        'textbook_extraction_pages_per_batch' => (int) env('OPENAI_TEXTBOOK_EXTRACTION_PAGES_PER_BATCH', 5),
+        'textbook_extraction_max_tokens' => (int) env('OPENAI_TEXTBOOK_EXTRACTION_MAX_TOKENS', 16384),
     ],
 
 ];

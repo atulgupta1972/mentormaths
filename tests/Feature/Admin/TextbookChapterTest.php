@@ -150,6 +150,80 @@ class TextbookChapterTest extends TestCase
             );
     }
 
+    public function test_extraction_processes_chapter_in_page_batches(): void
+    {
+        $samplePdf = base_path('tests/class 9/iemh108.pdf');
+        if (! file_exists($samplePdf)) {
+            $this->markTestSkipped('Sample chapter PDF is not available.');
+        }
+
+        Storage::fake('public');
+        Storage::disk('public')->put('textbooks/test/chapter.pdf', file_get_contents($samplePdf));
+
+        config([
+            'services.openai.api_key' => 'test-key',
+            'services.openai.textbook_extraction_pages_per_batch' => 3,
+        ]);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'items' => [
+                                    [
+                                        'id' => 'ex-batch',
+                                        'kind' => 'example',
+                                        'label' => 'Example 1',
+                                        'source_page' => 4,
+                                        'question_text' => 'Find the 5th term.',
+                                        'correct_answer' => '9',
+                                        'answer_format' => 'integer',
+                                        'explanation' => 'Substitute n = 5.',
+                                        'needs_diagram' => false,
+                                        'include_in_mcq' => true,
+                                        'include_in_written' => true,
+                                        'mcq_options' => [
+                                            ['text' => '9', 'is_correct' => true],
+                                            ['text' => '10', 'is_correct' => false],
+                                            ['text' => '7', 'is_correct' => false],
+                                            ['text' => '11', 'is_correct' => false],
+                                        ],
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        [$grade, $syllabusChapter, $admin] = $this->seedClassNineChapterEight();
+
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Manjari Part I',
+            'code' => 'iemh1',
+            'created_by' => $admin->id,
+        ]);
+
+        $chapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => $syllabusChapter->name,
+            'pdf_path' => 'textbooks/test/chapter.pdf',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $items = app(\App\Services\TextbookChapterExtractionService::class)->extract($chapter);
+
+        $this->assertNotEmpty($items);
+        Http::assertSentCount(9);
+    }
+
     /**
      * @return array{0: GradeLevel, 1: SyllabusChapter, 2: User}
      */

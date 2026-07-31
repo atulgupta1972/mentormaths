@@ -14,7 +14,7 @@ class ExtractTextbookChapterJob implements ShouldQueue
 
     public int $tries = 2;
 
-    public int $timeout = 600;
+    public int $timeout = 900;
 
     public function __construct(public int $textbookChapterId) {}
 
