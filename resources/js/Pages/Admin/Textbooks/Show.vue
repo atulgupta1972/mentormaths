@@ -118,7 +118,9 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div v-if="isExtracting" class="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
-                    AI is reading the PDF (text + diagram pages). This page refreshes automatically — usually 1–3 minutes.
+                    AI is reading the PDF (text + diagram pages). This usually takes 5–10 minutes.
+                    You can leave — we will email you when extraction is ready to review.
+                    This page also refreshes automatically if you keep it open.
                 </div>
 
                 <div v-if="chapter.status === 'failed'" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">

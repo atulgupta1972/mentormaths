@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\TextbookChapter;
 use App\Services\TextbookChapterExtractionService;
+use App\Support\TextbookChapterMailer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -44,6 +45,8 @@ class ExtractTextbookChapterJob implements ShouldQueue
                 'extracted_at' => now(),
                 'extraction_error' => null,
             ]);
+
+            TextbookChapterMailer::sendExtracted($chapter->fresh(['textbook.gradeLevel', 'creator']));
         } catch (\Throwable $exception) {
             Log::error('Textbook chapter extraction failed', [
                 'textbook_chapter_id' => $chapter->id,
@@ -54,6 +57,8 @@ class ExtractTextbookChapterJob implements ShouldQueue
                 'status' => TextbookChapter::STATUS_FAILED,
                 'extraction_error' => $exception->getMessage(),
             ]);
+
+            TextbookChapterMailer::sendExtractionFailed($chapter->fresh(['textbook.gradeLevel', 'creator']));
         }
     }
 }

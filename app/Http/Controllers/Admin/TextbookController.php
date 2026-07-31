@@ -170,8 +170,8 @@ class TextbookController extends Controller
         ExtractTextbookChapterJob::dispatch($chapter->id);
 
         return redirect()
-            ->route('admin.textbooks.show', $chapter)
-            ->with('success', 'Chapter PDF uploaded. AI extraction has started — refresh in a minute.');
+            ->route('admin.textbooks.index')
+            ->with('success', 'Chapter PDF uploaded. AI extraction is running in the background — we will email you when it is ready to review (usually 5–10 minutes).');
     }
 
     public function show(TextbookChapter $textbookChapter): Response
@@ -255,7 +255,9 @@ class TextbookController extends Controller
 
         ExtractTextbookChapterJob::dispatch($textbookChapter->id);
 
-        return back()->with('success', 'Re-extraction started.');
+        return redirect()
+            ->route('admin.textbooks.index')
+            ->with('success', 'Re-extraction started in the background — we will email you when it is ready to review.');
     }
 
     public function download(TextbookChapter $textbookChapter)

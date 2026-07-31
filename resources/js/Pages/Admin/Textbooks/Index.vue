@@ -1,12 +1,14 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 
 defineProps({
     chapters: { type: Array, default: () => [] },
     gradeLevel: { type: Object, default: null },
 });
+
+const page = usePage();
 </script>
 
 <template>
@@ -29,6 +31,13 @@ defineProps({
 
         <div class="py-12">
             <div class="mx-auto max-w-6xl sm:px-6 lg:px-8">
+                <div v-if="page.props.flash?.success" class="mb-4 rounded-md bg-green-50 px-4 py-3 text-sm text-green-800">
+                    {{ page.props.flash.success }}
+                </div>
+                <div v-if="page.props.flash?.error" class="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
+                    {{ page.props.flash.error }}
+                </div>
+
                 <div v-if="gradeLevel" class="mb-4 text-sm text-gray-600">
                     Filtered for <strong>{{ gradeLevel.name }}</strong> (change class from the top bar)
                 </div>

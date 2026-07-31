@@ -3,6 +3,8 @@
 namespace Tests\Feature\Admin;
 
 use App\Jobs\ExtractTextbookChapterJob;
+use App\Mail\TextbookChapterExtracted;
+use App\Mail\TextbookChapterExtractionFailed;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
@@ -16,6 +18,7 @@ use App\Models\Worksheet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -222,6 +225,90 @@ class TextbookChapterTest extends TestCase
 
         $this->assertNotEmpty($items);
         Http::assertSentCount(9);
+    }
+
+    public function test_extraction_emails_admin_when_complete(): void
+    {
+        Storage::fake('public');
+        Mail::fake();
+
+        [$grade, $syllabusChapter, $admin] = $this->seedClassNineChapterEight();
+
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Manjari Part I',
+            'code' => 'iemh1',
+            'created_by' => $admin->id,
+        ]);
+
+        $chapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => $syllabusChapter->name,
+            'pdf_path' => 'textbooks/1/chapters/8/chapter.pdf',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->mock(\App\Services\TextbookChapterExtractionService::class, function ($mock): void {
+            $mock->shouldReceive('extract')->once()->andReturn([
+                [
+                    'id' => 'ex-1',
+                    'kind' => 'example',
+                    'label' => 'Example 1',
+                    'source_page' => 4,
+                    'question_text' => 'Find the 5th odd number.',
+                    'correct_answer' => '9',
+                    'answer_format' => 'integer',
+                    'explanation' => 'Substitute n = 5.',
+                    'needs_diagram' => false,
+                    'include_in_mcq' => true,
+                    'include_in_written' => true,
+                    'approved' => true,
+                    'mcq_options' => [],
+                ],
+            ]);
+        });
+
+        (new ExtractTextbookChapterJob($chapter->id))->handle(app(\App\Services\TextbookChapterExtractionService::class));
+
+        Mail::assertSent(TextbookChapterExtracted::class, function (TextbookChapterExtracted $mail) use ($admin) {
+            return $mail->hasTo($admin->email)
+                && $mail->summary['items_count'] === 1;
+        });
+    }
+
+    public function test_extraction_emails_admin_when_failed(): void
+    {
+        Mail::fake();
+
+        [$grade, $syllabusChapter, $admin] = $this->seedClassNineChapterEight();
+
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Manjari Part I',
+            'code' => 'iemh1',
+            'created_by' => $admin->id,
+        ]);
+
+        $chapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => $syllabusChapter->name,
+            'pdf_path' => 'textbooks/1/chapters/8/chapter.pdf',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->mock(\App\Services\TextbookChapterExtractionService::class, function ($mock): void {
+            $mock->shouldReceive('extract')->once()->andThrow(new \InvalidArgumentException('AI extraction failed.'));
+        });
+
+        (new ExtractTextbookChapterJob($chapter->id))->handle(app(\App\Services\TextbookChapterExtractionService::class));
+
+        Mail::assertSent(TextbookChapterExtractionFailed::class, fn (TextbookChapterExtractionFailed $mail) => $mail->hasTo($admin->email));
     }
 
     /**

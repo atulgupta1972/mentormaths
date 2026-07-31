@@ -69,6 +69,11 @@ class TextbookChapter extends Model
         return $this->belongsTo(User::class, 'published_by');
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function pdfUrl(): ?string
     {
         return $this->pdf_path
