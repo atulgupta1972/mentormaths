@@ -126,6 +126,7 @@ class TextbookController extends Controller
         ]);
 
         $syllabusChapter = SyllabusChapter::query()->findOrFail($validated['syllabus_chapter_id']);
+        $chapterNumber = $syllabusChapter->numericChapterNumber();
 
         $textbook = Textbook::query()->firstOrCreate(
             [
@@ -153,13 +154,13 @@ class TextbookController extends Controller
                 ->with('error', 'This chapter is already uploaded for this book. Open it to re-extract or publish.');
         }
 
-        $directory = 'textbooks/'.$textbook->id.'/chapters/'.$syllabusChapter->chapter_number;
+        $directory = 'textbooks/'.$textbook->id.'/chapters/'.$chapterNumber;
         $pdfPath = $request->file('pdf')->store($directory, 'public');
 
         $chapter = TextbookChapter::create([
             'textbook_id' => $textbook->id,
             'syllabus_chapter_id' => $syllabusChapter->id,
-            'chapter_number' => $syllabusChapter->chapter_number,
+            'chapter_number' => $chapterNumber,
             'title' => $syllabusChapter->name,
             'pdf_path' => $pdfPath,
             'status' => TextbookChapter::STATUS_DRAFT,
@@ -270,12 +271,14 @@ class TextbookController extends Controller
     private static function chapterLabel(SyllabusChapter $chapter): string
     {
         $name = trim($chapter->name);
-        $prefix = 'Ch '.ltrim((string) $chapter->chapter_number, '0');
 
         if (preg_match('/^Ch\s*\d+/i', $name)) {
             return $name;
         }
 
-        return "{$prefix} — {$name}";
+        $number = preg_replace('/^Ch\s*/i', '', trim((string) $chapter->chapter_number));
+        $number = ltrim($number, '0') ?: $number;
+
+        return "Ch {$number} — {$name}";
     }
 }

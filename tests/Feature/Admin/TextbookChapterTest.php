@@ -140,7 +140,7 @@ class TextbookChapterTest extends TestCase
         $chapter = SyllabusChapter::query()->create([
             'syllabus_version_id' => $syllabus->id,
             'name' => 'Sequences and Progressions',
-            'chapter_number' => 8,
+            'chapter_number' => 'Ch 8',
             'sort_order' => 8,
         ]);
 

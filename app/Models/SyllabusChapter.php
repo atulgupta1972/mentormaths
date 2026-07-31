@@ -45,4 +45,15 @@ class SyllabusChapter extends Model
         return $this->belongsToMany(ExamPlan::class, 'exam_plan_chapters')
             ->withTimestamps();
     }
+
+    public function numericChapterNumber(): int
+    {
+        $raw = trim((string) $this->chapter_number);
+
+        if (preg_match('/(\d+)/', $raw, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return (int) ($this->sort_order ?: 0);
+    }
 }
