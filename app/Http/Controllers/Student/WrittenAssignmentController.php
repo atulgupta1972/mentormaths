@@ -62,6 +62,11 @@ class WrittenAssignmentController extends Controller
         $validated = $request->validate([
             'files' => ['required', 'array', 'min:1', WrittenSubmissionLimits::maxFilesRule()],
             'files.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', WrittenSubmissionLimits::maxFileSizeRule()],
+        ], [
+            'files.required' => 'Choose at least one photo or PDF.',
+            'files.max' => 'Upload up to '.WrittenSubmissionLimits::MAX_FILES.' files at once.',
+            'files.*.max' => 'Each file must be under '.(WrittenSubmissionLimits::MAX_FILE_KB / 1024).' MB.',
+            'files.*.mimes' => 'Only JPG, PNG, WEBP, or PDF files are allowed.',
         ]);
 
         $wasRevision = WrittenSubmission::query()

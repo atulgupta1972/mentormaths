@@ -72,6 +72,24 @@ const revisionForm = useForm({ files: [], skip_ai: false });
 const revisionFileInput = ref(null);
 const revisionSelectedFiles = ref([]);
 const revisionUploadError = ref('');
+const revisionUploading = ref(false);
+
+const findAssignmentRow = (assignmentId) =>
+    props.assignments.find((item) => item.assignment_id === assignmentId)
+    || (props.studentProgress?.assignment_id === assignmentId ? props.studentProgress : null);
+
+const reloadAssignmentRow = (assignmentId) => {
+    router.reload({
+        only: ['assignments', 'studentProgress'],
+        preserveScroll: true,
+        onFinish: () => {
+            const row = findAssignmentRow(assignmentId);
+            if (row) {
+                openGrade(row);
+            }
+        },
+    });
+};
 
 const handwritingOptions = [
     { value: 'very_good', label: 'Very good' },
@@ -234,37 +252,48 @@ const onRevisionFilesChange = (event) => {
 };
 
 const submitRevisionUpload = (assignmentId) => {
-    if (!assignmentId || !revisionSelectedFiles.value.length) {
+    const inputFiles = revisionFileInput.value?.files;
+    const files = inputFiles?.length ? [...inputFiles] : revisionSelectedFiles.value;
+
+    if (!assignmentId || !files.length) {
+        revisionUploadError.value = 'Choose at least one photo or PDF.';
+
         return;
     }
 
-    if (revisionSelectedFiles.value.length > props.uploadLimits.max_files) {
-        revisionUploadError.value = `Upload up to ${props.uploadLimits.max_files} photos or PDFs at once.`;
+    if (files.length > props.uploadLimits.max_files) {
+        revisionUploadError.value = `Upload up to ${props.uploadLimits.max_files} photos or PDFs at once. You chose ${files.length}.`;
 
         return;
     }
 
     revisionUploadError.value = '';
-    revisionForm.post(route('admin.written-assignments.upload-work', assignmentId), {
-        preserveScroll: true,
+    revisionUploading.value = true;
+
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files[]', file));
+    if (revisionForm.skip_ai) {
+        formData.append('skip_ai', '1');
+    }
+
+    router.post(route('admin.written-assignments.upload-work', assignmentId), formData, {
         forceFormData: true,
-        onError: () => {
-            revisionUploadError.value = revisionForm.errors.files
-                || revisionForm.errors['files.0']
-                || 'Upload failed. Check file count and size, then try again.';
+        preserveScroll: true,
+        onFinish: () => {
+            revisionUploading.value = false;
         },
         onSuccess: () => {
             revisionSelectedFiles.value = [];
-            revisionForm.reset();
+            revisionForm.skip_ai = false;
             if (revisionFileInput.value) {
                 revisionFileInput.value.value = '';
             }
-            // Keep marks panel open so teacher can tick/save again on the revised sheet.
-            const row = props.assignments.find((item) => item.assignment_id === assignmentId)
-                || (props.studentProgress?.assignment_id === assignmentId ? props.studentProgress : null);
-            if (row) {
-                openGrade(row);
-            }
+            reloadAssignmentRow(assignmentId);
+        },
+        onError: (errors) => {
+            revisionUploadError.value = errors.files
+                || errors['files.0']
+                || 'Upload failed. If you chose many pages, try again after deploy — or tick Skip AI and save.';
         },
     });
 };
@@ -1218,11 +1247,17 @@ const progressLabel = (p) => {
                                                         <SecondaryButton
                                                             type="button"
                                                             class="mt-2 !py-1 !text-xs"
-                                                            :disabled="revisionForm.processing || !revisionSelectedFiles.length"
+                                                            :disabled="revisionUploading || !revisionSelectedFiles.length"
                                                             @click="submitRevisionUpload(row.assignment_id)"
                                                         >
-                                                            {{ revisionForm.processing ? 'Uploading…' : 'Save upload' }}
+                                                            {{ revisionUploading ? 'Uploading…' : 'Save upload' }}
                                                         </SecondaryButton>
+                                                        <p v-if="page.props.flash?.success && gradingAssignmentId === row.assignment_id" class="mt-2 text-xs text-green-800">
+                                                            {{ page.props.flash.success }}
+                                                        </p>
+                                                        <p v-if="page.props.flash?.error && gradingAssignmentId === row.assignment_id" class="mt-2 text-xs text-rose-700">
+                                                            {{ page.props.flash.error }}
+                                                        </p>
                                                     </div>
 
                                                     <p class="text-xs text-indigo-900">

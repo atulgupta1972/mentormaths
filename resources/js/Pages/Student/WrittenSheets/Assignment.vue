@@ -19,6 +19,7 @@ const page = usePage();
 const fileInput = ref(null);
 const selectedFiles = ref([]);
 const uploadError = ref('');
+const uploadSubmitting = ref(false);
 
 const uploadForm = useForm({
     files: [],
@@ -45,20 +46,44 @@ const onFilesChange = (event) => {
 };
 
 const submitUpload = () => {
-    if (selectedFiles.value.length > props.upload_limits.max_files) {
-        uploadError.value = `Upload up to ${props.upload_limits.max_files} photos or PDFs at once.`;
+    const inputFiles = fileInput.value?.files;
+    const files = inputFiles?.length ? [...inputFiles] : selectedFiles.value;
+
+    if (!files.length) {
+        uploadError.value = 'Choose at least one photo or PDF.';
 
         return;
     }
 
-    uploadForm.post(route('student.written-assignments.upload', props.assignment.id), {
+    if (files.length > props.upload_limits.max_files) {
+        uploadError.value = `Upload up to ${props.upload_limits.max_files} photos or PDFs at once. You chose ${files.length}.`;
+
+        return;
+    }
+
+    uploadError.value = '';
+    uploadSubmitting.value = true;
+
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files[]', file));
+
+    router.post(route('student.written-assignments.upload', props.assignment.id), formData, {
         preserveScroll: true,
         forceFormData: true,
+        onFinish: () => {
+            uploadSubmitting.value = false;
+        },
         onSuccess: () => {
             selectedFiles.value = [];
             if (fileInput.value) {
                 fileInput.value.value = '';
             }
+            router.reload({ only: ['assignment'], preserveScroll: true });
+        },
+        onError: (errors) => {
+            uploadError.value = errors.files
+                || errors['files.0']
+                || 'Upload failed. Try fewer or smaller photos.';
         },
     });
 };
@@ -278,12 +303,12 @@ onBeforeUnmount(() => {
                     <InputError :message="uploadForm.errors['files.0']" class="mt-2" />
                     <PrimaryButton
                         class="mt-4"
-                        :disabled="uploadForm.processing || !selectedFiles.length || submission?.status === 'processing'"
+                        :disabled="uploadSubmitting || !selectedFiles.length || submission?.status === 'processing'"
                         @click="submitUpload"
                     >
-                        {{ uploadForm.processing
+                        {{ uploadSubmitting
                             ? 'Uploading…'
-                            : (isRevision ? 'Save revised upload for AI check' : 'Upload for AI check') }}
+                            : (isRevision ? 'Save revised upload for checking' : 'Upload for checking') }}
                     </PrimaryButton>
                 </div>
 
