@@ -27,6 +27,7 @@ use App\Support\WrittenSheetStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -184,18 +185,22 @@ class QuestionHubController extends Controller
 
         $codeService = app(PracticeSetCodeService::class);
         $browseOnly = ! $request->user()?->isAdmin();
+        $supportsSetCodes = $this->chapterSupportsSetCodes($chapter);
+        $supportsDeliveryMode = Schema::hasColumn('worksheets', 'delivery_mode');
+        $supportsPurpose = Schema::hasColumn('worksheets', 'purpose');
+        $supportsBankPurpose = Schema::hasColumn('questions', 'bank_purpose');
 
         $unpackagedChapterTestIds = Question::query()
             ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
             ->whereDoesntHave('worksheets')
-            ->where(fn (Builder $q) => $q
+            ->when($supportsBankPurpose, fn (Builder $q) => $q->where(fn (Builder $inner) => $inner
                 ->where('bank_purpose', QuestionBankPurpose::CHAPTER_TEST)
-                ->orWhereNull('bank_purpose'))
+                ->orWhereNull('bank_purpose')))
             ->pluck('id');
 
         $unpackagedPracticeSetIds = Question::query()
             ->whereHas('topic', fn ($q) => $q->where('syllabus_chapter_id', $chapter->id))
-            ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+            ->when($supportsBankPurpose, fn (Builder $q) => $q->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET))
             ->whereDoesntHave('worksheets')
             ->pluck('id');
 
@@ -221,44 +226,48 @@ class QuestionHubController extends Controller
         $topicModels = $chapter->topics()
             ->withCount('questions')
             ->with(['practiceSets' => fn ($q) => $q
-                ->where(function (Builder $inner) {
-                    $inner->whereNull('purpose')
+                ->when($supportsPurpose, fn (Builder $inner) => $inner->where(function (Builder $query) {
+                    $query->whereNull('purpose')
                         ->orWhere('purpose', WorksheetPurpose::STANDARD);
-                })
-                ->where(function (Builder $inner) {
-                    $inner->whereNull('delivery_mode')
+                }))
+                ->when($supportsDeliveryMode, fn (Builder $inner) => $inner->where(function (Builder $query) {
+                    $query->whereNull('delivery_mode')
                         ->orWhere('delivery_mode', WorksheetDeliveryMode::ONLINE);
-                })
+                }))
                 ->when($browseOnly, fn ($inner) => $inner->where('status', Worksheet::STATUS_PUBLISHED))
                 ->withCount('questions')
                 ->orderBy('set_number')])
             ->orderBy('sort_order')
             ->get();
 
-        $formulaSets = Worksheet::query()
-            ->where('purpose', WorksheetPurpose::FORMULA)
-            ->where('scope', PracticeSetScope::TOPIC)
-            ->whereHas('topic', fn (Builder $q) => $q->where('syllabus_chapter_id', $chapter->id))
-            ->with('topic:id,name')
-            ->withCount('questions')
-            ->orderBy('set_number')
-            ->get()
-            ->map(fn (Worksheet $set) => [
-                'id' => $set->id,
-                'set_code' => $set->set_code,
-                'set_number' => $set->set_number,
-                'topic_id' => $set->syllabus_topic_id,
-                'topic_name' => $set->topic?->name,
-                'questions_count' => $set->questions_count,
-                'status' => $set->status,
-            ])
-            ->values()
-            ->all();
+        $formulaSets = $supportsPurpose
+            ? Worksheet::query()
+                ->where('purpose', WorksheetPurpose::FORMULA)
+                ->where('scope', PracticeSetScope::TOPIC)
+                ->whereHas('topic', fn (Builder $q) => $q->where('syllabus_chapter_id', $chapter->id))
+                ->with('topic:id,name')
+                ->withCount('questions')
+                ->orderBy('set_number')
+                ->get()
+                ->map(fn (Worksheet $set) => [
+                    'id' => $set->id,
+                    'set_code' => $set->set_code,
+                    'set_number' => $set->set_number,
+                    'topic_id' => $set->syllabus_topic_id,
+                    'topic_name' => $set->topic?->name,
+                    'questions_count' => $set->questions_count,
+                    'status' => $set->status,
+                ])
+                ->values()
+                ->all()
+            : [];
 
-        $formulasCount = Question::query()
-            ->whereHas('topic', fn (Builder $q) => $q->where('syllabus_chapter_id', $chapter->id))
-            ->where('bank_purpose', QuestionBankPurpose::FORMULA)
-            ->count();
+        $formulasCount = $supportsBankPurpose
+            ? Question::query()
+                ->whereHas('topic', fn (Builder $q) => $q->where('syllabus_chapter_id', $chapter->id))
+                ->where('bank_purpose', QuestionBankPurpose::FORMULA)
+                ->count()
+            : 0;
 
         $setCards = collect();
 
@@ -277,11 +286,11 @@ class QuestionHubController extends Controller
                 ]);
             }
 
-            if (! $hasChapterPracticeBank) {
+            if (! $hasChapterPracticeBank && $supportsSetCodes) {
                 foreach ([false, true] as $fillInBlank) {
                     $unpackagedIds = Question::query()
                         ->where('syllabus_topic_id', $topic->id)
-                        ->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET)
+                        ->when($supportsBankPurpose, fn (Builder $q) => $q->where('bank_purpose', QuestionBankPurpose::PRACTICE_SET))
                         ->where('type', $fillInBlank ? Question::TYPE_FILL_IN_BLANK : Question::TYPE_MCQ)
                         ->whereDoesntHave('worksheets')
                         ->pluck('id')
@@ -306,7 +315,7 @@ class QuestionHubController extends Controller
             }
         }
 
-        if ($hasChapterPracticeBank) {
+        if ($hasChapterPracticeBank && $supportsSetCodes) {
             foreach ([false, true] as $fillInBlank) {
                 $typedIds = Question::query()
                     ->whereIn('id', $unpackagedPracticeSetIds)
@@ -340,7 +349,7 @@ class QuestionHubController extends Controller
             }
         }
 
-        if ($unpackagedChapterTestIds->count() > 0) {
+        if ($unpackagedChapterTestIds->count() > 0 && $supportsSetCodes) {
             $topicsWithUnpackaged = Question::query()
                 ->whereIn('id', $unpackagedChapterTestIds)
                 ->distinct()
@@ -357,27 +366,29 @@ class QuestionHubController extends Controller
             ]);
         }
 
-        $writtenSheets = Worksheet::query()
-            ->where('delivery_mode', WorksheetDeliveryMode::WRITTEN)
-            ->where(function (Builder $query) use ($chapter) {
-                $query->where('syllabus_chapter_id', $chapter->id)
-                    ->orWhereHas('topic', fn (Builder $inner) => $inner->where('syllabus_chapter_id', $chapter->id));
-            })
-            ->with('topic:id,name')
-            ->withCount('questions')
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (Worksheet $sheet) => [
-                'id' => $sheet->id,
-                'set_code' => $sheet->set_code,
-                'kind_label' => $sheet->isChapterTest() ? 'Test' : 'Practice',
-                'topic_name' => $sheet->topic?->name,
-                'questions_count' => $sheet->questions_count,
-                'written_status' => $sheet->written_status,
-                'written_status_label' => WrittenSheetStatus::label($sheet->written_status ?? WrittenSheetStatus::DRAFT),
-            ])
-            ->values()
-            ->all();
+        $writtenSheets = $supportsDeliveryMode
+            ? Worksheet::query()
+                ->where('delivery_mode', WorksheetDeliveryMode::WRITTEN)
+                ->where(function (Builder $query) use ($chapter) {
+                    $query->where('syllabus_chapter_id', $chapter->id)
+                        ->orWhereHas('topic', fn (Builder $inner) => $inner->where('syllabus_chapter_id', $chapter->id));
+                })
+                ->with('topic:id,name')
+                ->withCount('questions')
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn (Worksheet $sheet) => [
+                    'id' => $sheet->id,
+                    'set_code' => $sheet->set_code,
+                    'kind_label' => $sheet->isChapterTest() ? 'Test' : 'Practice',
+                    'topic_name' => $sheet->topic?->name,
+                    'questions_count' => $sheet->questions_count,
+                    'written_status' => $sheet->written_status,
+                    'written_status_label' => WrittenSheetStatus::label($sheet->written_status ?? WrittenSheetStatus::DRAFT),
+                ])
+                ->values()
+                ->all()
+            : [];
 
         return Inertia::render('Admin/Questions/Hub/Topics', [
             'chapter' => [
@@ -515,6 +526,13 @@ class QuestionHubController extends Controller
                 : null,
             'assignmentPanel' => $assignmentPanel,
         ]);
+    }
+
+    private function chapterSupportsSetCodes(SyllabusChapter $chapter): bool
+    {
+        $chapter->loadMissing('syllabusVersion.gradeLevel');
+
+        return (bool) $chapter->syllabusVersion?->gradeLevel;
     }
 
     private function classCardForBoard(
