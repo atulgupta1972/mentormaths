@@ -104,14 +104,16 @@ Rules:
 - For diagram/geometry questions, describe the figure fully in "question" and/or "chart"
 
 Charts and tables (critical — must be flawless):
-- If a question depends on a chart, graph, pictograph, bar graph, pie chart, or line graph, copy ALL data the student needs:
-  title, axes/units, scale, category labels, and every visible value
-- Put chart data in "chart" (plain-text description) and/or embed the key values in "question"
-- If a question depends on a table, include the FULL table — every column header and row, exact numbers:
-  use "table" as markdown (| col | col |) OR {"headers": ["Col1","Col2"], "rows": [["a","1"], ["b","2"]]}
-- NEVER write "see the table above", "refer to the chart", or "from the graph shown" without copying the data
-- Each question must be fully solvable from JSON alone — as if the student never saw the PDF
-- Double-check table/chart numbers against the PDF; do not round or omit rows
+- This import is TEXT ONLY — no image upload on the textbook page. Do not use chart_file or diagram_file here.
+- Charts/graphs: flatten ALL data into plain English in "chart" (and/or "question"). Example:
+  "Bar chart 'Books sold' (y-axis: number of books, 1 unit = 10 books). Jan: 30, Feb: 50, Mar: 40."
+  Do NOT put a grid inside "chart" — use sentences or comma-separated label: value pairs.
+  Include title, axis labels, scale/units, and every category value. Never say "see graph above".
+- Tables: use structured {"headers": [...], "rows": [[...]]} or a simple markdown table string in "table".
+  Include every column header and row with exact numbers. Never say "see the table above".
+- Each question must be fully solvable from JSON alone — as if the student never saw the PDF.
+- Double-check table/chart numbers against the PDF; do not round or omit rows.
+- For geometry figures that need a drawn diagram (angles, shapes), describe in text here OR import those separately via Question bank zip (diagram_file).
 
 After import, the admin splits questions into class sets on the review page.
 
