@@ -26,9 +26,11 @@ class TextbookChapter extends Model
         'pdf_path',
         'status',
         'extraction_items',
+        'mcq_set_plan',
         'extraction_error',
         'extracted_at',
         'mcq_worksheet_id',
+        'mcq_worksheet_ids',
         'written_worksheet_id',
         'published_at',
         'published_by',
@@ -39,6 +41,8 @@ class TextbookChapter extends Model
     {
         return [
             'extraction_items' => 'array',
+            'mcq_set_plan' => 'array',
+            'mcq_worksheet_ids' => 'array',
             'extracted_at' => 'datetime',
             'published_at' => 'datetime',
         ];
@@ -57,6 +61,23 @@ class TextbookChapter extends Model
     public function mcqWorksheet(): BelongsTo
     {
         return $this->belongsTo(Worksheet::class, 'mcq_worksheet_id');
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function mcqWorksheetIds(): array
+    {
+        $ids = array_values(array_filter(
+            $this->mcq_worksheet_ids ?? [],
+            fn ($id) => is_numeric($id),
+        ));
+
+        if ($ids !== []) {
+            return array_map('intval', $ids);
+        }
+
+        return $this->mcq_worksheet_id ? [(int) $this->mcq_worksheet_id] : [];
     }
 
     public function writtenWorksheet(): BelongsTo

@@ -83,6 +83,139 @@ class TextbookChapterTest extends TestCase
         $mcq = Worksheet::query()->findOrFail($textbookChapter->mcq_worksheet_id);
         $this->assertSame('C9-GP-CH08-M', $mcq->set_code);
         $this->assertSame(1, $mcq->questions()->count());
+        $this->assertSame([$mcq->id], $textbookChapter->mcq_worksheet_ids);
+    }
+
+    public function test_publish_splits_mcq_chapter_using_custom_set_plan(): void
+    {
+        Storage::fake('public');
+
+        [$grade, $syllabusChapter, $admin] = $this->seedClassNineChapterEight();
+
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'GP',
+            'created_by' => $admin->id,
+        ]);
+
+        $items = [];
+        for ($i = 1; $i <= 70; $i++) {
+            $items[] = [
+                'id' => "mcq-{$i}",
+                'kind' => 'exercise',
+                'label' => "Q{$i}",
+                'question_text' => "Question {$i}?",
+                'correct_answer' => (string) $i,
+                'approved' => true,
+                'include_in_mcq' => true,
+                'include_in_written' => false,
+                'mcq_options' => [
+                    ['text' => (string) $i, 'is_correct' => true],
+                    ['text' => '0', 'is_correct' => false],
+                    ['text' => '1', 'is_correct' => false],
+                    ['text' => '2', 'is_correct' => false],
+                ],
+            ];
+        }
+
+        $setPlan = [
+            ['set_code' => 'C9-GP-CH08-M1', 'q_from' => 1, 'q_to' => 15, 'description' => 'AP'],
+            ['set_code' => 'C9-GP-CH08-M2', 'q_from' => 16, 'q_to' => 36, 'description' => 'AP'],
+            ['set_code' => 'C9-GP-CH08-M3', 'q_from' => 37, 'q_to' => 70, 'description' => 'GP'],
+        ];
+
+        $textbookChapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => $syllabusChapter->name,
+            'pdf_path' => 'textbooks/1/chapters/8/chapter.pdf',
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'extraction_items' => $items,
+            'mcq_set_plan' => $setPlan,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.publish', $textbookChapter), [
+                'items' => $items,
+                'mcq_set_plan' => $setPlan,
+            ])
+            ->assertRedirect();
+
+        $textbookChapter->refresh();
+
+        $this->assertSame(TextbookChapter::STATUS_PUBLISHED, $textbookChapter->status);
+        $this->assertCount(3, $textbookChapter->mcq_worksheet_ids);
+
+        $worksheets = Worksheet::query()
+            ->whereIn('id', $textbookChapter->mcq_worksheet_ids)
+            ->orderBy('set_number')
+            ->get();
+
+        $this->assertSame(
+            ['C9-GP-CH08-M1', 'C9-GP-CH08-M2', 'C9-GP-CH08-M3'],
+            $worksheets->pluck('set_code')->all(),
+        );
+        $this->assertSame([15, 21, 34], $worksheets->map(fn (Worksheet $ws) => $ws->questions()->count())->all());
+        $this->assertSame('Sequences and Progressions — Textbook MCQ — AP', $worksheets->first()->title);
+        $this->assertSame('Sequences and Progressions — Textbook MCQ — GP', $worksheets->last()->title);
+    }
+
+    public function test_import_mcq_json_defaults_to_single_set_plan(): void
+    {
+        Storage::fake('public');
+
+        [$grade, $syllabusChapter, $admin] = $this->seedClassNineChapterEight();
+
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'GP',
+            'created_by' => $admin->id,
+        ]);
+
+        $textbookChapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => $syllabusChapter->name,
+            'pdf_path' => 'textbooks/1/chapters/8/chapter.pdf',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $questions = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $questions[] = [
+                'topic' => 'AP',
+                'question' => "Question {$i}?",
+                'options' => ['1', '2', '3', '4'],
+                'correct_index' => 0,
+                'explanation' => 'Because',
+                'difficulty' => 'Easy',
+            ];
+        }
+
+        $json = json_encode([
+            'questions' => $questions,
+            'set_plan' => [
+                ['set_code' => 'C9-GP-CH08-M1', 'q_from' => 1, 'q_to' => 3, 'description' => 'AP'],
+                ['set_code' => 'C9-GP-CH08-M2', 'q_from' => 4, 'q_to' => 5, 'description' => 'GP'],
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.import-mcq', $textbookChapter), ['json' => $json])
+            ->assertRedirect();
+
+        $textbookChapter->refresh();
+
+        $this->assertCount(5, $textbookChapter->extraction_items);
+        $this->assertSame([
+            ['set_code' => 'C9-GP-CH08-M', 'q_from' => 1, 'q_to' => 5, 'description' => ''],
+        ], $textbookChapter->mcq_set_plan);
     }
 
     public function test_admin_can_view_textbook_chapter_show_page(): void

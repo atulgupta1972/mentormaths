@@ -78,9 +78,12 @@ const page = usePage();
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 text-xs text-gray-600">
-                                    <div v-if="row.mcq_set_code">MCQ: {{ row.mcq_set_code }}</div>
+                                    <div v-if="row.mcq_set_codes?.length">
+                                        MCQ: {{ row.mcq_set_codes.join(', ') }}
+                                    </div>
+                                    <div v-else-if="row.mcq_set_code">MCQ: {{ row.mcq_set_code }}</div>
                                     <div v-if="row.written_set_code">Written: {{ row.written_set_code }}</div>
-                                    <span v-if="!row.mcq_set_code && !row.written_set_code">—</span>
+                                    <span v-if="!row.mcq_set_code && !row.mcq_set_codes?.length && !row.written_set_code">—</span>
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     <Link :href="route('admin.textbooks.show', row.id)" class="text-indigo-600 hover:underline">

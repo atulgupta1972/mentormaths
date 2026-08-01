@@ -24,12 +24,14 @@ class TextbookChapterPublishService
     public function __construct(
         private WrittenSheetService $writtenSheetService,
         private TextbookSetCodeService $setCodeService,
+        private TextbookMcqSetPlanService $setPlanService,
     ) {}
 
     /**
      * @param  list<array<string, mixed>>  $items
+     * @param  list<array<string, mixed>>|null  $setPlan
      */
-    public function publish(TextbookChapter $chapter, array $items, User $publisher): TextbookChapter
+    public function publish(TextbookChapter $chapter, array $items, User $publisher, ?array $setPlan = null): TextbookChapter
     {
         $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.gradeLevel']);
 
@@ -47,85 +49,64 @@ class TextbookChapterPublishService
         }
 
         $topic = $this->textbookTopic($syllabusChapter);
-        $codes = $this->setCodeService->codes($chapter);
-        $mcqCode = $codes['mcq'];
-        $writtenCode = $codes['written'];
+        $writtenCode = $this->setCodeService->codes($chapter)['written'];
+        $questionCount = count($items);
+        $resolvedPlan = $this->setPlanService->normalizePlanRows(
+            $setPlan ?? $chapter->mcq_set_plan ?? [],
+            $chapter,
+            $questionCount,
+        );
 
-        return DB::transaction(function () use ($chapter, $approved, $publisher, $topic, $syllabusChapter, $mcqCode, $writtenCode) {
-            if ($chapter->mcq_worksheet_id) {
-                $chapter->mcqWorksheet?->questions()->detach();
-                $chapter->mcqWorksheet?->delete();
-            }
+        return DB::transaction(function () use ($chapter, $items, $publisher, $topic, $syllabusChapter, $writtenCode, $resolvedPlan) {
+            $this->deleteExistingMcqWorksheets($chapter);
+
             if ($chapter->written_worksheet_id) {
                 $chapter->writtenWorksheet?->questions()->detach();
                 $chapter->writtenWorksheet?->delete();
             }
 
-            $mcqQuestions = [];
             $writtenQuestions = [];
-            $sort = 0;
+            $mcqQuestionsByPosition = [];
+            $approvedItems = [];
 
-            foreach ($approved as $item) {
-                $sort++;
+            foreach ($items as $index => $item) {
+                $position = $index + 1;
+                $isApproved = ($item['approved'] ?? true) && trim((string) ($item['question_text'] ?? '')) !== '';
+
+                if (! $isApproved) {
+                    continue;
+                }
+
+                $approvedItems[] = $item;
 
                 if ($item['include_in_written'] ?? true) {
-                    $writtenQuestions[] = $this->createWrittenQuestion($topic, $item, $publisher->id, $sort);
+                    $writtenQuestions[] = $this->createWrittenQuestion($topic, $item, $publisher->id, $position);
                 }
 
                 if ($item['include_in_mcq'] ?? true) {
-                    $mcqQuestions[] = $this->createMcqQuestion($topic, $item, $publisher->id, $sort);
+                    $mcqQuestionsByPosition[$position] = $this->createMcqQuestion($topic, $item, $publisher->id, $position);
                 }
             }
 
-            $mcqWorksheet = null;
-            $writtenWorksheet = null;
-
-            if ($mcqQuestions !== []) {
-                $mcqWorksheet = Worksheet::create([
-                    'title' => "{$chapter->title} — Textbook MCQ",
-                    'set_number' => 1,
-                    'set_code' => $mcqCode,
-                    'tier' => PracticeSetTier::STARTER,
-                    'scope' => PracticeSetScope::CHAPTER,
-                    'syllabus_chapter_id' => $syllabusChapter->id,
-                    'status' => Worksheet::STATUS_PUBLISHED,
-                    'delivery_mode' => WorksheetDeliveryMode::ONLINE,
-                    'created_by' => $publisher->id,
-                ]);
-
-                foreach ($mcqQuestions as $index => $question) {
-                    $mcqWorksheet->questions()->attach($question->id, ['sort_order' => $index + 1]);
-                }
+            if ($approvedItems === []) {
+                throw new InvalidArgumentException('Approve at least one question before publishing.');
             }
 
-            if ($writtenQuestions !== []) {
-                $writtenWorksheet = Worksheet::create([
-                    'title' => "{$chapter->title} — Textbook written",
-                    'set_number' => 1,
-                    'set_code' => $writtenCode,
-                    'tier' => PracticeSetTier::STARTER,
-                    'scope' => PracticeSetScope::CHAPTER,
-                    'syllabus_chapter_id' => $syllabusChapter->id,
-                    'status' => Worksheet::STATUS_PUBLISHED,
-                    'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
-                    'written_status' => WrittenSheetStatus::VERIFIED,
-                    'written_pdf_path' => $chapter->pdf_path,
-                    'written_verified_at' => now(),
-                    'written_verified_by' => $publisher->id,
-                    'created_by' => $publisher->id,
-                ]);
-
-                foreach ($writtenQuestions as $index => $question) {
-                    $writtenWorksheet->questions()->attach($question->id, ['sort_order' => $index + 1]);
-                }
-
-                $this->writtenSheetService->generatePdf($writtenWorksheet->fresh(['questions.blankAnswer', 'questions.options']));
-            }
+            $mcqWorksheetIds = $this->createMcqWorksheets($chapter, $syllabusChapter, $publisher, $mcqQuestionsByPosition, $resolvedPlan);
+            $writtenWorksheet = $this->createWrittenWorksheet(
+                $chapter,
+                $syllabusChapter,
+                $publisher,
+                $writtenQuestions,
+                $writtenCode,
+            );
 
             $chapter->update([
-                'extraction_items' => $approved->values()->all(),
+                'extraction_items' => $items,
+                'mcq_set_plan' => $resolvedPlan,
                 'status' => TextbookChapter::STATUS_PUBLISHED,
-                'mcq_worksheet_id' => $mcqWorksheet?->id,
+                'mcq_worksheet_id' => $mcqWorksheetIds[0] ?? null,
+                'mcq_worksheet_ids' => $mcqWorksheetIds !== [] ? $mcqWorksheetIds : null,
                 'written_worksheet_id' => $writtenWorksheet?->id,
                 'published_at' => now(),
                 'published_by' => $publisher->id,
@@ -134,6 +115,110 @@ class TextbookChapterPublishService
 
             return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet']);
         });
+    }
+
+    private function deleteExistingMcqWorksheets(TextbookChapter $chapter): void
+    {
+        foreach ($chapter->mcqWorksheetIds() as $worksheetId) {
+            $worksheet = Worksheet::query()->find($worksheetId);
+            $worksheet?->questions()->detach();
+            $worksheet?->delete();
+        }
+    }
+
+    /**
+     * @param  array<int, Question>  $mcqQuestionsByPosition
+     * @param  list<array{set_code: string, q_from: int, q_to: int, description: string}>  $setPlan
+     * @return list<int>
+     */
+    private function createMcqWorksheets(
+        TextbookChapter $chapter,
+        SyllabusChapter $syllabusChapter,
+        User $publisher,
+        array $mcqQuestionsByPosition,
+        array $setPlan,
+    ): array {
+        if ($mcqQuestionsByPosition === []) {
+            return [];
+        }
+
+        $worksheetIds = [];
+
+        foreach ($setPlan as $index => $row) {
+            $chunk = [];
+
+            for ($position = $row['q_from']; $position <= $row['q_to']; $position++) {
+                if (isset($mcqQuestionsByPosition[$position])) {
+                    $chunk[] = $mcqQuestionsByPosition[$position];
+                }
+            }
+
+            if ($chunk === []) {
+                throw new InvalidArgumentException("Set {$row['set_code']} has no approved MCQs in Q{$row['q_from']}–{$row['q_to']}.");
+            }
+
+            $description = trim((string) ($row['description'] ?? ''));
+            $titleSuffix = $description !== '' ? " — {$description}" : (count($setPlan) > 1 ? ' — Part '.($index + 1) : '');
+
+            $worksheet = Worksheet::create([
+                'title' => "{$chapter->title} — Textbook MCQ{$titleSuffix}",
+                'set_number' => $index + 1,
+                'set_code' => $row['set_code'],
+                'tier' => PracticeSetTier::STARTER,
+                'scope' => PracticeSetScope::CHAPTER,
+                'syllabus_chapter_id' => $syllabusChapter->id,
+                'status' => Worksheet::STATUS_PUBLISHED,
+                'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+                'created_by' => $publisher->id,
+            ]);
+
+            foreach ($chunk as $questionIndex => $question) {
+                $worksheet->questions()->attach($question->id, ['sort_order' => $questionIndex + 1]);
+            }
+
+            $worksheetIds[] = $worksheet->id;
+        }
+
+        return $worksheetIds;
+    }
+
+    /**
+     * @param  list<Question>  $writtenQuestions
+     */
+    private function createWrittenWorksheet(
+        TextbookChapter $chapter,
+        SyllabusChapter $syllabusChapter,
+        User $publisher,
+        array $writtenQuestions,
+        string $writtenCode,
+    ): ?Worksheet {
+        if ($writtenQuestions === []) {
+            return null;
+        }
+
+        $writtenWorksheet = Worksheet::create([
+            'title' => "{$chapter->title} — Textbook written",
+            'set_number' => 1,
+            'set_code' => $writtenCode,
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'written_status' => WrittenSheetStatus::VERIFIED,
+            'written_pdf_path' => $chapter->pdf_path,
+            'written_verified_at' => now(),
+            'written_verified_by' => $publisher->id,
+            'created_by' => $publisher->id,
+        ]);
+
+        foreach ($writtenQuestions as $index => $question) {
+            $writtenWorksheet->questions()->attach($question->id, ['sort_order' => $index + 1]);
+        }
+
+        $this->writtenSheetService->generatePdf($writtenWorksheet->fresh(['questions.blankAnswer', 'questions.options']));
+
+        return $writtenWorksheet;
     }
 
     private function textbookTopic(SyllabusChapter $chapter): SyllabusTopic

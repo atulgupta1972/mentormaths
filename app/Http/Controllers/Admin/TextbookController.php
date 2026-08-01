@@ -8,10 +8,13 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
+use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\TextbookChapterMcqImportService;
 use App\Services\TextbookChapterMcqPromptService;
 use App\Services\TextbookChapterPublishService;
+use App\Services\TextbookMcqSetPlanService;
+use App\Services\TextbookSetCodeService;
 use App\Support\UploadedFileDiagnostics;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,6 +30,8 @@ class TextbookController extends Controller
         private TextbookChapterPublishService $publishService,
         private TextbookChapterMcqPromptService $mcqPromptService,
         private TextbookChapterMcqImportService $mcqImportService,
+        private TextbookSetCodeService $setCodeService,
+        private TextbookMcqSetPlanService $setPlanService,
     ) {}
 
     public function index(Request $request): Response
@@ -58,6 +63,7 @@ class TextbookController extends Controller
                 'status_label' => $chapter->statusLabel(),
                 'items_count' => count($chapter->extraction_items ?? []),
                 'mcq_set_code' => $chapter->mcqWorksheet?->set_code,
+                'mcq_set_codes' => $this->publishedMcqSetCodes($chapter),
                 'written_set_code' => $chapter->writtenWorksheet?->set_code,
                 'published_at' => $chapter->published_at?->toDateTimeString(),
             ])
@@ -185,6 +191,9 @@ class TextbookController extends Controller
         ]);
 
         $aiPrompt = $this->mcqPromptService->payload($textbookChapter);
+        $itemCount = count($textbookChapter->extraction_items ?? []);
+        $mcqSetPlan = $textbookChapter->mcq_set_plan
+            ?? ($itemCount > 0 ? $this->setPlanService->defaultPlan($textbookChapter, $itemCount) : []);
 
         return Inertia::render('Admin/Textbooks/Show', [
             'chapter' => [
@@ -203,9 +212,13 @@ class TextbookController extends Controller
                     'grade_name' => $textbookChapter->textbook?->gradeLevel?->name,
                 ],
                 'items' => $textbookChapter->extraction_items ?? [],
+                'mcq_set_plan' => $mcqSetPlan,
+                'mcq_set_plan_summary' => $this->setPlanService->summary($mcqSetPlan),
                 'mcq_worksheet_id' => $textbookChapter->mcq_worksheet_id,
+                'mcq_worksheet_ids' => $textbookChapter->mcqWorksheetIds(),
                 'written_worksheet_id' => $textbookChapter->written_worksheet_id,
                 'mcq_set_code' => $textbookChapter->mcqWorksheet?->set_code ?? $aiPrompt['mcq_set_code'],
+                'mcq_set_codes' => $this->publishedMcqSetCodes($textbookChapter),
                 'written_set_code' => $textbookChapter->writtenWorksheet?->set_code ?? $aiPrompt['written_set_code'],
             ],
             'mcqImport' => $aiPrompt,
@@ -228,7 +241,7 @@ class TextbookController extends Controller
 
         return redirect()
             ->route('admin.textbooks.show', $chapter)
-            ->with('success', "{$count} MCQ(s) imported. Review below, then publish as {$this->mcqPromptService->payload($chapter)['mcq_set_code']}.");
+            ->with('success', "{$count} MCQ(s) imported. Edit the set plan matrix below — small chapters: keep one row for all questions.");
     }
 
     public function updateDraft(Request $request, TextbookChapter $textbookChapter): RedirectResponse
@@ -241,10 +254,24 @@ class TextbookController extends Controller
 
         $validated = $request->validate([
             'items' => ['required', 'array', 'min:1'],
+            'mcq_set_plan' => ['nullable', 'array'],
         ]);
+
+        $itemCount = count($validated['items']);
+
+        try {
+            $setPlan = $this->setPlanService->normalizePlanRows(
+                $validated['mcq_set_plan'] ?? $textbookChapter->mcq_set_plan ?? [],
+                $textbookChapter,
+                $itemCount,
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         $textbookChapter->update([
             'extraction_items' => $validated['items'],
+            'mcq_set_plan' => $setPlan,
             'status' => TextbookChapter::STATUS_REVIEW,
         ]);
 
@@ -254,19 +281,29 @@ class TextbookController extends Controller
     public function publish(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
         $items = $textbookChapter->extraction_items ?? [];
+        $setPlan = $textbookChapter->mcq_set_plan;
 
         if ($request->has('items')) {
             $validated = $request->validate([
                 'items' => ['required', 'array', 'min:1'],
+                'mcq_set_plan' => ['nullable', 'array'],
             ]);
             $items = $validated['items'];
+            $setPlan = $validated['mcq_set_plan'] ?? $setPlan;
         }
 
-        $this->publishService->publish($textbookChapter, $items, $request->user());
+        try {
+            $this->publishService->publish($textbookChapter, $items, $request->user(), $setPlan);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $textbookChapter->refresh();
+        $summary = $this->setPlanService->summary($textbookChapter->mcq_set_plan ?? []);
 
         return redirect()
             ->route('admin.textbooks.show', $textbookChapter)
-            ->with('success', 'Published — MCQ and written sets are ready to assign.');
+            ->with('success', "Published — MCQ sets ready to assign: {$summary}.");
     }
 
     public function resetImport(TextbookChapter $textbookChapter): RedirectResponse
@@ -274,6 +311,7 @@ class TextbookController extends Controller
         $textbookChapter->update([
             'status' => TextbookChapter::STATUS_DRAFT,
             'extraction_items' => null,
+            'mcq_set_plan' => null,
             'extraction_error' => null,
             'extracted_at' => null,
         ]);
@@ -303,5 +341,28 @@ class TextbookController extends Controller
         $number = ltrim($number, '0') ?: $number;
 
         return "Ch {$number} — {$name}";
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function publishedMcqSetCodes(TextbookChapter $chapter): array
+    {
+        if ($chapter->status !== TextbookChapter::STATUS_PUBLISHED) {
+            return [];
+        }
+
+        $ids = $chapter->mcqWorksheetIds();
+        if ($ids === []) {
+            return [];
+        }
+
+        return Worksheet::query()
+            ->whereIn('id', $ids)
+            ->orderBy('set_number')
+            ->pluck('set_code')
+            ->filter()
+            ->values()
+            ->all();
     }
 }

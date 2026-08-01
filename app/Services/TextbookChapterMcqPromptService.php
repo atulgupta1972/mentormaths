@@ -47,7 +47,6 @@ Context:
 - Class: {$grade}
 - Book: {$book} (code {$bookCode})
 - Chapter {$chapterNum}: {$title}
-- Published set code will be: {$codes['mcq']}
 
 INCLUDE:
 - Worked examples ("Example 1", "Example 2", …)
@@ -77,13 +76,16 @@ Return ONLY valid JSON (no markdown fences) in this exact shape:
 }
 
 Rules:
+- Return questions only — do NOT include set_plan or grouping metadata
 - correct_index is 0-based (0 = first option)
 - Exactly 4 options per question when possible
 - Do not skip numbered exercises — extract ALL solvable items
 - Fix broken subscripts (t_n, u_n) in question text
 - For diagram questions, describe the figure in the question text
 
-Sample (one question):
+After import, the admin splits questions into class sets on the review page.
+
+Sample:
 {$sampleJson}
 PROMPT;
 

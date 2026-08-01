@@ -6,6 +6,8 @@ use App\Models\TextbookChapter;
 
 class TextbookSetCodeService
 {
+    public const MCQ_BATCH_SIZE = 20;
+
     /**
      * @return array{mcq: string, written: string}
      */
@@ -21,6 +23,77 @@ class TextbookSetCodeService
             'mcq' => "{$gradeCode}-{$bookCode}-CH{$chapterNum}-M",
             'written' => "{$gradeCode}-{$bookCode}-CH{$chapterNum}-W",
         ];
+    }
+
+    public function mcqPartCount(int $questionCount): int
+    {
+        if ($questionCount <= 0) {
+            return 0;
+        }
+
+        if ($questionCount <= self::MCQ_BATCH_SIZE) {
+            return 1;
+        }
+
+        return (int) ceil($questionCount / self::MCQ_BATCH_SIZE);
+    }
+
+    public function mcqPartCode(TextbookChapter $chapter, int $partNumber, int $totalParts): string
+    {
+        $base = $this->codes($chapter)['mcq'];
+
+        if ($totalParts <= 1) {
+            return $base;
+        }
+
+        return "{$base}{$partNumber}";
+    }
+
+    /**
+     * @return list<array{part: int, count: int, set_code: string, from: int, to: int}>
+     */
+    public function mcqPartPlan(TextbookChapter $chapter, int $questionCount): array
+    {
+        if ($questionCount <= 0) {
+            return [];
+        }
+
+        $totalParts = $this->mcqPartCount($questionCount);
+        $plan = [];
+        $from = 1;
+
+        for ($part = 1; $part <= $totalParts; $part++) {
+            $remaining = $questionCount - ($from - 1);
+            $count = min(self::MCQ_BATCH_SIZE, $remaining);
+            $plan[] = [
+                'part' => $part,
+                'count' => $count,
+                'set_code' => $this->mcqPartCode($chapter, $part, $totalParts),
+                'from' => $from,
+                'to' => $from + $count - 1,
+            ];
+            $from += $count;
+        }
+
+        return $plan;
+    }
+
+    public function mcqPartPlanSummary(TextbookChapter $chapter, int $questionCount): string
+    {
+        $plan = $this->mcqPartPlan($chapter, $questionCount);
+
+        if ($plan === []) {
+            return $this->codes($chapter)['mcq'];
+        }
+
+        if (count($plan) === 1) {
+            return $plan[0]['set_code'];
+        }
+
+        $counts = implode('+', array_column($plan, 'count'));
+        $codes = implode(', ', array_column($plan, 'set_code'));
+
+        return count($plan)." sets ({$counts}): {$codes}";
     }
 
     private function gradeCode(TextbookChapter $chapter): string
