@@ -21,6 +21,7 @@ use App\Services\WrittenSheetPdfImportService;
 use App\Services\WrittenSheetService;
 use App\Services\WrittenSheetAnswerKeyParser;
 use App\Services\WrittenSubmissionService;
+use App\Support\DiagramQuestionSupport;
 use App\Support\WrittenSubmissionLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;

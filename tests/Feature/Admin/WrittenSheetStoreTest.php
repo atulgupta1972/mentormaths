@@ -24,6 +24,21 @@ class WrittenSheetStoreTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_admin_can_open_written_sheet_create_page_for_chapter(): void
+    {
+        [$chapter, $topics, $admin] = $this->seedChapterWithTopics();
+
+        $this->actingAs($admin)
+            ->get(route('admin.written-sheets.create', ['chapter_id' => $chapter->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/WrittenSheets/Create')
+                ->where('filters.chapter_id', $chapter->id)
+                ->where('supportsDiagrams', false)
+                ->has('topics', 2)
+            );
+    }
+
     public function test_admin_can_create_written_sheet_from_manual_chapter_rows(): void
     {
         [$chapter, $topics, $admin] = $this->seedChapterWithTopics();
