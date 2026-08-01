@@ -27,7 +27,7 @@ class PracticeSetTopicController extends Controller
         $topic->load([
             'chapter.syllabusVersion.board',
             'chapter.syllabusVersion.gradeLevel',
-            'practiceSets' => fn ($q) => $q->withCount('questions'),
+            'practiceSets' => fn ($q) => $q->withCount('questions')->orderBy('set_number'),
         ]);
 
         $gradeLevel = $topic->chapter?->syllabusVersion?->gradeLevel;

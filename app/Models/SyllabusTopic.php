@@ -48,6 +48,6 @@ class SyllabusTopic extends Model
 
     public function practiceSets(): HasMany
     {
-        return $this->hasMany(Worksheet::class, 'syllabus_topic_id')->orderBy('set_number');
+        return $this->hasMany(Worksheet::class, 'syllabus_topic_id');
     }
 }
