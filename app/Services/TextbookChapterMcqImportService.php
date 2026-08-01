@@ -3,6 +3,10 @@
 namespace App\Services;
 
 use App\Models\TextbookChapter;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class TextbookChapterMcqImportService
@@ -10,6 +14,7 @@ class TextbookChapterMcqImportService
     public function __construct(
         private McqImportService $mcqImport,
         private TextbookMcqSetPlanService $setPlanService,
+        private QuestionZipImportService $zipImport,
     ) {}
 
     /**
@@ -52,6 +57,123 @@ class TextbookChapterMcqImportService
     }
 
     /**
+     * @return array{chapter: TextbookChapter, question_count: int, diagram_count: int}
+     */
+    public function importZip(TextbookChapter $chapter, UploadedFile $zip): array
+    {
+        $this->deleteStagingDiagrams($chapter);
+
+        $extracted = $this->zipImport->extract($zip);
+
+        try {
+            if ($extracted['type'] !== QuestionZipImportService::TYPE_MCQ) {
+                throw new InvalidArgumentException('Zip must contain MCQ questions (options + correct_index).');
+            }
+
+            $items = [];
+            $diagramCount = 0;
+
+            foreach ($extracted['items'] as $index => $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                $diagramSource = $extracted['diagram_paths'][$index] ?? null;
+                $diagramFile = trim((string) ($row['diagram_file'] ?? $row['chart_file'] ?? $row['diagram'] ?? ''));
+                $stagingPath = null;
+
+                if ($diagramSource && is_file($diagramSource)) {
+                    $stagingPath = $this->persistStagingDiagram($chapter, $diagramSource);
+                    $diagramCount++;
+                }
+
+                $normalized = $this->normalizeImportedRow($row, $index, $stagingPath, $diagramFile !== '' ? $diagramFile : null);
+                if (trim((string) ($normalized['question_text'] ?? '')) === '') {
+                    continue;
+                }
+
+                $items[] = $normalized;
+            }
+
+            if ($items === []) {
+                throw new InvalidArgumentException('Could not parse any questions from the zip JSON.');
+            }
+
+            $setPlan = $this->setPlanService->defaultPlan($chapter, count($items));
+
+            $chapter->update([
+                'extraction_items' => $items,
+                'mcq_set_plan' => $setPlan,
+                'status' => TextbookChapter::STATUS_REVIEW,
+                'extracted_at' => now(),
+                'extraction_error' => null,
+            ]);
+
+            return [
+                'chapter' => $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet']),
+                'question_count' => count($items),
+                'diagram_count' => $diagramCount,
+            ];
+        } finally {
+            if (is_dir($extracted['temp_dir'])) {
+                File::deleteDirectory($extracted['temp_dir']);
+            }
+        }
+    }
+
+    public function deleteStagingDiagrams(TextbookChapter $chapter): void
+    {
+        Storage::disk('public')->deleteDirectory($this->stagingDiagramDirectory($chapter));
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function itemsWithDiagramPreviewUrls(array $items): array
+    {
+        return collect($items)
+            ->map(function (array $item) {
+                $path = trim((string) ($item['diagram_staging_path'] ?? ''));
+                if ($path !== '' && Storage::disk('public')->exists($path)) {
+                    $item['diagram_preview_url'] = Storage::disk('public')->url($path);
+                }
+
+                return $item;
+            })
+            ->values()
+            ->all();
+    }
+
+    private function persistStagingDiagram(TextbookChapter $chapter, string $sourcePath): string
+    {
+        $directory = $this->stagingDiagramDirectory($chapter);
+        Storage::disk('public')->makeDirectory($directory);
+
+        $extension = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'png');
+        $destination = $directory.'/'.Str::uuid().'.'.$extension;
+
+        $contents = file_get_contents($sourcePath);
+        if ($contents === false) {
+            throw new InvalidArgumentException('Could not read diagram image from the zip file.');
+        }
+
+        Storage::disk('public')->put($destination, $contents);
+
+        return $destination;
+    }
+
+    private function stagingDiagramDirectory(TextbookChapter $chapter): string
+    {
+        $chapter->loadMissing('textbook');
+
+        return sprintf(
+            'textbooks/%d/chapters/%s/import-diagrams',
+            $chapter->textbook_id,
+            $chapter->chapter_number,
+        );
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return list<array<string, mixed>>
      */
@@ -91,8 +213,12 @@ class TextbookChapterMcqImportService
      * @param  array<string, mixed>  $row
      * @return array<string, mixed>
      */
-    private function normalizeImportedRow(array $row, int $index): array
-    {
+    private function normalizeImportedRow(
+        array $row,
+        int $index,
+        ?string $diagramStagingPath = null,
+        ?string $diagramFile = null,
+    ): array {
         $options = collect($row['options'] ?? []);
         $correctIndex = isset($row['correct_index']) ? (int) $row['correct_index'] : null;
 
@@ -118,6 +244,8 @@ class TextbookChapterMcqImportService
         $correct = collect($mcqOptions)->firstWhere('is_correct', true);
         $topic = trim((string) ($row['topic'] ?? $row['topic_name'] ?? ''));
         $label = $topic !== '' ? $topic.' · Q'.($index + 1) : 'Q'.($index + 1);
+        $resolvedDiagramFile = $diagramFile ?? trim((string) ($row['diagram_file'] ?? $row['chart_file'] ?? ''));
+        $hasDiagram = $diagramStagingPath !== null;
 
         return [
             'id' => 'mcq-'.($index + 1),
@@ -131,7 +259,9 @@ class TextbookChapterMcqImportService
             'explanation' => trim((string) ($row['explanation'] ?? '')),
             'method_hint' => trim((string) ($row['method_hint'] ?? $row['hint'] ?? '')),
             'difficulty' => trim((string) ($row['difficulty'] ?? '')),
-            'needs_diagram' => false,
+            'needs_diagram' => $hasDiagram || filter_var($row['needs_diagram'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'diagram_file' => $resolvedDiagramFile !== '' ? $resolvedDiagramFile : null,
+            'diagram_staging_path' => $diagramStagingPath,
             'include_in_mcq' => true,
             'include_in_written' => false,
             'approved' => true,

@@ -103,17 +103,22 @@ Rules:
 - Fix broken subscripts (t_n, u_n) in question text
 - For diagram/geometry questions, describe the figure fully in "question" and/or "chart"
 
-Charts and tables (critical — must be flawless):
-- This import is TEXT ONLY — no image upload on the textbook page. Do not use chart_file or diagram_file here.
-- Charts/graphs: flatten ALL data into plain English in "chart" (and/or "question"). Example:
+Charts and tables:
+- For **zip import with images** (recommended for bar graphs, dot plots, geometry): put PNG/JPG files in the zip and set `"diagram_file": "chart1.png"` (or `"chart_file"`) on each question. Optional `"chart"` / `"table"` text is still merged into the question as backup.
+- For **paste JSON only** (no images): flatten ALL data into `"chart"` and/or `"table"`. Example:
   "Bar chart 'Books sold' (y-axis: number of books, 1 unit = 10 books). Jan: 30, Feb: 50, Mar: 40."
   Do NOT put a grid inside "chart" — use sentences or comma-separated label: value pairs.
   Include title, axis labels, scale/units, and every category value. Never say "see graph above".
 - Tables: use structured {"headers": [...], "rows": [[...]]} or a simple markdown table string in "table".
   Include every column header and row with exact numbers. Never say "see the table above".
-- Each question must be fully solvable from JSON alone — as if the student never saw the PDF.
+- Each question must be fully solvable from JSON alone when no diagram_file is used.
 - Double-check table/chart numbers against the PDF; do not round or omit rows.
-- For geometry figures that need a drawn diagram (angles, shapes), describe in text here OR import those separately via Question bank zip (diagram_file).
+
+Zip pack format (charts / pictures):
+- Zip contains `questions.json` plus image files (`chart1.png`, `q3.jpg`, …).
+- In JSON, set `"diagram_file": "chart1.png"` on questions that need that figure.
+- Multiple questions may share one image file. Filename matching is case-insensitive.
+- Upload the zip on the textbook chapter page (Step 3 — Import zip pack).
 
 After import, the admin splits questions into class sets on the review page.
 

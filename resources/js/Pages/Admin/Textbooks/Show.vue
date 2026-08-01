@@ -29,6 +29,8 @@ const copied = ref(false);
 const jsonInput = ref('');
 
 const importForm = useForm({ json: '' });
+const zipImportForm = useForm({ pack: null });
+const zipPackInput = ref(null);
 
 const draftForm = useForm({ items: items.value, mcq_set_plan: setPlan.value });
 const publishForm = useForm({ items: items.value, mcq_set_plan: setPlan.value });
@@ -68,6 +70,7 @@ const awaitingImport = computed(() => props.chapter.status === 'draft' && !hasIt
 const canEdit = computed(() => ['review', 'published', 'failed'].includes(props.chapter.status) || hasItems.value);
 const showImportSteps = computed(() => awaitingImport.value || (canEdit.value && !hasItems.value));
 const approvedCount = computed(() => items.value.filter((item) => item.approved !== false).length);
+const diagramLinkedCount = computed(() => items.value.filter((item) => item.diagram_staging_path || item.diagram_preview_url).length);
 const mcqBaseSetCode = computed(() => props.mcqImport.mcq_set_code || props.chapter.mcq_set_code?.replace(/M\d+$/, 'M'));
 
 const mcqPublishSummary = computed(() => {
@@ -172,6 +175,28 @@ const importMcq = () => {
         onSuccess: () => {
             jsonInput.value = '';
             applyFromProps();
+        },
+    });
+};
+
+const onZipPackSelected = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    zipImportForm.pack = file;
+    zipImportForm.post(safeRoute('admin.textbooks.import-mcq-zip', props.chapter.id, '#'), {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            applyFromProps();
+        },
+        onFinish: () => {
+            zipImportForm.reset('pack');
+            if (zipPackInput.value) {
+                zipPackInput.value.value = '';
+            }
         },
     });
 };
@@ -381,7 +406,7 @@ const quickAssignSet = (setId) => {
                     Small chapter (~25)? Keep <strong>one row</strong> covering Q1–{{ items.length }}.
                     Large chapter? Add rows and set q_from / q_to per class (e.g. AP, GP).
                     <SecondaryButton type="button" class="ml-3 !py-1 !text-xs" @click="resetImport">
-                        Re-import JSON
+                        Clear &amp; re-import
                     </SecondaryButton>
                 </div>
 
@@ -395,6 +420,10 @@ const quickAssignSet = (setId) => {
                             {{ chapter.status === 'published' ? 'Re-publish MCQ sets' : 'Publish MCQ sets' }}
                         </PrimaryButton>
                     </div>
+                </div>
+
+                <div v-if="hasItems && canEdit && diagramLinkedCount" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+                    <strong>{{ diagramLinkedCount }} chart/diagram image(s)</strong> linked — students will see these when attempting MCQs.
                 </div>
 
                 <div v-if="canEdit && hasItems" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
@@ -468,6 +497,7 @@ const quickAssignSet = (setId) => {
                                 <th class="px-3 py-2 text-left">#</th>
                                 <th class="px-3 py-2 text-left">Use</th>
                                 <th class="px-3 py-2 text-left">Label</th>
+                                <th class="px-3 py-2 text-left">Chart</th>
                                 <th class="px-3 py-2 text-left">Question</th>
                                 <th class="px-3 py-2 text-left">Answer / explanation</th>
                             </tr>
@@ -483,6 +513,16 @@ const quickAssignSet = (setId) => {
                                     <p v-if="item.difficulty" class="mt-1 text-[10px] uppercase text-gray-400">{{ item.difficulty }}</p>
                                 </td>
                                 <td class="px-3 py-3 align-top font-medium text-gray-800">{{ item.label }}</td>
+                                <td class="px-3 py-3 align-top">
+                                    <img
+                                        v-if="item.diagram_preview_url"
+                                        :src="item.diagram_preview_url"
+                                        alt="Chart preview"
+                                        class="max-h-24 max-w-full rounded border border-gray-200 object-contain"
+                                    >
+                                    <p v-else-if="item.diagram_file" class="text-xs text-amber-700">{{ item.diagram_file }} (missing)</p>
+                                    <span v-else class="text-xs text-gray-400">—</span>
+                                </td>
                                 <td class="px-3 py-3 align-top">
                                     <textarea v-model="item.question_text" rows="3" class="w-full min-w-[16rem] rounded-md border-gray-300 text-sm" />
                                 </td>
@@ -685,7 +725,7 @@ const quickAssignSet = (setId) => {
                     <ol class="mt-2 list-decimal space-y-1 pl-5">
                         <li>PDF is stored on the server (download link above — or upload the same PDF to Claude/Gemini).</li>
                         <li>Copy the AI prompt → paste in Cursor, Claude, or Gemini with the chapter PDF.</li>
-                        <li>Paste the JSON reply below → <strong>Import MCQs</strong>.</li>
+                        <li>Import MCQs — paste JSON <strong>or upload a .zip pack</strong> with <strong>questions.json</strong> + chart images.</li>
                         <li>Edit the <strong>set plan matrix</strong> on the review page (one set for small chapters, split for large ones) → <strong>Publish</strong>.</li>
                     </ol>
                 </div>
@@ -713,11 +753,39 @@ const quickAssignSet = (setId) => {
                     </details>
                 </div>
 
+                <div v-if="showImportSteps" class="space-y-4 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
+                    <div>
+                        <h3 class="font-semibold text-emerald-950">Step 3a — Import zip pack (charts / pictures)</h3>
+                        <p class="mt-1 text-sm text-emerald-900">
+                            Upload a zip with <strong>questions.json</strong> plus PNG/JPG images.
+                            In JSON, set <strong>"diagram_file": "chart1.png"</strong> (or <strong>"chart_file"</strong>) on each question.
+                            Multiple questions can share one image. Optional <strong>chart</strong> / <strong>table</strong> text is kept as backup.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <PrimaryButton
+                            type="button"
+                            :disabled="zipImportForm.processing"
+                            @click="zipPackInput?.click()"
+                        >
+                            {{ zipImportForm.processing ? 'Importing…' : 'Upload .zip pack → import MCQs' }}
+                        </PrimaryButton>
+                        <InputError :message="zipImportForm.errors.pack" />
+                    </div>
+                    <input
+                        ref="zipPackInput"
+                        type="file"
+                        accept=".zip,application/zip"
+                        class="hidden"
+                        @change="onZipPackSelected"
+                    />
+                </div>
+
                 <div v-if="showImportSteps" class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
                     <div>
-                        <h3 class="font-semibold text-gray-900">Step 3 — Import MCQ JSON</h3>
+                        <h3 class="font-semibold text-gray-900">Step 3b — Or paste MCQ JSON</h3>
                         <p class="mt-1 text-sm text-gray-600">
-                            Paste AI output here (JSON with <strong>questions</strong> only).
+                            Paste AI output here (JSON with <strong>questions</strong> only). Text-only charts/tables — no images.
                             After import, split into sets using the matrix on this page.
                         </p>
                     </div>

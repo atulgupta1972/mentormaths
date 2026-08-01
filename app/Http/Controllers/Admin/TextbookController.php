@@ -242,7 +242,7 @@ class TextbookController extends Controller
                     'code' => $textbookChapter->textbook?->code,
                     'grade_name' => $textbookChapter->textbook?->gradeLevel?->name,
                 ],
-                'items' => $textbookChapter->extraction_items ?? [],
+                'items' => $this->mcqImportService->itemsWithDiagramPreviewUrls($textbookChapter->extraction_items ?? []),
                 'mcq_set_plan' => $mcqSetPlan,
                 'mcq_set_plan_summary' => $this->setPlanService->summary($mcqSetPlan),
                 'mcq_worksheet_id' => $textbookChapter->mcq_worksheet_id,
@@ -285,6 +285,38 @@ class TextbookController extends Controller
         return redirect()
             ->route('admin.textbooks.show', $chapter)
             ->with('success', "{$count} MCQ(s) imported. Edit the set plan matrix below — small chapters: keep one row for all questions.");
+    }
+
+    public function importMcqZip(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $uploadedZip = $request->file('pack');
+        if ($uploadedZip) {
+            UploadedFileDiagnostics::assertValid($uploadedZip, 'pack');
+        }
+
+        $request->validate([
+            'pack' => ['required', 'file', 'mimes:zip', 'max:51200'],
+        ], [
+            'pack.required' => 'Choose a .zip file with questions.json and chart images.',
+            'pack.mimes' => 'Only .zip files are allowed.',
+            'pack.max' => 'The zip must be under 50 MB.',
+        ]);
+
+        try {
+            $result = $this->mcqImportService->importZip($textbookChapter, $uploadedZip);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $message = "{$result['question_count']} MCQ(s) imported from zip.";
+        if ($result['diagram_count'] > 0) {
+            $message .= " {$result['diagram_count']} chart/diagram image(s) linked.";
+        }
+        $message .= ' Edit the set plan matrix below, then Publish.';
+
+        return redirect()
+            ->route('admin.textbooks.show', $result['chapter'])
+            ->with('success', $message);
     }
 
     public function updateDraft(Request $request, TextbookChapter $textbookChapter): RedirectResponse
@@ -351,6 +383,8 @@ class TextbookController extends Controller
 
     public function resetImport(TextbookChapter $textbookChapter): RedirectResponse
     {
+        $this->mcqImportService->deleteStagingDiagrams($textbookChapter);
+
         $textbookChapter->update([
             'status' => TextbookChapter::STATUS_DRAFT,
             'extraction_items' => null,

@@ -17,6 +17,7 @@ use App\Support\QuestionMethodHint;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
 class TextbookChapterPublishService
@@ -25,6 +26,7 @@ class TextbookChapterPublishService
         private WrittenSheetService $writtenSheetService,
         private TextbookSetCodeService $setCodeService,
         private TextbookMcqSetPlanService $setPlanService,
+        private QuestionDiagramService $diagramService,
     ) {}
 
     /**
@@ -257,6 +259,8 @@ class TextbookChapterPublishService
             'correct_answer' => trim((string) ($item['correct_answer'] ?? '')),
         ]);
 
+        $this->attachStagingDiagram($question, $item);
+
         return $question;
     }
 
@@ -304,7 +308,22 @@ class TextbookChapterPublishService
             ]);
         }
 
+        $this->attachStagingDiagram($question, $item);
+
         return $question;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function attachStagingDiagram(Question $question, array $item): void
+    {
+        $path = trim((string) ($item['diagram_staging_path'] ?? ''));
+        if ($path === '' || ! Storage::disk('public')->exists($path)) {
+            return;
+        }
+
+        $this->diagramService->attachFromPath($question, Storage::disk('public')->path($path));
     }
 
     /**

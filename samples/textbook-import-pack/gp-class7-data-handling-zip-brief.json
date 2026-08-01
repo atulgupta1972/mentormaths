@@ -1,0 +1,157 @@
+{
+  "meta": {
+    "purpose": "Give this entire JSON + attach the chapter PDF in Claude or Cursor. Ask the AI to deliver a zip import pack for Mentor Maths textbook MCQs.",
+    "class": "Class 7",
+    "book": "Ganita Prakash Part II",
+    "syllabus_chapter": "Data Handling",
+    "pdf_chapter_title_in_book": "Connecting the Dots… (statistics / data handling content)",
+    "pdf_file_hint": "gegp205.pdf",
+    "admin_upload": "Admin → Textbook content → open chapter → Step 3a → Upload .zip pack"
+  },
+  "deliverables": {
+    "zip_filename": "gp-class7-data-handling-mcqs.zip",
+    "required_files": [
+      "questions.json",
+      "One PNG or JPG per distinct chart/table figure (see diagram_catalog below)"
+    ],
+    "do_not_include": [
+      "Markdown fences around JSON",
+      "set_plan or set grouping metadata",
+      "Graph-paper pages",
+      "Think-and-Reflect discussion-only prompts"
+    ]
+  },
+  "ai_prompt": "You are preparing a zip import pack for a school maths LMS.\n\nATTACHED: Ganita Prakash Grade 7 Part II — Chapter on Data Handling / statistics (PDF title may be \"Connecting the Dots…\").\n\nTASK — produce TWO things:\n\n1) questions.json — every gradable MCQ from the chapter\n2) PNG images — crop/export each distinct chart, graph, dot plot, or data table figure from the PDF\n\nZIP LAYOUT:\n  gp-class7-data-handling-mcqs.zip\n  ├── questions.json\n  ├── fig-dot-stories.png\n  ├── fig-dot-palm-heights.png\n  ├── fig-bar-onions.png\n  ├── fig-bar-rockets.png\n  ├── fig-table-heights-2019.png\n  ├── fig-bar-cricket-overs.png\n  ├── fig-bar-animal-speeds.png\n  ├── fig-bar-superpower.png\n  ├── fig-bar-jodhpur-temp.png\n  ├── fig-bar-ev-registrations.png\n  ├── fig-dot-pockets.png\n  ├── fig-bar-skyscrapers.png\n  ├── fig-dot-sudoku.png\n  ├── fig-dot-grade5-heights.png\n  └── (add more only if the PDF has additional distinct figures)\n\nquestions.json SHAPE (return ONLY this JSON object, no markdown fences):\n{\n  \"questions\": [\n    {\n      \"topic\": \"Statistical questions | Mean | Median and outliers | Bar graphs | Dot plots | Reading data tables\",\n      \"question\": \"Student-facing question text only (no 'see graph above')\",\n      \"diagram_file\": \"fig-bar-onions.png\",\n      \"table\": {\"headers\": [\"Col1\", \"Col2\"], \"rows\": [[\"a\", \"b\"]]},\n      \"chart\": \"Optional short backup description if useful\",\n      \"options\": [\"A\", \"B\", \"C\", \"D\"],\n      \"correct_index\": 0,\n      \"hint\": \"Theory/rules only — no final answer letter\",\n      \"explanation\": \"Full working + Answer: B\",\n      \"difficulty\": \"Easy|Medium|Hard\"\n    }\n  ]\n}\n\nRULES:\n- correct_index is 0-based (0 = first option)\n- Exactly 4 options per question when possible\n- INCLUDE: worked examples, inline exercises, numbered exercise sets, starred hard items\n- EXCLUDE: pure discussion prompts, draw-only tasks, projects, puzzles without MCQ answers\n- For ANY question that uses a figure in the PDF, set diagram_file to the matching PNG filename\n- Multiple questions MAY share the same diagram_file (same chart reused)\n- Tables in the PDF: either export as PNG (diagram_file) OR include full table JSON in \"table\" field (or both)\n- Keep topic labels short and consistent (use the topic list above)\n- Each question must be solvable from JSON + image together\n- Image files: clean crops, readable labels, white background, PNG preferred, width ~800–1200px\n\nDIAGRAM CATALOG (extract one PNG per row; reuse filename across all questions that use that figure):\n| diagram_file | Figure in PDF |\n| fig-dot-stories.png | Dot plot — short stories read by 15 students |\n| fig-dot-palm-heights.png | Dot plot — date-palm tree heights |\n| fig-bar-onions.png | Clustered column graph — monthly onion prices Yahapur vs Wahapur |\n| fig-bar-rockets.png | Horizontal triple-bar — rocket launches by organisation 2021–2023 |\n| fig-table-heights-2019.png | Table/graph — average heights boys & girls ages 5–19 (2019 survey) |\n| fig-bar-cricket-overs.png | Double column graph — runs per over (20-over match) |\n| fig-bar-animal-speeds.png | Horizontal bar — maximum animal speeds (air/land/water) |\n| fig-bar-superpower.png | Bar chart — superpower survey Grade 5 vs Grade 9 |\n| fig-bar-jodhpur-temp.png | Double-bar — Jodhpur temperature two days |\n| fig-bar-ev-registrations.png | Clustered column — EV registrations by state 2022–2024 |\n| fig-dot-pockets.png | Dot plots — pockets on clothing (boys vs girls) |\n| fig-bar-skyscrapers.png | Horizontal bar — cities with most skyscrapers |\n| fig-dot-sudoku.png | Dot plot — Sudoku solve times week 1 vs week 2 |\n| fig-dot-grade5-heights.png | Dot plots — Grade 5 class heights (boys/girls/whole class) |\n\nAlso include diagram_file for any table-only questions (e.g. cricket runs table Shubman/Yashasvi) as fig-table-cricket-runs.png if shown as a table in PDF.\n\nOUTPUT FORMAT FOR YOU (the AI):\nStep 1: Write complete questions.json\nStep 2: Export/create each PNG listed above from the attached PDF\nStep 3: Package into one .zip file\n\nIf you cannot create a binary zip in this chat, output questions.json in full and list each PNG as a separate downloadable file with the exact filename from diagram_catalog.",
+  "diagram_catalog": [
+    {
+      "diagram_file": "fig-dot-stories.png",
+      "description": "Dot plot — number of short stories read (15 students)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-dot-palm-heights.png",
+      "description": "Dot plot — date-palm tree heights (ft)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-bar-onions.png",
+      "description": "Clustered column graph — monthly onion prices in Yahapur and Wahapur",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-bar-rockets.png",
+      "description": "Horizontal triple-bar chart — worldwide rocket launches by organisation (2021–2023)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-table-heights-2019.png",
+      "description": "Survey table/chart — average heights of Indian boys and girls ages 5–19 (2019)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-bar-cricket-overs.png",
+      "description": "Double column graph — runs per over (20-over cricket match)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-table-cricket-runs.png",
+      "description": "Data table — runs per match (Shubman vs Yashasvi)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-bar-animal-speeds.png",
+      "description": "Horizontal bar chart — maximum speed of animals (air, land, water)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-bar-superpower.png",
+      "description": "Bar chart — superpower survey (Grade 5 vs Grade 9)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-bar-jodhpur-temp.png",
+      "description": "Double-bar graph — Jodhpur temperature (two days)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-bar-ev-registrations.png",
+      "description": "Clustered column graph — electric vehicles registered per year by state",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-dot-pockets.png",
+      "description": "Dot plots — pockets on clothing (boys vs girls)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-bar-skyscrapers.png",
+      "description": "Horizontal bar chart — cities with most skyscrapers (>150 m)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-dot-sudoku.png",
+      "description": "Dot plot — Sudoku solve times (week 1 vs week 2)",
+      "share_across_questions": true
+    },
+    {
+      "diagram_file": "fig-dot-grade5-heights.png",
+      "description": "Dot plots — Grade 5 heights (whole class, boys, girls)",
+      "share_across_questions": true
+    }
+  ],
+  "topic_labels": [
+    "Statistical questions",
+    "Mean",
+    "Median and outliers",
+    "Bar graphs",
+    "Dot plots",
+    "Reading data tables"
+  ],
+  "sample_questions": [
+    {
+      "topic": "Bar graphs",
+      "question": "In which month was the price of onions in Wahapur the highest?",
+      "diagram_file": "fig-bar-onions.png",
+      "chart": "Clustered column graph — monthly onion prices Yahapur (blue) vs Wahapur (red dotted). Scale ₹10 per unit.",
+      "options": ["September", "October", "November", "December"],
+      "correct_index": 1,
+      "hint": "Find the tallest Wahapur bar on the graph.",
+      "explanation": "Wahapur peak is October at ₹60/kg. Answer: B",
+      "difficulty": "Medium"
+    },
+    {
+      "topic": "Dot plots",
+      "question": "What is the median number of short stories read?",
+      "diagram_file": "fig-dot-stories.png",
+      "options": ["5", "6", "7", "8"],
+      "correct_index": 1,
+      "hint": "Order the 15 values and find the middle one.",
+      "explanation": "Sorted data gives median 6. Answer: B",
+      "difficulty": "Medium"
+    },
+    {
+      "topic": "Reading data tables",
+      "question": "What is Shubman's total runs in the four matches shown?",
+      "diagram_file": "fig-table-cricket-runs.png",
+      "table": {
+        "headers": ["Match", "Shubman", "Yashasvi"],
+        "rows": [["1", "0", "67"], ["2", "17", "55"], ["3", "21", "18"], ["4", "90", "35"]]
+      },
+      "options": ["118", "128", "138", "175"],
+      "correct_index": 1,
+      "hint": "Add Shubman's runs across all four matches.",
+      "explanation": "0 + 17 + 21 + 90 = 128. Answer: B",
+      "difficulty": "Easy"
+    }
+  ],
+  "claude_cursor_instructions": [
+    "1. Open Claude (Projects) or Cursor chat.",
+    "2. Attach the chapter PDF (gegp205.pdf).",
+    "3. Paste this entire JSON file OR paste the ai_prompt field below.",
+    "4. Say: \"Follow ai_prompt exactly. Deliver the zip (questions.json + all PNGs).\"",
+    "5. If the AI returns JSON + separate images, zip them yourself:",
+    "   - Put questions.json and all PNGs in one folder",
+    "   - Zip the folder → upload on Textbook content → Step 3a",
+    "6. Existing draft MCQs (optional base): tests/gegp205_mcqs.json — add diagram_file to each question using diagram_catalog filenames."
+  ]
+}

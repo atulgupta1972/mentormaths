@@ -302,7 +302,7 @@ class QuestionZipImportService
     {
         $candidates = [];
 
-        $diagramFile = trim((string) ($item['diagram_file'] ?? $item['diagram'] ?? ''));
+        $diagramFile = trim((string) ($item['diagram_file'] ?? $item['chart_file'] ?? $item['diagram'] ?? ''));
         if ($diagramFile !== '') {
             $candidates[] = basename($diagramFile);
         }

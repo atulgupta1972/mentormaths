@@ -68,7 +68,7 @@ class TextbookChapterMcqImportServiceTest extends TestCase
         $payload = app(\App\Services\TextbookChapterMcqPromptService::class)->payload($chapter);
 
         $this->assertStringContainsString('Charts and tables', $payload['prompt']);
-        $this->assertStringContainsString('TEXT ONLY', $payload['prompt']);
+        $this->assertStringContainsString('diagram_file', $payload['prompt']);
         $this->assertStringContainsString('Books read', $payload['sample_json']);
     }
 }

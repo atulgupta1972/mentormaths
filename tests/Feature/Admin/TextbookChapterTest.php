@@ -86,6 +86,100 @@ class TextbookChapterTest extends TestCase
         $this->assertSame([$mcq->id], $textbookChapter->mcq_worksheet_ids);
     }
 
+    public function test_admin_can_import_mcq_zip_with_diagram_and_publish(): void
+    {
+        Storage::fake('public');
+
+        [$grade, $syllabusChapter, $admin] = $this->seedClassNineChapterEight();
+
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash Part II',
+            'code' => 'GP',
+            'created_by' => $admin->id,
+        ]);
+
+        $textbookChapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => $syllabusChapter->name,
+            'pdf_path' => 'textbooks/1/chapters/8/chapter.pdf',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $zipPath = $this->createMcqImportZip([
+            'questions' => [[
+                'topic' => 'Bar graphs',
+                'question' => 'Which month had the highest sales?',
+                'chart' => 'Bar chart — Jan: 120, Feb: 180',
+                'options' => ['Jan', 'Feb', 'Mar', 'Apr'],
+                'correct_index' => 1,
+                'explanation' => 'Feb is highest. Answer: B',
+                'difficulty' => 'Easy',
+                'diagram_file' => 'chart1.png',
+            ]],
+        ], [
+            'chart1.png' => $this->minimalPngBytes(),
+        ]);
+
+        $zip = new UploadedFile($zipPath, 'data-handling.zip', 'application/zip', null, true);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.import-mcq-zip', $textbookChapter), ['pack' => $zip])
+            ->assertRedirect(route('admin.textbooks.show', $textbookChapter));
+
+        $textbookChapter->refresh();
+        $this->assertSame(TextbookChapter::STATUS_REVIEW, $textbookChapter->status);
+        $this->assertCount(1, $textbookChapter->extraction_items);
+        $this->assertNotEmpty($textbookChapter->extraction_items[0]['diagram_staging_path'] ?? null);
+        $this->assertTrue(
+            Storage::disk('public')->exists($textbookChapter->extraction_items[0]['diagram_staging_path']),
+        );
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.publish', $textbookChapter), [
+                'items' => $textbookChapter->extraction_items,
+            ])
+            ->assertRedirect();
+
+        $textbookChapter->refresh();
+        $mcq = Worksheet::query()->findOrFail($textbookChapter->mcq_worksheet_id);
+        $question = $mcq->questions()->first();
+        $this->assertNotNull($question);
+        $this->assertNotNull($question->diagram_path);
+        $this->assertTrue(Storage::disk('public')->exists($question->diagram_path));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, string>  $images
+     */
+    private function createMcqImportZip(array $payload, array $images = []): string
+    {
+        $zipPath = tempnam(sys_get_temp_dir(), 'textbook-mcq-');
+        $zip = new \ZipArchive;
+        $zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('questions.json', json_encode($payload, JSON_THROW_ON_ERROR));
+
+        foreach ($images as $name => $bytes) {
+            $zip->addFromString($name, $bytes);
+        }
+
+        $zip->close();
+
+        return $zipPath;
+    }
+
+    private function minimalPngBytes(): string
+    {
+        return base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+            true,
+        ) ?: '';
+    }
+
     public function test_publish_splits_mcq_chapter_using_custom_set_plan(): void
     {
         Storage::fake('public');

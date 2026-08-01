@@ -231,6 +231,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/draft', [TextbookController::class, 'updateDraft'])->name('textbooks.draft');
     Route::post('/textbooks/chapters/{textbookChapter}/publish', [TextbookController::class, 'publish'])->name('textbooks.publish');
     Route::post('/textbooks/chapters/{textbookChapter}/import-mcq', [TextbookController::class, 'importMcq'])->name('textbooks.import-mcq');
+    Route::post('/textbooks/chapters/{textbookChapter}/import-mcq-zip', [TextbookController::class, 'importMcqZip'])->name('textbooks.import-mcq-zip');
     Route::post('/textbooks/chapters/{textbookChapter}/reset-import', [TextbookController::class, 'resetImport'])->name('textbooks.reset-import');
     Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');
 
