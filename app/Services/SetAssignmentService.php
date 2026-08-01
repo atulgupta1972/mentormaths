@@ -377,20 +377,14 @@ class SetAssignmentService
      */
     public function assignmentsForWorksheet(int $worksheetId): Collection
     {
-        return SetAssignment::query()
-            ->with([
-                'enrollment.student:id,name',
-                'practiceSet' => fn ($q) => $q
-                    ->withCount('questions')
-                    ->with(['chapter:id,name', 'topic.chapter:id,name']),
-                'writtenSubmissions' => fn ($q) => $q->orderByDesc('id')->with('items'),
-            ])
-            ->where('worksheet_id', $worksheetId)
-            ->whereNot('status', SetAssignment::STATUS_CANCELLED)
-            ->orderByDesc('assigned_at')
-            ->get()
+        return $this->assignmentSummariesQuery($worksheetId)
             ->map(function (SetAssignment $assignment) {
-                $summary = AssignmentProgress::formatWrittenAssignmentSummary($assignment);
+                $summary = $assignment->practiceSet->isWritten()
+                    ? AssignmentProgress::formatWrittenAssignmentSummary($assignment)
+                    : AssignmentProgress::formatAssignmentSummary(
+                        $assignment,
+                        $assignment->attempts->first(),
+                    );
 
                 return [
                     ...$summary,
@@ -399,5 +393,25 @@ class SetAssignmentService
                 ];
             })
             ->values();
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, SetAssignment>
+     */
+    private function assignmentSummariesQuery(int $worksheetId): \Illuminate\Database\Eloquent\Collection
+    {
+        return SetAssignment::query()
+            ->with([
+                'enrollment.student:id,name',
+                'practiceSet' => fn ($q) => $q
+                    ->withCount('questions')
+                    ->with(['chapter:id,name', 'topic.chapter:id,name']),
+                'attempts' => fn ($q) => $q->orderByDesc('attempt_number'),
+                'writtenSubmissions' => fn ($q) => $q->orderByDesc('id')->with('items'),
+            ])
+            ->where('worksheet_id', $worksheetId)
+            ->whereNot('status', SetAssignment::STATUS_CANCELLED)
+            ->orderByDesc('assigned_at')
+            ->get();
     }
 }

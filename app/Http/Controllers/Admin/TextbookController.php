@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
+use App\Models\GradeLevel;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
+use App\Services\SetAssignmentService;
 use App\Services\TextbookChapterMcqImportService;
 use App\Services\TextbookChapterMcqPromptService;
 use App\Services\TextbookChapterPublishService;
@@ -32,6 +34,7 @@ class TextbookController extends Controller
         private TextbookChapterMcqImportService $mcqImportService,
         private TextbookSetCodeService $setCodeService,
         private TextbookMcqSetPlanService $setPlanService,
+        private SetAssignmentService $assignmentService,
     ) {}
 
     public function index(Request $request): Response
@@ -181,7 +184,7 @@ class TextbookController extends Controller
             ->with('success', 'Chapter PDF uploaded. Copy the AI prompt, generate MCQ JSON in Claude/Cursor/Gemini, then paste it below.');
     }
 
-    public function show(TextbookChapter $textbookChapter): Response
+    public function show(Request $request, TextbookChapter $textbookChapter): Response
     {
         $textbookChapter->load([
             'textbook.gradeLevel',
@@ -190,10 +193,38 @@ class TextbookController extends Controller
             'writtenWorksheet',
         ]);
 
+        $gradeLevel = $textbookChapter->textbook?->gradeLevel;
+        if ($gradeLevel) {
+            $this->gradeContext->persist($request, $gradeLevel->id);
+        }
+
+        $activeYear = AcademicYear::active();
         $aiPrompt = $this->mcqPromptService->payload($textbookChapter);
         $itemCount = count($textbookChapter->extraction_items ?? []);
         $mcqSetPlan = $textbookChapter->mcq_set_plan
             ?? ($itemCount > 0 ? $this->setPlanService->defaultPlan($textbookChapter, $itemCount) : []);
+
+        $publishedSets = [];
+        if ($textbookChapter->status === TextbookChapter::STATUS_PUBLISHED) {
+            $publishedSets = Worksheet::query()
+                ->whereIn('id', $textbookChapter->mcqWorksheetIds())
+                ->withCount('questions')
+                ->orderBy('set_number')
+                ->get()
+                ->map(fn (Worksheet $worksheet) => [
+                    'id' => $worksheet->id,
+                    'set_code' => $worksheet->set_code,
+                    'set_number' => $worksheet->set_number,
+                    'questions_count' => $worksheet->questions_count,
+                    'title' => $worksheet->title,
+                    'assignments' => $this->assignmentService
+                        ->assignmentsForWorksheet($worksheet->id)
+                        ->values()
+                        ->all(),
+                ])
+                ->values()
+                ->all();
+        }
 
         return Inertia::render('Admin/Textbooks/Show', [
             'chapter' => [
@@ -222,6 +253,18 @@ class TextbookController extends Controller
                 'written_set_code' => $textbookChapter->writtenWorksheet?->set_code ?? $aiPrompt['written_set_code'],
             ],
             'mcqImport' => $aiPrompt,
+            'publishedSets' => $publishedSets,
+            'students' => $this->assignmentService
+                ->activeStudentsForAssignment($activeYear?->id)
+                ->values()
+                ->all(),
+            'gradeLevels' => GradeLevel::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->get(['id', 'name'])
+                ->all(),
+            'defaultGradeLevelId' => $gradeLevel?->id,
+            'activeYear' => $activeYear?->only(['id', 'name']),
         ]);
     }
 

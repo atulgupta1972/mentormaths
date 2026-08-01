@@ -1,15 +1,22 @@
 <script setup>
+import InputLabel from '@/Components/InputLabel.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { safeRoute } from '@/utils/routes';
+import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
     chapter: { type: Object, required: true },
     mcqImport: { type: Object, required: true },
+    publishedSets: { type: Array, default: () => [] },
+    students: { type: Array, default: () => [] },
+    gradeLevels: { type: Array, default: () => [] },
+    defaultGradeLevelId: { type: [Number, null], default: null },
+    activeYear: { type: Object, default: null },
 });
 
 const cloneItems = (items) => JSON.parse(JSON.stringify(items ?? []));
@@ -186,6 +193,149 @@ const publish = () => {
     syncForms();
     publishForm.post(safeRoute('admin.textbooks.publish', props.chapter.id, '#'));
 };
+
+const defaultTargetDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+};
+
+const selectedGradeLevelId = ref('');
+const selectedStudentIds = ref([]);
+const bulkTargetDate = ref(defaultTargetDate());
+const assignNotes = ref('');
+const quickAssignStudentId = ref('');
+const quickTargetDate = ref(defaultTargetDate());
+const assigningSetId = ref(null);
+
+const bulkAssignForm = useForm({ student_ids: [], target_date: '', notes: '' });
+const quickAssignForm = useForm({ student_id: '', target_date: '', notes: '' });
+const classAssignForm = useForm({ grade_level_id: '', target_date: '', notes: '' });
+const assigningClassSetId = ref(null);
+
+const filteredStudents = computed(() => {
+    if (!selectedGradeLevelId.value) {
+        return [];
+    }
+
+    return props.students.filter(
+        (student) => String(student.grade_level_id) === String(selectedGradeLevelId.value),
+    );
+});
+
+const assignmentsForSet = (setId) => props.publishedSets.find((set) => set.id === setId)?.assignments ?? [];
+
+const existingByStudentIdForSet = (setId) => {
+    const map = {};
+
+    assignmentsForSet(setId).forEach((row) => {
+        map[row.student_id] = row;
+    });
+
+    return map;
+};
+
+const selectAllFiltered = () => {
+    selectedStudentIds.value = filteredStudents.value.map((student) => student.id);
+};
+
+const clearSelectedStudents = () => {
+    selectedStudentIds.value = [];
+};
+
+const toggleStudent = (studentId) => {
+    const index = selectedStudentIds.value.indexOf(studentId);
+
+    if (index === -1) {
+        selectedStudentIds.value.push(studentId);
+    } else {
+        selectedStudentIds.value.splice(index, 1);
+    }
+};
+
+watch(selectedGradeLevelId, (value) => {
+    if (value) {
+        selectAllFiltered();
+    } else {
+        clearSelectedStudents();
+    }
+});
+
+onMounted(() => {
+    if (props.defaultGradeLevelId) {
+        selectedGradeLevelId.value = String(props.defaultGradeLevelId);
+    }
+});
+
+const formatDate = (value) => {
+    if (!value) {
+        return '—';
+    }
+
+    return new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    });
+};
+
+const progressLabel = (row) => {
+    if (!row) {
+        return { label: 'Not assigned', class: 'bg-gray-100 text-gray-600' };
+    }
+
+    if (row.assignment_status === 'completed' && row.latest_score != null) {
+        const late = row.submission_timing === 'late' ? ' · Delayed' : '';
+
+        return {
+            label: `${row.latest_score_label || formatScoreLabel(row.latest_score, row.latest_max_score)}${late}`,
+            class: row.submission_timing === 'late' ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-800',
+        };
+    }
+
+    if (row.is_overdue) {
+        return { label: 'Overdue', class: 'bg-red-100 text-red-800' };
+    }
+
+    if (row.assignment_status === 'in_progress') {
+        return { label: 'In progress', class: 'bg-yellow-100 text-yellow-800' };
+    }
+
+    return { label: 'Assigned', class: 'bg-blue-100 text-blue-800' };
+};
+
+const assignSelectedStudents = (setId) => {
+    assigningSetId.value = setId;
+    bulkAssignForm.student_ids = selectedStudentIds.value;
+    bulkAssignForm.target_date = bulkTargetDate.value;
+    bulkAssignForm.notes = assignNotes.value;
+    bulkAssignForm.post(safeRoute('admin.practice-sets.assign-students', setId, '#'), {
+        preserveScroll: true,
+        onFinish: () => {
+            assigningSetId.value = null;
+        },
+    });
+};
+
+const assignWholeClass = (setId) => {
+    assigningClassSetId.value = setId;
+    classAssignForm.grade_level_id = selectedGradeLevelId.value || String(props.defaultGradeLevelId || '');
+    classAssignForm.target_date = bulkTargetDate.value;
+    classAssignForm.notes = assignNotes.value;
+    classAssignForm.post(safeRoute('admin.practice-sets.assign-bulk', setId, '#'), {
+        preserveScroll: true,
+        onFinish: () => {
+            assigningClassSetId.value = null;
+        },
+    });
+};
+
+const quickAssignSet = (setId) => {
+    quickAssignForm.student_id = quickAssignStudentId.value;
+    quickAssignForm.target_date = quickTargetDate.value;
+    quickAssignForm.notes = assignNotes.value;
+    quickAssignForm.post(safeRoute('admin.practice-sets.assign', setId, '#'), { preserveScroll: true });
+};
 </script>
 
 <template>
@@ -347,11 +497,187 @@ const publish = () => {
                     <InputError :message="publishForm.errors.items" class="px-4 py-2" />
                 </div>
 
-                <div v-if="chapter.status === 'published'" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                <div
+                    v-if="chapter.status === 'published' && publishedSets.length"
+                    id="assign"
+                    class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-indigo-200"
+                >
+                    <h3 class="font-semibold text-gray-900">Assign published MCQ sets</h3>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Pick {{ chapter.book?.grade_name || 'the class' }} (default), choose students, then assign each part — same as chapter practice sets.
+                    </p>
+
+                    <div class="mt-4 grid gap-6 lg:grid-cols-3">
+                        <div class="lg:col-span-2 space-y-4">
+                            <div class="rounded-md border border-gray-200 p-4">
+                                <div class="flex flex-wrap items-end gap-4">
+                                    <div>
+                                        <InputLabel value="Class" class="!text-xs" />
+                                        <select
+                                            v-model="selectedGradeLevelId"
+                                            class="mt-1 rounded-md border-gray-300 text-sm"
+                                        >
+                                            <option value="">Select class</option>
+                                            <option v-for="grade in gradeLevels" :key="grade.id" :value="String(grade.id)">
+                                                {{ grade.name }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div v-if="selectedGradeLevelId" class="flex flex-wrap gap-2">
+                                        <SecondaryButton type="button" class="!py-1.5 !text-xs" @click="selectAllFiltered">
+                                            Select all ({{ filteredStudents.length }})
+                                        </SecondaryButton>
+                                        <SecondaryButton type="button" class="!py-1.5 !text-xs" @click="clearSelectedStudents">
+                                            Clear
+                                        </SecondaryButton>
+                                    </div>
+                                </div>
+
+                                <p v-if="selectedGradeLevelId" class="mt-2 text-xs text-gray-500">
+                                    {{ filteredStudents.length }} student(s) · {{ selectedStudentIds.length }} selected
+                                </p>
+
+                                <div
+                                    v-if="selectedGradeLevelId && !filteredStudents.length"
+                                    class="mt-3 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500"
+                                >
+                                    No active students in this class for {{ activeYear?.name || 'the current year' }}.
+                                </div>
+
+                                <div
+                                    v-else-if="selectedGradeLevelId"
+                                    class="mt-3 max-h-56 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100"
+                                >
+                                    <label
+                                        v-for="student in filteredStudents"
+                                        :key="student.id"
+                                        class="flex cursor-pointer items-start gap-3 px-4 py-3 hover:bg-gray-50"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="mt-0.5 rounded border-gray-300 text-indigo-600"
+                                            :checked="selectedStudentIds.includes(student.id)"
+                                            @change="toggleStudent(student.id)"
+                                        >
+                                        <span class="min-w-0 flex-1 text-sm">
+                                            <span class="block font-medium text-gray-900">{{ student.name }}</span>
+                                            <span class="text-xs text-gray-500">{{ student.class_name }}</span>
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div class="mt-4 flex flex-wrap items-end gap-3 border-t border-gray-100 pt-4">
+                                    <div>
+                                        <InputLabel value="Target date" class="!text-xs" />
+                                        <input v-model="bulkTargetDate" type="date" class="mt-1 rounded-md border-gray-300 text-sm">
+                                    </div>
+                                    <div class="min-w-[12rem] flex-1">
+                                        <InputLabel value="Notes (optional)" class="!text-xs" />
+                                        <input v-model="assignNotes" type="text" class="mt-1 w-full rounded-md border-gray-300 text-sm">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div
+                                v-for="set in publishedSets"
+                                :key="set.id"
+                                class="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4"
+                            >
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                        <p class="font-mono text-lg font-bold text-emerald-900">{{ set.set_code }}</p>
+                                        <p class="text-sm text-gray-600">{{ set.questions_count }} MCQ(s)</p>
+                                    </div>
+                                    <span class="text-xs text-gray-500">{{ set.assignments?.length || 0 }} assigned</span>
+                                </div>
+
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <PrimaryButton
+                                        type="button"
+                                        class="!py-2"
+                                        :disabled="!selectedStudentIds.length || !bulkTargetDate || (assigningSetId === set.id && bulkAssignForm.processing)"
+                                        @click="assignSelectedStudents(set.id)"
+                                    >
+                                        {{ assigningSetId === set.id && bulkAssignForm.processing ? 'Assigning…' : 'Assign to selected' }}
+                                    </PrimaryButton>
+                                    <SecondaryButton
+                                        type="button"
+                                        class="!py-2"
+                                        :disabled="!selectedGradeLevelId || !bulkTargetDate || (assigningClassSetId === set.id && classAssignForm.processing)"
+                                        @click="assignWholeClass(set.id)"
+                                    >
+                                        {{ assigningClassSetId === set.id && classAssignForm.processing ? 'Assigning…' : 'Assign whole class' }}
+                                    </SecondaryButton>
+                                </div>
+
+                                <div v-if="set.assignments?.length" class="mt-4 overflow-x-auto rounded-md border border-emerald-100 bg-white">
+                                    <table class="min-w-full text-xs">
+                                        <thead class="bg-gray-50 text-gray-500">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left">Student</th>
+                                                <th class="px-3 py-2 text-left">Due</th>
+                                                <th class="px-3 py-2 text-left">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <tr v-for="row in set.assignments" :key="row.assignment_id">
+                                                <td class="px-3 py-2">{{ row.student_name }}</td>
+                                                <td class="px-3 py-2">{{ formatDate(row.target_date) }}</td>
+                                                <td class="px-3 py-2">
+                                                    <span
+                                                        class="rounded-full px-2 py-0.5 font-medium"
+                                                        :class="progressLabel(row).class"
+                                                    >
+                                                        {{ progressLabel(row).label }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+                                <p class="font-medium text-gray-900">Quick assign one student</p>
+                                <p class="mt-1 text-xs text-gray-500">Use for a single set without changing checkboxes.</p>
+                                <div class="mt-3">
+                                    <InputLabel value="Student" class="!text-xs" />
+                                    <select v-model="quickAssignStudentId" class="mt-1 w-full rounded-md border-gray-300 text-sm">
+                                        <option value="">Select</option>
+                                        <option v-for="student in students" :key="student.id" :value="student.id">
+                                            {{ student.label || student.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="mt-3">
+                                    <InputLabel value="Target date" class="!text-xs" />
+                                    <input v-model="quickTargetDate" type="date" class="mt-1 w-full rounded-md border-gray-300 text-sm">
+                                </div>
+                                <div class="mt-4 space-y-2">
+                                    <PrimaryButton
+                                        v-for="set in publishedSets"
+                                        :key="`quick-${set.id}`"
+                                        type="button"
+                                        class="w-full !py-2 !text-xs"
+                                        :disabled="!quickAssignStudentId || !quickTargetDate || quickAssignForm.processing"
+                                        @click="quickAssignSet(set.id)"
+                                    >
+                                        Assign {{ set.set_code }}
+                                    </PrimaryButton>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    v-else-if="chapter.status === 'published'"
+                    class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+                >
                     Published MCQ sets:
                     <strong>{{ publishedMcqSetCodes.join(', ') }}</strong>.
-                    Assign each part from class to class via
-                    <Link :href="safeRoute('admin.classes.index', null, '/admin/classes')" class="font-semibold underline">Classes → Assign</Link>.
                 </div>
 
                 <div v-if="!hasItems" class="rounded-lg border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-950">
