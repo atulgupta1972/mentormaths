@@ -27,12 +27,30 @@ class TextbookChapterMcqPromptService
         $sample = [
             'questions' => [
                 [
-                    'topic' => 'Textbook',
+                    'topic' => 'Explicit rule',
                     'question' => 'Find the 5th term of the sequence tₙ = 3n − 4 (n ≥ 1).',
                     'options' => ['8', '11', '14', '17'],
                     'correct_index' => 1,
                     'hint' => 'Substitute n = 5 into the explicit formula.',
                     'explanation' => 't5 = 3(5) − 4 = 11. Answer: B',
+                    'difficulty' => 'Easy',
+                ],
+                [
+                    'topic' => 'Reading a table',
+                    'question' => 'The table shows the number of books read by four students in March. Who read the most books?',
+                    'table' => [
+                        'headers' => ['Student', 'Books read'],
+                        'rows' => [
+                            ['Anya', '5'],
+                            ['Bhuvan', '8'],
+                            ['Chitra', '6'],
+                            ['Dev', '4'],
+                        ],
+                    ],
+                    'options' => ['Anya', 'Bhuvan', 'Chitra', 'Dev'],
+                    'correct_index' => 1,
+                    'hint' => 'Compare the values in the second column.',
+                    'explanation' => 'Bhuvan read 8 books, which is the greatest. Answer: B',
                     'difficulty' => 'Easy',
                 ],
             ],
@@ -66,6 +84,8 @@ Return ONLY valid JSON (no markdown fences) in this exact shape:
     {
       "topic": "Short topic label (e.g. Explicit rule, AP, End-of-chapter)",
       "question": "Student-facing question text",
+      "chart": "optional — full chart/graph description when the PDF uses a figure",
+      "table": "optional — markdown table string OR {\"headers\": [...], \"rows\": [[...]]}",
       "options": ["A text", "B text", "C text", "D text"],
       "correct_index": 0,
       "hint": "One-line method hint",
@@ -81,7 +101,17 @@ Rules:
 - Exactly 4 options per question when possible
 - Do not skip numbered exercises — extract ALL solvable items
 - Fix broken subscripts (t_n, u_n) in question text
-- For diagram questions, describe the figure in the question text
+- For diagram/geometry questions, describe the figure fully in "question" and/or "chart"
+
+Charts and tables (critical — must be flawless):
+- If a question depends on a chart, graph, pictograph, bar graph, pie chart, or line graph, copy ALL data the student needs:
+  title, axes/units, scale, category labels, and every visible value
+- Put chart data in "chart" (plain-text description) and/or embed the key values in "question"
+- If a question depends on a table, include the FULL table — every column header and row, exact numbers:
+  use "table" as markdown (| col | col |) OR {"headers": ["Col1","Col2"], "rows": [["a","1"], ["b","2"]]}
+- NEVER write "see the table above", "refer to the chart", or "from the graph shown" without copying the data
+- Each question must be fully solvable from JSON alone — as if the student never saw the PDF
+- Double-check table/chart numbers against the PDF; do not round or omit rows
 
 After import, the admin splits questions into class sets on the review page.
 

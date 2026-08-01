@@ -125,7 +125,7 @@ class TextbookChapterMcqImportService
             'label' => $label,
             'topic' => $topic,
             'source_page' => 0,
-            'question_text' => trim((string) ($row['question'] ?? $row['question_text'] ?? '')),
+            'question_text' => $this->composeQuestionText($row),
             'correct_answer' => trim((string) ($correct['text'] ?? '')),
             'answer_format' => 'text',
             'explanation' => trim((string) ($row['explanation'] ?? '')),
@@ -165,5 +165,100 @@ class TextbookChapterMcqImportService
         }
 
         throw new InvalidArgumentException('Invalid JSON. Paste {"questions": [...], "set_plan": [...]} from Cursor.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function composeQuestionText(array $row): string
+    {
+        $parts = [];
+
+        $question = trim((string) ($row['question'] ?? $row['question_text'] ?? ''));
+        if ($question !== '') {
+            $parts[] = $question;
+        }
+
+        foreach (['context', 'passage', 'intro'] as $key) {
+            $value = trim((string) ($row[$key] ?? ''));
+            if ($value !== '') {
+                $parts[] = $value;
+            }
+        }
+
+        foreach (['chart', 'chart_description', 'figure_description', 'graph'] as $key) {
+            $value = trim((string) ($row[$key] ?? ''));
+            if ($value !== '') {
+                $parts[] = "Chart:\n".$value;
+            }
+        }
+
+        foreach (['table', 'data_table', 'table_markdown', 'chart_table'] as $key) {
+            if (! array_key_exists($key, $row)) {
+                continue;
+            }
+
+            $formatted = is_array($row[$key])
+                ? $this->formatTableValue($row[$key])
+                : trim((string) $row[$key]);
+
+            if ($formatted !== '') {
+                $parts[] = "Table:\n".$formatted;
+            }
+        }
+
+        return trim(implode("\n\n", $parts));
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $table
+     */
+    private function formatTableValue(array $table): string
+    {
+        if (isset($table['headers'], $table['rows'])
+            && is_array($table['headers'])
+            && is_array($table['rows'])) {
+            $headers = array_map(strval(...), $table['headers']);
+            $lines = [
+                implode(' | ', $headers),
+                str_repeat('-', min(80, max(12, strlen(implode(' | ', $headers))))),
+            ];
+
+            foreach ($table['rows'] as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                $lines[] = implode(' | ', array_map(strval(...), $row));
+            }
+
+            return implode("\n", $lines);
+        }
+
+        $rows = array_values($table);
+        if ($rows !== [] && is_array($rows[0])) {
+            $headers = array_keys($rows[0]);
+            $lines = [
+                implode(' | ', $headers),
+                str_repeat('-', min(80, max(12, strlen(implode(' | ', $headers))))),
+            ];
+
+            foreach ($rows as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                $lines[] = implode(' | ', array_map(
+                    fn (string $header) => (string) ($row[$header] ?? ''),
+                    $headers,
+                ));
+            }
+
+            return implode("\n", $lines);
+        }
+
+        $encoded = json_encode($table, JSON_UNESCAPED_UNICODE);
+
+        return is_string($encoded) ? $encoded : '';
     }
 }
