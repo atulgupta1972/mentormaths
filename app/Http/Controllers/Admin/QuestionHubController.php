@@ -144,8 +144,8 @@ class QuestionHubController extends Controller
             'activeYear' => $activeYear?->only(['id', 'name']),
             'syllabusVersion' => $syllabusVersion ? [
                 'id' => $syllabusVersion->id,
-                'board_code' => $syllabusVersion->board->code,
-                'board_name' => $syllabusVersion->board->name,
+                'board_code' => $syllabusVersion->board?->code ?? $board->code,
+                'board_name' => $syllabusVersion->board?->name ?? $board->name,
             ] : null,
             'chapters' => $chapters,
             'stats' => [
