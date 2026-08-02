@@ -208,7 +208,7 @@ watch(
         </template>
 
         <div :class="protectionEnabled ? 'attempt-protected py-10' : 'py-10'">
-            <div class="mx-auto max-w-3xl space-y-5 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-4xl space-y-5 sm:px-6 lg:px-8">
                 <AttemptIntegrityNotice :mode="protectionMode" />
 
                 <div v-if="page.props.flash?.success" class="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">
@@ -271,6 +271,7 @@ watch(
                         <QuestionBody
                             :question-text="question.question_text"
                             :diagram-url="question.diagram_url"
+                            enlarge-diagram
                         />
                     </div>
 

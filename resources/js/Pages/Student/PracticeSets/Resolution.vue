@@ -101,7 +101,7 @@ const submitBlankAnswer = () => {
                     <QuestionBody
                         :question-text="item.question_text"
                         :diagram-url="item.diagram_url"
-                        use-html
+                        enlarge-diagram
                     />
 
                     <div v-if="isFillInBlank" class="mt-4 space-y-3">

@@ -144,7 +144,7 @@ const submitBlankRetry = (question) => {
                 <QuestionBody
                     :question-text="question.question_text"
                     :diagram-url="question.diagram_url"
-                    :use-html="question.type === 'mcq'"
+                    enlarge-diagram
                 />
             </div>
 

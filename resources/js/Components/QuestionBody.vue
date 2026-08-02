@@ -16,18 +16,49 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    /** Larger chart + tap-to-zoom on student attempt screens */
+    enlargeDiagram: {
+        type: Boolean,
+        default: false,
+    },
 });
 
-const formattedText = computed(() => formatMcqText(props.questionText));
+const stripEmbeddedChartTable = (text) => {
+    if (!text) {
+        return '';
+    }
+
+    return text
+        .split(/\n\n/)
+        .filter((part) => !part.startsWith('Chart:') && !part.startsWith('Table:'))
+        .join('\n\n')
+        .trim();
+};
+
+const displayQuestionText = computed(() => {
+    const text = props.diagramUrl
+        ? stripEmbeddedChartTable(props.questionText)
+        : props.questionText;
+
+    return formatMcqText(text);
+});
+
+const diagramSize = computed(() => {
+    if (props.enlargeDiagram) {
+        return 'lg';
+    }
+
+    return props.compact ? 'sm' : 'md';
+});
 </script>
 
 <template>
     <div>
-        <QuestionDiagram :url="diagramUrl" :compact="compact" />
+        <QuestionDiagram :url="diagramUrl" :compact="compact" :size="diagramSize" />
         <p
-            v-if="questionText"
+            v-if="displayQuestionText"
             class="whitespace-pre-wrap font-medium text-gray-900 [&_sup]:relative [&_sup]:top-[-0.35em] [&_sup]:text-[0.75em]"
-            v-html="formattedText"
+            v-html="displayQuestionText"
         />
     </div>
 </template>
