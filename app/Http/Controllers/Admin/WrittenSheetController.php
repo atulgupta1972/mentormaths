@@ -610,6 +610,7 @@ class WrittenSheetController extends Controller
 
         $activeYear = AcademicYear::active();
         $selectedStudentId = $request->integer('student_id') ?: null;
+        $focusAssignmentId = $request->integer('assignment_id') ?: null;
         $students = $this->assignmentService->activeStudentsForAssignment($activeYear?->id);
         $studentProgress = null;
 
@@ -633,6 +634,7 @@ class WrittenSheetController extends Controller
             'topics' => $this->topicsForWrittenSheet($worksheet),
             'students' => $students,
             'selectedStudentId' => $selectedStudentId,
+            'focusAssignmentId' => $focusAssignmentId,
             'studentProgress' => $studentProgress,
             'assignments' => $assignments,
             'activeYear' => $activeYear?->only(['id', 'name']),

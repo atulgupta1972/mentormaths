@@ -384,6 +384,18 @@ const pendingButtonLabel = (set) => {
     return 'Start';
 };
 
+const adminAssignmentHref = (set, studentId) => {
+    if (set.delivery_mode === 'written' && set.practice_set_id) {
+        return route('admin.written-sheets.show', {
+            worksheet: set.practice_set_id,
+            student_id: studentId,
+            assignment_id: set.assignment_id,
+        });
+    }
+
+    return route('admin.set-assignments.show', set.assignment_id);
+};
+
 const adminSetStatusClass = (set) => {
     if (set.status === 'green' || set.status === 'green-late') {
         return 'border-emerald-200 bg-emerald-50 text-emerald-900';
@@ -597,7 +609,7 @@ const adminSetStatusClass = (set) => {
                                         <Link
                                             v-for="set in student.assignments_pending"
                                             :key="set.assignment_id"
-                                            :href="route('admin.set-assignments.show', set.assignment_id)"
+                                            :href="adminAssignmentHref(set, student.student_id)"
                                             class="rounded border px-2 py-1 text-[11px] font-mono font-semibold"
                                             :class="adminSetStatusClass(set)"
                                         >
@@ -613,7 +625,7 @@ const adminSetStatusClass = (set) => {
                                         <Link
                                             v-for="set in student.assignments_completed"
                                             :key="`done-${set.assignment_id}`"
-                                            :href="route('admin.set-assignments.show', set.assignment_id)"
+                                            :href="adminAssignmentHref(set, student.student_id)"
                                             class="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-mono font-semibold text-emerald-900"
                                         >
                                             {{ setLabel(set) }}

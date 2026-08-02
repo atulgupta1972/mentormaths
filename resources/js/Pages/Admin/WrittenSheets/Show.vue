@@ -6,7 +6,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { formatScoreLabel } from '@/utils/scores';
 import {
     defaultFillBlankRow,
@@ -19,6 +19,7 @@ const props = defineProps({
     topics: { type: Array, default: () => [] },
     students: { type: Array, default: () => [] },
     selectedStudentId: { type: [Number, null], default: null },
+    focusAssignmentId: { type: [Number, null], default: null },
     studentProgress: { type: Object, default: null },
     assignments: { type: Array, default: () => [] },
     activeYear: { type: Object, default: null },
@@ -417,6 +418,17 @@ const onStudentChange = () => {
         { preserveState: true, preserveScroll: true },
     );
 };
+
+onMounted(() => {
+    if (!props.focusAssignmentId) {
+        return;
+    }
+
+    const row = findAssignmentRow(props.focusAssignmentId);
+    if (row) {
+        openGrade(row);
+    }
+});
 
 const assignSheet = () => {
     assignForm.student_id = assignStudentId.value;

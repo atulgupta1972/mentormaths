@@ -234,6 +234,7 @@ class AssignmentProgress
 
         return [
             'assignment_id' => $assignment->id,
+            'practice_set_id' => $assignment->worksheet_id,
             'set_code' => $practiceSet->set_code,
             'set_number' => $practiceSet->set_number,
             'kind_label' => $practiceSet->isChapterTest() ? 'Written test' : 'Written practice',

@@ -20,7 +20,7 @@ class SetAssignmentController extends Controller
 {
     public function __construct(private SetAssignmentService $assignmentService) {}
 
-    public function show(SetAssignment $assignment): Response
+    public function show(SetAssignment $assignment): Response|RedirectResponse
     {
         $assignment->load([
             'enrollment.student:id,name',
@@ -29,6 +29,14 @@ class SetAssignmentController extends Controller
             'attempts' => fn ($q) => $q->orderByDesc('attempt_number'),
             'assigner:id,name',
         ]);
+
+        if ($assignment->practiceSet->isWritten()) {
+            return redirect()->route('admin.written-sheets.show', [
+                'worksheet' => $assignment->worksheet_id,
+                'student_id' => $assignment->enrollment->student_id,
+                'assignment_id' => $assignment->id,
+            ]);
+        }
 
         $latest = $assignment->attempts->first();
         $latestSummary = ($latest && $latest->status === SetAttempt::STATUS_SUBMITTED)
