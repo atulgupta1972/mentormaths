@@ -419,6 +419,61 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertStringContainsString('Ghostscript', (string) $submission->grading_error);
     }
 
+    public function test_admin_can_retry_failed_ai_grading(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'summary' => 'Good work.',
+                                'items' => [
+                                    [
+                                        'question_number' => 1,
+                                        'extracted_answer' => '4',
+                                        'step_feedback' => 'Correct.',
+                                        'score' => 1,
+                                        'is_correct' => true,
+                                        'confidence' => 0.95,
+                                        'needs_review' => false,
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $path = 'written-submissions/'.$assignment->id.'/answers.jpg';
+        Storage::disk('public')->put($path, 'image');
+
+        $submission = WrittenSubmission::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'status' => WrittenSubmission::STATUS_FAILED,
+            'upload_paths' => [$path],
+            'grading_error' => 'PDF answer sheets need Ghostscript on the server.',
+            'uploaded_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.written-assignments.retry-ai', $assignment))
+            ->assertRedirect();
+
+        app()->terminate();
+
+        $submission->refresh();
+        $this->assertSame(WrittenSubmission::STATUS_GRADED, $submission->status);
+        $this->assertNull($submission->grading_error);
+        $this->assertSame(1, $submission->score);
+    }
+
     public function test_grade_pending_command_processes_stuck_upload(): void
     {
         Storage::fake('public');

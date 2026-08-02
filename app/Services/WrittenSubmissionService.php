@@ -289,6 +289,31 @@ class WrittenSubmissionService
         }
     }
 
+    public function retryAiGrading(WrittenSubmission $submission): void
+    {
+        if ($submission->status !== WrittenSubmission::STATUS_FAILED) {
+            throw new \InvalidArgumentException('Only failed uploads can be sent for AI checking again.');
+        }
+
+        if ($submission->upload_paths === [] || $submission->upload_paths === null) {
+            throw new \InvalidArgumentException('No uploaded files found for this submission.');
+        }
+
+        $submission->items()->delete();
+        $submission->update([
+            'status' => WrittenSubmission::STATUS_UPLOADED,
+            'grading_error' => null,
+            'score' => null,
+            'max_score' => null,
+            'ai_summary' => null,
+            'handwriting_rating' => null,
+            'teacher_remarks' => null,
+            'graded_at' => null,
+        ]);
+
+        $this->scheduleGrading($submission->fresh());
+    }
+
     private function scheduleGrading(WrittenSubmission $submission): void
     {
         $submissionId = $submission->id;

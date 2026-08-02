@@ -67,6 +67,7 @@ const assignNotes = ref('');
 const assignForm = useForm({ student_id: '', target_date: '', notes: '' });
 const bulkForm = useForm({ student_ids: [], target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
+const retryAiForm = useForm({});
 const gradeForm = useForm({ feedback: '', remarks: '', handwriting_rating: '', items: [] });
 const gradingAssignmentId = ref(null);
 const revisionForm = useForm({ files: [], skip_ai: false });
@@ -450,6 +451,17 @@ const reassign = (assignmentId) => {
 
     reassignForm.target_date = targetDate.value;
     reassignForm.post(route('admin.set-assignments.reassign', assignmentId), { preserveScroll: true });
+};
+
+const retryAiCheck = (assignmentId) => {
+    if (!confirm('Send this upload for AI checking again? Install Ghostscript on the server first if PDF checking failed before.')) {
+        return;
+    }
+
+    retryAiForm.post(route('admin.written-assignments.retry-ai', assignmentId), {
+        preserveScroll: true,
+        onSuccess: () => reloadAssignmentRow(assignmentId),
+    });
 };
 
 const onReplacePdfSelected = (event) => {
@@ -1178,6 +1190,15 @@ const progressLabel = (p) => {
                                                 <button type="button" class="text-indigo-600 hover:underline" @click="openGrade(row)">
                                                     {{ row.written_submission_status === 'graded' ? 'Edit marks' : 'Enter marks' }}
                                                 </button>
+                                                <button
+                                                    v-if="row.written_submission_status === 'failed'"
+                                                    type="button"
+                                                    class="text-amber-700 hover:underline"
+                                                    :disabled="retryAiForm.processing"
+                                                    @click="retryAiCheck(row.assignment_id)"
+                                                >
+                                                    Retry AI
+                                                </button>
                                                 <button type="button" class="text-gray-600 hover:underline" @click="reassign(row.assignment_id)">
                                                     Re-assign
                                                 </button>
@@ -1195,6 +1216,15 @@ const progressLabel = (p) => {
                                                             <span v-if="!allQuestionsMarked" class="ml-1 text-xs font-normal text-amber-700">
                                                                 ({{ gradeMarkedCount }}/{{ gradeForm.items.length }} marked)
                                                             </span>
+                                                        </p>
+                                                    </div>
+                                                    <div
+                                                        v-if="row.grading_error"
+                                                        class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+                                                    >
+                                                        <strong>AI could not check:</strong> {{ row.grading_error }}
+                                                        <p class="mt-1 text-amber-900">
+                                                            You can still mark manually below, or install Ghostscript on the server and click Retry AI.
                                                         </p>
                                                     </div>
                                                     <div v-if="(row.upload_files || []).length" class="space-y-3">

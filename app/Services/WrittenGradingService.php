@@ -117,7 +117,7 @@ class WrittenGradingService
                 if ($extension === 'pdf' || str_contains($mime, 'pdf')) {
                     if (! $this->pageImageService->isAvailable()) {
                         throw new \RuntimeException(
-                            'PDF answer sheets need Ghostscript on the server. Install Ghostscript, or upload a JPG/PNG photo instead.',
+                            'PDF answer sheets need Ghostscript or poppler-utils (pdftoppm) on the server. Install one of them, or upload a JPG/PNG photo instead.',
                         );
                     }
 
