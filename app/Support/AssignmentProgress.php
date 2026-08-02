@@ -130,6 +130,8 @@ class AssignmentProgress
             $status = 'overdue';
         }
 
+        $progress = WrittenSubmissionProgress::forSubmission($submission);
+
         return [
             'assignment_id' => $assignment->id,
             'practice_set_id' => $assignment->worksheet_id,
@@ -175,7 +177,9 @@ class AssignmentProgress
             'checking_minutes' => $submission && in_array($submission->status, [
                 WrittenSubmission::STATUS_UPLOADED,
                 WrittenSubmission::STATUS_PROCESSING,
-            ], true) ? $submission->uploaded_at?->diffInMinutes(now()) : null,
+            ], true) ? WrittenSubmissionProgress::checkingMinutes($submission) : null,
+            'grading_progress' => $progress['percent'],
+            'grading_stage' => $progress['stage'],
             'grading_error' => $submission?->grading_error,
             'status' => $status,
         ];

@@ -1,12 +1,13 @@
 <script setup>
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
+import WrittenGradingProgressBar from '@/Components/WrittenGradingProgressBar.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { formatScoreLabel } from '@/utils/scores';
 import {
     defaultFillBlankRow,
@@ -683,6 +684,50 @@ const openUpload = (row) => {
     openGrade(row);
 };
 
+const isWrittenChecking = (row) => ['uploaded', 'processing'].includes(row?.written_submission_status);
+
+const assignmentsChecking = computed(() =>
+    props.assignments.some((row) => isWrittenChecking(row))
+    || isWrittenChecking(props.studentProgress),
+);
+
+let checkingPollTimer = null;
+
+const pollCheckingAssignments = () => {
+    if (checkingPollTimer || !assignmentsChecking.value) {
+        return;
+    }
+
+    checkingPollTimer = window.setInterval(() => {
+        if (!assignmentsChecking.value) {
+            window.clearInterval(checkingPollTimer);
+            checkingPollTimer = null;
+
+            return;
+        }
+
+        router.reload({
+            only: ['assignments', 'studentProgress'],
+            preserveScroll: true,
+        });
+    }, 4000);
+};
+
+watch(assignmentsChecking, (checking) => {
+    if (checking) {
+        pollCheckingAssignments();
+    } else if (checkingPollTimer) {
+        window.clearInterval(checkingPollTimer);
+        checkingPollTimer = null;
+    }
+}, { immediate: true });
+
+onUnmounted(() => {
+    if (checkingPollTimer) {
+        window.clearInterval(checkingPollTimer);
+    }
+});
+
 const progressLabel = (p) => {
     if (!p) {
         return { label: 'Not assigned', class: 'bg-gray-100 text-gray-600' };
@@ -696,10 +741,8 @@ const progressLabel = (p) => {
     }
 
     if (p.written_submission_status === 'processing') {
-        const minutes = p.checking_minutes ?? 0;
-
         return {
-            label: minutes >= 5 ? `Checking… (${minutes}m)` : 'Checking…',
+            label: 'Checking…',
             class: 'bg-yellow-100 text-yellow-800',
         };
     }
@@ -708,7 +751,7 @@ const progressLabel = (p) => {
         const minutes = p.checking_minutes ?? 0;
 
         return {
-            label: minutes >= 3 ? 'Uploaded — waiting' : 'Uploaded — queued',
+            label: minutes >= 10 ? 'Waiting to start' : 'Queued',
             class: 'bg-yellow-100 text-yellow-800',
         };
     }
@@ -1178,6 +1221,18 @@ const progressLabel = (p) => {
                                                     >
                                                         {{ progressLabel(row).label }}
                                                     </span>
+                                                    <WrittenGradingProgressBar
+                                                        v-if="isWrittenChecking(row)"
+                                                        compact
+                                                        :progress="row.grading_progress ?? 0"
+                                                        :stage="row.grading_stage ?? ''"
+                                                    />
+                                                    <p
+                                                        v-if="isWrittenChecking(row) && (row.checking_minutes ?? 0) >= 10"
+                                                        class="text-[10px] text-amber-800"
+                                                    >
+                                                        Taking long? Click <strong>Retry AI</strong> after Ghostscript is installed.
+                                                    </p>
                                                     <p v-if="row.handwriting_label" class="text-xs text-gray-500">
                                                         Handwriting: {{ row.handwriting_label }}
                                                     </p>
@@ -1191,7 +1246,7 @@ const progressLabel = (p) => {
                                                     {{ row.written_submission_status === 'graded' ? 'Edit marks' : 'Enter marks' }}
                                                 </button>
                                                 <button
-                                                    v-if="row.written_submission_status === 'failed'"
+                                                    v-if="row.written_submission_status === 'failed' || (isWrittenChecking(row) && (row.checking_minutes ?? 0) >= 10)"
                                                     type="button"
                                                     class="text-amber-700 hover:underline"
                                                     :disabled="retryAiForm.processing"
@@ -1227,6 +1282,11 @@ const progressLabel = (p) => {
                                                             You can still mark manually below, or install Ghostscript on the server and click Retry AI.
                                                         </p>
                                                     </div>
+                                                    <WrittenGradingProgressBar
+                                                        v-else-if="isWrittenChecking(row)"
+                                                        :progress="row.grading_progress ?? 0"
+                                                        :stage="row.grading_stage ?? ''"
+                                                    />
                                                     <div v-if="(row.upload_files || []).length" class="space-y-3">
                                                         <p class="text-xs font-semibold uppercase tracking-wide text-indigo-800">
                                                             Uploaded answer sheet (view online)

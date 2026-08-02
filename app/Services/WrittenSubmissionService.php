@@ -8,6 +8,7 @@ use App\Models\WrittenSubmission;
 use App\Models\WrittenSubmissionItem;
 use App\Support\WrittenSubmissionLimits;
 use App\Support\WrittenSubmissionMailer;
+use App\Support\WrittenSubmissionProgress;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -110,6 +111,7 @@ class WrittenSubmissionService
         }
 
         if ($scheduleAi) {
+            WrittenSubmissionProgress::update($submission, 8, 'Queued');
             $this->scheduleGrading($submission);
         }
 
@@ -262,6 +264,7 @@ class WrittenSubmissionService
                     'status' => WrittenSubmission::STATUS_FAILED,
                     'grading_error' => 'AI checking took too long for this upload. Your teacher can mark it manually — no need to upload again.',
                 ]);
+                WrittenSubmissionProgress::clear($submissionId);
                 WrittenSubmissionMailer::sendCheckFailed($submission->fresh());
 
                 return false;
@@ -283,6 +286,7 @@ class WrittenSubmissionService
                 'grading_error' => $exception->getMessage(),
             ]);
 
+            WrittenSubmissionProgress::clear($submissionId);
             WrittenSubmissionMailer::sendCheckFailed($submission->fresh());
 
             return false;
@@ -311,6 +315,7 @@ class WrittenSubmissionService
             'graded_at' => null,
         ]);
 
+        WrittenSubmissionProgress::update($submission, 8, 'Queued');
         $this->scheduleGrading($submission->fresh());
     }
 
@@ -351,6 +356,8 @@ class WrittenSubmissionService
             return null;
         }
 
+        $progress = WrittenSubmissionProgress::forSubmission($submission);
+
         return [
             'id' => $submission->id,
             'status' => $submission->status,
@@ -363,11 +370,13 @@ class WrittenSubmissionService
             'grading_error' => $submission->grading_error,
             'uploaded_at' => $submission->uploaded_at?->toDateTimeString(),
             'graded_at' => $submission->graded_at?->toDateTimeString(),
-            'uploaded_minutes_ago' => $submission->uploaded_at?->diffInMinutes(now()),
+            'uploaded_minutes_ago' => WrittenSubmissionProgress::checkingMinutes($submission),
             'checking_minutes' => in_array($submission->status, [
                 WrittenSubmission::STATUS_UPLOADED,
                 WrittenSubmission::STATUS_PROCESSING,
-            ], true) ? $submission->uploaded_at?->diffInMinutes(now()) : null,
+            ], true) ? WrittenSubmissionProgress::checkingMinutes($submission) : null,
+            'grading_progress' => $progress['percent'],
+            'grading_stage' => $progress['stage'],
             'upload_urls' => $submission->uploadUrls(),
             'upload_files' => $submission->uploadFiles(),
             'can_retry' => in_array($submission->status, [

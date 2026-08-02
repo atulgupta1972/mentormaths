@@ -7,6 +7,7 @@ use App\Models\SetAssignment;
 use App\Models\WrittenSubmission;
 use App\Models\WrittenSubmissionItem;
 use App\Support\WrittenSubmissionMailer;
+use App\Support\WrittenSubmissionProgress;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
@@ -36,6 +37,7 @@ class WrittenGradingService
         }
 
         $submission->update(['status' => WrittenSubmission::STATUS_PROCESSING]);
+        WrittenSubmissionProgress::update($submission, 15, 'Preparing');
 
         $questions = $worksheet->questions->values()->map(function (Question $question, int $index) {
             $correct = $question->isMcq()
@@ -52,6 +54,7 @@ class WrittenGradingService
             ];
         })->all();
 
+        WrittenSubmissionProgress::update($submission, 35, 'Reading answer sheet');
         $imageParts = $this->buildImageParts($submission);
 
         if ($imageParts === []) {
@@ -60,6 +63,7 @@ class WrittenGradingService
 
         $prompt = $this->buildPrompt($questions, $worksheet->set_code);
 
+        WrittenSubmissionProgress::update($submission, 55, 'Checking with AI');
         $response = Http::withToken($apiKey)
             ->timeout(180)
             ->post('https://api.openai.com/v1/chat/completions', [
@@ -92,6 +96,8 @@ class WrittenGradingService
 
         /** @var array<string, mixed> $payload */
         $payload = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+
+        WrittenSubmissionProgress::update($submission, 85, 'Saving marks');
 
         return $this->persistResults($submission, $assignment, $worksheet->questions->values()->all(), $payload);
     }
@@ -253,6 +259,8 @@ class WrittenGradingService
             'grading_error' => null,
             'graded_at' => now(),
         ]);
+
+        WrittenSubmissionProgress::clear($submission->id);
 
         $assignment->update([
             'status' => SetAssignment::STATUS_COMPLETED,

@@ -1,10 +1,11 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import WrittenGradingProgressBar from '@/Components/WrittenGradingProgressBar.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
     assignment: { type: Object, required: true },
@@ -132,6 +133,28 @@ const isAwaitingGrade = computed(() => {
     const status = submission.value?.status;
 
     return status === 'uploaded' || status === 'processing';
+});
+
+let checkingPollTimer = null;
+
+watch(isAwaitingGrade, (checking) => {
+    if (checking && !checkingPollTimer) {
+        checkingPollTimer = window.setInterval(() => {
+            router.reload({
+                only: ['assignment'],
+                preserveScroll: true,
+            });
+        }, 4000);
+    } else if (!checking && checkingPollTimer) {
+        window.clearInterval(checkingPollTimer);
+        checkingPollTimer = null;
+    }
+}, { immediate: true });
+
+onUnmounted(() => {
+    if (checkingPollTimer) {
+        window.clearInterval(checkingPollTimer);
+    }
 });
 </script>
 
@@ -274,6 +297,11 @@ const isAwaitingGrade = computed(() => {
 
                 <div v-if="isAwaitingGrade" class="rounded-lg border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">
                     <p>{{ checkingMessage }}</p>
+                    <WrittenGradingProgressBar
+                        class="mt-3"
+                        :progress="submission?.grading_progress ?? 0"
+                        :stage="submission?.grading_stage ?? 'Checking…'"
+                    />
                     <p v-if="showInitialUpload" class="mt-2 text-violet-800">
                         Wrong order on your sheet? Replace the upload above before checking finishes — use Q1, Q2, Q3… in order.
                     </p>
