@@ -126,6 +126,116 @@ class TextbookChapterMcqImportService
         Storage::disk('public')->deleteDirectory($this->stagingDiagramDirectory($chapter));
     }
 
+    public function replaceItemDiagram(TextbookChapter $chapter, int $itemIndex, UploadedFile $image): TextbookChapter
+    {
+        $items = $chapter->extraction_items ?? [];
+        if (! isset($items[$itemIndex])) {
+            throw new InvalidArgumentException('Question not found.');
+        }
+
+        $this->deleteStagingPath($items[$itemIndex]['diagram_staging_path'] ?? null);
+
+        $items[$itemIndex]['diagram_staging_path'] = $this->persistStagingDiagram(
+            $chapter,
+            $image->getRealPath() ?: $image->path(),
+            strtolower($image->getClientOriginalExtension() ?: 'png'),
+        );
+        $items[$itemIndex]['needs_diagram'] = true;
+
+        $chapter->update(['extraction_items' => $items]);
+
+        if ($chapter->status === TextbookChapter::STATUS_PUBLISHED) {
+            $this->syncPublishedQuestionDiagram($chapter, $itemIndex, $items[$itemIndex]['diagram_staging_path']);
+        }
+
+        return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet']);
+    }
+
+    public function removeItemDiagram(TextbookChapter $chapter, int $itemIndex): TextbookChapter
+    {
+        $items = $chapter->extraction_items ?? [];
+        if (! isset($items[$itemIndex])) {
+            throw new InvalidArgumentException('Question not found.');
+        }
+
+        $this->deleteStagingPath($items[$itemIndex]['diagram_staging_path'] ?? null);
+
+        unset($items[$itemIndex]['diagram_staging_path'], $items[$itemIndex]['diagram_preview_url']);
+        $items[$itemIndex]['needs_diagram'] = false;
+
+        $chapter->update(['extraction_items' => $items]);
+
+        if ($chapter->status === TextbookChapter::STATUS_PUBLISHED) {
+            $question = $this->publishedQuestionForItemIndex($chapter, $itemIndex);
+            if ($question) {
+                app(QuestionDiagramService::class)->deleteForQuestion($question);
+            }
+        }
+
+        return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet']);
+    }
+
+    private function syncPublishedQuestionDiagram(TextbookChapter $chapter, int $itemIndex, string $stagingPath): void
+    {
+        $question = $this->publishedQuestionForItemIndex($chapter, $itemIndex);
+        if (! $question || ! Storage::disk('public')->exists($stagingPath)) {
+            return;
+        }
+
+        app(QuestionDiagramService::class)->attachFromPath(
+            $question,
+            Storage::disk('public')->path($stagingPath),
+        );
+    }
+
+    private function publishedQuestionForItemIndex(TextbookChapter $chapter, int $itemIndex): ?\App\Models\Question
+    {
+        if ($chapter->status !== TextbookChapter::STATUS_PUBLISHED) {
+            return null;
+        }
+
+        $position = $itemIndex + 1;
+        $setPlan = $chapter->mcq_set_plan ?? [];
+        $worksheetIds = $chapter->mcqWorksheetIds();
+
+        if ($setPlan === [] || $worksheetIds === []) {
+            return null;
+        }
+
+        $worksheets = \App\Models\Worksheet::query()
+            ->whereIn('id', $worksheetIds)
+            ->orderBy('set_number')
+            ->get()
+            ->values();
+
+        foreach ($setPlan as $planIndex => $row) {
+            $qFrom = (int) ($row['q_from'] ?? 0);
+            $qTo = (int) ($row['q_to'] ?? 0);
+
+            if ($position < $qFrom || $position > $qTo) {
+                continue;
+            }
+
+            $worksheet = $worksheets[$planIndex] ?? null;
+            if (! $worksheet) {
+                return null;
+            }
+
+            $questions = $worksheet->questions()->orderByPivot('sort_order')->get();
+
+            return $questions[$position - $qFrom] ?? null;
+        }
+
+        return null;
+    }
+
+    private function deleteStagingPath(?string $path): void
+    {
+        if ($path && Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
@@ -144,12 +254,12 @@ class TextbookChapterMcqImportService
             ->all();
     }
 
-    private function persistStagingDiagram(TextbookChapter $chapter, string $sourcePath): string
+    private function persistStagingDiagram(TextbookChapter $chapter, string $sourcePath, ?string $extension = null): string
     {
         $directory = $this->stagingDiagramDirectory($chapter);
         Storage::disk('public')->makeDirectory($directory);
 
-        $extension = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'png');
+        $extension = strtolower($extension ?: pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'png');
         $destination = $directory.'/'.Str::uuid().'.'.$extension;
 
         $contents = file_get_contents($sourcePath);

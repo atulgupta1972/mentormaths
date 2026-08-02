@@ -319,6 +319,72 @@ class TextbookController extends Controller
             ->with('success', $message);
     }
 
+    public function replaceItemDiagram(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        abort_unless(in_array($textbookChapter->status, [
+            TextbookChapter::STATUS_REVIEW,
+            TextbookChapter::STATUS_PUBLISHED,
+            TextbookChapter::STATUS_FAILED,
+        ], true), 422);
+
+        $uploaded = $request->file('diagram');
+        if ($uploaded) {
+            UploadedFileDiagnostics::assertValid($uploaded, 'diagram');
+        }
+
+        $validated = $request->validate([
+            'item_index' => ['required', 'integer', 'min:0'],
+            'diagram' => ['required', 'image', 'max:5120'],
+        ], [
+            'diagram.required' => 'Choose a PNG or JPG chart image.',
+            'diagram.max' => 'Chart image must be under 5 MB.',
+        ]);
+
+        try {
+            $this->mcqImportService->replaceItemDiagram(
+                $textbookChapter,
+                (int) $validated['item_index'],
+                $uploaded,
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return redirect()
+                ->route('admin.textbooks.show', $textbookChapter)
+                ->with('error', $exception->getMessage());
+        }
+
+        $label = ($textbookChapter->fresh()->extraction_items[$validated['item_index']]['label'] ?? null)
+            ?: 'Q'.((int) $validated['item_index'] + 1);
+
+        return redirect()
+            ->route('admin.textbooks.show', $textbookChapter)
+            ->with('success', "Chart updated for {$label}. Students see the new image immediately if sets are already published.");
+    }
+
+    public function removeItemDiagram(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        abort_unless(in_array($textbookChapter->status, [
+            TextbookChapter::STATUS_REVIEW,
+            TextbookChapter::STATUS_PUBLISHED,
+            TextbookChapter::STATUS_FAILED,
+        ], true), 422);
+
+        $validated = $request->validate([
+            'item_index' => ['required', 'integer', 'min:0'],
+        ]);
+
+        try {
+            $this->mcqImportService->removeItemDiagram($textbookChapter, (int) $validated['item_index']);
+        } catch (\InvalidArgumentException $exception) {
+            return redirect()
+                ->route('admin.textbooks.show', $textbookChapter)
+                ->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.textbooks.show', $textbookChapter)
+            ->with('success', 'Chart removed for this question.');
+    }
+
     public function updateDraft(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
         abort_unless(in_array($textbookChapter->status, [

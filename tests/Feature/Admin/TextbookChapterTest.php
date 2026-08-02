@@ -152,6 +152,77 @@ class TextbookChapterTest extends TestCase
         $this->assertTrue(Storage::disk('public')->exists($question->diagram_path));
     }
 
+    public function test_admin_can_replace_item_diagram_after_publish(): void
+    {
+        Storage::fake('public');
+
+        [$grade, $syllabusChapter, $admin] = $this->seedClassNineChapterEight();
+
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash Part II',
+            'code' => 'GP',
+            'created_by' => $admin->id,
+        ]);
+
+        $textbookChapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => $syllabusChapter->name,
+            'pdf_path' => 'textbooks/1/chapters/8/chapter.pdf',
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'created_by' => $admin->id,
+            'extraction_items' => [[
+                'id' => 'mcq-1',
+                'label' => 'Bar graphs · Q1',
+                'question_text' => 'Which month had the highest sales?',
+                'approved' => true,
+                'include_in_mcq' => true,
+                'include_in_written' => false,
+                'mcq_options' => [
+                    ['text' => 'Jan', 'is_correct' => false],
+                    ['text' => 'Feb', 'is_correct' => true],
+                    ['text' => 'Mar', 'is_correct' => false],
+                    ['text' => 'Apr', 'is_correct' => false],
+                ],
+                'diagram_staging_path' => 'textbooks/1/chapters/8/import-diagrams/old.png',
+            ]],
+            'mcq_set_plan' => [[
+                'set_code' => 'C9-GP-CH08-M',
+                'q_from' => 1,
+                'q_to' => 1,
+                'description' => '',
+            ]],
+        ]);
+
+        Storage::disk('public')->put('textbooks/1/chapters/8/import-diagrams/old.png', 'old');
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.publish', $textbookChapter), [
+                'items' => $textbookChapter->extraction_items,
+            ])
+            ->assertRedirect();
+
+        $replacement = UploadedFile::fake()->image('rocket-chart.png');
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.replace-diagram', $textbookChapter), [
+                'item_index' => 0,
+                'diagram' => $replacement,
+            ])
+            ->assertRedirect(route('admin.textbooks.show', $textbookChapter));
+
+        $textbookChapter->refresh();
+        $newPath = $textbookChapter->extraction_items[0]['diagram_staging_path'] ?? null;
+        $this->assertNotSame('textbooks/1/chapters/8/import-diagrams/old.png', $newPath);
+        $this->assertTrue(Storage::disk('public')->exists($newPath));
+
+        $question = Worksheet::query()->findOrFail($textbookChapter->mcq_worksheet_id)->questions()->first();
+        $this->assertNotNull($question->diagram_path);
+        $this->assertTrue(Storage::disk('public')->exists($question->diagram_path));
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @param  array<string, string>  $images

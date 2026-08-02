@@ -71,6 +71,42 @@ const canEdit = computed(() => ['review', 'published', 'failed'].includes(props.
 const showImportSteps = computed(() => awaitingImport.value || (canEdit.value && !hasItems.value));
 const approvedCount = computed(() => items.value.filter((item) => item.approved !== false).length);
 const diagramLinkedCount = computed(() => items.value.filter((item) => item.diagram_staging_path || item.diagram_preview_url).length);
+const replacingDiagramIndex = ref(null);
+
+const replaceDiagram = (index, event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    replacingDiagramIndex.value = index;
+    const formData = new FormData();
+    formData.append('item_index', String(index));
+    formData.append('diagram', file);
+
+    router.post(safeRoute('admin.textbooks.replace-diagram', props.chapter.id, '#'), formData, {
+        preserveScroll: true,
+        forceFormData: true,
+        onSuccess: () => applyFromProps(),
+        onFinish: () => {
+            replacingDiagramIndex.value = null;
+            event.target.value = '';
+        },
+    });
+};
+
+const removeDiagram = (index) => {
+    if (!confirm('Remove the chart image for this question?')) {
+        return;
+    }
+
+    router.post(safeRoute('admin.textbooks.remove-diagram', props.chapter.id, '#'), {
+        item_index: index,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => applyFromProps(),
+    });
+};
 const mcqBaseSetCode = computed(() => props.mcqImport.mcq_set_code || props.chapter.mcq_set_code?.replace(/M\d+$/, 'M'));
 
 const mcqPublishSummary = computed(() => {
@@ -422,6 +458,12 @@ const quickAssignSet = (setId) => {
                     </div>
                 </div>
 
+                <div v-if="hasItems && canEdit && diagramLinkedCount" class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+                    <strong>Charts from zip are often full PDF pages.</strong>
+                    Replace any row with a clean cropped graph only (PNG/JPG) — the MCQ question text is already separate.
+                    If sets are published, the new chart shows to students right away.
+                </div>
+
                 <div v-if="hasItems && canEdit && diagramLinkedCount" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
                     <strong>{{ diagramLinkedCount }} chart/diagram image(s)</strong> linked — students will see these when attempting MCQs.
                 </div>
@@ -518,10 +560,31 @@ const quickAssignSet = (setId) => {
                                         v-if="item.diagram_preview_url"
                                         :src="item.diagram_preview_url"
                                         alt="Chart preview"
-                                        class="max-h-24 max-w-full rounded border border-gray-200 object-contain"
+                                        class="max-h-36 max-w-full rounded border border-gray-200 object-contain"
                                     >
                                     <p v-else-if="item.diagram_file" class="text-xs text-amber-700">{{ item.diagram_file }} (missing)</p>
                                     <span v-else class="text-xs text-gray-400">—</span>
+                                    <div class="mt-2 space-y-1">
+                                        <label class="block">
+                                            <span class="sr-only">Replace chart for question {{ index + 1 }}</span>
+                                            <input
+                                                type="file"
+                                                accept="image/png,image/jpeg,image/webp"
+                                                class="block w-full min-w-[9rem] text-[10px] text-gray-600 file:mr-1 file:rounded file:border-0 file:bg-indigo-50 file:px-2 file:py-1 file:text-[10px] file:text-indigo-700"
+                                                :disabled="replacingDiagramIndex === index"
+                                                @change="replaceDiagram(index, $event)"
+                                            >
+                                        </label>
+                                        <button
+                                            v-if="item.diagram_preview_url"
+                                            type="button"
+                                            class="text-[10px] text-rose-600 hover:underline"
+                                            @click="removeDiagram(index)"
+                                        >
+                                            Remove chart
+                                        </button>
+                                        <p v-if="replacingDiagramIndex === index" class="text-[10px] text-gray-500">Uploading…</p>
+                                    </div>
                                 </td>
                                 <td class="px-3 py-3 align-top">
                                     <textarea v-model="item.question_text" rows="3" class="w-full min-w-[16rem] rounded-md border-gray-300 text-sm" />
