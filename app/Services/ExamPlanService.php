@@ -429,6 +429,7 @@ class ExamPlanService
                     'latest_max_score' => $summary['latest_max_score'],
                     'submission_timing' => $summary['submission_timing'],
                     'progress_label' => $this->prepProgressLabel($summary),
+                    'delivery_mode' => $assignment->practiceSet->delivery_mode ?? 'online',
                 ];
             });
     }

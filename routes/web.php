@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AcademicYearController;
+use App\Http\Controllers\Admin\BasicsDrillSettingsController;
 use App\Http\Controllers\Admin\ChapterHeadController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
 use App\Http\Controllers\Admin\CatchUpSetController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Admin\WrittenSheetController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
+use App\Http\Controllers\Student\BasicsDrillController;
 use App\Http\Controllers\Student\FormulaDrillController;
 use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
 use App\Http\Controllers\Student\PracticeSetController as StudentPracticeSetController;
@@ -46,7 +48,7 @@ Route::get('/register/thank-you', [RegistrationRequestController::class, 'thankY
     ->name('registration.thank-you');
 
 Route::get('/dashboard', DashboardController::class)
-    ->middleware(['auth', 'verified', 'formula.drill'])
+    ->middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])
     ->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function () {
@@ -239,6 +241,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');
 
     Route::get('/formula-bank', [FormulaBankController::class, 'index'])->name('formula-bank.index');
+    Route::get('/basics-drill', [BasicsDrillSettingsController::class, 'index'])->name('basics-drill.index');
+    Route::put('/basics-drill/classes/{gradeLevel}', [BasicsDrillSettingsController::class, 'update'])->name('basics-drill.update');
     Route::get('/formula-bank/classes/{grade}', [FormulaBankController::class, 'classShow'])->name('formula-bank.classes.show');
     Route::get('/formula-bank/topics/{topic}', [FormulaBankController::class, 'topicShow'])->name('formula-bank.topics.show');
     Route::post('/formula-bank/topics/{topic}/prompt', [FormulaBankController::class, 'topicPrompt'])->name('formula-bank.topics.prompt');
@@ -267,6 +271,13 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->name('student.')->group(function () {
     Route::get('/formula-drill', [FormulaDrillController::class, 'show'])->name('formula-drill.show');
     Route::post('/formula-drill/items/{item}/answer', [FormulaDrillController::class, 'submitAnswer'])->name('formula-drill.answer');
+    Route::get('/basics-drill', [BasicsDrillController::class, 'show'])->name('basics-drill.show');
+    Route::post('/basics-drill/sessions/{session}/start', [BasicsDrillController::class, 'start'])->name('basics-drill.start');
+    Route::post('/basics-drill/items/{item}/answer', [BasicsDrillController::class, 'submitAnswer'])->name('basics-drill.answer');
+    Route::post('/basics-drill/items/{item}/acknowledge', [BasicsDrillController::class, 'acknowledge'])->name('basics-drill.acknowledge');
+});
+
+Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix('student')->name('student.')->group(function () {
     Route::post('/exam-plans', [StudentExamPlanController::class, 'store'])->name('exam-plans.store');
     Route::put('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'update'])->name('exam-plans.update');
     Route::delete('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'destroy'])->name('exam-plans.destroy');

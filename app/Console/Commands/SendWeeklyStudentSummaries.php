@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\AcademicYear;
 use App\Models\StudentEnrollment;
+use App\Services\BasicsDrillReportService;
 use App\Services\FormulaDrillReportService;
 use App\Services\StudentNotificationEmailService;
 use App\Services\StudentProgressSummaryService;
@@ -20,6 +21,7 @@ class SendWeeklyStudentSummaries extends Command
         StudentProgressSummaryService $summaryService,
         StudentNotificationEmailService $emailService,
         FormulaDrillReportService $formulaDrillReport,
+        BasicsDrillReportService $basicsDrillReport,
     ): int {
         $activeYear = AcademicYear::active();
 
@@ -61,6 +63,7 @@ class SendWeeklyStudentSummaries extends Command
 
             $summary = $summaryService->build($enrollment, $asOf, $periodStart);
             $summary['formula_drill'] = $formulaDrillReport->summaryForStudent($student);
+            $summary['basics_drill'] = $basicsDrillReport->summaryForStudent($student);
 
             if ($this->option('dry-run')) {
                 $this->line("Would send to {$student->name}: ".implode(', ', $emails));

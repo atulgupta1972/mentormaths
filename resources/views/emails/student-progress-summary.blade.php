@@ -98,6 +98,25 @@
     </ul>
 @endif
 
+@if (! empty($summary['basics_drill']['weak_facts']))
+    <p><strong>Tables & powers — needs more practice</strong></p>
+    <p style="font-size: 14px;">
+        Facts practised: {{ $summary['basics_drill']['facts_practised'] ?? 0 }} ·
+        Mastered: {{ $summary['basics_drill']['mastered_count'] ?? 0 }} ·
+        Failures: {{ $summary['basics_drill']['total_failures'] ?? 0 }}
+    </p>
+    <ul>
+        @foreach ($summary['basics_drill']['weak_facts'] as $row)
+            <li style="margin-bottom: 8px;">
+                {{ $row['label'] }}
+                @if (($row['times_failed'] ?? 0) > 0)
+                    · {{ $row['times_failed'] }} wrong attempt(s)
+                @endif
+            </li>
+        @endforeach
+    </ul>
+@endif
+
 <p>
     View dashboard:<br>
     <a href="{{ $summary['dashboard_url'] }}">{{ $summary['dashboard_url'] }}</a>

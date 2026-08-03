@@ -1,0 +1,85 @@
+<?php
+
+namespace App\Http\Controllers\Student;
+
+use App\Http\Controllers\Controller;
+use App\Models\BasicsDrillItem;
+use App\Models\BasicsDrillSession;
+use App\Models\Student;
+use App\Services\BasicsDrillSessionService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class BasicsDrillController extends Controller
+{
+    public function __construct(private BasicsDrillSessionService $sessionService) {}
+
+    public function show(Request $request): Response
+    {
+        $student = $this->student($request);
+        $session = $this->sessionService->getOrCreateTodaysSession($student);
+        $session->load(['items', 'student']);
+
+        return Inertia::render('Student/BasicsDrill/Show', [
+            'session' => $this->sessionService->formatSession($session),
+        ]);
+    }
+
+    public function start(Request $request, BasicsDrillSession $session): JsonResponse
+    {
+        $this->authorizeSession($request, $session);
+        $session = $this->sessionService->startDrill($session);
+        $session->load(['items', 'student']);
+
+        return response()->json([
+            'session' => $this->sessionService->formatSession($session),
+        ]);
+    }
+
+    public function submitAnswer(Request $request, BasicsDrillItem $item): JsonResponse
+    {
+        $session = $item->session;
+        $this->authorizeSession($request, $session);
+
+        $validated = $request->validate([
+            'answer' => ['nullable', 'string', 'max:12'],
+            'timed_out' => ['sometimes', 'boolean'],
+        ]);
+
+        $session->load(['items', 'student']);
+
+        return response()->json(
+            $this->sessionService->submitAnswer(
+                $item,
+                $validated['answer'] ?? null,
+                (bool) ($validated['timed_out'] ?? false),
+            ),
+        );
+    }
+
+    public function acknowledge(Request $request, BasicsDrillItem $item): JsonResponse
+    {
+        $session = $item->session;
+        $this->authorizeSession($request, $session);
+        $session->load(['items', 'student']);
+
+        return response()->json(
+            $this->sessionService->acknowledgeReveal($item),
+        );
+    }
+
+    private function student(Request $request): Student
+    {
+        return $request->user()->student;
+    }
+
+    private function authorizeSession(Request $request, BasicsDrillSession $session): void
+    {
+        abort_unless(
+            $request->user()->student?->id === $session->student_id,
+            403,
+        );
+    }
+}

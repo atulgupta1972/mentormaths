@@ -4,6 +4,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
+import axios from 'axios';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -62,25 +63,10 @@ const submitAnswer = async () => {
     submitting.value = true;
 
     try {
-        const response = await fetch(route('student.formula-drill.answer', currentItem.value.id), {
-            method: 'POST',
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-            body: JSON.stringify({ option_id: selectedOptionId.value }),
-        });
-
-        const payload = await response.json();
-
-        if (!response.ok) {
-            feedback.value = { error: payload.message || 'Could not save answer.' };
-            submitting.value = false;
-
-            return;
-        }
+        const { data: payload } = await axios.post(
+            route('student.formula-drill.answer', currentItem.value.id),
+            { option_id: selectedOptionId.value },
+        );
 
         feedback.value = payload;
 
@@ -111,8 +97,10 @@ const submitAnswer = async () => {
             currentItem.value = payload.session.current;
             resetQuestionState();
         }, payload.exhausted ? 1800 : 900);
-    } catch {
-        feedback.value = { error: 'Network error. Try again.' };
+    } catch (error) {
+        feedback.value = {
+            error: error.response?.data?.message || 'Could not save answer. Try again.',
+        };
         submitting.value = false;
     }
 };

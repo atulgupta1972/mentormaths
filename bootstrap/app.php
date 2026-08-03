@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
             'formula.drill' => \App\Http\Middleware\EnsureFormulaDrillComplete::class,
+            'basics.drill' => \App\Http\Middleware\EnsureBasicsDrillComplete::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

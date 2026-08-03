@@ -51,7 +51,8 @@ const teachingGroup = computed(() => ({
         || route().current('admin.catch-up.*')
         || route().current('admin.written-sheets.*')
         || route().current('admin.textbooks.*')
-        || route().current('admin.formula-bank.*'),
+        || route().current('admin.formula-bank.*')
+        || route().current('admin.basics-drill.*'),
     items: [
         {
             label: 'Classes',
@@ -100,6 +101,12 @@ const teachingGroup = computed(() => ({
             href: route('admin.formula-bank.index'),
             active: route().current('admin.formula-bank.*'),
             show: isAdmin.value,
+        },
+        {
+            label: 'Basics drill',
+            href: route('admin.basics-drill.index'),
+            active: route().current('admin.basics-drill.*'),
+            show: isAdmin.value && route().has('admin.basics-drill.index'),
         },
     ],
 }));

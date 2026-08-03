@@ -1,0 +1,704 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\BasicsDrillItem;
+use App\Models\BasicsDrillProgress;
+use App\Models\BasicsDrillSession;
+use App\Models\BasicsFactStat;
+use App\Models\Student;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+
+class BasicsDrillSessionService
+{
+    public function __construct(
+        private BasicsDrillSettingsService $settingsService,
+    ) {}
+
+    public function todayDate(): Carbon
+    {
+        return now(config('basics_drill.timezone', 'Asia/Kolkata'))->startOfDay();
+    }
+
+    public function gatePassed(Student $student): bool
+    {
+        if (! $this->settingsService->isEnabledForEnrollment($student->currentEnrollment())) {
+            return true;
+        }
+
+        $session = $this->todaysSession($student);
+
+        return $session?->isComplete() ?? false;
+    }
+
+    public function todaysSession(Student $student): ?BasicsDrillSession
+    {
+        return BasicsDrillSession::query()
+            ->where('student_id', $student->id)
+            ->whereDate('drill_date', $this->todayDate())
+            ->with('items')
+            ->first();
+    }
+
+    public function getOrCreateTodaysSession(Student $student): BasicsDrillSession
+    {
+        $existing = $this->todaysSession($student);
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $settings = $this->settingsService->forStudent($student);
+        $progress = $this->progressFor($student);
+
+        if (! $this->settingsService->isEnabledForEnrollment($student->currentEnrollment())) {
+            return BasicsDrillSession::query()->create([
+                'student_id' => $student->id,
+                'student_enrollment_id' => $student->currentEnrollment()?->id,
+                'drill_date' => $this->todayDate(),
+                'status' => BasicsDrillSession::STATUS_SKIPPED,
+                'phase' => BasicsDrillSession::PHASE_COMPLETED,
+                'completed_at' => now(),
+            ]);
+        }
+
+        $tableNumber = $this->resolveTableNumber($progress, $settings);
+        $squareStart = $this->clampSquareBatchStart($progress->square_batch_start, $settings);
+        $cubeStart = $this->clampCubeBatchStart($progress->cube_batch_start, $settings);
+
+        $firstPhase = BasicsDrillSession::PHASE_COMPLETED;
+        if ($settings['tables_enabled'] && $tableNumber !== null) {
+            $firstPhase = BasicsDrillSession::PHASE_TABLE_SHOW;
+        } elseif ($settings['squares_enabled'] && $this->squareBatchNumbers($squareStart, $settings) !== []) {
+            $firstPhase = BasicsDrillSession::PHASE_SQUARES_SHOW;
+        } elseif ($settings['cubes_enabled'] && $this->cubeBatchNumbers($cubeStart, $settings) !== []) {
+            $firstPhase = BasicsDrillSession::PHASE_CUBES_SHOW;
+        }
+
+        if ($firstPhase === BasicsDrillSession::PHASE_COMPLETED) {
+            return BasicsDrillSession::query()->create([
+                'student_id' => $student->id,
+                'student_enrollment_id' => $student->currentEnrollment()?->id,
+                'drill_date' => $this->todayDate(),
+                'status' => BasicsDrillSession::STATUS_SKIPPED,
+                'phase' => BasicsDrillSession::PHASE_COMPLETED,
+                'completed_at' => now(),
+            ]);
+        }
+
+        return BasicsDrillSession::query()->create([
+            'student_id' => $student->id,
+            'student_enrollment_id' => $student->currentEnrollment()?->id,
+            'drill_date' => $this->todayDate(),
+            'status' => BasicsDrillSession::STATUS_IN_PROGRESS,
+            'phase' => $firstPhase,
+            'table_number' => $tableNumber,
+            'square_batch_start' => $squareStart,
+            'cube_batch_start' => $cubeStart,
+        ]);
+    }
+
+    public function startDrill(BasicsDrillSession $session): BasicsDrillSession
+    {
+        $phase = $session->phase;
+
+        if (str_ends_with($phase, '_show')) {
+            $drillPhase = str_replace('_show', '_drill', $phase);
+            $session->update(['phase' => $drillPhase]);
+            $this->ensureItemsForPhase($session->fresh(['items']));
+        }
+
+        return $session->fresh(['items']);
+    }
+
+    public function submitAnswer(BasicsDrillItem $item, ?string $answer, bool $timedOut): array
+    {
+        $session = $item->session()->with('items')->firstOrFail();
+        $settings = $this->settingsService->forStudent($session->student);
+        $correctAnswer = (string) $item->correct_answer;
+        $normalized = preg_replace('/\D+/', '', (string) $answer) ?: '';
+        $isCorrect = ! $timedOut && $normalized !== '' && $normalized === $correctAnswer;
+
+        $this->recordStat($session->student_id, $item, $isCorrect);
+
+        if ($isCorrect) {
+            $item->update(['status' => BasicsDrillItem::STATUS_CORRECT]);
+        } else {
+            $item->update(['status' => BasicsDrillItem::STATUS_FAILED]);
+        }
+
+        $session = $session->fresh(['items']);
+
+        if ($isCorrect) {
+            $next = $this->nextPendingItem($session);
+
+            if ($next) {
+                return [
+                    'correct' => true,
+                    'reveal' => false,
+                    'next_item' => $this->formatItem($next),
+                    'session' => $this->formatSession($session->fresh(['items']), $settings),
+                ];
+            }
+
+            return $this->advanceAfterPhase($session, $settings);
+        }
+
+        return [
+            'correct' => false,
+            'reveal' => true,
+            'correct_answer' => (int) $item->correct_answer,
+            'prompt' => $item->promptLabel(),
+            'item_id' => $item->id,
+            'session' => $this->formatSession($session->fresh(['items']), $settings),
+        ];
+    }
+
+    public function acknowledgeReveal(BasicsDrillItem $item): array
+    {
+        $session = $item->session()->with('items')->firstOrFail();
+        $settings = $this->settingsService->forStudent($session->student);
+
+        $item->update(['status' => BasicsDrillItem::STATUS_REVEALED]);
+
+        $session = $session->fresh(['items']);
+        $next = $this->nextPendingItem($session);
+
+        if ($next) {
+            return [
+                'next_item' => $this->formatItem($next),
+                'session' => $this->formatSession($session->fresh(['items']), $settings),
+            ];
+        }
+
+        return $this->advanceAfterPhase($session, $settings);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function formatSession(BasicsDrillSession $session, ?array $settings = null): array
+    {
+        $settings ??= $this->settingsService->forStudent($session->student);
+        $current = $this->currentItem($session);
+
+        return [
+            'id' => $session->id,
+            'status' => $session->status,
+            'phase' => $session->phase,
+            'table_number' => $session->table_number,
+            'square_batch_start' => $session->square_batch_start,
+            'cube_batch_start' => $session->cube_batch_start,
+            'seconds_per_blank' => $settings['seconds_per_blank'],
+            'chart' => $this->chartForPhase($session, $settings),
+            'current_item' => $current ? $this->formatItem($current) : null,
+            'progress_label' => $this->progressLabel($session),
+            'is_show_phase' => str_ends_with($session->phase, '_show'),
+            'is_complete' => $session->isComplete(),
+        ];
+    }
+
+    private function advanceAfterPhase(BasicsDrillSession $session, array $settings): array
+    {
+        $failed = $session->items->filter(
+            fn (BasicsDrillItem $item) => $item->status === BasicsDrillItem::STATUS_FAILED,
+        );
+
+        if ($failed->isNotEmpty() && str_ends_with($session->phase, '_drill')) {
+            $retryPhase = str_replace('_drill', '_retry', $session->phase);
+            $session->update(['phase' => $retryPhase]);
+            $this->ensureRetryItems($session->fresh(['items']));
+
+            $next = $this->nextPendingItem($session->fresh(['items']));
+
+            return [
+                'correct' => true,
+                'reveal' => false,
+                'phase_change' => $retryPhase,
+                'next_item' => $next ? $this->formatItem($next) : null,
+                'session' => $this->formatSession($session->fresh(['items']), $settings),
+            ];
+        }
+
+        $nextPhase = $this->nextPhaseAfter($session, $settings);
+
+        if ($nextPhase === BasicsDrillSession::PHASE_COMPLETED) {
+            $this->completeSession($session);
+
+            return [
+                'correct' => true,
+                'reveal' => false,
+                'completed' => true,
+                'redirect' => route('dashboard'),
+                'session' => $this->formatSession($session->fresh(['items']), $settings),
+            ];
+        }
+
+        $session->update(['phase' => $nextPhase]);
+
+        return [
+            'correct' => true,
+            'reveal' => false,
+            'phase_change' => $nextPhase,
+            'next_item' => null,
+            'session' => $this->formatSession($session->fresh(['items']), $settings),
+        ];
+    }
+
+    private function completeSession(BasicsDrillSession $session): void
+    {
+        DB::transaction(function () use ($session) {
+            $session->update([
+                'status' => BasicsDrillSession::STATUS_COMPLETED,
+                'phase' => BasicsDrillSession::PHASE_COMPLETED,
+                'completed_at' => now(),
+            ]);
+
+            $settings = $this->settingsService->forStudent($session->student);
+            $progress = $this->progressFor($session->student);
+
+            if ($settings['tables_enabled'] && $session->table_number !== null) {
+                $next = $session->table_number + 1;
+                if ($next > ($settings['table_to'] ?? 19)) {
+                    $next = $settings['table_from'] ?? 2;
+                }
+                $progress->update(['next_table' => $next]);
+            }
+
+            if ($settings['squares_enabled'] && $session->square_batch_start !== null) {
+                $nextStart = $session->square_batch_start + ($settings['squares_per_day'] ?? 5);
+                $maxStart = ($settings['square_to'] ?? 30) - ($settings['squares_per_day'] ?? 5) + 1;
+                if ($nextStart > max($settings['square_from'] ?? 2, $maxStart)) {
+                    $nextStart = $settings['square_from'] ?? 2;
+                }
+                $progress->update(['square_batch_start' => $nextStart]);
+            }
+
+            if ($settings['cubes_enabled'] && $session->cube_batch_start !== null) {
+                $nextStart = $session->cube_batch_start + ($settings['cubes_per_day'] ?? 3);
+                $maxStart = ($settings['cube_to'] ?? 13) - ($settings['cubes_per_day'] ?? 3) + 1;
+                if ($nextStart > max($settings['cube_from'] ?? 2, $maxStart)) {
+                    $nextStart = $settings['cube_from'] ?? 2;
+                }
+                $progress->update(['cube_batch_start' => $nextStart]);
+            }
+        });
+    }
+
+    private function nextPhaseAfter(BasicsDrillSession $session, array $settings): string
+    {
+        return match ($session->phase) {
+            BasicsDrillSession::PHASE_TABLE_DRILL,
+            BasicsDrillSession::PHASE_TABLE_RETRY => $settings['squares_enabled']
+                ? BasicsDrillSession::PHASE_SQUARES_SHOW
+                : ($settings['cubes_enabled']
+                    ? BasicsDrillSession::PHASE_CUBES_SHOW
+                    : BasicsDrillSession::PHASE_COMPLETED),
+            BasicsDrillSession::PHASE_SQUARES_DRILL,
+            BasicsDrillSession::PHASE_SQUARES_RETRY => $settings['cubes_enabled']
+                ? BasicsDrillSession::PHASE_CUBES_SHOW
+                : BasicsDrillSession::PHASE_COMPLETED,
+            BasicsDrillSession::PHASE_CUBES_DRILL,
+            BasicsDrillSession::PHASE_CUBES_RETRY => BasicsDrillSession::PHASE_COMPLETED,
+            default => BasicsDrillSession::PHASE_COMPLETED,
+        };
+    }
+
+    private function ensureItemsForPhase(BasicsDrillSession $session): void
+    {
+        $factType = $this->factTypeForPhase($session->phase);
+        $round = str_ends_with($session->phase, '_retry')
+            ? BasicsDrillItem::ROUND_RETRY
+            : BasicsDrillItem::ROUND_MAIN;
+
+        if ($factType === null) {
+            return;
+        }
+
+        if ($session->items()->where('fact_type', $factType)->where('round', $round)->exists()) {
+            return;
+        }
+
+        $settings = $this->settingsService->forStudent($session->student);
+        $facts = match ($factType) {
+            BasicsDrillItem::TYPE_TABLE => $this->tableFacts($session->table_number, $settings),
+            BasicsDrillItem::TYPE_SQUARE => $this->squareFacts($session->square_batch_start, $settings),
+            BasicsDrillItem::TYPE_CUBE => $this->cubeFacts($session->cube_batch_start, $settings),
+            default => [],
+        };
+
+        $this->createItems($session, $facts, $round);
+    }
+
+    private function factTypeForPhase(string $phase): ?string
+    {
+        if (str_contains($phase, 'table')) {
+            return BasicsDrillItem::TYPE_TABLE;
+        }
+
+        if (str_contains($phase, 'square')) {
+            return BasicsDrillItem::TYPE_SQUARE;
+        }
+
+        if (str_contains($phase, 'cube')) {
+            return BasicsDrillItem::TYPE_CUBE;
+        }
+
+        return null;
+    }
+
+    private function ensureRetryItems(BasicsDrillSession $session): void
+    {
+        $factType = $this->factTypeForPhase($session->phase);
+
+        if ($session->items()->where('round', BasicsDrillItem::ROUND_RETRY)->where('fact_type', $factType)->exists()) {
+            return;
+        }
+
+        $failedKeys = $session->items
+            ->where('round', BasicsDrillItem::ROUND_MAIN)
+            ->where('fact_type', $factType)
+            ->where('status', BasicsDrillItem::STATUS_FAILED)
+            ->pluck('fact_key')
+            ->all();
+
+        $mainItems = $session->items
+            ->where('round', BasicsDrillItem::ROUND_MAIN)
+            ->where('fact_type', $factType)
+            ->whereIn('fact_key', $failedKeys);
+
+        $order = 1;
+        foreach ($mainItems as $main) {
+            BasicsDrillItem::query()->create([
+                'basics_drill_session_id' => $session->id,
+                'fact_type' => $main->fact_type,
+                'fact_key' => $main->fact_key,
+                'operand_a' => $main->operand_a,
+                'operand_b' => $main->operand_b,
+                'correct_answer' => $main->correct_answer,
+                'sort_order' => 1000 + $order,
+                'round' => BasicsDrillItem::ROUND_RETRY,
+                'status' => BasicsDrillItem::STATUS_PENDING,
+            ]);
+            $order++;
+        }
+    }
+
+    /**
+     * @param  list<array{fact_type: string, fact_key: string, operand_a: int, operand_b: int, correct_answer: int}>  $facts
+     */
+    private function createItems(BasicsDrillSession $session, array $facts, string $round): void
+    {
+        foreach ($facts as $index => $fact) {
+            BasicsDrillItem::query()->create([
+                'basics_drill_session_id' => $session->id,
+                'fact_type' => $fact['fact_type'],
+                'fact_key' => $fact['fact_key'],
+                'operand_a' => $fact['operand_a'],
+                'operand_b' => $fact['operand_b'],
+                'correct_answer' => $fact['correct_answer'],
+                'sort_order' => $index + 1,
+                'round' => $round,
+                'status' => BasicsDrillItem::STATUS_PENDING,
+            ]);
+        }
+    }
+
+    /**
+     * @return list<array{fact_type: string, fact_key: string, operand_a: int, operand_b: int, correct_answer: int}>
+     */
+    private function tableFacts(?int $tableNumber, array $settings): array
+    {
+        if ($tableNumber === null) {
+            return [];
+        }
+
+        $multipliers = range(
+            (int) $settings['multiplier_from'],
+            (int) $settings['multiplier_to'],
+        );
+        shuffle($multipliers);
+
+        return array_map(function (int $multiplier) use ($tableNumber) {
+            return [
+                'fact_type' => BasicsDrillItem::TYPE_TABLE,
+                'fact_key' => "{$tableNumber}x{$multiplier}",
+                'operand_a' => $tableNumber,
+                'operand_b' => $multiplier,
+                'correct_answer' => $tableNumber * $multiplier,
+            ];
+        }, $multipliers);
+    }
+
+    /**
+     * @return list<array{fact_type: string, fact_key: string, operand_a: int, operand_b: int, correct_answer: int}>
+     */
+    private function squareFacts(?int $batchStart, array $settings): array
+    {
+        $numbers = $this->squareBatchNumbers($batchStart, $settings);
+        shuffle($numbers);
+
+        return array_map(function (int $n) {
+            return [
+                'fact_type' => BasicsDrillItem::TYPE_SQUARE,
+                'fact_key' => "sq{$n}",
+                'operand_a' => $n,
+                'operand_b' => 0,
+                'correct_answer' => $n * $n,
+            ];
+        }, $numbers);
+    }
+
+    /**
+     * @return list<array{fact_type: string, fact_key: string, operand_a: int, operand_b: int, correct_answer: int}>
+     */
+    private function cubeFacts(?int $batchStart, array $settings): array
+    {
+        $numbers = $this->cubeBatchNumbers($batchStart, $settings);
+        shuffle($numbers);
+
+        return array_map(function (int $n) {
+            return [
+                'fact_type' => BasicsDrillItem::TYPE_CUBE,
+                'fact_key' => "cb{$n}",
+                'operand_a' => $n,
+                'operand_b' => 0,
+                'correct_answer' => $n * $n * $n,
+            ];
+        }, $numbers);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function squareBatchNumbers(?int $batchStart, array $settings): array
+    {
+        if ($batchStart === null) {
+            return [];
+        }
+
+        $count = (int) ($settings['squares_per_day'] ?? 5);
+        $numbers = [];
+        for ($i = 0; $i < $count; $i++) {
+            $n = $batchStart + $i;
+            if ($n > ($settings['square_to'] ?? 30) || $n < ($settings['square_from'] ?? 2)) {
+                break;
+            }
+            $numbers[] = $n;
+        }
+
+        return $numbers;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function cubeBatchNumbers(?int $batchStart, array $settings): array
+    {
+        if ($batchStart === null) {
+            return [];
+        }
+
+        $count = (int) ($settings['cubes_per_day'] ?? 3);
+        $numbers = [];
+        for ($i = 0; $i < $count; $i++) {
+            $n = $batchStart + $i;
+            if ($n > ($settings['cube_to'] ?? 13) || $n < ($settings['cube_from'] ?? 2)) {
+                break;
+            }
+            $numbers[] = $n;
+        }
+
+        return $numbers;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function chartForPhase(BasicsDrillSession $session, array $settings): ?array
+    {
+        if (str_contains($session->phase, 'table')) {
+            $n = $session->table_number;
+            if ($n === null) {
+                return null;
+            }
+
+            $rows = [];
+            for ($m = (int) $settings['multiplier_from']; $m <= (int) $settings['multiplier_to']; $m++) {
+                $rows[] = [
+                    'label' => "{$n} × {$m}",
+                    'answer' => $n * $m,
+                ];
+            }
+
+            return ['title' => "Table of {$n}", 'rows' => $rows];
+        }
+
+        if (str_contains($session->phase, 'square')) {
+            $numbers = $this->squareBatchNumbers($session->square_batch_start, $settings);
+
+            return [
+                'title' => 'Squares',
+                'rows' => array_map(fn (int $n) => [
+                    'label' => "{$n}²",
+                    'answer' => $n * $n,
+                ], $numbers),
+            ];
+        }
+
+        if (str_contains($session->phase, 'cube')) {
+            $numbers = $this->cubeBatchNumbers($session->cube_batch_start, $settings);
+
+            return [
+                'title' => 'Cubes',
+                'rows' => array_map(fn (int $n) => [
+                    'label' => "{$n}³",
+                    'answer' => $n * $n * $n,
+                ], $numbers),
+            ];
+        }
+
+        return null;
+    }
+
+    private function currentItem(BasicsDrillSession $session): ?BasicsDrillItem
+    {
+        if (str_ends_with($session->phase, '_show') || $session->isComplete()) {
+            return null;
+        }
+
+        $factType = $this->factTypeForPhase($session->phase);
+        $round = str_ends_with($session->phase, '_retry')
+            ? BasicsDrillItem::ROUND_RETRY
+            : BasicsDrillItem::ROUND_MAIN;
+
+        return $session->items
+            ->where('fact_type', $factType)
+            ->where('round', $round)
+            ->firstWhere('status', BasicsDrillItem::STATUS_PENDING);
+    }
+
+    private function nextPendingItem(BasicsDrillSession $session): ?BasicsDrillItem
+    {
+        return $this->currentItem($session);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatItem(BasicsDrillItem $item): array
+    {
+        return [
+            'id' => $item->id,
+            'fact_type' => $item->fact_type,
+            'prompt' => $item->promptLabel(),
+            'round' => $item->round,
+        ];
+    }
+
+    private function progressLabel(BasicsDrillSession $session): string
+    {
+        $factType = $this->factTypeForPhase($session->phase);
+        $round = str_ends_with($session->phase, '_retry')
+            ? BasicsDrillItem::ROUND_RETRY
+            : BasicsDrillItem::ROUND_MAIN;
+        $items = $session->items
+            ->where('fact_type', $factType)
+            ->where('round', $round);
+        $done = $items->whereIn('status', [
+            BasicsDrillItem::STATUS_CORRECT,
+            BasicsDrillItem::STATUS_REVEALED,
+        ])->count();
+        $total = $items->count();
+
+        return $total > 0 ? "{$done}/{$total}" : '';
+    }
+
+    private function progressFor(Student $student): BasicsDrillProgress
+    {
+        $defaults = $this->settingsService->defaults();
+
+        return BasicsDrillProgress::query()->firstOrCreate(
+            ['student_id' => $student->id],
+            [
+                'student_enrollment_id' => $student->currentEnrollment()?->id,
+                'next_table' => $defaults['table_from'] ?? 2,
+                'square_batch_start' => $defaults['square_from'] ?? 2,
+                'cube_batch_start' => $defaults['cube_from'] ?? 2,
+            ],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $settings
+     */
+    private function resolveTableNumber(BasicsDrillProgress $progress, array $settings): ?int
+    {
+        if (! ($settings['tables_enabled'] ?? false)) {
+            return null;
+        }
+
+        $n = $progress->next_table;
+        if ($n < ($settings['table_from'] ?? 2)) {
+            $n = $settings['table_from'] ?? 2;
+        }
+        if ($n > ($settings['table_to'] ?? 19)) {
+            return null;
+        }
+
+        return $n;
+    }
+
+    /**
+     * @param  array<string, mixed>  $settings
+     */
+    private function clampSquareBatchStart(int $start, array $settings): int
+    {
+        $min = $settings['square_from'] ?? 2;
+        $max = ($settings['square_to'] ?? 30) - ($settings['squares_per_day'] ?? 5) + 1;
+
+        return max($min, min($start, max($min, $max)));
+    }
+
+    /**
+     * @param  array<string, mixed>  $settings
+     */
+    private function clampCubeBatchStart(int $start, array $settings): int
+    {
+        $min = $settings['cube_from'] ?? 2;
+        $max = ($settings['cube_to'] ?? 13) - ($settings['cubes_per_day'] ?? 3) + 1;
+
+        return max($min, min($start, max($min, $max)));
+    }
+
+    private function recordStat(int $studentId, BasicsDrillItem $item, bool $isCorrect): void
+    {
+        $stat = BasicsFactStat::query()->firstOrCreate(
+            [
+                'student_id' => $studentId,
+                'fact_type' => $item->fact_type,
+                'fact_key' => $item->fact_key,
+            ],
+            [
+                'times_shown' => 0,
+                'times_correct' => 0,
+                'times_failed' => 0,
+                'needs_review' => false,
+            ],
+        );
+
+        $stat->increment('times_shown');
+        $stat->update(['last_shown_date' => $this->todayDate()]);
+
+        if ($isCorrect) {
+            $stat->increment('times_correct');
+            if ($stat->times_failed === 0) {
+                $stat->update(['needs_review' => false]);
+            }
+        } else {
+            $stat->increment('times_failed');
+            $stat->update(['needs_review' => true]);
+        }
+    }
+}
