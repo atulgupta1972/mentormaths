@@ -150,6 +150,33 @@ class WrittenSheetServiceTest extends TestCase
         $this->assertSame('T7122-W2', $worksheet->set_code);
     }
 
+    public function test_update_questions_regenerates_pdf_with_new_wording(): void
+    {
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+        QuestionBlankAnswer::query()->create([
+            'question_id' => $question->id,
+            'correct_answer' => '4',
+            'answer_format' => 'integer',
+        ]);
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->generatePdf(
+            $service->createFromTopic($topic, [$question->id], $admin),
+        );
+        $oldPdfPath = $worksheet->written_pdf_path;
+
+        $updated = $service->updateQuestions($worksheet, [[
+            'question_text' => 'Simplify: 3(2x + 1) - (x - 4) = ___ x + 7.',
+            'correct_answer' => '5',
+            'answer_format' => 'integer',
+        ]]);
+
+        $this->assertSame('Simplify: 3(2x + 1) - (x - 4) = ___ x + 7.', $question->fresh()->question_text);
+        $this->assertSame('5', $question->fresh()->blankAnswer->correct_answer);
+        $this->assertNotSame($oldPdfPath, $updated->written_pdf_path);
+        $this->assertSame(WrittenSheetStatus::PENDING_REVIEW, $updated->written_status);
+    }
+
     public function test_can_replace_pdf_when_assigned_but_no_student_uploads(): void
     {
         Storage::fake('public');

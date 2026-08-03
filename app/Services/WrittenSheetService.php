@@ -690,6 +690,70 @@ class WrittenSheetService
         }
     }
 
+    public function canEditQuestions(Worksheet $worksheet): bool
+    {
+        return $this->canManagePdf($worksheet)
+            && ! $this->usesUploadedPdf($worksheet)
+            && $worksheet->questions()->exists();
+    }
+
+    /**
+     * Update question wording (and fill-in-blank answers) then regenerate the PDF.
+     *
+     * @param  list<array{question_text: string, correct_answer?: string, answer_format?: string}>  $rows
+     */
+    public function updateQuestions(Worksheet $worksheet, array $rows): Worksheet
+    {
+        if (! $this->canEditQuestions($worksheet)) {
+            throw new \InvalidArgumentException('Cannot edit questions on this sheet.');
+        }
+
+        $worksheet->load(['questions.blankAnswer']);
+        $questions = $worksheet->questions->values();
+
+        if ($questions->isEmpty()) {
+            throw new \InvalidArgumentException('This sheet has no questions.');
+        }
+
+        if (count($rows) !== $questions->count()) {
+            throw new \InvalidArgumentException(
+                'Question count ('.count($rows).') must match the sheet ('.$questions->count().').',
+            );
+        }
+
+        foreach ($questions as $index => $question) {
+            $row = $rows[$index];
+            $questionText = trim((string) ($row['question_text'] ?? ''));
+
+            if ($questionText === '') {
+                throw new \InvalidArgumentException('Q'.($index + 1).' question text cannot be empty.');
+            }
+
+            $question->update(['question_text' => $questionText]);
+
+            if ($question->isFillInBlank() && array_key_exists('correct_answer', $row)) {
+                $answer = mb_substr(trim((string) $row['correct_answer']), 0, 64);
+                $format = $row['answer_format'] ?? 'text';
+
+                if (! in_array($format, ['integer', 'decimal', 'fraction', 'text'], true)) {
+                    $format = 'text';
+                }
+
+                $question->blankAnswer()->updateOrCreate(
+                    ['question_id' => $question->id],
+                    [
+                        'correct_answer' => $answer,
+                        'answer_format' => $format,
+                    ],
+                );
+            }
+        }
+
+        $this->generatePdf($worksheet->fresh());
+
+        return $worksheet->fresh()->loadCount('questions');
+    }
+
     public function canUpdateAnswers(Worksheet $worksheet): bool
     {
         if (! $worksheet->isWritten()) {
@@ -797,6 +861,7 @@ class WrittenSheetService
             'can_reimport_zip' => $this->canReimportZip($worksheet),
             'can_reimport_json' => $this->canReimportZip($worksheet),
             'can_reset_sheet' => $this->canResetSheet($worksheet),
+            'can_edit_questions' => $this->canEditQuestions($worksheet),
             'can_update_answers' => $this->canUpdateAnswers($worksheet),
             'has_student_submissions' => $this->hasStudentSubmissions($worksheet),
         ];

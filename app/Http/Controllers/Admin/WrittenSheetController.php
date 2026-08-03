@@ -521,6 +521,39 @@ class WrittenSheetController extends Controller
         return back()->with('success', 'Answers updated for this written sheet.');
     }
 
+    public function updateQuestions(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        abort_unless($worksheet->isWritten(), 404);
+
+        $validated = $request->validate([
+            'questions' => ['required', 'array', 'min:1'],
+            'questions.*.question_text' => ['required', 'string'],
+            'questions.*.correct_answer' => ['nullable', 'string', 'max:64'],
+            'questions.*.answer_format' => ['nullable', 'in:integer,decimal,fraction,text'],
+        ]);
+
+        $rows = array_map(function (array $row) {
+            return [
+                'question_text' => trim((string) $row['question_text']),
+                'correct_answer' => array_key_exists('correct_answer', $row)
+                    ? $this->normalizeStoredAnswer(trim((string) $row['correct_answer']))
+                    : null,
+                'answer_format' => $row['answer_format'] ?? 'text',
+            ];
+        }, $validated['questions']);
+
+        try {
+            $worksheet = $this->writtenSheetService->updateQuestions($worksheet, $rows);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with(
+            'success',
+            "{$worksheet->questions_count} question(s) updated and PDF regenerated. Review the sheet before verifying again.",
+        );
+    }
+
     public function importZipPack(Request $request): RedirectResponse
     {
         $validated = $request->validate([

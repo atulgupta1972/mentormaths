@@ -102,6 +102,7 @@ const handwritingOptions = [
     { value: 'very_poor', label: 'Very poor' },
 ];
 const showAnswerEditor = ref(false);
+const showQuestionEditor = ref(false);
 const answerPdfInput = ref(null);
 const answerPdfParsing = ref(false);
 const answerPdfError = ref('');
@@ -109,6 +110,43 @@ const answerPdfWarnings = ref([]);
 const answersForm = useForm({
     answers: [],
 });
+const questionsForm = useForm({
+    questions: [],
+});
+
+const plainQuestionText = (html) => {
+    if (!html) {
+        return '';
+    }
+
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+
+    return tmp.textContent || tmp.innerText || '';
+};
+
+const openQuestionEditor = () => {
+    questionsForm.questions = (props.sheet.questions || []).map((question) => ({
+        question_text: plainQuestionText(question.question_text),
+        correct_answer: question.correct_answer || '',
+        answer_format: question.answer_format || 'text',
+    }));
+    showQuestionEditor.value = true;
+    showAnswerEditor.value = false;
+};
+
+const cancelQuestionEditor = () => {
+    showQuestionEditor.value = false;
+    questionsForm.reset();
+    questionsForm.clearErrors();
+};
+
+const submitQuestions = () => {
+    questionsForm.post(route('admin.written-sheets.update-questions', props.sheet.id), {
+        preserveScroll: true,
+        onSuccess: () => cancelQuestionEditor(),
+    });
+};
 
 const openAnswerEditor = () => {
     answersForm.answers = (props.sheet.questions || []).map((question) => ({
@@ -118,6 +156,7 @@ const openAnswerEditor = () => {
     answerPdfError.value = '';
     answerPdfWarnings.value = [];
     showAnswerEditor.value = true;
+    showQuestionEditor.value = false;
 };
 
 const cancelAnswerEditor = () => {
@@ -1493,17 +1532,87 @@ const progressLabel = (p) => {
                 <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <h3 class="font-medium text-gray-900">Questions on this sheet</h3>
-                        <SecondaryButton
-                            v-if="sheet.can_update_answers && !showAnswerEditor"
-                            type="button"
-                            class="!py-1.5 !text-xs"
-                            @click="openAnswerEditor"
-                        >
-                            Re-upload / edit answers
-                        </SecondaryButton>
+                        <div class="flex flex-wrap gap-2">
+                            <SecondaryButton
+                                v-if="sheet.can_edit_questions && !showQuestionEditor"
+                                type="button"
+                                class="!py-1.5 !text-xs"
+                                @click="openQuestionEditor"
+                            >
+                                Edit questions
+                            </SecondaryButton>
+                            <SecondaryButton
+                                v-if="sheet.can_update_answers && !showAnswerEditor && !showQuestionEditor"
+                                type="button"
+                                class="!py-1.5 !text-xs"
+                                @click="openAnswerEditor"
+                            >
+                                Edit answers only
+                            </SecondaryButton>
+                        </div>
                     </div>
 
-                    <div v-if="showAnswerEditor" class="mt-4 rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+                    <div v-if="showQuestionEditor" class="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/40 p-4">
+                        <h4 class="text-sm font-semibold text-indigo-950">Edit questions</h4>
+                        <p class="mt-1 text-sm text-indigo-900">
+                            Fix wording or blanks (use <code class="rounded bg-white px-1">___</code> for gaps). Saving updates the sheet and regenerates the PDF.
+                        </p>
+
+                        <div class="mt-4 space-y-3">
+                            <div
+                                v-for="(question, index) in sheet.questions"
+                                :key="question.id"
+                                class="rounded-md border border-indigo-100 bg-white p-3"
+                            >
+                                <p class="text-sm font-semibold text-gray-900">Q{{ question.number }}</p>
+                                <div class="mt-2">
+                                    <InputLabel value="Question text" class="!text-xs" />
+                                    <textarea
+                                        v-model="questionsForm.questions[index].question_text"
+                                        rows="2"
+                                        class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                                    />
+                                    <p v-if="questionsForm.errors[`questions.${index}.question_text`]" class="mt-1 text-xs text-rose-600">
+                                        {{ questionsForm.errors[`questions.${index}.question_text`] }}
+                                    </p>
+                                </div>
+                                <div class="mt-2 grid gap-2 sm:grid-cols-3">
+                                    <div class="sm:col-span-2">
+                                        <InputLabel value="Correct answer" class="!text-xs" />
+                                        <input
+                                            v-model="questionsForm.questions[index].correct_answer"
+                                            type="text"
+                                            maxlength="64"
+                                            class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                                        >
+                                        <p v-if="questionsForm.errors[`questions.${index}.correct_answer`]" class="mt-1 text-xs text-rose-600">
+                                            {{ questionsForm.errors[`questions.${index}.correct_answer`] }}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <InputLabel value="Format" class="!text-xs" />
+                                        <select v-model="questionsForm.questions[index].answer_format" class="mt-1 w-full rounded-md border-gray-300 text-sm">
+                                            <option value="text">Text</option>
+                                            <option value="integer">Integer</option>
+                                            <option value="decimal">Decimal</option>
+                                            <option value="fraction">Fraction</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p v-if="questionsForm.errors.questions" class="mt-2 text-sm text-rose-700">{{ questionsForm.errors.questions }}</p>
+
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <PrimaryButton type="button" :disabled="questionsForm.processing" @click="submitQuestions">
+                                {{ questionsForm.processing ? 'Saving…' : 'Save & regenerate PDF' }}
+                            </PrimaryButton>
+                            <SecondaryButton type="button" @click="cancelQuestionEditor">Cancel</SecondaryButton>
+                        </div>
+                    </div>
+
+                    <div v-else-if="showAnswerEditor" class="mt-4 rounded-lg border border-amber-200 bg-amber-50/40 p-4">
                         <h4 class="text-sm font-semibold text-amber-950">Update answer key</h4>
                         <p class="mt-1 text-sm text-amber-900">
                             Answers wrong? Edit them below, or upload a corrected answer-sheet PDF to fill the rows, then save.
