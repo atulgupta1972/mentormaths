@@ -104,9 +104,14 @@ class Worksheet extends Model
 
     public function writtenPdfUrl(): ?string
     {
-        return $this->written_pdf_path
-            ? Storage::disk('public')->url($this->written_pdf_path)
-            : null;
+        if (! $this->written_pdf_path) {
+            return null;
+        }
+
+        $url = Storage::disk('public')->url($this->written_pdf_path);
+        $version = $this->updated_at?->getTimestamp() ?? time();
+
+        return $url.'?v='.$version;
     }
 
     public function verifier(): BelongsTo

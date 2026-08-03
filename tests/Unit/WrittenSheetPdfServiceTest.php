@@ -7,17 +7,17 @@ use Tests\TestCase;
 
 class WrittenSheetPdfServiceTest extends TestCase
 {
-    public function test_question_text_for_sheet_strips_trailing_answer_blanks(): void
+    public function test_question_text_for_sheet_expands_blanks_for_print(): void
     {
         $service = app(WrittenSheetPdfService::class);
 
         $this->assertSame(
-            '(-12) + 8',
+            '(-12) + 8 = ______',
             $service->questionTextForSheet('(-12) + 8 = ____'),
         );
 
         $this->assertSame(
-            'Find 3/4 of',
+            'Find 3/4 of ______',
             $service->questionTextForSheet('Find 3/4 of ____'),
         );
     }
@@ -32,7 +32,7 @@ class WrittenSheetPdfServiceTest extends TestCase
         );
 
         $this->assertSame(
-            'When (5x + 3) + (2x - 7) is simplified, the coefficient of x is',
+            'When (5x + 3) + (2x - 7) is simplified, the coefficient of x is ______',
             $service->questionTextForSheet('When (5x + 3) + (2x - 7) is simplified, the coefficient of x is ____'),
         );
     }

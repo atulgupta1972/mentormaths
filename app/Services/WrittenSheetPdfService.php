@@ -87,14 +87,12 @@ class WrittenSheetPdfService
     }
 
     /**
-     * Question text for the printable sheet: inline blanks stay visible; trailing answer gaps are removed.
+     * Question text for the printable sheet: keep wording aligned with the admin list; expand blanks for print.
      */
     public function questionTextForSheet(?string $html): string
     {
         $text = $this->plainText($html);
         $text = preg_replace('/_{2,}/u', '______', $text) ?? $text;
-        $text = preg_replace('/\s*=\s*______\s*\.?\s*$/u', '', $text) ?? $text;
-        $text = preg_replace('/\s*______\s*\.?\s*$/u', '', $text) ?? $text;
         $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
 
         return trim($text);

@@ -885,6 +885,13 @@ const progressLabel = (p) => {
                     <p class="mt-3 text-sm text-gray-600">
                         Step 2: check the PDF below. Step 3: verify, then assign to students below (same as online practice sets).
                     </p>
+                    <p
+                        v-if="!sheet.uses_uploaded_pdf && sheet.written_pdf_url"
+                        class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                    >
+                        Question list looks right but the PDF preview is wrong?
+                        Click <strong>Regenerate PDF</strong> above (or edit a question and save) — the PDF is a separate file and only updates when you regenerate.
+                    </p>
 
                     <div v-if="sheet.has_student_submissions" class="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
                         At least one student has uploaded written work — the worksheet PDF and questions can no longer be changed.
