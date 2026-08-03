@@ -19,6 +19,7 @@ use App\Models\Worksheet;
 use App\Models\WrittenSubmission;
 use App\Services\WrittenSheetService;
 use App\Support\PracticeSetScope;
+use App\Support\PracticeSetTier;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -122,6 +123,31 @@ class WrittenSheetServiceTest extends TestCase
 
         $this->assertSame(2, $worksheet->questions()->count());
         $this->assertNotNull($worksheet->written_pdf_path);
+    }
+
+    public function test_create_chapter_test_allocates_unique_written_set_code_when_base_taken(): void
+    {
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+        $chapter = $topic->chapter;
+        $chapter->update(['chapter_number' => 12]);
+
+        Worksheet::query()->create([
+            'title' => 'Existing written chapter test',
+            'set_number' => 1,
+            'set_code' => 'T7122-W',
+            'tier' => PracticeSetTier::CHAPTER_TEST,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => Worksheet::STATUS_DRAFT,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'written_status' => WrittenSheetStatus::DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->createChapterTest($chapter, [$question->id], $admin);
+
+        $this->assertSame('T7122-W2', $worksheet->set_code);
     }
 
     public function test_can_replace_pdf_when_assigned_but_no_student_uploads(): void

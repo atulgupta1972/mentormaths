@@ -87,7 +87,7 @@ class WrittenSheetService
         $worksheet = Worksheet::create([
             'title' => $meta['title'].' — Written',
             'set_number' => $meta['set_number'],
-            'set_code' => $meta['set_code'].'-W',
+            'set_code' => $this->allocateWrittenSetCode($meta['set_code']),
             'tier' => PracticeSetTier::STARTER,
             'scope' => PracticeSetScope::TOPIC,
             'syllabus_topic_id' => $topic->id,
@@ -128,7 +128,7 @@ class WrittenSheetService
         $worksheet = Worksheet::create([
             'title' => $meta['title'].' — Written',
             'set_number' => $meta['set_number'],
-            'set_code' => $meta['set_code'].'-W',
+            'set_code' => $this->allocateWrittenSetCode($meta['set_code']),
             'tier' => $meta['tier'],
             'scope' => PracticeSetScope::CHAPTER,
             'syllabus_chapter_id' => $chapter->id,
@@ -657,6 +657,19 @@ class WrittenSheetService
             null,
             QuestionBankPurpose::PRACTICE_SET,
         ];
+    }
+
+    private function allocateWrittenSetCode(string $baseSetCode): string
+    {
+        $candidate = $baseSetCode.'-W';
+        $suffix = 1;
+
+        while (Worksheet::query()->where('set_code', $candidate)->exists()) {
+            $suffix++;
+            $candidate = $baseSetCode.'-W'.$suffix;
+        }
+
+        return $candidate;
     }
 
     private function deleteQuestionsExclusiveToWorksheet(Worksheet $worksheet): void
