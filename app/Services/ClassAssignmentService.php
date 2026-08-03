@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Models\Worksheet;
 use App\Support\AssignmentProgress;
 use App\Support\PracticeSetScope;
+use App\Support\WorksheetDeliveryMode;
 
 class ClassAssignmentService
 {
@@ -318,6 +319,7 @@ class ClassAssignmentService
                 ->with([
                     'practiceSet' => fn ($query) => $query->withCount('questions'),
                     'attempts' => fn ($query) => $query->orderByDesc('attempt_number'),
+                    'writtenSubmissions' => fn ($query) => $query->orderByDesc('id')->with('items'),
                 ])
                 ->orderByDesc('id')
                 ->get()
@@ -375,7 +377,9 @@ class ClassAssignmentService
             );
             $latest = $assignment?->attempts->first();
             $progress = $assignment
-                ? AssignmentProgress::formatAssignmentSummary($assignment, $latest)
+                ? ($assignment->practiceSet?->isWritten()
+                    ? AssignmentProgress::formatWrittenAssignmentSummary($assignment)
+                    : AssignmentProgress::formatAssignmentSummary($assignment, $latest))
                 : null;
 
             return [
@@ -548,6 +552,7 @@ class ClassAssignmentService
             'topic_name' => $set->topic?->name,
             'questions_count' => $set->questions_count,
             'kind_label' => $resolvedKind,
+            'delivery_mode' => $set->delivery_mode ?? WorksheetDeliveryMode::ONLINE,
             'scope' => $set->scope ?? PracticeSetScope::TOPIC,
             'is_catch_up' => $set->isCatchUp(),
             'sheet_grade_level_id' => $sheetGrade?->id,

@@ -39,6 +39,20 @@ class SetAssignmentShowTest extends TestCase
             ]));
     }
 
+    public function test_written_sheet_show_lists_assignments_even_when_pending_review(): void
+    {
+        [$assignment, $admin, $worksheet] = $this->seedWrittenAssignment();
+        $worksheet->update(['written_status' => WrittenSheetStatus::PENDING_REVIEW]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.written-sheets.show', $worksheet))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/WrittenSheets/Show')
+                ->has('assignments', 1)
+                ->where('assignments.0.assignment_id', $assignment->id));
+    }
+
     /**
      * @return array{0: SetAssignment, 1: User, 2: Worksheet, 3: Student}
      */

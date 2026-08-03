@@ -1045,16 +1045,24 @@ const progressLabel = (p) => {
                 </div>
 
                 <div
-                    v-if="sheet.can_assign"
+                    v-if="sheet.can_assign || assignments.length"
                     id="assign"
                     class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-indigo-200"
                 >
-                    <h3 class="font-semibold text-gray-900">Assign to students</h3>
-                    <p class="mt-1 text-sm text-gray-600">
+                    <h3 class="font-semibold text-gray-900">
+                        {{ assignments.length ? 'Students & uploads' : 'Assign to students' }}
+                    </h3>
+                    <p v-if="!sheet.can_assign && assignments.length" class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                        This sheet needs admin verification again after PDF changes. Assigned students are listed below — you can still <strong>upload their written work</strong> and enter marks.
+                    </p>
+                    <p v-else-if="sheet.can_assign" class="mt-1 text-sm text-gray-600">
                         Pick a class to load students (all selected by default), deselect anyone who should not get this sheet, then assign. Or assign one student quickly below.
                     </p>
+                    <p v-else-if="assignments.length" class="mt-1 text-sm text-gray-600">
+                        Upload photos or PDFs of each student&apos;s completed work, then enter marks.
+                    </p>
 
-                    <div class="mt-4 grid gap-6 lg:grid-cols-3">
+                    <div v-if="sheet.can_assign" class="mt-4 grid gap-6 lg:grid-cols-3">
                         <div class="lg:col-span-2 space-y-4">
                             <div class="rounded-md border border-gray-200 p-4">
                                 <div class="flex flex-wrap items-end gap-4">

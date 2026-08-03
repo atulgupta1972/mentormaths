@@ -658,9 +658,7 @@ class WrittenSheetController extends Controller
             }
         }
 
-        $assignments = $worksheet->isWrittenVerified()
-            ? $this->assignmentService->assignmentsForWorksheet($worksheet->id)->all()
-            : [];
+        $assignments = $this->assignmentService->assignmentsForWorksheet($worksheet->id)->all();
 
         return Inertia::render('Admin/WrittenSheets/Show', [
             'sheet' => $this->writtenSheetService->detail($worksheet),

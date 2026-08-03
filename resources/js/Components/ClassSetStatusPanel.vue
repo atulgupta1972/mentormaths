@@ -3,7 +3,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
-import { Link, useForm, usePage } from '@inertiajs/vue3';
+import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { formatScoreLabel } from '@/utils/scores';
 
@@ -34,6 +34,8 @@ const selectedMonth = ref('');
 const showPractice = ref(true);
 const showTests = ref(true);
 const showCatchUp = ref(true);
+const showOnline = ref(true);
+const showWritten = ref(true);
 
 const assignForm = useForm({ student_id: '', target_date: '', notes: '' });
 const bulkForm = useForm({ grade_level_id: '', board_id: '', target_date: '', notes: '' });
@@ -90,6 +92,16 @@ const setMatchesTypeFilter = (set) => {
     return showPractice.value;
 };
 
+const setMatchesDeliveryFilter = (set) => {
+    const isWritten = set.delivery_mode === 'written';
+
+    if (isWritten) {
+        return showWritten.value;
+    }
+
+    return showOnline.value;
+};
+
 const setMatchesMonthFilter = (set) => {
     if (!selectedMonth.value) {
         return true;
@@ -98,7 +110,9 @@ const setMatchesMonthFilter = (set) => {
     return (set.students ?? []).some((row) => row.progress?.target_date?.startsWith(selectedMonth.value));
 };
 
-const filterSets = (sets) => (sets ?? []).filter((set) => setMatchesTypeFilter(set) && setMatchesMonthFilter(set));
+const filterSets = (sets) => (sets ?? []).filter(
+    (set) => setMatchesTypeFilter(set) && setMatchesDeliveryFilter(set) && setMatchesMonthFilter(set),
+);
 
 const visibleChapters = computed(() => {
     let chapters = props.chapters;
@@ -134,7 +148,7 @@ const canDeassignProgress = (progress) =>
     progress?.assignment_id
     && ['assigned', 'in_progress'].includes(progress.assignment_status);
 
-const cellStatus = (progress) => {
+const cellStatus = (progress, set = null) => {
     const box = 'inline-flex min-h-[22px] min-w-[76px] items-center justify-center rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-tight';
 
     if (isNotAssigned(progress)) {
@@ -142,6 +156,54 @@ const cellStatus = (progress) => {
             label: 'Not assigned',
             boxClass: `${box} bg-slate-100 text-slate-500 border-slate-200`,
             title: 'Click to assign (3-day target)',
+        };
+    }
+
+    if (set?.delivery_mode === 'written') {
+        if (progress.written_submission_status === 'graded' && progress.latest_score != null) {
+            return {
+                label: progress.latest_score_label || formatScoreLabel(progress.latest_score, progress.latest_max_score),
+                boxClass: `${box} bg-emerald-100 text-emerald-800 border-emerald-300`,
+                title: 'Graded — click to upload or edit marks',
+            };
+        }
+
+        if (progress.written_submission_status === 'processing') {
+            return {
+                label: 'Checking…',
+                boxClass: `${box} bg-amber-100 text-amber-900 border-amber-300`,
+                title: 'AI checking — click to view',
+            };
+        }
+
+        if (progress.written_submission_status === 'uploaded') {
+            return {
+                label: 'Uploaded',
+                boxClass: `${box} bg-sky-100 text-sky-800 border-sky-300`,
+                title: 'Uploaded — click to view or mark',
+            };
+        }
+
+        if (progress.written_submission_status === 'failed') {
+            return {
+                label: 'Mark manually',
+                boxClass: `${box} bg-rose-100 text-rose-800 border-rose-300`,
+                title: 'AI failed — click to upload or mark',
+            };
+        }
+
+        if (progress.is_overdue) {
+            return {
+                label: 'Upload work',
+                boxClass: `${box} bg-rose-100 text-rose-800 border-rose-300`,
+                title: 'Overdue — click to upload student work',
+            };
+        }
+
+        return {
+            label: 'Upload work',
+            boxClass: `${box} bg-indigo-100 text-indigo-800 border-indigo-300`,
+            title: 'Click to upload student written work',
         };
     }
 
@@ -286,11 +348,22 @@ const assignBulk = (setId) => {
 };
 
 const onCellClick = (set, studentId) => {
+    const progress = studentRow(set, studentId)?.progress;
+
+    if (set.delivery_mode === 'written' && progress?.assignment_id) {
+        router.visit(route('admin.written-sheets.show', {
+            worksheet: set.id,
+            student_id: studentId,
+            assignment_id: progress.assignment_id,
+        }));
+
+        return;
+    }
+
     if (!props.canAssign) {
         return;
     }
 
-    const progress = studentRow(set, studentId)?.progress;
     assignStudentBySet.value[set.id] = String(studentId);
 
     if (isNotAssigned(progress)) {
@@ -305,6 +378,10 @@ const onCellClick = (set, studentId) => {
 
 const setMeta = (set) => {
     const parts = [set.kind_label];
+
+    if (set.delivery_mode === 'written') {
+        parts.push('Written');
+    }
 
     if (set.is_cross_grade && set.sheet_grade_name) {
         parts.push(set.sheet_grade_name);
@@ -366,6 +443,14 @@ const chapterRowClass = (chapter) => (chapter.is_extra ? 'bg-violet-50/70' : '')
                         <label class="inline-flex items-center gap-1 text-[10px] text-gray-700">
                             <input v-model="showCatchUp" type="checkbox" class="rounded border-gray-300 text-indigo-600" />
                             Correction sets
+                        </label>
+                        <label class="inline-flex items-center gap-1 text-[10px] text-gray-700">
+                            <input v-model="showOnline" type="checkbox" class="rounded border-gray-300 text-indigo-600" />
+                            Online
+                        </label>
+                        <label class="inline-flex items-center gap-1 text-[10px] text-gray-700">
+                            <input v-model="showWritten" type="checkbox" class="rounded border-gray-300 text-indigo-600" />
+                            Written
                         </label>
                     </div>
                     <div v-if="canAssign" class="flex items-center gap-2">
@@ -486,26 +571,26 @@ const chapterRowClass = (chapter) => (chapter.is_extra ? 'bg-violet-50/70' : '')
                                     class="px-2 py-1.5"
                                 >
                                     <button
-                                        v-if="canAssign"
+                                        v-if="canAssign || (set.delivery_mode === 'written' && studentRow(set, student.id)?.progress?.assignment_id)"
                                         type="button"
-                                        :class="cellStatus(studentRow(set, student.id)?.progress).boxClass"
-                                        :title="cellStatus(studentRow(set, student.id)?.progress).title"
+                                        :class="cellStatus(studentRow(set, student.id)?.progress, set).boxClass"
+                                        :title="cellStatus(studentRow(set, student.id)?.progress, set).title"
                                         @click="onCellClick(set, student.id)"
                                     >
-                                        {{ cellStatus(studentRow(set, student.id)?.progress).label }}
+                                        {{ cellStatus(studentRow(set, student.id)?.progress, set).label }}
                                     </button>
                                     <Link
                                         v-else-if="studentRow(set, student.id)?.progress?.assignment_id"
                                         :href="route('admin.set-assignments.show', studentRow(set, student.id).progress.assignment_id)"
-                                        :class="cellStatus(studentRow(set, student.id)?.progress).boxClass"
+                                        :class="cellStatus(studentRow(set, student.id)?.progress, set).boxClass"
                                     >
-                                        {{ cellStatus(studentRow(set, student.id)?.progress).label }}
+                                        {{ cellStatus(studentRow(set, student.id)?.progress, set).label }}
                                     </Link>
                                     <span
                                         v-else
-                                        :class="cellStatus(studentRow(set, student.id)?.progress).boxClass"
+                                        :class="cellStatus(studentRow(set, student.id)?.progress, set).boxClass"
                                     >
-                                        {{ cellStatus(studentRow(set, student.id)?.progress).label }}
+                                        {{ cellStatus(studentRow(set, student.id)?.progress, set).label }}
                                     </span>
                                 </td>
                                 <td v-if="canAssign" class="px-2 py-1.5">
