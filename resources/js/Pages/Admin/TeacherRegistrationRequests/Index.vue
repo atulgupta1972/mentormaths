@@ -58,9 +58,10 @@ defineProps({
                                 </td>
                                 <td class="px-4 py-2 text-gray-600">{{ row.email }}</td>
                                 <td class="px-4 py-2 text-xs text-gray-600">
-                                    <span v-if="row.interested_in_content_creation">Question bank</span>
-                                    <span v-if="row.interested_in_book_content_upload"><span v-if="row.interested_in_content_creation"> · </span>Book upload</span>
-                                    <span v-if="(row.interested_in_content_creation || row.interested_in_book_content_upload) && row.interested_in_doubt_solving"> · </span>
+                                    <span v-if="row.interested_in_content_creation">
+                                        Question bank<span v-if="row.interested_in_book_content_upload"> (+ book upload)</span>
+                                    </span>
+                                    <span v-if="row.interested_in_content_creation && row.interested_in_doubt_solving"> · </span>
                                     <span v-if="row.interested_in_doubt_solving">Mentoring</span>
                                 </td>
                                 <td class="px-4 py-2 text-gray-600">

@@ -76,10 +76,8 @@ const canReject = computed(() =>
 
                     <div v-if="application.interested_in_content_creation" class="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
                         <strong>Question bank:</strong> {{ application.content_class_labels?.join(', ') || '—' }}
-                    </div>
-                    <div v-if="application.interested_in_book_content_upload" class="mt-3 rounded-md bg-teal-50 px-3 py-2 text-sm text-teal-950">
-                        <strong>Book content upload:</strong> {{ application.content_class_labels?.join(', ') || '—' }}
                         · proposed ₹{{ application.proposed_rate_per_set_inr }}/set
+                        <span v-if="application.interested_in_book_content_upload"> · includes book content upload</span>
                     </div>
                     <div v-if="application.interested_in_doubt_solving" class="mt-3 rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-950">
                         <strong>Online mentoring:</strong> {{ application.teaching_class_labels?.join(', ') || '—' }}

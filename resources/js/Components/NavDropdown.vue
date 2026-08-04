@@ -30,7 +30,7 @@ const triggerClass = computed(() =>
 </script>
 
 <template>
-    <Dropdown v-if="visibleItems.length" align="left" width="52">
+    <Dropdown v-if="visibleItems.length" align="left" width="56">
         <template #trigger>
             <button type="button" :class="triggerClass">
                 {{ label }}

@@ -26,9 +26,16 @@ onMounted(() => document.addEventListener('keydown', closeOnEscape));
 onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
 
 const widthClass = computed(() => {
-    return {
+    const map = {
         48: 'w-48',
-    }[props.width.toString()];
+        52: 'w-52',
+        56: 'w-56',
+        60: 'w-60',
+        64: 'w-64',
+        auto: 'w-max min-w-[12rem]',
+    };
+
+    return map[props.width.toString()] ?? 'w-56';
 });
 
 const alignmentClasses = computed(() => {

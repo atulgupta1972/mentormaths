@@ -5,7 +5,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { watch } from 'vue';
 
 const props = defineProps({
     boards: { type: Array, default: () => [] },
@@ -93,8 +93,14 @@ const toggleFeature = (key) => {
     form.current_tool_features = [...set];
 };
 
-const wantsContentWork = computed(() =>
-    form.interested_in_content_creation || form.interested_in_book_content_upload,
+watch(
+    () => form.interested_in_content_creation,
+    (enabled) => {
+        if (! enabled) {
+            form.interested_in_book_content_upload = false;
+            form.proposed_rate_per_set_inr = '';
+        }
+    },
 );
 
 const submit = () => {
@@ -268,58 +274,55 @@ const submit = () => {
                         <Checkbox v-model:checked="form.interested_in_content_creation" class="mt-1" />
                         <span>
                             <span class="font-semibold text-emerald-950">Create question bank &amp; test papers</span>
-                            <span class="mt-1 block text-sm text-emerald-900">MCQ sets, fill-in-blank, written sheets, chapter tests (Classes 5–12)</span>
+                            <span class="mt-1 block text-sm text-emerald-900">MCQ sets, fill-in-blank, written sheets, chapter tests, book page upload (Classes 5–12)</span>
                         </span>
                     </label>
                     <InputError :message="form.errors.interested_in_content_creation" class="mt-2" />
 
-                    <div v-if="form.interested_in_content_creation" class="space-y-3 pl-7">
-                        <InputLabel value="Content types I can create" />
-                        <div class="flex flex-wrap gap-3 text-sm">
-                            <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_mcq" /> MCQ</label>
-                            <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_fill_blank" /> Fill-in-blank</label>
-                            <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_written_sheets" /> Written sheets</label>
-                            <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_chapter_tests" /> Chapter tests</label>
-                            <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_formula_drills" /> Formula drills</label>
+                    <div v-if="form.interested_in_content_creation" class="space-y-4 pl-7">
+                        <div>
+                            <InputLabel value="Content types I can create" />
+                            <div class="mt-2 flex flex-wrap gap-3 text-sm">
+                                <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_mcq" /> MCQ</label>
+                                <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_fill_blank" /> Fill-in-blank</label>
+                                <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_written_sheets" /> Written sheets</label>
+                                <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_chapter_tests" /> Chapter tests</label>
+                                <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.creates_formula_drills" /> Formula drills</label>
+                                <label class="inline-flex items-center gap-2 rounded-md border border-emerald-300 bg-white px-2 py-1">
+                                    <Checkbox v-model:checked="form.interested_in_book_content_upload" />
+                                    Book content upload
+                                </label>
+                            </div>
+                            <InputError :message="form.errors.interested_in_content_creation" class="mt-1" />
+                        </div>
+
+                        <div>
+                            <InputLabel value="Your proposed rate (₹ / question set) *" />
+                            <TextInput v-model="form.proposed_rate_per_set_inr" type="number" min="50" class="mt-1 block w-full max-w-sm" placeholder="e.g. 500" />
+                            <p class="mt-1 text-sm text-emerald-900">For MCQ sets, chapter tests, written sheets, book page sets, etc.</p>
+                            <InputError :message="form.errors.proposed_rate_per_set_inr" class="mt-1" />
+                        </div>
+
+                        <div v-if="form.interested_in_book_content_upload" class="rounded-md border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-sm text-emerald-950">
+                            <p><strong>Book content upload:</strong> upload textbook pages — we provide JSON generation; you may use AI to draft questions.</p>
+                            <p class="mt-1">After upload, <strong>every question must be verified</strong>. Typical set: <strong>15–20 questions</strong> · <strong>15–20 minutes</strong>.</p>
                         </div>
 
                         <div>
                             <InputLabel value="Sample work link (optional)" />
                             <TextInput v-model="form.sample_work_url" class="mt-1 block w-full" placeholder="Google Drive / PDF link" />
                         </div>
-                    </div>
 
-                    <div class="border-t border-emerald-200/80 pt-4">
-                        <label class="flex items-start gap-3">
-                            <Checkbox v-model:checked="form.interested_in_book_content_upload" class="mt-1" />
-                            <span>
-                                <span class="font-semibold text-emerald-950">Book content upload</span>
-                                <span class="mt-1 block text-sm text-emerald-900">Upload textbook pages — we provide JSON generation; you may use AI to draft questions</span>
-                            </span>
-                        </label>
-
-                        <div v-if="form.interested_in_book_content_upload" class="mt-3 space-y-3 pl-7">
-                            <div class="rounded-md border border-emerald-200 bg-white/80 px-3 py-2 text-sm text-emerald-950">
-                                <p>After upload, <strong>every question must be verified</strong> before it goes live.</p>
-                                <p class="mt-1">Typical set size: <strong>15–20 questions</strong> · approx <strong>15–20 minutes</strong> per set.</p>
+                        <div>
+                            <InputLabel value="Classes I can work on" />
+                            <div class="mt-2 flex flex-wrap gap-2">
+                                <label v-for="grade in gradeLevels" :key="`content-${grade.id}`" class="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-sm">
+                                    <input type="checkbox" :checked="hasId('content_grade_level_ids', grade.id)" @change="toggleId('content_grade_level_ids', grade.id)">
+                                    {{ grade.name }}
+                                </label>
                             </div>
-                            <div>
-                                <InputLabel value="Your proposed rate (₹ / question set)" />
-                                <TextInput v-model="form.proposed_rate_per_set_inr" type="number" min="50" class="mt-1 block w-full max-w-xs" placeholder="e.g. 500" />
-                                <InputError :message="form.errors.proposed_rate_per_set_inr" class="mt-1" />
-                            </div>
+                            <InputError :message="form.errors.content_grade_level_ids" class="mt-1" />
                         </div>
-                    </div>
-
-                    <div v-if="wantsContentWork" class="space-y-3 border-t border-emerald-200/80 pt-4">
-                        <InputLabel value="Classes I can work on (question bank / book upload)" />
-                        <div class="flex flex-wrap gap-2">
-                            <label v-for="grade in gradeLevels" :key="`content-${grade.id}`" class="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-sm">
-                                <input type="checkbox" :checked="hasId('content_grade_level_ids', grade.id)" @change="toggleId('content_grade_level_ids', grade.id)">
-                                {{ grade.name }}
-                            </label>
-                        </div>
-                        <InputError :message="form.errors.content_grade_level_ids" class="mt-1" />
                     </div>
                 </section>
 

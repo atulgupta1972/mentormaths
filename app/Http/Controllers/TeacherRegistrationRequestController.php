@@ -232,29 +232,47 @@ class TeacherRegistrationRequestController extends Controller
         $validated['interested_in_doubt_solving'] = (bool) ($validated['interested_in_doubt_solving'] ?? false);
 
         if (! $validated['interested_in_content_creation']
-            && ! $validated['interested_in_book_content_upload']
             && ! $validated['interested_in_doubt_solving']) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'interested_in_content_creation' => 'Select at least one: question bank creation, book content upload, or online mentoring.',
+                'interested_in_content_creation' => 'Select at least one: question bank creation or online mentoring.',
+            ]);
+        }
+
+        if ($validated['interested_in_book_content_upload'] && ! $validated['interested_in_content_creation']) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'interested_in_content_creation' => 'Book content upload is part of question bank creation — please enable that section.',
             ]);
         }
 
         $validated['agreed_to_mentoring_program'] = (bool) ($validated['agreed_to_mentoring_program'] ?? false);
 
-        if (($validated['interested_in_content_creation'] || $validated['interested_in_book_content_upload'])
-            && empty($validated['content_grade_level_ids'])) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'content_grade_level_ids' => 'Select at least one class for question bank / book content work.',
-            ]);
-        }
+        if ($validated['interested_in_content_creation']) {
+            if (empty($validated['content_grade_level_ids'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'content_grade_level_ids' => 'Select at least one class for question bank work.',
+                ]);
+            }
 
-        if ($validated['interested_in_book_content_upload']) {
+            $hasContentType = ($validated['creates_mcq'] ?? false)
+                || ($validated['creates_fill_blank'] ?? false)
+                || ($validated['creates_written_sheets'] ?? false)
+                || ($validated['creates_chapter_tests'] ?? false)
+                || ($validated['creates_formula_drills'] ?? false)
+                || $validated['interested_in_book_content_upload'];
+
+            if (! $hasContentType) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'interested_in_content_creation' => 'Select at least one content type (including book content upload if applicable).',
+                ]);
+            }
+
             $request->validate([
                 'proposed_rate_per_set_inr' => ['required', 'integer', 'min:50', 'max:100000'],
             ]);
 
             $validated['proposed_rate_per_set_inr'] = (int) $request->input('proposed_rate_per_set_inr');
         } else {
+            $validated['interested_in_book_content_upload'] = false;
             $validated['proposed_rate_per_set_inr'] = null;
         }
 

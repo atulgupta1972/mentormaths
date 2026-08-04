@@ -61,6 +61,7 @@ class TeacherRegistrationTest extends TestCase
             'interested_in_content_creation' => $content,
             'content_grade_level_ids' => $content ? $contentGradeIds : [],
             'creates_mcq' => true,
+            'proposed_rate_per_set_inr' => $content ? 500 : null,
             'interested_in_doubt_solving' => $doubts,
             'teaching_grade_level_ids' => $doubts ? $teachingGradeIds : [],
             'agreed_to_terms' => true,
@@ -107,6 +108,7 @@ class TeacherRegistrationTest extends TestCase
             'status' => TeacherRegistrationRequest::STATUS_PENDING,
             'interested_in_content_creation' => true,
             'interested_in_doubt_solving' => false,
+            'proposed_rate_per_set_inr' => 500,
         ]);
     }
 
@@ -196,9 +198,8 @@ class TeacherRegistrationTest extends TestCase
         ['board' => $board, 'grades' => $grades] = $this->seedPrerequisites();
 
         $response = $this->post(route('teacher-registration.store'), [
-            ...$this->validPayload($board->id, [], [], 'book@example.com', false, false),
+            ...$this->validPayload($board->id, [$grades[2]->id], [], 'book@example.com', true, false),
             'interested_in_book_content_upload' => true,
-            'content_grade_level_ids' => [$grades[2]->id],
             'proposed_rate_per_set_inr' => 600,
         ]);
 
