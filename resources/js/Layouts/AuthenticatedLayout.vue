@@ -20,6 +20,7 @@ const peopleGroup = computed(() => ({
         route().current('admin.users.*')
         || route().current('admin.groups.*')
         || route().current('admin.registration-requests.*')
+        || route().current('admin.teacher-registrations.*')
         || route().current('admin.students.*'),
     items: [
         {
@@ -32,6 +33,12 @@ const peopleGroup = computed(() => ({
             label: 'Registrations',
             href: route('admin.registration-requests.index'),
             active: route().current('admin.registration-requests.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Mentor applications',
+            href: route('admin.teacher-registrations.index'),
+            active: route().current('admin.teacher-registrations.*'),
             show: isAdmin.value,
         },
         {

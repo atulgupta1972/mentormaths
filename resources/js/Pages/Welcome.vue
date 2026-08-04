@@ -66,7 +66,7 @@ const highlights = [
             <Link href="/" class="transition opacity-90 hover:opacity-100">
                 <MentorMathsLogo size-class="h-11 w-auto" />
             </Link>
-            <div class="flex items-center gap-3">
+            <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                 <Link
                     v-if="$page.props.auth?.user"
                     :href="route('dashboard')"
@@ -83,9 +83,15 @@ const highlights = [
                     </Link>
                     <Link
                         :href="route('registration.create')"
-                        class="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-blue-600/25 transition hover:bg-blue-700"
+                        class="rounded-xl border border-slate-200 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 backdrop-blur transition hover:bg-white sm:px-5 sm:py-2.5"
                     >
                         Request access
+                    </Link>
+                    <Link
+                        :href="route('teacher-registration.create')"
+                        class="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-violet-600/25 transition hover:bg-violet-700 sm:px-5 sm:py-2.5"
+                    >
+                        Join as mentor
                     </Link>
                 </template>
             </div>

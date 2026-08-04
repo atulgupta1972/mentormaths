@@ -21,12 +21,14 @@ use App\Http\Controllers\Admin\RegistrationRequestController as AdminRegistratio
 use App\Http\Controllers\Admin\SetAssignmentController;
 use App\Http\Controllers\Admin\StudentController;
 use App\Http\Controllers\Admin\SyllabusVersionController;
+use App\Http\Controllers\Admin\TeacherRegistrationRequestController as AdminTeacherRegistrationRequestController;
 use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WrittenSheetController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
+use App\Http\Controllers\TeacherRegistrationRequestController;
 use App\Http\Controllers\Student\BasicsDrillController;
 use App\Http\Controllers\Student\FormulaDrillController;
 use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
@@ -46,6 +48,18 @@ Route::post('/register/request', [RegistrationRequestController::class, 'store']
     ->name('registration.store');
 Route::get('/register/thank-you', [RegistrationRequestController::class, 'thankYou'])
     ->name('registration.thank-you');
+
+Route::get('/teachers/register', [TeacherRegistrationRequestController::class, 'create'])
+    ->name('teacher-registration.create');
+Route::redirect('/mentors/register', '/teachers/register');
+Route::post('/teachers/register', [TeacherRegistrationRequestController::class, 'store'])
+    ->name('teacher-registration.store');
+Route::get('/teachers/register/thank-you', [TeacherRegistrationRequestController::class, 'thankYou'])
+    ->name('teacher-registration.thank-you');
+Route::get('/teachers/register/offer/{token}', [TeacherRegistrationRequestController::class, 'showOffer'])
+    ->name('teacher-registration.offer');
+Route::post('/teachers/register/offer/{token}', [TeacherRegistrationRequestController::class, 'respondToOffer'])
+    ->name('teacher-registration.offer.respond');
 
 Route::get('/dashboard', DashboardController::class)
     ->middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])
@@ -79,6 +93,19 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('registration-requests.reject');
     Route::patch('/registration-requests/{registrationRequest}/contacts', [AdminRegistrationRequestController::class, 'updateContacts'])
         ->name('registration-requests.contacts.update');
+
+    Route::get('/teacher-registrations', [AdminTeacherRegistrationRequestController::class, 'index'])
+        ->name('teacher-registrations.index');
+    Route::get('/teacher-registrations/{teacherRegistration}', [AdminTeacherRegistrationRequestController::class, 'show'])
+        ->name('teacher-registrations.show');
+    Route::get('/teacher-registrations/{teacherRegistration}/resume', [AdminTeacherRegistrationRequestController::class, 'downloadResume'])
+        ->name('teacher-registrations.resume');
+    Route::post('/teacher-registrations/{teacherRegistration}/counter-offer', [AdminTeacherRegistrationRequestController::class, 'sendCounterOffer'])
+        ->name('teacher-registrations.counter-offer');
+    Route::post('/teacher-registrations/{teacherRegistration}/approve', [AdminTeacherRegistrationRequestController::class, 'approve'])
+        ->name('teacher-registrations.approve');
+    Route::post('/teacher-registrations/{teacherRegistration}/reject', [AdminTeacherRegistrationRequestController::class, 'reject'])
+        ->name('teacher-registrations.reject');
 
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');

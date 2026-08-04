@@ -1,5 +1,7 @@
 <script setup>
-defineProps({
+import { computed } from 'vue';
+
+const props = defineProps({
     variant: {
         type: String,
         default: 'full',
@@ -9,14 +11,24 @@ defineProps({
         default: '',
     },
 });
+
+const svgClass = computed(() => {
+    const defaults = props.variant === 'mark'
+        ? 'block h-12 w-12 shrink-0'
+        : 'block h-10 w-auto max-w-full shrink-0';
+
+    return [defaults, props.sizeClass].filter(Boolean).join(' ');
+});
 </script>
 
 <template>
     <svg
         v-if="variant === 'mark'"
         viewBox="0 0 48 48"
+        width="48"
+        height="48"
         xmlns="http://www.w3.org/2000/svg"
-        :class="class"
+        :class="svgClass"
         role="img"
         aria-label="Mentor Maths"
     >
@@ -60,8 +72,10 @@ defineProps({
     <svg
         v-else
         viewBox="0 0 220 48"
+        width="220"
+        height="48"
         xmlns="http://www.w3.org/2000/svg"
-        :class="sizeClass"
+        :class="svgClass"
         role="img"
         aria-label="Mentor Maths"
     >
