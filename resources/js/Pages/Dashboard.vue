@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ChapterSummaryPanel from '@/Components/ChapterSummaryPanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
+import StudentAssignmentGroupTable from '@/Components/StudentAssignmentGroupTable.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
@@ -802,65 +803,12 @@ const adminSetStatusClass = (set) => {
                                         </div>
                                     </div>
                                     <div v-if="prepAssignmentsByChapter(plan).length" class="mt-3 space-y-2">
-                                        <section
-                                            v-for="group in prepAssignmentsByChapter(plan)"
-                                            :key="`${plan.id}-${group.chapter_label}`"
-                                            class="overflow-hidden rounded-lg bg-white/95 text-gray-900 shadow-sm"
-                                        >
-                                            <div class="border-b border-violet-100 bg-violet-50 px-2.5 py-1.5">
-                                                <p class="text-xs font-semibold text-violet-950">
-                                                    {{ group.chapter_label }}
-                                                    <span
-                                                        v-if="group.pending_count"
-                                                        class="font-normal text-rose-700"
-                                                    >
-                                                        · {{ group.pending_count }} pending
-                                                    </span>
-                                                </p>
-                                            </div>
-                                            <div class="overflow-x-auto">
-                                                <table class="min-w-full text-xs">
-                                                    <thead class="border-b border-gray-100 bg-gray-50/80 text-left text-[10px] uppercase tracking-wide text-gray-500">
-                                                        <tr>
-                                                            <th class="px-2.5 py-1.5 font-semibold">Set</th>
-                                                            <th class="px-2.5 py-1.5 font-semibold">Topic</th>
-                                                            <th class="px-2.5 py-1.5 font-semibold">Status</th>
-                                                            <th class="px-2.5 py-1.5 text-right font-semibold">Action</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody class="divide-y divide-gray-100">
-                                                        <tr
-                                                            v-for="prep in group.sets"
-                                                            :key="prep.assignment_id"
-                                                            class="hover:bg-violet-50/40"
-                                                        >
-                                                            <td class="whitespace-nowrap px-2.5 py-2 font-mono font-semibold text-gray-900">
-                                                                {{ prep.set_code }}
-                                                            </td>
-                                                            <td class="px-2.5 py-2 text-gray-700">
-                                                                {{ prep.topic_name || prep.kind_label || '—' }}
-                                                            </td>
-                                                            <td class="px-2.5 py-2">
-                                                                <span
-                                                                    class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                                                                    :class="prepStatusClass(prep)"
-                                                                >
-                                                                    {{ prep.progress_label }}
-                                                                </span>
-                                                            </td>
-                                                            <td class="whitespace-nowrap px-2.5 py-2 text-right">
-                                                                <Link
-                                                                    :href="prepAssignmentHref(prep)"
-                                                                    class="font-semibold text-violet-700 hover:text-violet-950 hover:underline"
-                                                                >
-                                                                    Open
-                                                                </Link>
-                                                            </td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </section>
+                                        <StudentAssignmentGroupTable
+                                            :groups="prepAssignmentsByChapter(plan)"
+                                            variant="prep"
+                                            chapter-field="chapter_label"
+                                            count-suffix="prep sets"
+                                        />
                                     </div>
                                     <p
                                         v-if="plan.has_marks"
@@ -957,62 +905,12 @@ const adminSetStatusClass = (set) => {
                             <p class="mb-3 text-xs text-sky-800">
                                 Extra practice on sums you needed help with — new numbers, same skills.
                             </p>
-                            <div v-if="pendingCatchUpByChapter.length" class="space-y-3">
-                                <section
-                                    v-for="group in pendingCatchUpByChapter"
-                                    :key="`catchup-${group.chapter_name}`"
-                                    class="overflow-hidden rounded-lg border border-sky-200 bg-white shadow-sm"
-                                >
-                                    <div class="border-b border-sky-100 bg-sky-50/80 px-3 py-2">
-                                        <h4 class="text-sm font-semibold text-sky-950">
-                                            {{ group.chapter_name }}
-                                            <span class="font-normal text-sky-800">· {{ group.sets.length }} pending</span>
-                                        </h4>
-                                    </div>
-                                    <div class="overflow-x-auto">
-                                        <table class="min-w-full divide-y divide-sky-100 text-sm">
-                                            <thead class="bg-white">
-                                                <tr class="text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                                                    <th class="px-3 py-2">Set</th>
-                                                    <th class="px-3 py-2">Topic</th>
-                                                    <th class="px-3 py-2">Due</th>
-                                                    <th class="px-3 py-2">Status</th>
-                                                    <th class="px-3 py-2 text-right">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-sky-50">
-                                                <tr
-                                                    v-for="set in group.sets"
-                                                    :key="set.assignment_id"
-                                                    class="hover:bg-sky-50/40"
-                                                >
-                                                    <td class="px-3 py-2.5 font-mono font-semibold text-gray-900">{{ setLabel(set) }}</td>
-                                                    <td class="px-3 py-2.5 text-gray-800">{{ topicLabel(set) }}</td>
-                                                    <td class="px-3 py-2.5 text-gray-600">
-                                                        {{ set.target_date ? formatDate(set.target_date) : '—' }}
-                                                    </td>
-                                                    <td class="px-3 py-2.5">
-                                                        <span
-                                                            class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                                                            :class="pendingBadgeClass(set)"
-                                                        >
-                                                            {{ pendingStatusLabel(set) }}
-                                                        </span>
-                                                    </td>
-                                                    <td class="px-3 py-2.5 text-right">
-                                                        <Link
-                                                            :href="assignmentHref(set)"
-                                                            class="inline-block rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow"
-                                                            :class="pendingButtonClass(set)"
-                                                        >
-                                                            {{ pendingButtonLabel(set) }}
-                                                        </Link>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </section>
+                            <div v-if="pendingCatchUpByChapter.length">
+                                <StudentAssignmentGroupTable
+                                    :groups="pendingCatchUpByChapter"
+                                    variant="catchup"
+                                    count-suffix="pending"
+                                />
                             </div>
                         </section>
 
@@ -1022,68 +920,12 @@ const adminSetStatusClass = (set) => {
                                 Practice & tests · Pending · {{ pendingAssignments.length }}
                             </h3>
 
-                            <div v-if="pendingAssignments.length" class="space-y-4">
-                                <div
-                                    v-for="group in pendingByChapter"
-                                    :key="`pending-${group.chapter_name}`"
-                                    class="overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm"
-                                >
-                                    <div class="border-b border-amber-100 bg-amber-50/80 px-3 py-2">
-                                        <h4 class="text-sm font-semibold text-amber-950">
-                                            {{ group.chapter_name }}
-                                            <span class="font-normal text-amber-800">· {{ group.sets.length }} pending</span>
-                                        </h4>
-                                    </div>
-                                    <div class="overflow-x-auto">
-                                        <table class="min-w-full divide-y divide-amber-100 text-sm">
-                                            <thead class="bg-white">
-                                                <tr class="text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                                                    <th class="px-3 py-2">Topic</th>
-                                                    <th class="px-3 py-2">Set</th>
-                                                    <th class="px-3 py-2">Type</th>
-                                                    <th class="px-3 py-2">Due</th>
-                                                    <th class="px-3 py-2">Status</th>
-                                                    <th class="px-3 py-2 text-right">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-amber-50">
-                                                <tr
-                                                    v-for="set in group.sets"
-                                                    :key="set.assignment_id"
-                                                    class="hover:bg-amber-50/40"
-                                                >
-                                                    <td class="px-3 py-2.5 text-gray-800">{{ topicLabel(set) }}</td>
-                                                    <td class="px-3 py-2.5 font-mono font-semibold text-gray-900">{{ setLabel(set) }}</td>
-                                                    <td class="px-3 py-2.5 text-gray-600">
-                                                        {{ set.kind_label || (set.scope === 'chapter' ? 'Test' : 'Practice') }}
-                                                    </td>
-                                                    <td class="px-3 py-2.5 text-gray-600">
-                                                        <span v-if="set.target_date">{{ formatDate(set.target_date) }}</span>
-                                                        <span v-else>—</span>
-                                                    </td>
-                                                    <td class="px-3 py-2.5">
-                                                        <span
-                                                            class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                                                            :class="pendingBadgeClass(set)"
-                                                        >
-                                                            {{ pendingStatusLabel(set) }}
-                                                        </span>
-                                                    </td>
-                                                    <td class="px-3 py-2.5 text-right">
-                                                        <Link
-                                                            :href="assignmentHref(set)"
-                                                            class="inline-flex rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow"
-                                                            :class="pendingButtonClass(set)"
-                                                        >
-                                                            {{ pendingButtonLabel(set) }}
-                                                        </Link>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
+                            <StudentAssignmentGroupTable
+                                v-if="pendingAssignments.length"
+                                :groups="pendingByChapter"
+                                variant="pending"
+                                count-suffix="pending"
+                            />
 
                             <div v-else-if="completedAssignments.length" class="rounded-lg border border-dashed border-amber-300 bg-white/70 p-4 text-center text-xs text-amber-900">
                                 All caught up — no pending sets right now.
@@ -1106,58 +948,11 @@ const adminSetStatusClass = (set) => {
                         <p class="mb-3 text-xs text-violet-800">
                             We will email you when checking is finished. You can continue with other work below.
                         </p>
-                        <div class="space-y-4">
-                            <div
-                                v-for="group in checkingByChapter"
-                                :key="`checking-${group.chapter_name}`"
-                                class="overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm"
-                            >
-                                <div class="border-b border-violet-100 bg-violet-50/80 px-3 py-2">
-                                    <h4 class="text-sm font-semibold text-violet-950">
-                                        {{ group.chapter_name }}
-                                        <span class="font-normal text-violet-800">· {{ group.sets.length }} checking</span>
-                                    </h4>
-                                </div>
-                                <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-violet-100 text-sm">
-                                        <thead class="bg-white">
-                                            <tr class="text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                                                <th class="px-3 py-2">Topic</th>
-                                                <th class="px-3 py-2">Set</th>
-                                                <th class="px-3 py-2">Type</th>
-                                                <th class="px-3 py-2">Submitted</th>
-                                                <th class="px-3 py-2 text-right">View</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-violet-50">
-                                            <tr
-                                                v-for="set in group.sets"
-                                                :key="`checking-${set.assignment_id}`"
-                                                class="hover:bg-violet-50/40"
-                                            >
-                                                <td class="px-3 py-2.5 text-gray-800">{{ topicLabel(set) }}</td>
-                                                <td class="px-3 py-2.5 font-mono font-semibold text-gray-900">{{ setLabel(set) }}</td>
-                                                <td class="px-3 py-2.5 text-gray-600">
-                                                    {{ set.kind_label || (set.scope === 'chapter' ? 'Test' : 'Practice') }}
-                                                </td>
-                                                <td class="px-3 py-2.5 text-gray-600">
-                                                    <span v-if="set.submitted_at">{{ formatDate(set.submitted_at) }}</span>
-                                                    <span v-else>—</span>
-                                                </td>
-                                                <td class="px-3 py-2.5 text-right">
-                                                    <Link
-                                                        :href="assignmentHref(set)"
-                                                        class="inline-flex rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-violet-700"
-                                                    >
-                                                        View upload
-                                                    </Link>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
+                        <StudentAssignmentGroupTable
+                            :groups="checkingByChapter"
+                            variant="checking"
+                            count-suffix="checking"
+                        />
                     </section>
 
                     <!-- Completed exams -->
@@ -1197,57 +992,11 @@ const adminSetStatusClass = (set) => {
                         <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-emerald-800">
                             Completed · {{ completedAssignments.length }}
                         </h3>
-                        <div class="space-y-4">
-                            <div
-                                v-for="group in completedByChapter"
-                                :key="`done-${group.chapter_name}`"
-                                class="overflow-hidden rounded-lg border border-emerald-200 bg-white shadow-sm"
-                            >
-                                <div class="border-b border-emerald-100 bg-emerald-50/80 px-3 py-2">
-                                    <h4 class="text-sm font-semibold text-emerald-950">
-                                        {{ group.chapter_name }}
-                                        <span class="font-normal text-emerald-800">· {{ group.sets.length }} done</span>
-                                    </h4>
-                                </div>
-                                <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-emerald-100 text-sm">
-                                        <thead class="bg-white">
-                                            <tr class="text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                                                <th class="px-3 py-2">Topic</th>
-                                                <th class="px-3 py-2">Set</th>
-                                                <th class="px-3 py-2">Type</th>
-                                                <th class="px-3 py-2">Score</th>
-                                                <th class="px-3 py-2 text-right">View</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-emerald-50">
-                                            <tr
-                                                v-for="set in group.sets"
-                                                :key="`done-${set.assignment_id}`"
-                                                class="hover:bg-emerald-50/40"
-                                            >
-                                                <td class="px-3 py-2.5 text-gray-800">{{ topicLabel(set) }}</td>
-                                                <td class="px-3 py-2.5 font-mono font-semibold text-emerald-900">{{ setLabel(set) }}</td>
-                                                <td class="px-3 py-2.5 text-gray-600">
-                                                    {{ set.kind_label || (set.scope === 'chapter' ? 'Test' : 'Practice') }}
-                                                </td>
-                                                <td class="px-3 py-2.5 font-semibold text-emerald-800">
-                                                    {{ set.latest_score_label || formatScoreLabel(set.latest_score, set.latest_max_score) }}
-                                                </td>
-                                                <td class="px-3 py-2.5 text-right">
-                                                    <Link
-                                                        :href="completedAssignmentHref(set)"
-                                                        class="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
-                                                    >
-                                                        {{ completedLinkLabel(set) }}
-                                                    </Link>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
+                        <StudentAssignmentGroupTable
+                            :groups="completedByChapter"
+                            variant="completed"
+                            count-suffix="done"
+                        />
                     </section>
 
                     <ChapterSummaryPanel :chapter-summary="chapterSummary" />
