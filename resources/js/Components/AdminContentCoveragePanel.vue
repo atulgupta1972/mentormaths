@@ -3,52 +3,67 @@ import { Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
-    chapterSummary: {
+    coverage: {
         type: Object,
         default: () => ({ book_columns: [], chapters: [], context: {} }),
     },
-    chapterSummaryFilters: {
+    coverageFilters: {
         type: Object,
         default: () => ({
             grade_levels: [],
             boards_by_grade: {},
             selected_grade_level_id: null,
             selected_board_id: null,
-            home_grade_level_id: null,
-            home_board_id: null,
         }),
     },
 });
 
 const expandedChapterIds = ref(new Set());
-const assigningWorksheetId = ref(null);
-const selectedGradeId = ref(props.chapterSummaryFilters.selected_grade_level_id);
-const selectedBoardId = ref(props.chapterSummaryFilters.selected_board_id);
+const selectedGradeId = ref(props.coverageFilters.selected_grade_level_id);
+const selectedBoardId = ref(props.coverageFilters.selected_board_id);
 
-const bookColumns = computed(() => props.chapterSummary?.book_columns ?? []);
-const chapters = computed(() => props.chapterSummary?.chapters ?? []);
-const summaryContext = computed(() => props.chapterSummary?.context ?? {});
-const showPanel = computed(() => (props.chapterSummaryFilters.grade_levels?.length ?? 0) > 0);
+const bookColumns = computed(() => props.coverage?.book_columns ?? []);
+const chapters = computed(() => props.coverage?.chapters ?? []);
+const summaryContext = computed(() => props.coverage?.context ?? {});
+const showPanel = computed(() => (props.coverageFilters.grade_levels?.length ?? 0) > 0);
 const hasRows = computed(() => chapters.value.length > 0);
 
 const boardsForGrade = computed(() =>
-    props.chapterSummaryFilters.boards_by_grade?.[selectedGradeId.value] ?? [],
+    props.coverageFilters.boards_by_grade?.[selectedGradeId.value] ?? [],
 );
 
-const homeGradeName = computed(() =>
-    props.chapterSummaryFilters.grade_levels?.find(
-        (grade) => grade.id === props.chapterSummaryFilters.home_grade_level_id,
-    )?.name ?? 'your class',
-);
+const totals = computed(() => {
+    const sums = {
+        practice: 0,
+        test: 0,
+        written: 0,
+        fill_blank: 0,
+        formula: 0,
+        books: {},
+    };
+
+    for (const chapter of chapters.value) {
+        sums.practice += chapter.counts?.practice ?? 0;
+        sums.test += chapter.counts?.test ?? 0;
+        sums.written += chapter.counts?.written ?? 0;
+        sums.fill_blank += chapter.counts?.fill_blank ?? 0;
+        sums.formula += chapter.counts?.formula ?? 0;
+
+        for (const [bookId, count] of Object.entries(chapter.counts?.books ?? {})) {
+            sums.books[bookId] = (sums.books[bookId] ?? 0) + count;
+        }
+    }
+
+    return sums;
+});
 
 const applyFilters = () => {
-    router.get(route('dashboard'), {
+    router.get(route('admin.questions.coverage'), {
         grade_level_id: selectedGradeId.value,
         board_id: selectedBoardId.value,
     }, {
         preserveState: true,
         preserveScroll: true,
-        only: ['chapterSummary', 'chapterSummaryFilters'],
     });
 };
 
@@ -63,7 +78,7 @@ const onGradeChange = () => {
 };
 
 watch(
-    () => props.chapterSummaryFilters,
+    () => props.coverageFilters,
     (filters) => {
         selectedGradeId.value = filters.selected_grade_level_id;
         selectedBoardId.value = filters.selected_board_id;
@@ -103,37 +118,6 @@ const formatDrillDown = (items) => {
         .join(', ');
 };
 
-const itemHref = (item) => {
-    if (!item.can_open || !item.assignment_id) {
-        return null;
-    }
-
-    if (item.delivery_mode === 'written') {
-        return route('student.written-assignments.show', item.assignment_id);
-    }
-
-    if (item.latest_attempt_id) {
-        return route('student.attempts.result', item.latest_attempt_id);
-    }
-
-    return route('student.assignments.show', item.assignment_id);
-};
-
-const selfAssign = (item) => {
-    if (!item.can_assign || assigningWorksheetId.value) {
-        return;
-    }
-
-    assigningWorksheetId.value = item.worksheet_id;
-
-    router.post(route('student.worksheets.self-assign', item.worksheet_id), {}, {
-        preserveScroll: true,
-        onFinish: () => {
-            assigningWorksheetId.value = null;
-        },
-    });
-};
-
 const cellContent = (chapter, columnKey) => {
     if (!isExpanded(chapter.id)) {
         return countOrDash(chapter.counts?.[columnKey] ?? 0);
@@ -159,18 +143,11 @@ const bookCellContent = (chapter, bookId) => {
 const bookItems = (chapter, bookId) => chapter.items?.books?.[String(bookId)] ?? [];
 
 const statusClass = (status) => {
-    switch (status) {
-    case 'done':
+    if (status === 'published') {
         return 'text-emerald-800 bg-emerald-50';
-    case 'checking':
-        return 'text-violet-800 bg-violet-50';
-    case 'overdue':
-        return 'text-rose-800 bg-rose-50';
-    case 'in_progress':
-        return 'text-amber-800 bg-amber-50';
-    default:
-        return 'text-slate-700 bg-slate-100';
     }
+
+    return 'text-amber-800 bg-amber-50';
 };
 
 const rowBgClass = (index, expanded = false) => {
@@ -198,6 +175,8 @@ const chapterShortLabel = (chapter) => {
 
     return `Ch ${raw}`;
 };
+
+const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chapterId);
 </script>
 
 <template>
@@ -208,18 +187,13 @@ const chapterShortLabel = (chapter) => {
         <div class="mb-2 flex flex-wrap items-start justify-between gap-3">
             <div>
                 <h3 class="text-sm font-bold uppercase tracking-wide text-slate-900">
-                    Chapter overview — what is available
+                    Chapter × content — what is in the bank
                 </h3>
                 <p class="mt-0.5 text-[11px] font-medium text-slate-600">
-                    Click a chapter row to expand · <span class="font-bold text-slate-800">Assign me</span> to add work ·
-                    <span class="font-bold text-slate-800">Open / Redo</span> to continue
-                </p>
-                <p
-                    v-if="summaryContext.is_home_class === false"
-                    class="mt-1 text-[11px] font-semibold text-indigo-800"
-                >
-                    Viewing {{ summaryContext.selected_grade_name }} · {{ summaryContext.selected_board_name }}
-                    — switch back to {{ homeGradeName }} anytime
+                    Click a chapter row to expand · counts include published and draft sets
+                    <span v-if="summaryContext.selected_grade_name">
+                        · {{ summaryContext.selected_grade_name }} · {{ summaryContext.selected_board_name }}
+                    </span>
                 </p>
             </div>
 
@@ -232,7 +206,7 @@ const chapterShortLabel = (chapter) => {
                         @change="onGradeChange"
                     >
                         <option
-                            v-for="grade in chapterSummaryFilters.grade_levels"
+                            v-for="grade in coverageFilters.grade_levels"
                             :key="`grade-${grade.id}`"
                             :value="grade.id"
                         >
@@ -259,7 +233,10 @@ const chapterShortLabel = (chapter) => {
             </div>
         </div>
 
-        <p v-if="!hasRows" class="mb-2 rounded border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-[11px] font-medium text-slate-600">
+        <p
+            v-if="!hasRows"
+            class="mb-2 rounded border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-[11px] font-medium text-slate-600"
+        >
             No syllabus chapters found for this class and board.
         </p>
 
@@ -346,16 +323,25 @@ const chapterShortLabel = (chapter) => {
                             <td :class="gridCell" />
                             <td :colspan="6" :class="[gridCell, 'py-1.5']">
                                 <div class="space-y-1.5">
+                                    <Link
+                                        :href="chapterHubUrl(chapter.id)"
+                                        class="inline-block text-[10px] font-bold uppercase tracking-wide text-indigo-700 hover:underline"
+                                        @click.stop
+                                    >
+                                        Open chapter hub →
+                                    </Link>
                                     <div v-for="bucket in ['practice', 'test', 'written', 'fill_blank', 'formula']" :key="`${chapter.id}-${bucket}`">
                                         <template v-if="chapter.items?.[bucket]?.length">
                                             <p class="text-[10px] font-bold uppercase tracking-wide text-slate-700">
                                                 {{ bucket.replace('_', ' ') }}
                                             </p>
                                             <div class="mt-0.5 flex flex-wrap gap-1">
-                                                <div
+                                                <Link
                                                     v-for="item in chapter.items[bucket]"
                                                     :key="`${bucket}-${item.worksheet_id}`"
-                                                    class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm"
+                                                    :href="item.admin_url"
+                                                    class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm hover:border-indigo-400"
+                                                    @click.stop
                                                 >
                                                     <span class="font-mono text-[11px] font-bold text-slate-900">
                                                         {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
@@ -366,24 +352,7 @@ const chapterShortLabel = (chapter) => {
                                                     >
                                                         {{ item.status_label }}
                                                     </span>
-                                                    <button
-                                                        v-if="item.can_assign"
-                                                        type="button"
-                                                        class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800 disabled:opacity-50"
-                                                        :disabled="assigningWorksheetId === item.worksheet_id"
-                                                        @click.stop="selfAssign(item)"
-                                                    >
-                                                        {{ item.status === 'done' ? 'Redo' : 'Assign me' }}
-                                                    </button>
-                                                    <Link
-                                                        v-else-if="itemHref(item)"
-                                                        :href="itemHref(item)"
-                                                        class="rounded bg-emerald-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-emerald-800"
-                                                        @click.stop
-                                                    >
-                                                        Open
-                                                    </Link>
-                                                </div>
+                                                </Link>
                                             </div>
                                         </template>
                                     </div>
@@ -395,10 +364,12 @@ const chapterShortLabel = (chapter) => {
                                 :class="[gridCell, 'border-l-2 border-slate-400 align-top py-1.5']"
                             >
                                 <div v-if="bookItems(chapter, book.id).length" class="space-y-1">
-                                    <div
+                                    <Link
                                         v-for="item in bookItems(chapter, book.id)"
                                         :key="`book-item-${item.worksheet_id}`"
-                                        class="rounded border border-slate-300 bg-white px-1.5 py-1 shadow-sm"
+                                        :href="item.admin_url"
+                                        class="block rounded border border-slate-300 bg-white px-1.5 py-1 shadow-sm hover:border-indigo-400"
+                                        @click.stop
                                     >
                                         <div class="font-mono text-[10px] font-bold text-slate-900">
                                             {{ item.set_code }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
@@ -409,31 +380,28 @@ const chapterShortLabel = (chapter) => {
                                         >
                                             {{ item.status_label }}
                                         </div>
-                                        <div class="mt-1 flex flex-wrap gap-1">
-                                            <button
-                                                v-if="item.can_assign"
-                                                type="button"
-                                                class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800 disabled:opacity-50"
-                                                :disabled="assigningWorksheetId === item.worksheet_id"
-                                                @click.stop="selfAssign(item)"
-                                            >
-                                                {{ item.status === 'done' ? 'Redo' : 'Assign me' }}
-                                            </button>
-                                            <Link
-                                                v-else-if="itemHref(item)"
-                                                :href="itemHref(item)"
-                                                class="rounded bg-emerald-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-emerald-800"
-                                                @click.stop
-                                            >
-                                                Open
-                                            </Link>
-                                        </div>
-                                    </div>
+                                    </Link>
                                 </div>
                                 <span v-else class="font-bold text-slate-400">—</span>
                             </td>
                         </tr>
                     </template>
+
+                    <tr class="bg-slate-200 font-bold">
+                        <td :class="[gridCell, 'text-center']" colspan="2">Total</td>
+                        <td :class="[gridCell, 'text-center']">{{ countOrDash(totals.practice) }}</td>
+                        <td :class="[gridCell, 'text-center']">{{ countOrDash(totals.test) }}</td>
+                        <td :class="[gridCell, 'text-center']">{{ countOrDash(totals.written) }}</td>
+                        <td :class="[gridCell, 'text-center']">{{ countOrDash(totals.fill_blank) }}</td>
+                        <td :class="[gridCell, 'text-center']">{{ countOrDash(totals.formula) }}</td>
+                        <td
+                            v-for="book in bookColumns"
+                            :key="`book-total-${book.id}`"
+                            :class="[gridCell, 'border-l-2 border-slate-400 text-center']"
+                        >
+                            {{ countOrDash(totals.books[String(book.id)] ?? 0) }}
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>

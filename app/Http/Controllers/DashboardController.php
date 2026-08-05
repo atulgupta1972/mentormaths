@@ -32,7 +32,9 @@ class DashboardController extends Controller
         }
 
         $enrollment = $user->student?->currentEnrollment();
-        $studentData = $this->dashboardService->forStudent($enrollment);
+        $gradeLevelId = $request->integer('grade_level_id') ?: null;
+        $boardId = $request->integer('board_id') ?: null;
+        $studentData = $this->dashboardService->forStudent($enrollment, $gradeLevelId, $boardId);
         $student = $user->student;
 
         return Inertia::render('Dashboard', [

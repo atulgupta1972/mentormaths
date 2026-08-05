@@ -19,15 +19,32 @@ class DashboardService
     /**
      * @return array<string, mixed>
      */
-    public function forStudent(?StudentEnrollment $enrollment): array
+    public function forStudent(?StudentEnrollment $enrollment, ?int $gradeLevelId = null, ?int $boardId = null): array
     {
         $examPlanMeta = ['upcoming' => [], 'past' => []];
         $syllabusChapters = [];
         $assignments = [];
         $resolutionItems = [];
-        $chapterSummary = ['book_columns' => [], 'chapters' => []];
+        $chapterSummary = ['book_columns' => [], 'chapters' => [], 'context' => []];
+        $chapterSummaryFilters = [
+            'grade_levels' => [],
+            'boards_by_grade' => [],
+            'selected_grade_level_id' => null,
+            'selected_board_id' => null,
+            'home_grade_level_id' => null,
+            'home_board_id' => null,
+        ];
 
         if ($enrollment) {
+            $chapterSummaryFilters = $this->chapterSummaryService->filterOptions(
+                $enrollment,
+                $gradeLevelId,
+                $boardId,
+            );
+
+            $selectedGradeId = $chapterSummaryFilters['selected_grade_level_id'];
+            $selectedBoardId = $chapterSummaryFilters['selected_board_id'];
+
             $plans = $this->examPlanService->plansForEnrollment($enrollment);
             $split = $this->examPlanService->splitPlansByTiming($plans);
             $examPlanMeta = [
@@ -37,7 +54,11 @@ class DashboardService
             $syllabusChapters = $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all();
             $assignments = $this->attemptService->dashboardForEnrollment($enrollment);
             $resolutionItems = $this->resolutionService->pendingForEnrollment($enrollment->id);
-            $chapterSummary = $this->chapterSummaryService->forEnrollment($enrollment);
+            $chapterSummary = $this->chapterSummaryService->forEnrollment(
+                $enrollment,
+                $selectedGradeId,
+                $selectedBoardId,
+            );
         }
 
         return [
@@ -45,6 +66,7 @@ class DashboardService
             'examPlans' => $examPlanMeta,
             'syllabusChapters' => $syllabusChapters,
             'chapterSummary' => $chapterSummary,
+            'chapterSummaryFilters' => $chapterSummaryFilters,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
             'stats' => $this->studentStats($assignments, $examPlanMeta, count($resolutionItems)),
             'resolutionItems' => $resolutionItems,

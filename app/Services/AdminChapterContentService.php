@@ -2,25 +2,88 @@
 
 namespace App\Services;
 
+use App\Models\AcademicYear;
 use App\Models\Question;
-use App\Models\SetAssignment;
-use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\Worksheet;
-use App\Support\AssignmentProgress;
 use App\Support\PracticeSetScope;
 use App\Support\WorksheetDeliveryMode;
 use Illuminate\Support\Collection;
 
-class StudentChapterSummaryService
+class AdminChapterContentService
 {
-    public function __construct(
-        private ExamPlanService $examPlanService,
-    ) {}
+    /**
+     * @return array{
+     *     grade_levels: list<array<string, mixed>>,
+     *     boards_by_grade: array<int, list<array<string, mixed>>>,
+     *     selected_grade_level_id: int|null,
+     *     selected_board_id: int|null
+     * }
+     */
+    public function filterOptions(
+        AcademicYear $year,
+        ?int $selectedGradeLevelId = null,
+        ?int $selectedBoardId = null,
+    ): array {
+        $maths = Subject::query()->where('code', 'MATHS')->first();
+
+        if (! $maths) {
+            return [
+                'grade_levels' => [],
+                'boards_by_grade' => [],
+                'selected_grade_level_id' => null,
+                'selected_board_id' => null,
+            ];
+        }
+
+        $versions = SyllabusVersion::query()
+            ->where('academic_year_id', $year->id)
+            ->where('subject_id', $maths->id)
+            ->with(['gradeLevel:id,name,sort_order', 'board:id,code,name'])
+            ->get();
+
+        $gradeLevels = $versions
+            ->pluck('gradeLevel')
+            ->filter()
+            ->unique('id')
+            ->sortBy('sort_order')
+            ->values()
+            ->map(fn ($grade) => $grade->only(['id', 'name', 'sort_order']))
+            ->all();
+
+        $boardsByGrade = $versions
+            ->groupBy('grade_level_id')
+            ->map(fn (Collection $group) => $group
+                ->pluck('board')
+                ->filter()
+                ->unique('id')
+                ->sortBy('name')
+                ->values()
+                ->map(fn ($board) => $board->only(['id', 'code', 'name']))
+                ->all())
+            ->all();
+
+        $selectedGradeLevelId = $selectedGradeLevelId ?? ($gradeLevels[0]['id'] ?? null);
+        $boardsForGrade = $boardsByGrade[$selectedGradeLevelId] ?? [];
+        $selectedBoardId = $selectedBoardId ?? ($boardsForGrade[0]['id'] ?? null);
+
+        $boardIdsForGrade = collect($boardsForGrade)->pluck('id')->all();
+
+        if ($boardIdsForGrade !== [] && $selectedBoardId && ! in_array($selectedBoardId, $boardIdsForGrade, true)) {
+            $selectedBoardId = $boardIdsForGrade[0];
+        }
+
+        return [
+            'grade_levels' => $gradeLevels,
+            'boards_by_grade' => $boardsByGrade,
+            'selected_grade_level_id' => $selectedGradeLevelId,
+            'selected_board_id' => $selectedBoardId,
+        ];
+    }
 
     /**
      * @return array{
@@ -29,23 +92,16 @@ class StudentChapterSummaryService
      *     context: array<string, mixed>
      * }
      */
-    public function forEnrollment(
-        StudentEnrollment $enrollment,
-        ?int $gradeLevelId = null,
-        ?int $boardId = null,
+    public function forClassAndBoard(
+        AcademicYear $year,
+        int $gradeLevelId,
+        int $boardId,
     ): array {
-        $gradeLevelId = $gradeLevelId ?? $enrollment->grade_level_id;
-        $boardId = $boardId ?? $enrollment->board_id;
-
-        $syllabusVersion = $this->resolveSyllabusVersion($enrollment, $gradeLevelId, $boardId);
+        $syllabusVersion = $this->resolveSyllabusVersion($year, $gradeLevelId, $boardId);
 
         $context = [
             'selected_grade_level_id' => $gradeLevelId,
             'selected_board_id' => $boardId,
-            'home_grade_level_id' => $enrollment->grade_level_id,
-            'home_board_id' => $enrollment->board_id,
-            'is_home_class' => $gradeLevelId === $enrollment->grade_level_id
-                && $boardId === $enrollment->board_id,
             'selected_grade_name' => $syllabusVersion?->gradeLevel?->name,
             'selected_board_name' => $syllabusVersion?->board?->name,
         ];
@@ -87,7 +143,7 @@ class StudentChapterSummaryService
             ->all();
 
         $worksheets = Worksheet::query()
-            ->where('status', Worksheet::STATUS_PUBLISHED)
+            ->whereIn('status', [Worksheet::STATUS_PUBLISHED, Worksheet::STATUS_DRAFT])
             ->where(function ($query) use ($topicIds, $chapterIds) {
                 $query->where(function ($inner) use ($topicIds) {
                     $inner->where('scope', PracticeSetScope::TOPIC)
@@ -134,18 +190,6 @@ class StudentChapterSummaryService
             );
         }
 
-        $assignmentsByWorksheet = SetAssignment::query()
-            ->where('student_enrollment_id', $enrollment->id)
-            ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
-            ->with([
-                'practiceSet' => fn ($query) => $query->withCount('questions'),
-                'attempts' => fn ($query) => $query->orderByDesc('attempt_number')->limit(1),
-                'writtenSubmissions' => fn ($query) => $query->latest('id')->limit(1),
-            ])
-            ->orderByDesc('id')
-            ->get()
-            ->groupBy('worksheet_id');
-
         $worksheetsById = $worksheets->keyBy('id');
         $worksheetsByChapter = $this->groupWorksheetsByChapter($worksheets, $chapterIds);
 
@@ -154,7 +198,6 @@ class StudentChapterSummaryService
             $worksheetsById,
             $textbookChapters,
             $textbookColumns,
-            $assignmentsByWorksheet,
         ) {
             $chapterWorksheets = $worksheetsByChapter->get($chapter->id, collect());
             $chapterTextbookRows = $textbookChapters->where('syllabus_chapter_id', $chapter->id);
@@ -175,7 +218,7 @@ class StudentChapterSummaryService
                     continue;
                 }
 
-                $item = $this->buildSetItem($worksheet, $assignmentsByWorksheet);
+                $item = $this->buildSetItem($worksheet);
                 $bucket = $this->bucketForWorksheet($worksheet);
 
                 match ($bucket) {
@@ -197,7 +240,7 @@ class StudentChapterSummaryService
                         $worksheet = $worksheetsById->get($worksheetId);
 
                         if ($worksheet) {
-                            $bookItems[] = $this->buildSetItem($worksheet, $assignmentsByWorksheet, 'B');
+                            $bookItems[] = $this->buildSetItem($worksheet, 'B');
                         }
                     }
 
@@ -205,7 +248,7 @@ class StudentChapterSummaryService
                         $worksheet = $worksheetsById->get((int) $textbookChapter->written_worksheet_id);
 
                         if ($worksheet) {
-                            $bookItems[] = $this->buildSetItem($worksheet, $assignmentsByWorksheet, 'B');
+                            $bookItems[] = $this->buildSetItem($worksheet, 'B');
                         }
                     }
                 }
@@ -247,83 +290,8 @@ class StudentChapterSummaryService
         ];
     }
 
-    /**
-     * @return array{
-     *     grade_levels: list<array<string, mixed>>,
-     *     boards_by_grade: array<int, list<array<string, mixed>>>,
-     *     selected_grade_level_id: int,
-     *     selected_board_id: int,
-     *     home_grade_level_id: int,
-     *     home_board_id: int
-     * }
-     */
-    public function filterOptions(
-        StudentEnrollment $enrollment,
-        ?int $selectedGradeLevelId = null,
-        ?int $selectedBoardId = null,
-    ): array {
-        $maths = Subject::query()->where('code', 'MATHS')->first();
-
-        if (! $maths) {
-            return [
-                'grade_levels' => [],
-                'boards_by_grade' => [],
-                'selected_grade_level_id' => $enrollment->grade_level_id,
-                'selected_board_id' => $enrollment->board_id,
-                'home_grade_level_id' => $enrollment->grade_level_id,
-                'home_board_id' => $enrollment->board_id,
-            ];
-        }
-
-        $versions = SyllabusVersion::query()
-            ->where('academic_year_id', $enrollment->academic_year_id)
-            ->where('subject_id', $maths->id)
-            ->with(['gradeLevel:id,name,sort_order', 'board:id,code,name'])
-            ->get();
-
-        $gradeLevels = $versions
-            ->pluck('gradeLevel')
-            ->filter()
-            ->unique('id')
-            ->sortBy('sort_order')
-            ->values()
-            ->map(fn ($grade) => $grade->only(['id', 'name', 'sort_order']))
-            ->all();
-
-        $boardsByGrade = $versions
-            ->groupBy('grade_level_id')
-            ->map(fn (Collection $group) => $group
-                ->pluck('board')
-                ->filter()
-                ->unique('id')
-                ->sortBy('name')
-                ->values()
-                ->map(fn ($board) => $board->only(['id', 'code', 'name']))
-                ->all())
-            ->all();
-
-        $selectedGradeLevelId = $selectedGradeLevelId ?? $enrollment->grade_level_id;
-        $boardsForGrade = $boardsByGrade[$selectedGradeLevelId] ?? [];
-        $selectedBoardId = $selectedBoardId ?? $enrollment->board_id;
-
-        $boardIdsForGrade = collect($boardsForGrade)->pluck('id')->all();
-
-        if ($boardIdsForGrade !== [] && ! in_array($selectedBoardId, $boardIdsForGrade, true)) {
-            $selectedBoardId = $boardIdsForGrade[0];
-        }
-
-        return [
-            'grade_levels' => $gradeLevels,
-            'boards_by_grade' => $boardsByGrade,
-            'selected_grade_level_id' => $selectedGradeLevelId,
-            'selected_board_id' => $selectedBoardId,
-            'home_grade_level_id' => $enrollment->grade_level_id,
-            'home_board_id' => $enrollment->board_id,
-        ];
-    }
-
     private function resolveSyllabusVersion(
-        StudentEnrollment $enrollment,
+        AcademicYear $year,
         int $gradeLevelId,
         int $boardId,
     ): ?SyllabusVersion {
@@ -334,7 +302,7 @@ class StudentChapterSummaryService
         }
 
         return SyllabusVersion::query()
-            ->where('academic_year_id', $enrollment->academic_year_id)
+            ->where('academic_year_id', $year->id)
             ->where('grade_level_id', $gradeLevelId)
             ->where('board_id', $boardId)
             ->where('subject_id', $maths->id)
@@ -404,34 +372,10 @@ class StudentChapterSummaryService
     }
 
     /**
-     * @param  Collection<int, Collection<int, SetAssignment>>  $assignmentsByWorksheet
      * @return array<string, mixed>
      */
-    private function buildSetItem(
-        Worksheet $worksheet,
-        Collection $assignmentsByWorksheet,
-        ?string $prefixOverride = null,
-    ): array {
-        $assignment = $this->resolveCurrentAssignment(
-            $assignmentsByWorksheet->get($worksheet->id, collect()),
-        );
-
-        $progress = null;
-
-        if ($assignment) {
-            if ($worksheet->isWritten()) {
-                $progress = AssignmentProgress::formatWrittenStudentDashboardSummary(
-                    $assignment,
-                    $assignment->writtenSubmissions->first(),
-                );
-            } else {
-                $progress = AssignmentProgress::formatStudentDashboardSummary(
-                    $assignment,
-                    $assignment->attempts->first(),
-                );
-            }
-        }
-
+    private function buildSetItem(Worksheet $worksheet, ?string $prefixOverride = null): array
+    {
         $bucket = $this->bucketForWorksheet($worksheet);
         $prefix = $prefixOverride ?? match ($bucket) {
             'test' => 'T',
@@ -443,7 +387,7 @@ class StudentChapterSummaryService
 
         $setNumber = $worksheet->set_number ?: 1;
         $shortLabel = "{$prefix}{$setNumber}";
-        $statusMeta = $this->statusMeta($progress, $assignment !== null);
+        $published = $worksheet->status === Worksheet::STATUS_PUBLISHED;
 
         return [
             'worksheet_id' => $worksheet->id,
@@ -452,63 +396,10 @@ class StudentChapterSummaryService
             'short_label' => $shortLabel,
             'question_count' => (int) ($worksheet->questions_count ?? 0),
             'delivery_mode' => $worksheet->delivery_mode ?? WorksheetDeliveryMode::ONLINE,
-            'assignment_id' => $assignment?->id,
-            'latest_attempt_id' => $progress['latest_attempt_id'] ?? null,
-            'status' => $statusMeta['status'],
-            'status_label' => $statusMeta['status_label'],
-            'can_assign' => $statusMeta['can_assign'],
-            'can_open' => $statusMeta['can_open'],
-            'latest_score_percent' => $progress['latest_score_percent'] ?? null,
+            'status' => $published ? 'published' : 'draft',
+            'status_label' => $published ? 'PUBLISHED' : 'DRAFT',
+            'admin_url' => route('admin.questions.sets.show', $worksheet),
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>|null  $progress
-     * @return array{status: string, status_label: string, can_assign: bool, can_open: bool}
-     */
-    private function statusMeta(?array $progress, bool $assigned): array
-    {
-        if (! $assigned || ! $progress) {
-            return [
-                'status' => 'not_assigned',
-                'status_label' => 'NOT DONE',
-                'can_assign' => true,
-                'can_open' => false,
-            ];
-        }
-
-        $percent = $progress['latest_score_percent'] ?? null;
-
-        return match ($progress['status']) {
-            'green', 'green-late' => [
-                'status' => 'done',
-                'status_label' => $percent !== null ? "DONE({$percent}%)" : 'DONE',
-                'can_assign' => true,
-                'can_open' => true,
-            ],
-            'checking' => [
-                'status' => 'checking',
-                'status_label' => 'CHECKING',
-                'can_assign' => false,
-                'can_open' => true,
-            ],
-            'overdue' => [
-                'status' => 'overdue',
-                'status_label' => 'OVERDUE',
-                'can_assign' => true,
-                'can_open' => true,
-            ],
-            default => [
-                'status' => ($progress['assignment_status'] ?? null) === SetAssignment::STATUS_IN_PROGRESS
-                    ? 'in_progress'
-                    : 'pending',
-                'status_label' => ($progress['assignment_status'] ?? null) === SetAssignment::STATUS_IN_PROGRESS
-                    ? 'IN PROGRESS'
-                    : 'NOT DONE',
-                'can_assign' => false,
-                'can_open' => true,
-            ],
-        };
     }
 
     private function bucketForWorksheet(Worksheet $worksheet): string
@@ -561,29 +452,5 @@ class StudentChapterSummaryService
         }
 
         return false;
-    }
-
-    /**
-     * @param  Collection<int, SetAssignment>  $assignments
-     */
-    private function resolveCurrentAssignment(Collection $assignments): ?SetAssignment
-    {
-        if ($assignments->isEmpty()) {
-            return null;
-        }
-
-        $active = $assignments
-            ->whereIn('status', [SetAssignment::STATUS_ASSIGNED, SetAssignment::STATUS_IN_PROGRESS])
-            ->sortByDesc('id')
-            ->first();
-
-        if ($active) {
-            return $active;
-        }
-
-        return $assignments
-            ->where('status', SetAssignment::STATUS_COMPLETED)
-            ->sortByDesc('id')
-            ->first();
     }
 }

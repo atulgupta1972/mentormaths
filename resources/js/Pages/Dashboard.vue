@@ -23,7 +23,18 @@ const props = defineProps({
     syllabusChapters: { type: Array, default: () => [] },
     chapterSummary: {
         type: Object,
-        default: () => ({ book_columns: [], chapters: [] }),
+        default: () => ({ book_columns: [], chapters: [], context: {} }),
+    },
+    chapterSummaryFilters: {
+        type: Object,
+        default: () => ({
+            grade_levels: [],
+            boards_by_grade: {},
+            selected_grade_level_id: null,
+            selected_board_id: null,
+            home_grade_level_id: null,
+            home_board_id: null,
+        }),
     },
     examTypeOptions: { type: Array, default: () => [] },
     stats: {
@@ -999,7 +1010,10 @@ const adminSetStatusClass = (set) => {
                         />
                     </section>
 
-                    <ChapterSummaryPanel :chapter-summary="chapterSummary" />
+                    <ChapterSummaryPanel
+                        :chapter-summary="chapterSummary"
+                        :chapter-summary-filters="chapterSummaryFilters"
+                    />
                 </template>
             </div>
         </div>

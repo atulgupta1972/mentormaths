@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\ChapterPracticeSetController;
 use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ClassAssignmentController;
 use App\Http\Controllers\Admin\ClassHubController;
+use App\Http\Controllers\Admin\ContentCoverageController;
 use App\Http\Controllers\Admin\ExamPlanController as AdminExamPlanController;
 use App\Http\Controllers\Admin\FormulaBankController;
 use App\Http\Controllers\Admin\GradeContextController;
@@ -206,6 +207,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::patch('/questions/{question}/fill-blank', [QuestionController::class, 'updateFillBlank'])->name('questions.fill-blank.update');
     Route::delete('/questions/{question}', [QuestionController::class, 'destroy'])->name('questions.destroy');
     Route::get('/questions/set-code', [QuestionHubController::class, 'setCodeReview'])->name('questions.set-code');
+    Route::get('/questions/coverage', [ContentCoverageController::class, 'index'])->name('questions.coverage');
 
     Route::get('/question-audit', [QuestionAuditController::class, 'index'])->name('question-audit.index');
     Route::get('/question-audit/classes/{gradeLevel}', [QuestionAuditController::class, 'chapters'])->name('question-audit.classes.show');

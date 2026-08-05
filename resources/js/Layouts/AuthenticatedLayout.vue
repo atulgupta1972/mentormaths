@@ -127,6 +127,12 @@ const contentGroup = computed(() => ({
         || route().current('admin.syllabus.*'),
     items: [
         {
+            label: 'Content coverage',
+            href: route('admin.questions.coverage'),
+            active: route().current('admin.questions.coverage'),
+            show: isAdmin.value,
+        },
+        {
             label: 'Look up set code',
             href: route('admin.questions.set-code'),
             active: route().current('admin.questions.set-code'),

@@ -51,6 +51,13 @@ const boardBadgeClass = (code) => {
                 </div>
                 <p class="mb-6 text-sm text-gray-600">
                     Board → Class → Chapter → Topic → Questions.
+                    <Link
+                        :href="route('admin.questions.coverage')"
+                        class="font-medium text-indigo-600 hover:underline"
+                    >
+                        Content coverage matrix
+                    </Link>
+                    — class × chapter overview of all set types.
                 </p>
 
                 <div v-if="!boardSections.length" class="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">

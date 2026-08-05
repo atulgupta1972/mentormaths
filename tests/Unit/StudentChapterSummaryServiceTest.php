@@ -19,6 +19,7 @@ use App\Services\StudentChapterSummaryService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\WorksheetDeliveryMode;
+use App\Support\WorksheetPurpose;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -100,7 +101,51 @@ class StudentChapterSummaryServiceTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Dashboard')
-                ->has('chapterSummary.chapters', 1));
+                ->has('chapterSummary.chapters', 1)
+                ->has('chapterSummaryFilters.grade_levels', 1)
+                ->where('chapterSummaryFilters.selected_grade_level_id', $enrollment->grade_level_id)
+                ->where('chapterSummaryFilters.selected_board_id', $enrollment->board_id));
+    }
+
+    public function test_chapter_summary_includes_formula_sets(): void
+    {
+        [$enrollment, $chapter] = $this->seedChapterContent(withFormula: true);
+
+        $summary = app(StudentChapterSummaryService::class)->forEnrollment($enrollment);
+
+        $row = $summary['chapters'][0];
+        $this->assertSame(1, $row['counts']['formula']);
+        $this->assertSame('Fm3', $row['items']['formula'][0]['short_label']);
+    }
+
+    public function test_filter_options_default_to_student_class_and_board(): void
+    {
+        [$enrollment] = $this->seedChapterContent();
+
+        $filters = app(StudentChapterSummaryService::class)->filterOptions($enrollment);
+
+        $this->assertSame($enrollment->grade_level_id, $filters['selected_grade_level_id']);
+        $this->assertSame($enrollment->board_id, $filters['selected_board_id']);
+        $this->assertSame($enrollment->grade_level_id, $filters['home_grade_level_id']);
+        $this->assertSame($enrollment->board_id, $filters['home_board_id']);
+    }
+
+    public function test_chapter_summary_can_show_other_grade_syllabus(): void
+    {
+        [$enrollment, $chapter] = $this->seedChapterContent(withOtherGrade: true);
+
+        $otherGrade = GradeLevel::query()->where('name', 'Class 6')->firstOrFail();
+
+        $summary = app(StudentChapterSummaryService::class)->forEnrollment(
+            $enrollment,
+            $otherGrade->id,
+            $enrollment->board_id,
+        );
+
+        $this->assertFalse($summary['context']['is_home_class']);
+        $this->assertSame('Class 6', $summary['context']['selected_grade_name']);
+        $this->assertCount(1, $summary['chapters']);
+        $this->assertSame('Integers', $summary['chapters'][0]['name']);
     }
 
     private function studentUserForEnrollment(StudentEnrollment $enrollment): User
@@ -120,8 +165,10 @@ class StudentChapterSummaryServiceTest extends TestCase
      *     4: Worksheet
      * }
      */
-    private function seedChapterContent(): array
-    {
+    private function seedChapterContent(
+        bool $withFormula = false,
+        bool $withOtherGrade = false,
+    ): array {
         $year = AcademicYear::query()->create([
             'name' => '2026-27',
             'starts_on' => '2026-03-01',
@@ -201,6 +248,40 @@ class StudentChapterSummaryServiceTest extends TestCase
             'delivery_mode' => WorksheetDeliveryMode::ONLINE,
             'status' => Worksheet::STATUS_PUBLISHED,
         ]);
+
+        $formulaWorksheet = null;
+
+        if ($withFormula) {
+            $formulaWorksheet = Worksheet::query()->create([
+                'title' => 'Formula recall 1',
+                'set_number' => 3,
+                'set_code' => 'FM713',
+                'purpose' => WorksheetPurpose::FORMULA,
+                'tier' => PracticeSetTier::STARTER,
+                'scope' => PracticeSetScope::TOPIC,
+                'syllabus_topic_id' => $topic->id,
+                'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+                'status' => Worksheet::STATUS_PUBLISHED,
+            ]);
+        }
+
+        if ($withOtherGrade) {
+            $classSix = GradeLevel::query()->create(['name' => 'Class 6', 'sort_order' => 6, 'is_active' => true]);
+
+            $syllabusSix = SyllabusVersion::query()->create([
+                'academic_year_id' => $year->id,
+                'grade_level_id' => $classSix->id,
+                'board_id' => $board->id,
+                'subject_id' => $subject->id,
+            ]);
+
+            SyllabusChapter::query()->create([
+                'syllabus_version_id' => $syllabusSix->id,
+                'name' => 'Integers',
+                'chapter_number' => 1,
+                'sort_order' => 1,
+            ]);
+        }
 
         return [$enrollment, $chapter, $practiceOne, $practiceTwo, $testWorksheet];
     }
