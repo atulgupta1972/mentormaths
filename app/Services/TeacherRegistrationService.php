@@ -66,6 +66,50 @@ class TeacherRegistrationService
         return $request->fresh();
     }
 
+    public function requestProfileCompletion(
+        TeacherRegistrationRequest $request,
+        ?string $message,
+        int $adminUserId,
+    ): TeacherRegistrationRequest {
+        if (! $request->canRequestProfileCompletion()) {
+            throw new \InvalidArgumentException('Profile details are already complete or this application cannot be updated.');
+        }
+
+        $request->update([
+            'profile_completion_token' => (string) Str::uuid(),
+            'profile_completion_requested_at' => now(),
+            'profile_completion_message' => $message,
+            'reviewed_by' => $adminUserId,
+        ]);
+
+        TeacherRegistrationMailer::sendProfileCompletionRequest($request->fresh());
+
+        return $request->fresh();
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    public function updateProfileDetails(TeacherRegistrationRequest $request, array $validated): TeacherRegistrationRequest
+    {
+        if (! $request->canCompleteProfileViaToken()) {
+            throw new \InvalidArgumentException('This profile update link is no longer valid.');
+        }
+
+        $request->update([
+            'city' => $validated['city'],
+            'state' => $validated['state'],
+            'country' => $validated['country'] ?? 'India',
+            'teaches_english_medium' => (bool) ($validated['teaches_english_medium'] ?? false),
+            'teaches_hindi_medium' => (bool) ($validated['teaches_hindi_medium'] ?? false),
+            'regional_language' => $validated['regional_language'] ?? null,
+            'profile_completion_token' => null,
+            'profile_completion_message' => null,
+        ]);
+
+        return $request->fresh();
+    }
+
     public function approve(TeacherRegistrationRequest $request, int $adminUserId, ?string $adminNotes = null): User
     {
         if (! $request->canApprove()) {
@@ -155,6 +199,19 @@ class TeacherRegistrationService
             'offer_url' => $request->counter_offer_token
                 ? route('teacher-registration.offer', $request->counter_offer_token)
                 : null,
+            'location_label' => $request->locationLabel(),
+            'language_labels' => $request->languageLabels(),
+            'missing_profile_fields' => $request->missingProfileFields(),
+            'missing_profile_field_labels' => collect($request->missingProfileFields())
+                ->map(fn (string $field) => TeacherRegistrationRequest::missingProfileFieldLabel($field))
+                ->values()
+                ->all(),
+            'has_complete_profile' => $request->hasCompleteProfileDetails(),
+            'can_request_profile_completion' => $request->canRequestProfileCompletion(),
+            'profile_completion_url' => $request->profile_completion_token
+                ? route('teacher-registration.profile', $request->profile_completion_token)
+                : null,
+            'profile_completion_requested_at' => $request->profile_completion_requested_at?->toDateTimeString(),
         ];
     }
 }

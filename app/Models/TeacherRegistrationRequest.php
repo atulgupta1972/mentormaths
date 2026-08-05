@@ -53,6 +53,8 @@ class TeacherRegistrationRequest extends Model
         'date_of_birth',
         'password',
         'city',
+        'state',
+        'country',
         'qualification',
         'current_role',
         'years_of_experience',
@@ -86,11 +88,13 @@ class TeacherRegistrationRequest extends Model
         'counter_hourly_rate_inr',
         'counter_offer_message',
         'counter_offer_token',
+        'profile_completion_token',
         'counter_offer_sent_at',
         'offer_responded_at',
         'offer_response',
         'teaches_english_medium',
         'teaches_hindi_medium',
+        'regional_language',
         'referral_source',
         'agreed_to_terms',
         'agreed_at',
@@ -105,6 +109,7 @@ class TeacherRegistrationRequest extends Model
     protected $hidden = [
         'password',
         'counter_offer_token',
+        'profile_completion_token',
     ];
 
     protected function casts(): array
@@ -129,6 +134,7 @@ class TeacherRegistrationRequest extends Model
             'doubt_hours_per_week' => 'decimal:1',
             'expected_start_date' => 'date',
             'counter_offer_sent_at' => 'datetime',
+            'profile_completion_requested_at' => 'datetime',
             'offer_responded_at' => 'datetime',
             'agreed_to_terms' => 'boolean',
             'agreed_at' => 'datetime',
@@ -231,6 +237,100 @@ class TeacherRegistrationRequest extends Model
         }
 
         return self::PLATFORM_USAGE_SCOPES[$this->platform_usage_scope] ?? $this->platform_usage_scope;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function languageLabels(): array
+    {
+        $labels = [];
+
+        if ($this->teaches_english_medium) {
+            $labels[] = 'English';
+        }
+
+        if ($this->teaches_hindi_medium) {
+            $labels[] = 'Hindi';
+        }
+
+        if ($this->regional_language) {
+            $labels[] = $this->regional_language;
+        }
+
+        return $labels;
+    }
+
+    public function locationLabel(): ?string
+    {
+        $parts = array_filter([
+            $this->city,
+            $this->state,
+            $this->country ?: 'India',
+        ]);
+
+        return $parts === [] ? null : implode(', ', $parts);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function missingProfileFields(): array
+    {
+        $missing = [];
+
+        if (blank($this->city)) {
+            $missing[] = 'city';
+        }
+
+        if (blank($this->state)) {
+            $missing[] = 'state';
+        }
+
+        if (blank($this->country)) {
+            $missing[] = 'country';
+        }
+
+        if (! $this->teaches_english_medium && ! $this->teaches_hindi_medium) {
+            $missing[] = 'language';
+        }
+
+        return $missing;
+    }
+
+    public function hasCompleteProfileDetails(): bool
+    {
+        return $this->missingProfileFields() === [];
+    }
+
+    public function canRequestProfileCompletion(): bool
+    {
+        if ($this->hasCompleteProfileDetails()) {
+            return false;
+        }
+
+        return ! in_array($this->status, [
+            self::STATUS_REJECTED,
+        ], true);
+    }
+
+    public function canCompleteProfileViaToken(): bool
+    {
+        return (bool) $this->profile_completion_token
+            && ! in_array($this->status, [
+                self::STATUS_REJECTED,
+            ], true);
+    }
+
+    public static function missingProfileFieldLabel(string $field): string
+    {
+        return match ($field) {
+            'city' => 'City',
+            'state' => 'State',
+            'country' => 'Country',
+            'language' => 'Language (English and/or Hindi)',
+            default => ucfirst(str_replace('_', ' ', $field)),
+        };
     }
 
     public static function statusLabel(string $status): string

@@ -114,6 +114,72 @@ class TeacherRegistrationRequestController extends Controller
                 : 'We have recorded your response. Thank you for your interest.');
     }
 
+    public function showCompleteProfile(string $token): Response|RedirectResponse
+    {
+        $application = TeacherRegistrationRequest::query()
+            ->where('profile_completion_token', $token)
+            ->firstOrFail();
+
+        if (! $application->canCompleteProfileViaToken()) {
+            return redirect()->route('teacher-registration.create')
+                ->with('warning', 'This profile link is no longer valid.');
+        }
+
+        return Inertia::render('TeacherRegistration/CompleteProfile', [
+            'application' => [
+                'name' => $application->name,
+                'email' => $application->email,
+                'city' => $application->city,
+                'state' => $application->state,
+                'country' => $application->country ?: 'India',
+                'teaches_english_medium' => (bool) $application->teaches_english_medium,
+                'teaches_hindi_medium' => (bool) $application->teaches_hindi_medium,
+                'regional_language' => $application->regional_language,
+                'missing_profile_field_labels' => collect($application->missingProfileFields())
+                    ->map(fn (string $field) => TeacherRegistrationRequest::missingProfileFieldLabel($field))
+                    ->values()
+                    ->all(),
+            ],
+            'token' => $token,
+        ]);
+    }
+
+    public function updateCompleteProfile(Request $request, string $token): RedirectResponse
+    {
+        $application = TeacherRegistrationRequest::query()
+            ->where('profile_completion_token', $token)
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'city' => ['required', 'string', 'max:120'],
+            'state' => ['required', 'string', 'max:120'],
+            'country' => ['nullable', 'string', 'max:80'],
+            'teaches_english_medium' => ['sometimes', 'boolean'],
+            'teaches_hindi_medium' => ['sometimes', 'boolean'],
+            'regional_language' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $validated['teaches_english_medium'] = (bool) ($validated['teaches_english_medium'] ?? false);
+        $validated['teaches_hindi_medium'] = (bool) ($validated['teaches_hindi_medium'] ?? false);
+        $validated['country'] = $validated['country'] ?: 'India';
+
+        if (! $validated['teaches_english_medium'] && ! $validated['teaches_hindi_medium']) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'teaches_english_medium' => 'Select at least one language: English and/or Hindi.',
+            ]);
+        }
+
+        try {
+            $this->service->updateProfileDetails($application, $validated);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('teacher-registration.thank-you')
+            ->with('success', 'Thank you — your location and language details have been saved.');
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -183,7 +249,9 @@ class TeacherRegistrationRequestController extends Controller
             'gender' => ['required', 'string', Rule::in(['female', 'male', 'other', 'prefer_not_to_say'])],
             'date_of_birth' => ['required', 'date', 'before:today', 'after:1950-01-01'],
             'password' => ['required', 'string', 'confirmed', Password::defaults()],
-            'city' => ['nullable', 'string', 'max:120'],
+            'city' => ['required', 'string', 'max:120'],
+            'state' => ['required', 'string', 'max:120'],
+            'country' => ['nullable', 'string', 'max:80'],
             'qualification' => ['nullable', 'string', 'max:255'],
             'current_role' => ['nullable', 'string', 'max:255'],
             'years_of_experience' => ['required', 'integer', 'min:0', 'max:60'],
@@ -220,6 +288,7 @@ class TeacherRegistrationRequestController extends Controller
             'expected_start_date' => ['nullable', 'date', 'after_or_equal:today'],
             'teaches_english_medium' => ['sometimes', 'boolean'],
             'teaches_hindi_medium' => ['sometimes', 'boolean'],
+            'regional_language' => ['nullable', 'string', 'max:120'],
             'referral_source' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'agreed_to_terms' => ['accepted'],
@@ -314,6 +383,13 @@ class TeacherRegistrationRequestController extends Controller
 
         $validated['teaches_english_medium'] = (bool) ($validated['teaches_english_medium'] ?? true);
         $validated['teaches_hindi_medium'] = (bool) ($validated['teaches_hindi_medium'] ?? false);
+        $validated['country'] = $validated['country'] ?? 'India';
+
+        if (! $validated['teaches_english_medium'] && ! $validated['teaches_hindi_medium']) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'teaches_english_medium' => 'Select at least one language: English and/or Hindi.',
+            ]);
+        }
 
         return $validated;
     }

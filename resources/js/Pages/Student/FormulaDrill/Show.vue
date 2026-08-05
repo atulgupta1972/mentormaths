@@ -20,6 +20,28 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    pool_breakdown: {
+        type: Object,
+        default: null,
+    },
+});
+
+const poolNote = computed(() => {
+    const breakdown = props.pool_breakdown;
+
+    if (!breakdown?.previous_grade_name || breakdown.previous_grade_count <= 0) {
+        return null;
+    }
+
+    const parts = [
+        `${breakdown.previous_grade_count} from ${breakdown.previous_grade_name} revision`,
+    ];
+
+    if (breakdown.current_grade_count > 0) {
+        parts.push(`${breakdown.current_grade_count} from your assigned chapters`);
+    }
+
+    return parts.join(' · ');
 });
 
 const currentItem = ref(props.current);
@@ -136,6 +158,9 @@ const optionClass = (optionId) => {
                 <p class="text-sm text-gray-500">
                     Complete {{ sessionState.questions_total }} formulas to unlock today&apos;s work
                     <span v-if="sessionState.pool_size"> · Pool of {{ sessionState.pool_size }}</span>
+                </p>
+                <p v-if="poolNote" class="mt-1 text-xs text-indigo-700">
+                    Includes {{ poolNote }}
                 </p>
             </div>
         </template>

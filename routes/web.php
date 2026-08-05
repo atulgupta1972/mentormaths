@@ -62,6 +62,10 @@ Route::get('/teachers/register/offer/{token}', [TeacherRegistrationRequestContro
     ->name('teacher-registration.offer');
 Route::post('/teachers/register/offer/{token}', [TeacherRegistrationRequestController::class, 'respondToOffer'])
     ->name('teacher-registration.offer.respond');
+Route::get('/teachers/register/profile/{token}', [TeacherRegistrationRequestController::class, 'showCompleteProfile'])
+    ->name('teacher-registration.profile');
+Route::post('/teachers/register/profile/{token}', [TeacherRegistrationRequestController::class, 'updateCompleteProfile'])
+    ->name('teacher-registration.profile.update');
 
 Route::get('/dashboard', DashboardController::class)
     ->middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])
@@ -104,6 +108,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('teacher-registrations.resume');
     Route::post('/teacher-registrations/{teacherRegistration}/counter-offer', [AdminTeacherRegistrationRequestController::class, 'sendCounterOffer'])
         ->name('teacher-registrations.counter-offer');
+    Route::post('/teacher-registrations/{teacherRegistration}/request-profile', [AdminTeacherRegistrationRequestController::class, 'requestProfileCompletion'])
+        ->name('teacher-registrations.request-profile');
     Route::post('/teacher-registrations/{teacherRegistration}/approve', [AdminTeacherRegistrationRequestController::class, 'approve'])
         ->name('teacher-registrations.approve');
     Route::post('/teacher-registrations/{teacherRegistration}/reject', [AdminTeacherRegistrationRequestController::class, 'reject'])

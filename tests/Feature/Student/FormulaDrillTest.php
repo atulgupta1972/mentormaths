@@ -257,6 +257,119 @@ class FormulaDrillTest extends TestCase
     }
 
     /**
+     * @return array{
+     *     student: Student,
+     *     user: User,
+     *     class8Question: Question,
+     *     class9Question: Question
+     * }
+     */
+    private function seedClass9StudentWithPreviousGradeFormulas(): array
+    {
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+
+        $board = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
+        $grade8 = GradeLevel::query()->create(['name' => 'Class 8', 'sort_order' => 8, 'is_active' => true]);
+        $grade9 = GradeLevel::query()->create(['name' => 'Class 9', 'sort_order' => 9, 'is_active' => true]);
+
+        $syllabus8 = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade8->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+            'name' => 'CBSE Class 8',
+        ]);
+
+        $chapter8 = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabus8->id,
+            'chapter_number' => 1,
+            'name' => 'Rational Numbers',
+            'sort_order' => 1,
+        ]);
+
+        $topic8 = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter8->id,
+            'name' => 'Properties',
+            'sort_order' => 1,
+        ]);
+
+        $syllabus9 = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade9->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+            'name' => 'CBSE Class 9',
+        ]);
+
+        $chapter9 = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabus9->id,
+            'chapter_number' => 1,
+            'name' => 'Number Systems',
+            'sort_order' => 1,
+        ]);
+
+        $topic9 = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter9->id,
+            'name' => 'Irrational numbers',
+            'sort_order' => 1,
+        ]);
+
+        $user = User::factory()->create(['role' => User::ROLE_STUDENT]);
+        $student = Student::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Class 9 Student',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543210',
+            'school_name' => 'Demo',
+        ]);
+
+        $enrollment = StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $year->id,
+            'board_id' => $board->id,
+            'grade_level_id' => $grade9->id,
+            'school_name' => 'Demo',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        $worksheet = Worksheet::query()->create([
+            'title' => 'Number systems practice',
+            'set_code' => 'C9-NS-P1',
+            'set_number' => 1,
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::TOPIC,
+            'syllabus_topic_id' => $topic9->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+        ]);
+
+        SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $user->id,
+            'assigned_at' => now()->subDay(),
+            'due_date' => now()->addDay()->toDateString(),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        $class8Question = $this->createFormulaQuestion($topic8, '(a + b)² expands to:', 'a² + 2ab + b²');
+        $class9Question = $this->createFormulaQuestion($topic9, '√2 is:', 'irrational');
+
+        return [
+            'student' => $student,
+            'user' => $user,
+            'class8Question' => $class8Question,
+            'class9Question' => $class9Question,
+        ];
+    }
+
+    /**
      * @return array{student: Student, user: User, formulaQuestion: Question}
      */
     private function seedStudentWithAssignedChapter(): array
@@ -362,6 +475,25 @@ class FormulaDrillTest extends TestCase
 
         $this->assertContains($class6Question->id, $poolIds);
         $this->assertContains($class7Question->id, $poolIds);
+    }
+
+    public function test_class_9_student_gets_all_class_8_formulas_in_drill_pool(): void
+    {
+        [
+            'student' => $student,
+            'class8Question' => $class8Question,
+            'class9Question' => $class9Question,
+        ] = $this->seedClass9StudentWithPreviousGradeFormulas();
+
+        $poolService = app(\App\Services\FormulaDrillPoolService::class);
+        $poolIds = $poolService->poolQuestionIds($student);
+        $breakdown = $poolService->poolBreakdown($student);
+
+        $this->assertContains($class8Question->id, $poolIds);
+        $this->assertContains($class9Question->id, $poolIds);
+        $this->assertSame('Class 8', $breakdown['previous_grade_name']);
+        $this->assertSame(1, $breakdown['previous_grade_count']);
+        $this->assertSame(1, $breakdown['current_grade_count']);
     }
 
     public function test_formula_drill_does_not_repeat_until_pool_exhausted(): void

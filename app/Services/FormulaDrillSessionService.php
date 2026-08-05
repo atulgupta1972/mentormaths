@@ -328,6 +328,8 @@ class FormulaDrillSessionService
     {
         $current = $this->currentItem($session);
 
+        $student = $session->student ?? Student::query()->find($session->student_id);
+
         return [
             'session' => [
                 'id' => $session->id,
@@ -338,6 +340,9 @@ class FormulaDrillSessionService
                 'pool_size' => $session->pool_size,
                 'is_complete' => $session->isComplete(),
             ],
+            'pool_breakdown' => $student
+                ? $this->poolService->poolBreakdown($student)
+                : null,
             'current' => $current ? $this->itemPayload($current) : null,
             'progress_label' => $session->questions_total > 0
                 ? ($session->questions_completed + ($current ? 1 : 0)).' / '.$session->questions_total

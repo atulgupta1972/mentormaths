@@ -45,6 +45,7 @@ defineProps({
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Name</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Email</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Tracks</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-600">Location</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Rate</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Status</th>
                             </tr>
@@ -55,6 +56,12 @@ defineProps({
                                     <Link :href="route('admin.teacher-registrations.show', row.id)" class="font-medium text-indigo-600 hover:underline">
                                         {{ row.name }}
                                     </Link>
+                                    <span
+                                        v-if="!row.has_complete_profile"
+                                        class="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800"
+                                    >
+                                        Profile
+                                    </span>
                                 </td>
                                 <td class="px-4 py-2 text-gray-600">{{ row.email }}</td>
                                 <td class="px-4 py-2 text-xs text-gray-600">
@@ -63,6 +70,10 @@ defineProps({
                                     </span>
                                     <span v-if="row.interested_in_content_creation && row.interested_in_doubt_solving"> · </span>
                                     <span v-if="row.interested_in_doubt_solving">Mentoring</span>
+                                </td>
+                                <td class="px-4 py-2 text-gray-600">
+                                    <span v-if="row.location_label">{{ row.location_label }}</span>
+                                    <span v-else class="text-amber-700">Incomplete</span>
                                 </td>
                                 <td class="px-4 py-2 text-gray-600">
                                     <span v-if="row.proposed_hourly_rate_inr">₹{{ row.proposed_hourly_rate_inr }}/hr</span>

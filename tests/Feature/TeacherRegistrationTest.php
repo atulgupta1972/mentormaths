@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\TeacherRegistrationCompleteProfile;
 use App\Mail\TeacherRegistrationCounterOffer;
 use App\Models\Board;
 use App\Models\GradeLevel;
@@ -56,6 +57,10 @@ class TeacherRegistrationTest extends TestCase
             'date_of_birth' => '1990-05-15',
             'password' => 'SecurePass1!',
             'password_confirmation' => 'SecurePass1!',
+            'city' => 'Pune',
+            'state' => 'Maharashtra',
+            'country' => 'India',
+            'teaches_english_medium' => true,
             'years_of_experience' => 5,
             'board_ids' => [$boardId],
             'interested_in_content_creation' => $content,
@@ -225,5 +230,61 @@ class TeacherRegistrationTest extends TestCase
                 ->has('gradeLevels', 8)
                 ->where('gradeLevels.0.sort_order', 5)
                 ->where('gradeLevels.7.sort_order', 12));
+    }
+
+    public function test_admin_can_email_mentor_to_complete_profile_details(): void
+    {
+        Mail::fake();
+
+        ['board' => $board, 'grades' => $grades] = $this->seedPrerequisites();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $this->post(route('teacher-registration.store'), $this->validPayload(
+            $board->id,
+            [$grades[0]->id],
+            [],
+            'incomplete@example.com',
+            true,
+            false,
+        ));
+
+        $application = TeacherRegistrationRequest::query()
+            ->where('email', 'incomplete@example.com')
+            ->firstOrFail();
+
+        $application->update([
+            'city' => null,
+            'state' => null,
+            'teaches_english_medium' => false,
+            'teaches_hindi_medium' => false,
+        ]);
+
+        $this->actingAs($admin)
+            ->from(route('admin.teacher-registrations.show', $application))
+            ->post(route('admin.teacher-registrations.request-profile', $application), [
+                'profile_completion_message' => 'Please add your city and languages.',
+            ])
+            ->assertRedirect(route('admin.teacher-registrations.show', $application));
+
+        $application->refresh();
+
+        $this->assertNotNull($application->profile_completion_token);
+        Mail::assertSent(\App\Mail\TeacherRegistrationCompleteProfile::class);
+
+        $this->post(route('teacher-registration.profile.update', $application->profile_completion_token), [
+            'city' => 'Jaipur',
+            'state' => 'Rajasthan',
+            'country' => 'India',
+            'teaches_english_medium' => true,
+            'teaches_hindi_medium' => true,
+            'regional_language' => 'Marathi',
+        ])->assertRedirect(route('teacher-registration.thank-you'));
+
+        $application->refresh();
+
+        $this->assertSame('Jaipur', $application->city);
+        $this->assertSame('Rajasthan', $application->state);
+        $this->assertTrue($application->hasCompleteProfileDetails());
+        $this->assertNull($application->profile_completion_token);
     }
 }

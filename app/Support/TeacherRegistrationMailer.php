@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Mail\TeacherRegistrationApproved;
+use App\Mail\TeacherRegistrationCompleteProfile;
 use App\Mail\TeacherRegistrationCounterOffer;
 use App\Mail\TeacherRegistrationOfferResponseAdmin;
 use App\Mail\TeacherRegistrationReceived;
@@ -50,6 +51,18 @@ class TeacherRegistrationMailer
             Mail::to($request->email)->send(new TeacherRegistrationCounterOffer($request));
         } catch (\Throwable $e) {
             Log::error('Failed to send teacher counter offer email.', [
+                'teacher_registration_request_id' => $request->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    public static function sendProfileCompletionRequest(TeacherRegistrationRequest $request): void
+    {
+        try {
+            Mail::to($request->email)->send(new TeacherRegistrationCompleteProfile($request));
+        } catch (\Throwable $e) {
+            Log::error('Failed to send mentor profile completion email.', [
                 'teacher_registration_request_id' => $request->id,
                 'error' => $e->getMessage(),
             ]);

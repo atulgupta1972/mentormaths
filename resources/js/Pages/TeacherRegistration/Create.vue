@@ -26,6 +26,8 @@ const form = useForm({
     password: '',
     password_confirmation: '',
     city: '',
+    state: '',
+    country: 'India',
     qualification: '',
     current_role: '',
     years_of_experience: '',
@@ -55,6 +57,7 @@ const form = useForm({
     expected_start_date: '',
     teaches_english_medium: true,
     teaches_hindi_medium: false,
+    regional_language: '',
     referral_source: '',
     notes: '',
     resume: null,
@@ -170,8 +173,20 @@ const submit = () => {
                             <TextInput v-model="form.password_confirmation" type="password" class="mt-1 block w-full" required />
                         </div>
                         <div>
-                            <InputLabel value="City" />
-                            <TextInput v-model="form.city" class="mt-1 block w-full" />
+                            <InputLabel value="City *" />
+                            <TextInput v-model="form.city" class="mt-1 block w-full" required />
+                            <InputError :message="form.errors.city" class="mt-1" />
+                        </div>
+                        <div>
+                            <InputLabel value="State *" />
+                            <TextInput v-model="form.state" class="mt-1 block w-full" placeholder="e.g. Maharashtra" required />
+                            <InputError :message="form.errors.state" class="mt-1" />
+                        </div>
+                        <div>
+                            <InputLabel value="Country" />
+                            <TextInput v-model="form.country" class="mt-1 block w-full" />
+                            <p class="mt-1 text-xs text-gray-500">Default: India</p>
+                            <InputError :message="form.errors.country" class="mt-1" />
                         </div>
                         <div>
                             <InputLabel value="Years of experience" />
@@ -200,6 +215,21 @@ const submit = () => {
                         <div class="sm:col-span-2">
                             <InputLabel value="Short bio (shown on mentor profile later)" />
                             <textarea v-model="form.bio" rows="3" class="mt-1 block w-full rounded-md border-gray-300 text-sm" placeholder="Brief intro and maths mentoring background" />
+                        </div>
+                    </div>
+
+                    <div class="mt-6 rounded-lg border border-indigo-100 bg-indigo-50/40 p-4">
+                        <h3 class="text-sm font-semibold text-gray-900">Languages you teach in</h3>
+                        <p class="mt-1 text-xs text-gray-600">English and/or Hindi · add regional language if any</p>
+                        <div class="mt-3 flex flex-wrap gap-4 text-sm">
+                            <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.teaches_english_medium" /> English</label>
+                            <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.teaches_hindi_medium" /> Hindi</label>
+                        </div>
+                        <InputError :message="form.errors.teaches_english_medium" class="mt-2" />
+                        <div class="mt-3">
+                            <InputLabel value="Regional language (optional)" />
+                            <TextInput v-model="form.regional_language" class="mt-1 block w-full max-w-md" placeholder="e.g. Marathi, Tamil, Bengali" />
+                            <InputError :message="form.errors.regional_language" class="mt-1" />
                         </div>
                     </div>
                 </section>
@@ -255,7 +285,7 @@ const submit = () => {
                 </section>
 
                 <section>
-                    <h2 class="text-lg font-semibold text-gray-900">Boards &amp; medium</h2>
+                    <h2 class="text-lg font-semibold text-gray-900">Boards</h2>
                     <div class="mt-3 flex flex-wrap gap-3">
                         <label v-for="board in boards" :key="board.id" class="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm">
                             <input type="checkbox" class="rounded border-gray-300 text-indigo-600" :checked="hasId('board_ids', board.id)" @change="toggleId('board_ids', board.id)">
@@ -263,10 +293,6 @@ const submit = () => {
                         </label>
                     </div>
                     <InputError :message="form.errors.board_ids" class="mt-2" />
-                    <div class="mt-3 flex flex-wrap gap-4 text-sm">
-                        <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.teaches_english_medium" /> English medium</label>
-                        <label class="inline-flex items-center gap-2"><Checkbox v-model:checked="form.teaches_hindi_medium" /> Hindi medium</label>
-                    </div>
                 </section>
 
                 <section class="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 space-y-4">

@@ -43,24 +43,59 @@ class FormulaDrillPoolService
 
         $enrollment->loadMissing('gradeLevel');
 
-        $previousGradeTopicIds = $this->previousGradeTopicIds($enrollment);
-        $completedTopicIds = $this->completedTopicIdsForEnrollment($enrollment);
-        $assignedTopicIds = $this->assignedTopicIdsForEnrollment($enrollment);
-
-        $currentGradeTopicIds = array_values(array_unique(array_merge(
-            $completedTopicIds,
-            $assignedTopicIds,
-        )));
-
         return $this->mergePools(
-            $this->formulaIdsForTopicIds($previousGradeTopicIds),
-            $this->formulaIdsForTopicIds($currentGradeTopicIds),
+            $this->formulaIdsForTopicIds($this->previousGradeTopicIds($enrollment)),
+            $this->formulaIdsForTopicIds($this->currentGradeTopicIds($enrollment)),
         );
     }
 
     public function poolSize(Student $student): int
     {
         return count($this->poolQuestionIds($student));
+    }
+
+    /**
+     * @return array{
+     *     previous_grade_name: ?string,
+     *     previous_grade_count: int,
+     *     current_grade_count: int,
+     *     total: int
+     * }
+     */
+    public function poolBreakdown(Student $student): array
+    {
+        if (! FormulaDrillSchema::isReady()) {
+            return [
+                'previous_grade_name' => null,
+                'previous_grade_count' => 0,
+                'current_grade_count' => 0,
+                'total' => 0,
+            ];
+        }
+
+        $enrollment = $student->currentEnrollment();
+
+        if (! $enrollment) {
+            return [
+                'previous_grade_name' => null,
+                'previous_grade_count' => 0,
+                'current_grade_count' => 0,
+                'total' => 0,
+            ];
+        }
+
+        $enrollment->loadMissing('gradeLevel');
+
+        $previousIds = $this->formulaIdsForTopicIds($this->previousGradeTopicIds($enrollment));
+        $currentIds = $this->formulaIdsForTopicIds($this->currentGradeTopicIds($enrollment));
+        $previousGrade = $this->resolvePreviousGrade($enrollment);
+
+        return [
+            'previous_grade_name' => $previousGrade?->name,
+            'previous_grade_count' => count($previousIds),
+            'current_grade_count' => count(array_diff($currentIds, $previousIds)),
+            'total' => count($this->mergePools($previousIds, $currentIds)),
+        ];
     }
 
     /**
@@ -125,20 +160,27 @@ class FormulaDrillPoolService
     }
 
     /**
+     * Current-grade pool: formulas from chapters the student has been assigned or completed.
+     *
+     * @return list<int>
+     */
+    private function currentGradeTopicIds(StudentEnrollment $enrollment): array
+    {
+        return array_values(array_unique(array_merge(
+            $this->completedTopicIdsForEnrollment($enrollment),
+            $this->assignedTopicIdsForEnrollment($enrollment),
+        )));
+    }
+
+    /**
+     * Previous-grade pool: every formula from the immediately lower class syllabus
+     * (Class 9 → all Class 8 topics, same board and academic year).
+     *
      * @return list<int>
      */
     private function previousGradeTopicIds(StudentEnrollment $enrollment): array
     {
-        $sortOrder = $enrollment->gradeLevel?->sort_order;
-
-        if ($sortOrder === null || $sortOrder <= 1) {
-            return [];
-        }
-
-        $previousGrade = GradeLevel::query()
-            ->where('is_active', true)
-            ->where('sort_order', $sortOrder - 1)
-            ->first();
+        $previousGrade = $this->resolvePreviousGrade($enrollment);
 
         if (! $previousGrade) {
             return [];
@@ -165,6 +207,21 @@ class FormulaDrillPoolService
             ->whereHas('chapter', fn ($query) => $query->where('syllabus_version_id', $syllabusVersion->id))
             ->pluck('id')
             ->all();
+    }
+
+    private function resolvePreviousGrade(StudentEnrollment $enrollment): ?GradeLevel
+    {
+        $sortOrder = $enrollment->gradeLevel?->sort_order;
+
+        if ($sortOrder === null || $sortOrder <= 1) {
+            return null;
+        }
+
+        return GradeLevel::query()
+            ->where('is_active', true)
+            ->where('sort_order', '<', $sortOrder)
+            ->orderByDesc('sort_order')
+            ->first();
     }
 
     /**

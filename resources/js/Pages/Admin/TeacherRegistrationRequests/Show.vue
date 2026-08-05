@@ -20,6 +20,9 @@ const counterForm = useForm({
     counter_hourly_rate_inr: props.application.counter_hourly_rate_inr ?? props.application.proposed_hourly_rate_inr ?? '',
     counter_offer_message: props.application.counter_offer_message ?? '',
 });
+const profileForm = useForm({
+    profile_completion_message: '',
+});
 
 const canApprove = computed(() =>
     ['pending', 'offer_accepted'].includes(props.application.status),
@@ -61,6 +64,8 @@ const canReject = computed(() =>
                         <div><dt class="text-gray-500">Gender</dt><dd class="font-medium capitalize">{{ application.gender?.replace(/_/g, ' ') || '—' }}</dd></div>
                         <div><dt class="text-gray-500">Date of birth</dt><dd class="font-medium">{{ application.date_of_birth || '—' }}<span v-if="application.age"> ({{ application.age }} yrs)</span></dd></div>
                         <div><dt class="text-gray-500">Experience</dt><dd class="font-medium">{{ application.years_of_experience }} years</dd></div>
+                        <div><dt class="text-gray-500">Location</dt><dd class="font-medium">{{ application.location_label || '—' }}</dd></div>
+                        <div><dt class="text-gray-500">Languages</dt><dd class="font-medium">{{ application.language_labels?.join(', ') || '—' }}</dd></div>
                         <div><dt class="text-gray-500">Qualification</dt><dd class="font-medium">{{ application.qualification || '—' }}</dd></div>
                         <div><dt class="text-gray-500">Boards</dt><dd class="font-medium">{{ application.board_labels?.join(', ') || '—' }}</dd></div>
                         <div><dt class="text-gray-500">Expected start</dt><dd class="font-medium">{{ application.expected_start_date || '—' }}</dd></div>
@@ -100,6 +105,37 @@ const canReject = computed(() =>
 
                     <p v-if="application.bio" class="mt-4 text-sm text-gray-700">{{ application.bio }}</p>
                     <p v-if="application.notes" class="mt-2 text-sm text-gray-500">{{ application.notes }}</p>
+
+                    <div
+                        v-if="!application.has_complete_profile"
+                        class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                    >
+                        <strong>Profile incomplete:</strong>
+                        {{ application.missing_profile_field_labels?.join(', ') || 'Location or language missing' }}
+                        <p v-if="application.profile_completion_requested_at" class="mt-1 text-xs text-amber-800">
+                            Completion email sent {{ application.profile_completion_requested_at }}
+                        </p>
+                    </div>
+                </div>
+
+                <div v-if="application.can_request_profile_completion" class="rounded-lg border border-violet-200 bg-violet-50/50 p-5">
+                    <h3 class="font-semibold text-violet-950">Email mentor to complete location &amp; languages</h3>
+                    <p class="mt-1 text-sm text-violet-900">
+                        Send a one-time link so they can add city, state, country (default India), and teaching languages.
+                    </p>
+                    <div class="mt-4">
+                        <InputLabel value="Optional note in email" />
+                        <textarea v-model="profileForm.profile_completion_message" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" placeholder="e.g. Please add your city and state — we are building the mentor directory." />
+                    </div>
+                    <PrimaryButton
+                        class="mt-4"
+                        type="button"
+                        :disabled="profileForm.processing"
+                        @click="profileForm.post(route('admin.teacher-registrations.request-profile', application.id))"
+                    >
+                        Send profile completion email
+                    </PrimaryButton>
+                    <p v-if="application.profile_completion_url" class="mt-2 text-xs text-violet-800">Latest link: {{ application.profile_completion_url }}</p>
                 </div>
 
                 <div v-if="canCounterOffer" class="rounded-lg border border-amber-200 bg-amber-50/50 p-5">

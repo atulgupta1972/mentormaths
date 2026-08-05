@@ -25,7 +25,12 @@ class TeacherRegistrationRequestController extends Controller
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->latest()
             ->paginate(15)
-            ->withQueryString();
+            ->withQueryString()
+            ->through(fn (TeacherRegistrationRequest $application) => [
+                ...$application->toArray(),
+                'has_complete_profile' => $application->hasCompleteProfileDetails(),
+                'location_label' => $application->locationLabel(),
+            ]);
 
         return Inertia::render('Admin/TeacherRegistrationRequests/Index', [
             'applications' => $applications,
@@ -78,6 +83,25 @@ class TeacherRegistrationRequestController extends Controller
         }
 
         return back()->with('success', 'Counter offer sent by email. The mentor must accept before you can approve.');
+    }
+
+    public function requestProfileCompletion(Request $request, TeacherRegistrationRequest $teacherRegistration): RedirectResponse
+    {
+        $validated = $request->validate([
+            'profile_completion_message' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $this->service->requestProfileCompletion(
+                $teacherRegistration,
+                $validated['profile_completion_message'] ?? null,
+                $request->user()->id,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Profile completion email sent to the mentor.');
     }
 
     public function downloadResume(TeacherRegistrationRequest $teacherRegistration)
