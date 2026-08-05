@@ -7,7 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { formatScoreLabel } from '@/utils/scores';
 import {
     defaultFillBlankRow,
@@ -71,8 +71,10 @@ const reassignForm = useForm({ target_date: '', notes: '' });
 const retryAiForm = useForm({});
 const gradeForm = useForm({ feedback: '', remarks: '', handwriting_rating: '', items: [] });
 const gradingAssignmentId = ref(null);
-const revisionForm = useForm({ files: [], skip_ai: false });
+const revisionForm = useForm({ files: [], skip_ai: false, append: false });
 const revisionFileInput = ref(null);
+const uploadPanelRef = ref(null);
+const highlightUploadPanel = ref(false);
 const revisionSelectedFiles = ref([]);
 const revisionUploadError = ref('');
 const revisionUploading = ref(false);
@@ -277,6 +279,8 @@ const cancelGrade = () => {
     revisionSelectedFiles.value = [];
     revisionForm.reset();
     revisionForm.skip_ai = false;
+    revisionForm.append = false;
+    highlightUploadPanel.value = false;
     revisionForm.clearErrors();
     if (revisionFileInput.value) {
         revisionFileInput.value.value = '';
@@ -296,6 +300,8 @@ const onRevisionFilesChange = (event) => {
 const submitRevisionUpload = (assignmentId) => {
     const inputFiles = revisionFileInput.value?.files;
     const files = inputFiles?.length ? [...inputFiles] : revisionSelectedFiles.value;
+    const row = findAssignmentRow(assignmentId);
+    const existingCount = row?.upload_files?.length || 0;
 
     if (!assignmentId || !files.length) {
         revisionUploadError.value = 'Choose at least one photo or PDF.';
@@ -303,7 +309,16 @@ const submitRevisionUpload = (assignmentId) => {
         return;
     }
 
-    if (files.length > props.uploadLimits.max_files) {
+    if (revisionForm.append && existingCount + files.length > props.uploadLimits.max_files) {
+        const remaining = props.uploadLimits.max_files - existingCount;
+        revisionUploadError.value = remaining > 0
+            ? `Only ${remaining} more page${remaining === 1 ? '' : 's'} can be added (${existingCount} already uploaded).`
+            : 'This upload already has the maximum number of pages. Replace it instead of adding more.';
+
+        return;
+    }
+
+    if (!revisionForm.append && files.length > props.uploadLimits.max_files) {
         revisionUploadError.value = `Upload up to ${props.uploadLimits.max_files} photos or PDFs at once. You chose ${files.length}.`;
 
         return;
@@ -317,6 +332,9 @@ const submitRevisionUpload = (assignmentId) => {
     if (revisionForm.skip_ai) {
         formData.append('skip_ai', '1');
     }
+    if (revisionForm.append) {
+        formData.append('append', '1');
+    }
 
     router.post(route('admin.written-assignments.upload-work', assignmentId), formData, {
         forceFormData: true,
@@ -327,6 +345,8 @@ const submitRevisionUpload = (assignmentId) => {
         onSuccess: () => {
             revisionSelectedFiles.value = [];
             revisionForm.skip_ai = false;
+            revisionForm.append = false;
+            highlightUploadPanel.value = false;
             if (revisionFileInput.value) {
                 revisionFileInput.value.value = '';
             }
@@ -721,6 +741,13 @@ const formatDate = (d) => {
 
 const openUpload = (row) => {
     openGrade(row);
+    revisionForm.append = (row.upload_files || []).length > 0;
+    revisionForm.skip_ai = (row.upload_files || []).length > 0;
+    highlightUploadPanel.value = true;
+
+    nextTick(() => {
+        uploadPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
 };
 
 const isWrittenChecking = (row) => ['uploaded', 'processing'].includes(row?.written_submission_status);
@@ -1250,7 +1277,7 @@ const progressLabel = (p) => {
                     <div v-if="assignments.length" class="mt-6">
                         <h4 class="text-sm font-semibold text-gray-800">Current assignments ({{ assignments.length }})</h4>
                         <p class="mt-1 text-xs text-gray-500">
-                            Uploads are checked automatically. For large photos, open <strong>Upload work</strong> to upload on behalf of a student or mark manually without waiting for AI.
+                            Uploads are checked automatically. If a student could not upload (or only sent some pages), click <strong>Upload work</strong> to add photos on their behalf.
                         </p>
                         <div class="mt-2 overflow-hidden rounded-md border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -1373,10 +1400,14 @@ const progressLabel = (p) => {
                                                         No photo/PDF uploaded yet — you can still tick questions after checking the paper offline.
                                                     </p>
 
-                                                    <div class="rounded-md border border-dashed border-indigo-200 bg-white p-3">
+                                                    <div
+                                                        ref="uploadPanelRef"
+                                                        class="rounded-md border border-dashed p-3 transition-colors"
+                                                        :class="highlightUploadPanel ? 'border-indigo-400 bg-indigo-50/70' : 'border-indigo-200 bg-white'"
+                                                    >
                                                         <p class="text-xs font-semibold text-gray-800">Upload answer sheet</p>
                                                         <p class="mt-1 text-xs text-gray-600">
-                                                            Upload the student&apos;s completed work (photo or PDF).
+                                                            Upload the student&apos;s completed work (photo or PDF) if they could not do it themselves.
                                                             Up to {{ uploadLimits.max_files }} files, {{ uploadLimits.max_file_mb }} MB each.
                                                         </p>
                                                         <input
@@ -1389,9 +1420,26 @@ const progressLabel = (p) => {
                                                         >
                                                         <p v-if="revisionSelectedFiles.length" class="mt-2 text-xs text-gray-700">
                                                             Selected: {{ revisionSelectedFiles.length }} file{{ revisionSelectedFiles.length === 1 ? '' : 's' }}
+                                                            <span v-if="revisionForm.append && (row.upload_files || []).length">
+                                                                ({{ (row.upload_files || []).length + revisionSelectedFiles.length }}/{{ uploadLimits.max_files }} pages total)
+                                                            </span>
                                                         </p>
                                                         <p v-if="revisionUploadError" class="mt-2 text-xs text-rose-700">{{ revisionUploadError }}</p>
                                                         <p v-else-if="revisionForm.errors.files" class="mt-2 text-xs text-rose-700">{{ revisionForm.errors.files }}</p>
+                                                        <label
+                                                            v-if="(row.upload_files || []).length"
+                                                            class="mt-3 flex items-start gap-2 text-xs text-gray-700"
+                                                        >
+                                                            <input
+                                                                v-model="revisionForm.append"
+                                                                type="checkbox"
+                                                                class="mt-0.5 rounded border-gray-300 text-indigo-600"
+                                                            >
+                                                            <span>
+                                                                Add to existing pages
+                                                                ({{ row.upload_files.length }} already uploaded — use this when the student only sent part of the sheet)
+                                                            </span>
+                                                        </label>
                                                         <label class="mt-3 flex items-start gap-2 text-xs text-gray-700">
                                                             <input
                                                                 v-model="revisionForm.skip_ai"
@@ -1406,7 +1454,13 @@ const progressLabel = (p) => {
                                                             :disabled="revisionUploading || !revisionSelectedFiles.length"
                                                             @click="submitRevisionUpload(row.assignment_id)"
                                                         >
-                                                            {{ revisionUploading ? 'Uploading…' : 'Save upload' }}
+                                                            {{
+                                                                revisionUploading
+                                                                    ? 'Uploading…'
+                                                                    : revisionForm.append
+                                                                        ? 'Add pages'
+                                                                        : 'Save upload'
+                                                            }}
                                                         </SecondaryButton>
                                                         <p v-if="page.props.flash?.success && gradingAssignmentId === row.assignment_id" class="mt-2 text-xs text-green-800">
                                                             {{ page.props.flash.success }}

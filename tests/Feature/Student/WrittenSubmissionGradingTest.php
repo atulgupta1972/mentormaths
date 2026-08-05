@@ -581,6 +581,40 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertSame(1, $graded->score);
     }
 
+    public function test_admin_can_append_pages_to_partial_student_upload(): void
+    {
+        Storage::fake('public');
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $existingPath = 'written-submissions/'.$assignment->id.'/page1.jpg';
+        Storage::disk('public')->put($existingPath, 'image-one');
+
+        WrittenSubmission::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'status' => WrittenSubmission::STATUS_GRADED,
+            'upload_paths' => [$existingPath],
+            'score' => 1,
+            'max_score' => 1,
+            'uploaded_at' => now(),
+            'graded_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->post(
+            route('admin.written-assignments.upload-work', $assignment),
+            [
+                'files' => [UploadedFile::fake()->image('page2.jpg')],
+                'append' => true,
+                'skip_ai' => true,
+            ],
+        )->assertRedirect();
+
+        $submission = WrittenSubmission::query()->where('set_assignment_id', $assignment->id)->firstOrFail();
+        $this->assertSame(WrittenSubmission::STATUS_UPLOADED, $submission->status);
+        $this->assertCount(2, $submission->upload_paths ?? []);
+        Storage::disk('public')->assertExists($existingPath);
+    }
+
     public function test_stale_processing_is_marked_failed_after_fifteen_minutes(): void
     {
         Mail::fake();

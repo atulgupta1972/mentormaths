@@ -21,11 +21,12 @@ class WrittenSubmissionService
 
     /**
      * @param  list<UploadedFile>  $files
-     * @param  array{schedule_ai?: bool}  $options
+     * @param  array{schedule_ai?: bool, append?: bool}  $options
      */
     public function store(SetAssignment $assignment, array $files, array $options = []): WrittenSubmission
     {
         $scheduleAi = $options['schedule_ai'] ?? true;
+        $append = (bool) ($options['append'] ?? false);
         $assignment->loadMissing('practiceSet');
 
         if (! $assignment->practiceSet?->isWritten()) {
@@ -77,12 +78,24 @@ class WrittenSubmissionService
             ->first();
 
         // Allow re-upload after graded so students can retry (e.g. after seeing correct answers
-        // or when handwriting was misread). Latest upload replaces the previous one.
+        // or when handwriting was misread). Latest upload replaces the previous one unless append is set.
 
         if ($existing) {
-            foreach ($existing->upload_paths ?? [] as $oldPath) {
-                Storage::disk('public')->delete($oldPath);
+            if ($append) {
+                $existingPaths = $existing->upload_paths ?? [];
+                $paths = array_values(array_merge($existingPaths, $paths));
+
+                if (count($paths) > WrittenSubmissionLimits::MAX_FILES) {
+                    throw new \InvalidArgumentException(
+                        'This upload would exceed '.WrittenSubmissionLimits::MAX_FILES.' pages total. Remove some pages or replace the upload instead.',
+                    );
+                }
+            } else {
+                foreach ($existing->upload_paths ?? [] as $oldPath) {
+                    Storage::disk('public')->delete($oldPath);
+                }
             }
+
             $existing->items()->delete();
             $existing->update([
                 'status' => WrittenSubmission::STATUS_UPLOADED,

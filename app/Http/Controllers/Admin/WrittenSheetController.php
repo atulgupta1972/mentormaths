@@ -887,6 +887,7 @@ class WrittenSheetController extends Controller
             'files' => ['required', 'array', 'min:1', WrittenSubmissionLimits::maxFilesRule()],
             'files.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', WrittenSubmissionLimits::maxFileSizeRule()],
             'skip_ai' => ['sometimes', 'boolean'],
+            'append' => ['sometimes', 'boolean'],
         ], [
             'files.required' => 'Choose at least one photo or PDF.',
             'files.max' => 'Upload up to '.WrittenSubmissionLimits::MAX_FILES.' files at once.',
@@ -897,9 +898,18 @@ class WrittenSheetController extends Controller
         try {
             $this->submissionService->store($assignment, $validated['files'], [
                 'schedule_ai' => ! ($validated['skip_ai'] ?? false),
+                'append' => $validated['append'] ?? false,
             ]);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
+        }
+
+        if ($validated['append'] ?? false) {
+            if ($validated['skip_ai'] ?? false) {
+                return back()->with('success', 'Pages added to the answer sheet. Open Enter marks to tick questions and save.');
+            }
+
+            return back()->with('success', 'Pages added to the answer sheet. AI will check the full upload shortly — you can also enter marks now.');
         }
 
         if ($validated['skip_ai'] ?? false) {
