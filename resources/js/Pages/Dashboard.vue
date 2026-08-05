@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ChapterSummaryPanel from '@/Components/ChapterSummaryPanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
@@ -19,7 +20,10 @@ const props = defineProps({
         default: () => ({ upcoming: [], past: [] }),
     },
     syllabusChapters: { type: Array, default: () => [] },
-    examTypeOptions: { type: Array, default: () => [] },
+    chapterSummary: {
+        type: Object,
+        default: () => ({ book_columns: [], chapters: [] }),
+    },
     examTypeOptions: { type: Array, default: () => [] },
     stats: {
         type: Object,
@@ -1245,6 +1249,8 @@ const adminSetStatusClass = (set) => {
                             </div>
                         </div>
                     </section>
+
+                    <ChapterSummaryPanel :chapter-summary="chapterSummary" />
                 </template>
             </div>
         </div>

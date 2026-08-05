@@ -13,6 +13,7 @@ class DashboardService
         private SetAttemptService $attemptService,
         private AdminGradeContext $gradeContext,
         private QuestionResolutionService $resolutionService,
+        private StudentChapterSummaryService $chapterSummaryService,
     ) {}
 
     /**
@@ -24,6 +25,7 @@ class DashboardService
         $syllabusChapters = [];
         $assignments = [];
         $resolutionItems = [];
+        $chapterSummary = ['book_columns' => [], 'chapters' => []];
 
         if ($enrollment) {
             $plans = $this->examPlanService->plansForEnrollment($enrollment);
@@ -35,12 +37,14 @@ class DashboardService
             $syllabusChapters = $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all();
             $assignments = $this->attemptService->dashboardForEnrollment($enrollment);
             $resolutionItems = $this->resolutionService->pendingForEnrollment($enrollment->id);
+            $chapterSummary = $this->chapterSummaryService->forEnrollment($enrollment);
         }
 
         return [
             'assignments' => $assignments,
             'examPlans' => $examPlanMeta,
             'syllabusChapters' => $syllabusChapters,
+            'chapterSummary' => $chapterSummary,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
             'stats' => $this->studentStats($assignments, $examPlanMeta, count($resolutionItems)),
             'resolutionItems' => $resolutionItems,
