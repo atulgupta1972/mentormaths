@@ -261,6 +261,13 @@ class TeacherRegistrationRequest extends Model
         return $labels;
     }
 
+    public function cityStateLabel(): ?string
+    {
+        $parts = array_filter([$this->city, $this->state]);
+
+        return $parts === [] ? null : implode(', ', $parts);
+    }
+
     public function locationLabel(): ?string
     {
         $parts = array_filter([

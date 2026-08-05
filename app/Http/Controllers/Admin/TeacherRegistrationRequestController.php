@@ -29,7 +29,9 @@ class TeacherRegistrationRequestController extends Controller
             ->through(fn (TeacherRegistrationRequest $application) => [
                 ...$application->toArray(),
                 'has_complete_profile' => $application->hasCompleteProfileDetails(),
+                'city_state_label' => $application->cityStateLabel(),
                 'location_label' => $application->locationLabel(),
+                'language_labels' => $application->languageLabels(),
             ]);
 
         return Inertia::render('Admin/TeacherRegistrationRequests/Index', [

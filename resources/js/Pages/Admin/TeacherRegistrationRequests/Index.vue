@@ -18,7 +18,7 @@ defineProps({
         </template>
 
         <div class="py-8">
-            <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="mb-4 flex flex-wrap gap-2">
                     <Link
                         :href="route('admin.teacher-registrations.index')"
@@ -45,7 +45,8 @@ defineProps({
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Name</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Email</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Tracks</th>
-                                <th class="px-4 py-2 text-left font-medium text-gray-600">Location</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-600">City / State</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-600">Languages</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Rate</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Status</th>
                             </tr>
@@ -72,7 +73,11 @@ defineProps({
                                     <span v-if="row.interested_in_doubt_solving">Mentoring</span>
                                 </td>
                                 <td class="px-4 py-2 text-gray-600">
-                                    <span v-if="row.location_label">{{ row.location_label }}</span>
+                                    <span v-if="row.city_state_label">{{ row.city_state_label }}</span>
+                                    <span v-else class="text-amber-700">Incomplete</span>
+                                </td>
+                                <td class="px-4 py-2 text-gray-600">
+                                    <span v-if="row.language_labels?.length">{{ row.language_labels.join(', ') }}</span>
                                     <span v-else class="text-amber-700">Incomplete</span>
                                 </td>
                                 <td class="px-4 py-2 text-gray-600">
