@@ -7,6 +7,7 @@ use App\Models\QuestionBlankAnswer;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Support\DiagramQuestionSupport;
+use App\Support\FillBlankAnswerConsistency;
 use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +59,7 @@ Requirements:
 - Each question is a short sum with ONE blank shown as "____" in the question text
 - Use only these answer formats: "integer", "decimal", or "fraction"
 - "correct_answer" must match the blank exactly (examples: "42", "-3.5", "3/4", "1 1/2")
+- The final number in "explanation" MUST be identical to "correct_answer" (including sign)
 - For decimals, include "decimal_places" when needed (e.g. 2 for money-style answers)
 - Include "method_hint": theory/rules ONLY — no final numeric answer
 - Include "explanation": full teacher-only working with the final answer
@@ -163,6 +165,7 @@ Requirements:
 - Each question is a short sum with ONE blank shown as "____" in the question text
 - Use only these answer formats: "integer", "decimal", or "fraction"
 - "correct_answer" must match the blank exactly (examples: "42", "-3.5", "3/4", "1 1/2")
+- The final number in "explanation" MUST be identical to "correct_answer" (including sign)
 - For decimals, include "decimal_places" when needed
 - Include "method_hint": theory/rules ONLY — no final numeric answer
 - Include "explanation": full teacher-only working with the final answer
@@ -383,6 +386,12 @@ PROMPT;
         }
 
         $format = $this->resolveAnswerFormat($format, $correctAnswer);
+        $explanation = trim((string) ($item['explanation'] ?? ''));
+
+        $mismatch = app(FillBlankAnswerConsistency::class)->mismatch($correctAnswer, $explanation, $format);
+        if ($mismatch !== null) {
+            throw new InvalidArgumentException('Question '.($index + 1).': '.$mismatch['message']);
+        }
 
         return [
             'question_text' => $questionText,
@@ -391,7 +400,7 @@ PROMPT;
             'answer_format' => $format,
             'correct_answer' => $correctAnswer,
             'decimal_places' => isset($item['decimal_places']) ? (int) $item['decimal_places'] : null,
-            'explanation' => trim((string) ($item['explanation'] ?? '')),
+            'explanation' => $explanation,
             'method_hint' => trim((string) ($item['method_hint'] ?? $item['hint'] ?? '')),
             'difficulty' => trim((string) ($item['difficulty'] ?? '')),
             'needs_diagram' => DiagramQuestionSupport::needsDiagram($item),

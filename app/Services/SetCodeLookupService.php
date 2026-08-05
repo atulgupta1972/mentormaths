@@ -8,6 +8,7 @@ use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\Worksheet;
+use App\Support\FillBlankAnswerConsistency;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
 
@@ -16,6 +17,7 @@ class SetCodeLookupService
     public function __construct(
         private PracticeSetCodeService $codeService,
         private ChapterMixedQuestionService $mixedQuestionService,
+        private FillBlankAnswerConsistency $answerConsistency,
     ) {}
 
     /**
@@ -125,6 +127,15 @@ class SetCodeLookupService
     private function formatQuestion(Question $question): array
     {
         $correctOption = $question->options->firstWhere('is_correct', true);
+        $answerWarning = null;
+
+        if ($question->isFillInBlank()) {
+            $answerWarning = $this->answerConsistency->mismatch(
+                $question->blankAnswer?->correct_answer,
+                $question->explanation,
+                $question->blankAnswer?->answer_format,
+            );
+        }
 
         return [
             'id' => $question->id,
@@ -137,6 +148,7 @@ class SetCodeLookupService
             'explanation' => $question->explanation,
             'method_hint' => $question->method_hint,
             'difficulty' => $question->difficulty,
+            'answer_warning' => $answerWarning,
             'options' => $question->options->map(fn ($option, $index) => [
                 'letter' => chr(65 + $index),
                 'option_text' => $option->option_text,

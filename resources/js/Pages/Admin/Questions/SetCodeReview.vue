@@ -52,6 +52,14 @@ const cancelEdit = () => {
     blankForm.reset();
 };
 
+const applySuggestedAnswer = (question) => {
+    if (!question?.answer_warning?.suggested_answer) {
+        return;
+    }
+
+    blankForm.correct_answer = question.answer_warning.suggested_answer;
+};
+
 const saveEdit = (questionId) => {
     blankForm.patch(route('admin.questions.fill-blank.update', questionId), {
         preserveScroll: true,
@@ -172,6 +180,12 @@ watch(
                                             <template v-if="question.type === 'fill_in_blank'">
                                                 <p class="font-mono font-semibold text-gray-900">{{ question.correct_answer || '—' }}</p>
                                                 <p class="text-xs text-gray-500">{{ question.answer_format || '—' }}</p>
+                                                <p
+                                                    v-if="question.answer_warning"
+                                                    class="mt-1 text-xs font-medium text-amber-800"
+                                                >
+                                                    ⚠ {{ question.answer_warning.message }}
+                                                </p>
                                             </template>
                                             <template v-else>
                                                 <p class="font-mono font-semibold text-gray-900">{{ question.correct_answer || '—' }}</p>
@@ -243,7 +257,20 @@ watch(
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div class="mt-4 flex gap-2">
+                                            <div class="mt-4 flex flex-wrap gap-2">
+                                                <div
+                                                    v-if="question.answer_warning"
+                                                    class="mb-2 w-full rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+                                                >
+                                                    {{ question.answer_warning.message }}
+                                                    <button
+                                                        type="button"
+                                                        class="ml-2 font-semibold text-indigo-700 hover:underline"
+                                                        @click="applySuggestedAnswer(question)"
+                                                    >
+                                                        Use {{ question.answer_warning.suggested_answer }}
+                                                    </button>
+                                                </div>
                                                 <button
                                                     type="button"
                                                     class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"

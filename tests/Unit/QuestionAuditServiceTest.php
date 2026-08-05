@@ -59,6 +59,20 @@ class QuestionAuditServiceTest extends TestCase
         $this->assertSame(0, $result['issue_count']);
     }
 
+    public function test_audit_flags_explanation_answer_mismatch(): void
+    {
+        [$worksheet] = $this->seedWorksheetWithFillBlankAndExplanation(
+            'Factorise completely. Product of constants is: ____',
+            '-24',
+            'Product of constants = 3×(-2)×2 = -12. [Correction: product = -12]',
+        );
+
+        $result = app(QuestionAuditService::class)->auditWorksheet($worksheet);
+
+        $this->assertSame(QuestionSetAudit::STATUS_ISSUES, $result['status']);
+        $this->assertTrue(collect($result['findings'])->contains('issue_type', 'explanation_answer_mismatch'));
+    }
+
     public function test_record_audit_persists_findings(): void
     {
         [$worksheet] = $this->seedWorksheetWithFillBlank('Solve for x: x + 2 = 5', '99', QuestionBlankAnswer::FORMAT_INTEGER);
@@ -140,6 +154,42 @@ class QuestionAuditServiceTest extends TestCase
             'title' => 'Starter',
             'set_number' => 1,
             'set_code' => 'SF711',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::TOPIC,
+            'syllabus_topic_id' => $topic->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+        ]);
+
+        $worksheet->questions()->attach($question->id, ['sort_order' => 1]);
+
+        return [$worksheet->fresh(['questions.blankAnswer'])];
+    }
+
+    /**
+     * @return array{0: Worksheet}
+     */
+    private function seedWorksheetWithFillBlankAndExplanation(string $questionText, string $answer, string $explanation): array
+    {
+        [$topic] = $this->seedTopic();
+
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_FILL_IN_BLANK,
+            'question_text' => $questionText,
+            'explanation' => $explanation,
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+
+        QuestionBlankAnswer::query()->create([
+            'question_id' => $question->id,
+            'answer_format' => QuestionBlankAnswer::FORMAT_INTEGER,
+            'correct_answer' => $answer,
+        ]);
+
+        $worksheet = Worksheet::query()->create([
+            'title' => 'Starter',
+            'set_number' => 1,
+            'set_code' => 'SF712',
             'tier' => PracticeSetTier::STARTER,
             'scope' => PracticeSetScope::TOPIC,
             'syllabus_topic_id' => $topic->id,

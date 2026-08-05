@@ -7,9 +7,13 @@ use App\Models\QuestionBlankAnswer;
 use App\Models\QuestionSetAudit;
 use App\Models\User;
 use App\Models\Worksheet;
+use App\Support\FillBlankAnswerConsistency;
 
 class QuestionAuditService
 {
+    public function __construct(
+        private FillBlankAnswerConsistency $answerConsistency,
+    ) {}
     /**
      * @return array{
      *     status: string,
@@ -185,6 +189,24 @@ class QuestionAuditService
                 'correct_answer',
                 $blank->correct_answer,
                 ['suggested_answer' => (string) $computed],
+            );
+        }
+
+        $explanationMismatch = $this->answerConsistency->mismatch(
+            $blank->correct_answer,
+            $question->explanation,
+            $blank->answer_format,
+        );
+
+        if ($explanationMismatch !== null
+            && ! collect($findings)->contains(fn (array $finding) => ($finding['suggested_answer'] ?? null) === $explanationMismatch['suggested_answer'])) {
+            $findings[] = $this->finding(
+                $base,
+                'explanation_answer_mismatch',
+                $explanationMismatch['message'],
+                'correct_answer',
+                $blank->correct_answer,
+                ['suggested_answer' => $explanationMismatch['suggested_answer']],
             );
         }
 
