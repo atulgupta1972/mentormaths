@@ -157,14 +157,16 @@ $totalPeriods = 0;
 
 foreach ($sourceRows as $row) {
     $chapterNo = $row[0];
-    $mainTopic = $mainTopicByChapter[$chapterNo];
+    $mentorHead = $mainTopicByChapter[$chapterNo];
     $ncertTitle = $ncertTitleByChapter[$chapterNo];
-    $remarks = trim(($row[4] ?? ''));
+    $extraRemarks = trim($row[4] ?? '');
+    $remarksParts = array_filter(["Head: {$mentorHead}", $extraRemarks]);
+    $remarks = implode(' · ', $remarksParts);
 
     $out = [
         (string) $chapterNo,
-        $mainTopic,
-        ' '.$ncertTitle,
+        $ncertTitle,
+        '',
         $row[1],
         $row[2],
         (string) $row[3],

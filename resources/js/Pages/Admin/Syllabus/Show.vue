@@ -83,11 +83,27 @@ const previewLoading = ref(false);
 const importReplaceProcessing = ref(false);
 const previewWarnings = ref([]);
 const savedRowSnapshot = ref(null);
+const importFileInput = ref(null);
+const lastPreviewedFile = ref('');
+
+const resetImportFileInput = (event) => {
+    event.target.value = '';
+};
 
 const onImportFileChange = (event) => {
     importForm.file = event.target.files[0] ?? null;
-    importFeedback.value = importForm.file ? `Selected: ${importForm.file.name}` : '';
-    importFeedbackType.value = importForm.file ? 'info' : '';
+
+    if (!importForm.file) {
+        importFeedback.value = '';
+        importFeedbackType.value = '';
+
+        return;
+    }
+
+    importFeedbackType.value = 'info';
+    importFeedback.value = previewActive.value
+        ? `Selected: ${importForm.file.name}. Click Preview Excel to replace the current preview.`
+        : `Selected: ${importForm.file.name}. Click Preview Excel or Import & replace.`;
 };
 
 const snapshotSavedRows = () => {
@@ -102,6 +118,7 @@ const applyPreviewRows = (rows, filename) => {
     form.rows = rows.map((row) => ({ ...row }));
     previewActive.value = true;
     previewFilename.value = filename;
+    lastPreviewedFile.value = filename;
     previewWarnings.value = [];
     importFeedbackType.value = 'info';
     importFeedback.value = `Preview loaded: ${rows.length} row(s) from ${filename}. Review the table below, then click Save preview to syllabus to replace the saved data.`;
@@ -126,6 +143,7 @@ const discardPreview = () => {
 
     previewActive.value = false;
     previewFilename.value = '';
+    lastPreviewedFile.value = '';
     previewWarnings.value = [];
     savedRowSnapshot.value = null;
     importFeedback.value = 'Preview discarded. Showing the last saved syllabus again.';
@@ -146,21 +164,22 @@ const submitExcelPreview = async () => {
     }
 
     previewLoading.value = true;
-    importFeedback.value = 'Reading Excel file…';
+    importFeedback.value = `Reading ${importForm.file.name}…`;
     importFeedbackType.value = 'info';
+
+    const selectedFile = importForm.file;
 
     try {
         const formData = new FormData();
-        formData.append('file', importForm.file);
+        formData.append('file', selectedFile);
 
         const { data } = await window.axios.post(
-            route('admin.syllabus.import-preview', props.version.id),
+            `${route('admin.syllabus.import-preview', props.version.id)}?_=${Date.now()}`,
             formData,
             { headers: { 'Content-Type': 'multipart/form-data' } },
         );
 
-        applyPreviewResponse(data, importForm.file.name);
-        importForm.reset('file');
+        applyPreviewResponse(data, data.filename || selectedFile.name);
     } catch (error) {
         importFeedbackType.value = 'error';
         const headerInfo = error.response?.data?.header_info;
@@ -214,6 +233,7 @@ const submitImportReplace = () => {
         onSuccess: () => {
             previewActive.value = false;
             previewFilename.value = '';
+            lastPreviewedFile.value = '';
             previewWarnings.value = [];
             savedRowSnapshot.value = null;
             importForm.reset('file');
@@ -453,6 +473,7 @@ const saveRows = () => {
         onSuccess: () => {
             previewActive.value = false;
             previewFilename.value = '';
+            lastPreviewedFile.value = '';
             savedRowSnapshot.value = null;
         },
     });
@@ -563,9 +584,11 @@ const saveNewHead = async () => {
                         <div class="min-w-[240px] flex-1">
                             <InputLabel value="Excel file (.xlsx)" />
                             <input
+                                ref="importFileInput"
                                 type="file"
                                 accept=".xlsx,.xls"
                                 class="mt-1 block w-full text-sm"
+                                @click="resetImportFileInput"
                                 @change="onImportFileChange"
                             />
                             <InputError class="mt-1" :message="importForm.errors.file" />
@@ -609,9 +632,9 @@ const saveNewHead = async () => {
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <p>
                             <strong>Preview mode</strong> — showing {{ form.rows.length }} row(s) from
-                            <strong>{{ previewFilename }}</strong> in the table below.
-                            Click <strong>Save preview to syllabus</strong> to replace the saved data, or
-                            <strong>Discard preview</strong> to go back.
+                            <strong>{{ previewFilename }}</strong> in the table below (not saved yet).
+                            Click <strong>Save preview to syllabus</strong> to apply, or pick another file and click
+                            <strong>Preview Excel</strong> again.
                         </p>
                         <div class="flex flex-wrap gap-2">
                             <PrimaryButton type="button" :disabled="form.processing" @click="saveRows">

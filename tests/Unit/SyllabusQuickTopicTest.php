@@ -181,11 +181,9 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertSame([], $headerInfo['missing']);
         $this->assertSame([], $headerInfo['unrecognized']);
         $this->assertSame(45, $rows->count());
-        $this->assertSame('NCERT: We the Travellers—I · NCERT opening chapter', $rows->first()['remarks']);
-        $this->assertTrue($rows->pluck('chapter_name')->contains('Geometry'));
-        $this->assertTrue(
-            $rows->filter(fn ($row) => str_contains((string) $row['remarks'], 'Grandmother\'s Quilt'))->isNotEmpty()
-        );
+        $this->assertSame('We the Travellers—I', $rows->first()['chapter_name']);
+        $this->assertSame('Head: Number System · NCERT opening chapter', $rows->first()['remarks']);
+        $this->assertTrue($rows->pluck('chapter_name')->contains('Grandmother\'s Quilt'));
     }
 
     private function seedSyllabusVersion(): SyllabusVersion
