@@ -146,6 +146,7 @@ class SyllabusVersionController extends Controller
     public function updateRows(Request $request, SyllabusVersion $syllabusVersion): RedirectResponse
     {
         $validated = $request->validate([
+            'replace' => ['sometimes', 'boolean'],
             'rows' => ['required', 'array'],
             'rows.*.id' => ['nullable', 'integer'],
             'rows.*.chapter_id' => ['nullable', 'integer'],
@@ -159,11 +160,17 @@ class SyllabusVersionController extends Controller
             'rows.*.remarks' => ['nullable', 'string'],
         ]);
 
-        $this->importService->syncRows($syllabusVersion, $validated['rows']);
+        $this->importService->syncRows(
+            $syllabusVersion,
+            $validated['rows'],
+            replaceExisting: (bool) ($validated['replace'] ?? false),
+        );
 
         return redirect()
             ->route('admin.syllabus.show', $syllabusVersion)
-            ->with('success', 'Syllabus saved.');
+            ->with('success', ($validated['replace'] ?? false)
+                ? 'Syllabus replaced with the preview.'
+                : 'Syllabus saved.');
     }
 
     public function import(Request $request): RedirectResponse

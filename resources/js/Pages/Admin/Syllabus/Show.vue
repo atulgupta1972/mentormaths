@@ -115,7 +115,12 @@ const applyPreviewRows = (rows, filename) => {
         snapshotSavedRows();
     }
 
-    form.rows = rows.map((row) => ({ ...row }));
+    form.rows = rows.map((row) => ({
+        ...emptyRow(),
+        ...row,
+        id: null,
+        chapter_id: null,
+    }));
     previewActive.value = true;
     previewFilename.value = filename;
     lastPreviewedFile.value = filename;
@@ -468,15 +473,29 @@ const resizeAllFields = () => {
 onMounted(resizeAllFields);
 
 const saveRows = () => {
-    form.put(route('admin.syllabus.rows.update', props.version.id), {
-        preserveScroll: true,
-        onSuccess: () => {
-            previewActive.value = false;
-            previewFilename.value = '';
-            lastPreviewedFile.value = '';
-            savedRowSnapshot.value = null;
-        },
-    });
+    const replacingPreview = previewActive.value;
+
+    form
+        .transform((data) => ({
+            ...data,
+            replace: replacingPreview,
+            rows: replacingPreview
+                ? data.rows.map((row) => ({
+                    ...row,
+                    id: null,
+                    chapter_id: null,
+                }))
+                : data.rows,
+        }))
+        .put(route('admin.syllabus.rows.update', props.version.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                previewActive.value = false;
+                previewFilename.value = '';
+                lastPreviewedFile.value = '';
+                savedRowSnapshot.value = null;
+            },
+        });
 };
 
 const submitCarryForward = () => {

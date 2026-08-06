@@ -137,6 +137,34 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertSame(SyllabusVersion::STATUS_DRAFT, $version->status);
     }
 
+    public function test_replace_sync_rows_deletes_previous_topics(): void
+    {
+        $version = $this->seedSyllabusVersion();
+        $service = app(SyllabusImportService::class);
+
+        $service->syncRows($version, [[
+            'chapter_number' => '1',
+            'chapter_name' => 'Old Chapter',
+            'topic_name' => 'Old Topic',
+            'learning_outcomes' => null,
+            'remarks' => null,
+        ]]);
+
+        $service->syncRows($version, [[
+            'chapter_number' => '1',
+            'chapter_name' => 'We the Travellers—I',
+            'topic_name' => 'Large Numbers in Travel',
+            'learning_outcomes' => null,
+            'remarks' => 'Head: Number System',
+        ]], replaceExisting: true);
+
+        $version = $version->fresh();
+        $this->assertSame(1, $version->chapters()->count());
+        $this->assertSame('We the Travellers—I', $version->chapters()->first()?->name);
+        $this->assertSame(1, $version->chapters()->first()?->topics()->count());
+        $this->assertSame('Large Numbers in Travel', $version->chapters()->first()?->topics()->first()?->name);
+    }
+
     public function test_class4_r1_excel_parses_with_trailing_space_chapter_column(): void
     {
         $path = base_path('tests/Class4_Math r1.xlsx');

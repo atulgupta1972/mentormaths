@@ -20,7 +20,7 @@ class SyllabusImportService
             return 0;
         }
 
-        $this->syncRows($version, $rows->all());
+        $this->syncRows($version, $rows->all(), replaceExisting: true);
 
         return $rows->count();
     }
@@ -95,9 +95,17 @@ class SyllabusImportService
     /**
      * @param  list<array<string, mixed>>  $rows
      */
-    public function syncRows(SyllabusVersion $version, array $rows): void
+    public function syncRows(SyllabusVersion $version, array $rows, bool $replaceExisting = false): void
     {
-        DB::transaction(function () use ($version, $rows) {
+        DB::transaction(function () use ($version, $rows, $replaceExisting) {
+            if ($replaceExisting) {
+                $chapterIds = $version->chapters()->pluck('id');
+                SyllabusTopic::query()
+                    ->whereIn('syllabus_chapter_id', $chapterIds)
+                    ->delete();
+                $version->chapters()->delete();
+            }
+
             $keptTopicIds = [];
             $chapterSort = 0;
             $chapterCache = [];
