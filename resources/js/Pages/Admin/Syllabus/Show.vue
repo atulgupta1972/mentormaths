@@ -28,6 +28,16 @@ const newHeadInput = ref(null);
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 const hasSavedRows = computed(() => (props.rows?.length ?? 0) > 0);
 
+const rowHasContent = (row) => (
+    String(row?.topic_name ?? '').trim() !== ''
+    || String(row?.chapter_name ?? '').trim() !== ''
+    || String(row?.chapter_number ?? '').trim() !== ''
+);
+
+const hasTableRows = computed(() => form.rows.some(rowHasContent));
+
+const canClearSyllabus = computed(() => hasSavedRows.value || hasTableRows.value);
+
 const readOnlyFilteredRows = computed(() => {
     const query = search.value.trim().toLowerCase();
 
@@ -37,7 +47,7 @@ const readOnlyFilteredRows = computed(() => {
 const form = useForm({
     rows: props.rows.length
         ? props.rows.map((row) => ({ ...row }))
-        : [emptyRow()],
+        : [],
 });
 
 const carryForm = useForm({
@@ -70,7 +80,7 @@ watch(
 
         form.rows = newRows?.length
             ? newRows.map((row) => ({ ...row }))
-            : [emptyRow()];
+            : [];
     },
     { deep: true },
 );
@@ -143,7 +153,7 @@ const discardPreview = () => {
     if (savedRowSnapshot.value) {
         form.rows = savedRowSnapshot.value.map((row) => ({ ...row }));
     } else {
-        form.rows = props.rows.length ? props.rows.map((row) => ({ ...row })) : [emptyRow()];
+        form.rows = props.rows.length ? props.rows.map((row) => ({ ...row })) : [];
     }
 
     previewActive.value = false;
@@ -256,22 +266,47 @@ const submitImportReplace = () => {
     });
 };
 
-const clearSavedSyllabus = () => {
-    if (!hasSavedRows.value) {
+const clearAllSyllabus = () => {
+    if (!canClearSyllabus.value) {
         return;
     }
 
-    if (previewActive.value) {
-        discardPreview();
-    }
+    const savedCount = props.rows.length;
+    const tableCount = form.rows.filter(rowHasContent).length;
+    const message = savedCount > 0
+        ? `Delete all ${savedCount} saved row(s) from this syllabus? You can then import a fresh Excel file.`
+        : `Clear all ${tableCount} row(s) from the table?`;
 
-    if (!confirm(`Delete all ${props.rows.length} saved row(s) from this syllabus? You can then import a fresh Excel file.`)) {
+    if (!confirm(message)) {
         return;
     }
 
-    router.post(route('admin.syllabus.clear', props.version.id), {}, {
-        preserveScroll: true,
-    });
+    if (savedCount > 0) {
+        router.post(route('admin.syllabus.clear', props.version.id), {}, {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.rows = [];
+                previewActive.value = false;
+                previewFilename.value = '';
+                lastPreviewedFile.value = '';
+                previewWarnings.value = [];
+                savedRowSnapshot.value = null;
+                importFeedback.value = 'Saved syllabus cleared. Import from Excel or add rows manually.';
+                importFeedbackType.value = 'success';
+            },
+        });
+
+        return;
+    }
+
+    form.rows = [];
+    previewActive.value = false;
+    previewFilename.value = '';
+    lastPreviewedFile.value = '';
+    previewWarnings.value = [];
+    savedRowSnapshot.value = null;
+    importFeedback.value = 'Table cleared.';
+    importFeedbackType.value = 'info';
 };
 
 function emptyRow() {
@@ -474,18 +509,18 @@ onMounted(resizeAllFields);
 
 const saveRows = () => {
     const replacingPreview = previewActive.value;
+    const rowsWithContent = form.rows.filter(rowHasContent);
+    const clearingAllSaved = hasSavedRows.value && rowsWithContent.length === 0;
 
     form
         .transform((data) => ({
             ...data,
-            replace: replacingPreview,
-            rows: replacingPreview
-                ? data.rows.map((row) => ({
-                    ...row,
-                    id: null,
-                    chapter_id: null,
-                }))
-                : data.rows,
+            replace: replacingPreview || clearingAllSaved,
+            rows: (replacingPreview ? data.rows : rowsWithContent).map((row) => ({
+                ...row,
+                id: replacingPreview ? null : row.id,
+                chapter_id: replacingPreview ? null : row.chapter_id,
+            })),
         }))
         .put(route('admin.syllabus.rows.update', props.version.id), {
             preserveScroll: true,
@@ -623,12 +658,12 @@ const saveNewHead = async () => {
                             {{ importReplaceProcessing ? 'Importing…' : 'Import & replace' }}
                         </SecondaryButton>
                         <DangerButton
-                            v-if="hasSavedRows"
+                            v-if="canClearSyllabus"
                             type="button"
                             :disabled="previewLoading || importReplaceProcessing"
-                            @click="clearSavedSyllabus"
+                            @click="clearAllSyllabus"
                         >
-                            Clear saved syllabus
+                            Clear all rows
                         </DangerButton>
                     </form>
                     <div
@@ -818,6 +853,14 @@ const saveNewHead = async () => {
                         <h3 class="font-medium text-gray-900">Syllabus table</h3>
                         <div class="flex gap-2">
                             <SecondaryButton type="button" @click="addRow">Add row</SecondaryButton>
+                            <DangerButton
+                                v-if="canClearSyllabus"
+                                type="button"
+                                :disabled="form.processing"
+                                @click="clearAllSyllabus"
+                            >
+                                Clear all rows
+                            </DangerButton>
                             <PrimaryButton type="button" :disabled="form.processing" @click="saveRows">
                                 {{ previewActive ? 'Save preview to syllabus' : 'Save syllabus' }}
                             </PrimaryButton>

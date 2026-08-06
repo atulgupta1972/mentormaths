@@ -169,7 +169,9 @@ class SyllabusVersionController extends Controller
         return redirect()
             ->route('admin.syllabus.show', $syllabusVersion)
             ->with('success', ($validated['replace'] ?? false)
-                ? 'Syllabus replaced with the preview.'
+                ? (count($validated['rows']) > 0
+                    ? 'Syllabus replaced with the preview.'
+                    : 'All syllabus rows were deleted.')
                 : 'Syllabus saved.');
     }
 

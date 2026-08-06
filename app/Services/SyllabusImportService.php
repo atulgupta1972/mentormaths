@@ -147,7 +147,15 @@ class SyllabusImportService
                 ->whereDoesntHave('topics')
                 ->delete();
 
-            $version->update(['status' => SyllabusVersion::STATUS_PUBLISHED]);
+            $hasTopics = SyllabusTopic::query()
+                ->whereIn('syllabus_chapter_id', $version->chapters()->pluck('id'))
+                ->exists();
+
+            $version->update([
+                'status' => $hasTopics
+                    ? SyllabusVersion::STATUS_PUBLISHED
+                    : SyllabusVersion::STATUS_DRAFT,
+            ]);
         });
     }
 
