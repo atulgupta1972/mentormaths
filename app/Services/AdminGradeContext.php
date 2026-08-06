@@ -12,8 +12,8 @@ class AdminGradeContext
 
     public const SESSION_BOARD_KEY = 'admin_board_id';
 
-    /** Classes offered at Maths Foundation (middle + secondary). */
-    public const CLASS_SORT_ORDERS = [6, 7, 8, 9, 10];
+    /** Classes offered at Maths Foundation (primary + middle + secondary). */
+    public const CLASS_SORT_ORDERS = [4, 5, 6, 7, 8, 9, 10];
 
     public function classLevels()
     {
