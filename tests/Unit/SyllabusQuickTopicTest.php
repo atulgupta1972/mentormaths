@@ -69,6 +69,32 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertSame(1, $version->fresh()->chapters()->count());
     }
 
+    public function test_sync_rows_treats_empty_chapter_head_id_as_null(): void
+    {
+        $version = $this->seedSyllabusVersion();
+        $service = app(SyllabusImportService::class);
+
+        $service->syncRows($version, [[
+            'chapter_number' => '1',
+            'chapter_name' => 'Shapes Around Us',
+            'chapter_head_id' => '',
+            'topic_name' => 'Geometry & Spatial Sense',
+            'learning_outcomes' => '2D/3D shapes, spatial perception',
+            'difficulty' => 'Easy',
+            'planned_periods' => '8–10',
+            'remarks' => 'Activity-based introduction to geometry',
+        ]]);
+
+        $chapter = $version->fresh()->chapters()->first();
+        $topic = $chapter?->topics()->first();
+
+        $this->assertNotNull($chapter);
+        $this->assertNull($chapter->chapter_head_id);
+        $this->assertSame('Shapes Around Us', $chapter->name);
+        $this->assertSame('Geometry & Spatial Sense', $topic?->name);
+        $this->assertSame(8, $topic?->planned_periods);
+    }
+
     private function seedSyllabusVersion(): SyllabusVersion
     {
         $year = AcademicYear::query()->create([

@@ -339,7 +339,20 @@ class SyllabusImportService
             return null;
         }
 
-        return (int) preg_replace('/\D/', '', (string) $value);
+        if (preg_match('/(\d+)/', (string) $value, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return null;
+    }
+
+    private function nullableIntId(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (int) $value;
     }
 
     /**
@@ -363,7 +376,7 @@ class SyllabusImportService
                 'chapter_number' => $this->cleanChapterNumber($row['chapter_number'] ?? '') ?: $chapter->chapter_number,
                 'name' => trim((string) ($row['chapter_name'] ?? '')) ?: $chapter->name,
                 'sort_order' => $sortOrder,
-                'chapter_head_id' => ! empty($row['chapter_head_id']) ? (int) $row['chapter_head_id'] : null,
+                'chapter_head_id' => $this->nullableIntId($row['chapter_head_id'] ?? null),
             ]);
 
             $chapterCache[$cacheKey] = $chapter;
@@ -382,7 +395,7 @@ class SyllabusImportService
 
         $chapter = SyllabusChapter::create([
             'syllabus_version_id' => $version->id,
-            'chapter_head_id' => $row['chapter_head_id'] ?? null,
+            'chapter_head_id' => $this->nullableIntId($row['chapter_head_id'] ?? null),
             'chapter_number' => $number ?: (string) $sortOrder,
             'name' => $name ?: 'Chapter '.$sortOrder,
             'sort_order' => $sortOrder,
