@@ -21,7 +21,15 @@ class AdminGradeContext
             ->where('is_active', true)
             ->whereIn('sort_order', self::CLASS_SORT_ORDERS)
             ->orderBy('sort_order')
-            ->get(['id', 'name', 'sort_order'])
+            ->get(['id', 'name', 'sort_order']);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array{id: int, name: string, sort_order: int, typical_age: int}>
+     */
+    public function classLevelOptions()
+    {
+        return $this->classLevels()
             ->map(fn (GradeLevel $grade) => [
                 'id' => $grade->id,
                 'name' => $grade->name,
@@ -94,7 +102,7 @@ class AdminGradeContext
         $selected = $this->resolve($request);
 
         return [
-            'levels' => $this->classLevels(),
+            'levels' => $this->classLevelOptions(),
             'selected' => $selected?->only(['id', 'name', 'sort_order']),
         ];
     }

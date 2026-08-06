@@ -43,7 +43,7 @@ class SyllabusVersionController extends Controller
                 'label' => $version->label(),
             ]),
             'boards' => Board::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'gradeLevels' => $this->gradeContext->classLevels(),
+            'gradeLevels' => $this->gradeContext->classLevelOptions(),
             'subjects' => Subject::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'academicYears' => AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'name']),
             'selectedGrade' => $grade?->only(['id', 'name']),
