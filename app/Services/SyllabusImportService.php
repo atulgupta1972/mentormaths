@@ -85,7 +85,7 @@ class SyllabusImportService
                 'learning_outcomes' => $data['learning_outcomes'],
                 'difficulty' => $data['difficulty'],
                 'planned_periods' => $this->parsePeriods($data['planned_periods']) ?? '',
-                'remarks' => $data['remarks'],
+                'remarks' => $this->combineRemarks($data['remarks'], $data['ncert_chapter']),
             ]);
         }
 
@@ -221,6 +221,7 @@ class SyllabusImportService
         $mapped = [
             'chapter_number' => '',
             'chapter_name' => '',
+            'ncert_chapter' => '',
             'topic' => '',
             'learning_outcomes' => '',
             'difficulty' => '',
@@ -273,8 +274,9 @@ class SyllabusImportService
     private function normalizeHeaders(array $headerRow): array
     {
         $aliases = [
-            'chapter_number' => ['chapter no.', 'chapter no', 'chapter number', 'chapter'],
-            'chapter_name' => ['main topic', 'main topic (chapter)', 'chapter name', 'unit'],
+            'chapter_number' => ['chapter no.', 'chapter no', 'chapter number'],
+            'chapter_name' => ['main topic', 'main topic (chapter)', 'chapter name'],
+            'ncert_chapter' => ['ncert chapter', 'textbook chapter', 'ncert unit', 'unit title', 'chapter'],
             'topic' => ['sub-topic', 'sub topic', 'topic', 'subtopic'],
             'learning_outcomes' => ['key concepts', 'key concepts / learning outcomes', 'learning outcomes', 'concepts'],
             'difficulty' => ['difficulty level', 'difficulty'],
@@ -344,6 +346,22 @@ class SyllabusImportService
         }
 
         return null;
+    }
+
+    private function combineRemarks(string $remarks, string $ncertChapter): string
+    {
+        $remarks = trim($remarks);
+        $ncertChapter = trim($ncertChapter);
+
+        if ($ncertChapter === '') {
+            return $remarks;
+        }
+
+        $ncertLine = str_starts_with(strtolower($ncertChapter), 'ncert')
+            ? $ncertChapter
+            : "NCERT: {$ncertChapter}";
+
+        return $remarks !== '' ? "{$ncertLine} · {$remarks}" : $ncertLine;
     }
 
     private function nullableIntId(mixed $value): ?int

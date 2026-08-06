@@ -95,6 +95,26 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertSame(8, $topic?->planned_periods);
     }
 
+    public function test_excel_with_ncert_chapter_column_maps_correctly(): void
+    {
+        $version = $this->seedSyllabusVersion();
+        $service = app(SyllabusImportService::class);
+
+        $service->syncRows($version, [[
+            'chapter_number' => '1',
+            'chapter_name' => 'Geometry',
+            'topic_name' => '2D and 3D Shapes',
+            'learning_outcomes' => 'Identifying flat and solid shapes',
+            'remarks' => 'NCERT: Shapes Around Us',
+        ]]);
+
+        $topic = $version->fresh()->chapters()->first()?->topics()->first();
+
+        $this->assertSame('1', $version->fresh()->chapters()->first()?->chapter_number);
+        $this->assertSame('Geometry', $version->fresh()->chapters()->first()?->name);
+        $this->assertSame('NCERT: Shapes Around Us', $topic?->remarks);
+    }
+
     private function seedSyllabusVersion(): SyllabusVersion
     {
         $year = AcademicYear::query()->create([
