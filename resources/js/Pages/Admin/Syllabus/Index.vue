@@ -136,7 +136,7 @@ const submitImport = () => {
                             <InputLabel value="Class" />
                             <select v-model="createForm.grade_level_id" class="mt-1 block w-full rounded-md border-gray-300" required>
                                 <option value="" disabled>Select class</option>
-                                <option v-for="grade in gradeLevels" :key="grade.id" :value="grade.id">{{ grade.name }}</option>
+                                <option v-for="grade in gradeLevels" :key="grade.id" :value="grade.id">{{ grade.name }} (age {{ grade.typical_age }})</option>
                             </select>
                         </div>
                         <div>
@@ -220,7 +220,7 @@ const submitImport = () => {
                                 <InputLabel value="Class" />
                                 <select v-model="importForm.grade_level_id" class="mt-1 block w-full rounded-md border-gray-300" required>
                                     <option value="" disabled>Select class</option>
-                                    <option v-for="grade in gradeLevels" :key="grade.id" :value="grade.id">{{ grade.name }}</option>
+                                    <option v-for="grade in gradeLevels" :key="grade.id" :value="grade.id">{{ grade.name }} (age {{ grade.typical_age }})</option>
                                 </select>
                                 <InputError class="mt-1" :message="importForm.errors.grade_level_id" />
                             </div>

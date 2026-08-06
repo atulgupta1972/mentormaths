@@ -41,4 +41,15 @@ class GradeLevel extends Model
             ->where('sort_order', $this->sort_order + 1)
             ->first();
     }
+
+    /** Typical student age at start of academic year (CBSE: Class N ≈ N + 5 years). */
+    public function typicalAge(): int
+    {
+        return (int) $this->sort_order + 5;
+    }
+
+    public function nameWithAge(): string
+    {
+        return "{$this->name} (age {$this->typicalAge()})";
+    }
 }

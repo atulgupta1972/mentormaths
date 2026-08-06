@@ -21,7 +21,14 @@ class AdminGradeContext
             ->where('is_active', true)
             ->whereIn('sort_order', self::CLASS_SORT_ORDERS)
             ->orderBy('sort_order')
-            ->get(['id', 'name', 'sort_order']);
+            ->get(['id', 'name', 'sort_order'])
+            ->map(fn (GradeLevel $grade) => [
+                'id' => $grade->id,
+                'name' => $grade->name,
+                'sort_order' => $grade->sort_order,
+                'typical_age' => $grade->typicalAge(),
+            ])
+            ->values();
     }
 
     public function resolve(Request $request): ?GradeLevel

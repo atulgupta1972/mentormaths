@@ -40,6 +40,7 @@ class FillBlankImportService
         $context = collect([
             $version ? "Board: {$version->board->code}" : null,
             $version ? "Class: {$version->gradeLevel->name}" : null,
+            $version ? "Typical student age: {$version->gradeLevel->typicalAge()} years" : null,
             $version ? "Academic year: {$version->academicYear->name}" : null,
             $chapter ? "Chapter: {$chapter->chapter_number} — {$chapter->name}" : null,
             "Topic: {$topic->name}",
@@ -440,6 +441,7 @@ PROMPT;
         return collect([
             $version ? "Board: {$version->board->code}" : null,
             $version ? "Class: {$version->gradeLevel->name}" : null,
+            $version ? "Typical student age: {$version->gradeLevel->typicalAge()} years" : null,
             $version ? "Academic year: {$version->academicYear->name}" : null,
             "Chapter: {$chapter->chapter_number} — {$chapter->name}",
             $topicList !== '' ? "Topics: {$topicList}" : null,

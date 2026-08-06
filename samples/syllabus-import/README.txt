@@ -4,6 +4,16 @@ Mentor Maths — Syllabus Excel import format
 Use these templates to prepare CBSE Class 4 and Class 5 maths syllabus.
 Search NCERT / CBSE official syllabus online, then fill one row per sub-topic.
 
+Typical student age (CBSE, start of year)
+-----------------------------------------
+  Class 4 → age 9
+  Class 5 → age 10
+  Class 6 → age 11
+  Class 7 → age 12
+  (Class N → age N + 5)
+
+Include age when asking Gemini / Claude to generate syllabus or MCQs so wording stays age-appropriate.
+
 Files
 -----
   CBSE_Class4_Maths_Syllabus_TEMPLATE.xlsx

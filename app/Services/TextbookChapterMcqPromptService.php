@@ -18,6 +18,8 @@ class TextbookChapterMcqPromptService
         $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter']);
 
         $grade = $chapter->textbook?->gradeLevel?->name ?? 'Class';
+        $age = $chapter->textbook?->gradeLevel?->typicalAge();
+        $ageLine = $age ? "\n- Typical student age: {$age} years" : '';
         $book = $chapter->textbook?->name ?? 'Textbook';
         $bookCode = strtoupper($chapter->textbook?->code ?? 'TB');
         $chapterNum = $chapter->chapter_number;
@@ -62,7 +64,7 @@ class TextbookChapterMcqPromptService
 Extract every gradable maths MCQ from this textbook chapter PDF.
 
 Context:
-- Class: {$grade}
+- Class: {$grade}{$ageLine}
 - Book: {$book} (code {$bookCode})
 - Chapter {$chapterNum}: {$title}
 

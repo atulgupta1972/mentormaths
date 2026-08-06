@@ -22,7 +22,7 @@ const onChange = (event) => {
         >
             <option value="">All classes (4–10)</option>
             <option v-for="grade in context.levels" :key="grade.id" :value="grade.id">
-                {{ grade.name }}
+                {{ grade.name }} (age {{ grade.typical_age }})
             </option>
         </select>
     </div>
