@@ -4,12 +4,15 @@ import ChapterSummaryPanel from '@/Components/ChapterSummaryPanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import StudentAssignmentGroupTable from '@/Components/StudentAssignmentGroupTable.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
+import ContentUploadGuidePanel from '@/Components/ContentUploadGuidePanel.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref } from 'vue';
 
 const page = usePage();
+
+const isContentUploader = computed(() => page.props.auth?.isContentUploader ?? false);
 
 const props = defineProps({
     isAdmin: { type: Boolean, default: false },
@@ -549,6 +552,8 @@ const adminSetStatusClass = (set) => {
                         :grade-levels="gradeLevels"
                     />
 
+                    <ContentUploadGuidePanel variant="admin" />
+
                     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                         <div class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-violet-700">{{ stats.students_count || 0 }}</p>
@@ -761,8 +766,10 @@ const adminSetStatusClass = (set) => {
                     </section>
                 </template>
 
-                <!-- Student dashboard -->
+                <!-- Student / teacher / uploader dashboard -->
                 <template v-else>
+                    <ContentUploadGuidePanel v-if="isContentUploader" variant="uploader" />
+
                     <!-- Welcome — single compact row -->
                     <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-4 py-3 text-white shadow">
                         <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">

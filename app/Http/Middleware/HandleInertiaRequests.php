@@ -57,6 +57,7 @@ class HandleInertiaRequests extends Middleware
                 'guided_feedback' => fn () => $request->session()->get('guided_feedback'),
                 'save_confirmation' => fn () => $request->session()->get('save_confirmation'),
             ],
+            'contentUploaderGuideUrl' => '/guides/content-uploader-guide.html',
         ];
     }
 }
