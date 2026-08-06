@@ -18,7 +18,7 @@ const isAdmin = computed(() => props.variant === 'admin');
 
 const steps = computed(() => (isAdmin.value
     ? ['Set rates in matrix', 'Assign chapters to uploader', 'Review & publish when submitted']
-    : ['Read assignment email', 'Agree to rate', 'Import MCQ JSON', 'Verify every question', 'Submit for publish']));
+    : ['Read assignment email', 'Agree to rate', 'Import MCQ JSON', 'Divide questions into sets', 'Verify every question', 'Submit for publish']));
 </script>
 
 <template>

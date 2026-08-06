@@ -244,6 +244,7 @@
         <p style="margin-top:24px;">
             <span class="badge">Rate agreement</span>
             <span class="badge">MCQ import</span>
+            <span class="badge">Divide into sets</span>
             <span class="badge">Question verification</span>
             <span class="badge">Admin publish</span>
         </p>
@@ -271,6 +272,8 @@
                     <span class="flow-arrow">→</span>
                     <div class="flow-node upload">Upload<br>MCQs</div>
                     <span class="flow-arrow">→</span>
+                    <div class="flow-node upload">Divide<br>into sets</div>
+                    <span class="flow-arrow">→</span>
                     <div class="flow-node upload">Verify<br>each Q</div>
                     <span class="flow-arrow">→</span>
                     <div class="flow-node upload">Submit<br>publish</div>
@@ -293,6 +296,7 @@
             <li>Admin <strong>assigns syllabus chapters</strong> to one uploader.</li>
             <li>Uploader gets an <strong>email</strong> — must review system carefully.</li>
             <li>Uploader <strong>agrees to rate</strong>, then uploads MCQ JSON.</li>
+            <li>Uploader <strong>splits questions into sets</strong> (M1, M2, …) on the chapter page.</li>
             <li>Uploader <strong>verifies every question</strong> (7 checks each).</li>
             <li>Admin <strong>publishes</strong> — only then students see content.</li>
         </ol>
@@ -395,7 +399,7 @@
                     <span style="font-size:8px;">
                     Hi ATUL,<br><br>
                     Please log in and <strong>carefully review the assignment</strong> before starting.<br><br>
-                    <strong>Steps:</strong> My content tasks → agree rate → upload → verify every question → submit.<br><br>
+                    <strong>Steps:</strong> My content tasks → agree rate → upload → divide into sets → verify every question → submit.<br><br>
                     <strong>Ch 5</strong> · ₹250<br>
                     <strong>Note from admin:</strong> Check all explanations carefully<br><br>
                     <span class="url">mentormaths.in/content/tasks</span>
@@ -482,7 +486,7 @@
                     <div class="field" style="margin-top:6px;"><textarea rows="3" placeholder='{"questions":[...]}'></textarea></div>
                     <button class="btn btn-primary">Import MCQ JSON</button>
                 </div>
-                <div class="card green">After import: review items list · fix answers/wording</div>
+                <div class="card green">After import: review items list · fix answers/wording · then divide into sets (next step).</div>
             </div>
         </div>
     </div>
@@ -495,12 +499,61 @@
             <li>Use the <strong>AI prompt</strong> on the page to generate MCQ JSON.</li>
             <li><strong>Paste JSON</strong> or upload ZIP pack → Import.</li>
             <li>Review imported questions on the same screen.</li>
-            <li>Back on task page → <strong>Mark upload complete</strong>.</li>
         </ol>
+        <p class="footer-note">Do not mark upload complete yet — divide questions into sets first.</p>
     </div>
 </section>
 
 <!-- UPLOADER STEP 4 -->
+<section class="slide">
+    <div class="screen-side">
+        <div class="screen-label">Screen · Divide questions into sets</div>
+        <div class="browser">
+            <div class="browser-bar">
+                <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+                <span class="browser-url">mentormaths.in/content/textbooks/chapters/…</span>
+            </div>
+            <div class="screen-body">
+                <div class="page-title">Textbook chapter · Ch 5 · 30 MCQs imported</div>
+                <div class="card amber">Review 30 MCQ(s) — use the <strong>set plan matrix</strong> below. Small chapter? One row. Large chapter? Split into parts.</div>
+                <div class="card highlight-ring">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <strong>MCQ set plan</strong>
+                        <span>
+                            <button class="btn btn-secondary">One set (all)</button>
+                            <button class="btn btn-secondary" style="margin-left:4px;">Add row / split</button>
+                        </span>
+                    </div>
+                    <table class="table-mini">
+                        <tr><th>Set code</th><th>Q from</th><th>Q to</th><th>Description</th><th>Count</th></tr>
+                        <tr><td><input value="GP7M1" style="width:52px;font-size:7px;"></td><td>1</td><td>15</td><td>AP part 1</td><td>15</td></tr>
+                        <tr><td><input value="GP7M2" style="width:52px;font-size:7px;"></td><td>16</td><td>30</td><td>GP part 2</td><td>15</td></tr>
+                    </table>
+                    <div style="margin-top:8px;text-align:right;">
+                        <button class="btn btn-secondary">Save draft</button>
+                    </div>
+                </div>
+                <div class="card sky">Students attempt one set at a time (M1, M2, …). Ranges must cover every question with no gaps.</div>
+            </div>
+        </div>
+    </div>
+    <div class="text-side">
+        <span class="step-tag upload">Uploader · Step 4</span>
+        <h2>Divide questions into sets</h2>
+        <ol>
+            <li>On the textbook chapter page, scroll to <strong>MCQ set plan</strong>.</li>
+            <li><strong>Small chapter (~25 Q):</strong> keep <strong>One set (all)</strong> — one row, Q1 to last.</li>
+            <li><strong>Large chapter:</strong> click <strong>Add row / split</strong> — first click splits roughly in half (M1, M2).</li>
+            <li>Edit <strong>Set code</strong>, <strong>Q from</strong>, <strong>Q to</strong>, and optional <strong>Description</strong> per row.</li>
+            <li>Every question number must appear in exactly one set — no gaps, no overlaps.</li>
+            <li>Click <strong>Save draft</strong> when the matrix is correct.</li>
+            <li>Return to <strong>My content tasks</strong> → <strong>Mark upload complete</strong>.</li>
+        </ol>
+        <p class="footer-note"><strong>Required</strong> before verification — admin publishes these sets for students.</p>
+    </div>
+</section>
+
+<!-- UPLOADER STEP 5 -->
 <section class="slide">
     <div class="screen-side">
         <div class="screen-label">Screen · Verify every question</div>
@@ -537,7 +590,7 @@
         </div>
     </div>
     <div class="text-side">
-        <span class="step-tag upload">Uploader · Step 4</span>
+        <span class="step-tag upload">Uploader · Step 5</span>
         <h2>Verify each question</h2>
         <ol>
             <li>Tick <strong>all 7 checks</strong> per question:
@@ -612,6 +665,8 @@
                     <li>Read assignment email</li>
                     <li>Agree to rate</li>
                     <li>Import MCQ JSON</li>
+                    <li>Divide into sets (M1, M2, …)</li>
+                    <li>Mark upload complete</li>
                     <li>Verify all 7 checks × every Q</li>
                     <li>Submit for publish</li>
                 </ul>
