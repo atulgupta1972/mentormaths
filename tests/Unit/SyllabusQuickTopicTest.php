@@ -161,6 +161,33 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertTrue($rows->pluck('chapter_name')->contains('Geometry'));
     }
 
+    public function test_class5_r1_excel_parses_with_ncert_chapter_column(): void
+    {
+        $path = base_path('tests/Class5_Math r1.xlsx');
+        $this->assertFileExists($path);
+
+        $service = app(SyllabusImportService::class);
+        $file = new \Illuminate\Http\UploadedFile(
+            $path,
+            'Class5_Math r1.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true,
+        );
+
+        $headerInfo = $service->describeFileHeaders($file);
+        $rows = $service->parseFileToPreviewRows($file);
+
+        $this->assertSame([], $headerInfo['missing']);
+        $this->assertSame([], $headerInfo['unrecognized']);
+        $this->assertSame(45, $rows->count());
+        $this->assertSame('NCERT: We the Travellers—I · NCERT opening chapter', $rows->first()['remarks']);
+        $this->assertTrue($rows->pluck('chapter_name')->contains('Geometry'));
+        $this->assertTrue(
+            $rows->filter(fn ($row) => str_contains((string) $row['remarks'], 'Grandmother\'s Quilt'))->isNotEmpty()
+        );
+    }
+
     private function seedSyllabusVersion(): SyllabusVersion
     {
         $year = AcademicYear::query()->create([
