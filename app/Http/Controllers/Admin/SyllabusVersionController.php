@@ -205,6 +205,7 @@ class SyllabusVersionController extends Controller
         ]);
 
         try {
+            $headerInfo = $this->importService->describeFileHeaders($request->file('file'));
             $rows = $this->importService->parseFileToPreviewRows($request->file('file'));
         } catch (\Throwable $e) {
             report($e);
@@ -216,17 +217,43 @@ class SyllabusVersionController extends Controller
             return response()->json(['message' => $message], 422);
         }
 
+        if ($headerInfo['missing'] !== []) {
+            return response()->json([
+                'message' => 'Missing required column(s): '.implode(', ', $headerInfo['missing'])
+                    .'. Expected headers like Chapter No., Main Topic (Chapter), Sub-Topic, Key Concepts / Learning Outcomes.',
+                'header_info' => $headerInfo,
+            ], 422);
+        }
+
         if ($rows->isEmpty()) {
             return response()->json([
                 'message' => 'No topics found. Check that row 1 has headers: Chapter No., Main Topic (Chapter), Sub-Topic, etc.',
+                'header_info' => $headerInfo,
             ], 422);
+        }
+
+        $warnings = [];
+
+        if ($headerInfo['unrecognized'] !== []) {
+            $warnings[] = 'Unrecognized column(s) will be ignored: '.implode(', ', $headerInfo['unrecognized']);
         }
 
         return response()->json([
             'rows' => $rows->values()->all(),
             'count' => $rows->count(),
             'filename' => $request->file('file')->getClientOriginalName(),
+            'warnings' => $warnings,
+            'header_info' => $headerInfo,
         ]);
+    }
+
+    public function clearRows(SyllabusVersion $syllabusVersion): RedirectResponse
+    {
+        $this->importService->clearAllRows($syllabusVersion);
+
+        return redirect()
+            ->route('admin.syllabus.show', $syllabusVersion)
+            ->with('success', 'All saved syllabus rows were deleted. Import from Excel or add rows manually.');
     }
 
     private function processImport(Request $request, SyllabusVersion $version): RedirectResponse

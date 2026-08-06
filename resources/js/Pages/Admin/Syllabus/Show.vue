@@ -7,7 +7,7 @@ import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -26,6 +26,7 @@ const addHeadSaving = ref(false);
 const targetRowIndex = ref(null);
 const newHeadInput = ref(null);
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
+const hasSavedRows = computed(() => (props.rows?.length ?? 0) > 0);
 
 const readOnlyFilteredRows = computed(() => {
     const query = search.value.trim().toLowerCase();
@@ -79,6 +80,8 @@ const importFeedbackType = ref('');
 const previewActive = ref(false);
 const previewFilename = ref('');
 const previewLoading = ref(false);
+const importReplaceProcessing = ref(false);
+const previewWarnings = ref([]);
 const savedRowSnapshot = ref(null);
 
 const onImportFileChange = (event) => {
@@ -99,9 +102,19 @@ const applyPreviewRows = (rows, filename) => {
     form.rows = rows.map((row) => ({ ...row }));
     previewActive.value = true;
     previewFilename.value = filename;
+    previewWarnings.value = [];
     importFeedbackType.value = 'info';
-    importFeedback.value = `Preview loaded: ${rows.length} row(s) from ${filename}. Review the table, then click Save syllabus to apply.`;
+    importFeedback.value = `Preview loaded: ${rows.length} row(s) from ${filename}. Review the table below, then click Save preview to syllabus to replace the saved data.`;
     nextTick(resizeAllFields);
+};
+
+const applyPreviewResponse = (data, fallbackFilename) => {
+    applyPreviewRows(data.rows, data.filename || fallbackFilename);
+    previewWarnings.value = data.warnings ?? [];
+
+    if (previewWarnings.value.length) {
+        importFeedback.value += ` ${previewWarnings.value.join(' ')}`;
+    }
 };
 
 const discardPreview = () => {
@@ -113,6 +126,7 @@ const discardPreview = () => {
 
     previewActive.value = false;
     previewFilename.value = '';
+    previewWarnings.value = [];
     savedRowSnapshot.value = null;
     importFeedback.value = 'Preview discarded. Showing the last saved syllabus again.';
     importFeedbackType.value = 'info';
@@ -145,17 +159,94 @@ const submitExcelPreview = async () => {
             { headers: { 'Content-Type': 'multipart/form-data' } },
         );
 
-        applyPreviewRows(data.rows, data.filename || importForm.file.name);
+        applyPreviewResponse(data, importForm.file.name);
         importForm.reset('file');
     } catch (error) {
         importFeedbackType.value = 'error';
-        importFeedback.value =
+        const headerInfo = error.response?.data?.header_info;
+        const unrecognized = headerInfo?.unrecognized?.length
+            ? ` Unrecognized columns: ${headerInfo.unrecognized.join(', ')}.`
+            : '';
+
+        importFeedback.value = (
             error.response?.data?.message
             || error.response?.data?.errors?.file?.[0]
-            || 'Could not read the Excel file. Use a .xlsx file under 10 MB.';
+            || 'Could not read the Excel file. Use a .xlsx file under 10 MB.'
+        ) + unrecognized;
+
+        if (hasSavedRows.value) {
+            importFeedback.value += ' The saved syllabus is unchanged. You can clear it and try again, or fix the Excel headers and re-upload.';
+        }
     } finally {
         previewLoading.value = false;
     }
+};
+
+const submitImportReplace = () => {
+    importFeedback.value = '';
+    importFeedbackType.value = '';
+    importForm.clearErrors();
+
+    if (!importForm.file) {
+        importForm.setError('file', 'Choose an Excel file first.');
+        importFeedback.value = 'Choose an Excel file first.';
+        importFeedbackType.value = 'error';
+
+        return;
+    }
+
+    const filename = importForm.file.name;
+    const confirmMessage = hasSavedRows.value
+        ? `Replace all ${props.rows.length} saved row(s) with "${filename}"? Old topics will be removed.`
+        : `Import "${filename}" into this syllabus?`;
+
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    importReplaceProcessing.value = true;
+    importFeedback.value = 'Uploading and replacing syllabus…';
+    importFeedbackType.value = 'info';
+
+    importForm.post(route('admin.syllabus.import-into', props.version.id), {
+        preserveScroll: true,
+        forceFormData: true,
+        onSuccess: () => {
+            previewActive.value = false;
+            previewFilename.value = '';
+            previewWarnings.value = [];
+            savedRowSnapshot.value = null;
+            importForm.reset('file');
+        },
+        onError: () => {
+            importFeedbackType.value = 'error';
+            importFeedback.value =
+                importForm.errors.file
+                || Object.values(importForm.errors)[0]
+                || 'Import failed. Check the Excel headers and try again.';
+        },
+        onFinish: () => {
+            importReplaceProcessing.value = false;
+        },
+    });
+};
+
+const clearSavedSyllabus = () => {
+    if (!hasSavedRows.value) {
+        return;
+    }
+
+    if (previewActive.value) {
+        discardPreview();
+    }
+
+    if (!confirm(`Delete all ${props.rows.length} saved row(s) from this syllabus? You can then import a fresh Excel file.`)) {
+        return;
+    }
+
+    router.post(route('admin.syllabus.clear', props.version.id), {}, {
+        preserveScroll: true,
+    });
 };
 
 function emptyRow() {
@@ -458,8 +549,15 @@ const saveNewHead = async () => {
                 <div v-if="isAdmin" class="rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 p-4 shadow-sm">
                     <h3 class="font-medium text-gray-900">Import from Excel</h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Load a .xlsx file to <strong>preview</strong> in the table below. Nothing is saved until you click
-                        <strong>Save syllabus</strong>.
+                        <strong>Preview Excel</strong> loads rows into the table below without saving.
+                        <strong>Import &amp; replace</strong> saves immediately and removes old topics not in the file.
+                        Expected headers: Chapter No., Main Topic (Chapter), Sub-Topic, Key Concepts / Learning Outcomes, Approx. Periods, Remarks.
+                        An extra <strong>chapter</strong> column (NCERT unit name) is fine — it is stored in Remarks.
+                    </p>
+                    <p v-if="hasSavedRows" class="mt-2 text-sm text-amber-900">
+                        This syllabus already has <strong>{{ rows.length }}</strong> saved row(s).
+                        If the table still shows old data after preview, click
+                        <strong>Save preview to syllabus</strong>, or use <strong>Import &amp; replace</strong>.
                     </p>
                     <form class="mt-3 flex flex-wrap items-end gap-3" @submit.prevent="submitExcelPreview">
                         <div class="min-w-[240px] flex-1">
@@ -472,9 +570,24 @@ const saveNewHead = async () => {
                             />
                             <InputError class="mt-1" :message="importForm.errors.file" />
                         </div>
-                        <PrimaryButton type="submit" :disabled="previewLoading">
+                        <PrimaryButton type="submit" :disabled="previewLoading || importReplaceProcessing">
                             {{ previewLoading ? 'Reading…' : 'Preview Excel' }}
                         </PrimaryButton>
+                        <SecondaryButton
+                            type="button"
+                            :disabled="previewLoading || importReplaceProcessing || !importForm.file"
+                            @click="submitImportReplace"
+                        >
+                            {{ importReplaceProcessing ? 'Importing…' : 'Import & replace' }}
+                        </SecondaryButton>
+                        <DangerButton
+                            v-if="hasSavedRows"
+                            type="button"
+                            :disabled="previewLoading || importReplaceProcessing"
+                            @click="clearSavedSyllabus"
+                        >
+                            Clear saved syllabus
+                        </DangerButton>
                     </form>
                     <div
                         v-if="importFeedback"
@@ -496,13 +609,22 @@ const saveNewHead = async () => {
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <p>
                             <strong>Preview mode</strong> — showing {{ form.rows.length }} row(s) from
-                            <strong>{{ previewFilename }}</strong>. The saved syllabus is unchanged until you click
-                            <strong>Save syllabus</strong>.
+                            <strong>{{ previewFilename }}</strong> in the table below.
+                            Click <strong>Save preview to syllabus</strong> to replace the saved data, or
+                            <strong>Discard preview</strong> to go back.
                         </p>
-                        <SecondaryButton type="button" @click="discardPreview">
-                            Discard preview
-                        </SecondaryButton>
+                        <div class="flex flex-wrap gap-2">
+                            <PrimaryButton type="button" :disabled="form.processing" @click="saveRows">
+                                Save preview to syllabus
+                            </PrimaryButton>
+                            <SecondaryButton type="button" @click="discardPreview">
+                                Discard preview
+                            </SecondaryButton>
+                        </div>
                     </div>
+                    <p v-if="previewWarnings.length" class="mt-2 text-xs text-amber-800">
+                        {{ previewWarnings.join(' ') }}
+                    </p>
                 </div>
 
                 <div class="rounded-lg bg-white p-4 shadow-sm">

@@ -191,6 +191,78 @@ class SyllabusImportService
         });
     }
 
+    /**
+     * Remove every chapter and topic from a syllabus version.
+     */
+    public function clearAllRows(SyllabusVersion $version): void
+    {
+        DB::transaction(function () use ($version) {
+            $chapterIds = $version->chapters()->pluck('id');
+
+            SyllabusTopic::query()
+                ->whereIn('syllabus_chapter_id', $chapterIds)
+                ->delete();
+
+            $version->chapters()->delete();
+            $version->update(['status' => SyllabusVersion::STATUS_DRAFT]);
+        });
+    }
+
+    /**
+     * @return array{
+     *     unrecognized: list<string>,
+     *     mapped: list<string>,
+     *     missing: list<string>
+     * }
+     */
+    public function describeFileHeaders(UploadedFile $file): array
+    {
+        if (! class_exists(\ZipArchive::class)) {
+            throw new \RuntimeException('PHP zip extension is required to read Excel (.xlsx) files.');
+        }
+
+        $spreadsheet = IOFactory::load($file->getRealPath());
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+
+        if ($rows === []) {
+            return ['unrecognized' => [], 'mapped' => [], 'missing' => ['Sub-Topic']];
+        }
+
+        $headerIndex = $this->findHeaderRowIndex($rows);
+        $headerRow = $rows[$headerIndex];
+        $headers = $this->normalizeHeaders($headerRow);
+        $mapped = array_values(array_unique(array_filter($headers)));
+        $unrecognized = [];
+
+        foreach ($headerRow as $index => $label) {
+            $trimmed = trim((string) $label);
+
+            if ($trimmed === '') {
+                continue;
+            }
+
+            if (($headers[$index] ?? '') === '') {
+                $unrecognized[] = $trimmed;
+            }
+        }
+
+        $missing = [];
+
+        if (! in_array('topic', $mapped, true)) {
+            $missing[] = 'Sub-Topic';
+        }
+
+        if (! in_array('chapter_name', $mapped, true) && ! in_array('chapter_number', $mapped, true)) {
+            $missing[] = 'Main Topic (Chapter) or Chapter No.';
+        }
+
+        return [
+            'unrecognized' => $unrecognized,
+            'mapped' => $mapped,
+            'missing' => $missing,
+        ];
+    }
+
     public function flattenToRows(SyllabusVersion $version): Collection
     {
         $version->load(['chapters.topics', 'chapters.chapterHead']);

@@ -115,6 +115,52 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertSame('NCERT: Shapes Around Us', $topic?->remarks);
     }
 
+    public function test_clear_all_rows_removes_chapters_and_topics(): void
+    {
+        $version = $this->seedSyllabusVersion();
+        $service = app(SyllabusImportService::class);
+
+        $service->syncRows($version, [[
+            'chapter_number' => '1',
+            'chapter_name' => 'Geometry',
+            'topic_name' => '2D and 3D Shapes',
+            'learning_outcomes' => null,
+            'remarks' => null,
+        ]]);
+
+        $this->assertSame(1, $version->fresh()->chapters()->count());
+
+        $service->clearAllRows($version);
+
+        $version = $version->fresh();
+        $this->assertSame(0, $version->chapters()->count());
+        $this->assertSame(SyllabusVersion::STATUS_DRAFT, $version->status);
+    }
+
+    public function test_class4_r1_excel_parses_with_trailing_space_chapter_column(): void
+    {
+        $path = base_path('tests/Class4_Math r1.xlsx');
+        $this->assertFileExists($path);
+
+        $service = app(SyllabusImportService::class);
+        $file = new \Illuminate\Http\UploadedFile(
+            $path,
+            'Class4_Math r1.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true,
+        );
+
+        $headerInfo = $service->describeFileHeaders($file);
+        $rows = $service->parseFileToPreviewRows($file);
+
+        $this->assertSame([], $headerInfo['missing']);
+        $this->assertSame([], $headerInfo['unrecognized']);
+        $this->assertSame(42, $rows->count());
+        $this->assertSame('NCERT: Shapes Around Us', $rows->first()['remarks']);
+        $this->assertTrue($rows->pluck('chapter_name')->contains('Geometry'));
+    }
+
     private function seedSyllabusVersion(): SyllabusVersion
     {
         $year = AcademicYear::query()->create([
