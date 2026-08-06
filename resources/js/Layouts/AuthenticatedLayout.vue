@@ -13,6 +13,7 @@ import { assignToClassPath, safeRoute } from '@/utils/routes';
 const showingNavigationDropdown = ref(false);
 const page = usePage();
 const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
+const isContentUploader = computed(() => page.props.auth?.isContentUploader ?? false);
 
 const peopleGroup = computed(() => ({
     label: 'People',
@@ -59,7 +60,9 @@ const teachingGroup = computed(() => ({
         || route().current('admin.written-sheets.*')
         || route().current('admin.textbooks.*')
         || route().current('admin.formula-bank.*')
-        || route().current('admin.basics-drill.*'),
+        || route().current('admin.basics-drill.*')
+        || route().current('admin.content-tasks.*')
+        || route().current('admin.content-rate-cards.*'),
     items: [
         {
             label: 'Classes',
@@ -102,6 +105,12 @@ const teachingGroup = computed(() => ({
             href: route('admin.textbooks.index'),
             active: route().current('admin.textbooks.*'),
             show: isAdmin.value,
+        },
+        {
+            label: 'Content upload tasks',
+            href: route('admin.content-tasks.index'),
+            active: route().current('admin.content-tasks.*') || route().current('admin.content-rate-cards.*'),
+            show: isAdmin.value && route().has('admin.content-tasks.index'),
         },
         {
             label: 'Formula bank',
@@ -210,6 +219,14 @@ const navGroups = computed(() =>
                                     :active="route().current('dashboard')"
                                 >
                                     Dashboard
+                                </NavLink>
+
+                                <NavLink
+                                    v-if="isContentUploader && route().has('content.tasks.index')"
+                                    :href="route('content.tasks.index')"
+                                    :active="route().current('content.*')"
+                                >
+                                    My content tasks
                                 </NavLink>
 
                                 <NavDropdown

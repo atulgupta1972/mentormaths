@@ -8,6 +8,8 @@ use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ClassAssignmentController;
 use App\Http\Controllers\Admin\ClassHubController;
 use App\Http\Controllers\Admin\ContentCoverageController;
+use App\Http\Controllers\Admin\ContentRateCardController;
+use App\Http\Controllers\Admin\ContentUploadTaskController;
 use App\Http\Controllers\Admin\ExamPlanController as AdminExamPlanController;
 use App\Http\Controllers\Admin\FormulaBankController;
 use App\Http\Controllers\Admin\GradeContextController;
@@ -26,6 +28,7 @@ use App\Http\Controllers\Admin\TeacherRegistrationRequestController as AdminTeac
 use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WrittenSheetController;
+use App\Http\Controllers\ContentUploader\ContentTaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
@@ -112,6 +115,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('teacher-registrations.request-profile');
     Route::post('/teacher-registrations/{teacherRegistration}/approve', [AdminTeacherRegistrationRequestController::class, 'approve'])
         ->name('teacher-registrations.approve');
+    Route::post('/teacher-registrations/{teacherRegistration}/resend-welcome', [AdminTeacherRegistrationRequestController::class, 'resendWelcomeEmail'])
+        ->name('teacher-registrations.resend-welcome');
     Route::post('/teacher-registrations/{teacherRegistration}/reject', [AdminTeacherRegistrationRequestController::class, 'reject'])
         ->name('teacher-registrations.reject');
 
@@ -293,6 +298,16 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/formula-bank/sets/{worksheet}', [FormulaBankController::class, 'setShow'])->name('formula-bank.sets.show');
     Route::post('/formula-bank/sets/{worksheet}/import', [FormulaBankController::class, 'importToSet'])->name('formula-bank.sets.import');
 
+    Route::get('/content-rate-cards', [ContentRateCardController::class, 'index'])->name('content-rate-cards.index');
+    Route::post('/content-rate-cards', [ContentRateCardController::class, 'store'])->name('content-rate-cards.store');
+    Route::put('/content-rate-cards/{contentRateCard}', [ContentRateCardController::class, 'update'])->name('content-rate-cards.update');
+
+    Route::get('/content-tasks', [ContentUploadTaskController::class, 'index'])->name('content-tasks.index');
+    Route::get('/content-tasks/create', [ContentUploadTaskController::class, 'create'])->name('content-tasks.create');
+    Route::post('/content-tasks', [ContentUploadTaskController::class, 'store'])->name('content-tasks.store');
+    Route::get('/content-tasks/{contentTask}', [ContentUploadTaskController::class, 'show'])->name('content-tasks.show');
+    Route::post('/content-tasks/{contentTask}/publish', [ContentUploadTaskController::class, 'publish'])->name('content-tasks.publish');
+
     Route::post('/practice-sets/{worksheet}/assign', [SetAssignmentController::class, 'store'])->name('practice-sets.assign');
     Route::post('/practice-sets/{worksheet}/assign-bulk', [SetAssignmentController::class, 'storeBulk'])->name('practice-sets.assign-bulk');
     Route::post('/practice-sets/{worksheet}/assign-students', [SetAssignmentController::class, 'storeStudents'])->name('practice-sets.assign-students');
@@ -338,6 +353,26 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
     Route::get('/resolutions/clear-all', [StudentPracticeSetController::class, 'startClearAllQueue'])->name('resolutions.clear-all');
     Route::get('/resolutions/{item}', [StudentPracticeSetController::class, 'showResolution'])->name('resolutions.show');
     Route::post('/resolutions/{item}/answer', [StudentPracticeSetController::class, 'submitResolution'])->name('resolutions.answer');
+});
+
+Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->name('content.')->group(function () {
+    Route::get('/tasks', [ContentTaskController::class, 'index'])->name('tasks.index');
+    Route::get('/tasks/{contentTask}', [ContentTaskController::class, 'show'])->name('tasks.show');
+    Route::post('/tasks/{contentTask}/agree', [ContentTaskController::class, 'agree'])->name('tasks.agree');
+    Route::post('/tasks/{contentTask}/mark-uploaded', [ContentTaskController::class, 'markUploaded'])->name('tasks.mark-uploaded');
+    Route::post('/tasks/{contentTask}/verification-check', [ContentTaskController::class, 'saveVerificationCheck'])->name('tasks.verification-check');
+    Route::post('/tasks/{contentTask}/complete-verification', [ContentTaskController::class, 'completeVerification'])->name('tasks.complete-verification');
+    Route::post('/tasks/{contentTask}/submit-for-publish', [ContentTaskController::class, 'submitForPublish'])->name('tasks.submit-for-publish');
+    Route::post('/tasks/{contentTask}/ping-session', [ContentTaskController::class, 'pingSession'])->name('tasks.ping-session');
+
+    Route::middleware('content.chapter')->group(function () {
+        Route::get('/textbooks/chapters/{textbookChapter}', [TextbookController::class, 'show'])->name('textbooks.show');
+        Route::post('/textbooks/chapters/{textbookChapter}/import-mcq', [TextbookController::class, 'importMcq'])->name('textbooks.import-mcq');
+        Route::post('/textbooks/chapters/{textbookChapter}/import-mcq-zip', [TextbookController::class, 'importMcqZip'])->name('textbooks.import-mcq-zip');
+        Route::post('/textbooks/chapters/{textbookChapter}/replace-diagram', [TextbookController::class, 'replaceItemDiagram'])->name('textbooks.replace-diagram');
+        Route::post('/textbooks/chapters/{textbookChapter}/remove-diagram', [TextbookController::class, 'removeItemDiagram'])->name('textbooks.remove-diagram');
+        Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');
+    });
 });
 
 Route::middleware('auth')->group(function () {

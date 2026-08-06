@@ -110,8 +110,13 @@ class TeacherRegistrationService
         return $request->fresh();
     }
 
-    public function approve(TeacherRegistrationRequest $request, int $adminUserId, ?string $adminNotes = null): User
-    {
+    public function approve(
+        TeacherRegistrationRequest $request,
+        int $adminUserId,
+        ?string $adminNotes = null,
+        bool $assignMentor = false,
+        bool $assignContentUploader = false,
+    ): User {
         if (! $request->canApprove()) {
             throw new \InvalidArgumentException('This application cannot be approved in its current state.');
         }
@@ -120,7 +125,7 @@ class TeacherRegistrationService
             throw new \InvalidArgumentException('A user with this email already exists.');
         }
 
-        return DB::transaction(function () use ($request, $adminUserId, $adminNotes) {
+        return DB::transaction(function () use ($request, $adminUserId, $adminNotes, $assignMentor, $assignContentUploader) {
             $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
@@ -133,6 +138,14 @@ class TeacherRegistrationService
 
             $this->userGroupService->attachGroupByCode($user, User::ROLE_TEACHER);
 
+            if ($assignMentor) {
+                $this->userGroupService->attachGroupByCode($user, User::ROLE_MENTOR);
+            }
+
+            if ($assignContentUploader) {
+                $this->userGroupService->attachGroupByCode($user, User::ROLE_CONTENT_UPLOADER);
+            }
+
             $request->update([
                 'status' => TeacherRegistrationRequest::STATUS_APPROVED,
                 'admin_notes' => $adminNotes,
@@ -141,10 +154,20 @@ class TeacherRegistrationService
                 'user_id' => $user->id,
             ]);
 
-            TeacherRegistrationMailer::sendApproved($request->fresh());
-
             return $user;
         });
+    }
+
+    public function sendApprovedWelcomeEmail(
+        TeacherRegistrationRequest $request,
+        bool $assignMentor = false,
+        bool $assignContentUploader = false,
+    ): bool {
+        return TeacherRegistrationMailer::sendApproved(
+            $request->fresh(),
+            $assignMentor,
+            $assignContentUploader,
+        );
     }
 
     public function reject(TeacherRegistrationRequest $request, int $adminUserId, ?string $adminNotes = null): TeacherRegistrationRequest
@@ -180,6 +203,13 @@ class TeacherRegistrationService
             ->values()
             ->all();
 
+        $loginUser = null;
+        if ($request->user_id) {
+            $loginUser = $request->relationLoaded('user')
+                ? $request->user?->loadMissing('groups:id,code,name')
+                : User::query()->with('groups:id,code,name')->find($request->user_id);
+        }
+
         return [
             ...$request->toArray(),
             'status_label' => TeacherRegistrationRequest::statusLabel($request->status),
@@ -212,6 +242,14 @@ class TeacherRegistrationService
                 ? route('teacher-registration.profile', $request->profile_completion_token)
                 : null,
             'profile_completion_requested_at' => $request->profile_completion_requested_at?->toDateTimeString(),
+            'login_user' => $loginUser ? [
+                'id' => $loginUser->id,
+                'email' => $loginUser->email,
+                'groups' => $loginUser->groups->pluck('name', 'code')->all(),
+                'content_tasks_url' => $loginUser->isContentUploader()
+                    ? route('content.tasks.index')
+                    : null,
+            ] : null,
         ];
     }
 }

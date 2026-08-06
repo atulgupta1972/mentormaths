@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AcademicYear;
+use App\Models\ContentUploadTask;
 use App\Models\StudentEnrollment;
 use Illuminate\Http\Request;
 
@@ -91,10 +92,12 @@ class DashboardService
                     'upcoming_exams_count' => 0,
                     'pending_sets_count' => 0,
                     'completed_sets_count' => 0,
-                    'help_requests_count' => 0,
-                ],
-                'students' => [],
-                'helpRequests' => [],
+                'help_requests_count' => 0,
+                'content_publish_queue_count' => 0,
+            ],
+            'students' => [],
+            'helpRequests' => [],
+            'contentPublishQueue' => [],
             ];
         }
 
@@ -152,6 +155,28 @@ class DashboardService
         $pendingSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_pending']));
         $completedSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_completed']));
         $helpRequestsCount = count($helpRequests);
+        $contentPublishQueue = ContentUploadTask::query()
+            ->with([
+                'assignee:id,name',
+                'textbookChapter:id,chapter_number,title,textbook_id',
+                'textbookChapter.textbook:id,name,grade_level_id',
+                'textbookChapter.textbook.gradeLevel:id,name',
+            ])
+            ->where('status', ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH)
+            ->latest('submitted_at')
+            ->limit(20)
+            ->get()
+            ->map(fn (ContentUploadTask $task) => [
+                'id' => $task->id,
+                'assignee_name' => $task->assignee?->name,
+                'chapter_number' => $task->textbookChapter?->chapter_number,
+                'chapter_title' => $task->textbookChapter?->title,
+                'grade_name' => $task->textbookChapter?->textbook?->gradeLevel?->name,
+                'textbook_name' => $task->textbookChapter?->textbook?->name,
+                'submitted_at' => $task->submitted_at?->toIso8601String(),
+                'agreed_amount_inr' => $task->agreed_amount_inr,
+            ])
+            ->all();
 
         return [
             'activeYear' => $activeYear->only(['id', 'name']),
@@ -162,9 +187,11 @@ class DashboardService
                 'pending_sets_count' => $pendingSetsCount,
                 'completed_sets_count' => $completedSetsCount,
                 'help_requests_count' => $helpRequestsCount,
+                'content_publish_queue_count' => count($contentPublishQueue),
             ],
             'students' => $students,
             'helpRequests' => $helpRequests,
+            'contentPublishQueue' => $contentPublishQueue,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ];
     }

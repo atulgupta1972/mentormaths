@@ -38,6 +38,8 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user ? $user->loadMissing('groups:id,code,name') : null,
                 'isAdmin' => $user?->isAdmin() ?? false,
                 'isStudent' => $user?->isStudent() ?? false,
+                'isContentUploader' => $user?->isContentUploader() ?? false,
+                'isMentor' => $user?->isMentor() ?? false,
             ],
             'gradeContext' => fn () => $user?->isAdmin()
                 ? app(AdminGradeContext::class)->sharedPayload($request)

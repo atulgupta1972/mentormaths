@@ -12,6 +12,8 @@ class UserGroupService
     private const ROLE_PRIORITY = [
         User::ROLE_ADMIN,
         User::ROLE_TEACHER,
+        User::ROLE_MENTOR,
+        User::ROLE_CONTENT_UPLOADER,
         User::ROLE_PARENT,
         User::ROLE_STUDENT,
     ];

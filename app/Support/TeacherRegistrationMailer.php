@@ -87,15 +87,27 @@ class TeacherRegistrationMailer
         }
     }
 
-    public static function sendApproved(TeacherRegistrationRequest $request): bool
-    {
+    public static function sendApproved(
+        TeacherRegistrationRequest $request,
+        bool $assignMentor = false,
+        bool $assignContentUploader = false,
+    ): bool {
+        if (! str_contains($request->email, '@')) {
+            return false;
+        }
+
         try {
-            Mail::to($request->email)->send(new TeacherRegistrationApproved($request));
+            Mail::to($request->email)->send(new TeacherRegistrationApproved(
+                $request,
+                $assignMentor,
+                $assignContentUploader,
+            ));
 
             return true;
         } catch (\Throwable $e) {
             Log::error('Failed to send teacher approval email.', [
                 'teacher_registration_request_id' => $request->id,
+                'email' => $request->email,
                 'error' => $e->getMessage(),
             ]);
 

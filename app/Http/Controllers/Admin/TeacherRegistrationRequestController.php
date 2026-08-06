@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\TeacherRegistrationRequest;
+use App\Models\User;
 use App\Services\TeacherRegistrationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -50,7 +51,7 @@ class TeacherRegistrationRequestController extends Controller
 
     public function show(TeacherRegistrationRequest $teacherRegistration): Response
     {
-        $teacherRegistration->load(['reviewer:id,name', 'user:id,name,email']);
+        $teacherRegistration->load(['reviewer:id,name', 'user.groups:id,code,name']);
 
         $boards = Board::query()->orderBy('name')->get(['id', 'name', 'code']);
         $gradeLevels = GradeLevel::query()
@@ -121,21 +122,62 @@ class TeacherRegistrationRequestController extends Controller
     {
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string', 'max:2000'],
+            'assign_mentor' => ['sometimes', 'boolean'],
+            'assign_content_uploader' => ['sometimes', 'boolean'],
         ]);
 
         try {
-            $this->service->approve(
+            $user = $this->service->approve(
                 $teacherRegistration,
                 $request->user()->id,
                 $validated['admin_notes'] ?? null,
+                (bool) ($validated['assign_mentor'] ?? false),
+                (bool) ($validated['assign_content_uploader'] ?? false),
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
+        $teacherRegistration->refresh();
+
+        $emailSent = $this->service->sendApprovedWelcomeEmail(
+            $teacherRegistration,
+            (bool) ($validated['assign_mentor'] ?? false),
+            (bool) ($validated['assign_content_uploader'] ?? false),
+        );
+
         return redirect()
             ->route('admin.teacher-registrations.show', $teacherRegistration)
-            ->with('success', 'Mentor application approved. They can log in with the email and password they registered with.');
+            ->with('success', 'Mentor application approved.')
+            ->with('generated_login', [
+                'email' => $teacherRegistration->email,
+                'user_chose_password' => true,
+                'assign_mentor' => (bool) ($validated['assign_mentor'] ?? false),
+                'assign_content_uploader' => (bool) ($validated['assign_content_uploader'] ?? false),
+            ])
+            ->with('email_sent', $emailSent);
+    }
+
+    public function resendWelcomeEmail(TeacherRegistrationRequest $teacherRegistration): RedirectResponse
+    {
+        if ($teacherRegistration->status !== TeacherRegistrationRequest::STATUS_APPROVED) {
+            return back()->with('error', 'Welcome email can only be sent for approved applications.');
+        }
+
+        $teacherRegistration->loadMissing('user.groups:id,code,name');
+
+        $assignMentor = $teacherRegistration->user?->inGroup(User::ROLE_MENTOR) ?? false;
+        $assignContentUploader = $teacherRegistration->user?->inGroup(User::ROLE_CONTENT_UPLOADER) ?? false;
+
+        $emailSent = $this->service->sendApprovedWelcomeEmail(
+            $teacherRegistration,
+            $assignMentor,
+            $assignContentUploader,
+        );
+
+        return back()
+            ->with('success', $emailSent ? 'Welcome email sent again.' : 'Could not send email — check mail settings or share login details manually.')
+            ->with('email_sent', $emailSent);
     }
 
     public function reject(Request $request, TeacherRegistrationRequest $teacherRegistration): RedirectResponse

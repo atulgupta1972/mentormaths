@@ -24,6 +24,10 @@ class User extends Authenticatable
 
     public const ROLE_PARENT = 'parent';
 
+    public const ROLE_MENTOR = 'mentor';
+
+    public const ROLE_CONTENT_UPLOADER = 'content_uploader';
+
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
@@ -73,6 +77,24 @@ class User extends Authenticatable
     public function isParent(): bool
     {
         return $this->inGroup(self::ROLE_PARENT) || $this->role === self::ROLE_PARENT;
+    }
+
+    public function isMentor(): bool
+    {
+        return $this->inGroup(self::ROLE_MENTOR);
+    }
+
+    public function isContentUploader(): bool
+    {
+        return $this->inGroup(self::ROLE_CONTENT_UPLOADER);
+    }
+
+    public function isContentTeamMember(): bool
+    {
+        return $this->isAdmin()
+            || $this->isTeacher()
+            || $this->isMentor()
+            || $this->isContentUploader();
     }
 
     public function isActiveAccount(): bool

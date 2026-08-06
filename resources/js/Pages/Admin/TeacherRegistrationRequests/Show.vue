@@ -14,7 +14,11 @@ const props = defineProps({
 
 const page = usePage();
 
-const approveForm = useForm({ admin_notes: props.application.admin_notes ?? '' });
+const approveForm = useForm({
+    admin_notes: props.application.admin_notes ?? '',
+    assign_mentor: props.application.interested_in_doubt_solving || props.application.agreed_to_mentoring_program,
+    assign_content_uploader: props.application.interested_in_book_content_upload,
+});
 const rejectForm = useForm({ admin_notes: props.application.admin_notes ?? '' });
 const counterForm = useForm({
     counter_hourly_rate_inr: props.application.counter_hourly_rate_inr ?? props.application.proposed_hourly_rate_inr ?? '',
@@ -23,6 +27,10 @@ const counterForm = useForm({
 const profileForm = useForm({
     profile_completion_message: '',
 });
+const resendWelcomeForm = useForm({});
+
+const generatedLogin = computed(() => page.props.flash?.generated_login ?? null);
+const isApproved = computed(() => props.application.status === 'approved');
 
 const canApprove = computed(() =>
     ['pending', 'offer_accepted'].includes(props.application.status),
@@ -53,6 +61,27 @@ const canReject = computed(() =>
             <div class="mx-auto max-w-4xl space-y-6 px-4 sm:px-6 lg:px-8">
                 <div v-if="page.props.flash?.success" class="rounded-md bg-green-50 px-4 py-3 text-sm text-green-800">{{ page.props.flash.success }}</div>
                 <div v-if="page.props.flash?.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">{{ page.props.flash.error }}</div>
+
+                <div
+                    v-if="generatedLogin || application.login_user"
+                    class="rounded-md border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950"
+                >
+                    <p class="font-semibold">Login created</p>
+                    <p class="mt-1"><strong>Email (login ID):</strong> {{ generatedLogin?.email || application.login_user?.email }}</p>
+                    <p><strong>Password:</strong> Chosen during registration (not stored here).</p>
+                    <p v-if="generatedLogin?.assign_content_uploader || application.login_user?.groups?.content_uploader" class="mt-1">
+                        <strong>Content uploader:</strong>
+                        <a
+                            v-if="application.login_user?.content_tasks_url"
+                            :href="application.login_user.content_tasks_url"
+                            class="text-indigo-700 underline"
+                        >My content tasks</a>
+                    </p>
+                    <p v-if="page.props.flash?.email_sent" class="mt-2 text-green-800">Welcome email sent to the login address.</p>
+                    <p v-else-if="generatedLogin || application.login_user" class="mt-2 text-red-800">
+                        Email could not be sent — share login details manually or use Resend below.
+                    </p>
+                </div>
 
                 <div class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <div class="flex flex-wrap items-center gap-3">
@@ -161,6 +190,17 @@ const canReject = computed(() =>
                     <InputLabel value="Admin notes" />
                     <textarea v-model="approveForm.admin_notes" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
 
+                    <div class="mt-4 space-y-2 text-sm">
+                        <label class="flex items-center gap-2">
+                            <input v-model="approveForm.assign_mentor" type="checkbox" class="rounded border-gray-300">
+                            Assign as mentor (student doubt resolution)
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <input v-model="approveForm.assign_content_uploader" type="checkbox" class="rounded border-gray-300">
+                            Assign as content uploader (textbook MCQ upload)
+                        </label>
+                    </div>
+
                     <div class="mt-4 flex flex-wrap gap-3">
                         <PrimaryButton v-if="canApprove" type="button" :disabled="approveForm.processing" @click="approveForm.post(route('admin.teacher-registrations.approve', application.id))">
                             Approve &amp; create login
@@ -169,6 +209,24 @@ const canReject = computed(() =>
                             Reject
                         </DangerButton>
                     </div>
+                </div>
+
+                <div v-if="isApproved && application.login_user" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
+                    <h3 class="font-semibold text-gray-900">Account</h3>
+                    <p class="mt-1 text-sm text-gray-600">
+                        User #{{ application.login_user.id }} · {{ application.login_user.email }}
+                    </p>
+                    <p v-if="Object.keys(application.login_user.groups || {}).length" class="mt-1 text-sm text-gray-600">
+                        Groups: {{ Object.values(application.login_user.groups).join(', ') }}
+                    </p>
+                    <PrimaryButton
+                        class="mt-4"
+                        type="button"
+                        :disabled="resendWelcomeForm.processing"
+                        @click="resendWelcomeForm.post(route('admin.teacher-registrations.resend-welcome', application.id))"
+                    >
+                        Resend welcome email
+                    </PrimaryButton>
                 </div>
             </div>
         </div>

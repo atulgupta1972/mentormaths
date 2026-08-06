@@ -13,17 +13,29 @@ class TeacherRegistrationApproved extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public TeacherRegistrationRequest $request) {}
+    public function __construct(
+        public TeacherRegistrationRequest $request,
+        public bool $assignMentor = false,
+        public bool $assignContentUploader = false,
+    ) {}
 
     public function envelope(): Envelope
     {
-        return new Envelope(
-            subject: 'Welcome to Mentor Maths — teacher account approved',
-        );
+        $subject = $this->assignContentUploader
+            ? 'Welcome to Mentor Maths — content uploader account approved'
+            : 'Welcome to Mentor Maths — teacher account approved';
+
+        return new Envelope(subject: $subject);
     }
 
     public function content(): Content
     {
-        return new Content(view: 'emails.teacher-registration-approved');
+        return new Content(
+            view: 'emails.teacher-registration-approved',
+            with: [
+                'loginUrl' => route('login'),
+                'contentTasksUrl' => route('content.tasks.index'),
+            ],
+        );
     }
 }

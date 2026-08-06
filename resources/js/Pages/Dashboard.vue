@@ -43,6 +43,7 @@ const props = defineProps({
     },
     students: { type: Array, default: () => [] },
     helpRequests: { type: Array, default: () => [] },
+    contentPublishQueue: { type: Array, default: () => [] },
     resolutionItems: { type: Array, default: () => [] },
     resolutionCount: { type: Number, default: 0 },
     weeklyReportEmails: { type: String, default: '' },
@@ -582,6 +583,35 @@ const adminSetStatusClass = (set) => {
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Done</p>
                         </div>
                     </div>
+
+                    <section
+                        v-if="contentPublishQueue.length"
+                        class="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm"
+                    >
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-sm font-semibold text-amber-950">
+                                Content ready to publish · {{ contentPublishQueue.length }}
+                            </p>
+                            <Link :href="route('admin.content-tasks.index')" class="text-xs font-medium text-indigo-600 hover:underline">
+                                All content tasks →
+                            </Link>
+                        </div>
+                        <ul class="mt-3 space-y-2">
+                            <li
+                                v-for="item in contentPublishQueue"
+                                :key="item.id"
+                                class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/80 px-3 py-2 text-sm"
+                            >
+                                <span>
+                                    {{ item.grade_name }} · Ch {{ item.chapter_number }} — {{ item.chapter_title }}
+                                    <span class="text-gray-500">· {{ item.assignee_name }}</span>
+                                </span>
+                                <Link :href="route('admin.content-tasks.show', item.id)" class="text-indigo-600 hover:underline">
+                                    Review →
+                                </Link>
+                            </li>
+                        </ul>
+                    </section>
 
                     <section
                         v-if="showHelpRequests && helpRequests.length"
