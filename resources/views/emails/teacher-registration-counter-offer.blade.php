@@ -8,6 +8,7 @@
 </p>
 
 @if ($request->counter_offer_message)
+    <p><strong>Message from Mentor Maths:</strong></p>
     <p>{{ $request->counter_offer_message }}</p>
 @endif
 

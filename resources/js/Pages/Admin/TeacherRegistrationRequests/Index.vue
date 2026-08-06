@@ -47,7 +47,8 @@ defineProps({
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Tracks</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">City / State</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Languages</th>
-                                <th class="px-4 py-2 text-left font-medium text-gray-600">Rate</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-600">Content rate</th>
+                                <th class="px-4 py-2 text-left font-medium text-gray-600">Mentoring rate</th>
                                 <th class="px-4 py-2 text-left font-medium text-gray-600">Status</th>
                             </tr>
                         </thead>
@@ -81,9 +82,20 @@ defineProps({
                                     <span v-else class="text-amber-700">Incomplete</span>
                                 </td>
                                 <td class="px-4 py-2 text-gray-600">
-                                    <span v-if="row.proposed_hourly_rate_inr">₹{{ row.proposed_hourly_rate_inr }}/hr</span>
-                                    <span v-else-if="row.proposed_rate_per_set_inr">₹{{ row.proposed_rate_per_set_inr }}/set</span>
-                                    <span v-else>—</span>
+                                    <span v-if="row.interested_in_content_creation && row.proposed_rate_per_set_inr">
+                                        ₹{{ row.proposed_rate_per_set_inr }}/set
+                                    </span>
+                                    <span v-else class="text-gray-400">—</span>
+                                </td>
+                                <td class="px-4 py-2 text-gray-600">
+                                    <template v-if="row.interested_in_doubt_solving">
+                                        <span v-if="row.proposed_hourly_rate_inr">₹{{ row.proposed_hourly_rate_inr }}/hr</span>
+                                        <span v-if="row.counter_hourly_rate_inr" class="block text-xs text-amber-800">
+                                            Counter ₹{{ row.counter_hourly_rate_inr }}/hr
+                                        </span>
+                                        <span v-if="!row.proposed_hourly_rate_inr && !row.counter_hourly_rate_inr" class="text-gray-400">—</span>
+                                    </template>
+                                    <span v-else class="text-gray-400">—</span>
                                 </td>
                                 <td class="px-4 py-2 capitalize text-gray-700">{{ row.status.replace(/_/g, ' ') }}</td>
                             </tr>

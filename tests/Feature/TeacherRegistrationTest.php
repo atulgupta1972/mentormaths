@@ -269,7 +269,10 @@ class TeacherRegistrationTest extends TestCase
         $application->refresh();
 
         $this->assertNotNull($application->profile_completion_token);
-        Mail::assertSent(\App\Mail\TeacherRegistrationCompleteProfile::class);
+        $this->assertSame('Please add your city and languages.', $application->profile_completion_message);
+        Mail::assertSent(\App\Mail\TeacherRegistrationCompleteProfile::class, function ($mail) {
+            return str_contains($mail->render(), 'Please add your city and languages.');
+        });
 
         $this->post(route('teacher-registration.profile.update', $application->profile_completion_token), [
             'city' => 'Jaipur',

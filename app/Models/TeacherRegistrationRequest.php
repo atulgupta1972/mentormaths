@@ -89,6 +89,8 @@ class TeacherRegistrationRequest extends Model
         'counter_offer_message',
         'counter_offer_token',
         'profile_completion_token',
+        'profile_completion_requested_at',
+        'profile_completion_message',
         'counter_offer_sent_at',
         'offer_responded_at',
         'offer_response',

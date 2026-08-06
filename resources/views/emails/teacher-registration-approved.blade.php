@@ -34,4 +34,9 @@
     <p>Agreed doubt-solving rate: ₹{{ number_format($request->agreedHourlyRateInr()) }}/hour.</p>
 @endif
 
+@if ($request->admin_notes)
+    <p><strong>Message from Mentor Maths:</strong></p>
+    <p>{{ $request->admin_notes }}</p>
+@endif
+
 <p>— Mentor Maths</p>

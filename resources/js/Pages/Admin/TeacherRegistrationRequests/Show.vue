@@ -153,8 +153,8 @@ const canReject = computed(() =>
                         Send a one-time link so they can add city, state, country (default India), and teaching languages.
                     </p>
                     <div class="mt-4">
-                        <InputLabel value="Optional note in email" />
-                        <textarea v-model="profileForm.profile_completion_message" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" placeholder="e.g. Please add your city and state — we are building the mentor directory." />
+                        <InputLabel value="Message to mentor (included in email)" />
+                        <textarea v-model="profileForm.profile_completion_message" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" placeholder="e.g. Please call us back on … or add your city and state." />
                     </div>
                     <PrimaryButton
                         class="mt-4"
@@ -176,8 +176,8 @@ const canReject = computed(() =>
                             <TextInput v-model="counterForm.counter_hourly_rate_inr" type="number" min="100" class="mt-1 block w-full" />
                         </div>
                         <div class="sm:col-span-2">
-                            <InputLabel value="Message to mentor" />
-                            <textarea v-model="counterForm.counter_offer_message" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
+                            <InputLabel value="Message to mentor (included in email)" />
+                            <textarea v-model="counterForm.counter_offer_message" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" placeholder="e.g. Please call us to discuss before accepting." />
                         </div>
                     </div>
                     <PrimaryButton class="mt-4" type="button" :disabled="counterForm.processing" @click="counterForm.post(route('admin.teacher-registrations.counter-offer', application.id))">
@@ -187,8 +187,8 @@ const canReject = computed(() =>
                 </div>
 
                 <div v-if="canApprove || canReject" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
-                    <InputLabel value="Admin notes" />
-                    <textarea v-model="approveForm.admin_notes" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
+                    <InputLabel value="Admin notes (included in approval email)" />
+                    <textarea v-model="approveForm.admin_notes" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" placeholder="e.g. Please call us on … before you start." />
 
                     <div class="mt-4 space-y-2 text-sm">
                         <label class="flex items-center gap-2">

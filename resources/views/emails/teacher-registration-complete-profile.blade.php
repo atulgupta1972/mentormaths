@@ -11,6 +11,7 @@
 </ul>
 
 @if ($request->profile_completion_message)
+    <p><strong>Message from Mentor Maths:</strong></p>
     <p>{{ $request->profile_completion_message }}</p>
 @endif
 
