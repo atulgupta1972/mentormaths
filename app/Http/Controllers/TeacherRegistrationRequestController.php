@@ -189,7 +189,7 @@ class TeacherRegistrationRequestController extends Controller
             'boards' => Board::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'gradeLevels' => GradeLevel::query()
                 ->where('is_active', true)
-                ->whereBetween('sort_order', [5, 12])
+                ->whereBetween('sort_order', [4, 12])
                 ->orderBy('sort_order')
                 ->get(['id', 'name', 'sort_order']),
             'preferredDayOptions' => [

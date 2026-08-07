@@ -227,9 +227,9 @@ class TeacherRegistrationTest extends TestCase
         $this->get(route('teacher-registration.create'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->has('gradeLevels', 8)
-                ->where('gradeLevels.0.sort_order', 5)
-                ->where('gradeLevels.7.sort_order', 12));
+                ->has('gradeLevels', 9)
+                ->where('gradeLevels.0.sort_order', 4)
+                ->where('gradeLevels.8.sort_order', 12));
     }
 
     public function test_content_uploader_approval_email_shows_content_rate_not_doubt_rate(): void
