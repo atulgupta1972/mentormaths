@@ -109,8 +109,14 @@ const teachingGroup = computed(() => ({
         {
             label: 'Content upload tasks',
             href: route('admin.content-tasks.index'),
-            active: route().current('admin.content-tasks.*') || route().current('admin.content-rate-cards.*'),
+            active: route().current('admin.content-tasks.*'),
             show: isAdmin.value && route().has('admin.content-tasks.index'),
+        },
+        {
+            label: 'Content rate cards',
+            href: route('admin.content-rate-cards.index'),
+            active: route().current('admin.content-rate-cards.*'),
+            show: isAdmin.value && route().has('admin.content-rate-cards.index'),
         },
         {
             label: 'Formula bank',
