@@ -105,7 +105,41 @@ class ContentTextbookImportTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('ContentUploader/Tasks/Show')
                 ->where('task.status', ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS)
-                ->has('verification.questions', 1));
+                ->has('verification.questions', 1)
+                ->where('verification.questions.0.question_text', 'What is 2 + 2?')
+                ->has('verification.questions.0.options', 4)
+                ->where('verification.questions.0.options.1.is_correct', true));
+
+        $questionId = ContentUploadTask::query()->findOrFail($task->id)
+            ->textbookChapter
+            ->mcqWorksheetIds();
+
+        $worksheetId = $questionId[0];
+        $savedQuestionId = \App\Models\Worksheet::query()->findOrFail($worksheetId)->questions()->firstOrFail()->id;
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.verification-question', $task), [
+                'run_id' => \App\Models\ContentVerificationRun::query()->where('content_upload_task_id', $task->id)->value('id'),
+                'question_id' => $savedQuestionId,
+                'question_text' => 'What is two plus two?',
+                'explanation' => 'Adding gives four.',
+                'method_hint' => 'Use addition',
+                'difficulty' => 'Easy',
+                'options' => [
+                    ['id' => null, 'option_text' => '3', 'is_correct' => false],
+                    ['id' => null, 'option_text' => '4', 'is_correct' => true],
+                    ['id' => null, 'option_text' => '5', 'is_correct' => false],
+                    ['id' => null, 'option_text' => '6', 'is_correct' => false],
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('questions', [
+            'id' => $savedQuestionId,
+            'question_text' => 'What is two plus two?',
+            'explanation' => 'Adding gives four.',
+        ]);
     }
 
     public function test_content_uploader_without_student_profile_is_sent_to_tasks_from_dashboard(): void

@@ -122,6 +122,43 @@ class ContentTaskController extends Controller
         return back();
     }
 
+    public function saveVerificationQuestion(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+            'question_text' => ['required', 'string', 'max:5000'],
+            'explanation' => ['nullable', 'string', 'max:5000'],
+            'method_hint' => ['nullable', 'string', 'max:2000'],
+            'difficulty' => ['nullable', 'string', 'max:64'],
+            'options' => ['required', 'array', 'min:2', 'max:8'],
+            'options.*.id' => ['nullable', 'integer'],
+            'options.*.option_text' => ['required', 'string', 'max:2000'],
+            'options.*.is_correct' => ['required', 'boolean'],
+        ]);
+
+        $run = ContentVerificationRun::query()->findOrFail($validated['run_id']);
+
+        if ($run->content_upload_task_id !== $contentTask->id) {
+            abort(403);
+        }
+
+        try {
+            $this->verificationService->saveQuestion(
+                $run,
+                (int) $validated['question_id'],
+                $validated,
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Question saved and marked verified.');
+    }
+
     public function completeVerification(Request $request, ContentUploadTask $contentTask): RedirectResponse
     {
         $this->authorizeTask($contentTask, $request);

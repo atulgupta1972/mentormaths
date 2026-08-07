@@ -371,6 +371,7 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/tasks/{contentTask}/agree', [ContentTaskController::class, 'agree'])->name('tasks.agree');
     Route::post('/tasks/{contentTask}/mark-uploaded', [ContentTaskController::class, 'markUploaded'])->name('tasks.mark-uploaded');
     Route::post('/tasks/{contentTask}/verification-check', [ContentTaskController::class, 'saveVerificationCheck'])->name('tasks.verification-check');
+    Route::post('/tasks/{contentTask}/verification-question', [ContentTaskController::class, 'saveVerificationQuestion'])->name('tasks.verification-question');
     Route::post('/tasks/{contentTask}/complete-verification', [ContentTaskController::class, 'completeVerification'])->name('tasks.complete-verification');
     Route::post('/tasks/{contentTask}/submit-for-publish', [ContentTaskController::class, 'submitForPublish'])->name('tasks.submit-for-publish');
     Route::post('/tasks/{contentTask}/ping-session', [ContentTaskController::class, 'pingSession'])->name('tasks.ping-session');
