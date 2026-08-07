@@ -139,6 +139,9 @@ onUnmounted(() => clearInterval(pingTimer));
                         <p class="mt-1 text-sm text-gray-600">
                             {{ verificationSummary.verified }} verified · {{ verificationSummary.unverified }} remaining · {{ verificationSummary.total }} total
                         </p>
+                        <p v-if="verificationSummary.total === 0" class="mt-2 text-sm text-amber-800">
+                            No published MCQ questions found yet. Open the textbook chapter, tick Approved, click Save MCQ sets, then mark upload complete again.
+                        </p>
                     </div>
 
                     <div

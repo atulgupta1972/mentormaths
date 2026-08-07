@@ -61,6 +61,53 @@ class ContentTextbookImportTest extends TestCase
                 ->has('chapter.items', 1));
     }
 
+    public function test_content_uploader_can_mark_upload_complete_and_open_verification(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedUploaderWithChapter(withTask: true);
+
+        $json = json_encode([
+            'questions' => [
+                [
+                    'topic' => 'Addition',
+                    'question' => 'What is 2 + 2?',
+                    'options' => ['3', '4', '5', '6'],
+                    'correct_index' => 1,
+                    'hint' => 'Add',
+                    'explanation' => '2+2=4',
+                    'difficulty' => 'Easy',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->actingAs($uploader)
+            ->post(route('content.textbooks.import-mcq', $chapter), ['json' => $json])
+            ->assertRedirect();
+
+        $chapter->refresh();
+
+        $this->actingAs($uploader)
+            ->post(route('content.textbooks.publish', $chapter), [
+                'items' => $chapter->extraction_items,
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($uploader)
+            ->from(route('content.tasks.show', $task))
+            ->post(route('content.tasks.mark-uploaded', $task))
+            ->assertRedirect(route('content.tasks.show', $task))
+            ->assertSessionHas('success');
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('ContentUploader/Tasks/Show')
+                ->where('task.status', ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS)
+                ->has('verification.questions', 1));
+    }
+
     public function test_content_uploader_without_student_profile_is_sent_to_tasks_from_dashboard(): void
     {
         $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
@@ -72,9 +119,9 @@ class ContentTextbookImportTest extends TestCase
     }
 
     /**
-     * @return array{0: User, 1: TextbookChapter}
+     * @return array{0: User, 1: TextbookChapter, 2?: ContentUploadTask}
      */
-    private function seedUploaderWithChapter(): array
+    private function seedUploaderWithChapter(bool $withTask = false): array
     {
         $year = AcademicYear::query()->create([
             'name' => '2026-27',
@@ -123,7 +170,7 @@ class ContentTextbookImportTest extends TestCase
             'created_by' => $admin->id,
         ]);
 
-        ContentUploadTask::query()->create([
+        $task = ContentUploadTask::query()->create([
             'textbook_chapter_id' => $chapter->id,
             'assigned_to_user_id' => $uploader->id,
             'assigned_by_user_id' => $admin->id,
@@ -132,6 +179,10 @@ class ContentTextbookImportTest extends TestCase
             'agreed_amount_inr' => 5000,
             'agreed_at' => now(),
         ]);
+
+        if ($withTask) {
+            return [$uploader, $chapter, $task];
+        }
 
         return [$uploader, $chapter];
     }

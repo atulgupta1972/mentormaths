@@ -39,10 +39,13 @@ class ContentVerificationService
             ->get()
             ->keyBy('question_id');
 
-        $questions = Question::query()
-            ->whereIn('id', $questionIds)
-            ->orderByRaw('FIELD(id, '.implode(',', $questionIds ?: [0]).')')
-            ->get(['id', 'question_text', 'difficulty']);
+        $questions = $questionIds === []
+            ? collect()
+            : Question::query()
+                ->whereIn('id', $questionIds)
+                ->get(['id', 'question_text', 'difficulty'])
+                ->sortBy(fn (Question $question) => array_search($question->id, $questionIds, true))
+                ->values();
 
         $rows = $questions->map(function (Question $question) use ($checks) {
             $check = $checks->get($question->id);
@@ -184,12 +187,20 @@ class ContentVerificationService
     private function questionIdsForChapter(ContentUploadTask $task): array
     {
         $chapter = $task->textbookChapter;
-        $chapter->loadMissing(['mcqWorksheet.questions', 'textbook']);
+
+        if (! $chapter) {
+            return [];
+        }
+
+        $chapter->loadMissing(['textbook']);
 
         $ids = [];
 
         foreach ($chapter->mcqWorksheetIds() as $worksheetId) {
-            $worksheet = \App\Models\Worksheet::query()->with(['questions' => fn ($q) => $q->orderByPivot('sort_order')])->find($worksheetId);
+            $worksheet = \App\Models\Worksheet::query()
+                ->with(['questions' => fn ($q) => $q->orderByPivot('sort_order')])
+                ->find($worksheetId);
+
             if ($worksheet) {
                 foreach ($worksheet->questions as $question) {
                     $ids[] = $question->id;

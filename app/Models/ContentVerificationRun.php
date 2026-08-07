@@ -42,9 +42,4 @@ class ContentVerificationRun extends Model
     {
         return $this->hasMany(ContentVerificationCheck::class);
     }
-
-    public function task(): BelongsTo
-    {
-        return $this->belongsTo(ContentUploadTask::class, 'content_upload_task_id');
-    }
 }
