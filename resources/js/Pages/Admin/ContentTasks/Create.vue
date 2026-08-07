@@ -2,6 +2,7 @@
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
@@ -12,11 +13,14 @@ const props = defineProps({
     gradeLevel: { type: Object, default: null },
     textbooks: { type: Array, default: () => [] },
     syllabusChapters: { type: Array, default: () => [] },
+    classDefaultRateInr: { type: Number, default: 0 },
 });
 
 const page = usePage();
 const useNewBook = ref(props.textbooks.length === 0);
 const selectedTextbookId = ref(props.textbooks[0]?.id ?? '');
+const rateSectionRef = ref(null);
+const showRateRequired = ref(false);
 
 watch(
     () => props.textbooks,
@@ -123,11 +127,7 @@ const hasMatrixRate = computed(() => {
     return selected.every((ch) => Number(ch.default_amount_inr) > 0);
 });
 
-const canSubmit = computed(() => {
-    if (!form.assigned_to_user_id || form.syllabus_chapter_ids.length === 0) {
-        return false;
-    }
-
+const hasValidRate = computed(() => {
     if (form.offered_amount_inr !== '' && Number(form.offered_amount_inr) >= 100) {
         return true;
     }
@@ -135,18 +135,46 @@ const canSubmit = computed(() => {
     return hasMatrixRate.value;
 });
 
+const needsRateOverride = computed(() => {
+    return form.syllabus_chapter_ids.length > 0 && !hasMatrixRate.value;
+});
+
+const canSubmit = computed(() => {
+    return Boolean(form.assigned_to_user_id) && form.syllabus_chapter_ids.length > 0;
+});
+
 const submitBlockedReason = computed(() => {
-    if (canSubmit.value || form.syllabus_chapter_ids.length === 0) {
-        return '';
+    if (!form.assigned_to_user_id) {
+        return 'Select a content uploader.';
     }
 
-    return 'Set rates in the rate matrix first, or enter a rate override (₹) above.';
+    if (form.syllabus_chapter_ids.length === 0) {
+        return 'Select at least one syllabus chapter.';
+    }
+
+    if (!hasValidRate.value) {
+        return 'Enter a rate override (₹) — no rate is set in the matrix for the selected chapters.';
+    }
+
+    return '';
 });
 
 const submit = () => {
     if (!canSubmit.value || form.processing) {
         return;
     }
+
+    if (!hasValidRate.value) {
+        showRateRequired.value = true;
+        form.setError(
+            'offered_amount_inr',
+            'Enter a rate (₹) per chapter — no rate is set in the matrix for this class.',
+        );
+        rateSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+    }
+
+    showRateRequired.value = false;
 
     form.transform((data) => ({
         ...data,
@@ -156,6 +184,19 @@ const submit = () => {
         offered_amount_inr: data.offered_amount_inr === '' ? null : Number(data.offered_amount_inr),
     })).post(route('admin.content-tasks.store'));
 };
+
+watch(() => form.offered_amount_inr, () => {
+    if (hasValidRate.value) {
+        showRateRequired.value = false;
+        form.clearErrors('offered_amount_inr');
+    }
+});
+
+const applySuggestedRate = () => {
+    form.offered_amount_inr = props.classDefaultRateInr > 0 ? props.classDefaultRateInr : 5000;
+    showRateRequired.value = false;
+    form.clearErrors('offered_amount_inr');
+};
 </script>
 
 <template>
@@ -163,9 +204,17 @@ const submit = () => {
 
     <AuthenticatedLayout>
         <template #header>
-            <div>
-                <h2 class="text-xl font-semibold text-gray-800">Assign chapters to uploader</h2>
-                <p class="text-sm text-gray-500">Class → textbook master → syllabus chapters. One uploader per chapter.</p>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-800">Assign chapters to uploader</h2>
+                    <p class="text-sm text-gray-500">Class → textbook master → syllabus chapters. One uploader per chapter.</p>
+                </div>
+                <Link
+                    :href="route('admin.content-rate-cards.index')"
+                    class="rounded-md border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-900 hover:bg-indigo-100"
+                >
+                    Open rate matrix →
+                </Link>
             </div>
         </template>
 
@@ -276,9 +325,63 @@ const submit = () => {
                         No syllabus chapters found for {{ gradeLevel.name }}. Check academic year and syllabus setup.
                     </div>
 
-                    <div>
-                        <InputLabel value="Rate override (₹, optional — applies to all selected chapters)" />
-                        <input v-model="form.offered_amount_inr" type="number" min="100" class="mt-1 block w-full rounded-md border-gray-300 text-sm" placeholder="Leave blank to use matrix per chapter">
+                    <div
+                        v-if="needsRateOverride"
+                        class="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-4 text-sm text-amber-950"
+                    >
+                        <p class="text-base font-semibold">Step 1: Set payment rate (required)</p>
+                        <p class="mt-2">
+                            Chapters show <strong>—</strong> because no rate is configured yet. Choose one:
+                        </p>
+                        <ol class="mt-2 list-decimal space-y-1 pl-5">
+                            <li>
+                                Type an amount in <strong>Rate override</strong> below (e.g. 5000), then create assignments.
+                            </li>
+                            <li>
+                                Or open the
+                                <Link :href="route('admin.content-rate-cards.index')" class="font-semibold underline">rate matrix</Link>,
+                                add a row for <strong>{{ gradeLevel.name }}</strong>, then return here.
+                            </li>
+                        </ol>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <SecondaryButton type="button" @click="applySuggestedRate">
+                                Use {{ formatInr(classDefaultRateInr > 0 ? classDefaultRateInr : 5000) }} in override
+                            </SecondaryButton>
+                            <Link
+                                :href="route('admin.content-rate-cards.index')"
+                                class="inline-flex items-center rounded-md border border-amber-600 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-amber-900 hover:bg-amber-100"
+                            >
+                                Open rate matrix
+                            </Link>
+                        </div>
+                    </div>
+
+                    <div ref="rateSectionRef">
+                        <InputLabel
+                            :value="needsRateOverride
+                                ? 'Rate override (₹, required — no matrix rate for this class)'
+                                : 'Rate override (₹, optional — applies to all selected chapters)'"
+                        />
+                        <div class="mt-1 flex flex-wrap items-center gap-2">
+                            <input
+                                v-model="form.offered_amount_inr"
+                                type="number"
+                                min="100"
+                                class="block w-full min-w-[12rem] flex-1 rounded-md text-sm"
+                                :class="showRateRequired || form.errors.offered_amount_inr
+                                    ? 'border-amber-500 ring-2 ring-amber-300'
+                                    : 'border-gray-300'"
+                                :placeholder="needsRateOverride ? 'Enter amount, e.g. 5000' : 'Leave blank to use matrix per chapter'"
+                            >
+                            <SecondaryButton
+                                v-if="needsRateOverride && !hasValidRate"
+                                type="button"
+                                class="shrink-0"
+                                @click="applySuggestedRate"
+                            >
+                                Fill ₹5,000
+                            </SecondaryButton>
+                        </div>
                         <InputError :message="form.errors.offered_amount_inr" class="mt-1" />
                     </div>
 
@@ -299,7 +402,10 @@ const submit = () => {
                         </PrimaryButton>
                         <Link :href="route('admin.content-tasks.index')" class="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700">Cancel</Link>
                     </div>
-                    <p v-if="submitBlockedReason" class="text-sm text-amber-800">{{ submitBlockedReason }}</p>
+                    <p v-if="!canSubmit && !form.processing" class="text-sm text-amber-800">{{ submitBlockedReason }}</p>
+                    <p v-else-if="needsRateOverride && !hasValidRate && !form.processing" class="text-sm text-amber-800">
+                        Enter a rate override (₹) above, then click Create assignment(s).
+                    </p>
                     <p v-if="form.processing" class="text-sm text-slate-600">Saving assignments and sending email…</p>
                 </form>
             </div>

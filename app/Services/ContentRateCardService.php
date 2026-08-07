@@ -76,4 +76,16 @@ class ContentRateCardService
 
         return $this->resolveAmountForChapter($placeholder, $contentType);
     }
+
+    public function resolveClassDefaultAmount(int $gradeLevelId, string $contentType = ContentRateCard::TYPE_TEXTBOOK_CHAPTER_MCQ): int
+    {
+        $card = ContentRateCard::query()
+            ->where('content_type', $contentType)
+            ->where('grade_level_id', $gradeLevelId)
+            ->whereNull('syllabus_chapter_id')
+            ->orderByDesc('updated_at')
+            ->first();
+
+        return $card?->default_amount_inr ?? 0;
+    }
 }

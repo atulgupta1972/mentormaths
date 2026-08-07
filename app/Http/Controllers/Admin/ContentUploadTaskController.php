@@ -181,6 +181,9 @@ class ContentUploadTaskController extends Controller
             'gradeLevel' => $gradeLevel?->only(['id', 'name']),
             'textbooks' => $textbooks,
             'syllabusChapters' => $syllabusChapters,
+            'classDefaultRateInr' => $gradeLevel
+                ? $this->rateCardService->resolveClassDefaultAmount($gradeLevel->id)
+                : 0,
         ]);
     }
 
@@ -205,6 +208,34 @@ class ContentUploadTaskController extends Controller
 
         if (! $uploader->isContentUploader()) {
             return back()->with('error', 'Selected user is not a content uploader.');
+        }
+
+        $amountOverride = isset($validated['offered_amount_inr'])
+            ? (int) $validated['offered_amount_inr']
+            : null;
+
+        if ($amountOverride === null || $amountOverride <= 0) {
+            $missingRate = false;
+
+            foreach ($validated['syllabus_chapter_ids'] as $syllabusChapterId) {
+                $syllabusChapter = SyllabusChapter::query()->find($syllabusChapterId);
+                if (! $syllabusChapter) {
+                    continue;
+                }
+
+                if ($this->rateCardService->resolveAmountForSyllabusChapter($gradeLevel->id, $syllabusChapter) <= 0) {
+                    $missingRate = true;
+                    break;
+                }
+            }
+
+            if ($missingRate) {
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        'offered_amount_inr' => 'No rate in the matrix for this class. Enter a rate override (₹) above, or set class rates in the rate matrix first.',
+                    ]);
+            }
         }
 
         if (! empty($validated['textbook_id'])) {

@@ -183,6 +183,28 @@ class ContentUploadTaskTest extends TestCase
                 ->where("matrix.cells.{$grade->id}.{$uploader->id}.count", 1));
     }
 
+    public function test_store_requires_rate_when_matrix_empty(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->from(route('admin.content-tasks.create'))
+            ->post(route('admin.content-tasks.store'), [
+                'assigned_to_user_id' => $uploader->id,
+                'book_name' => 'Ganita Prakash',
+                'book_code' => 'GP',
+                'syllabus_chapter_ids' => [$syllabusChapter->id],
+            ])
+            ->assertRedirect(route('admin.content-tasks.create'))
+            ->assertSessionHasErrors('offered_amount_inr');
+
+        $this->assertSame(0, ContentUploadTask::query()->count());
+    }
+
     public function test_duplicate_assignment_blocked_without_override(): void
     {
         [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
