@@ -110,25 +110,35 @@ class BasicsDrillSessionService
             return $session;
         }
 
-        $settings = $this->settingsService->forStudent($session->student);
-        $guard = 0;
+        $session->loadMissing(['items', 'student']);
 
-        while ($guard < 8 && $this->isStuckDrillPhase($session)) {
-            $guard++;
-            $this->advanceAfterPhase($session->fresh(['items', 'student']), $settings);
-            $session = $session->fresh(['items', 'student']);
-
-            if ($session->isComplete()) {
-                break;
-            }
-
-            // Landed on a show phase — that is a valid screen.
-            if (str_ends_with($session->phase, '_show')) {
-                break;
-            }
+        if (! $session->student) {
+            return $session;
         }
 
-        return $session->fresh(['items', 'student']);
+        try {
+            $settings = $this->settingsService->forStudent($session->student);
+            $guard = 0;
+
+            while ($guard < 8 && $this->isStuckDrillPhase($session)) {
+                $guard++;
+                $this->advanceAfterPhase($session->fresh(['items', 'student']), $settings);
+                $session = $session->fresh(['items', 'student']);
+
+                if (! $session || $session->isComplete()) {
+                    break;
+                }
+
+                // Landed on a show phase — that is a valid screen.
+                if (str_ends_with($session->phase, '_show')) {
+                    break;
+                }
+            }
+        } catch (\Throwable) {
+            return $session->fresh(['items']) ?? $session;
+        }
+
+        return $session->fresh(['items', 'student']) ?? $session;
     }
 
     private function isStuckDrillPhase(BasicsDrillSession $session): bool

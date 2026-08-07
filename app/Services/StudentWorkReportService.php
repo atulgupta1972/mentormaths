@@ -14,6 +14,7 @@ use App\Support\ProgressSummaryTable;
 use App\Support\WorksheetDeliveryMode;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class StudentWorkReportService
 {
@@ -319,13 +320,19 @@ class StudentWorkReportService
         $online = collect();
         $cutoff = now()->subMinutes(self::LIVE_MINUTES);
 
-        $online = $online->merge(
-            \App\Models\User::query()
-                ->whereIn('id', $userIds)
-                ->where('last_seen_at', '>=', $cutoff)
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id),
-        );
+        try {
+            if (Schema::hasColumn('users', 'last_seen_at')) {
+                $online = $online->merge(
+                    \App\Models\User::query()
+                        ->whereIn('id', $userIds)
+                        ->where('last_seen_at', '>=', $cutoff)
+                        ->pluck('id')
+                        ->map(fn ($id) => (int) $id),
+                );
+            }
+        } catch (\Throwable) {
+            // Column may be missing before migrate.
+        }
 
         $sessionCutoff = $cutoff->getTimestamp();
 
