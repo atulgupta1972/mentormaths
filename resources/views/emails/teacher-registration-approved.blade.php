@@ -30,7 +30,13 @@
     </p>
 @endif
 
-@if ($request->agreedHourlyRateInr())
+@if ($assignContentUploader)
+    @if ($request->proposed_rate_per_set_inr)
+        <p>Proposed content upload rate: ₹{{ number_format($request->proposed_rate_per_set_inr) }}/set. Final amount is confirmed per chapter when you agree on My content tasks.</p>
+    @else
+        <p>Content upload rates are confirmed per chapter when you agree on My content tasks.</p>
+    @endif
+@elseif ($assignMentor && $request->agreedHourlyRateInr())
     <p>Agreed doubt-solving rate: ₹{{ number_format($request->agreedHourlyRateInr()) }}/hour.</p>
 @endif
 

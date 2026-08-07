@@ -232,6 +232,24 @@ class TeacherRegistrationTest extends TestCase
                 ->where('gradeLevels.7.sort_order', 12));
     }
 
+    public function test_content_uploader_approval_email_shows_content_rate_not_doubt_rate(): void
+    {
+        $application = new TeacherRegistrationRequest([
+            'name' => 'Smitha Rao',
+            'email' => 'smitha@example.com',
+            'interested_in_book_content_upload' => true,
+            'proposed_rate_per_set_inr' => 500,
+            'proposed_hourly_rate_inr' => 200,
+            'interested_in_doubt_solving' => true,
+        ]);
+
+        $html = (new \App\Mail\TeacherRegistrationApproved($application, true, true))->render();
+
+        $this->assertStringContainsString('Proposed content upload rate: ₹500/set', $html);
+        $this->assertStringNotContainsString('doubt-solving rate', $html);
+        $this->assertStringContainsString('My content tasks', $html);
+    }
+
     public function test_admin_can_email_mentor_to_complete_profile_details(): void
     {
         Mail::fake();
