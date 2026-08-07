@@ -46,7 +46,7 @@ class BasicsDrillSessionService
         $existing = $this->todaysSession($student);
 
         if ($existing) {
-            return $existing;
+            return $this->recoverStuckSession($existing);
         }
 
         $settings = $this->settingsService->forStudent($student);
@@ -99,6 +99,53 @@ class BasicsDrillSessionService
         ]);
     }
 
+    /**
+     * If a drill/retry phase has no pending items left (e.g. last answer saved but
+     * the advance request failed), move the session forward so the student is not stuck
+     * on a blank screen.
+     */
+    public function recoverStuckSession(BasicsDrillSession $session): BasicsDrillSession
+    {
+        if ($session->isComplete()) {
+            return $session;
+        }
+
+        $settings = $this->settingsService->forStudent($session->student);
+        $guard = 0;
+
+        while ($guard < 8 && $this->isStuckDrillPhase($session)) {
+            $guard++;
+            $this->advanceAfterPhase($session->fresh(['items', 'student']), $settings);
+            $session = $session->fresh(['items', 'student']);
+
+            if ($session->isComplete()) {
+                break;
+            }
+
+            // Landed on a show phase — that is a valid screen.
+            if (str_ends_with($session->phase, '_show')) {
+                break;
+            }
+        }
+
+        return $session->fresh(['items', 'student']);
+    }
+
+    private function isStuckDrillPhase(BasicsDrillSession $session): bool
+    {
+        if ($session->isComplete()) {
+            return false;
+        }
+
+        if (! str_ends_with($session->phase, '_drill') && ! str_ends_with($session->phase, '_retry')) {
+            return false;
+        }
+
+        $session->loadMissing('items');
+
+        return $this->currentItem($session) === null;
+    }
+
     public function startDrill(BasicsDrillSession $session): BasicsDrillSession
     {
         $phase = $session->phase;
@@ -107,6 +154,15 @@ class BasicsDrillSessionService
             $drillPhase = str_replace('_show', '_drill', $phase);
             $session->update(['phase' => $drillPhase]);
             $this->ensureItemsForPhase($session->fresh(['items']));
+            $session = $session->fresh(['items', 'student']);
+
+            // Empty batch (misconfigured range) — don't leave a blank drill screen.
+            if ($this->currentItem($session) === null) {
+                $settings = $this->settingsService->forStudent($session->student);
+                $this->advanceAfterPhase($session, $settings);
+
+                return $session->fresh(['items', 'student']);
+            }
         }
 
         return $session->fresh(['items']);
@@ -201,23 +257,35 @@ class BasicsDrillSessionService
 
     private function advanceAfterPhase(BasicsDrillSession $session, array $settings): array
     {
-        $failed = $session->items->filter(
-            fn (BasicsDrillItem $item) => $item->status === BasicsDrillItem::STATUS_FAILED,
+        $factType = $this->factTypeForPhase($session->phase);
+        $missed = $session->items->filter(
+            fn (BasicsDrillItem $item) => $item->round === BasicsDrillItem::ROUND_MAIN
+                && $item->fact_type === $factType
+                && in_array($item->status, [
+                    BasicsDrillItem::STATUS_FAILED,
+                    BasicsDrillItem::STATUS_REVEALED,
+                ], true),
         );
 
-        if ($failed->isNotEmpty() && str_ends_with($session->phase, '_drill')) {
+        if ($missed->isNotEmpty() && str_ends_with($session->phase, '_drill')) {
             $retryPhase = str_replace('_drill', '_retry', $session->phase);
             $session->update(['phase' => $retryPhase]);
             $this->ensureRetryItems($session->fresh(['items']));
 
-            $next = $this->nextPendingItem($session->fresh(['items']));
+            $fresh = $session->fresh(['items', 'student']);
+            $next = $this->nextPendingItem($fresh);
+
+            // No retry rows created — continue rather than blank screen.
+            if (! $next) {
+                return $this->advanceAfterPhase($fresh, $settings);
+            }
 
             return [
                 'correct' => true,
                 'reveal' => false,
                 'phase_change' => $retryPhase,
-                'next_item' => $next ? $this->formatItem($next) : null,
-                'session' => $this->formatSession($session->fresh(['items']), $settings),
+                'next_item' => $this->formatItem($next),
+                'session' => $this->formatSession($fresh, $settings),
             ];
         }
 
@@ -359,7 +427,10 @@ class BasicsDrillSessionService
         $failedKeys = $session->items
             ->where('round', BasicsDrillItem::ROUND_MAIN)
             ->where('fact_type', $factType)
-            ->where('status', BasicsDrillItem::STATUS_FAILED)
+            ->filter(fn (BasicsDrillItem $item) => in_array($item->status, [
+                BasicsDrillItem::STATUS_FAILED,
+                BasicsDrillItem::STATUS_REVEALED,
+            ], true))
             ->pluck('fact_key')
             ->all();
 

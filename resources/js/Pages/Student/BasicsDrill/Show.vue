@@ -44,11 +44,29 @@ const applySession = (next) => {
     answer.value = '';
 };
 
+const goDashboard = () => {
+    router.visit(route('dashboard'));
+};
+
+const handleAdvancePayload = (payload) => {
+    if (payload.session) {
+        applySession(payload.session);
+    }
+
+    if (payload.completed || payload.session?.is_complete) {
+        router.visit(payload.redirect || route('dashboard'));
+
+        return true;
+    }
+
+    return false;
+};
+
 const clearTimer = () => {
     if (timerId) {
         window.clearInterval(timerId);
-        timerId = null;
     }
+    timerId = null;
 };
 
 const startTimer = () => {
@@ -98,6 +116,9 @@ const startDrill = async () => {
 
     try {
         const payload = await postJson(route('student.basics-drill.start', sessionState.value.id));
+        if (handleAdvancePayload(payload)) {
+            return;
+        }
         applySession(payload.session);
     } finally {
         submitting.value = false;
@@ -122,9 +143,8 @@ const submitAnswer = async (timedOut = false) => {
             timed_out: timedOut,
         });
 
-        applySession(payload.session);
-
         if (payload.reveal) {
+            applySession(payload.session);
             reveal.value = {
                 itemId: payload.item_id,
                 prompt: payload.prompt,
@@ -134,11 +154,11 @@ const submitAnswer = async (timedOut = false) => {
             return;
         }
 
-        if (payload.completed && payload.redirect) {
-            router.visit(payload.redirect);
-
+        if (handleAdvancePayload(payload)) {
             return;
         }
+
+        applySession(payload.session);
     } finally {
         submitting.value = false;
     }
@@ -153,14 +173,19 @@ const acknowledgeReveal = async () => {
 
     try {
         const payload = await postJson(route('student.basics-drill.acknowledge', reveal.value.itemId));
-        applySession(payload.session);
 
-        if (payload.session?.is_complete) {
-            router.visit(route('dashboard'));
+        if (handleAdvancePayload(payload)) {
+            return;
         }
+
+        applySession(payload.session);
     } finally {
         submitting.value = false;
     }
+};
+
+const continueAfterBlank = () => {
+    router.visit(route('student.basics-drill.show'), { replace: true });
 };
 
 const timerPercent = computed(() => {
@@ -241,7 +266,7 @@ const timerPercent = computed(() => {
                 </div>
 
                 <div
-                    v-if="reveal"
+                    v-else-if="reveal"
                     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
                 >
                     <div class="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-xl">
@@ -254,10 +279,21 @@ const timerPercent = computed(() => {
                     </div>
                 </div>
 
-                <div v-if="sessionState.is_complete" class="rounded-xl bg-emerald-50 p-6 text-center text-emerald-900">
+                <div v-else-if="sessionState.is_complete" class="rounded-xl bg-emerald-50 p-6 text-center text-emerald-900">
                     <p class="font-semibold">Basics drill complete for today.</p>
-                    <PrimaryButton class="mt-4" @click="router.visit(route('dashboard'))">
+                    <PrimaryButton class="mt-4" @click="goDashboard">
                         Go to dashboard
+                    </PrimaryButton>
+                </div>
+
+                <div
+                    v-else
+                    class="rounded-xl bg-amber-50 p-6 text-center text-amber-950 ring-1 ring-amber-200"
+                >
+                    <p class="font-semibold">This step finished — tap Continue.</p>
+                    <p class="mt-1 text-sm text-amber-800">If the screen was blank, we can move you to the next part.</p>
+                    <PrimaryButton class="mt-4" @click="continueAfterBlank">
+                        Continue
                     </PrimaryButton>
                 </div>
             </div>

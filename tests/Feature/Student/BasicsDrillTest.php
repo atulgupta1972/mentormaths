@@ -171,6 +171,52 @@ class BasicsDrillTest extends TestCase
             ->assertOk();
     }
 
+    public function test_stuck_cube_drill_with_no_pending_items_recovers_on_reload(): void
+    {
+        ['student' => $student, 'user' => $user, 'grade' => $grade] = $this->seedStudentWithFormulaComplete();
+
+        BasicsDrillSetting::query()->where('grade_level_id', $grade->id)->update([
+            'tables_enabled' => false,
+            'squares_enabled' => false,
+            'cubes_enabled' => true,
+            'cube_from' => 2,
+            'cube_to' => 4,
+            'cubes_per_day' => 3,
+        ]);
+
+        $session = BasicsDrillSession::query()->create([
+            'student_id' => $student->id,
+            'student_enrollment_id' => $student->currentEnrollment()?->id,
+            'drill_date' => now(config('basics_drill.timezone', 'Asia/Kolkata'))->startOfDay(),
+            'status' => BasicsDrillSession::STATUS_IN_PROGRESS,
+            'phase' => BasicsDrillSession::PHASE_CUBES_DRILL,
+            'cube_batch_start' => 2,
+        ]);
+
+        foreach ([2, 3, 4] as $index => $n) {
+            BasicsDrillItem::query()->create([
+                'basics_drill_session_id' => $session->id,
+                'fact_type' => BasicsDrillItem::TYPE_CUBE,
+                'fact_key' => "cb{$n}",
+                'operand_a' => $n,
+                'operand_b' => 0,
+                'correct_answer' => $n * $n * $n,
+                'sort_order' => $index + 1,
+                'round' => BasicsDrillItem::ROUND_MAIN,
+                'status' => BasicsDrillItem::STATUS_CORRECT,
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->get(route('student.basics-drill.show'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('session.is_complete', true)
+                ->where('session.phase', BasicsDrillSession::PHASE_COMPLETED));
+
+        $this->assertTrue($session->fresh()->isComplete());
+    }
+
     public function test_admin_can_open_basics_drill_settings(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
