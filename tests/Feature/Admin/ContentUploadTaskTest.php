@@ -138,6 +138,7 @@ class ContentUploadTaskTest extends TestCase
                 ->has('matrix.uploaders')
                 ->has('matrix.grades')
                 ->where('matrix.total_assignments', 1)
+                ->where('matrix.database_total', 1)
                 ->where('matrix.drill.uploader.name', 'Matrix Mentor')
                 ->has('matrix.drill.chapters', 1)
                 ->where('matrix.drill.chapters.0.status_group', 'awaiting'));

@@ -18,7 +18,8 @@ class ContentAllocationMatrixService
      *     grades: list<array{id: int, name: string, sort_order: int}>,
      *     cells: array<string, array<string, array{count: int, statuses: array<string, int>}>>,
      *     drill: array<string, mixed>|null,
-     *     total_assignments: int
+     *     total_assignments: int,
+     *     database_total: int
      * }
      */
     public function build(?int $boardId, ?int $drillGradeId = null, ?int $drillUploaderId = null): array
@@ -31,7 +32,6 @@ class ContentAllocationMatrixService
             ->values()
             ->all();
 
-        // null board_id = All boards (do not default to first board — that hid assignments)
         $uploaders = User::query()
             ->whereHas('groups', fn ($q) => $q->where('code', User::ROLE_CONTENT_UPLOADER))
             ->where('is_active', true)
@@ -47,6 +47,12 @@ class ContentAllocationMatrixService
             ->orderBy('sort_order')
             ->get(['id', 'name', 'sort_order']);
 
+        $databaseTotal = ContentUploadTask::query()
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->count();
+
+        // Always load all active assignments — board filter is display-only for grades,
+        // not a hard filter that can zero out the matrix when board IDs differ.
         $tasks = ContentUploadTask::query()
             ->with([
                 'assignee:id,name,email',
@@ -55,20 +61,31 @@ class ContentAllocationMatrixService
                 'textbookChapter.textbook.gradeLevel:id,name,sort_order',
                 'textbookChapter.syllabusChapter:id,name,syllabus_version_id',
                 'textbookChapter.syllabusChapter.syllabusVersion:id,board_id,grade_level_id',
+                'textbookChapter.syllabusChapter.syllabusVersion.board:id,code',
             ])
             ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
             ->latest('id')
             ->get();
 
+        $boardCode = null;
         if ($boardId) {
-            $tasks = $tasks->filter(function (ContentUploadTask $task) use ($boardId) {
-                return $this->taskMatchesBoard($task, $boardId);
-            })->values();
+            $boardCode = collect($boards)->firstWhere('id', $boardId)['code']
+                ?? Board::query()->whereKey($boardId)->value('code');
         }
 
-        // Include any grade that has assignments even if outside the default 4–12 list.
+        if ($boardCode) {
+            $filtered = $tasks->filter(function (ContentUploadTask $task) use ($boardCode) {
+                return $this->taskMatchesBoardCode($task, (string) $boardCode);
+            })->values();
+
+            // If filter would hide everything but DB has work, keep all (avoid blank matrix).
+            if ($filtered->isNotEmpty() || $tasks->isEmpty()) {
+                $tasks = $filtered;
+            }
+        }
+
         $gradeIdsFromTasks = $tasks
-            ->map(fn (ContentUploadTask $task) => $task->textbookChapter?->textbook?->grade_level_id)
+            ->map(fn (ContentUploadTask $task) => $this->resolveGradeId($task))
             ->filter()
             ->unique()
             ->values();
@@ -90,6 +107,21 @@ class ContentAllocationMatrixService
             ->values()
             ->all();
 
+        $uploaderIds = collect($uploaders)->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        // Include assignees even if they lost the content_uploader group later.
+        $assigneeIds = $tasks->pluck('assigned_to_user_id')->map(fn ($id) => (int) $id)->unique()->all();
+        $missingUploaderIds = array_values(array_diff($assigneeIds, $uploaderIds));
+        if ($missingUploaderIds !== []) {
+            $extraUploaders = User::query()
+                ->whereIn('id', $missingUploaderIds)
+                ->orderBy('name')
+                ->get(['id', 'name', 'email'])
+                ->map(fn (User $user) => $user->only(['id', 'name', 'email']))
+                ->all();
+            $uploaders = array_values(array_merge($uploaders, $extraUploaders));
+        }
+
         $cells = [];
         foreach ($gradeRows as $grade) {
             foreach ($uploaders as $uploader) {
@@ -109,10 +141,6 @@ class ContentAllocationMatrixService
 
             $gKey = (string) $gradeId;
             $uKey = (string) $uploaderId;
-            if (! isset($cells[$gKey])) {
-                // Grade still missing from rows — skip display but keep total_assignments honest.
-                continue;
-            }
             if (! isset($cells[$gKey][$uKey])) {
                 $cells[$gKey][$uKey] = ['count' => 0, 'statuses' => []];
             }
@@ -147,6 +175,7 @@ class ContentAllocationMatrixService
             'cells' => $cells,
             'drill' => $drill,
             'total_assignments' => $tasks->count(),
+            'database_total' => $databaseTotal,
             'work_types' => [
                 ['key' => 'content_upload', 'label' => 'Content upload (textbook MCQ)', 'active' => true],
                 ['key' => 'mcq', 'label' => 'MCQ bank', 'active' => false],
@@ -155,16 +184,15 @@ class ContentAllocationMatrixService
         ];
     }
 
-    private function taskMatchesBoard(ContentUploadTask $task, int $boardId): bool
+    private function taskMatchesBoardCode(ContentUploadTask $task, string $boardCode): bool
     {
-        $taskBoardId = $task->textbookChapter?->syllabusChapter?->syllabusVersion?->board_id;
+        $taskBoardCode = $task->textbookChapter?->syllabusChapter?->syllabusVersion?->board?->code;
 
-        // Unknown board (no syllabus link) — keep visible under any board filter.
-        if ($taskBoardId === null) {
+        if ($taskBoardCode === null || $taskBoardCode === '') {
             return true;
         }
 
-        return (int) $taskBoardId === $boardId;
+        return strcasecmp($taskBoardCode, $boardCode) === 0;
     }
 
     private function resolveGradeId(ContentUploadTask $task): ?int

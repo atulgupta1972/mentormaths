@@ -116,9 +116,34 @@ const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
                             </select>
                         </div>
                         <p class="text-xs text-gray-500">
-                            <strong>{{ matrix.total_assignments ?? 0 }}</strong> active assignment(s) shown.
-                            Work type: <strong>Content upload (textbook MCQ)</strong>.
-                            Click a number to see chapters & status.
+                            Showing <strong>{{ matrix.total_assignments ?? 0 }}</strong> assignment(s)
+                            <span v-if="(matrix.database_total ?? 0) !== (matrix.total_assignments ?? 0)">
+                                ({{ matrix.database_total }} in database)
+                            </span>.
+                            Click a number to see chapters &amp; status.
+                        </p>
+                    </div>
+
+                    <div
+                        v-if="(matrix.database_total ?? 0) === 0"
+                        class="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                    >
+                        <p class="font-semibold">No chapter assignments are saved yet.</p>
+                        <p class="mt-1">
+                            If you clicked <strong>Create assignment(s)</strong> earlier but the form stayed filled,
+                            the save likely failed because chapter rates were missing
+                            (“Set rates in matrix first”).
+                        </p>
+                        <p class="mt-2">
+                            Fix:
+                            <Link :href="route('admin.content-rate-cards.index')" class="underline">set Rate matrix</Link>
+                            for this class, <em>or</em> enter a <strong>Rate override (₹)</strong> on Assign chapters,
+                            then assign again. You should then see a green success message and email confirmation.
+                        </p>
+                        <p class="mt-2">
+                            <Link :href="route('admin.content-tasks.create')" class="font-medium text-indigo-700 underline">
+                                Go to Assign chapters →
+                            </Link>
                         </p>
                     </div>
 
