@@ -34,7 +34,7 @@ class ContentUploadTaskController extends Controller
     public function index(Request $request): Response
     {
         $status = $request->string('status')->toString();
-        $boardId = $request->integer('board_id') ?: null;
+        $boardId = $request->filled('board_id') ? $request->integer('board_id') : null;
         $drillGradeId = $request->integer('drill_grade_id') ?: null;
         $drillUploaderId = $request->integer('drill_uploader_id') ?: null;
 

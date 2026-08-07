@@ -137,9 +137,49 @@ class ContentUploadTaskTest extends TestCase
                 ->component('Admin/ContentTasks/Index')
                 ->has('matrix.uploaders')
                 ->has('matrix.grades')
+                ->where('matrix.total_assignments', 1)
                 ->where('matrix.drill.uploader.name', 'Matrix Mentor')
                 ->has('matrix.drill.chapters', 1)
                 ->where('matrix.drill.chapters.0.status_group', 'awaiting'));
+    }
+
+    public function test_allocation_matrix_shows_assignments_without_board_filter(): void
+    {
+        Mail::fake();
+
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        ContentRateCard::create([
+            'grade_level_id' => $grade->id,
+            'content_type' => ContentRateCard::TYPE_TEXTBOOK_CHAPTER_MCQ,
+            'default_amount_inr' => 5000,
+        ]);
+
+        $uploader = User::factory()->create([
+            'name' => 'Visible Mentor',
+            'role' => User::ROLE_TEACHER,
+        ]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->post(route('admin.content-tasks.store'), [
+                'assigned_to_user_id' => $uploader->id,
+                'book_name' => 'Ganita Prakash',
+                'book_code' => 'GP',
+                'syllabus_chapter_ids' => [$syllabusChapter->id],
+                'offered_amount_inr' => 5000,
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ContentTasks/Index')
+                ->where('matrix.board_id', null)
+                ->where('matrix.total_assignments', 1)
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.count", 1));
     }
 
     public function test_duplicate_assignment_blocked_without_override(): void

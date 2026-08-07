@@ -109,14 +109,16 @@ const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
                                 :value="matrix.board_id || ''"
                                 @change="setBoard($event.target.value ? Number($event.target.value) : null)"
                             >
+                                <option value="">All boards</option>
                                 <option v-for="board in matrix.boards" :key="board.id" :value="board.id">
                                     {{ board.code }} — {{ board.name }}
                                 </option>
                             </select>
                         </div>
                         <p class="text-xs text-gray-500">
-                            Active work type: <strong>Content upload (textbook MCQ)</strong>.
-                            MCQ bank / Fill in blanks columns are reserved for later assignment types.
+                            <strong>{{ matrix.total_assignments ?? 0 }}</strong> active assignment(s) shown.
+                            Work type: <strong>Content upload (textbook MCQ)</strong>.
+                            Click a number to see chapters & status.
                         </p>
                     </div>
 
