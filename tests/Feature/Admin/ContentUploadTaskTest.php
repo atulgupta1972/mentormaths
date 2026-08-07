@@ -70,7 +70,18 @@ class ContentUploadTaskTest extends TestCase
         $this->assertSame(ContentUploadTask::STATUS_PENDING_AGREEMENT, $task->status);
         $this->assertSame(6000, $task->offered_amount_inr);
 
-        Mail::assertSent(ContentTaskAssignedUploader::class, fn ($mail) => $mail->hasTo($uploader->email));
+        Mail::assertSent(ContentTaskAssignedUploader::class, function ($mail) use ($uploader) {
+            if (! $mail->hasTo($uploader->email)) {
+                return false;
+            }
+
+            $html = $mail->render();
+
+            return str_contains($html, 'content upload (MCQ)')
+                && str_contains($html, 'Ganita Prakash')
+                && str_contains($html, 'Brief process')
+                && str_contains($html, 'verify each question');
+        });
 
         $this->actingAs($uploader)
             ->post(route('content.tasks.agree', $task))

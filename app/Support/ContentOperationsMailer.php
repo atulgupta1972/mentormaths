@@ -28,7 +28,10 @@ class ContentOperationsMailer
 
         $loadedTasks = ContentUploadTask::query()
             ->whereIn('id', $taskIds)
-            ->with(['textbookChapter.textbook.gradeLevel'])
+            ->with([
+                'textbookChapter.textbook.gradeLevel',
+                'textbookChapter.syllabusChapter:id,name,chapter_number',
+            ])
             ->get();
 
         try {

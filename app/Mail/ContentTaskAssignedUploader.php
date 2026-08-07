@@ -25,12 +25,29 @@ class ContentTaskAssignedUploader extends Mailable
     public function envelope(): Envelope
     {
         $count = $this->tasks->count();
+
+        if ($count === 1) {
+            $task = $this->tasks->first();
+            $chapter = $task?->textbookChapter;
+            $grade = $chapter?->textbook?->gradeLevel?->name;
+            $chNo = $chapter?->chapter_number;
+            $title = $chapter?->title;
+
+            if ($grade && $chNo) {
+                $shortTitle = $title ? ' — '.$title : '';
+
+                return new Envelope(
+                    subject: "Mentor Maths — {$grade} Ch {$chNo}{$shortTitle} · MCQ upload assigned",
+                );
+            }
+        }
+
         $label = $count === 1
             ? '1 chapter assigned'
             : "{$count} chapters assigned";
 
         return new Envelope(
-            subject: "Mentor Maths — {$label} · please review & agree",
+            subject: "Mentor Maths — {$label} · textbook MCQ upload · please review & agree",
         );
     }
 
@@ -41,6 +58,7 @@ class ContentTaskAssignedUploader extends Mailable
             with: [
                 'tasksUrl' => route('content.tasks.index'),
                 'loginUrl' => route('login'),
+                'guideUrl' => url('/guides/content-uploader-guide.html'),
             ],
         );
     }
