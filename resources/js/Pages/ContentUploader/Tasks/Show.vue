@@ -21,7 +21,7 @@ const submitForm = useForm({});
 const completeForm = useForm({ run_id: props.verification?.run_id ?? null });
 
 const questionForms = reactive({});
-const filterMode = reactive({ value: 'all' }); // all | pending | verified
+const filterMode = reactive({ value: 'pending' }); // pending | verified
 
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
 const formatDuration = (seconds) => {
@@ -33,18 +33,41 @@ const formatDuration = (seconds) => {
 const verificationSummary = computed(() => props.verification?.summary ?? { total: 0, verified: 0, unverified: 0 });
 const canEditQuestions = computed(() => ['uploaded', 'verification_in_progress'].includes(props.task.status));
 
-const visibleQuestions = computed(() => {
-    const rows = props.verification?.questions ?? [];
+const pendingQuestions = computed(() =>
+    (props.verification?.questions ?? []).filter((row) => !row.is_verified),
+);
 
-    if (filterMode.value === 'pending') {
-        return rows.filter((row) => !row.is_verified);
+const verifiedQuestions = computed(() =>
+    (props.verification?.questions ?? []).filter((row) => row.is_verified),
+);
+
+const currentPending = computed(() => pendingQuestions.value[0] ?? null);
+
+const visibleQuestions = computed(() => {
+    if (filterMode.value === 'verified') {
+        return verifiedQuestions.value;
     }
+
+    // Pending queue: show only the next unverified question.
+    return currentPending.value ? [currentPending.value] : [];
+});
+
+const queueLabel = computed(() => {
+    const total = verificationSummary.value.total;
+    const verified = verificationSummary.value.verified;
+    const remaining = verificationSummary.value.unverified;
 
     if (filterMode.value === 'verified') {
-        return rows.filter((row) => row.is_verified);
+        return `${verified} verified — open any to re-check and save again`;
     }
 
-    return rows;
+    if (!currentPending.value) {
+        return remaining === 0 && total > 0
+            ? 'All questions verified — lock verification below'
+            : 'No pending questions';
+    }
+
+    return `Now reviewing Q${currentPending.value.number} of ${total} · ${verified} done · ${remaining} left`;
 });
 
 const buildForm = (row) => useForm({
@@ -74,7 +97,6 @@ const syncQuestionForms = () => {
             return;
         }
 
-        // Keep in-progress edits; only refresh when server marked verified / fields match empty form.
         if (row.is_verified && !questionForms[row.question_id].processing) {
             questionForms[row.question_id] = buildForm(row);
         }
@@ -85,7 +107,14 @@ syncQuestionForms();
 
 watch(
     () => props.verification?.questions,
-    () => syncQuestionForms(),
+    () => {
+        syncQuestionForms();
+        if (filterMode.value === 'pending') {
+            window.setTimeout(() => {
+                document.getElementById('verification-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
+        }
+    },
     { deep: true },
 );
 
@@ -107,8 +136,17 @@ const saveQuestion = (questionId) => {
         return;
     }
 
+    // After save, stay on pending queue so the next question appears.
+    filterMode.value = 'pending';
+
     form.post(route('content.tasks.verification-question', props.task.id), {
-        preserveScroll: true,
+        preserveScroll: false,
+        onSuccess: () => {
+            filterMode.value = 'pending';
+            window.setTimeout(() => {
+                document.getElementById('verification-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 80);
+        },
     });
 };
 
@@ -172,8 +210,9 @@ onUnmounted(() => clearInterval(pingTimer));
 
                 <div v-else-if="['in_progress', 'uploaded', 'verification_in_progress', 'verified'].includes(task.status)" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <p class="text-sm text-gray-700">
-                        Review each question below line by line (text, options, correct answer, hint, explanation). Edit if needed, then
-                        <strong>Save &amp; mark verified</strong> one by one.
+                        One question at a time: review details, edit if needed, then
+                        <strong>Save &amp; mark verified → next</strong>.
+                        Verified questions move to the Verified tab (open that tab to re-check any).
                     </p>
                     <div class="mt-3 flex flex-wrap gap-3">
                         <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="text-sm font-medium text-indigo-600 hover:underline">
@@ -190,31 +229,21 @@ onUnmounted(() => clearInterval(pingTimer));
                     </div>
                 </div>
 
-                <div v-if="verification" class="space-y-4">
+                <div v-if="verification" id="verification-queue" class="space-y-4">
                     <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <p class="text-sm font-semibold text-gray-900">Verification progress</p>
-                                <p class="mt-1 text-sm text-gray-600">
-                                    {{ verificationSummary.verified }} verified · {{ verificationSummary.unverified }} remaining · {{ verificationSummary.total }} total
-                                </p>
+                                <p class="mt-1 text-sm text-gray-600">{{ queueLabel }}</p>
                             </div>
                             <div class="flex flex-wrap gap-2 text-xs">
-                                <button
-                                    type="button"
-                                    class="rounded-md border px-3 py-1.5"
-                                    :class="filterMode.value === 'all' ? 'border-indigo-400 bg-indigo-50 text-indigo-900' : 'border-gray-300 text-gray-700'"
-                                    @click="filterMode.value = 'all'"
-                                >
-                                    All
-                                </button>
                                 <button
                                     type="button"
                                     class="rounded-md border px-3 py-1.5"
                                     :class="filterMode.value === 'pending' ? 'border-amber-400 bg-amber-50 text-amber-900' : 'border-gray-300 text-gray-700'"
                                     @click="filterMode.value = 'pending'"
                                 >
-                                    Pending
+                                    To verify ({{ verificationSummary.unverified }})
                                 </button>
                                 <button
                                     type="button"
@@ -222,12 +251,15 @@ onUnmounted(() => clearInterval(pingTimer));
                                     :class="filterMode.value === 'verified' ? 'border-emerald-400 bg-emerald-50 text-emerald-900' : 'border-gray-300 text-gray-700'"
                                     @click="filterMode.value = 'verified'"
                                 >
-                                    Verified
+                                    Verified ({{ verificationSummary.verified }})
                                 </button>
                             </div>
                         </div>
                         <p v-if="verificationSummary.total === 0" class="mt-2 text-sm text-amber-800">
                             No published MCQ questions found yet. Open the textbook chapter, tick Approved, click Save MCQ sets, then mark upload complete again.
+                        </p>
+                        <p v-else-if="filterMode.value === 'pending' && !currentPending && verificationSummary.unverified === 0" class="mt-2 text-sm text-emerald-800">
+                            All questions moved to Verified. Open that tab to re-check any, or lock verification below.
                         </p>
                     </div>
 
@@ -338,13 +370,22 @@ onUnmounted(() => clearInterval(pingTimer));
                                     :disabled="questionForms[row.question_id].processing"
                                     @click="saveQuestion(row.question_id)"
                                 >
-                                    {{ questionForms[row.question_id].processing ? 'Saving…' : (row.is_verified ? 'Save again' : 'Save & mark verified') }}
+                                    {{ questionForms[row.question_id].processing
+                                        ? 'Saving…'
+                                        : (row.is_verified ? 'Save again (stay in Verified)' : 'Save & mark verified → next') }}
                                 </PrimaryButton>
-                                <span v-if="row.correct_letter && row.is_verified" class="text-xs text-emerald-700">
-                                    Correct answer: {{ row.correct_letter }}
+                                <span v-if="row.is_verified" class="text-xs text-emerald-700">
+                                    In Verified tab — save again if you re-checked it.
                                 </span>
                             </div>
                         </div>
+                    </div>
+
+                    <div
+                        v-if="filterMode.value === 'verified' && !verifiedQuestions.length"
+                        class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500"
+                    >
+                        No verified questions yet. Save questions from the To verify tab.
                     </div>
 
                     <div v-if="task.status === 'verification_in_progress' || task.status === 'verified'" class="flex flex-wrap gap-3">
