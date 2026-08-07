@@ -265,6 +265,8 @@ class TextbookController extends Controller
                 ->all(),
             'defaultGradeLevelId' => $gradeLevel?->id,
             'activeYear' => $activeYear?->only(['id', 'name']),
+            'routeNamespace' => $this->isContentUploaderContext($request) ? 'content' : 'admin',
+            'uploaderMode' => $this->isContentUploaderContext($request),
         ]);
     }
 
@@ -282,8 +284,7 @@ class TextbookController extends Controller
 
         $count = count($chapter->extraction_items ?? []);
 
-        return redirect()
-            ->route('admin.textbooks.show', $chapter)
+        return $this->redirectToChapterShow($chapter)
             ->with('success', "{$count} MCQ(s) imported. Edit the set plan matrix below — small chapters: keep one row for all questions.");
     }
 
@@ -314,8 +315,7 @@ class TextbookController extends Controller
         }
         $message .= ' Edit the set plan matrix below, then Publish.';
 
-        return redirect()
-            ->route('admin.textbooks.show', $result['chapter'])
+        return $this->redirectToChapterShow($result['chapter'])
             ->with('success', $message);
     }
 
@@ -347,16 +347,14 @@ class TextbookController extends Controller
                 $uploaded,
             );
         } catch (\InvalidArgumentException $exception) {
-            return redirect()
-                ->route('admin.textbooks.show', $textbookChapter)
+            return $this->redirectToChapterShow($textbookChapter)
                 ->with('error', $exception->getMessage());
         }
 
         $label = ($textbookChapter->fresh()->extraction_items[$validated['item_index']]['label'] ?? null)
             ?: 'Q'.((int) $validated['item_index'] + 1);
 
-        return redirect()
-            ->route('admin.textbooks.show', $textbookChapter)
+        return $this->redirectToChapterShow($textbookChapter)
             ->with('success', "Chart updated for {$label}. Students see the new image immediately if sets are already published.");
     }
 
@@ -375,13 +373,11 @@ class TextbookController extends Controller
         try {
             $this->mcqImportService->removeItemDiagram($textbookChapter, (int) $validated['item_index']);
         } catch (\InvalidArgumentException $exception) {
-            return redirect()
-                ->route('admin.textbooks.show', $textbookChapter)
+            return $this->redirectToChapterShow($textbookChapter)
                 ->with('error', $exception->getMessage());
         }
 
-        return redirect()
-            ->route('admin.textbooks.show', $textbookChapter)
+        return $this->redirectToChapterShow($textbookChapter)
             ->with('success', 'Chart removed for this question.');
     }
 
@@ -442,9 +438,8 @@ class TextbookController extends Controller
         $textbookChapter->refresh();
         $summary = $this->setPlanService->summary($textbookChapter->mcq_set_plan ?? []);
 
-        return redirect()
-            ->route('admin.textbooks.show', $textbookChapter)
-            ->with('success', "Published — MCQ sets ready to assign: {$summary}.");
+        return $this->redirectToChapterShow($textbookChapter)
+            ->with('success', "Published — MCQ sets ready: {$summary}.");
     }
 
     public function resetImport(TextbookChapter $textbookChapter): RedirectResponse
@@ -507,5 +502,21 @@ class TextbookController extends Controller
             ->filter()
             ->values()
             ->all();
+    }
+
+    private function isContentUploaderContext(?Request $request = null): bool
+    {
+        $request ??= request();
+
+        return $request->routeIs('content.*');
+    }
+
+    private function redirectToChapterShow(TextbookChapter $chapter): RedirectResponse
+    {
+        $route = $this->isContentUploaderContext()
+            ? 'content.textbooks.show'
+            : 'admin.textbooks.show';
+
+        return redirect()->route($route, $chapter);
     }
 }

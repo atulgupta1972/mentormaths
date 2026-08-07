@@ -7,6 +7,7 @@ use App\Models\GradeLevel;
 use App\Services\DashboardService;
 use App\Support\MailConfigStatus;
 use App\Support\StudentWeeklyReportEmails;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -15,7 +16,7 @@ class DashboardController extends Controller
 {
     public function __construct(private DashboardService $dashboardService) {}
 
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
 
@@ -29,6 +30,10 @@ class DashboardController extends Controller
                     ->get(['id', 'name']),
                 ...$this->dashboardService->forAdmin($request),
             ]);
+        }
+
+        if ($user->isContentUploader() && ! $user->student) {
+            return redirect()->route('content.tasks.index');
         }
 
         $enrollment = $user->student?->currentEnrollment();

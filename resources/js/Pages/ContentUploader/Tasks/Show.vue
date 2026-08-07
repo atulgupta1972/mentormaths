@@ -114,9 +114,12 @@ onUnmounted(() => clearInterval(pingTimer));
                 </div>
 
                 <div v-else-if="['in_progress', 'uploaded', 'verification_in_progress', 'verified'].includes(task.status)" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
-                    <p class="text-sm text-gray-700">Upload MCQs via the textbook chapter page, then mark upload complete.</p>
+                    <p class="text-sm text-gray-700">
+                        Open the chapter page to paste JSON, split into sets, tick each question approved, then save MCQ sets.
+                        After that, mark upload complete here and finish the verification checklist.
+                    </p>
                     <div class="mt-3 flex flex-wrap gap-3">
-                        <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="text-sm font-medium text-indigo-600 hover:underline" target="_blank" rel="noopener">
+                        <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="text-sm font-medium text-indigo-600 hover:underline">
                             Open textbook chapter →
                         </a>
                         <SecondaryButton

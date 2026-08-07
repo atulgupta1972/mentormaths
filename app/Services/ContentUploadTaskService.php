@@ -162,8 +162,16 @@ class ContentUploadTaskService
 
         $chapter = $task->textbookChapter;
 
+        if ($chapter->mcqWorksheetIds() === [] && empty($chapter->extraction_items)) {
+            throw new \InvalidArgumentException(
+                'Import MCQs for this chapter first (paste JSON on the textbook chapter page), approve questions, and save MCQ sets before marking upload complete.',
+            );
+        }
+
         if ($chapter->mcqWorksheetIds() === []) {
-            throw new \InvalidArgumentException('Import MCQs for this chapter before marking upload complete.');
+            throw new \InvalidArgumentException(
+                'Save MCQ sets on the chapter page (tick Approved on questions, set plan, then Save MCQ sets) before marking upload complete.',
+            );
         }
 
         $task->update(['status' => ContentUploadTask::STATUS_UPLOADED]);

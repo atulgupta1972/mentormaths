@@ -17,7 +17,12 @@ const props = defineProps({
     gradeLevels: { type: Array, default: () => [] },
     defaultGradeLevelId: { type: [Number, null], default: null },
     activeYear: { type: Object, default: null },
+    routeNamespace: { type: String, default: 'admin' },
+    uploaderMode: { type: Boolean, default: false },
 });
+
+const chapterRoute = (action, fallback = '#') =>
+    safeRoute(`${props.routeNamespace}.textbooks.${action}`, props.chapter.id, fallback);
 
 const cloneItems = (items) => JSON.parse(JSON.stringify(items ?? []));
 const clonePlan = (plan) => JSON.parse(JSON.stringify(plan ?? []));
@@ -84,7 +89,7 @@ const replaceDiagram = (index, event) => {
     formData.append('item_index', String(index));
     formData.append('diagram', file);
 
-    router.post(safeRoute('admin.textbooks.replace-diagram', props.chapter.id, '#'), formData, {
+    router.post(chapterRoute('replace-diagram'), formData, {
         preserveScroll: true,
         forceFormData: true,
         onSuccess: () => applyFromProps(),
@@ -100,7 +105,7 @@ const removeDiagram = (index) => {
         return;
     }
 
-    router.post(safeRoute('admin.textbooks.remove-diagram', props.chapter.id, '#'), {
+    router.post(chapterRoute('remove-diagram'), {
         item_index: index,
     }, {
         preserveScroll: true,
@@ -206,7 +211,7 @@ const copyPrompt = async () => {
 
 const importMcq = () => {
     importForm.json = jsonInput.value;
-    importForm.post(safeRoute('admin.textbooks.import-mcq', props.chapter.id, '#'), {
+    importForm.post(chapterRoute('import-mcq'), {
         preserveScroll: true,
         onSuccess: () => {
             jsonInput.value = '';
@@ -222,7 +227,7 @@ const onZipPackSelected = (event) => {
     }
 
     zipImportForm.pack = file;
-    zipImportForm.post(safeRoute('admin.textbooks.import-mcq-zip', props.chapter.id, '#'), {
+    zipImportForm.post(chapterRoute('import-mcq-zip'), {
         forceFormData: true,
         preserveScroll: true,
         onSuccess: () => {
@@ -242,17 +247,17 @@ const resetImport = () => {
         return;
     }
 
-    router.post(safeRoute('admin.textbooks.reset-import', props.chapter.id, '#'));
+    router.post(chapterRoute('reset-import'));
 };
 
 const saveDraft = () => {
     syncForms();
-    draftForm.post(safeRoute('admin.textbooks.draft', props.chapter.id, '#'), { preserveScroll: true });
+    draftForm.post(chapterRoute('draft'), { preserveScroll: true });
 };
 
 const publish = () => {
     syncForms();
-    publishForm.post(safeRoute('admin.textbooks.publish', props.chapter.id, '#'));
+    publishForm.post(chapterRoute('publish'));
 };
 
 const defaultTargetDate = () => {
@@ -418,12 +423,25 @@ const quickAssignSet = (setId) => {
                 <div class="flex flex-wrap gap-2">
                     <a
                         v-if="chapter.pdf_url"
-                        :href="safeRoute('admin.textbooks.download', chapter.id, chapter.pdf_url)"
+                        :href="chapterRoute('download', chapter.pdf_url)"
                         class="text-sm text-indigo-600 hover:underline"
                     >
                         Download PDF
                     </a>
-                    <Link :href="safeRoute('admin.textbooks.index', null, '/admin/textbooks')" class="text-sm text-gray-600 hover:underline">All chapters</Link>
+                    <Link
+                        v-if="uploaderMode"
+                        :href="safeRoute('content.tasks.index', null, '/content/tasks')"
+                        class="text-sm text-indigo-600 hover:underline"
+                    >
+                        ← My content tasks
+                    </Link>
+                    <Link
+                        v-else
+                        :href="safeRoute('admin.textbooks.index', null, '/admin/textbooks')"
+                        class="text-sm text-gray-600 hover:underline"
+                    >
+                        All chapters
+                    </Link>
                 </div>
             </div>
         </template>
@@ -438,9 +456,15 @@ const quickAssignSet = (setId) => {
                 </div>
 
                 <div v-if="hasItems && canEdit" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                    <strong>Review {{ items.length }} MCQ(s)</strong> — use the set plan matrix below.
-                    Small chapter (~25)? Keep <strong>one row</strong> covering Q1–{{ items.length }}.
-                    Large chapter? Add rows and set q_from / q_to per class (e.g. AP, GP).
+                    <strong>Review {{ items.length }} MCQ(s)</strong> —
+                    <span v-if="uploaderMode">
+                        bifurcate into sets below, tick <strong>Approved</strong> on each question you checked, then publish sets and return to your task to mark upload complete.
+                    </span>
+                    <span v-else>
+                        use the set plan matrix below.
+                        Small chapter (~25)? Keep <strong>one row</strong> covering Q1–{{ items.length }}.
+                        Large chapter? Add rows and set q_from / q_to per class (e.g. AP, GP).
+                    </span>
                     <SecondaryButton type="button" class="ml-3 !py-1 !text-xs" @click="resetImport">
                         Clear &amp; re-import
                     </SecondaryButton>
@@ -448,12 +472,14 @@ const quickAssignSet = (setId) => {
 
                 <div v-if="canEdit && hasItems" class="flex flex-wrap items-center justify-between gap-3">
                     <p class="text-sm text-gray-600">
-                        {{ approvedCount }} of {{ items.length }} approved · publish as {{ mcqPublishSummary }}.
+                        {{ approvedCount }} of {{ items.length }} approved · {{ uploaderMode ? 'save as' : 'publish as' }} {{ mcqPublishSummary }}.
                     </p>
                     <div class="flex flex-wrap gap-2">
                         <SecondaryButton :disabled="draftForm.processing" @click="saveDraft">Save draft</SecondaryButton>
                         <PrimaryButton :disabled="publishForm.processing || approvedCount === 0" @click="publish">
-                            {{ chapter.status === 'published' ? 'Re-publish MCQ sets' : 'Publish MCQ sets' }}
+                            {{ chapter.status === 'published'
+                                ? (uploaderMode ? 'Re-save MCQ sets' : 'Re-publish MCQ sets')
+                                : (uploaderMode ? 'Save MCQ sets (ready to verify)' : 'Publish MCQ sets') }}
                         </PrimaryButton>
                     </div>
                 </div>
@@ -601,7 +627,7 @@ const quickAssignSet = (setId) => {
                 </div>
 
                 <div
-                    v-if="chapter.status === 'published' && publishedSets.length"
+                    v-if="!uploaderMode && chapter.status === 'published' && publishedSets.length"
                     id="assign"
                     class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-indigo-200"
                 >
@@ -773,6 +799,17 @@ const quickAssignSet = (setId) => {
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <div
+                    v-else-if="uploaderMode && chapter.status === 'published'"
+                    class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950"
+                >
+                    MCQ sets saved:
+                    <strong>{{ publishedMcqSetCodes.join(', ') || 'ready' }}</strong>.
+                    Return to
+                    <Link :href="safeRoute('content.tasks.index', null, '/content/tasks')" class="font-medium underline">My content tasks</Link>,
+                    open this chapter, click <strong>Mark upload complete</strong>, then tick-verify each question.
                 </div>
 
                 <div
