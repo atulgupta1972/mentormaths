@@ -3,7 +3,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 const props = defineProps({
     gradeLevel: { type: Object, default: null },
@@ -15,8 +15,35 @@ const props = defineProps({
 const page = usePage();
 const showOnlyPending = ref(true);
 const expandedStudentId = ref(null);
+const lastRefreshedAt = ref(new Date());
 
 const reminderForm = useForm({});
+
+let refreshTimer = null;
+
+const refreshReport = () => {
+    router.get(route('admin.student-work-report.index'), {
+        board_id: props.filters.board_id || undefined,
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+        only: ['report', 'filters', 'boards', 'gradeLevel'],
+        onSuccess: () => {
+            lastRefreshedAt.value = new Date();
+        },
+    });
+};
+
+onMounted(() => {
+    refreshTimer = setInterval(refreshReport, 20000);
+});
+
+onUnmounted(() => {
+    if (refreshTimer) {
+        clearInterval(refreshTimer);
+    }
+});
 
 const setBoard = (boardId) => {
     router.get(route('admin.student-work-report.index'), {
@@ -150,7 +177,7 @@ const statusClass = (status) => ({
                         <div class="border-b border-gray-100 bg-sky-50 px-4 py-3">
                             <h3 class="text-sm font-semibold text-sky-950">Live now — students working</h3>
                             <p class="text-xs text-sky-800">
-                                Open practice/test sessions, formula drill, and basics drill. Refresh the page to update.
+                                Open practice/test sessions, formula drill, and basics drill. Auto-refreshes every 20 seconds.
                             </p>
                         </div>
                         <div class="overflow-x-auto">

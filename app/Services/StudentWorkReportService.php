@@ -54,12 +54,19 @@ class StudentWorkReportService
 
         $studentIds = $enrollments->pluck('student_id');
         $asOf = now()->endOfDay();
+        $userIds = $enrollments->pluck('student.user_id')->filter()->map(fn ($id) => (int) $id)->all();
 
-        $liveByStudent = $this->liveActivities($enrollments, $studentIds)->groupBy('student_id');
-        $onlineUserIds = $this->recentlyOnlineUserIds(
-            $enrollments->pluck('student.user_id')->filter()->map(fn ($id) => (int) $id)->all(),
-            $liveByStudent,
-        );
+        $onlineUserIds = $this->recentlyOnlineUserIds($userIds);
+        $liveByStudent = $this->liveActivities($enrollments, $studentIds, $onlineUserIds)->groupBy('student_id');
+
+        // Anyone with live work is online.
+        $liveUserIds = \App\Models\Student::query()
+            ->whereIn('id', $liveByStudent->keys()->all())
+            ->whereNotNull('user_id')
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $onlineUserIds = array_values(array_unique([...$onlineUserIds, ...$liveUserIds]));
 
         $students = [];
         $totalPendingItems = 0;
@@ -132,22 +139,40 @@ class StudentWorkReportService
     /**
      * @param  \Illuminate\Support\Collection<int, StudentEnrollment>  $enrollments
      * @param  \Illuminate\Support\Collection<int, int>  $studentIds
+     * @param  list<int>  $onlineUserIds
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>
      */
-    private function liveActivities($enrollments, $studentIds)
+    private function liveActivities($enrollments, $studentIds, array $onlineUserIds = [])
     {
         $cutoff = now()->subMinutes(self::LIVE_MINUTES);
         $enrollmentByStudent = $enrollments->keyBy('student_id');
         $rows = collect();
 
-        // Open attempt sessions (active_session_started_at set) stay "live" even after 20+ minutes
-        // of continuous work — resumeSession often keeps the original timestamp.
+        $onlineStudentIds = $onlineUserIds === []
+            ? []
+            : \App\Models\Student::query()
+                ->whereIn('user_id', $onlineUserIds)
+                ->whereIn('id', $studentIds)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+        // Live = open timing session, recent attempt/answer activity, or in-progress while student is online.
         $attempts = SetAttempt::query()
             ->where('status', SetAttempt::STATUS_IN_PROGRESS)
-            ->where(function ($query) use ($cutoff) {
+            ->where(function ($query) use ($cutoff, $onlineStudentIds) {
                 $query->whereNotNull('active_session_started_at')
                     ->orWhere('updated_at', '>=', $cutoff)
-                    ->orWhere('started_at', '>=', $cutoff);
+                    ->orWhere('started_at', '>=', $cutoff)
+                    ->orWhereHas('answers', fn ($q) => $q->where('updated_at', '>=', $cutoff))
+                    ->orWhereHas('guidedQuestions', fn ($q) => $q->where('updated_at', '>=', $cutoff));
+
+                if ($onlineStudentIds !== []) {
+                    $query->orWhereHas(
+                        'assignment.enrollment',
+                        fn ($q) => $q->whereIn('student_id', $onlineStudentIds),
+                    );
+                }
             })
             ->whereHas('assignment', fn ($query) => $query
                 ->whereIn('student_enrollment_id', $enrollments->pluck('id'))
@@ -173,14 +198,24 @@ class StudentWorkReportService
             $partial = AssignmentProgress::partialProgress($assignment);
             $worksheet = $assignment->practiceSet;
             $kind = $worksheet?->isChapterTest() ? 'Test' : ($worksheet?->isCatchUp() ? 'Catch-up' : 'Practice');
-            $lastActive = $attempt->updated_at
-                ?? $attempt->active_session_started_at
-                ?? $attempt->started_at;
+            $answerStamp = $attempt->answers->max('updated_at');
+            $guidedStamp = $attempt->guidedQuestions->max('updated_at');
+            $lastActive = collect([
+                $attempt->updated_at,
+                $attempt->active_session_started_at,
+                $attempt->started_at,
+                $answerStamp,
+                $guidedStamp,
+            ])->filter()->sortDesc()->first();
 
             // Open session still counting → treat as active now.
             if ($attempt->active_session_started_at) {
                 $lastActive = now();
             }
+
+            $lastActiveAt = $lastActive
+                ? Carbon::parse($lastActive)->toIso8601String()
+                : null;
 
             $rows->push($this->liveRow(
                 studentId: $student->id,
@@ -191,7 +226,7 @@ class StudentWorkReportService
                 progressLabel: $partial['label'],
                 progressDone: $partial['done'],
                 progressTotal: $partial['total'],
-                lastActiveAt: $lastActive?->toIso8601String(),
+                lastActiveAt: $lastActiveAt,
                 assignmentId: $assignment->id,
             ));
         }
@@ -201,7 +236,16 @@ class StudentWorkReportService
         $formulaSessions = FormulaDrillSession::query()
             ->whereIn('student_id', $studentIds)
             ->whereDate('drill_date', $today)
-            ->where('status', FormulaDrillSession::STATUS_IN_PROGRESS)
+            ->where(function ($query) use ($cutoff, $onlineStudentIds) {
+                $query->where('status', FormulaDrillSession::STATUS_IN_PROGRESS)
+                    ->where(function ($inner) use ($cutoff, $onlineStudentIds) {
+                        $inner->where('updated_at', '>=', $cutoff);
+
+                        if ($onlineStudentIds !== []) {
+                            $inner->orWhereIn('student_id', $onlineStudentIds);
+                        }
+                    });
+            })
             ->with('student:id,name')
             ->get();
 
@@ -227,7 +271,16 @@ class StudentWorkReportService
         $basicsSessions = BasicsDrillSession::query()
             ->whereIn('student_id', $studentIds)
             ->whereDate('drill_date', $today)
-            ->where('status', BasicsDrillSession::STATUS_IN_PROGRESS)
+            ->where(function ($query) use ($cutoff, $onlineStudentIds) {
+                $query->where('status', BasicsDrillSession::STATUS_IN_PROGRESS)
+                    ->where(function ($inner) use ($cutoff, $onlineStudentIds) {
+                        $inner->where('updated_at', '>=', $cutoff);
+
+                        if ($onlineStudentIds !== []) {
+                            $inner->orWhereIn('student_id', $onlineStudentIds);
+                        }
+                    });
+            })
             ->with(['student:id,name', 'items'])
             ->get();
 
@@ -255,37 +308,33 @@ class StudentWorkReportService
 
     /**
      * @param  list<int>  $userIds
-     * @param  \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, array<string, mixed>>>  $liveByStudent
      * @return list<int>
      */
-    private function recentlyOnlineUserIds(array $userIds, $liveByStudent): array
+    private function recentlyOnlineUserIds(array $userIds): array
     {
-        $online = collect();
-
-        // Anyone currently shown as working is online.
-        $liveStudentIds = $liveByStudent->keys()->map(fn ($id) => (int) $id)->all();
-        if ($liveStudentIds !== []) {
-            $online = $online->merge(
-                \App\Models\Student::query()
-                    ->whereIn('id', $liveStudentIds)
-                    ->whereNotNull('user_id')
-                    ->pluck('user_id')
-                    ->map(fn ($id) => (int) $id),
-            );
-        }
-
         if ($userIds === []) {
-            return $online->unique()->values()->all();
+            return [];
         }
 
-        $cutoff = now()->subMinutes(self::LIVE_MINUTES)->getTimestamp();
+        $online = collect();
+        $cutoff = now()->subMinutes(self::LIVE_MINUTES);
+
+        $online = $online->merge(
+            \App\Models\User::query()
+                ->whereIn('id', $userIds)
+                ->where('last_seen_at', '>=', $cutoff)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id),
+        );
+
+        $sessionCutoff = $cutoff->getTimestamp();
 
         try {
             if (config('session.driver') === 'database') {
                 $online = $online->merge(
                     DB::table('sessions')
                         ->whereIn('user_id', $userIds)
-                        ->where('last_activity', '>=', $cutoff)
+                        ->where('last_activity', '>=', $sessionCutoff)
                         ->pluck('user_id')
                         ->map(fn ($id) => (int) $id),
                 );

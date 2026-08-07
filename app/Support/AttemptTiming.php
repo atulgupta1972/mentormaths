@@ -55,11 +55,35 @@ class AttemptTiming
             return $attempt;
         }
 
+        // Ignore pause beacons that race in right after a fresh resume (Inertia remount).
+        if (self::elapsedSeconds($attempt->active_session_started_at) < 3) {
+            return $attempt;
+        }
+
         $attempt->update([
             'active_seconds' => ($attempt->active_seconds ?? 0)
                 + self::elapsedSeconds($attempt->active_session_started_at),
             'active_session_started_at' => null,
         ]);
+
+        return $attempt->fresh();
+    }
+
+    /**
+     * Keep the attempt marked live while the student is still on the page
+     * (batch tests may not hit the server between start and submit).
+     */
+    public static function heartbeat(SetAttempt $attempt): SetAttempt
+    {
+        if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS) {
+            return $attempt;
+        }
+
+        if (! $attempt->active_session_started_at) {
+            return self::resumeSession($attempt);
+        }
+
+        $attempt->touch();
 
         return $attempt->fresh();
     }

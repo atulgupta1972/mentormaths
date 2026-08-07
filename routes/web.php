@@ -355,6 +355,8 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
     Route::post('/attempts/{attempt}/guided/request-hint', [StudentPracticeSetController::class, 'guidedRequestHint'])->name('attempts.guided.request-hint');
     Route::post('/attempts/{attempt}/guided/give-up', [StudentPracticeSetController::class, 'guidedGiveUp'])->name('attempts.guided.give-up');
     Route::post('/attempts/{attempt}/timing/pause', [StudentPracticeSetController::class, 'pauseAttemptTiming'])->name('attempts.timing.pause');
+    Route::post('/attempts/{attempt}/timing/resume', [StudentPracticeSetController::class, 'resumeAttemptTiming'])->name('attempts.timing.resume');
+    Route::post('/attempts/{attempt}/timing/heartbeat', [StudentPracticeSetController::class, 'heartbeatAttemptTiming'])->name('attempts.timing.heartbeat');
     Route::post('/attempts/{attempt}/integrity/tab-leave', [StudentPracticeSetController::class, 'recordTabLeave'])->name('attempts.integrity.tab-leave');
     Route::post('/attempts/{attempt}/submit', [StudentPracticeSetController::class, 'submitAttempt'])->name('attempts.submit');
     Route::get('/attempts/{attempt}/result', [StudentPracticeSetController::class, 'result'])->name('attempts.result');

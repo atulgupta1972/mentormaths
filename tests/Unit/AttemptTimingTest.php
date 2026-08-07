@@ -57,6 +57,43 @@ class AttemptTimingTest extends TestCase
         $this->assertSame(150, $attempt->active_seconds);
     }
 
+    public function test_pause_ignores_beacon_race_right_after_resume(): void
+    {
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $this->seedAssignmentId(),
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subMinutes(5),
+            'active_seconds' => 10,
+            'active_session_started_at' => now()->subSecond(),
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+        ]);
+
+        AttemptTiming::pauseSession($attempt);
+        $attempt->refresh();
+
+        $this->assertNotNull($attempt->active_session_started_at);
+        $this->assertSame(10, $attempt->active_seconds);
+    }
+
+    public function test_heartbeat_reopens_paused_session(): void
+    {
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $this->seedAssignmentId(),
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subMinutes(5),
+            'active_seconds' => 40,
+            'active_session_started_at' => null,
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+        ]);
+
+        AttemptTiming::heartbeat($attempt);
+        $attempt->refresh();
+
+        $this->assertNotNull($attempt->active_session_started_at);
+    }
+
     public function test_finalize_uses_active_seconds_not_wall_clock(): void
     {
         $attempt = SetAttempt::query()->create([

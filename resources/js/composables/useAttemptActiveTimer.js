@@ -4,13 +4,35 @@ function readCsrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 }
 
+async function postTiming(url) {
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': readCsrfToken(),
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+        body: '{}',
+    });
+
+    if (! response.ok) {
+        return null;
+    }
+
+    return response.json();
+}
+
 export function useAttemptActiveTimer(attemptId, timing = {}) {
     const elapsed = ref(timing.active_seconds ?? 0);
-    const sessionStartedAt = timing.active_session_started_at
+    let baseSeconds = timing.active_seconds ?? 0;
+    let sessionStartedAt = timing.active_session_started_at
         ? new Date(timing.active_session_started_at).getTime()
         : Date.now();
 
     let timer = null;
+    let heartbeatTimer = null;
     let pauseSent = false;
 
     const tick = () => {
@@ -18,12 +40,24 @@ export function useAttemptActiveTimer(attemptId, timing = {}) {
             return;
         }
 
-        const base = timing.active_seconds ?? 0;
-        elapsed.value = base + Math.floor((Date.now() - sessionStartedAt) / 1000);
+        elapsed.value = baseSeconds + Math.floor((Date.now() - sessionStartedAt) / 1000);
+    };
+
+    const applyPayload = (payload) => {
+        if (! payload) {
+            return;
+        }
+
+        baseSeconds = payload.active_seconds ?? baseSeconds;
+        if (payload.active_session_started_at) {
+            sessionStartedAt = new Date(payload.active_session_started_at).getTime();
+            pauseSent = false;
+        }
+        tick();
     };
 
     const pause = () => {
-        if (pauseSent || !attemptId) {
+        if (pauseSent || ! attemptId) {
             return;
         }
 
@@ -48,15 +82,47 @@ export function useAttemptActiveTimer(attemptId, timing = {}) {
         }
     };
 
+    const resume = async () => {
+        if (! attemptId || document.hidden) {
+            return;
+        }
+
+        try {
+            const payload = await postTiming(route('student.attempts.timing.resume', attemptId));
+            applyPayload(payload);
+            pauseSent = false;
+        } catch {
+            pauseSent = false;
+            sessionStartedAt = Date.now();
+        }
+    };
+
+    const heartbeat = async () => {
+        if (! attemptId || document.hidden || pauseSent) {
+            return;
+        }
+
+        try {
+            const payload = await postTiming(route('student.attempts.timing.heartbeat', attemptId));
+            applyPayload(payload);
+        } catch {
+            // ignore transient network errors
+        }
+    };
+
     const onVisibilityChange = () => {
         if (document.hidden) {
             pause();
+        } else {
+            resume();
         }
     };
 
     onMounted(() => {
         tick();
         timer = setInterval(tick, 1000);
+        heartbeatTimer = setInterval(heartbeat, 30000);
+        heartbeat();
         document.addEventListener('visibilitychange', onVisibilityChange);
         window.addEventListener('pagehide', pause);
     });
@@ -64,6 +130,9 @@ export function useAttemptActiveTimer(attemptId, timing = {}) {
     onUnmounted(() => {
         if (timer) {
             clearInterval(timer);
+        }
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
         }
 
         document.removeEventListener('visibilitychange', onVisibilityChange);

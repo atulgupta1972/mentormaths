@@ -178,6 +178,32 @@ class PracticeSetController extends Controller
         return response()->json(AttemptTiming::payloadForAttempt($attempt));
     }
 
+    public function resumeAttemptTiming(Request $request, SetAttempt $attempt): JsonResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        if ($attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
+            AttemptTiming::resumeSession($attempt);
+            $attempt->refresh();
+        }
+
+        return response()->json(AttemptTiming::payloadForAttempt($attempt));
+    }
+
+    public function heartbeatAttemptTiming(Request $request, SetAttempt $attempt): JsonResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        if ($attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
+            AttemptTiming::heartbeat($attempt);
+            $attempt->refresh();
+        }
+
+        return response()->json(AttemptTiming::payloadForAttempt($attempt));
+    }
+
     public function recordTabLeave(Request $request, SetAttempt $attempt): JsonResponse
     {
         $assignment = $attempt->assignment;

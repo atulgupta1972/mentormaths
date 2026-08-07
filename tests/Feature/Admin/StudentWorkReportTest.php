@@ -85,6 +85,36 @@ class StudentWorkReportTest extends TestCase
                 ->has('report.live', 1));
     }
 
+    public function test_online_student_with_paused_open_attempt_still_counts_as_live(): void
+    {
+        $this->withoutVite();
+
+        [$grade, $enrollment, $admin, $assignment] = $this->seedStudentWithPendingWork();
+
+        // Tab blur pauses timing; batch tests may not update the attempt until submit.
+        SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'current_question_index' => 2,
+            'started_at' => now()->subMinutes(50),
+            'active_session_started_at' => null,
+            'updated_at' => now()->subMinutes(35),
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+        ]);
+
+        $enrollment->student->user->forceFill(['last_seen_at' => now()->subMinutes(1)])->save();
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.student-work-report.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('report.summary.students_live_now', 1)
+                ->where('report.summary.students_online', 1)
+                ->has('report.live', 1));
+    }
+
     public function test_admin_can_send_class_reminders_from_work_report(): void
     {
         Mail::fake();
