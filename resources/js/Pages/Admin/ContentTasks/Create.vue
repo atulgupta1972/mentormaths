@@ -4,7 +4,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -14,6 +14,7 @@ const props = defineProps({
     syllabusChapters: { type: Array, default: () => [] },
 });
 
+const page = usePage();
 const useNewBook = ref(props.textbooks.length === 0);
 const selectedTextbookId = ref(props.textbooks[0]?.id ?? '');
 
@@ -69,7 +70,40 @@ const selectedRatePreview = computed(() => {
     return 'Set rates in matrix first';
 });
 
+const hasMatrixRate = computed(() => {
+    const selected = props.syllabusChapters.filter((ch) => form.syllabus_chapter_ids.includes(ch.id));
+    if (!selected.length) {
+        return false;
+    }
+
+    return selected.every((ch) => Number(ch.default_amount_inr) > 0);
+});
+
+const canSubmit = computed(() => {
+    if (!form.assigned_to_user_id || form.syllabus_chapter_ids.length === 0) {
+        return false;
+    }
+
+    if (form.offered_amount_inr !== '' && Number(form.offered_amount_inr) >= 100) {
+        return true;
+    }
+
+    return hasMatrixRate.value;
+});
+
+const submitBlockedReason = computed(() => {
+    if (canSubmit.value || form.syllabus_chapter_ids.length === 0) {
+        return '';
+    }
+
+    return 'Set rates in the rate matrix first, or enter a rate override (₹) above.';
+});
+
 const submit = () => {
+    if (!canSubmit.value || form.processing) {
+        return;
+    }
+
     form.transform((data) => ({
         ...data,
         textbook_id: useNewBook.value ? null : selectedTextbookId.value,
@@ -93,6 +127,10 @@ const submit = () => {
 
         <div class="py-8">
             <div class="mx-auto max-w-3xl space-y-4 px-4 sm:px-6">
+                <div v-if="page.props.flash?.error" class="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950">
+                    {{ page.props.flash.error }}
+                </div>
+
                 <div v-if="!gradeLevel" class="rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
                     Select a class from the top bar first (e.g. Class 7), then return to this page.
                 </div>
@@ -209,10 +247,14 @@ const submit = () => {
                         <textarea v-model="form.admin_notes" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
                     </div>
 
-                    <div class="flex gap-3">
-                        <PrimaryButton :disabled="form.processing || !syllabusChapters.length">Create assignment(s)</PrimaryButton>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <PrimaryButton :disabled="form.processing || !canSubmit">
+                            {{ form.processing ? 'Creating…' : 'Create assignment(s)' }}
+                        </PrimaryButton>
                         <Link :href="route('admin.content-tasks.index')" class="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700">Cancel</Link>
                     </div>
+                    <p v-if="submitBlockedReason" class="text-sm text-amber-800">{{ submitBlockedReason }}</p>
+                    <p v-if="form.processing" class="text-sm text-slate-600">Saving assignments and sending email…</p>
                 </form>
             </div>
         </div>

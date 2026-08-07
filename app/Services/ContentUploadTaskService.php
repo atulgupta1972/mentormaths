@@ -19,7 +19,7 @@ class ContentUploadTaskService
 
     /**
      * @param  list<int>  $chapterIds
-     * @return list<ContentUploadTask>
+     * @return array{tasks: list<ContentUploadTask>, email_sent: bool}
      */
     public function assignChapters(
         User $uploader,
@@ -63,16 +63,19 @@ class ContentUploadTaskService
             }
         });
 
-        if ($tasks !== []) {
-            ContentOperationsMailer::notifyAssigned($uploader, $tasks);
-        }
+        $emailSent = $tasks !== []
+            ? ContentOperationsMailer::notifyAssigned($uploader, $tasks)
+            : false;
 
-        return $tasks;
+        return [
+            'tasks' => $tasks,
+            'email_sent' => $emailSent,
+        ];
     }
 
     /**
      * @param  list<int>  $syllabusChapterIds
-     * @return list<ContentUploadTask>
+     * @return array{tasks: list<ContentUploadTask>, email_sent: bool}
      */
     public function assignSyllabusChapters(
         Textbook $textbook,
@@ -102,6 +105,13 @@ class ContentUploadTaskService
                     'created_by' => $admin->id,
                 ],
             );
+
+            if ($textbookChapter->title !== $syllabusChapter->name || (int) $textbookChapter->chapter_number !== $chapterNumber) {
+                $textbookChapter->update([
+                    'title' => $syllabusChapter->name,
+                    'chapter_number' => $chapterNumber,
+                ]);
+            }
 
             $textbookChapterIds[] = $textbookChapter->id;
         }

@@ -11,6 +11,7 @@ use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\User;
 use App\Services\AdminGradeContext;
+use App\Services\ContentAllocationMatrixService;
 use App\Services\ContentRateCardService;
 use App\Services\ContentUploadTaskService;
 use App\Services\ContentWorkSessionService;
@@ -27,11 +28,15 @@ class ContentUploadTaskController extends Controller
         private ContentWorkSessionService $sessionService,
         private AdminGradeContext $gradeContext,
         private ContentRateCardService $rateCardService,
+        private ContentAllocationMatrixService $matrixService,
     ) {}
 
     public function index(Request $request): Response
     {
         $status = $request->string('status')->toString();
+        $boardId = $request->integer('board_id') ?: null;
+        $drillGradeId = $request->integer('drill_grade_id') ?: null;
+        $drillUploaderId = $request->integer('drill_uploader_id') ?: null;
 
         $tasks = ContentUploadTask::query()
             ->with([
@@ -48,8 +53,14 @@ class ContentUploadTaskController extends Controller
 
         return Inertia::render('Admin/ContentTasks/Index', [
             'tasks' => $tasks,
-            'filters' => ['status' => $status],
+            'filters' => [
+                'status' => $status,
+                'board_id' => $boardId,
+                'drill_grade_id' => $drillGradeId,
+                'drill_uploader_id' => $drillUploaderId,
+            ],
             'statuses' => $this->statusOptions(),
+            'matrix' => $this->matrixService->build($boardId, $drillGradeId, $drillUploaderId),
             'pendingPublishCount' => ContentUploadTask::query()
                 ->where('status', ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH)
                 ->count(),
@@ -177,7 +188,7 @@ class ContentUploadTaskController extends Controller
                 ? (int) $validated['offered_amount_inr']
                 : null;
 
-            $this->taskService->assignSyllabusChapters(
+            $result = $this->taskService->assignSyllabusChapters(
                 $textbook,
                 $validated['syllabus_chapter_ids'],
                 $uploader,
@@ -187,12 +198,30 @@ class ContentUploadTaskController extends Controller
                 $validated['admin_notes'] ?? null,
             );
         } catch (\InvalidArgumentException $e) {
-            return back()->with('error', $e->getMessage());
+            return back()
+                ->withInput()
+                ->with('error', $e->getMessage());
         }
+
+        $count = count($result['tasks']);
+        $emailSent = (bool) $result['email_sent'];
+
+        $success = $count === 1
+            ? "1 chapter assigned to {$uploader->name}."
+            : "{$count} chapters assigned to {$uploader->name}.";
+
+        $success .= $emailSent
+            ? " Assignment email sent to {$uploader->email}."
+            : ' Warning: assignment email could not be sent — check mail settings.';
 
         return redirect()
             ->route('admin.content-tasks.index')
-            ->with('success', 'Chapter assignment(s) created. Uploader emailed to review and agree before starting.');
+            ->with('success', $success)
+            ->with('email_sent', $emailSent)
+            ->with('assignment_summary', [
+                'uploader' => $uploader->only(['id', 'name', 'email']),
+                'count' => $count,
+            ]);
     }
 
     public function show(ContentUploadTask $contentTask): Response

@@ -1,16 +1,64 @@
 <script setup>
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
-defineProps({
+const props = defineProps({
     tasks: { type: Object, required: true },
     filters: { type: Object, default: () => ({}) },
     statuses: { type: Array, default: () => [] },
+    matrix: { type: Object, required: true },
     pendingPublishCount: { type: Number, default: 0 },
 });
 
+const page = usePage();
 const formatInr = (amount) => (amount ? `₹${Number(amount).toLocaleString('en-IN')}` : '—');
+
+const cellCount = (gradeId, uploaderId) =>
+    props.matrix.cells?.[String(gradeId)]?.[String(uploaderId)]?.count ?? 0;
+
+const isDrillOpen = (gradeId, uploaderId) =>
+    Number(props.filters.drill_grade_id) === Number(gradeId)
+    && Number(props.filters.drill_uploader_id) === Number(uploaderId);
+
+const setBoard = (boardId) => {
+    router.get(route('admin.content-tasks.index'), {
+        board_id: boardId || undefined,
+        status: props.filters.status || undefined,
+    }, { preserveState: true, replace: true });
+};
+
+const toggleDrill = (gradeId, uploaderId) => {
+    const open = isDrillOpen(gradeId, uploaderId);
+    router.get(route('admin.content-tasks.index'), {
+        board_id: props.matrix.board_id || undefined,
+        status: props.filters.status || undefined,
+        drill_grade_id: open ? undefined : gradeId,
+        drill_uploader_id: open ? undefined : uploaderId,
+    }, { preserveState: true, replace: true, preserveScroll: true });
+};
+
+const closeDrill = () => {
+    router.get(route('admin.content-tasks.index'), {
+        board_id: props.matrix.board_id || undefined,
+        status: props.filters.status || undefined,
+    }, { preserveState: true, replace: true, preserveScroll: true });
+};
+
+const statusTone = (group) => ({
+    awaiting: 'bg-amber-50 text-amber-900 ring-amber-200',
+    under_upload: 'bg-sky-50 text-sky-900 ring-sky-200',
+    uploaded: 'bg-indigo-50 text-indigo-900 ring-indigo-200',
+    submitted: 'bg-violet-50 text-violet-900 ring-violet-200',
+    published: 'bg-emerald-50 text-emerald-900 ring-emerald-200',
+    other: 'bg-gray-50 text-gray-700 ring-gray-200',
+}[group] || 'bg-gray-50 text-gray-700 ring-gray-200');
+
+const flashSuccess = computed(() => page.props.flash?.success);
+const flashError = computed(() => page.props.flash?.error);
+const emailSent = computed(() => page.props.flash?.email_sent);
+const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
 </script>
 
 <template>
@@ -20,8 +68,8 @@ const formatInr = (amount) => (amount ? `₹${Number(amount).toLocaleString('en-
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-gray-800">Content upload tasks</h2>
-                    <p class="text-sm text-gray-500">Assign chapters, track agreement, and publish when verified.</p>
+                    <h2 class="text-xl font-semibold text-gray-800">Content allocation matrix</h2>
+                    <p class="text-sm text-gray-500">See what is assigned to whom — click a count to drill into chapters & status.</p>
                 </div>
                 <div class="flex gap-2">
                     <Link :href="route('admin.content-rate-cards.index')" class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
@@ -35,12 +83,148 @@ const formatInr = (amount) => (amount ? `₹${Number(amount).toLocaleString('en-
         </template>
 
         <div class="py-8">
-            <div class="mx-auto max-w-6xl space-y-4 px-4 sm:px-6">
+            <div class="mx-auto max-w-7xl space-y-4 px-4 sm:px-6">
+                <div v-if="flashSuccess" class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+                    {{ flashSuccess }}
+                    <span v-if="emailSent === true" class="mt-1 block text-emerald-800">Email delivery attempted successfully.</span>
+                    <span v-else-if="emailSent === false" class="mt-1 block text-amber-800">Email may not have been delivered.</span>
+                    <span v-if="assignmentSummary" class="mt-1 block text-emerald-800">
+                        {{ assignmentSummary.count }} chapter(s) → {{ assignmentSummary.uploader?.name }} ({{ assignmentSummary.uploader?.email }})
+                    </span>
+                </div>
+                <div v-if="flashError" class="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950">
+                    {{ flashError }}
+                </div>
+
                 <div v-if="pendingPublishCount" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                     <strong>{{ pendingPublishCount }}</strong> chapter(s) submitted and waiting for admin publish.
                 </div>
 
+                <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500">Board filter</label>
+                            <select
+                                class="mt-1 block rounded-md border-gray-300 text-sm"
+                                :value="matrix.board_id || ''"
+                                @change="setBoard($event.target.value ? Number($event.target.value) : null)"
+                            >
+                                <option v-for="board in matrix.boards" :key="board.id" :value="board.id">
+                                    {{ board.code }} — {{ board.name }}
+                                </option>
+                            </select>
+                        </div>
+                        <p class="text-xs text-gray-500">
+                            Active work type: <strong>Content upload (textbook MCQ)</strong>.
+                            MCQ bank / Fill in blanks columns are reserved for later assignment types.
+                        </p>
+                    </div>
+
+                    <div class="mt-4 overflow-x-auto">
+                        <table class="min-w-full border-collapse text-sm">
+                            <thead>
+                                <tr class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                                    <th class="sticky left-0 z-10 border border-slate-200 bg-slate-50 px-3 py-2">Class</th>
+                                    <th
+                                        v-for="uploader in matrix.uploaders"
+                                        :key="uploader.id"
+                                        class="border border-slate-200 px-3 py-2"
+                                        :title="uploader.email"
+                                    >
+                                        Content upload<br>
+                                        <span class="normal-case tracking-normal text-slate-800">{{ uploader.name }}</span>
+                                    </th>
+                                    <th class="border border-dashed border-slate-200 px-3 py-2 text-slate-400">MCQ bank</th>
+                                    <th class="border border-dashed border-slate-200 px-3 py-2 text-slate-400">Fill in blanks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="grade in matrix.grades" :key="grade.id">
+                                    <td class="sticky left-0 z-10 border border-slate-200 bg-white px-3 py-2 font-medium text-slate-900">
+                                        {{ grade.name }}
+                                    </td>
+                                    <td
+                                        v-for="uploader in matrix.uploaders"
+                                        :key="`${grade.id}-${uploader.id}`"
+                                        class="border border-slate-200 px-2 py-1 text-center"
+                                    >
+                                        <button
+                                            v-if="cellCount(grade.id, uploader.id) > 0"
+                                            type="button"
+                                            class="min-w-[2.5rem] rounded-md px-2 py-1 text-sm font-semibold ring-1 transition"
+                                            :class="isDrillOpen(grade.id, uploader.id)
+                                                ? 'bg-indigo-600 text-white ring-indigo-600'
+                                                : 'bg-indigo-50 text-indigo-900 ring-indigo-200 hover:bg-indigo-100'"
+                                            @click="toggleDrill(grade.id, uploader.id)"
+                                        >
+                                            {{ cellCount(grade.id, uploader.id) }}
+                                        </button>
+                                        <span v-else class="text-slate-300">—</span>
+                                    </td>
+                                    <td class="border border-dashed border-slate-200 px-3 py-2 text-center text-slate-300">—</td>
+                                    <td class="border border-dashed border-slate-200 px-3 py-2 text-center text-slate-300">—</td>
+                                </tr>
+                                <tr v-if="!matrix.uploaders.length">
+                                    <td :colspan="4" class="border border-slate-200 px-4 py-6 text-center text-slate-500">
+                                        No content uploaders yet. Approve mentors with content uploader access, then assign chapters.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div v-if="matrix.drill" class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-indigo-200">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h3 class="font-semibold text-slate-900">
+                                {{ matrix.drill.grade?.name }} · {{ matrix.drill.uploader?.name }}
+                            </h3>
+                            <p class="text-sm text-slate-500">
+                                {{ matrix.drill.chapters.length }} chapter(s) · {{ matrix.drill.uploader?.email }}
+                            </p>
+                        </div>
+                        <button type="button" class="text-sm text-indigo-600 hover:underline" @click="closeDrill">Close</button>
+                    </div>
+
+                    <div class="mt-4 overflow-hidden rounded-md ring-1 ring-slate-200">
+                        <table class="min-w-full divide-y divide-slate-100 text-sm">
+                            <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                                <tr>
+                                    <th class="px-3 py-2">Chapter</th>
+                                    <th class="px-3 py-2">Book</th>
+                                    <th class="px-3 py-2">Status</th>
+                                    <th class="px-3 py-2">Questions</th>
+                                    <th class="px-3 py-2">Rate</th>
+                                    <th class="px-3 py-2"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <tr v-for="row in matrix.drill.chapters" :key="row.id">
+                                    <td class="px-3 py-2">
+                                        <p class="font-medium text-slate-900">Ch {{ row.chapter?.chapter_number }} — {{ row.chapter?.title }}</p>
+                                    </td>
+                                    <td class="px-3 py-2 text-slate-600">{{ row.chapter?.textbook_name }}</td>
+                                    <td class="px-3 py-2">
+                                        <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1" :class="statusTone(row.status_group)">
+                                            {{ row.status_label }}
+                                        </span>
+                                    </td>
+                                    <td class="px-3 py-2">{{ row.question_count || '—' }}</td>
+                                    <td class="px-3 py-2">{{ formatInr(row.agreed_amount_inr || row.offered_amount_inr) }}</td>
+                                    <td class="px-3 py-2 text-right">
+                                        <Link :href="route('admin.content-tasks.show', row.id)" class="text-indigo-600 hover:underline">Open</Link>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+                    <div class="border-b border-gray-100 px-4 py-3">
+                        <h3 class="font-semibold text-gray-900">Recent tasks</h3>
+                    </div>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                             <tr>

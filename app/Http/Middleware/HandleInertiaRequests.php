@@ -50,6 +50,7 @@ class HandleInertiaRequests extends Middleware
                 'warning' => fn () => $request->session()->get('warning'),
                 'generated_login' => fn () => $request->session()->get('generated_login'),
                 'email_sent' => fn () => $request->session()->get('email_sent'),
+                'assignment_summary' => fn () => $request->session()->get('assignment_summary'),
                 'promotion_errors' => fn () => $request->session()->get('promotion_errors'),
                 'import_rows' => fn () => $request->session()->get('import_rows'),
                 'manual_questions_draft' => fn () => $request->session()->get('manual_questions_draft'),
