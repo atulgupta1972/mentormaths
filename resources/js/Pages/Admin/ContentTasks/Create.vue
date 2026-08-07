@@ -44,6 +44,10 @@ const form = useForm({
 });
 
 const toggleChapter = (chapterId) => {
+    if (chapterBlockReason(chapterId)) {
+        return;
+    }
+
     const ids = new Set(form.syllabus_chapter_ids);
     if (ids.has(chapterId)) {
         ids.delete(chapterId);
@@ -53,7 +57,47 @@ const toggleChapter = (chapterId) => {
     form.syllabus_chapter_ids = [...ids];
 };
 
+const chapterBlockReason = (chapterOrId) => {
+    const chapter = typeof chapterOrId === 'object'
+        ? chapterOrId
+        : props.syllabusChapters.find((row) => Number(row.id) === Number(chapterOrId));
+
+    if (!chapter) {
+        return '';
+    }
+
+    // New book master: nothing uploaded/assigned for that book yet.
+    if (useNewBook.value || !selectedTextbookId.value) {
+        return '';
+    }
+
+    const textbookId = Number(selectedTextbookId.value);
+    const assignedIds = (chapter.assigned_for_textbooks || []).map(Number);
+    if (assignedIds.includes(textbookId)) {
+        return 'already assigned';
+    }
+
+    const uploadedIds = (chapter.uploaded_for_textbooks || []).map(Number);
+    if (uploadedIds.includes(textbookId)) {
+        return 'already uploaded';
+    }
+
+    return '';
+};
+
 const formatInr = (amount) => (amount > 0 ? `₹${Number(amount).toLocaleString('en-IN')}` : '—');
+
+watch(selectedTextbookId, () => {
+    form.syllabus_chapter_ids = form.syllabus_chapter_ids.filter((id) => !chapterBlockReason(id));
+});
+
+watch(useNewBook, (isNew) => {
+    if (isNew) {
+        return;
+    }
+
+    form.syllabus_chapter_ids = form.syllabus_chapter_ids.filter((id) => !chapterBlockReason(id));
+});
 
 const selectedRatePreview = computed(() => {
     const selected = props.syllabusChapters.filter((ch) => form.syllabus_chapter_ids.includes(ch.id));
@@ -204,20 +248,22 @@ const submit = () => {
                             <label
                                 v-for="chapter in syllabusChapters"
                                 :key="chapter.id"
-                                class="flex cursor-pointer items-start justify-between gap-2 text-sm"
-                                :class="chapter.has_task ? 'text-gray-400' : 'text-gray-800'"
+                                class="flex items-start justify-between gap-2 text-sm"
+                                :class="chapterBlockReason(chapter) ? 'cursor-not-allowed text-gray-400' : 'cursor-pointer text-gray-800'"
                             >
                                 <span class="flex items-start gap-2">
                                     <input
                                         type="checkbox"
                                         class="mt-1 rounded border-gray-300"
-                                        :disabled="chapter.has_task"
+                                        :disabled="Boolean(chapterBlockReason(chapter))"
                                         :checked="form.syllabus_chapter_ids.includes(chapter.id)"
                                         @change="toggleChapter(chapter.id)"
                                     >
                                     <span>
                                         {{ chapter.label }}
-                                        <span v-if="chapter.has_task" class="text-xs">(already assigned)</span>
+                                        <span v-if="chapterBlockReason(chapter)" class="text-xs font-medium text-amber-700">
+                                            — {{ chapterBlockReason(chapter) }}
+                                        </span>
                                     </span>
                                 </span>
                                 <span class="shrink-0 text-xs text-gray-500">{{ formatInr(chapter.default_amount_inr) }}</span>

@@ -9,6 +9,7 @@ use App\Models\GradeLevel;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
+use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Services\AdminGradeContext;
 use App\Services\ContentAllocationMatrixService;
@@ -101,18 +102,62 @@ class ContentUploadTaskController extends Controller
                     ->where('grade_level_id', $gradeLevel->id)
                     ->first();
 
-                $assignedSyllabusIds = ContentUploadTask::query()
+                $tasksForGrade = ContentUploadTask::query()
                     ->whereHas('textbookChapter.textbook', fn ($q) => $q->where('grade_level_id', $gradeLevel->id))
                     ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
-                    ->with('textbookChapter:id,syllabus_chapter_id')
-                    ->get()
-                    ->pluck('textbookChapter.syllabus_chapter_id')
-                    ->filter()
-                    ->unique()
-                    ->all();
+                    ->with(['textbookChapter:id,textbook_id,syllabus_chapter_id,status,mcq_worksheet_id,mcq_worksheet_ids'])
+                    ->get();
+
+                $assignedBySyllabus = [];
+                foreach ($tasksForGrade as $task) {
+                    $syllabusId = (int) ($task->textbookChapter?->syllabus_chapter_id ?? 0);
+                    $textbookId = (int) ($task->textbookChapter?->textbook_id ?? 0);
+                    if ($syllabusId > 0 && $textbookId > 0) {
+                        $assignedBySyllabus[$syllabusId][$textbookId] = true;
+                    }
+                }
+
+                $textbookChapters = TextbookChapter::query()
+                    ->whereHas('textbook', fn ($q) => $q->where('grade_level_id', $gradeLevel->id))
+                    ->get(['id', 'textbook_id', 'syllabus_chapter_id', 'status', 'mcq_worksheet_id', 'mcq_worksheet_ids', 'extraction_items']);
+
+                $uploadedBySyllabus = [];
+                foreach ($textbookChapters as $textbookChapter) {
+                    $syllabusId = (int) ($textbookChapter->syllabus_chapter_id ?? 0);
+                    $textbookId = (int) $textbookChapter->textbook_id;
+                    if ($syllabusId <= 0 || $textbookId <= 0) {
+                        continue;
+                    }
+
+                    $isUploaded = $textbookChapter->status === TextbookChapter::STATUS_PUBLISHED
+                        || $textbookChapter->mcqWorksheetIds() !== []
+                        || (is_array($textbookChapter->extraction_items) && $textbookChapter->extraction_items !== []);
+
+                    if (! $isUploaded) {
+                        $hasUploadedTask = $tasksForGrade->contains(function (ContentUploadTask $task) use ($textbookChapter) {
+                            return (int) $task->textbook_chapter_id === (int) $textbookChapter->id
+                                && in_array($task->status, [
+                                    ContentUploadTask::STATUS_UPLOADED,
+                                    ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+                                    ContentUploadTask::STATUS_VERIFIED,
+                                    ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                                    ContentUploadTask::STATUS_PUBLISHED,
+                                ], true);
+                        });
+                        $isUploaded = $hasUploadedTask;
+                    }
+
+                    if (! $isUploaded) {
+                        continue;
+                    }
+
+                    $uploadedBySyllabus[$syllabusId][$textbookId] = true;
+                }
 
                 $syllabusChapters = $syllabus?->chapters
-                    ->map(function (SyllabusChapter $chapter) use ($assignedSyllabusIds, $gradeLevel) {
+                    ->map(function (SyllabusChapter $chapter) use ($gradeLevel, $uploadedBySyllabus, $assignedBySyllabus) {
+                        $syllabusId = (int) $chapter->id;
+
                         return [
                             'id' => $chapter->id,
                             'chapter_number' => $chapter->chapter_number,
@@ -122,7 +167,8 @@ class ContentUploadTaskController extends Controller
                                 $gradeLevel->id,
                                 $chapter,
                             ),
-                            'has_task' => in_array($chapter->id, $assignedSyllabusIds, true),
+                            'assigned_for_textbooks' => array_keys($assignedBySyllabus[$syllabusId] ?? []),
+                            'uploaded_for_textbooks' => array_keys($uploadedBySyllabus[$syllabusId] ?? []),
                         ];
                     })
                     ->values()
@@ -187,6 +233,29 @@ class ContentUploadTaskController extends Controller
             $amount = isset($validated['offered_amount_inr'])
                 ? (int) $validated['offered_amount_inr']
                 : null;
+
+            $blocked = [];
+            foreach ($validated['syllabus_chapter_ids'] as $syllabusChapterId) {
+                $existing = TextbookChapter::query()
+                    ->where('textbook_id', $textbook->id)
+                    ->where('syllabus_chapter_id', $syllabusChapterId)
+                    ->first();
+
+                if (! $existing) {
+                    continue;
+                }
+
+                $guard = app(\App\Services\ContentDuplicateGuardService::class)->check($existing);
+                if ($guard['blocked']) {
+                    $blocked[] = $existing->title ?: ('chapter #'.$syllabusChapterId);
+                }
+            }
+
+            if ($blocked !== []) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'Already uploaded / assigned — cannot re-select: '.implode(', ', $blocked));
+            }
 
             $result = $this->taskService->assignSyllabusChapters(
                 $textbook,
