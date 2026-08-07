@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Subject;
+use App\Models\ChapterHead;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Services\SyllabusImportService;
@@ -230,8 +231,55 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertSame([], $headerInfo['unrecognized']);
         $this->assertSame(45, $rows->count());
         $this->assertSame('We the Travellers—I', $rows->first()['chapter_name']);
-        $this->assertSame('Head: Number System · NCERT opening chapter', $rows->first()['remarks']);
         $this->assertTrue($rows->pluck('chapter_name')->contains('Grandmother\'s Quilt'));
+    }
+
+    public function test_final_class5_excel_maps_chapter_column_to_chapter_head(): void
+    {
+        $path = base_path('tests/FINAL 5.xlsx');
+        $this->assertFileExists($path);
+
+        ChapterHead::query()->create(['name' => 'Number System', 'sort_order' => 1]);
+        ChapterHead::query()->create(['name' => 'Geometry', 'sort_order' => 2]);
+        ChapterHead::query()->create(['name' => 'Ratio & Proportion', 'sort_order' => 3]);
+
+        $service = app(SyllabusImportService::class);
+        $file = new \Illuminate\Http\UploadedFile(
+            $path,
+            'FINAL 5.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true,
+        );
+
+        $rows = $service->parseFileToPreviewRows($file);
+
+        $this->assertSame(45, $rows->count());
+        $this->assertSame('We the Travellers—I', $rows->first()['chapter_name']);
+        $this->assertSame('Number System', $rows->first()['chapter_head_name']);
+        $this->assertNotNull($rows->first()['chapter_head_id']);
+        $this->assertSame('', $rows->first()['remarks']);
+        $this->assertSame('Geometry', $rows->firstWhere('chapter_name', 'Angles as Turns')['chapter_head_name']);
+    }
+
+    public function test_import_creates_missing_chapter_head_from_excel_column(): void
+    {
+        $version = $this->seedSyllabusVersion();
+        $service = app(SyllabusImportService::class);
+
+        $service->syncRows($version, [[
+            'chapter_number' => '1',
+            'chapter_name' => 'We the Travellers—I',
+            'chapter_head_name' => 'Number System',
+            'topic_name' => 'Large Numbers in Travel',
+            'learning_outcomes' => null,
+            'remarks' => null,
+        ]], replaceExisting: true);
+
+        $chapter = $version->fresh()->chapters()->first();
+
+        $this->assertNotNull($chapter?->chapter_head_id);
+        $this->assertSame('Number System', $chapter?->chapterHead?->name);
     }
 
     private function seedSyllabusVersion(): SyllabusVersion

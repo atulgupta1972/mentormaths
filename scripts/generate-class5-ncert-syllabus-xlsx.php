@@ -132,12 +132,12 @@ $headers = [
     'Sub-Topic',
     'Key Concepts / Learning Outcomes',
     'Approx. Periods',
-    'Remarks',
 ];
 
-$targets = [
+    $targets = [
     __DIR__.'/../tests/CBSE_Class5_Maths_Syllabus_2026-27.xlsx',
     __DIR__.'/../tests/Class5_Math r1.xlsx',
+    __DIR__.'/../tests/FINAL 5.xlsx',
     __DIR__.'/../samples/syllabus-import/CBSE_Class5_Maths_Syllabus_2026-27.xlsx',
     __DIR__.'/../samples/syllabus-import/CBSE_Class5_Maths_Syllabus_TEMPLATE.xlsx',
     __DIR__.'/../public/samples/syllabus-import/CBSE_Class5_Maths_Syllabus_2026-27.xlsx',
@@ -159,18 +159,15 @@ foreach ($sourceRows as $row) {
     $chapterNo = $row[0];
     $mentorHead = $mainTopicByChapter[$chapterNo];
     $ncertTitle = $ncertTitleByChapter[$chapterNo];
-    $extraRemarks = trim($row[4] ?? '');
-    $remarksParts = array_filter(["Head: {$mentorHead}", $extraRemarks]);
-    $remarks = implode(' · ', $remarksParts);
 
     $out = [
         (string) $chapterNo,
         $ncertTitle,
-        '',
+        $mentorHead,
         $row[1],
         $row[2],
         (string) $row[3],
-        $remarks,
+        '',
     ];
 
     foreach ($out as $index => $value) {
@@ -181,7 +178,7 @@ foreach ($sourceRows as $row) {
     $rowNumber++;
 }
 
-foreach (range('A', 'G') as $column) {
+foreach (range('A', 'F') as $column) {
     $sheet->getColumnDimension($column)->setAutoSize(true);
 }
 

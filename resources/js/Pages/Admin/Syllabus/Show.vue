@@ -626,8 +626,8 @@ const saveNewHead = async () => {
                     <p class="mt-1 text-sm text-gray-600">
                         <strong>Preview Excel</strong> loads rows into the table below without saving.
                         <strong>Import &amp; replace</strong> saves immediately and removes old topics not in the file.
-                        Expected headers: Chapter No., Main Topic (Chapter), Sub-Topic, Key Concepts / Learning Outcomes, Approx. Periods, Remarks.
-                        An extra <strong>chapter</strong> column (NCERT unit name) is fine — it is stored in Remarks.
+                        Expected headers: Chapter No., Main Topic (Chapter), Sub-Topic, Key Concepts / Learning Outcomes, Approx. Periods.
+                        Optional <strong>chapter</strong> column: NCERT unit name (Class 4) or <strong>Chapter Head</strong> name (Class 5, e.g. Number System, Geometry).
                     </p>
                     <p v-if="hasSavedRows" class="mt-2 text-sm text-amber-900">
                         This syllabus already has <strong>{{ rows.length }}</strong> saved row(s).

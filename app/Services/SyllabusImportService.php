@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ChapterHead;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
@@ -50,7 +51,7 @@ class SyllabusImportService
         $chapterSort = 0;
 
         foreach ($dataRows as $row) {
-            $data = $this->mapRow($headers, $row);
+            $data = $this->interpretChapterExtraColumn($this->mapRow($headers, $row));
 
             if ($data['topic'] === '' && $data['chapter_name'] === '') {
                 continue;
@@ -74,13 +75,15 @@ class SyllabusImportService
                 continue;
             }
 
+            $chapterHead = $this->resolveChapterHeadFromRow($data, createIfMissing: false);
+
             $previewRows->push([
                 'id' => null,
                 'chapter_id' => null,
                 'chapter_number' => $currentChapter->chapter_number,
                 'chapter_name' => $currentChapter->name,
-                'chapter_head_id' => '',
-                'chapter_head_name' => '',
+                'chapter_head_id' => $chapterHead['id'] ?? '',
+                'chapter_head_name' => $chapterHead['name'] ?? '',
                 'topic_name' => $topicName,
                 'learning_outcomes' => $data['learning_outcomes'],
                 'difficulty' => $data['difficulty'],
@@ -116,7 +119,7 @@ class SyllabusImportService
                 }
 
                 $chapterSort++;
-                $chapter = $this->resolveChapter($version, $row, $chapterSort, $chapterCache);
+                $chapter = $this->resolveChapter($version, $row, $chapterSort, $chapterCache, createHeadsIfMissing: true);
 
                 $topic = isset($row['id']) && $row['id']
                     ? SyllabusTopic::query()
@@ -309,6 +312,7 @@ class SyllabusImportService
         $mapped = [
             'chapter_number' => '',
             'chapter_name' => '',
+            'chapter_head_name' => '',
             'ncert_chapter' => '',
             'topic' => '',
             'learning_outcomes' => '',
@@ -364,6 +368,7 @@ class SyllabusImportService
         $aliases = [
             'chapter_number' => ['chapter no.', 'chapter no', 'chapter number'],
             'chapter_name' => ['main topic', 'main topic (chapter)', 'chapter name'],
+            'chapter_head_name' => ['chapter head', 'mentor head', 'head'],
             'ncert_chapter' => ['ncert chapter', 'textbook chapter', 'ncert unit', 'unit title', 'chapter'],
             'topic' => ['sub-topic', 'sub topic', 'topic', 'subtopic'],
             'learning_outcomes' => ['key concepts', 'key concepts / learning outcomes', 'learning outcomes', 'concepts'],
@@ -436,6 +441,86 @@ class SyllabusImportService
         return null;
     }
 
+    /**
+     * The optional "chapter" column is used either for NCERT unit titles (Class 4)
+     * or mentor chapter-head names (Class 5). Match against chapter heads when possible.
+     *
+     * @param  array<string, string>  $data
+     * @return array<string, string>
+     */
+    private function interpretChapterExtraColumn(array $data): array
+    {
+        if ($data['chapter_head_name'] !== '') {
+            return $data;
+        }
+
+        $extra = trim($data['ncert_chapter']);
+
+        if ($extra === '') {
+            return $data;
+        }
+
+        $head = ChapterHead::query()
+            ->whereRaw('LOWER(name) = ?', [strtolower($extra)])
+            ->first();
+
+        if ($head) {
+            $data['chapter_head_name'] = $head->name;
+            $data['ncert_chapter'] = '';
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array{id: int|null, name: string}|null
+     */
+    private function resolveChapterHeadFromRow(array $row, bool $createIfMissing = false): ?array
+    {
+        if (! empty($row['chapter_head_id'])) {
+            $head = ChapterHead::query()->find($row['chapter_head_id']);
+
+            return $head ? ['id' => $head->id, 'name' => $head->name] : null;
+        }
+
+        $name = trim((string) ($row['chapter_head_name'] ?? ''));
+
+        if ($name === '') {
+            return null;
+        }
+
+        $head = ChapterHead::query()
+            ->whereRaw('LOWER(name) = ?', [strtolower($name)])
+            ->first();
+
+        if ($head) {
+            return ['id' => $head->id, 'name' => $head->name];
+        }
+
+        if (! $createIfMissing) {
+            return ['id' => null, 'name' => $name];
+        }
+
+        $head = ChapterHead::create([
+            'name' => $name,
+            'sort_order' => ((int) ChapterHead::query()->max('sort_order')) + 1,
+        ]);
+
+        return ['id' => $head->id, 'name' => $head->name];
+    }
+
+    private function chapterHeadIdFromRow(array $row, bool $createIfMissing = false): ?int
+    {
+        $resolved = $this->resolveChapterHeadFromRow($row, $createIfMissing);
+
+        if ($resolved === null) {
+            return null;
+        }
+
+        return $resolved['id'];
+    }
+
     private function combineRemarks(string $remarks, string $ncertChapter): string
     {
         $remarks = trim($remarks);
@@ -465,8 +550,10 @@ class SyllabusImportService
      * @param  array<string, SyllabusChapter>  $chapterCache
      * @param  array<string, mixed>  $row
      */
-    private function resolveChapter(SyllabusVersion $version, array $row, int $sortOrder, array &$chapterCache): SyllabusChapter
+    private function resolveChapter(SyllabusVersion $version, array $row, int $sortOrder, array &$chapterCache, bool $createHeadsIfMissing = false): SyllabusChapter
     {
+        $chapterHeadId = $this->chapterHeadIdFromRow($row, $createHeadsIfMissing);
+
         if (! empty($row['chapter_id'])) {
             $cacheKey = 'id:'.$row['chapter_id'];
 
@@ -482,7 +569,7 @@ class SyllabusImportService
                 'chapter_number' => $this->cleanChapterNumber($row['chapter_number'] ?? '') ?: $chapter->chapter_number,
                 'name' => trim((string) ($row['chapter_name'] ?? '')) ?: $chapter->name,
                 'sort_order' => $sortOrder,
-                'chapter_head_id' => $this->nullableIntId($row['chapter_head_id'] ?? null),
+                'chapter_head_id' => $chapterHeadId,
             ]);
 
             $chapterCache[$cacheKey] = $chapter;
@@ -501,7 +588,7 @@ class SyllabusImportService
 
         $chapter = SyllabusChapter::create([
             'syllabus_version_id' => $version->id,
-            'chapter_head_id' => $this->nullableIntId($row['chapter_head_id'] ?? null),
+            'chapter_head_id' => $chapterHeadId,
             'chapter_number' => $number ?: (string) $sortOrder,
             'name' => $name ?: 'Chapter '.$sortOrder,
             'sort_order' => $sortOrder,
