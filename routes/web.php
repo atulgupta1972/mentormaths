@@ -23,6 +23,7 @@ use App\Http\Controllers\Admin\QuestionHubController;
 use App\Http\Controllers\Admin\RegistrationRequestController as AdminRegistrationRequestController;
 use App\Http\Controllers\Admin\SetAssignmentController;
 use App\Http\Controllers\Admin\StudentController;
+use App\Http\Controllers\Admin\StudentWorkReportController;
 use App\Http\Controllers\Admin\SyllabusVersionController;
 use App\Http\Controllers\Admin\TeacherRegistrationRequestController as AdminTeacherRegistrationRequestController;
 use App\Http\Controllers\Admin\TextbookController;
@@ -173,6 +174,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('notifications.index');
     Route::post('/notifications/send-pending-work', [NotificationSettingsController::class, 'sendPendingWorkAll'])
         ->name('notifications.send-pending-work');
+
+    Route::get('/student-work-report', [StudentWorkReportController::class, 'index'])
+        ->name('student-work-report.index');
+    Route::post('/student-work-report/send-reminders', [StudentWorkReportController::class, 'sendReminders'])
+        ->name('student-work-report.send-reminders');
 
     Route::get('/syllabus', [SyllabusVersionController::class, 'index'])
         ->name('syllabus.index');

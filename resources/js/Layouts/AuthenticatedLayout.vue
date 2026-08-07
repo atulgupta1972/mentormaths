@@ -62,7 +62,8 @@ const teachingGroup = computed(() => ({
         || route().current('admin.formula-bank.*')
         || route().current('admin.basics-drill.*')
         || route().current('admin.content-tasks.*')
-        || route().current('admin.content-rate-cards.*'),
+        || route().current('admin.content-rate-cards.*')
+        || route().current('admin.student-work-report.*'),
     items: [
         {
             label: 'Classes',
@@ -117,6 +118,12 @@ const teachingGroup = computed(() => ({
             href: route('admin.content-rate-cards.index'),
             active: route().current('admin.content-rate-cards.*'),
             show: isAdmin.value && route().has('admin.content-rate-cards.index'),
+        },
+        {
+            label: 'Student work report',
+            href: route('admin.student-work-report.index'),
+            active: route().current('admin.student-work-report.*'),
+            show: isAdmin.value && route().has('admin.student-work-report.index'),
         },
         {
             label: 'Formula bank',

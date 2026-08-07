@@ -298,4 +298,89 @@ class AssignmentProgress
             'written_submission_status' => null,
         ];
     }
+
+    /**
+     * Partial completion for pending / in-progress assignments (e.g. 7/20 questions).
+     *
+     * @return array{done: int, total: int, label: string, started: bool}
+     */
+    public static function partialProgress(SetAssignment $assignment): array
+    {
+        $assignment->loadMissing([
+            'practiceSet' => fn ($query) => $query->withCount('questions'),
+            'attempts' => fn ($query) => $query->orderByDesc('attempt_number'),
+            'attempts.guidedQuestions',
+            'attempts.answers',
+            'writtenSubmissions' => fn ($query) => $query->orderByDesc('id'),
+        ]);
+
+        $total = (int) ($assignment->practiceSet?->questions_count ?? 0);
+
+        if ($assignment->practiceSet?->isWritten()) {
+            $submission = $assignment->writtenSubmissions->first();
+
+            if ($submission && in_array($submission->status, [
+                \App\Models\WrittenSubmission::STATUS_UPLOADED,
+                \App\Models\WrittenSubmission::STATUS_PROCESSING,
+            ], true)) {
+                return [
+                    'done' => $total,
+                    'total' => max($total, 1),
+                    'label' => 'Uploaded',
+                    'started' => true,
+                ];
+            }
+
+            return [
+                'done' => 0,
+                'total' => max($total, 1),
+                'label' => '0/'.$total,
+                'started' => false,
+            ];
+        }
+
+        $attempt = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_IN_PROGRESS)
+            ?? $assignment->attempts->first();
+
+        if (! $attempt) {
+            return [
+                'done' => 0,
+                'total' => max($total, 1),
+                'label' => '0/'.$total,
+                'started' => false,
+            ];
+        }
+
+        if ($attempt->isGuided()) {
+            $guidedTotal = max($attempt->guidedQuestions->count(), $total, 1);
+            $done = $attempt->guidedQuestions
+                ->filter(fn ($row) => $row->isFinished())
+                ->count();
+
+            return [
+                'done' => $done,
+                'total' => $guidedTotal,
+                'label' => "{$done}/{$guidedTotal}",
+                'started' => $done > 0 || $attempt->status === SetAttempt::STATUS_IN_PROGRESS,
+            ];
+        }
+
+        $answered = $attempt->relationLoaded('answers')
+            ? $attempt->answers->count()
+            : $attempt->answers()->count();
+        $done = max($answered, (int) $attempt->current_question_index);
+
+        $batchTotal = max($total, 1);
+
+        if ($attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
+            $done = max($done, min((int) $attempt->current_question_index + 1, $batchTotal));
+        }
+
+        return [
+            'done' => min($done, $batchTotal),
+            'total' => $batchTotal,
+            'label' => min($done, $batchTotal).'/'.$batchTotal,
+            'started' => $done > 0 || $attempt->status === SetAttempt::STATUS_IN_PROGRESS,
+        ];
+    }
 }
