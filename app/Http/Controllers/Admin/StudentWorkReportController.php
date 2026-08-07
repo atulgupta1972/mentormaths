@@ -24,14 +24,17 @@ class StudentWorkReportController extends Controller
     public function index(Request $request): Response
     {
         $gradeLevel = $this->gradeContext->resolve($request);
-        $boardId = $request->integer('board_id') ?: null;
+        $boardId = $request->has('board_id')
+            ? ($request->integer('board_id') ?: null)
+            : null;
 
         $boards = $gradeLevel
             ? $this->classAssignmentService->boardsForGrade($gradeLevel)
             : [];
 
-        if ($gradeLevel && ! $boardId && $boards !== []) {
-            $boardId = $this->classAssignmentService->defaultBoardIdForGrade($gradeLevel);
+        // Default to all boards when multiple exist — avoid hiding live students on another board.
+        if ($gradeLevel && ! $request->has('board_id') && count($boards) === 1) {
+            $boardId = $boards[0]['id'];
         }
 
         $report = $gradeLevel

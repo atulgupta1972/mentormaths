@@ -47,7 +47,7 @@ const studentRows = computed(() => {
         return rows;
     }
 
-    return rows.filter((row) => row.pending_count > 0 || (row.live_activities?.length ?? 0) > 0);
+    return rows.filter((row) => row.pending_count > 0 || (row.live_activities?.length ?? 0) > 0 || row.is_online);
 });
 
 const summary = computed(() => props.report.summary ?? {});
@@ -127,6 +127,7 @@ const statusClass = (status) => ({
                                 :value="filters.board_id ?? ''"
                                 @change="setBoard($event.target.value || null)"
                             >
+                                <option value="">All boards</option>
                                 <option v-for="board in boards" :key="board.id" :value="board.id">
                                     {{ board.label }} ({{ board.students_count }})
                                 </option>
@@ -147,8 +148,10 @@ const statusClass = (status) => ({
                     <!-- Live activity matrix -->
                     <section class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
                         <div class="border-b border-gray-100 bg-sky-50 px-4 py-3">
-                            <h3 class="text-sm font-semibold text-sky-950">Live now — students working (last 20 minutes)</h3>
-                            <p class="text-xs text-sky-800">Practice sets, tests, formula drill, basics drill in progress.</p>
+                            <h3 class="text-sm font-semibold text-sky-950">Live now — students working</h3>
+                            <p class="text-xs text-sky-800">
+                                Open practice/test sessions, formula drill, and basics drill. Refresh the page to update.
+                            </p>
                         </div>
                         <div class="overflow-x-auto">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">

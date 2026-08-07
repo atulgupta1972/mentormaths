@@ -52,13 +52,13 @@ class StudentWorkReportService
             return $this->emptyReport($boardId);
         }
 
-        $enrollmentIds = $enrollments->pluck('id');
         $studentIds = $enrollments->pluck('student_id');
         $asOf = now()->endOfDay();
 
         $liveByStudent = $this->liveActivities($enrollments, $studentIds)->groupBy('student_id');
         $onlineUserIds = $this->recentlyOnlineUserIds(
-            $enrollments->pluck('student.user_id')->filter()->all(),
+            $enrollments->pluck('student.user_id')->filter()->map(fn ($id) => (int) $id)->all(),
+            $liveByStudent,
         );
 
         $students = [];
@@ -140,14 +140,14 @@ class StudentWorkReportService
         $enrollmentByStudent = $enrollments->keyBy('student_id');
         $rows = collect();
 
+        // Open attempt sessions (active_session_started_at set) stay "live" even after 20+ minutes
+        // of continuous work — resumeSession often keeps the original timestamp.
         $attempts = SetAttempt::query()
             ->where('status', SetAttempt::STATUS_IN_PROGRESS)
             ->where(function ($query) use ($cutoff) {
-                $query->where('active_session_started_at', '>=', $cutoff)
-                    ->orWhere(function ($inner) use ($cutoff) {
-                        $inner->whereNull('active_session_started_at')
-                            ->where('started_at', '>=', $cutoff);
-                    });
+                $query->whereNotNull('active_session_started_at')
+                    ->orWhere('updated_at', '>=', $cutoff)
+                    ->orWhere('started_at', '>=', $cutoff);
             })
             ->whereHas('assignment', fn ($query) => $query
                 ->whereIn('student_enrollment_id', $enrollments->pluck('id'))
@@ -173,6 +173,14 @@ class StudentWorkReportService
             $partial = AssignmentProgress::partialProgress($assignment);
             $worksheet = $assignment->practiceSet;
             $kind = $worksheet?->isChapterTest() ? 'Test' : ($worksheet?->isCatchUp() ? 'Catch-up' : 'Practice');
+            $lastActive = $attempt->updated_at
+                ?? $attempt->active_session_started_at
+                ?? $attempt->started_at;
+
+            // Open session still counting → treat as active now.
+            if ($attempt->active_session_started_at) {
+                $lastActive = now();
+            }
 
             $rows->push($this->liveRow(
                 studentId: $student->id,
@@ -183,7 +191,7 @@ class StudentWorkReportService
                 progressLabel: $partial['label'],
                 progressDone: $partial['done'],
                 progressTotal: $partial['total'],
-                lastActiveAt: ($attempt->active_session_started_at ?? $attempt->started_at)?->toIso8601String(),
+                lastActiveAt: $lastActive?->toIso8601String(),
                 assignmentId: $assignment->id,
             ));
         }
@@ -211,7 +219,7 @@ class StudentWorkReportService
                 progressLabel: "{$done}/{$total}",
                 progressDone: $done,
                 progressTotal: $total,
-                lastActiveAt: $session->updated_at?->toIso8601String(),
+                lastActiveAt: ($session->updated_at ?? now())?->toIso8601String(),
                 assignmentId: null,
             ));
         }
@@ -237,7 +245,7 @@ class StudentWorkReportService
                 progressLabel: "{$done}/{$total}",
                 progressDone: $done,
                 progressTotal: $total,
-                lastActiveAt: $session->updated_at?->toIso8601String(),
+                lastActiveAt: ($session->updated_at ?? now())?->toIso8601String(),
                 assignmentId: null,
             ));
         }
@@ -247,24 +255,46 @@ class StudentWorkReportService
 
     /**
      * @param  list<int>  $userIds
+     * @param  \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, array<string, mixed>>>  $liveByStudent
      * @return list<int>
      */
-    private function recentlyOnlineUserIds(array $userIds): array
+    private function recentlyOnlineUserIds(array $userIds, $liveByStudent): array
     {
+        $online = collect();
+
+        // Anyone currently shown as working is online.
+        $liveStudentIds = $liveByStudent->keys()->map(fn ($id) => (int) $id)->all();
+        if ($liveStudentIds !== []) {
+            $online = $online->merge(
+                \App\Models\Student::query()
+                    ->whereIn('id', $liveStudentIds)
+                    ->whereNotNull('user_id')
+                    ->pluck('user_id')
+                    ->map(fn ($id) => (int) $id),
+            );
+        }
+
         if ($userIds === []) {
-            return [];
+            return $online->unique()->values()->all();
         }
 
         $cutoff = now()->subMinutes(self::LIVE_MINUTES)->getTimestamp();
 
-        return DB::table('sessions')
-            ->whereIn('user_id', $userIds)
-            ->where('last_activity', '>=', $cutoff)
-            ->pluck('user_id')
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
+        try {
+            if (config('session.driver') === 'database') {
+                $online = $online->merge(
+                    DB::table('sessions')
+                        ->whereIn('user_id', $userIds)
+                        ->where('last_activity', '>=', $cutoff)
+                        ->pluck('user_id')
+                        ->map(fn ($id) => (int) $id),
+                );
+            }
+        } catch (\Throwable) {
+            // Session table may be missing / non-database driver.
+        }
+
+        return $online->unique()->values()->all();
     }
 
     /**

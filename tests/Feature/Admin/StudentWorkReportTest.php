@@ -58,6 +58,33 @@ class StudentWorkReportTest extends TestCase
                 ->where('report.students.0.pending_count', 1));
     }
 
+    public function test_long_open_practice_session_still_counts_as_live(): void
+    {
+        $this->withoutVite();
+
+        [$grade, $enrollment, $admin, $assignment] = $this->seedStudentWithPendingWork();
+
+        // Continuous work keeps the original active_session_started_at (often > 20 minutes old).
+        SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'current_question_index' => 3,
+            'started_at' => now()->subMinutes(45),
+            'active_session_started_at' => now()->subMinutes(40),
+            'updated_at' => now()->subMinutes(1),
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.student-work-report.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('report.summary.students_live_now', 1)
+                ->has('report.live', 1));
+    }
+
     public function test_admin_can_send_class_reminders_from_work_report(): void
     {
         Mail::fake();
