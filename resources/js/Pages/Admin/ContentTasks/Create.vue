@@ -105,9 +105,23 @@ const submit = () => {
 
                     <div>
                         <InputLabel value="Content uploader" />
-                        <select v-model="form.assigned_to_user_id" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                        <select
+                            v-model="form.assigned_to_user_id"
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                            :disabled="uploaders.length === 0"
+                        >
+                            <option value="" disabled>Select content uploader</option>
                             <option v-for="u in uploaders" :key="u.id" :value="u.id">{{ u.name }} ({{ u.email }})</option>
                         </select>
+                        <p class="mt-1 text-xs text-gray-500">
+                            Showing {{ uploaders.length }} user(s) with the Content uploader group
+                            (not all mentors). Manage groups under
+                            <Link :href="route('admin.users.index')" class="text-indigo-600 underline">People → Users</Link>.
+                        </p>
+                        <p v-if="uploaders.length < 2" class="mt-1 text-xs text-amber-800">
+                            Expected more people? Open their mentor application and click
+                            <strong>Grant content uploader access</strong>, or edit the user and tick the Content uploader group.
+                        </p>
                         <InputError :message="form.errors.assigned_to_user_id" class="mt-1" />
                     </div>
 

@@ -8,6 +8,7 @@ use App\Models\GradeLevel;
 use App\Models\TeacherRegistrationRequest;
 use App\Models\User;
 use App\Services\TeacherRegistrationService;
+use App\Services\UserGroupService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -16,7 +17,10 @@ use Inertia\Response;
 
 class TeacherRegistrationRequestController extends Controller
 {
-    public function __construct(private TeacherRegistrationService $service) {}
+    public function __construct(
+        private TeacherRegistrationService $service,
+        private UserGroupService $userGroupService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -178,6 +182,30 @@ class TeacherRegistrationRequestController extends Controller
         return back()
             ->with('success', $emailSent ? 'Welcome email sent again.' : 'Could not send email — check mail settings or share login details manually.')
             ->with('email_sent', $emailSent);
+    }
+
+    public function grantContentUploader(TeacherRegistrationRequest $teacherRegistration): RedirectResponse
+    {
+        if ($teacherRegistration->status !== TeacherRegistrationRequest::STATUS_APPROVED) {
+            return back()->with('error', 'Approve the application first, then grant content uploader access.');
+        }
+
+        $user = $teacherRegistration->user;
+        if (! $user) {
+            return back()->with('error', 'No login user is linked to this application.');
+        }
+
+        if ($user->isContentUploader()) {
+            return back()->with('success', 'This user already has content uploader access.');
+        }
+
+        if (! $user->is_active) {
+            return back()->with('error', 'User is inactive. Activate them under People → Users first.');
+        }
+
+        $this->userGroupService->attachGroupByCode($user, User::ROLE_CONTENT_UPLOADER);
+
+        return back()->with('success', 'Content uploader access granted. They will now appear when assigning chapters.');
     }
 
     public function reject(Request $request, TeacherRegistrationRequest $teacherRegistration): RedirectResponse

@@ -28,9 +28,13 @@ const profileForm = useForm({
     profile_completion_message: '',
 });
 const resendWelcomeForm = useForm({});
+const grantUploaderForm = useForm({});
 
 const generatedLogin = computed(() => page.props.flash?.generated_login ?? null);
 const isApproved = computed(() => props.application.status === 'approved');
+const hasContentUploaderGroup = computed(() =>
+    Boolean(props.application.login_user?.groups?.content_uploader),
+);
 
 const canApprove = computed(() =>
     ['pending', 'offer_accepted'].includes(props.application.status),
@@ -219,14 +223,26 @@ const canReject = computed(() =>
                     <p v-if="Object.keys(application.login_user.groups || {}).length" class="mt-1 text-sm text-gray-600">
                         Groups: {{ Object.values(application.login_user.groups).join(', ') }}
                     </p>
-                    <PrimaryButton
-                        class="mt-4"
-                        type="button"
-                        :disabled="resendWelcomeForm.processing"
-                        @click="resendWelcomeForm.post(route('admin.teacher-registrations.resend-welcome', application.id))"
-                    >
-                        Resend welcome email
-                    </PrimaryButton>
+                    <p v-if="!hasContentUploaderGroup" class="mt-2 text-sm text-amber-800">
+                        Not in the Content uploader list yet — they will not appear when assigning chapters.
+                    </p>
+                    <div class="mt-4 flex flex-wrap gap-3">
+                        <PrimaryButton
+                            type="button"
+                            :disabled="resendWelcomeForm.processing"
+                            @click="resendWelcomeForm.post(route('admin.teacher-registrations.resend-welcome', application.id))"
+                        >
+                            Resend welcome email
+                        </PrimaryButton>
+                        <PrimaryButton
+                            v-if="!hasContentUploaderGroup"
+                            type="button"
+                            :disabled="grantUploaderForm.processing"
+                            @click="grantUploaderForm.post(route('admin.teacher-registrations.grant-content-uploader', application.id))"
+                        >
+                            Grant content uploader access
+                        </PrimaryButton>
+                    </div>
                 </div>
             </div>
         </div>

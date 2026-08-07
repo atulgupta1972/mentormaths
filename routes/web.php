@@ -117,6 +117,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('teacher-registrations.approve');
     Route::post('/teacher-registrations/{teacherRegistration}/resend-welcome', [AdminTeacherRegistrationRequestController::class, 'resendWelcomeEmail'])
         ->name('teacher-registrations.resend-welcome');
+    Route::post('/teacher-registrations/{teacherRegistration}/grant-content-uploader', [AdminTeacherRegistrationRequestController::class, 'grantContentUploader'])
+        ->name('teacher-registrations.grant-content-uploader');
     Route::post('/teacher-registrations/{teacherRegistration}/reject', [AdminTeacherRegistrationRequestController::class, 'reject'])
         ->name('teacher-registrations.reject');
 
