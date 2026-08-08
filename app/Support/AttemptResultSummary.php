@@ -468,6 +468,11 @@ class AttemptResultSummary
      */
     private static function batchQuestionRows(SetAttempt $attempt, Worksheet $worksheet, bool $includeCorrect): array
     {
+        if ($includeCorrect) {
+            $worksheet->loadMissing(['questions.options', 'questions.blankAnswer', 'questions.topic.chapter']);
+            $attempt->loadMissing(['answers.question.options', 'answers.question.blankAnswer']);
+        }
+
         $answersByQuestion = $attempt->answers->keyBy('question_id');
         $rows = [];
 
@@ -480,13 +485,27 @@ class AttemptResultSummary
                 continue;
             }
 
-            $rows[] = [
+            $row = [
                 'number' => $index + 1,
+                'question_id' => $question->id,
                 'topic_name' => $question->topic?->name,
                 'chapter_name' => $question->topic?->chapter?->name,
                 'outcome' => $outcome,
                 'outcome_label' => $isCorrect ? 'Correct' : 'Wrong answer',
             ];
+
+            if ($includeCorrect) {
+                $row['question_text'] = $question->question_text;
+                $row['diagram_url'] = $question->diagram_url;
+                $row['correct_answer'] = self::correctAnswerLabel($question);
+                $row['student_answer'] = self::answeredLabel(
+                    $answer?->question_option_id,
+                    $answer?->answer_text,
+                    $question,
+                );
+            }
+
+            $rows[] = $row;
         }
 
         return $rows;
@@ -497,26 +516,34 @@ class AttemptResultSummary
      */
     private static function guidedQuestionRows(SetAttempt $attempt, bool $includeCorrect): array
     {
+        if ($includeCorrect) {
+            $attempt->loadMissing([
+                'guidedQuestions.question.options',
+                'guidedQuestions.question.blankAnswer',
+                'guidedQuestions.question.topic.chapter',
+            ]);
+        }
+
         $rows = [];
 
         foreach ($attempt->guidedQuestions as $index => $guided) {
             $question = $guided->question;
 
-        if ($guided->first_try_correct) {
-            $outcome = 'correct';
-            $outcomeLabel = 'Correct on first try';
-        } elseif ($guided->gave_up) {
-            $outcome = 'gave_up';
-            $outcomeLabel = 'Gave up — needs teacher help';
-        } elseif ($guided->corrected_after_help) {
-            $outcome = 'corrected_after_help';
-            $outcomeLabel = $guided->used_early_hint
-                ? 'Correct after using hint (no first-try mark)'
-                : 'Correct after using method';
-        } elseif ($guided->used_early_hint) {
-            $outcome = 'incorrect';
-            $outcomeLabel = 'Hint used before answering — no first-try mark';
-        } else {
+            if ($guided->first_try_correct) {
+                $outcome = 'correct';
+                $outcomeLabel = 'Correct on first try';
+            } elseif ($guided->gave_up) {
+                $outcome = 'gave_up';
+                $outcomeLabel = 'Gave up — needs teacher help';
+            } elseif ($guided->corrected_after_help) {
+                $outcome = 'corrected_after_help';
+                $outcomeLabel = $guided->used_early_hint
+                    ? 'Correct after using hint (no first-try mark)'
+                    : 'Correct after using method';
+            } elseif ($guided->used_early_hint) {
+                $outcome = 'incorrect';
+                $outcomeLabel = 'Hint used before answering — no first-try mark';
+            } else {
                 $outcome = 'incorrect';
                 $outcomeLabel = 'Not correct on first try';
             }
@@ -527,8 +554,9 @@ class AttemptResultSummary
 
             $helpAsked = ($guided->wrong_before_explanation ?? 0) > 0;
 
-            $rows[] = [
+            $row = [
                 'number' => $index + 1,
+                'question_id' => $question?->id,
                 'topic_name' => $question?->topic?->name,
                 'chapter_name' => $question?->topic?->chapter?->name,
                 'outcome' => $outcome,
@@ -537,9 +565,52 @@ class AttemptResultSummary
                 'help_asked_label' => self::guidedHelpLabel($guided),
                 'wrong_before_help' => (int) ($guided->wrong_before_explanation ?? 0),
             ];
+
+            if ($includeCorrect) {
+                $row['question_text'] = $question?->question_text;
+                $row['diagram_url'] = $question?->diagram_url;
+                $row['correct_answer'] = self::correctAnswerLabel($question);
+                $row['student_answer'] = self::guidedStudentAnswerLabel($guided, $question);
+            }
+
+            $rows[] = $row;
         }
 
         return $rows;
+    }
+
+    private static function answeredLabel(?int $optionId, ?string $answerText, $question): ?string
+    {
+        return self::formatReviewAttempt('', $optionId, $answerText, $question, false)['answer'];
+    }
+
+    private static function guidedStudentAnswerLabel(GuidedAttemptQuestion $guided, $question): ?string
+    {
+        if ($guided->first_wrong_option_id || filled($guided->first_wrong_answer_text)) {
+            return self::answeredLabel(
+                $guided->first_wrong_option_id,
+                $guided->first_wrong_answer_text,
+                $question,
+            );
+        }
+
+        if ($guided->second_wrong_option_id || filled($guided->second_wrong_answer_text)) {
+            return self::answeredLabel(
+                $guided->second_wrong_option_id,
+                $guided->second_wrong_answer_text,
+                $question,
+            );
+        }
+
+        if (! $guided->final_is_correct && ($guided->final_option_id || filled($guided->final_answer_text))) {
+            return self::answeredLabel(
+                $guided->final_option_id,
+                $guided->final_answer_text,
+                $question,
+            );
+        }
+
+        return null;
     }
 
     private static function guidedHelpLabel(GuidedAttemptQuestion $guided): ?string

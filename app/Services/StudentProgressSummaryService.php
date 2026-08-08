@@ -409,7 +409,16 @@ class StudentProgressSummaryService
             }
 
             return [
+                'number' => $question['number'] ?? null,
+                'question_id' => $question['question_id'] ?? null,
                 'label' => $label,
+                'outcome_label' => $question['outcome_label'] ?? null,
+                'question_text' => $question['question_text'] ?? null,
+                'diagram_url' => $question['diagram_url'] ?? null,
+                'correct_answer' => $question['correct_answer'] ?? null,
+                'student_answer' => $question['student_answer'] ?? null,
+                'topic_name' => $question['topic_name'] ?? null,
+                'chapter_name' => $question['chapter_name'] ?? null,
                 'help_asked_label' => $question['help_asked_label'] ?? null,
             ];
         }, $summary['wrong_questions']);

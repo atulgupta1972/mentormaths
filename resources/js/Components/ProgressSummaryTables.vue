@@ -1,9 +1,12 @@
 <script setup>
 import DangerButton from '@/Components/DangerButton.vue';
+import Modal from '@/Components/Modal.vue';
+import QuestionBody from '@/Components/QuestionBody.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { formatDate } from '@/utils/dates';
 import { formatScoreLabel } from '@/utils/scores';
-import { useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Link, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     summary: {
@@ -17,6 +20,8 @@ const props = defineProps({
 });
 
 const deassignForm = useForm({});
+const reviewRow = ref(null);
+const copiedFeedback = ref(false);
 
 const detailLabel = (row) => {
     if (row.topic_name) {
@@ -36,11 +41,16 @@ const targetDate = (row) => formatDate(row.target_date);
 
 const scoreLabel = (row) => row.latest_score_label || formatScoreLabel(row.latest_score, row.latest_max_score);
 
+const reviewCount = (row) => (row.review_items || []).length;
+
 const reviewLabel = (row) => {
-    const count = (row.review_items || []).length;
+    const count = reviewCount(row);
 
     return count > 0 ? `${count} need review` : '—';
 };
+
+const hasQuestionDrillDown = (row) =>
+    (row.review_items || []).some((item) => item.question_text || item.question_id);
 
 const stats = computed(() => props.summary?.stats || {});
 const hasSummary = computed(() => Boolean(props.summary));
@@ -49,6 +59,74 @@ const canRemoveAssignment = (row) =>
     props.canDeassign
     && row.assignment_id
     && ['assigned', 'in_progress'].includes(row.assignment_status);
+
+const openReview = (row) => {
+    if (reviewCount(row) === 0) {
+        return;
+    }
+
+    reviewRow.value = row;
+    copiedFeedback.value = false;
+};
+
+const closeReview = () => {
+    reviewRow.value = null;
+    copiedFeedback.value = false;
+};
+
+const feedbackText = computed(() => {
+    const row = reviewRow.value;
+
+    if (!row) {
+        return '';
+    }
+
+    const lines = [
+        `${row.set_code} — questions to review (${reviewCount(row)})`,
+        detailLabel(row),
+        '',
+    ];
+
+    (row.review_items || []).forEach((item, index) => {
+        lines.push(`${index + 1}. ${item.label || `Q${item.number}`}`);
+
+        if (item.question_text) {
+            lines.push(`   Q: ${String(item.question_text).replace(/<[^>]+>/g, '')}`);
+        }
+
+        if (item.student_answer) {
+            lines.push(`   Student: ${item.student_answer}`);
+        }
+
+        if (item.correct_answer) {
+            lines.push(`   Correct: ${item.correct_answer}`);
+        }
+
+        if (item.help_asked_label) {
+            lines.push(`   Help: ${item.help_asked_label}`);
+        }
+
+        lines.push('');
+    });
+
+    return lines.join('\n').trim();
+});
+
+const copyFeedbackNotes = async () => {
+    if (!feedbackText.value) {
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(feedbackText.value);
+        copiedFeedback.value = true;
+        window.setTimeout(() => {
+            copiedFeedback.value = false;
+        }, 2000);
+    } catch {
+        // ignore
+    }
+};
 
 const deassign = (row) => {
     if (!confirm(`Remove ${row.set_code}? The student will no longer see this assignment.`)) {
@@ -94,6 +172,9 @@ const deassign = (row) => {
             <h4 class="text-sm font-semibold text-gray-900">
                 {{ summary.period_filtered ? 'Completed in this period' : 'Completed work' }}
             </h4>
+            <p class="mt-1 text-xs text-gray-500">
+                Click a review count to see the exact questions the student got wrong.
+            </p>
 
             <div
                 v-for="group in (summary.completed_by_date?.length ? summary.completed_by_date : summary.completed_by_chapter)"
@@ -118,7 +199,17 @@ const deassign = (row) => {
                     <tbody class="divide-y divide-gray-100">
                         <tr v-for="row in group.rows" :key="`completed-row-${row.assignment_id}-${row.latest_attempt_number || 1}`">
                             <td v-if="!summary.completed_by_date?.length" class="whitespace-nowrap px-3 py-2 text-gray-700">{{ submittedDate(row) }}</td>
-                            <td class="whitespace-nowrap px-3 py-2 font-mono font-semibold text-gray-900">{{ row.set_code }}</td>
+                            <td class="whitespace-nowrap px-3 py-2 font-mono font-semibold text-gray-900">
+                                <button
+                                    v-if="reviewCount(row) > 0"
+                                    type="button"
+                                    class="text-left font-mono font-semibold text-indigo-700 hover:underline"
+                                    @click="openReview(row)"
+                                >
+                                    {{ row.set_code }}
+                                </button>
+                                <span v-else>{{ row.set_code }}</span>
+                            </td>
                             <td class="whitespace-nowrap px-3 py-2 text-gray-700">{{ row.kind_label }}</td>
                             <td class="px-3 py-2 text-gray-700">{{ detailLabel(row) }}</td>
                             <td class="px-3 py-2 text-gray-700">{{ row.chapter_name || '—' }}</td>
@@ -128,7 +219,17 @@ const deassign = (row) => {
                                     · Attempt {{ row.latest_attempt_number }}
                                 </span>
                             </td>
-                            <td class="whitespace-nowrap px-3 py-2 text-gray-700">{{ reviewLabel(row) }}</td>
+                            <td class="whitespace-nowrap px-3 py-2 text-gray-700">
+                                <button
+                                    v-if="reviewCount(row) > 0"
+                                    type="button"
+                                    class="font-medium text-rose-700 hover:underline"
+                                    @click="openReview(row)"
+                                >
+                                    {{ reviewLabel(row) }} →
+                                </button>
+                                <span v-else>—</span>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -229,5 +330,70 @@ const deassign = (row) => {
         >
             {{ summary.period_filtered ? 'No work completed in this date range.' : 'No assignments to show for this date.' }}
         </p>
+
+        <Modal :show="Boolean(reviewRow)" max-width="2xl" @close="closeReview">
+            <div v-if="reviewRow" class="p-6">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Questions to review</p>
+                        <h3 class="mt-1 font-mono text-lg font-semibold text-gray-900">{{ reviewRow.set_code }}</h3>
+                        <p class="text-sm text-gray-600">
+                            {{ detailLabel(reviewRow) }}
+                            <span v-if="reviewRow.chapter_name"> · {{ reviewRow.chapter_name }}</span>
+                        </p>
+                        <p class="mt-1 text-sm text-gray-700">
+                            Score: {{ scoreLabel(reviewRow) }} · {{ reviewCount(reviewRow) }} need review
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <SecondaryButton type="button" @click="copyFeedbackNotes">
+                            {{ copiedFeedback ? 'Copied!' : 'Copy for feedback' }}
+                        </SecondaryButton>
+                        <Link
+                            v-if="reviewRow.assignment_id"
+                            :href="route('admin.set-assignments.show', reviewRow.assignment_id)"
+                            class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 shadow-sm hover:bg-gray-50"
+                        >
+                            Full attempt
+                        </Link>
+                    </div>
+                </div>
+
+                <div class="mt-4 max-h-[65vh] space-y-3 overflow-y-auto pr-1">
+                    <div
+                        v-for="(item, index) in reviewRow.review_items"
+                        :key="`review-${item.question_id || index}`"
+                        class="rounded-lg border border-rose-100 bg-rose-50/40 p-3"
+                    >
+                        <p class="text-xs font-semibold uppercase tracking-wide text-rose-800">
+                            {{ item.label || `Q${item.number || index + 1}` }}
+                        </p>
+                        <div v-if="item.question_text" class="mt-2 text-sm text-gray-900">
+                            <QuestionBody :question-text="item.question_text" :diagram-url="item.diagram_url" :compact="true" />
+                        </div>
+                        <p v-else-if="!hasQuestionDrillDown(reviewRow)" class="mt-2 text-sm text-gray-700">
+                            {{ item.label }}
+                        </p>
+                        <dl class="mt-2 grid gap-1 text-sm sm:grid-cols-2">
+                            <div v-if="item.student_answer">
+                                <dt class="text-xs text-gray-500">Student answered</dt>
+                                <dd class="font-medium text-rose-900">{{ item.student_answer }}</dd>
+                            </div>
+                            <div v-if="item.correct_answer">
+                                <dt class="text-xs text-gray-500">Correct answer</dt>
+                                <dd class="font-medium text-emerald-800">{{ item.correct_answer }}</dd>
+                            </div>
+                        </dl>
+                        <p v-if="item.help_asked_label" class="mt-2 text-xs text-amber-800">
+                            {{ item.help_asked_label }}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="mt-4 flex justify-end">
+                    <SecondaryButton type="button" @click="closeReview">Close</SecondaryButton>
+                </div>
+            </div>
+        </Modal>
     </div>
 </template>

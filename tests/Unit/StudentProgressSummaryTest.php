@@ -227,6 +227,88 @@ class StudentProgressSummaryTest extends TestCase
         );
     }
 
+    public function test_review_items_include_question_text_for_failed_questions(): void
+    {
+        [$enrollment, $completedAssignment] = $this->seedAssignments();
+
+        $topicId = null;
+        $worksheet = $completedAssignment->practiceSet;
+        $worksheet->update(['syllabus_topic_id' => null]);
+
+        // Attach a real question with a wrong answer so review drill-down has text.
+        $year = AcademicYear::query()->first();
+        $board = Board::query()->first();
+        $grade = GradeLevel::query()->first();
+        $subject = Subject::query()->first();
+        $syllabus = \App\Models\SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+        ]);
+        $chapter = \App\Models\SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabus->id,
+            'name' => 'Integers',
+            'chapter_number' => 1,
+            'sort_order' => 1,
+        ]);
+        $topic = \App\Models\SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->id,
+            'name' => 'Addition',
+            'sort_order' => 1,
+        ]);
+        $worksheet->update(['syllabus_topic_id' => $topic->id]);
+
+        $question = \App\Models\Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'question_text' => 'What is (-3)+5?',
+            'type' => \App\Models\Question::TYPE_MCQ,
+            'source' => \App\Models\Question::SOURCE_AI,
+            'bank_purpose' => \App\Support\QuestionBankPurpose::PRACTICE_SET,
+        ]);
+        $wrong = \App\Models\QuestionOption::query()->create([
+            'question_id' => $question->id,
+            'option_text' => '-8',
+            'is_correct' => false,
+            'sort_order' => 1,
+        ]);
+        \App\Models\QuestionOption::query()->create([
+            'question_id' => $question->id,
+            'option_text' => '2',
+            'is_correct' => true,
+            'sort_order' => 2,
+        ]);
+        $worksheet->questions()->attach($question->id, ['sort_order' => 1]);
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $completedAssignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subHour(),
+            'completed_at' => now()->subMinutes(30),
+            'score' => 0,
+            'max_score' => 1,
+            'time_seconds' => 120,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+
+        \App\Models\SetAttemptAnswer::query()->create([
+            'set_attempt_id' => $attempt->id,
+            'question_id' => $question->id,
+            'question_option_id' => $wrong->id,
+            'is_correct' => false,
+        ]);
+
+        $summary = app(StudentProgressSummaryService::class)->build($enrollment, now());
+        $items = $summary['completed'][0]['review_items'];
+
+        $this->assertNotEmpty($items);
+        $this->assertSame('What is (-3)+5?', $items[0]['question_text']);
+        $this->assertStringContainsString('2', (string) $items[0]['correct_answer']);
+        $this->assertStringContainsString('-8', (string) $items[0]['student_answer']);
+    }
+
     public function test_engagement_counts_login_days_and_time_spent_in_range(): void
     {
         [$enrollment, $completedAssignment] = $this->seedAssignments();
