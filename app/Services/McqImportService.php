@@ -6,6 +6,7 @@ use App\Models\Question;
 use App\Models\QuestionOption;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
+use App\Support\McqGenerationPrompt;
 use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
 use Illuminate\Support\Facades\DB;
@@ -533,9 +534,9 @@ REQ,
       "topic": "Exact topic name from plan",
       "question": "Question text here",
       "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correct_index": 0,
+      "correct_index": 2,
       "hint": "Theory or rule hint only — no final answer",
-      "explanation": "Full working for teacher (optional)",
+      "explanation": "Full working for teacher — Answer: C",
       "difficulty": "Easy"
     }
   ]
@@ -547,14 +548,16 @@ JSON
     {
       "question": "Question text here",
       "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correct_index": 0,
+      "correct_index": 3,
       "method_hint": "Theory or rule hint only — no final answer",
-      "explanation": "Full working for teacher (optional)",
+      "explanation": "Full working for teacher — Answer: D",
       "difficulty": "Easy"
     }
   ]
 }
 JSON;
+
+        $varyRule = McqGenerationPrompt::VARY_CORRECT_OPTION_RULE;
 
         return <<<PROMPT
 {$intro}
@@ -563,6 +566,8 @@ Context:
 {$context}
 
 {$requirements}
+- correct_index is 0-based (0 = A, 1 = B, 2 = C, 3 = D)
+{$varyRule}
 
 JSON format:
 {$jsonFormat}

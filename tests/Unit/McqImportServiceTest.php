@@ -54,6 +54,8 @@ JSON;
 
         $this->assertStringContainsString('Rational Numbers: Easy 5, Medium 1, Hard 2', $prompt);
         $this->assertStringContainsString('"topic"', $prompt);
+        $this->assertStringContainsString('do NOT default every question to option A', $prompt);
+        $this->assertStringContainsString('"correct_index": 2', $prompt);
     }
 
     /**

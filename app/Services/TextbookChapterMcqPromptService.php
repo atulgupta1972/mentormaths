@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\TextbookChapter;
+use App\Support\McqGenerationPrompt;
 
 class TextbookChapterMcqPromptService
 {
@@ -55,10 +56,20 @@ class TextbookChapterMcqPromptService
                     'explanation' => 'Bhuvan read 8 books, which is the greatest. Answer: B',
                     'difficulty' => 'Easy',
                 ],
+                [
+                    'topic' => 'Comparing numbers',
+                    'question' => 'Which number is the greatest?',
+                    'options' => ['12', '8', '15', '19'],
+                    'correct_index' => 3,
+                    'hint' => 'Compare all four values.',
+                    'explanation' => '19 is the greatest. Answer: D',
+                    'difficulty' => 'Easy',
+                ],
             ],
         ];
 
         $sampleJson = json_encode($sample, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $varyRule = McqGenerationPrompt::VARY_CORRECT_OPTION_RULE;
 
         $prompt = <<<PROMPT
 Extract every gradable maths MCQ from this textbook chapter PDF.
@@ -89,9 +100,9 @@ Return ONLY valid JSON (no markdown fences) in this exact shape:
       "chart": "optional — full chart/graph description when the PDF uses a figure",
       "table": "optional — markdown table string OR {\"headers\": [...], \"rows\": [[...]]}",
       "options": ["A text", "B text", "C text", "D text"],
-      "correct_index": 0,
+      "correct_index": 2,
       "hint": "One-line method hint",
-      "explanation": "Brief working + Answer: A/B/C/D",
+      "explanation": "Brief working + Answer: C",
       "difficulty": "Easy|Medium|Hard"
     }
   ]
@@ -99,7 +110,8 @@ Return ONLY valid JSON (no markdown fences) in this exact shape:
 
 Rules:
 - Return questions only — do NOT include set_plan or grouping metadata
-- correct_index is 0-based (0 = first option)
+- correct_index is 0-based (0 = A, 1 = B, 2 = C, 3 = D)
+{$varyRule}
 - Exactly 4 options per question when possible
 - Do not skip numbered exercises — extract ALL solvable items
 - Fix broken subscripts (t_n, u_n) in question text
