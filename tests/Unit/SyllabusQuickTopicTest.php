@@ -210,6 +210,30 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertTrue($rows->pluck('chapter_name')->contains('Geometry'));
     }
 
+    public function test_class4_cbse_2026_excel_uses_chapter_name_column(): void
+    {
+        $path = base_path('samples/syllabus-import/CBSE_Class4_Maths_Syllabus_2026-27.xlsx');
+        $this->assertFileExists($path);
+
+        $service = app(SyllabusImportService::class);
+        $file = new \Illuminate\Http\UploadedFile(
+            $path,
+            'CBSE_Class4_Maths_Syllabus_2026-27.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true,
+        );
+
+        $headerInfo = $service->describeFileHeaders($file);
+        $rows = $service->parseFileToPreviewRows($file);
+
+        $this->assertSame([], $headerInfo['missing']);
+        $this->assertSame([], $headerInfo['unrecognized']);
+        $this->assertSame(42, $rows->count());
+        $this->assertSame('Shapes Around Us', $rows->first()['chapter_name']);
+        $this->assertFalse($rows->pluck('chapter_name')->contains('Geometry'));
+    }
+
     public function test_class5_r1_excel_parses_with_ncert_chapter_column(): void
     {
         $path = base_path('tests/Class5_Math r1.xlsx');
