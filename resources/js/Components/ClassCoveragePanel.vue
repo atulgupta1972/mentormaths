@@ -103,29 +103,31 @@ const chapterTitle = (chapter) => {
                         <td class="px-1.5 py-1 text-center align-top">
                             <button
                                 type="button"
-                                class="inline-flex h-5 w-5 items-center justify-center rounded text-xs leading-none"
+                                class="inline-flex h-5 w-5 items-center justify-center rounded border-2 text-[11px] font-bold leading-none"
                                 :class="chapter.studied
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-transparent text-slate-300 hover:text-emerald-600'"
+                                    ? 'border-emerald-700 bg-emerald-600 text-white'
+                                    : 'border-slate-400 bg-white text-transparent hover:border-emerald-500'"
                                 :title="chapter.studied ? 'Marked studied' : 'Mark as studied'"
+                                :aria-pressed="chapter.studied ? 'true' : 'false'"
                                 :disabled="savingId !== null"
                                 @click="mark(chapter.id, 'studied')"
                             >
-                                ✓
+                                <span v-if="chapter.studied">✓</span>
                             </button>
                         </td>
                         <td class="px-1.5 py-1 text-center align-top">
                             <button
                                 type="button"
-                                class="inline-flex h-5 w-5 items-center justify-center rounded text-xs leading-none"
+                                class="inline-flex h-5 w-5 items-center justify-center rounded border-2 text-[11px] font-bold leading-none"
                                 :class="chapter.under_study
-                                    ? 'bg-amber-500 text-white'
-                                    : 'bg-transparent text-slate-300 hover:text-amber-600'"
+                                    ? 'border-amber-600 bg-amber-500 text-white'
+                                    : 'border-slate-400 bg-white text-transparent hover:border-amber-500'"
                                 :title="chapter.under_study ? 'Currently under study' : 'Mark as under study'"
+                                :aria-pressed="chapter.under_study ? 'true' : 'false'"
                                 :disabled="savingId !== null"
                                 @click="mark(chapter.id, 'under_study')"
                             >
-                                ✓
+                                <span v-if="chapter.under_study">✓</span>
                             </button>
                         </td>
                     </tr>
