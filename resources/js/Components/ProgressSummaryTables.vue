@@ -90,34 +90,38 @@ const deassign = (row) => {
             <strong>Mentor remark:</strong> {{ summary.mentor_remark }}
         </div>
 
-        <section v-if="summary.completed_by_chapter?.length">
-            <h4 class="text-sm font-semibold text-gray-900">Completed work</h4>
+        <section v-if="summary.completed_by_date?.length || summary.completed_by_chapter?.length">
+            <h4 class="text-sm font-semibold text-gray-900">
+                {{ summary.period_filtered ? 'Completed in this period' : 'Completed work' }}
+            </h4>
 
             <div
-                v-for="group in summary.completed_by_chapter"
-                :key="`completed-${group.chapter_name}`"
+                v-for="group in (summary.completed_by_date?.length ? summary.completed_by_date : summary.completed_by_chapter)"
+                :key="`completed-${group.date || group.chapter_name}`"
                 class="mt-3 overflow-x-auto rounded-lg border border-gray-200 bg-white"
             >
                 <p class="border-b border-gray-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-900">
-                    {{ group.chapter_name }}
+                    {{ group.date_label || group.chapter_name }}
                 </p>
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                     <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                         <tr>
-                            <th class="px-3 py-2">Date</th>
+                            <th v-if="!summary.completed_by_date?.length" class="px-3 py-2">Date</th>
                             <th class="px-3 py-2">Set</th>
                             <th class="px-3 py-2">Type</th>
                             <th class="px-3 py-2">Topic</th>
+                            <th class="px-3 py-2">Chapter</th>
                             <th class="px-3 py-2">Score</th>
                             <th class="px-3 py-2">Review</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
-                        <tr v-for="row in group.rows" :key="`completed-row-${row.assignment_id}`">
-                            <td class="whitespace-nowrap px-3 py-2 text-gray-700">{{ submittedDate(row) }}</td>
+                        <tr v-for="row in group.rows" :key="`completed-row-${row.assignment_id}-${row.latest_attempt_number || 1}`">
+                            <td v-if="!summary.completed_by_date?.length" class="whitespace-nowrap px-3 py-2 text-gray-700">{{ submittedDate(row) }}</td>
                             <td class="whitespace-nowrap px-3 py-2 font-mono font-semibold text-gray-900">{{ row.set_code }}</td>
                             <td class="whitespace-nowrap px-3 py-2 text-gray-700">{{ row.kind_label }}</td>
                             <td class="px-3 py-2 text-gray-700">{{ detailLabel(row) }}</td>
+                            <td class="px-3 py-2 text-gray-700">{{ row.chapter_name || '—' }}</td>
                             <td class="whitespace-nowrap px-3 py-2 text-gray-900">
                                 {{ scoreLabel(row) }}
                                 <span v-if="(row.latest_attempt_number || 0) > 1" class="text-xs text-gray-500">
@@ -220,10 +224,10 @@ const deassign = (row) => {
         </section>
 
         <p
-            v-if="!summary.completed_by_chapter?.length && !summary.pending_by_chapter?.length && !summary.overdue_by_chapter?.length"
+            v-if="!summary.completed_by_date?.length && !summary.completed_by_chapter?.length && !summary.pending_by_chapter?.length && !summary.overdue_by_chapter?.length"
             class="text-sm text-gray-500"
         >
-            No assignments to show for this date.
+            {{ summary.period_filtered ? 'No work completed in this date range.' : 'No assignments to show for this date.' }}
         </p>
     </div>
 </template>

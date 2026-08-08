@@ -37,11 +37,14 @@
 </p>
 
 @if (count($summary['completed']) > 0)
-    <p><strong>Completed work</strong></p>
+    <p><strong>{{ ($summary['period_filtered'] ?? false) ? 'Completed in this period' : 'Completed work' }}</strong></p>
 
-    @foreach ($summary['completed_by_chapter'] as $group)
-        <p style="margin: 16px 0 8px; font-weight: bold;">{{ $group['chapter_name'] }}</p>
-        @include('emails.partials.progress-summary-completed-table', ['rows' => $group['rows']])
+    @foreach (($summary['completed_by_date'] ?? []) ?: ($summary['completed_by_chapter'] ?? []) as $group)
+        <p style="margin: 16px 0 8px; font-weight: bold;">{{ $group['date_label'] ?? $group['chapter_name'] }}</p>
+        @include('emails.partials.progress-summary-completed-table', [
+            'rows' => $group['rows'],
+            'hideDateColumn' => isset($group['date_label']),
+        ])
     @endforeach
 @endif
 

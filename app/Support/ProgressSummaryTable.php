@@ -32,6 +32,40 @@ class ProgressSummaryTable
     }
 
     /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array{date: string, date_label: string, rows: list<array<string, mixed>>}>
+     */
+    public static function groupByDate(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        return collect($rows)
+            ->groupBy(function (array $row) {
+                if (empty($row['submitted_at'])) {
+                    return 'unknown';
+                }
+
+                return substr((string) $row['submitted_at'], 0, 10);
+            })
+            ->map(function ($items, string $date) {
+                $label = $date === 'unknown'
+                    ? 'Date unknown'
+                    : DateLabels::formatDate($date);
+
+                return [
+                    'date' => $date,
+                    'date_label' => $label,
+                    'rows' => $items->values()->all(),
+                ];
+            })
+            ->sortBy(fn (array $group) => $group['date'] === 'unknown' ? '9999-12-31' : $group['date'])
+            ->values()
+            ->all();
+    }
+
+    /**
      * @param  array<string, mixed>  $row
      */
     public static function chapterName(array $row): string

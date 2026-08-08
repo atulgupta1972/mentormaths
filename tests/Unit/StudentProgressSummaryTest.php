@@ -170,12 +170,61 @@ class StudentProgressSummaryTest extends TestCase
         $this->assertStringContainsString('Days logged in:', $message);
         $this->assertStringContainsString('Mentor remark:', $message);
         $this->assertStringContainsString('Please finish overdue work this week.', $message);
-        $this->assertStringContainsString('Completed (1):', $message);
+        $this->assertStringContainsString('Completed in period (1):', $message);
         $this->assertStringContainsString('100% (1/1)', $message);
         $this->assertStringContainsString('Overall score: 100% (1/1)', $message);
-        $this->assertStringContainsString('Date · Set · Type · Topic · Score · Review', $message);
+        $this->assertStringContainsString('Set · Type · Topic · Score · Review', $message);
         $this->assertStringContainsString('Pending (1):', $message);
         $this->assertStringContainsString('S902', $message);
+    }
+
+    public function test_period_range_shows_only_work_completed_in_those_days(): void
+    {
+        [$enrollment, $firstAssignment, $secondAssignment] = $this->seedAssignments();
+
+        SetAttempt::query()->create([
+            'set_assignment_id' => $firstAssignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subDays(20),
+            'completed_at' => now()->subDays(20)->setTime(10, 0),
+            'score' => 8,
+            'max_score' => 10,
+            'time_seconds' => 120,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+
+        SetAttempt::query()->create([
+            'set_assignment_id' => $secondAssignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subDay(),
+            'completed_at' => now()->subDay()->setTime(15, 0),
+            'score' => 9,
+            'max_score' => 10,
+            'time_seconds' => 130,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+
+        // Mark second as completed assignment status for consistency.
+        $secondAssignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
+
+        $summary = app(StudentProgressSummaryService::class)->build(
+            $enrollment,
+            now(),
+            now()->subDays(6),
+        );
+
+        $this->assertTrue($summary['period_filtered']);
+        $this->assertSame(1, $summary['stats']['completed_count']);
+        $this->assertSame(['S902'], array_column($summary['completed'], 'set_code'));
+        $this->assertNotEmpty($summary['completed_by_date']);
+        $this->assertSame(
+            substr(now()->subDay()->toDateString(), 0, 10),
+            $summary['completed_by_date'][0]['date'],
+        );
     }
 
     public function test_engagement_counts_login_days_and_time_spent_in_range(): void

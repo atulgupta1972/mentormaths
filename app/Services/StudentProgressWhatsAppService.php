@@ -81,23 +81,38 @@ class StudentProgressWhatsAppService
     private function appendCompletedSection(array &$lines, array $summary): void
     {
         $lines[] = '';
-        $lines[] = 'Completed ('.($summary['stats']['completed_count'] ?? 0).'):';
+        $label = ($summary['period_filtered'] ?? false)
+            ? 'Completed in period ('.($summary['stats']['completed_count'] ?? 0).'):'
+            : 'Completed ('.($summary['stats']['completed_count'] ?? 0).'):';
+        $lines[] = $label;
 
         if ($summary['completed'] === []) {
-            $lines[] = '— none yet';
+            $lines[] = ($summary['period_filtered'] ?? false)
+                ? '— none completed in this period'
+                : '— none yet';
 
             return;
         }
 
-        foreach ($summary['completed_by_chapter'] as $group) {
+        $groups = $summary['completed_by_date'] ?? [];
+
+        if ($groups === []) {
+            $groups = collect($summary['completed_by_chapter'] ?? [])
+                ->map(fn (array $group) => [
+                    'date_label' => $group['chapter_name'],
+                    'rows' => $group['rows'],
+                ])
+                ->all();
+        }
+
+        foreach ($groups as $group) {
             $lines[] = '';
-            $lines[] = $group['chapter_name'];
-            $lines[] = 'Date · Set · Type · Topic · Score · Review';
+            $lines[] = $group['date_label'];
+            $lines[] = 'Set · Type · Topic · Score · Review';
 
             foreach ($group['rows'] as $row) {
                 $score = ProgressSummaryTable::scoreLabel($row).ProgressSummaryTable::attemptSuffix($row);
                 $lines[] = implode(' · ', [
-                    ProgressSummaryTable::submittedDateLabel($row) ?? '—',
                     $row['set_code'],
                     $row['kind_label'],
                     ProgressSummaryTable::detailLabel($row),

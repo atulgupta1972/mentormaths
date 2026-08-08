@@ -120,14 +120,22 @@ class StudentProgressSummaryService
         }
 
         $helpRequests = $this->resolutionService->pendingForEnrollment($enrollment->id);
-        $completed = $this->sortBySubmittedDateAsc($completed);
+        $allCompleted = $this->sortBySubmittedDateAsc($completed);
         $recentlyCompleted = $this->sortBySubmittedDateAsc($recentlyCompleted);
+
+        // Date-range reports show only work finished in the selected period (not lifetime history).
+        if ($periodStart) {
+            $completed = $recentlyCompleted;
+            $recentlyCompleted = [];
+        } else {
+            $completed = $allCompleted;
+        }
+
         $pending = $this->sortByTargetDateAsc($pending);
         $overdue = $this->sortByTargetDateAsc($overdue);
         $overall = ScoreLabel::aggregateFromRows($completed);
         $chapterPerformance = ProgressSummaryAnalytics::chapterPerformance($completed);
-        $dateSource = ($periodStart && $recentlyCompleted !== []) ? $recentlyCompleted : $completed;
-        $datePerformance = ProgressSummaryAnalytics::datePerformance($dateSource);
+        $datePerformance = ProgressSummaryAnalytics::datePerformance($completed);
 
         $engagementFrom = $periodStart ?? $asOf->copy()->startOfDay();
         $engagement = StudentEngagementMetrics::forEnrollment($enrollment, $engagementFrom, $asOf);
@@ -143,10 +151,12 @@ class StudentProgressSummaryService
             'date_to' => $engagement['date_to'],
             'period_start' => $periodStart?->toDateString() ?? $engagement['date_from'],
             'period_label' => DateLabels::formatDate($engagement['date_from']).' – '.DateLabels::formatDate($engagement['date_to']),
+            'period_filtered' => $periodStart !== null,
             'mentor_remark' => $remark,
             'engagement' => $engagement,
             'completed' => $completed,
             'completed_by_chapter' => ProgressSummaryTable::groupByChapter($completed, 'submitted_at'),
+            'completed_by_date' => ProgressSummaryTable::groupByDate($completed),
             'pending' => $pending,
             'pending_by_chapter' => ProgressSummaryTable::groupByChapter($pending, 'target_date'),
             'overdue' => $overdue,
