@@ -133,13 +133,20 @@ class FormulaBankController extends Controller
         ]);
     }
 
-    public function setShow(Worksheet $worksheet): Response
+    public function setShow(Request $request, Worksheet $worksheet): Response
     {
         abort_unless($worksheet->isFormula(), 404);
 
+        $isAdmin = (bool) $request->user()?->isAdmin();
+
+        if (! $isAdmin && $worksheet->status !== Worksheet::STATUS_PUBLISHED) {
+            abort(403, 'This formula set is not available for preview.');
+        }
+
         return Inertia::render('Admin/FormulaBank/SetShow', [
-            'set' => $this->formulaBank->setDetail($worksheet),
-            'sampleJson' => $this->sampleJson(),
+            'set' => $this->formulaBank->setDetail($worksheet, includeQuestions: $isAdmin),
+            'sampleJson' => $isAdmin ? $this->sampleJson() : '',
+            'canViewQuestions' => $isAdmin,
         ]);
     }
 

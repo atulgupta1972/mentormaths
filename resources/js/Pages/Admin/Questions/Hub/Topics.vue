@@ -394,7 +394,7 @@ const clearBank = (card) => {
                             </button>
                         </p>
                         <p v-else-if="!isAdmin && card.type === 'bank'" class="mt-3 border-t border-emerald-200 pt-3 text-xs text-emerald-800">
-                            Topic question bank — tap to browse questions.
+                            Topic question bank — counts only; questions stay hidden until assigned.
                         </p>
                         <p v-else-if="card.status === 'draft'" class="mt-2 text-xs text-amber-700">Draft</p>
                     </div>

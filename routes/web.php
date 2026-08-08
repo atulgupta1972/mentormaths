@@ -92,6 +92,8 @@ Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(
     Route::get('/questions/chapters/{chapter}', [QuestionHubController::class, 'topics'])->name('questions.chapters.show');
     Route::get('/questions/sets/{worksheet}', [QuestionHubController::class, 'setQuestions'])->name('questions.sets.show');
     Route::get('/questions/topics/{topic}', [QuestionController::class, 'topicIndex'])->name('questions.topics.show');
+    // Browse-only for students: Q&A redacted in controller. Admin import stays under admin middleware.
+    Route::get('/formula-bank/sets/{worksheet}', [FormulaBankController::class, 'setShow'])->name('formula-bank.sets.show');
 });
 
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
@@ -312,7 +314,6 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/formula-bank/chapters/{chapter}/prompt', [FormulaBankController::class, 'chapterPrompt'])->name('formula-bank.chapters.prompt');
     Route::post('/formula-bank/chapters/{chapter}/import', [FormulaBankController::class, 'importToChapter'])->name('formula-bank.chapters.import');
     Route::delete('/formula-bank/cards/{question}', [FormulaBankController::class, 'destroyCard'])->name('formula-bank.cards.destroy');
-    Route::get('/formula-bank/sets/{worksheet}', [FormulaBankController::class, 'setShow'])->name('formula-bank.sets.show');
     Route::post('/formula-bank/sets/{worksheet}/import', [FormulaBankController::class, 'importToSet'])->name('formula-bank.sets.import');
 
     Route::get('/content-rate-cards', [ContentRateCardController::class, 'index'])->name('content-rate-cards.index');

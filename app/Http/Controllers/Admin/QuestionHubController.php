@@ -447,15 +447,22 @@ class QuestionHubController extends Controller
             abort(403, 'This practice set is not available for preview.');
         }
 
+        $isAdmin = (bool) $request->user()?->isAdmin();
+
         $worksheet->load([
             'topic.chapter.syllabusVersion.board',
             'topic.chapter.syllabusVersion.gradeLevel',
             'chapter.syllabusVersion.board',
             'chapter.syllabusVersion.gradeLevel',
-            'questions.options',
-            'questions.blankAnswer',
         ]);
         $worksheet->loadCount('questions');
+
+        if ($isAdmin) {
+            $worksheet->load([
+                'questions.options',
+                'questions.blankAnswer',
+            ]);
+        }
 
         $topic = $worksheet->topic;
         $chapter = $worksheet->chapter ?? $topic?->chapter;
@@ -470,7 +477,6 @@ class QuestionHubController extends Controller
             $this->gradeContext->persistBoard($request, $board->id);
         }
 
-        $isAdmin = (bool) $request->user()?->isAdmin();
         $activeYear = AcademicYear::active();
         $assignmentPanel = null;
 
@@ -488,6 +494,42 @@ class QuestionHubController extends Controller
                     ->worksheetAssignmentOverview($worksheet->id, $activeYear?->id)
                     ->all(),
             ];
+        }
+
+        $questions = [];
+        $isFillInBlankSet = false;
+        $hintStats = null;
+        $topicHintStats = null;
+
+        if ($isAdmin) {
+            $isFillInBlankSet = $worksheet->questions->isNotEmpty()
+                && $worksheet->questions->every(fn (Question $q) => $q->isFillInBlank());
+
+            $questions = $worksheet->questions->map(function ($q) {
+                $correctOption = $q->options->firstWhere('is_correct', true);
+
+                return [
+                    'id' => $q->id,
+                    'question_text' => $q->question_text,
+                    'diagram_url' => $q->diagram_url,
+                    'difficulty' => $q->difficulty,
+                    'source' => $q->source,
+                    'method_hint' => $q->method_hint,
+                    'type' => $q->type,
+                    'type_label' => $q->isFillInBlank() ? 'Fill in blank' : 'MCQ',
+                    'options_count' => $q->options->count(),
+                    'answer_format' => $q->blankAnswer?->answer_format,
+                    'correct_answer' => $q->blankAnswer?->correct_answer ?? $correctOption?->option_text,
+                    'decimal_places' => $q->blankAnswer?->decimal_places,
+                ];
+            })->values()->all();
+
+            $hintStats = $topic
+                ? $this->methodHintService->statsForQuestions($worksheet->questions)
+                : null;
+            $topicHintStats = $topic
+                ? $this->methodHintService->statsForTopic($topic)
+                : null;
         }
 
         return Inertia::render('Admin/Questions/SetQuestions', [
@@ -524,31 +566,11 @@ class QuestionHubController extends Controller
             ] : null),
             'board' => $board?->only(['id', 'code', 'name']),
             'isChapterTest' => $worksheet->isChapterTest(),
-            'isFillInBlankSet' => $worksheet->questions->every(fn (Question $q) => $q->isFillInBlank()),
-            'questions' => $worksheet->questions->map(function ($q) {
-                $correctOption = $q->options->firstWhere('is_correct', true);
-
-                return [
-                    'id' => $q->id,
-                    'question_text' => $q->question_text,
-                    'diagram_url' => $q->diagram_url,
-                    'difficulty' => $q->difficulty,
-                    'source' => $q->source,
-                    'method_hint' => $q->method_hint,
-                    'type' => $q->type,
-                    'type_label' => $q->isFillInBlank() ? 'Fill in blank' : 'MCQ',
-                    'options_count' => $q->options->count(),
-                    'answer_format' => $q->blankAnswer?->answer_format,
-                    'correct_answer' => $q->blankAnswer?->correct_answer ?? $correctOption?->option_text,
-                    'decimal_places' => $q->blankAnswer?->decimal_places,
-                ];
-            })->values()->all(),
-            'hintStats' => $topic
-                ? $this->methodHintService->statsForQuestions($worksheet->questions)
-                : null,
-            'topicHintStats' => $topic
-                ? $this->methodHintService->statsForTopic($topic)
-                : null,
+            'isFillInBlankSet' => $isFillInBlankSet,
+            'canViewQuestions' => $isAdmin,
+            'questions' => $questions,
+            'hintStats' => $hintStats,
+            'topicHintStats' => $topicHintStats,
             'assignmentPanel' => $assignmentPanel,
         ]);
     }

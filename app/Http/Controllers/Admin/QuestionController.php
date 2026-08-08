@@ -51,15 +51,33 @@ class QuestionController extends Controller
             $this->gradeContext->persistBoard($request, $board->id);
         }
 
-        $query = Question::query()
-            ->with('options')
+        $isAdmin = (bool) $request->user()?->isAdmin();
+
+        $questions = Question::query()
             ->where('syllabus_topic_id', $topic->id)
-            ->when($request->filled('search'), function ($q) use ($request) {
+            ->when($isAdmin && $request->filled('search'), function ($q) use ($request) {
                 $search = $request->string('search')->toString();
                 $q->where('question_text', 'like', "%{$search}%");
-            });
+            })
+            ->when($isAdmin, fn ($q) => $q->with('options'))
+            ->when(! $isAdmin, fn ($q) => $q->select(['id', 'syllabus_topic_id', 'type', 'difficulty', 'created_at']))
+            ->latest()
+            ->paginate(20)
+            ->withQueryString();
 
-        $questions = $query->latest()->paginate(20)->withQueryString();
+        if (! $isAdmin) {
+            $questions->getCollection()->transform(function (Question $question) {
+                return [
+                    'id' => $question->id,
+                    'question_text' => null,
+                    'diagram_url' => null,
+                    'type' => $question->type,
+                    'difficulty' => $question->difficulty,
+                    'options' => [],
+                    'hidden' => true,
+                ];
+            });
+        }
 
         return Inertia::render('Admin/Questions/TopicQuestions', [
             'topic' => [
@@ -76,11 +94,12 @@ class QuestionController extends Controller
             ],
             'board' => $board?->only(['id', 'code', 'name']),
             'questions' => $questions,
+            'canViewQuestions' => $isAdmin,
             'filters' => [
-                'search' => $request->string('search')->toString(),
+                'search' => $isAdmin ? $request->string('search')->toString() : '',
             ],
-            'hintStats' => $this->methodHintService->statsForTopic($topic),
-            'canClearBank' => ! $topic->practiceSets()->exists(),
+            'hintStats' => $isAdmin ? $this->methodHintService->statsForTopic($topic) : null,
+            'canClearBank' => $isAdmin && ! $topic->practiceSets()->exists(),
         ]);
     }
 

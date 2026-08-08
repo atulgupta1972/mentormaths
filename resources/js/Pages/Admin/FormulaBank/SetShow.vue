@@ -4,14 +4,16 @@ import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     set: { type: Object, required: true },
     sampleJson: { type: String, default: '' },
+    canViewQuestions: { type: Boolean, default: true },
 });
 
 const page = usePage();
+const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
 const showImport = ref(false);
 const importForm = useForm({ json: props.sampleJson || '' });
 
@@ -80,12 +82,17 @@ const submitImport = () => {
                             <h3 class="font-medium text-gray-900">{{ set.title }}</h3>
                             <p class="text-xs text-gray-500">{{ set.questions_count }} formula / concept cards</p>
                         </div>
-                        <SecondaryButton type="button" class="!py-1.5 !text-xs" @click="showImport = !showImport">
+                        <SecondaryButton
+                            v-if="canViewQuestions && isAdmin"
+                            type="button"
+                            class="!py-1.5 !text-xs"
+                            @click="showImport = !showImport"
+                        >
                             {{ showImport ? 'Hide import' : 'Add more MCQs' }}
                         </SecondaryButton>
                     </div>
 
-                    <div v-if="showImport" class="mt-4 space-y-3 rounded-md border border-indigo-100 bg-indigo-50/40 p-4">
+                    <div v-if="showImport && canViewQuestions" class="mt-4 space-y-3 rounded-md border border-indigo-100 bg-indigo-50/40 p-4">
                         <textarea
                             v-model="importForm.json"
                             rows="12"
@@ -98,7 +105,25 @@ const submitImport = () => {
                     </div>
                 </div>
 
-                <div class="space-y-3">
+                <div
+                    v-if="!canViewQuestions"
+                    class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950"
+                >
+                    <p class="font-semibold">Cards are hidden in browse mode.</p>
+                    <p class="mt-1">
+                        This set has {{ set.questions_count ?? 0 }} formula / concept card{{ (set.questions_count ?? 0) === 1 ? '' : 's' }}.
+                        You will see them only when your teacher assigns formula practice from the Dashboard.
+                    </p>
+                    <Link
+                        v-if="set.topic?.chapter_id"
+                        :href="route('admin.questions.chapters.show', set.topic.chapter_id)"
+                        class="mt-3 inline-block text-sm font-medium text-indigo-700 hover:underline"
+                    >
+                        ← Back to chapter sets
+                    </Link>
+                </div>
+
+                <div v-else class="space-y-3">
                     <div
                         v-for="(question, index) in set.questions"
                         :key="question.id"

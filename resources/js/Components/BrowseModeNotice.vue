@@ -11,7 +11,7 @@ const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
         class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900"
     >
         <strong>Browse mode.</strong>
-        You can view the syllabus, question counts, and question bank here.
-        Practice sets can only be attempted when assigned to you from the Dashboard.
+        You can view the syllabus and question counts here.
+        Questions and answers stay hidden until a set is assigned to you from the Dashboard.
     </div>
 </template>

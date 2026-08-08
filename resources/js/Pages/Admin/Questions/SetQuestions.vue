@@ -17,6 +17,7 @@ const props = defineProps({
     questions: Array,
     isChapterTest: { type: Boolean, default: false },
     isFillInBlankSet: { type: Boolean, default: false },
+    canViewQuestions: { type: Boolean, default: true },
     hintStats: Object,
     topicHintStats: Object,
     assignmentPanel: { type: Object, default: null },
@@ -340,7 +341,25 @@ const generateHints = () => {
 
                 <p class="text-sm text-gray-600">{{ practiceSet.tier_tagline }}</p>
 
-                <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
+                <div
+                    v-if="!canViewQuestions"
+                    class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950"
+                >
+                    <p class="font-semibold">Questions are hidden in browse mode.</p>
+                    <p class="mt-1">
+                        This set has {{ practiceSet.questions_count ?? 0 }} question{{ (practiceSet.questions_count ?? 0) === 1 ? '' : 's' }}.
+                        You will see the questions only when your teacher assigns this set from the Dashboard.
+                    </p>
+                    <Link
+                        v-if="topic?.chapter_id"
+                        :href="route('admin.questions.chapters.show', topic.chapter_id)"
+                        class="mt-3 inline-block text-sm font-medium text-indigo-700 hover:underline"
+                    >
+                        ← Back to chapter sets
+                    </Link>
+                </div>
+
+                <div v-else class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-gray-50">
                             <tr>

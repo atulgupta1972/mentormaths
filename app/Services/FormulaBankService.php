@@ -294,15 +294,20 @@ class FormulaBankService
     /**
      * @return array<string, mixed>
      */
-    public function setDetail(Worksheet $worksheet): array
+    public function setDetail(Worksheet $worksheet, bool $includeQuestions = true): array
     {
         abort_unless($worksheet->isFormula(), 404);
 
-        $worksheet->loadMissing([
+        $with = [
             'topic.chapter.syllabusVersion.gradeLevel',
             'topic.chapter.syllabusVersion.board',
-            'questions.options',
-        ])->loadCount('questions');
+        ];
+
+        if ($includeQuestions) {
+            $with[] = 'questions.options';
+        }
+
+        $worksheet->loadMissing($with)->loadCount('questions');
 
         return [
             'id' => $worksheet->id,
@@ -320,7 +325,9 @@ class FormulaBankService
             ],
             'grade' => $worksheet->topic?->chapter?->syllabusVersion?->gradeLevel?->only(['id', 'name']),
             'board' => $worksheet->topic?->chapter?->syllabusVersion?->board?->only(['id', 'code', 'name']),
-            'questions' => $worksheet->questions->map(fn (Question $q) => $this->questionPayload($q))->values()->all(),
+            'questions' => $includeQuestions
+                ? $worksheet->questions->map(fn (Question $q) => $this->questionPayload($q))->values()->all()
+                : [],
         ];
     }
 
