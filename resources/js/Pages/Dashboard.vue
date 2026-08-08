@@ -536,8 +536,6 @@ const adminSetStatusClass = (set) => {
                         :grade-levels="gradeLevels"
                     />
 
-                    <ContentUploadGuidePanel variant="admin" />
-
                     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                         <div class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-violet-700">{{ stats.students_count || 0 }}</p>
