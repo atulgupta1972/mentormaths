@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
 use App\Models\GradeLevel;
+use App\Services\ContentUploaderDashboardService;
 use App\Services\DashboardService;
 use App\Support\MailConfigStatus;
 use App\Support\StudentWeeklyReportEmails;
@@ -14,7 +15,10 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __construct(private DashboardService $dashboardService) {}
+    public function __construct(
+        private DashboardService $dashboardService,
+        private ContentUploaderDashboardService $uploaderDashboard,
+    ) {}
 
     public function __invoke(Request $request): Response|RedirectResponse
     {
@@ -42,12 +46,23 @@ class DashboardController extends Controller
         $studentData = $this->dashboardService->forStudent($enrollment, $gradeLevelId, $boardId);
         $student = $user->student;
 
+        $contentUploaderTasks = null;
+        if ($user->isContentUploader()) {
+            $dashboard = $this->uploaderDashboard->forUser($user);
+            $contentUploaderTasks = [
+                'summary' => $dashboard['summary'],
+                'uploadPending' => $dashboard['uploadPending'],
+                'reviewPending' => $dashboard['reviewPending'],
+            ];
+        }
+
         return Inertia::render('Dashboard', [
             'isAdmin' => false,
             'activeYear' => AcademicYear::active()?->only(['id', 'name']),
             'weeklyReportEmails' => $student
                 ? StudentWeeklyReportEmails::display($student->parent1_email, $student->parent2_email)
                 : '',
+            'contentUploaderTasks' => $contentUploaderTasks,
             ...$studentData,
         ]);
     }

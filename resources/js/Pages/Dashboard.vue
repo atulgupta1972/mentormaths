@@ -4,6 +4,7 @@ import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import StudentAssignmentGroupTable from '@/Components/StudentAssignmentGroupTable.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
 import ContentUploadGuidePanel from '@/Components/ContentUploadGuidePanel.vue';
+import ContentUploaderTasksPanel from '@/Components/ContentUploaderTasksPanel.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link, usePage } from '@inertiajs/vue3';
@@ -34,6 +35,7 @@ const props = defineProps({
     resolutionItems: { type: Array, default: () => [] },
     resolutionCount: { type: Number, default: 0 },
     weeklyReportEmails: { type: String, default: '' },
+    contentUploaderTasks: { type: Object, default: null },
     mailSettings: { type: Object, default: null },
     gradeLevels: { type: Array, default: () => [] },
 });
@@ -751,6 +753,15 @@ const adminSetStatusClass = (set) => {
                 <!-- Student / teacher / uploader dashboard -->
                 <template v-else>
                     <ContentUploadGuidePanel v-if="isContentUploader" variant="uploader" />
+
+                    <ContentUploaderTasksPanel
+                        v-if="contentUploaderTasks?.summary?.total_active"
+                        class="mb-4"
+                        compact
+                        :summary="contentUploaderTasks.summary"
+                        :upload-pending="contentUploaderTasks.uploadPending"
+                        :review-pending="contentUploaderTasks.reviewPending"
+                    />
 
                     <!-- Welcome — single compact row -->
                     <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-4 py-3 text-white shadow">

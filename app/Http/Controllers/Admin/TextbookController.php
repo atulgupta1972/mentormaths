@@ -228,15 +228,28 @@ class TextbookController extends Controller
         }
 
         $contentUploadTask = null;
-        if (! $this->isContentUploaderContext($request)) {
-            $task = ContentUploadTask::query()
-                ->with('assignee:id,name')
-                ->where('textbook_chapter_id', $textbookChapter->id)
-                ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
-                ->latest()
-                ->first();
+        $taskQuery = ContentUploadTask::query()
+            ->where('textbook_chapter_id', $textbookChapter->id)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED);
 
-            if ($task) {
+        if ($this->isContentUploaderContext($request)) {
+            $taskQuery->where('assigned_to_user_id', $request->user()->id);
+        } else {
+            $taskQuery->with('assignee:id,name');
+        }
+
+        $task = $taskQuery->latest()->first();
+
+        if ($task) {
+            if ($this->isContentUploaderContext($request)) {
+                $contentUploadTask = [
+                    'id' => $task->id,
+                    'status' => $task->status,
+                    'status_label' => $task->statusLabel(),
+                    'bucket' => $task->uploaderBucket(),
+                    'can_start_review' => $task->uploaderBucket() === 'review_pending',
+                ];
+            } else {
                 $contentUploadTask = [
                     'id' => $task->id,
                     'status' => $task->status,
@@ -466,8 +479,12 @@ class TextbookController extends Controller
         $textbookChapter->refresh();
         $summary = $this->setPlanService->summary($textbookChapter->mcq_set_plan ?? []);
 
+        $message = $this->isContentUploaderContext($request)
+            ? "MCQ sets saved: {$summary}. Click Review & complete to verify each question."
+            : "Published — MCQ sets ready: {$summary}.";
+
         return $this->redirectToChapterShow($textbookChapter)
-            ->with('success', "Published — MCQ sets ready: {$summary}.");
+            ->with('success', $message);
     }
 
     public function resetImport(TextbookChapter $textbookChapter): RedirectResponse

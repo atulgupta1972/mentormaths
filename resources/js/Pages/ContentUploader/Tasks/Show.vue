@@ -1,7 +1,6 @@
 <script setup>
 import ContentVerificationPanel from '@/Components/ContentVerificationPanel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import SecondaryButton from '@/Components/SecondaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { onMounted, onUnmounted } from 'vue';
@@ -15,7 +14,7 @@ const props = defineProps({
 
 const page = usePage();
 const agreeForm = useForm({});
-const uploadForm = useForm({});
+const startReviewForm = useForm({});
 
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
 const formatDuration = (seconds) => {
@@ -82,25 +81,28 @@ onUnmounted(() => clearInterval(pingTimer));
                     </PrimaryButton>
                 </div>
 
-                <div v-else-if="['in_progress', 'uploaded', 'verification_in_progress', 'verified'].includes(task.status)" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
+                <div v-else-if="task.needs_review && !verification" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
+                    <p class="text-sm text-gray-700">
+                        MCQ sets are saved. Open review to check each question — fix options and explanations, then submit.
+                    </p>
+                    <PrimaryButton
+                        class="mt-4"
+                        type="button"
+                        :disabled="startReviewForm.processing"
+                        @click="startReviewForm.post(route('content.tasks.start-review', task.id))"
+                    >
+                        Review &amp; complete →
+                    </PrimaryButton>
+                </div>
+
+                <div v-else-if="verification" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <p class="text-sm text-gray-700">
                         One question at a time: review details, edit if needed, then
                         <strong>Save &amp; mark verified → next</strong>.
-                        Verified questions move to the Verified tab (open that tab to re-check any).
                     </p>
-                    <div class="mt-3 flex flex-wrap gap-3">
-                        <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="text-sm font-medium text-indigo-600 hover:underline">
-                            Open textbook chapter →
-                        </a>
-                        <SecondaryButton
-                            v-if="['in_progress', 'uploaded'].includes(task.status)"
-                            type="button"
-                            :disabled="uploadForm.processing"
-                            @click="uploadForm.post(route('content.tasks.mark-uploaded', task.id))"
-                        >
-                            Mark upload complete
-                        </SecondaryButton>
-                    </div>
+                    <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline">
+                        Open textbook chapter →
+                    </a>
                 </div>
 
                 <ContentVerificationPanel

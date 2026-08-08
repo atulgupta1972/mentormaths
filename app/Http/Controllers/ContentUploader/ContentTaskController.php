@@ -5,6 +5,7 @@ namespace App\Http\Controllers\ContentUploader;
 use App\Http\Controllers\Controller;
 use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
+use App\Services\ContentUploaderDashboardService;
 use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
@@ -19,23 +20,15 @@ class ContentTaskController extends Controller
         private ContentUploadTaskService $taskService,
         private ContentVerificationService $verificationService,
         private ContentWorkSessionService $sessionService,
+        private ContentUploaderDashboardService $uploaderDashboard,
     ) {}
 
     public function index(Request $request): Response
     {
         $user = $request->user();
+        $dashboard = $this->uploaderDashboard->forUser($user);
 
-        $tasks = ContentUploadTask::query()
-            ->where('assigned_to_user_id', $user->id)
-            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
-            ->with(['textbookChapter.textbook.gradeLevel'])
-            ->latest()
-            ->get()
-            ->map(fn (ContentUploadTask $task) => $this->serializeTask($task));
-
-        return Inertia::render('ContentUploader/Tasks/Index', [
-            'tasks' => $tasks,
-        ]);
+        return Inertia::render('ContentUploader/Tasks/Index', $dashboard);
     }
 
     public function show(Request $request, ContentUploadTask $contentTask): Response
@@ -55,7 +48,13 @@ class ContentTaskController extends Controller
         }
 
         return Inertia::render('ContentUploader/Tasks/Show', [
-            'task' => $this->serializeTask($contentTask, detailed: true),
+            'task' => $this->uploaderDashboard->serializeTask($contentTask) + [
+                'admin_notes' => $contentTask->admin_notes,
+                'can_work' => $contentTask->canAssigneeWork(),
+                'awaiting_agreement' => $contentTask->isAwaitingAgreement(),
+                'needs_review' => $contentTask->uploaderBucket() === 'review_pending',
+                'textbook_chapter_id' => $contentTask->textbook_chapter_id,
+            ],
             'verification' => $verification ? [
                 'run_id' => $verification['run']->id,
                 'questions' => $verification['questions'],
@@ -90,6 +89,21 @@ class ContentTaskController extends Controller
         }
 
         return back()->with('success', 'Upload marked complete. Verify each question below.');
+    }
+
+    public function startReview(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        try {
+            $this->taskService->startReview($contentTask, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('content.tasks.show', $contentTask)
+            ->with('success', 'Review each question — fix options and explanations, then submit when done.');
     }
 
     public function saveVerificationCheck(Request $request, ContentUploadTask $contentTask): RedirectResponse
@@ -214,38 +228,5 @@ class ContentTaskController extends Controller
         if ($contentTask->assigned_to_user_id !== $request->user()->id && ! $request->user()->isAdmin()) {
             abort(403);
         }
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function serializeTask(ContentUploadTask $task, bool $detailed = false): array
-    {
-        $chapter = $task->textbookChapter;
-
-        $data = [
-            'id' => $task->id,
-            'status' => $task->status,
-            'status_label' => $task->statusLabel(),
-            'offered_amount_inr' => $task->offered_amount_inr,
-            'agreed_amount_inr' => $task->agreed_amount_inr,
-            'agreed_at' => $task->agreed_at?->toIso8601String(),
-            'submitted_at' => $task->submitted_at?->toIso8601String(),
-            'chapter' => $chapter ? [
-                'id' => $chapter->id,
-                'chapter_number' => $chapter->chapter_number,
-                'title' => $chapter->title,
-                'textbook_name' => $chapter->textbook?->name,
-                'grade_name' => $chapter->textbook?->gradeLevel?->name,
-            ] : null,
-        ];
-
-        if ($detailed) {
-            $data['admin_notes'] = $task->admin_notes;
-            $data['can_work'] = $task->canAssigneeWork();
-            $data['awaiting_agreement'] = $task->isAwaitingAgreement();
-        }
-
-        return $data;
     }
 }

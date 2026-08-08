@@ -387,6 +387,7 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::get('/tasks/{contentTask}', [ContentTaskController::class, 'show'])->name('tasks.show');
     Route::post('/tasks/{contentTask}/agree', [ContentTaskController::class, 'agree'])->name('tasks.agree');
     Route::post('/tasks/{contentTask}/mark-uploaded', [ContentTaskController::class, 'markUploaded'])->name('tasks.mark-uploaded');
+    Route::post('/tasks/{contentTask}/start-review', [ContentTaskController::class, 'startReview'])->name('tasks.start-review');
     Route::post('/tasks/{contentTask}/verification-check', [ContentTaskController::class, 'saveVerificationCheck'])->name('tasks.verification-check');
     Route::post('/tasks/{contentTask}/verification-question', [ContentTaskController::class, 'saveVerificationQuestion'])->name('tasks.verification-question');
     Route::post('/tasks/{contentTask}/complete-verification', [ContentTaskController::class, 'completeVerification'])->name('tasks.complete-verification');

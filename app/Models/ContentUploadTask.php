@@ -100,6 +100,51 @@ class ContentUploadTask extends Model
         ], true);
     }
 
+    /**
+     * Uploader dashboard bucket: upload_pending | review_pending | done
+     */
+    public function uploaderBucket(): string
+    {
+        if (in_array($this->status, [
+            self::STATUS_SUBMITTED_FOR_PUBLISH,
+            self::STATUS_PUBLISHED,
+            self::STATUS_CANCELLED,
+        ], true)) {
+            return 'done';
+        }
+
+        if ($this->status === self::STATUS_PENDING_AGREEMENT) {
+            return 'upload_pending';
+        }
+
+        $chapter = $this->textbookChapter;
+        $hasPublishedSets = $chapter && $chapter->mcqWorksheetIds() !== [];
+
+        if ($this->status === self::STATUS_IN_PROGRESS && ! $hasPublishedSets) {
+            return 'upload_pending';
+        }
+
+        if ($hasPublishedSets && in_array($this->status, [
+            self::STATUS_IN_PROGRESS,
+            self::STATUS_UPLOADED,
+            self::STATUS_VERIFICATION_IN_PROGRESS,
+            self::STATUS_VERIFIED,
+        ], true)) {
+            return 'review_pending';
+        }
+
+        return 'upload_pending';
+    }
+
+    public function uploaderBucketLabel(): string
+    {
+        return match ($this->uploaderBucket()) {
+            'upload_pending' => 'Upload pending',
+            'review_pending' => 'Review pending',
+            default => 'Complete',
+        };
+    }
+
     public function statusLabel(): string
     {
         return match ($this->status) {

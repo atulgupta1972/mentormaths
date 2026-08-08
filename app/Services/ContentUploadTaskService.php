@@ -217,6 +217,27 @@ class ContentUploadTaskService
         return $task->fresh();
     }
 
+    public function startReview(ContentUploadTask $task, User $uploader): ContentUploadTask
+    {
+        if ($task->assigned_to_user_id !== $uploader->id) {
+            throw new \InvalidArgumentException('You are not assigned to this task.');
+        }
+
+        if ($task->status === ContentUploadTask::STATUS_IN_PROGRESS) {
+            return $this->markUploaded($task, $uploader);
+        }
+
+        if (! in_array($task->status, [
+            ContentUploadTask::STATUS_UPLOADED,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            ContentUploadTask::STATUS_VERIFIED,
+        ], true)) {
+            throw new \InvalidArgumentException('Save MCQ sets on the chapter page before starting review.');
+        }
+
+        return $task->fresh();
+    }
+
     public function returnForReverification(
         ContentUploadTask $task,
         User $admin,

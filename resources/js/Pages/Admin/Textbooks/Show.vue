@@ -40,6 +40,7 @@ const zipPackInput = ref(null);
 
 const draftForm = useForm({ items: items.value, mcq_set_plan: setPlan.value });
 const publishForm = useForm({ items: items.value, mcq_set_plan: setPlan.value });
+const startReviewForm = useForm({});
 
 const syncForms = () => {
     draftForm.items = items.value;
@@ -72,6 +73,13 @@ watch(
 );
 
 const hasItems = computed(() => items.value.length > 0);
+const showUploaderReviewCta = computed(() =>
+    props.uploaderMode
+    && props.chapter.status === 'published'
+    && props.contentUploadTask?.can_start_review,
+);
+const showUploaderEditor = ref(false);
+const hideUploaderEditPanels = computed(() => showUploaderReviewCta.value && !showUploaderEditor.value);
 const awaitingImport = computed(() => props.chapter.status === 'draft' && !hasItems.value);
 const canEdit = computed(() => ['review', 'published', 'failed'].includes(props.chapter.status) || hasItems.value);
 const showImportSteps = computed(() => awaitingImport.value || (canEdit.value && !hasItems.value));
@@ -471,7 +479,33 @@ const quickAssignSet = (setId) => {
                     </Link>
                 </div>
 
-                <div v-if="hasItems && canEdit" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                <div
+                    v-if="showUploaderReviewCta"
+                    class="rounded-xl border-2 border-emerald-400 bg-emerald-50 p-6 text-center shadow-sm"
+                >
+                    <p class="text-lg font-semibold text-emerald-950">MCQ sets saved — {{ mcqPublishSummary }}</p>
+                    <p class="mt-2 text-sm text-emerald-900">
+                        Next: review each question, fix the correct option and explanation, then submit for admin.
+                    </p>
+                    <PrimaryButton
+                        class="mt-4"
+                        type="button"
+                        :disabled="startReviewForm.processing"
+                        @click="startReviewForm.post(route('content.tasks.start-review', contentUploadTask.id))"
+                    >
+                        {{ startReviewForm.processing ? 'Opening…' : 'Review & complete →' }}
+                    </PrimaryButton>
+                    <SecondaryButton
+                        v-if="showUploaderReviewCta"
+                        class="mt-3"
+                        type="button"
+                        @click="showUploaderEditor = true"
+                    >
+                        Edit MCQ sets again
+                    </SecondaryButton>
+                </div>
+
+                <div v-if="hasItems && canEdit && !hideUploaderEditPanels" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                     <strong>Review {{ items.length }} MCQ(s)</strong> —
                     <span v-if="uploaderMode">
                         bifurcate into sets below, tick <strong>Approved</strong> on each question you checked, then publish sets and return to your task to mark upload complete.
@@ -486,7 +520,7 @@ const quickAssignSet = (setId) => {
                     </SecondaryButton>
                 </div>
 
-                <div v-if="canEdit && hasItems" class="flex flex-wrap items-center justify-between gap-3">
+                <div v-if="canEdit && hasItems && !hideUploaderEditPanels" class="flex flex-wrap items-center justify-between gap-3">
                     <p class="text-sm text-gray-600">
                         {{ approvedCount }} of {{ items.length }} approved · {{ uploaderMode ? 'save as' : 'publish as' }} {{ mcqPublishSummary }}.
                     </p>
@@ -500,17 +534,17 @@ const quickAssignSet = (setId) => {
                     </div>
                 </div>
 
-                <div v-if="hasItems && canEdit && diagramLinkedCount" class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+                <div v-if="hasItems && canEdit && !hideUploaderEditPanels && diagramLinkedCount" class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
                     <strong>Charts from zip are often full PDF pages.</strong>
                     Replace any row with a clean cropped graph only (PNG/JPG) — the MCQ question text is already separate.
                     If sets are published, the new chart shows to students right away.
                 </div>
 
-                <div v-if="hasItems && canEdit && diagramLinkedCount" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+                <div v-if="hasItems && canEdit && !hideUploaderEditPanels && diagramLinkedCount" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
                     <strong>{{ diagramLinkedCount }} chart/diagram image(s)</strong> linked — students will see these when attempting MCQs.
                 </div>
 
-                <div v-if="canEdit && hasItems" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+                <div v-if="canEdit && hasItems && !hideUploaderEditPanels" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
                     <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -574,7 +608,7 @@ const quickAssignSet = (setId) => {
                     <InputError :message="publishForm.errors.mcq_set_plan" class="px-4 py-2" />
                 </div>
 
-                <div v-if="canEdit && hasItems" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+                <div v-if="canEdit && hasItems && !hideUploaderEditPanels" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-gray-50">
                             <tr>
@@ -815,17 +849,6 @@ const quickAssignSet = (setId) => {
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <div
-                    v-else-if="uploaderMode && chapter.status === 'published'"
-                    class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950"
-                >
-                    MCQ sets saved:
-                    <strong>{{ publishedMcqSetCodes.join(', ') || 'ready' }}</strong>.
-                    Return to
-                    <Link :href="safeRoute('content.tasks.index', null, '/content/tasks')" class="font-medium underline">My content tasks</Link>,
-                    open this chapter, click <strong>Mark upload complete</strong>, then tick-verify each question.
                 </div>
 
                 <div

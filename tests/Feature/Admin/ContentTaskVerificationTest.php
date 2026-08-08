@@ -105,6 +105,29 @@ class ContentTaskVerificationTest extends TestCase
         Mail::assertSent(ContentTaskReturnedUploader::class, fn ($mail) => $mail->hasTo($uploader->email));
     }
 
+    public function test_start_review_marks_uploaded_and_opens_verification(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.start-review', $task))
+            ->assertRedirect(route('content.tasks.show', $task))
+            ->assertSessionHas('success');
+
+        $task->refresh();
+        $this->assertSame(ContentUploadTask::STATUS_UPLOADED, $task->status);
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('verification.questions', 1));
+
+        $task->refresh();
+        $this->assertSame(ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS, $task->status);
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask}
      */
