@@ -15,6 +15,7 @@ class DashboardService
         private AdminGradeContext $gradeContext,
         private QuestionResolutionService $resolutionService,
         private StudentChapterSummaryService $chapterSummaryService,
+        private ClassCoverageService $classCoverageService,
     ) {}
 
     /**
@@ -35,6 +36,7 @@ class DashboardService
             'home_grade_level_id' => null,
             'home_board_id' => null,
         ];
+        $classCoverage = ['chapters' => [], 'under_study_chapter_id' => null];
 
         if ($enrollment) {
             $chapterSummaryFilters = $this->chapterSummaryService->filterOptions(
@@ -60,6 +62,7 @@ class DashboardService
                 $selectedGradeId,
                 $selectedBoardId,
             );
+            $classCoverage = $this->classCoverageService->forEnrollment($enrollment);
         }
 
         return [
@@ -68,6 +71,7 @@ class DashboardService
             'syllabusChapters' => $syllabusChapters,
             'chapterSummary' => $chapterSummary,
             'chapterSummaryFilters' => $chapterSummaryFilters,
+            'classCoverage' => $classCoverage,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
             'stats' => $this->studentStats($assignments, $examPlanMeta, count($resolutionItems)),
             'resolutionItems' => $resolutionItems,
