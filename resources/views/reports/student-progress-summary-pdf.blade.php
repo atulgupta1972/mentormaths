@@ -33,6 +33,17 @@
     @if ($summary['period_label'] ?? null)
         <p><strong>Period:</strong> {{ $summary['period_label'] }}</p>
     @endif
+    @if ($summary['engagement'] ?? null)
+        <p>
+            <strong>Time spent:</strong> {{ $summary['engagement']['time_spent_label'] }} ·
+            <strong>Days logged in:</strong> {{ $summary['engagement']['days_logged_in'] }} /
+            {{ $summary['engagement']['total_days'] }}
+            (not logged in: {{ $summary['engagement']['days_not_logged_in'] }})
+        </p>
+    @endif
+    @if ($summary['mentor_remark'] ?? null)
+        <p><strong>Mentor remark:</strong> {{ $summary['mentor_remark'] }}</p>
+    @endif
 
     <p class="stats">
         <strong>Completed:</strong> {{ $summary['stats']['completed_count'] }} ·

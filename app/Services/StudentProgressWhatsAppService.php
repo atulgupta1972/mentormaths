@@ -35,7 +35,7 @@ class StudentProgressWhatsAppService
             'Hello, this is Mentor Maths.',
             '',
             "Progress summary for {$summary['student_name']}",
-            'As on: '.$summary['as_of_label'],
+            'Period: '.($summary['period_label'] ?? $summary['as_of_label']),
         ];
 
         if ($summary['class_name'] ?? null) {
@@ -46,8 +46,17 @@ class StudentProgressWhatsAppService
             $lines[] = 'Overall score: '.$summary['stats']['overall_score_label'];
         }
 
-        if ($summary['period_label'] ?? null) {
-            $lines[] = 'Period: '.$summary['period_label'];
+        if ($summary['engagement'] ?? null) {
+            $lines[] = 'Time spent: '.$summary['engagement']['time_spent_label'];
+            $lines[] = 'Days logged in: '.$summary['engagement']['days_logged_in']
+                .' of '.$summary['engagement']['total_days']
+                .' (not logged in: '.$summary['engagement']['days_not_logged_in'].')';
+        }
+
+        if ($summary['mentor_remark'] ?? null) {
+            $lines[] = '';
+            $lines[] = 'Mentor remark:';
+            $lines[] = $summary['mentor_remark'];
         }
 
         $this->appendCompletedSection($lines, $summary);

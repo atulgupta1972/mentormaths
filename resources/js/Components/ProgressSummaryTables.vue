@@ -70,6 +70,26 @@ const deassign = (row) => {
             <span v-if="stats.overall_score_label"><strong>Overall:</strong> {{ stats.overall_score_label }}</span>
         </div>
 
+        <div
+            v-if="summary.engagement || summary.period_label"
+            class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-700"
+        >
+            <span v-if="summary.period_label"><strong>Period:</strong> {{ summary.period_label }}</span>
+            <span v-if="stats.time_spent_label"><strong>Time spent:</strong> {{ stats.time_spent_label }}</span>
+            <span v-if="stats.total_days != null">
+                <strong>Days logged in:</strong>
+                {{ stats.days_logged_in || 0 }} / {{ stats.total_days || 0 }}
+                <span class="text-gray-500">(not logged in: {{ stats.days_not_logged_in || 0 }})</span>
+            </span>
+        </div>
+
+        <div
+            v-if="summary.mentor_remark"
+            class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+        >
+            <strong>Mentor remark:</strong> {{ summary.mentor_remark }}
+        </div>
+
         <section v-if="summary.completed_by_chapter?.length">
             <h4 class="text-sm font-semibold text-gray-900">Completed work</h4>
 

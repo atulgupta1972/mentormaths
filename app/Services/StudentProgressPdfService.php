@@ -32,9 +32,10 @@ class StudentProgressPdfService
     public function filename(Student $student, array $summary): string
     {
         $slug = preg_replace('/[^a-z0-9]+/i', '-', strtolower($student->name)) ?: 'student';
-        $date = $summary['as_of_date'] ?? now()->toDateString();
+        $from = $summary['date_from'] ?? $summary['as_of_date'] ?? now()->toDateString();
+        $to = $summary['date_to'] ?? $summary['as_of_date'] ?? now()->toDateString();
 
-        return "progress-{$slug}-{$date}.pdf";
+        return "progress-{$slug}-{$from}-to-{$to}.pdf";
     }
 
     /**

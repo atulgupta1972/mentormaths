@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\StudentEngagementMetrics;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -25,6 +26,9 @@ class RecordUserLastSeen
                     // Quiet update — do not bump updated_at.
                     $user->forceFill(['last_seen_at' => now()])->saveQuietly();
                 }
+
+                // insertOrIgnore — safe to call every request; tracks calendar days.
+                StudentEngagementMetrics::recordLoginDay((int) $user->id);
             } catch (\Throwable) {
                 // Never block student requests if presence tracking fails.
             }

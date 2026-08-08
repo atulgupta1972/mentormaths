@@ -253,7 +253,11 @@ class StudentController extends Controller
     public function progressSummaryPreview(Request $request, Student $student): JsonResponse
     {
         $validated = $request->validate([
-            'as_of_date' => ['required', 'date'],
+            'date_from' => ['required', 'date'],
+            'date_to' => ['required', 'date', 'after_or_equal:date_from'],
+            'mentor_remark' => ['nullable', 'string', 'max:1000'],
+            // Legacy alias for older clients.
+            'as_of_date' => ['nullable', 'date'],
         ]);
 
         $enrollment = $student->currentEnrollment();
@@ -264,8 +268,14 @@ class StudentController extends Controller
             ], 422);
         }
 
-        $asOf = \Carbon\Carbon::parse($validated['as_of_date']);
-        $summary = $this->progressSummaryService->build($enrollment, $asOf);
+        $dateFrom = \Carbon\Carbon::parse($validated['date_from'] ?? $validated['as_of_date']);
+        $dateTo = \Carbon\Carbon::parse($validated['date_to'] ?? $validated['as_of_date'] ?? $validated['date_from']);
+        $summary = $this->progressSummaryService->build(
+            $enrollment,
+            $dateTo,
+            $dateFrom,
+            $validated['mentor_remark'] ?? null,
+        );
 
         return response()->json(['summary' => $summary]);
     }
@@ -273,10 +283,13 @@ class StudentController extends Controller
     public function sendProgressSummary(Request $request, Student $student): RedirectResponse
     {
         $validated = $request->validate([
-            'as_of_date' => ['required', 'date'],
+            'date_from' => ['required', 'date'],
+            'date_to' => ['required', 'date', 'after_or_equal:date_from'],
+            'mentor_remark' => ['nullable', 'string', 'max:1000'],
             'send_email' => ['sometimes', 'boolean'],
             'send_whatsapp' => ['sometimes', 'boolean'],
             'email' => ['nullable', 'email', 'max:255'],
+            'as_of_date' => ['nullable', 'date'],
         ]);
 
         $enrollment = $student->currentEnrollment();
@@ -285,8 +298,14 @@ class StudentController extends Controller
             return back()->with('error', 'Student has no active enrollment for the current year.');
         }
 
-        $asOf = \Carbon\Carbon::parse($validated['as_of_date']);
-        $summary = $this->progressSummaryService->build($enrollment, $asOf);
+        $dateFrom = \Carbon\Carbon::parse($validated['date_from'] ?? $validated['as_of_date']);
+        $dateTo = \Carbon\Carbon::parse($validated['date_to'] ?? $validated['as_of_date'] ?? $validated['date_from']);
+        $summary = $this->progressSummaryService->build(
+            $enrollment,
+            $dateTo,
+            $dateFrom,
+            $validated['mentor_remark'] ?? null,
+        );
 
         $messages = [];
         $warnings = [];
@@ -371,7 +390,10 @@ class StudentController extends Controller
     public function progressSummaryPdf(Request $request, Student $student)
     {
         $validated = $request->validate([
-            'as_of_date' => ['required', 'date'],
+            'date_from' => ['required', 'date'],
+            'date_to' => ['required', 'date', 'after_or_equal:date_from'],
+            'mentor_remark' => ['nullable', 'string', 'max:1000'],
+            'as_of_date' => ['nullable', 'date'],
         ]);
 
         $enrollment = $student->currentEnrollment();
@@ -380,8 +402,14 @@ class StudentController extends Controller
             abort(422, 'Student has no active enrollment for the current year.');
         }
 
-        $asOf = \Carbon\Carbon::parse($validated['as_of_date']);
-        $summary = $this->progressSummaryService->build($enrollment, $asOf);
+        $dateFrom = \Carbon\Carbon::parse($validated['date_from'] ?? $validated['as_of_date']);
+        $dateTo = \Carbon\Carbon::parse($validated['date_to'] ?? $validated['as_of_date'] ?? $validated['date_from']);
+        $summary = $this->progressSummaryService->build(
+            $enrollment,
+            $dateTo,
+            $dateFrom,
+            $validated['mentor_remark'] ?? null,
+        );
         $pdfBytes = $this->progressPdfService->render($summary);
         $filename = $this->progressPdfService->filename($student, $summary);
 

@@ -13,6 +13,7 @@ use App\Support\ProgressSummaryAnalytics;
 use App\Support\ProgressSummaryChartImage;
 use App\Support\ProgressSummaryTable;
 use App\Support\ScoreLabel;
+use App\Support\StudentEngagementMetrics;
 use App\Support\WorksheetDeliveryMode;
 use Carbon\Carbon;
 
@@ -29,11 +30,12 @@ class StudentProgressSummaryService
         StudentEnrollment $enrollment,
         ?Carbon $asOf = null,
         ?Carbon $periodStart = null,
+        ?string $mentorRemark = null,
     ): array {
         $asOf = ($asOf ?? now())->copy()->endOfDay();
         $periodStart = $periodStart?->copy()->startOfDay();
 
-        $enrollment->loadMissing('student:id,name', 'gradeLevel:id,name');
+        $enrollment->loadMissing(['student.user', 'gradeLevel:id,name']);
 
         $assignments = SetAssignment::query()
             ->with([
@@ -127,15 +129,22 @@ class StudentProgressSummaryService
         $dateSource = ($periodStart && $recentlyCompleted !== []) ? $recentlyCompleted : $completed;
         $datePerformance = ProgressSummaryAnalytics::datePerformance($dateSource);
 
+        $engagementFrom = $periodStart ?? $asOf->copy()->startOfDay();
+        $engagement = StudentEngagementMetrics::forEnrollment($enrollment, $engagementFrom, $asOf);
+        $remark = is_string($mentorRemark) ? trim($mentorRemark) : '';
+        $remark = $remark !== '' ? $remark : null;
+
         return [
             'student_name' => $enrollment->student?->name ?? 'Student',
             'class_name' => $enrollment->gradeLevel?->name,
             'as_of_date' => $asOf->toDateString(),
             'as_of_label' => DateLabels::formatDate($asOf->toDateString()),
-            'period_start' => $periodStart?->toDateString(),
-            'period_label' => $periodStart
-                ? DateLabels::formatDate($periodStart->toDateString()).' – '.DateLabels::formatDate($asOf->toDateString())
-                : null,
+            'date_from' => $engagement['date_from'],
+            'date_to' => $engagement['date_to'],
+            'period_start' => $periodStart?->toDateString() ?? $engagement['date_from'],
+            'period_label' => DateLabels::formatDate($engagement['date_from']).' – '.DateLabels::formatDate($engagement['date_to']),
+            'mentor_remark' => $remark,
+            'engagement' => $engagement,
             'completed' => $completed,
             'completed_by_chapter' => ProgressSummaryTable::groupByChapter($completed, 'submitted_at'),
             'pending' => $pending,
@@ -155,6 +164,11 @@ class StudentProgressSummaryService
                 'overall_max_total' => $overall['max_total'],
                 'overall_percent' => $overall['percent'],
                 'overall_score_label' => $overall['label'],
+                'time_spent_seconds' => $engagement['time_spent_seconds'],
+                'time_spent_label' => $engagement['time_spent_label'],
+                'total_days' => $engagement['total_days'],
+                'days_logged_in' => $engagement['days_logged_in'],
+                'days_not_logged_in' => $engagement['days_not_logged_in'],
             ],
             'chapter_performance' => $chapterPerformance,
             'date_performance' => $datePerformance,

@@ -144,11 +144,17 @@ class StudentProgressSummaryTest extends TestCase
             'score' => 1,
             'max_score' => 1,
             'time_seconds' => 120,
+            'active_seconds' => 900,
             'status' => SetAttempt::STATUS_SUBMITTED,
             'submission_timing' => SetAttempt::TIMING_ON_TIME,
         ]);
 
-        $summary = app(StudentProgressSummaryService::class)->build($enrollment, now());
+        $summary = app(StudentProgressSummaryService::class)->build(
+            $enrollment,
+            now(),
+            now()->subDays(6),
+            'Please finish overdue work this week.',
+        );
         $student = $enrollment->student;
 
         $student->update([
@@ -159,12 +165,57 @@ class StudentProgressSummaryTest extends TestCase
         $message = app(StudentProgressWhatsAppService::class)->buildMessage($summary);
 
         $this->assertStringContainsString('Progress summary for Test Student', $message);
+        $this->assertStringContainsString('Period:', $message);
+        $this->assertStringContainsString('Time spent: 15 min', $message);
+        $this->assertStringContainsString('Days logged in:', $message);
+        $this->assertStringContainsString('Mentor remark:', $message);
+        $this->assertStringContainsString('Please finish overdue work this week.', $message);
         $this->assertStringContainsString('Completed (1):', $message);
         $this->assertStringContainsString('100% (1/1)', $message);
         $this->assertStringContainsString('Overall score: 100% (1/1)', $message);
         $this->assertStringContainsString('Date · Set · Type · Topic · Score · Review', $message);
         $this->assertStringContainsString('Pending (1):', $message);
         $this->assertStringContainsString('S902', $message);
+    }
+
+    public function test_engagement_counts_login_days_and_time_spent_in_range(): void
+    {
+        [$enrollment, $completedAssignment] = $this->seedAssignments();
+        $user = \App\Models\User::factory()->create(['role' => \App\Models\User::ROLE_STUDENT]);
+        $enrollment->student->update(['user_id' => $user->id]);
+
+        \App\Models\UserLoginDay::query()->create([
+            'user_id' => $user->id,
+            'login_date' => now()->subDays(2)->toDateString(),
+        ]);
+        \App\Models\UserLoginDay::query()->create([
+            'user_id' => $user->id,
+            'login_date' => now()->subDay()->toDateString(),
+        ]);
+
+        SetAttempt::query()->create([
+            'set_assignment_id' => $completedAssignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subDays(2)->setTime(10, 0),
+            'completed_at' => now()->subDays(2)->setTime(10, 30),
+            'score' => 1,
+            'max_score' => 1,
+            'active_seconds' => 1800,
+            'time_seconds' => 1800,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+
+        $from = now()->subDays(3)->startOfDay();
+        $to = now()->endOfDay();
+        $summary = app(StudentProgressSummaryService::class)->build($enrollment, $to, $from);
+
+        $this->assertSame(4, $summary['engagement']['total_days']);
+        $this->assertSame(2, $summary['engagement']['days_logged_in']);
+        $this->assertSame(2, $summary['engagement']['days_not_logged_in']);
+        $this->assertSame(1800, $summary['engagement']['time_spent_seconds']);
+        $this->assertSame('30 min', $summary['engagement']['time_spent_label']);
     }
 
     public function test_send_progress_summary_email(): void

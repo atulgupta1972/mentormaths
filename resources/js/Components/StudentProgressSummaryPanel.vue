@@ -38,9 +38,17 @@ const previewLoading = ref(false);
 const previewError = ref('');
 
 const today = () => new Date().toISOString().slice(0, 10);
+const daysAgo = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+
+    return d.toISOString().slice(0, 10);
+};
 
 const form = useForm({
-    as_of_date: today(),
+    date_from: daysAgo(6),
+    date_to: today(),
+    mentor_remark: '',
     send_email: true,
     send_whatsapp: false,
     email: '',
@@ -77,7 +85,7 @@ watch(
 );
 
 const loadPreview = async () => {
-    if (!form.as_of_date) {
+    if (!form.date_from || !form.date_to) {
         previewSummary.value = null;
         previewError.value = '';
 
@@ -90,7 +98,9 @@ const loadPreview = async () => {
     try {
         const url = route('admin.students.progress-summary-preview', {
             student: props.student.id,
-            as_of_date: form.as_of_date,
+            date_from: form.date_from,
+            date_to: form.date_to,
+            mentor_remark: form.mentor_remark || undefined,
         });
         const response = await fetch(url, {
             headers: {
@@ -103,7 +113,7 @@ const loadPreview = async () => {
 
         if (!response.ok) {
             previewSummary.value = null;
-            previewError.value = payload.error || 'Could not load preview.';
+            previewError.value = payload.error || payload.message || 'Could not load preview.';
 
             return;
         }
@@ -118,9 +128,12 @@ const loadPreview = async () => {
 };
 
 watch(
-    () => form.as_of_date,
+    () => [form.date_from, form.date_to, form.mentor_remark],
     () => {
-        loadPreview();
+        window.clearTimeout(loadPreview._timer);
+        loadPreview._timer = window.setTimeout(() => {
+            loadPreview();
+        }, 350);
     },
     { immediate: true },
 );
@@ -159,14 +172,22 @@ const prepareWhatsApp = () => {
 };
 
 const downloadPdf = () => {
-    if (!form.as_of_date) {
+    if (!form.date_from || !form.date_to) {
         return;
     }
 
-    window.location.href = route('admin.students.progress-summary-pdf', {
-        student: props.student.id,
-        as_of_date: form.as_of_date,
+    const params = new URLSearchParams({
+        date_from: form.date_from,
+        date_to: form.date_to,
     });
+
+    if (form.mentor_remark) {
+        params.set('mentor_remark', form.mentor_remark);
+    }
+
+    window.location.href = `${route('admin.students.progress-summary-pdf', {
+        student: props.student.id,
+    })}?${params.toString()}`;
 };
 </script>
 
@@ -175,7 +196,8 @@ const downloadPdf = () => {
         <div class="border-b border-gray-200 px-6 py-4">
             <h3 class="font-medium text-gray-900">Progress summary</h3>
             <p class="mt-1 text-sm text-gray-500">
-                Send a snapshot of completed work, pending sets, overdue items, and help needed — as on a chosen date.
+                Choose a date range, optionally add a mentor remark, then email or prepare WhatsApp.
+                Progress is as on the end date; time spent and login days cover the full range.
             </p>
         </div>
 
@@ -194,14 +216,37 @@ const downloadPdf = () => {
                 {{ flashWarning }}
             </div>
 
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="text-sm font-medium text-gray-700">Date from</label>
+                    <input
+                        v-model="form.date_from"
+                        type="date"
+                        class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm"
+                    />
+                    <InputError :message="form.errors.date_from" class="mt-1" />
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700">Date to</label>
+                    <input
+                        v-model="form.date_to"
+                        type="date"
+                        class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm"
+                    />
+                    <InputError :message="form.errors.date_to" class="mt-1" />
+                </div>
+            </div>
+
             <div>
-                <label class="text-sm font-medium text-gray-700">As on date</label>
-                <input
-                    v-model="form.as_of_date"
-                    type="date"
-                    class="mt-1 block w-full max-w-xs rounded-md border-gray-300 text-sm shadow-sm"
+                <label class="text-sm font-medium text-gray-700">Mentor / admin remark (optional)</label>
+                <textarea
+                    v-model="form.mentor_remark"
+                    rows="3"
+                    maxlength="1000"
+                    class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm"
+                    placeholder="e.g. Please finish overdue chapter tests this week. Call me if stuck."
                 />
-                <InputError :message="form.errors.as_of_date" class="mt-1" />
+                <InputError :message="form.errors.mentor_remark" class="mt-1" />
             </div>
 
             <div>
@@ -243,7 +288,7 @@ const downloadPdf = () => {
                 <button
                     type="button"
                     class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    :disabled="!form.as_of_date"
+                    :disabled="!form.date_from || !form.date_to"
                     @click="downloadPdf"
                 >
                     Download PDF
