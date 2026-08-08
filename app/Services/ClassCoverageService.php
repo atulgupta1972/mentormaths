@@ -46,6 +46,8 @@ class ClassCoverageService
                 'chapter_number' => $chapter['chapter_number'],
                 'name' => $chapter['name'],
                 'label' => $chapter['label'],
+                'topics' => collect($chapter['topics'] ?? [])->pluck('name')->values()->all(),
+                'topics_label' => collect($chapter['topics'] ?? [])->pluck('name')->implode(', '),
                 'studied' => $isStudied,
                 'under_study' => $isUnderStudy,
             ];

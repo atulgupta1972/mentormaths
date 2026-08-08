@@ -150,7 +150,9 @@ class ClassCoverageTest extends TestCase
                 ->has('classCoverage.chapters', 2)
                 ->where('classCoverage.chapters.0.id', $chapters[0]->id)
                 ->where('classCoverage.chapters.0.studied', false)
-                ->where('classCoverage.chapters.0.under_study', false));
+                ->where('classCoverage.chapters.0.under_study', false)
+                ->where('classCoverage.chapters.0.name', 'Chapter 1')
+                ->has('classCoverage.chapters.0.topics'));
     }
 
     /**

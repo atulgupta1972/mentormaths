@@ -43,35 +43,45 @@ const mark = (chapterId, status) => {
     });
 };
 
-const chapterShortLabel = (chapter) => {
+const chapterTitle = (chapter) => {
     const number = String(chapter.chapter_number ?? '').trim();
+    const name = chapter.name || '';
 
-    if (number) {
-        return number.startsWith('Ch') || number.startsWith('ch') ? number : `Ch ${number}`;
+    if (! number) {
+        return name || chapter.label || 'Chapter';
     }
 
-    return chapter.name;
+    const prefix = number.toLowerCase().startsWith('ch') ? number : `Ch ${number}`;
+
+    return name ? `${prefix} — ${name}` : prefix;
 };
 </script>
 
 <template>
-    <section class="w-fit max-w-full">
-        <h3 class="mb-1 text-xs font-semibold text-slate-800">Topics already covered in class</h3>
-        <p class="mb-1.5 text-[10px] leading-tight text-slate-500">
+    <section class="w-full max-w-3xl">
+        <h3 class="mb-1 text-sm font-semibold text-slate-800">Topics already covered in class</h3>
+        <p class="mb-2 text-xs leading-snug text-slate-500">
             Tick under study — earlier chapters move to studied.
         </p>
 
-        <div v-if="!chapters.length" class="rounded border border-dashed border-slate-300 px-2 py-2 text-[11px] text-slate-600">
+        <div v-if="!chapters.length" class="rounded border border-dashed border-slate-300 px-3 py-3 text-xs text-slate-600">
             No syllabus chapters for your class / board yet.
         </div>
 
         <div v-else class="overflow-x-auto rounded border border-slate-300">
-            <table class="w-auto border-collapse text-[11px] leading-none">
+            <table class="w-full table-fixed border-collapse text-xs leading-snug">
+                <colgroup>
+                    <col class="w-[28%]">
+                    <col class="w-[52%]">
+                    <col class="w-[10%]">
+                    <col class="w-[10%]">
+                </colgroup>
                 <thead>
                     <tr class="bg-[#0b2a5b] text-white">
-                        <th class="whitespace-nowrap px-1.5 py-1 text-left font-semibold">Chapter</th>
-                        <th class="whitespace-nowrap px-1.5 py-1 text-center font-semibold">Studied</th>
-                        <th class="whitespace-nowrap px-1.5 py-1 text-center font-semibold">Under study</th>
+                        <th class="px-2 py-1.5 text-left font-semibold">Chapter</th>
+                        <th class="px-2 py-1.5 text-left font-semibold">Topics</th>
+                        <th class="px-1.5 py-1.5 text-center font-semibold">Studied</th>
+                        <th class="px-1.5 py-1.5 text-center font-semibold">Under study</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -83,13 +93,17 @@ const chapterShortLabel = (chapter) => {
                             savingId === chapter.id ? 'opacity-60' : '',
                         ]"
                     >
-                        <td class="whitespace-nowrap px-1.5 py-0.5 font-medium text-slate-800" :title="chapter.label || chapter.name">
-                            {{ chapterShortLabel(chapter) }}
+                        <td class="px-2 py-1 align-top font-medium text-slate-900">
+                            {{ chapterTitle(chapter) }}
                         </td>
-                        <td class="px-1.5 py-0.5 text-center">
+                        <td class="px-2 py-1 align-top text-[13px] text-slate-700">
+                            <span v-if="chapter.topics_label">{{ chapter.topics_label }}</span>
+                            <span v-else class="text-slate-400">—</span>
+                        </td>
+                        <td class="px-1.5 py-1 text-center align-top">
                             <button
                                 type="button"
-                                class="inline-flex h-4 w-4 items-center justify-center rounded text-[10px] leading-none"
+                                class="inline-flex h-5 w-5 items-center justify-center rounded text-xs leading-none"
                                 :class="chapter.studied
                                     ? 'bg-emerald-600 text-white'
                                     : 'bg-transparent text-slate-300 hover:text-emerald-600'"
@@ -100,10 +114,10 @@ const chapterShortLabel = (chapter) => {
                                 ✓
                             </button>
                         </td>
-                        <td class="px-1.5 py-0.5 text-center">
+                        <td class="px-1.5 py-1 text-center align-top">
                             <button
                                 type="button"
-                                class="inline-flex h-4 w-4 items-center justify-center rounded text-[10px] leading-none"
+                                class="inline-flex h-5 w-5 items-center justify-center rounded text-xs leading-none"
                                 :class="chapter.under_study
                                     ? 'bg-amber-500 text-white'
                                     : 'bg-transparent text-slate-300 hover:text-amber-600'"
