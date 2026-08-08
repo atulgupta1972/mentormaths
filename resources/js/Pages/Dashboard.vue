@@ -1,7 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ChapterSummaryPanel from '@/Components/ChapterSummaryPanel.vue';
-import ClassCoveragePanel from '@/Components/ClassCoveragePanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import StudentAssignmentGroupTable from '@/Components/StudentAssignmentGroupTable.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
@@ -39,10 +38,6 @@ const props = defineProps({
             home_grade_level_id: null,
             home_board_id: null,
         }),
-    },
-    classCoverage: {
-        type: Object,
-        default: () => ({ chapters: [], under_study_chapter_id: null }),
     },
     examTypeOptions: { type: Array, default: () => [] },
     stats: {
@@ -1051,8 +1046,6 @@ const adminSetStatusClass = (set) => {
                             count-suffix="done"
                         />
                     </section>
-
-                    <ClassCoveragePanel :class-coverage="classCoverage" />
 
                     <ChapterSummaryPanel
                         :chapter-summary="chapterSummary"

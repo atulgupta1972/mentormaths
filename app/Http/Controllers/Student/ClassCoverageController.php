@@ -7,10 +7,26 @@ use App\Models\SyllabusChapter;
 use App\Services\ClassCoverageService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class ClassCoverageController extends Controller
 {
     public function __construct(private ClassCoverageService $coverageService) {}
+
+    public function show(Request $request): Response
+    {
+        $enrollment = $request->user()->student?->currentEnrollment();
+        $enrollment?->loadMissing(['gradeLevel:id,name', 'board:id,name']);
+
+        return Inertia::render('Student/SchoolStudyPlan', [
+            'classCoverage' => $this->coverageService->forEnrollment($enrollment),
+            'context' => [
+                'grade_name' => $enrollment?->gradeLevel?->name,
+                'board_name' => $enrollment?->board?->name,
+            ],
+        ]);
+    }
 
     public function update(Request $request, SyllabusChapter $syllabusChapter): RedirectResponse
     {
@@ -30,6 +46,6 @@ class ClassCoverageController extends Controller
             $this->coverageService->markStudied($enrollment, $syllabusChapter);
         }
 
-        return back()->with('success', 'Class coverage updated.');
+        return back()->with('success', 'School study plan updated.');
     }
 }

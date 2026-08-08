@@ -138,15 +138,15 @@ class ClassCoverageTest extends TestCase
             ->assertSessionHasErrors('syllabus_chapter_id');
     }
 
-    public function test_dashboard_includes_class_coverage(): void
+    public function test_school_study_plan_page_includes_class_coverage(): void
     {
         [$user, , $chapters] = $this->seedStudentWithChapters(2);
 
         $this->actingAs($user)
-            ->get(route('dashboard'))
+            ->get(route('student.school-study-plan.show'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('Dashboard')
+                ->component('Student/SchoolStudyPlan')
                 ->has('classCoverage.chapters', 2)
                 ->where('classCoverage.chapters.0.id', $chapters[0]->id)
                 ->where('classCoverage.chapters.0.studied', false)

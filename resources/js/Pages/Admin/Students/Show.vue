@@ -157,6 +157,16 @@ const destroyStudent = () => {
                     (class, board, school). Past years are kept for history.
                 </div>
 
+                <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
+                    <Link
+                        :href="route('admin.school-study-plan.index', { student_id: student.id })"
+                        class="text-sm font-medium text-indigo-700 hover:underline"
+                    >
+                        Open school study plan →
+                    </Link>
+                    <p class="mt-1 text-xs text-gray-500">Chapters already covered / under study in school.</p>
+                </div>
+
                 <ContactNumbersPanel
                     :student-name="student.name"
                     :contacts="contactFields"

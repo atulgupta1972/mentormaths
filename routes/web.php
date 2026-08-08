@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\QuestionController;
 use App\Http\Controllers\Admin\QuestionHubController;
 use App\Http\Controllers\Admin\RegistrationRequestController as AdminRegistrationRequestController;
 use App\Http\Controllers\Admin\SetAssignmentController;
+use App\Http\Controllers\Admin\SchoolStudyPlanController;
 use App\Http\Controllers\Admin\StudentController;
 use App\Http\Controllers\Admin\StudentWorkReportController;
 use App\Http\Controllers\Admin\SyllabusVersionController;
@@ -180,6 +181,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('student-work-report.index');
     Route::post('/student-work-report/send-reminders', [StudentWorkReportController::class, 'sendReminders'])
         ->name('student-work-report.send-reminders');
+
+    Route::get('/school-study-plan', [SchoolStudyPlanController::class, 'index'])
+        ->name('school-study-plan.index');
+    Route::put('/school-study-plan/{student}/{syllabusChapter}', [SchoolStudyPlanController::class, 'update'])
+        ->name('school-study-plan.update');
 
     Route::get('/syllabus', [SyllabusVersionController::class, 'index'])
         ->name('syllabus.index');
@@ -347,6 +353,8 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
 
     Route::put('/class-coverage/{syllabusChapter}', [ClassCoverageController::class, 'update'])
         ->name('class-coverage.update');
+    Route::get('/school-study-plan', [ClassCoverageController::class, 'show'])
+        ->name('school-study-plan.show');
 
     Route::post('/worksheets/{worksheet}/self-assign', [SelfAssignController::class, 'store'])->name('worksheets.self-assign');
     Route::get('/assignments/{assignment}', [StudentPracticeSetController::class, 'showAssignment'])->name('assignments.show');

@@ -7,6 +7,14 @@ const props = defineProps({
         type: Object,
         default: () => ({ chapters: [], under_study_chapter_id: null }),
     },
+    updateRouteName: {
+        type: String,
+        default: 'student.class-coverage.update',
+    },
+    updateRouteParams: {
+        type: Object,
+        default: () => ({}),
+    },
 });
 
 const savingId = ref(null);
@@ -20,7 +28,12 @@ const mark = (chapterId, status) => {
 
     savingId.value = chapterId;
 
-    router.put(route('student.class-coverage.update', chapterId), {
+    const params = {
+        ...props.updateRouteParams,
+        syllabusChapter: chapterId,
+    };
+
+    router.put(route(props.updateRouteName, params), {
         status,
     }, {
         preserveScroll: true,

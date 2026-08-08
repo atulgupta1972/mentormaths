@@ -14,6 +14,7 @@ const showingNavigationDropdown = ref(false);
 const page = usePage();
 const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
 const isContentUploader = computed(() => page.props.auth?.isContentUploader ?? false);
+const isStudent = computed(() => page.props.auth?.isStudent ?? false);
 
 const peopleGroup = computed(() => ({
     label: 'People',
@@ -63,7 +64,8 @@ const teachingGroup = computed(() => ({
         || route().current('admin.basics-drill.*')
         || route().current('admin.content-tasks.*')
         || route().current('admin.content-rate-cards.*')
-        || route().current('admin.student-work-report.*'),
+        || route().current('admin.student-work-report.*')
+        || route().current('admin.school-study-plan.*'),
     items: [
         {
             label: 'Classes',
@@ -124,6 +126,12 @@ const teachingGroup = computed(() => ({
             href: route('admin.student-work-report.index'),
             active: route().current('admin.student-work-report.*'),
             show: isAdmin.value && route().has('admin.student-work-report.index'),
+        },
+        {
+            label: 'School study plans',
+            href: route('admin.school-study-plan.index'),
+            active: route().current('admin.school-study-plan.*'),
+            show: isAdmin.value && route().has('admin.school-study-plan.index'),
         },
         {
             label: 'Formula bank',
@@ -235,6 +243,14 @@ const navGroups = computed(() =>
                                 </NavLink>
 
                                 <NavLink
+                                    v-if="isStudent && !isAdmin && route().has('student.school-study-plan.show')"
+                                    :href="route('student.school-study-plan.show')"
+                                    :active="route().current('student.school-study-plan.*')"
+                                >
+                                    My School Study Plan
+                                </NavLink>
+
+                                <NavLink
                                     v-if="isContentUploader && route().has('content.tasks.index')"
                                     :href="route('content.tasks.index')"
                                     :active="route().current('content.*')"
@@ -314,6 +330,14 @@ const navGroups = computed(() =>
                             :active="route().current('dashboard')"
                         >
                             Dashboard
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            v-if="isStudent && !isAdmin && route().has('student.school-study-plan.show')"
+                            :href="route('student.school-study-plan.show')"
+                            :active="route().current('student.school-study-plan.*')"
+                        >
+                            My School Study Plan
                         </ResponsiveNavLink>
 
                         <ResponsiveNavGroup
