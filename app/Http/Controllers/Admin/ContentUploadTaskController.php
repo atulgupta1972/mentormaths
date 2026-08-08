@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\ContentUploadTask;
+use App\Models\ContentVerificationRun;
 use App\Models\GradeLevel;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
@@ -15,6 +16,7 @@ use App\Services\AdminGradeContext;
 use App\Services\ContentAllocationMatrixService;
 use App\Services\ContentRateCardService;
 use App\Services\ContentUploadTaskService;
+use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,6 +28,7 @@ class ContentUploadTaskController extends Controller
 {
     public function __construct(
         private ContentUploadTaskService $taskService,
+        private ContentVerificationService $verificationService,
         private ContentWorkSessionService $sessionService,
         private AdminGradeContext $gradeContext,
         private ContentRateCardService $rateCardService,
@@ -324,7 +327,7 @@ class ContentUploadTaskController extends Controller
             ]);
     }
 
-    public function show(ContentUploadTask $contentTask): Response
+    public function show(Request $request, ContentUploadTask $contentTask): Response
     {
         $contentTask->load([
             'assignee:id,name,email',
@@ -332,10 +335,63 @@ class ContentUploadTaskController extends Controller
             'textbookChapter.textbook.gradeLevel',
         ]);
 
+        $verification = $this->verificationPayload($contentTask, $request->user());
+
         return Inertia::render('Admin/ContentTasks/Show', [
             'task' => $this->serializeTask($contentTask, detailed: true),
+            'verification' => $verification,
             'activeSeconds' => $this->sessionService->totalActiveSeconds($contentTask),
         ]);
+    }
+
+    public function saveVerificationQuestion(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+            'question_text' => ['required', 'string', 'max:5000'],
+            'explanation' => ['nullable', 'string', 'max:5000'],
+            'method_hint' => ['nullable', 'string', 'max:2000'],
+            'difficulty' => ['nullable', 'string', 'max:64'],
+            'options' => ['required', 'array', 'min:2', 'max:8'],
+            'options.*.id' => ['nullable', 'integer'],
+            'options.*.option_text' => ['required', 'string', 'max:2000'],
+            'options.*.is_correct' => ['required', 'boolean'],
+        ]);
+
+        $run = $this->authorizeVerificationRun($contentTask, (int) $validated['run_id']);
+
+        try {
+            $this->verificationService->saveQuestion(
+                $run,
+                (int) $validated['question_id'],
+                $validated,
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Question saved.');
+    }
+
+    public function returnForReverification(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'reason' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $this->taskService->returnForReverification(
+                $contentTask,
+                $request->user(),
+                $validated['reason'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Sent back to uploader for re-verification. They will be emailed.');
     }
 
     public function publish(ContentUploadTask $contentTask, Request $request): RedirectResponse
@@ -387,9 +443,61 @@ class ContentUploadTaskController extends Controller
             $data['duplicate_override_reason'] = $task->duplicate_override_reason;
             $data['admin_notes'] = $task->admin_notes;
             $data['assigner'] = $task->assigner?->only(['id', 'name']);
+            $data['can_return_for_reverification'] = in_array($task->status, [
+                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                ContentUploadTask::STATUS_VERIFIED,
+                ContentUploadTask::STATUS_PUBLISHED,
+                ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            ], true);
+            $data['can_verify_questions'] = in_array($task->status, [
+                ContentUploadTask::STATUS_UPLOADED,
+                ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+                ContentUploadTask::STATUS_VERIFIED,
+                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                ContentUploadTask::STATUS_PUBLISHED,
+            ], true);
         }
 
         return $data;
+    }
+
+    /**
+     * @return array{run_id: int, questions: list<array<string, mixed>>, summary: array<string, int>}|null
+     */
+    private function verificationPayload(ContentUploadTask $task, User $user): ?array
+    {
+        if (! in_array($task->status, [
+            ContentUploadTask::STATUS_UPLOADED,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_PUBLISHED,
+        ], true)) {
+            return null;
+        }
+
+        if ($task->textbookChapter?->mcqWorksheetIds() === []) {
+            return null;
+        }
+
+        $verification = $this->verificationService->forTask($task, $user);
+
+        return [
+            'run_id' => $verification['run']->id,
+            'questions' => $verification['questions'],
+            'summary' => $verification['summary'],
+        ];
+    }
+
+    private function authorizeVerificationRun(ContentUploadTask $task, int $runId): ContentVerificationRun
+    {
+        $run = ContentVerificationRun::query()->findOrFail($runId);
+
+        if ($run->content_upload_task_id !== $task->id) {
+            abort(403);
+        }
+
+        return $run;
     }
 
     /**

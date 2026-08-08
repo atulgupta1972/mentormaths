@@ -19,6 +19,7 @@ const props = defineProps({
     activeYear: { type: Object, default: null },
     routeNamespace: { type: String, default: 'admin' },
     uploaderMode: { type: Boolean, default: false },
+    contentUploadTask: { type: Object, default: null },
 });
 
 const chapterRoute = (action, fallback = '#') =>
@@ -453,6 +454,21 @@ const quickAssignSet = (setId) => {
                 </div>
                 <div v-if="page.props.flash?.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
                     {{ page.props.flash.error }}
+                </div>
+
+                <div
+                    v-if="!uploaderMode && contentUploadTask?.can_verify"
+                    class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950"
+                >
+                    <strong>Uploader task:</strong> {{ contentUploadTask.status_label }}
+                    <span v-if="contentUploadTask.assignee_name"> · {{ contentUploadTask.assignee_name }}</span>
+                    — fix wrong MCQ options/explanations in verification, or send back to uploader.
+                    <Link
+                        :href="route('admin.content-tasks.show', contentUploadTask.id)"
+                        class="ml-2 font-medium text-indigo-700 hover:underline"
+                    >
+                        Open MCQ verification →
+                    </Link>
                 </div>
 
                 <div v-if="hasItems && canEdit" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">

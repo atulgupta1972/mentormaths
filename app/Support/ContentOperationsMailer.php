@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Mail\ContentTaskAgreementAdmin;
 use App\Mail\ContentTaskAssignedUploader;
+use App\Mail\ContentTaskReturnedUploader;
 use App\Mail\ContentTaskSubmittedForPublishAdmin;
 use App\Models\ContentUploadTask;
 use App\Models\User;
@@ -82,6 +83,29 @@ class ContentOperationsMailer
                 'content_upload_task_id' => $task->id,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    public static function notifyReturnedForReverification(ContentUploadTask $task): bool
+    {
+        $uploader = $task->assignee;
+
+        if (! $uploader || ! str_contains($uploader->email, '@')) {
+            return false;
+        }
+
+        try {
+            Mail::to($uploader->email)->send(new ContentTaskReturnedUploader($task));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Failed to send content task returned uploader email.', [
+                'content_upload_task_id' => $task->id,
+                'uploader_id' => $uploader->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
         }
     }
 }

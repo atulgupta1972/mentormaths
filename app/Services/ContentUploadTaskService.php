@@ -216,4 +216,46 @@ class ContentUploadTaskService
 
         return $task->fresh();
     }
+
+    public function returnForReverification(
+        ContentUploadTask $task,
+        User $admin,
+        ?string $reason = null,
+    ): ContentUploadTask {
+        if (! in_array($task->status, [
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_PUBLISHED,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+        ], true)) {
+            throw new \InvalidArgumentException(
+                'Only submitted, verified, or in-progress verification tasks can be sent back for re-verification.',
+            );
+        }
+
+        DB::transaction(function () use ($task, $admin, $reason) {
+            app(ContentVerificationService::class)->resetAllVerification($task);
+
+            $notes = trim((string) ($task->admin_notes ?? ''));
+            if ($reason) {
+                $stamp = now()->format('Y-m-d H:i');
+                $notes = trim($notes."\n\n[Returned {$stamp} by {$admin->name}] {$reason}");
+            }
+
+            $task->update([
+                'status' => ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+                'submitted_at' => null,
+                'published_at' => null,
+                'published_by' => null,
+                'admin_notes' => $notes !== '' ? $notes : null,
+            ]);
+        });
+
+        ContentOperationsMailer::notifyReturnedForReverification($task->fresh([
+            'assignee',
+            'textbookChapter.textbook.gradeLevel',
+        ]));
+
+        return $task->fresh();
+    }
 }

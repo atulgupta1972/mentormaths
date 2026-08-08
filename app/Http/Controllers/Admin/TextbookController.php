@@ -8,6 +8,7 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\GradeLevel;
 use App\Models\Textbook;
+use App\Models\ContentUploadTask;
 use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
@@ -226,6 +227,32 @@ class TextbookController extends Controller
                 ->all();
         }
 
+        $contentUploadTask = null;
+        if (! $this->isContentUploaderContext($request)) {
+            $task = ContentUploadTask::query()
+                ->with('assignee:id,name')
+                ->where('textbook_chapter_id', $textbookChapter->id)
+                ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+                ->latest()
+                ->first();
+
+            if ($task) {
+                $contentUploadTask = [
+                    'id' => $task->id,
+                    'status' => $task->status,
+                    'status_label' => $task->statusLabel(),
+                    'assignee_name' => $task->assignee?->name,
+                    'can_verify' => in_array($task->status, [
+                        ContentUploadTask::STATUS_UPLOADED,
+                        ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+                        ContentUploadTask::STATUS_VERIFIED,
+                        ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                        ContentUploadTask::STATUS_PUBLISHED,
+                    ], true) && $textbookChapter->mcqWorksheetIds() !== [],
+                ];
+            }
+        }
+
         return Inertia::render('Admin/Textbooks/Show', [
             'chapter' => [
                 'id' => $textbookChapter->id,
@@ -267,6 +294,7 @@ class TextbookController extends Controller
             'activeYear' => $activeYear?->only(['id', 'name']),
             'routeNamespace' => $this->isContentUploaderContext($request) ? 'content' : 'admin',
             'uploaderMode' => $this->isContentUploaderContext($request),
+            'contentUploadTask' => $contentUploadTask,
         ]);
     }
 

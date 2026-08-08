@@ -118,13 +118,7 @@ class ContentVerificationService
         array $payload,
         User $user,
     ): ContentVerificationCheck {
-        if ($run->user_id !== $user->id) {
-            throw new \InvalidArgumentException('You cannot edit this verification run.');
-        }
-
-        if ($run->status === ContentVerificationRun::STATUS_COMPLETED) {
-            throw new \InvalidArgumentException('Verification is already complete.');
-        }
+        $this->assertCanEditRun($run, $user);
 
         $task = $run->task;
         $allowedIds = $this->questionIdsForChapter($task);
@@ -219,13 +213,7 @@ class ContentVerificationService
         array $checks,
         User $user,
     ): ContentVerificationCheck {
-        if ($run->user_id !== $user->id) {
-            throw new \InvalidArgumentException('You cannot edit this verification run.');
-        }
-
-        if ($run->status === ContentVerificationRun::STATUS_COMPLETED) {
-            throw new \InvalidArgumentException('Verification is already complete.');
-        }
+        $this->assertCanEditRun($run, $user);
 
         $check = ContentVerificationCheck::query()
             ->where('content_verification_run_id', $run->id)
@@ -250,9 +238,7 @@ class ContentVerificationService
 
     public function completeRun(ContentVerificationRun $run, User $user): ContentVerificationRun
     {
-        if ($run->user_id !== $user->id) {
-            throw new \InvalidArgumentException('You cannot complete this verification run.');
-        }
+        $this->assertCanEditRun($run, $user);
 
         $incomplete = ContentVerificationCheck::query()
             ->where('content_verification_run_id', $run->id)
@@ -272,6 +258,60 @@ class ContentVerificationService
         $run->task?->update(['status' => ContentUploadTask::STATUS_VERIFIED]);
 
         return $run->fresh();
+    }
+
+    public function resetAllVerification(ContentUploadTask $task): void
+    {
+        $runs = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->get();
+
+        foreach ($runs as $run) {
+            $reset = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, false);
+            $reset['verified_at'] = null;
+
+            ContentVerificationCheck::query()
+                ->where('content_verification_run_id', $run->id)
+                ->update($reset);
+
+            if ($run->status === ContentVerificationRun::STATUS_COMPLETED) {
+                $run->update([
+                    'status' => ContentVerificationRun::STATUS_IN_PROGRESS,
+                    'completed_at' => null,
+                ]);
+            }
+        }
+    }
+
+    private function assertCanEditRun(ContentVerificationRun $run, User $user): void
+    {
+        if ($user->isAdmin()) {
+            if ($run->status === ContentVerificationRun::STATUS_COMPLETED && ! $this->adminMayEditCompletedRun($run->task)) {
+                throw new \InvalidArgumentException('Reopen verification or send back to the uploader before editing.');
+            }
+
+            return;
+        }
+
+        if ($run->user_id !== $user->id) {
+            throw new \InvalidArgumentException('You cannot edit this verification run.');
+        }
+
+        if ($run->status === ContentVerificationRun::STATUS_COMPLETED) {
+            throw new \InvalidArgumentException('Verification is already complete.');
+        }
+    }
+
+    private function adminMayEditCompletedRun(?ContentUploadTask $task): bool
+    {
+        if (! $task) {
+            return false;
+        }
+
+        return in_array($task->status, [
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_PUBLISHED,
+        ], true);
     }
 
     private function resolveRun(ContentUploadTask $task, User $user): ContentVerificationRun
