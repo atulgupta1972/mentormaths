@@ -1,6 +1,5 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import ChapterSummaryPanel from '@/Components/ChapterSummaryPanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import StudentAssignmentGroupTable from '@/Components/StudentAssignmentGroupTable.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
@@ -24,21 +23,6 @@ const props = defineProps({
         default: () => ({ upcoming: [], past: [] }),
     },
     syllabusChapters: { type: Array, default: () => [] },
-    chapterSummary: {
-        type: Object,
-        default: () => ({ book_columns: [], chapters: [], context: {} }),
-    },
-    chapterSummaryFilters: {
-        type: Object,
-        default: () => ({
-            grade_levels: [],
-            boards_by_grade: {},
-            selected_grade_level_id: null,
-            selected_board_id: null,
-            home_grade_level_id: null,
-            home_board_id: null,
-        }),
-    },
     examTypeOptions: { type: Array, default: () => [] },
     stats: {
         type: Object,
@@ -1047,10 +1031,6 @@ const adminSetStatusClass = (set) => {
                         />
                     </section>
 
-                    <ChapterSummaryPanel
-                        :chapter-summary="chapterSummary"
-                        :chapter-summary-filters="chapterSummaryFilters"
-                    />
                 </template>
             </div>
         </div>

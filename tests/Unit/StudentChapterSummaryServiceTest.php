@@ -85,7 +85,7 @@ class StudentChapterSummaryServiceTest extends TestCase
         ]);
     }
 
-    public function test_dashboard_includes_chapter_summary_for_students(): void
+    public function test_school_study_plan_includes_chapter_availability(): void
     {
         $this->withoutMiddleware([
             \App\Http\Middleware\EnsureFormulaDrillComplete::class,
@@ -97,14 +97,14 @@ class StudentChapterSummaryServiceTest extends TestCase
 
         $this->withoutVite()
             ->actingAs($studentUser)
-            ->get(route('dashboard'))
+            ->get(route('student.school-study-plan.show'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('Dashboard')
-                ->has('chapterSummary.chapters', 1)
-                ->has('chapterSummaryFilters.grade_levels', 1)
-                ->where('chapterSummaryFilters.selected_grade_level_id', $enrollment->grade_level_id)
-                ->where('chapterSummaryFilters.selected_board_id', $enrollment->board_id));
+                ->component('Student/SchoolStudyPlan')
+                ->has('classCoverage.chapters', 1)
+                ->has('classCoverage.availability_columns')
+                ->where('classCoverage.chapters.0.availability.practice', 2)
+                ->where('classCoverage.chapters.0.availability.test', 1));
     }
 
     public function test_chapter_summary_includes_formula_sets(): void

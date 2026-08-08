@@ -10,17 +10,27 @@ use Illuminate\Validation\ValidationException;
 
 class ClassCoverageService
 {
-    public function __construct(private ExamPlanService $examPlanService) {}
+    public function __construct(
+        private ExamPlanService $examPlanService,
+        private StudentChapterSummaryService $chapterSummaryService,
+    ) {}
 
     /**
-     * @return array{chapters: list<array<string, mixed>>, under_study_chapter_id: int|null}
+     * @return array{
+     *     chapters: list<array<string, mixed>>,
+     *     under_study_chapter_id: int|null,
+     *     availability_columns: list<array{key: string, label: string, short: string}>
+     * }
      */
     public function forEnrollment(?StudentEnrollment $enrollment): array
     {
+        $emptyColumns = $this->defaultAvailabilityColumns();
+
         if (! $enrollment) {
             return [
                 'chapters' => [],
                 'under_study_chapter_id' => null,
+                'availability_columns' => $emptyColumns,
             ];
         }
 
@@ -31,14 +41,30 @@ class ClassCoverageService
             ->get()
             ->keyBy('syllabus_chapter_id');
 
+        $summary = $this->chapterSummaryService->forEnrollment($enrollment);
+        $summaryById = collect($summary['chapters'] ?? [])->keyBy('id');
+        $availabilityColumns = $this->availabilityColumnsFor($summary['book_columns'] ?? []);
+
         $underStudyId = null;
-        $chapters = $chapterOptions->values()->map(function (array $chapter) use ($coverages, &$underStudyId) {
+        $chapters = $chapterOptions->values()->map(function (array $chapter) use ($coverages, $summaryById, $availabilityColumns, &$underStudyId) {
             $coverage = $coverages->get($chapter['id']);
             $isStudied = $coverage?->status === StudentChapterCoverage::STATUS_STUDIED;
             $isUnderStudy = $coverage?->status === StudentChapterCoverage::STATUS_UNDER_STUDY;
 
             if ($isUnderStudy) {
                 $underStudyId = (int) $chapter['id'];
+            }
+
+            $counts = $summaryById->get($chapter['id'])['counts'] ?? [];
+            $availability = [];
+            foreach ($availabilityColumns as $column) {
+                $key = $column['key'];
+                if (str_starts_with($key, 'book:')) {
+                    $bookId = substr($key, 5);
+                    $availability[$key] = (int) ($counts['books'][$bookId] ?? 0);
+                } else {
+                    $availability[$key] = (int) ($counts[$key] ?? 0);
+                }
             }
 
             return [
@@ -50,12 +76,55 @@ class ClassCoverageService
                 'topics_label' => collect($chapter['topics'] ?? [])->pluck('name')->implode(', '),
                 'studied' => $isStudied,
                 'under_study' => $isUnderStudy,
+                'availability' => $availability,
             ];
         })->all();
 
         return [
             'chapters' => $chapters,
             'under_study_chapter_id' => $underStudyId,
+            'availability_columns' => $availabilityColumns,
+        ];
+    }
+
+    /**
+     * @param  list<array{id?: int|string, label?: string, code?: string, name?: string}>  $bookColumns
+     * @return list<array{key: string, label: string, short: string}>
+     */
+    private function availabilityColumnsFor(array $bookColumns): array
+    {
+        $columns = $this->defaultAvailabilityColumns();
+
+        foreach ($bookColumns as $book) {
+            $id = (string) ($book['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+
+            $label = (string) ($book['label'] ?? $book['code'] ?? $book['name'] ?? 'Book');
+            $short = strtoupper(substr(preg_replace('/\s+/', '', (string) ($book['code'] ?? 'B')), 0, 3)) ?: 'BK';
+
+            $columns[] = [
+                'key' => 'book:'.$id,
+                'label' => $label,
+                'short' => $short,
+            ];
+        }
+
+        return $columns;
+    }
+
+    /**
+     * @return list<array{key: string, label: string, short: string}>
+     */
+    private function defaultAvailabilityColumns(): array
+    {
+        return [
+            ['key' => 'practice', 'label' => 'Practice set', 'short' => 'Prac'],
+            ['key' => 'test', 'label' => 'Test', 'short' => 'Test'],
+            ['key' => 'written', 'label' => 'Written', 'short' => 'Writ'],
+            ['key' => 'fill_blank', 'label' => 'Fill in blank', 'short' => 'Fill'],
+            ['key' => 'formula', 'label' => 'Formula', 'short' => 'Form'],
         ];
     }
 
