@@ -29,47 +29,57 @@ const mark = (chapterId, status) => {
         },
     });
 };
+
+const chapterShortLabel = (chapter) => {
+    const number = String(chapter.chapter_number ?? '').trim();
+
+    if (number) {
+        return number.startsWith('Ch') || number.startsWith('ch') ? number : `Ch ${number}`;
+    }
+
+    return chapter.name;
+};
 </script>
 
 <template>
-    <section class="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-violet-50 to-white p-4 shadow-sm">
-        <div class="mb-3">
-            <h3 class="text-sm font-semibold text-indigo-950">Topics already covered in class</h3>
-            <p class="mt-1 text-xs text-indigo-800">
-                Tick the chapter you are studying now. Earlier chapters move to Studied automatically.
-            </p>
+    <section class="w-fit max-w-full">
+        <h3 class="mb-1 text-xs font-semibold text-slate-800">Topics already covered in class</h3>
+        <p class="mb-1.5 text-[10px] leading-tight text-slate-500">
+            Tick under study — earlier chapters move to studied.
+        </p>
+
+        <div v-if="!chapters.length" class="rounded border border-dashed border-slate-300 px-2 py-2 text-[11px] text-slate-600">
+            No syllabus chapters for your class / board yet.
         </div>
 
-        <div v-if="!chapters.length" class="rounded-lg border border-dashed border-indigo-200 bg-white/70 px-4 py-6 text-center text-sm text-indigo-800">
-            No syllabus chapters found for your class and board yet.
-        </div>
-
-        <div v-else class="overflow-x-auto rounded-lg bg-white ring-1 ring-indigo-100">
-            <table class="min-w-full divide-y divide-indigo-100 text-sm">
-                <thead class="bg-indigo-50/80 text-left text-xs uppercase tracking-wide text-indigo-700">
-                    <tr>
-                        <th class="px-4 py-2.5 font-semibold">Chapter</th>
-                        <th class="w-28 px-4 py-2.5 text-center font-semibold">Studied</th>
-                        <th class="w-32 px-4 py-2.5 text-center font-semibold">Under study</th>
+        <div v-else class="overflow-x-auto rounded border border-slate-300">
+            <table class="w-auto border-collapse text-[11px] leading-none">
+                <thead>
+                    <tr class="bg-[#0b2a5b] text-white">
+                        <th class="whitespace-nowrap px-1.5 py-1 text-left font-semibold">Chapter</th>
+                        <th class="whitespace-nowrap px-1.5 py-1 text-center font-semibold">Studied</th>
+                        <th class="whitespace-nowrap px-1.5 py-1 text-center font-semibold">Under study</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-indigo-50">
+                <tbody>
                     <tr
-                        v-for="chapter in chapters"
+                        v-for="(chapter, index) in chapters"
                         :key="chapter.id"
-                        class="hover:bg-indigo-50/40"
-                        :class="{ 'opacity-60': savingId === chapter.id }"
+                        :class="[
+                            index % 2 === 0 ? 'bg-white' : 'bg-slate-100',
+                            savingId === chapter.id ? 'opacity-60' : '',
+                        ]"
                     >
-                        <td class="px-4 py-2.5">
-                            <p class="font-medium text-gray-900">{{ chapter.label || chapter.name }}</p>
+                        <td class="whitespace-nowrap px-1.5 py-0.5 font-medium text-slate-800" :title="chapter.label || chapter.name">
+                            {{ chapterShortLabel(chapter) }}
                         </td>
-                        <td class="px-4 py-2.5 text-center">
+                        <td class="px-1.5 py-0.5 text-center">
                             <button
                                 type="button"
-                                class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-base transition"
+                                class="inline-flex h-4 w-4 items-center justify-center rounded text-[10px] leading-none"
                                 :class="chapter.studied
-                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                                    : 'border-gray-200 bg-white text-transparent hover:border-emerald-300 hover:text-emerald-400'"
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-transparent text-slate-300 hover:text-emerald-600'"
                                 :title="chapter.studied ? 'Marked studied' : 'Mark as studied'"
                                 :disabled="savingId !== null"
                                 @click="mark(chapter.id, 'studied')"
@@ -77,13 +87,13 @@ const mark = (chapterId, status) => {
                                 ✓
                             </button>
                         </td>
-                        <td class="px-4 py-2.5 text-center">
+                        <td class="px-1.5 py-0.5 text-center">
                             <button
                                 type="button"
-                                class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-base transition"
+                                class="inline-flex h-4 w-4 items-center justify-center rounded text-[10px] leading-none"
                                 :class="chapter.under_study
-                                    ? 'border-amber-400 bg-amber-50 text-amber-700 ring-2 ring-amber-200'
-                                    : 'border-gray-200 bg-white text-transparent hover:border-amber-300 hover:text-amber-400'"
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-transparent text-slate-300 hover:text-amber-600'"
                                 :title="chapter.under_study ? 'Currently under study' : 'Mark as under study'"
                                 :disabled="savingId !== null"
                                 @click="mark(chapter.id, 'under_study')"
