@@ -231,6 +231,7 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertSame([], $headerInfo['unrecognized']);
         $this->assertSame(42, $rows->count());
         $this->assertSame('Shapes Around Us', $rows->first()['chapter_name']);
+        $this->assertSame('Geometry', $rows->first()['chapter_head_name']);
         $this->assertFalse($rows->pluck('chapter_name')->contains('Geometry'));
     }
 

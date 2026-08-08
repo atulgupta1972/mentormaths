@@ -365,10 +365,24 @@ class SyllabusImportService
      */
     private function normalizeHeaders(array $headerRow): array
     {
+        $normalizedLabels = array_map(
+            fn ($label) => $this->normalizeLabel((string) $label),
+            $headerRow,
+        );
+
+        // Class 4 revised sheets use "Main Topic (Chapter)" for mentor heads (Geometry)
+        // and a separate "CHAPTER NAME" column for NCERT unit titles (Shapes Around Us).
+        // Class 5 sheets keep Main Topic as the chapter name and use "chapter" for heads.
+        $hasDedicatedChapterNameColumn = in_array('chapter name', $normalizedLabels, true);
+
         $aliases = [
             'chapter_number' => ['chapter no.', 'chapter no', 'chapter number'],
-            'chapter_name' => ['main topic', 'main topic (chapter)', 'chapter name'],
-            'chapter_head_name' => ['chapter head', 'mentor head', 'head'],
+            'chapter_name' => $hasDedicatedChapterNameColumn
+                ? ['chapter name']
+                : ['main topic', 'main topic (chapter)', 'chapter name'],
+            'chapter_head_name' => $hasDedicatedChapterNameColumn
+                ? ['main topic', 'main topic (chapter)', 'chapter head', 'mentor head', 'head']
+                : ['chapter head', 'mentor head', 'head'],
             'ncert_chapter' => ['ncert chapter', 'textbook chapter', 'ncert unit', 'unit title', 'chapter'],
             'topic' => ['sub-topic', 'sub topic', 'topic', 'subtopic'],
             'learning_outcomes' => ['key concepts', 'key concepts / learning outcomes', 'learning outcomes', 'concepts'],
