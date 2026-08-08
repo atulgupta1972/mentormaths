@@ -55,7 +55,8 @@ class ClassCoverageService
                 $underStudyId = (int) $chapter['id'];
             }
 
-            $counts = $summaryById->get($chapter['id'])['counts'] ?? [];
+            $summaryChapter = $summaryById->get($chapter['id']);
+            $counts = $summaryChapter['counts'] ?? [];
             $availability = [];
             foreach ($availabilityColumns as $column) {
                 $key = $column['key'];
@@ -77,6 +78,7 @@ class ClassCoverageService
                 'studied' => $isStudied,
                 'under_study' => $isUnderStudy,
                 'availability' => $availability,
+                'items' => $this->formatDetailItems($summaryChapter['items'] ?? []),
             ];
         })->all();
 
@@ -84,6 +86,83 @@ class ClassCoverageService
             'chapters' => $chapters,
             'under_study_chapter_id' => $underStudyId,
             'availability_columns' => $availabilityColumns,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $items
+     * @return list<array{key: string, label: string, items: list<array<string, mixed>>}>
+     */
+    private function formatDetailItems(array $items): array
+    {
+        $groups = [];
+
+        foreach ([
+            'practice' => 'Practice',
+            'test' => 'Test',
+            'written' => 'Written',
+            'fill_blank' => 'Fill in blank',
+            'formula' => 'Formula',
+        ] as $key => $label) {
+            $rows = collect($items[$key] ?? [])
+                ->map(fn (array $item) => $this->detailItemPayload($item))
+                ->values()
+                ->all();
+
+            if ($rows !== []) {
+                $groups[] = [
+                    'key' => $key,
+                    'label' => $label,
+                    'items' => $rows,
+                ];
+            }
+        }
+
+        $bookItems = collect($items['books'] ?? [])
+            ->flatten(1)
+            ->map(fn (array $item) => $this->detailItemPayload($item))
+            ->values()
+            ->all();
+
+        if ($bookItems !== []) {
+            $groups[] = [
+                'key' => 'books',
+                'label' => 'Books',
+                'items' => $bookItems,
+            ];
+        }
+
+        return $groups;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>
+     */
+    private function detailItemPayload(array $item): array
+    {
+        $percent = $item['latest_score_percent'] ?? null;
+        $statusLabel = (string) ($item['status_label'] ?? 'NOT DONE');
+
+        // Prefer explicit score in brackets when DONE already embeds it; otherwise append.
+        $displayStatus = $statusLabel;
+        if ($percent !== null && ! str_contains($statusLabel, '(')) {
+            $displayStatus = $statusLabel.' ('.$percent.'%)';
+        }
+
+        return [
+            'worksheet_id' => $item['worksheet_id'] ?? null,
+            'short_label' => $item['short_label'] ?? ($item['set_code'] ?? 'Set'),
+            'set_code' => $item['set_code'] ?? null,
+            'question_count' => (int) ($item['question_count'] ?? 0),
+            'status' => $item['status'] ?? 'not_assigned',
+            'status_label' => $displayStatus,
+            'score_percent' => $percent,
+            'assignment_id' => $item['assignment_id'] ?? null,
+            'latest_attempt_id' => $item['latest_attempt_id'] ?? null,
+            'delivery_mode' => $item['delivery_mode'] ?? null,
+            'can_assign' => (bool) ($item['can_assign'] ?? false),
+            'can_open' => (bool) ($item['can_open'] ?? false),
         ];
     }
 

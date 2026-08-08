@@ -104,7 +104,8 @@ class StudentChapterSummaryServiceTest extends TestCase
                 ->has('classCoverage.chapters', 1)
                 ->has('classCoverage.availability_columns')
                 ->where('classCoverage.chapters.0.availability.practice', 2)
-                ->where('classCoverage.chapters.0.availability.test', 1));
+                ->where('classCoverage.chapters.0.availability.test', 1)
+                ->has('classCoverage.chapters.0.items'));
     }
 
     public function test_chapter_summary_includes_formula_sets(): void
