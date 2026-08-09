@@ -1,6 +1,7 @@
 <script setup>
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { questionHubChapterUrl } from '@/utils/questionHub';
 import { Link } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -36,7 +37,8 @@ const prepStatusClass = (row) => {
     return 'bg-indigo-50 text-indigo-800';
 };
 
-const chapterHubHref = (chapterId) => route('admin.practice-sets.chapters.show', chapterId);
+/** Opens Question bank chapter hub (practice / worksheets) — board & class come from the chapter syllabus. */
+const chapterHubHref = (chapterId) => questionHubChapterUrl(chapterId);
 
 const setHref = (set) => {
     if (!props.isAdminContext || !set.practice_set_id) {
