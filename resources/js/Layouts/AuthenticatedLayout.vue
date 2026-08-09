@@ -214,8 +214,21 @@ const setupGroup = computed(() => ({
     ],
 }));
 
+const accountsGroup = computed(() => ({
+    label: 'Accounts',
+    active: route().current('admin.finance.*'),
+    items: [
+        {
+            label: 'Finance',
+            href: route().has('admin.finance.index') ? route('admin.finance.index') : '/admin/finance',
+            active: route().current('admin.finance.*'),
+            show: isAdmin.value,
+        },
+    ],
+}));
+
 const navGroups = computed(() =>
-    [peopleGroup.value, teachingGroup.value, contentGroup.value, setupGroup.value].filter(
+    [peopleGroup.value, teachingGroup.value, contentGroup.value, accountsGroup.value, setupGroup.value].filter(
         (group) => group.items.some((item) => item.show !== false),
     ),
 );

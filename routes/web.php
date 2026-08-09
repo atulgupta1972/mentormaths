@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ClassAssignmentController;
 use App\Http\Controllers\Admin\ClassHubController;
 use App\Http\Controllers\Admin\ContentCoverageController;
+use App\Http\Controllers\Admin\ContentFinanceController;
 use App\Http\Controllers\Admin\ContentRateCardController;
 use App\Http\Controllers\Admin\ContentUploadTaskController;
 use App\Http\Controllers\Admin\ExamPlanController as AdminExamPlanController;
@@ -330,6 +331,9 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
     Route::post('/content-tasks/{contentTask}/return-for-reverification', [ContentUploadTaskController::class, 'returnForReverification'])->name('content-tasks.return-for-reverification');
     Route::post('/content-tasks/{contentTask}/publish', [ContentUploadTaskController::class, 'publish'])->name('content-tasks.publish');
+
+    Route::get('/finance', [ContentFinanceController::class, 'index'])->name('finance.index');
+    Route::post('/finance/payments', [ContentFinanceController::class, 'storePayment'])->name('finance.payments.store');
 
     Route::post('/practice-sets/{worksheet}/assign', [SetAssignmentController::class, 'store'])->name('practice-sets.assign');
     Route::post('/practice-sets/{worksheet}/assign-bulk', [SetAssignmentController::class, 'storeBulk'])->name('practice-sets.assign-bulk');

@@ -85,6 +85,25 @@ class ContentUploadTask extends Model
         return $this->hasOne(ContentVerificationRun::class)->latestOfMany();
     }
 
+    public function payment(): HasOne
+    {
+        return $this->hasOne(ContentUploaderPayment::class);
+    }
+
+    public function payableAmountInr(): int
+    {
+        return (int) ($this->agreed_amount_inr ?? $this->offered_amount_inr ?? 0);
+    }
+
+    public function isPayable(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_VERIFIED,
+            self::STATUS_SUBMITTED_FOR_PUBLISH,
+            self::STATUS_PUBLISHED,
+        ], true) && $this->payableAmountInr() > 0;
+    }
+
     public function isAwaitingAgreement(): bool
     {
         return $this->status === self::STATUS_PENDING_AGREEMENT;
