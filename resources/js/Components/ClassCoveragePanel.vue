@@ -22,6 +22,7 @@ const props = defineProps({
 });
 
 const savingId = ref(null);
+const saveError = ref('');
 const assigningWorksheetId = ref(null);
 const expandedChapterIds = ref(new Set());
 
@@ -30,22 +31,48 @@ const availabilityColumns = computed(() => props.classCoverage?.availability_col
 const isStudentView = computed(() => String(props.updateRouteName).startsWith('student.'));
 const columnCount = computed(() => 4 + availabilityColumns.value.length);
 
-const mark = (chapterId, status) => {
+const mark = (chapter, status) => {
     if (savingId.value) {
         return;
     }
 
-    savingId.value = chapterId;
+    if (!route().has(props.updateRouteName)) {
+        saveError.value = 'Save route is not available. Try refreshing the page.';
+
+        return;
+    }
+
+    let nextStatus = status;
+    if (status === 'studied' && chapter.studied) {
+        nextStatus = 'none';
+    } else if (status === 'under_study' && chapter.under_study) {
+        nextStatus = 'none';
+    } else if (status === 'studied' && chapter.under_study) {
+        nextStatus = 'studied';
+    } else if (status === 'under_study' && chapter.studied) {
+        nextStatus = 'under_study';
+    }
+
+    savingId.value = chapter.id;
+    saveError.value = '';
 
     const params = {
         ...props.updateRouteParams,
-        syllabusChapter: chapterId,
+        syllabusChapter: chapter.id,
     };
 
     router.put(route(props.updateRouteName, params), {
-        status,
+        status: nextStatus,
     }, {
         preserveScroll: true,
+        onSuccess: () => {
+            saveError.value = '';
+        },
+        onError: (errors) => {
+            const first = Object.values(errors ?? {})[0];
+
+            saveError.value = Array.isArray(first) ? first[0] : (first || 'Could not save. Please try again.');
+        },
         onFinish: () => {
             savingId.value = null;
         },
@@ -136,7 +163,10 @@ const selfAssign = (item) => {
     <section class="w-full max-w-6xl">
         <h3 class="mb-1 text-sm font-semibold text-slate-800">Class coverage & available content</h3>
         <p class="mb-2 text-xs leading-snug text-slate-500">
-            Click a chapter to see set details and scores. Tick under study — earlier chapters move to studied.
+            Click a chapter to see set details and scores. Tick each chapter independently — click the same box again to clear it.
+        </p>
+        <p v-if="saveError" class="mb-2 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-800">
+            {{ saveError }}
         </p>
 
         <div v-if="!chapters.length" class="rounded border border-dashed border-slate-300 px-3 py-3 text-xs text-slate-600">
@@ -191,10 +221,10 @@ const selfAssign = (item) => {
                                     :class="chapter.studied
                                         ? 'border-emerald-700 bg-emerald-600 text-white'
                                         : 'border-slate-400 bg-white hover:border-emerald-500'"
-                                    :title="chapter.studied ? 'Marked studied' : 'Mark as studied'"
+                                    :title="chapter.studied ? 'Marked studied — click to undo' : 'Mark as studied'"
                                     :aria-pressed="chapter.studied ? 'true' : 'false'"
-                                    :disabled="savingId !== null"
-                                    @click.stop="mark(chapter.id, 'studied')"
+                                    :disabled="savingId === chapter.id"
+                                    @click.stop="mark(chapter, 'studied')"
                                 >
                                     <span v-if="chapter.studied">✓</span>
                                 </button>
@@ -206,10 +236,10 @@ const selfAssign = (item) => {
                                     :class="chapter.under_study
                                         ? 'border-amber-600 bg-amber-500 text-white'
                                         : 'border-slate-400 bg-white hover:border-amber-500'"
-                                    :title="chapter.under_study ? 'Currently under study' : 'Mark as under study'"
+                                    :title="chapter.under_study ? 'Currently under study — click to undo' : 'Mark as under study'"
                                     :aria-pressed="chapter.under_study ? 'true' : 'false'"
-                                    :disabled="savingId !== null"
-                                    @click.stop="mark(chapter.id, 'under_study')"
+                                    :disabled="savingId === chapter.id"
+                                    @click.stop="mark(chapter, 'under_study')"
                                 >
                                     <span v-if="chapter.under_study">✓</span>
                                 </button>

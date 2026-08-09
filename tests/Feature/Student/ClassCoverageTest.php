@@ -30,7 +30,7 @@ class ClassCoverageTest extends TestCase
         ]);
     }
 
-    public function test_marking_chapter_under_study_moves_previous_and_earlier_to_studied(): void
+    public function test_marking_chapter_under_study_only_updates_that_chapter(): void
     {
         [$user, $enrollment, $chapters] = $this->seedStudentWithChapters(4);
 
@@ -40,15 +40,13 @@ class ClassCoverageTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('student_chapter_coverages', [
+        $this->assertDatabaseMissing('student_chapter_coverages', [
             'student_enrollment_id' => $enrollment->id,
             'syllabus_chapter_id' => $chapters[0]->id,
-            'status' => StudentChapterCoverage::STATUS_STUDIED,
         ]);
-        $this->assertDatabaseHas('student_chapter_coverages', [
+        $this->assertDatabaseMissing('student_chapter_coverages', [
             'student_enrollment_id' => $enrollment->id,
             'syllabus_chapter_id' => $chapters[1]->id,
-            'status' => StudentChapterCoverage::STATUS_STUDIED,
         ]);
         $this->assertDatabaseHas('student_chapter_coverages', [
             'student_enrollment_id' => $enrollment->id,
@@ -66,10 +64,9 @@ class ClassCoverageTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('student_chapter_coverages', [
+        $this->assertDatabaseMissing('student_chapter_coverages', [
             'student_enrollment_id' => $enrollment->id,
             'syllabus_chapter_id' => $chapters[2]->id,
-            'status' => StudentChapterCoverage::STATUS_STUDIED,
         ]);
         $this->assertDatabaseHas('student_chapter_coverages', [
             'student_enrollment_id' => $enrollment->id,
@@ -84,6 +81,34 @@ class ClassCoverageTest extends TestCase
                 ->where('status', StudentChapterCoverage::STATUS_UNDER_STUDY)
                 ->count(),
         );
+    }
+
+    public function test_student_can_clear_chapter_status(): void
+    {
+        [$user, $enrollment, $chapters] = $this->seedStudentWithChapters(2);
+
+        $this->actingAs($user)
+            ->put(route('student.class-coverage.update', $chapters[0]), [
+                'status' => 'studied',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('student_chapter_coverages', [
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapters[0]->id,
+            'status' => StudentChapterCoverage::STATUS_STUDIED,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('student.class-coverage.update', $chapters[0]), [
+                'status' => 'none',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('student_chapter_coverages', [
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapters[0]->id,
+        ]);
     }
 
     public function test_student_can_mark_chapter_studied(): void

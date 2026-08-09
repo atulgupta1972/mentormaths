@@ -88,22 +88,29 @@ class SchoolStudyPlanController extends Controller
     public function update(Request $request, Student $student, SyllabusChapter $syllabusChapter): RedirectResponse
     {
         $activeYear = AcademicYear::active();
+        $gradeLevel = $this->gradeContext->resolve($request);
 
-        $enrollment = $student->currentEnrollment()
-            ?? ($activeYear ? $student->enrollmentForYear($activeYear->id) : null);
+        $enrollment = StudentEnrollment::query()
+            ->where('student_id', $student->id)
+            ->when($activeYear, fn ($q) => $q->where('academic_year_id', $activeYear->id))
+            ->when($gradeLevel, fn ($q) => $q->where('grade_level_id', $gradeLevel->id))
+            ->where('status', StudentEnrollment::STATUS_ACTIVE)
+            ->first();
 
         abort_unless($enrollment, 404, 'No active enrollment for this student.');
 
         $validated = $request->validate([
-            'status' => ['required', 'in:studied,under_study'],
+            'status' => ['required', 'in:studied,under_study,none'],
         ]);
 
-        if ($validated['status'] === 'under_study') {
-            $this->coverageService->markUnderStudy($enrollment, $syllabusChapter);
-        } else {
-            $this->coverageService->markStudied($enrollment, $syllabusChapter);
-        }
+        match ($validated['status']) {
+            'under_study' => $this->coverageService->markUnderStudy($enrollment, $syllabusChapter),
+            'studied' => $this->coverageService->markStudied($enrollment, $syllabusChapter),
+            'none' => $this->coverageService->clearCoverage($enrollment, $syllabusChapter),
+        };
 
-        return back()->with('success', 'School study plan updated.');
+        return redirect()
+            ->route('admin.school-study-plan.index', ['student_id' => $student->id])
+            ->with('success', 'School study plan updated.');
     }
 }

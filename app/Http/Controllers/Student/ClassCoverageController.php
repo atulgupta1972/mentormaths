@@ -37,14 +37,14 @@ class ClassCoverageController extends Controller
         }
 
         $validated = $request->validate([
-            'status' => ['required', 'in:studied,under_study'],
+            'status' => ['required', 'in:studied,under_study,none'],
         ]);
 
-        if ($validated['status'] === 'under_study') {
-            $this->coverageService->markUnderStudy($enrollment, $syllabusChapter);
-        } else {
-            $this->coverageService->markStudied($enrollment, $syllabusChapter);
-        }
+        match ($validated['status']) {
+            'under_study' => $this->coverageService->markUnderStudy($enrollment, $syllabusChapter),
+            'studied' => $this->coverageService->markStudied($enrollment, $syllabusChapter),
+            'none' => $this->coverageService->clearCoverage($enrollment, $syllabusChapter),
+        };
 
         return back()->with('success', 'School study plan updated.');
     }

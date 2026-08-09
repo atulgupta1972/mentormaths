@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ClassCoveragePanel from '@/Components/ClassCoveragePanel.vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 const props = defineProps({
@@ -36,6 +36,8 @@ const contextLabel = computed(() => {
 
     return parts.join(' · ');
 });
+
+const flashSuccess = computed(() => usePage().props.flash?.success ?? '');
 </script>
 
 <template>
@@ -81,6 +83,9 @@ const contextLabel = computed(() => {
                     </div>
 
                     <div v-else class="space-y-2">
+                        <p v-if="flashSuccess" class="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                            {{ flashSuccess }}
+                        </p>
                         <p class="text-sm text-slate-700">
                             <span class="font-semibold">{{ selectedStudent.name }}</span>
                             <span v-if="contextLabel" class="text-slate-500"> · {{ contextLabel }}</span>

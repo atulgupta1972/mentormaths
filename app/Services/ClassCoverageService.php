@@ -211,49 +211,14 @@ class ClassCoverageService
     {
         $this->assertChapterBelongsToEnrollment($enrollment, $chapter);
 
-        $orderedIds = $this->examPlanService
-            ->chapterOptionsForEnrollment($enrollment)
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->values()
-            ->all();
-
-        $targetIndex = array_search((int) $chapter->id, $orderedIds, true);
-
-        if ($targetIndex === false) {
-            throw ValidationException::withMessages([
-                'syllabus_chapter_id' => 'This chapter is not part of your class syllabus.',
-            ]);
-        }
-
-        $earlierIds = array_slice($orderedIds, 0, $targetIndex);
         $now = now();
 
-        DB::transaction(function () use ($enrollment, $chapter, $earlierIds, $now) {
+        DB::transaction(function () use ($enrollment, $chapter, $now) {
             StudentChapterCoverage::query()
                 ->where('student_enrollment_id', $enrollment->id)
                 ->where('status', StudentChapterCoverage::STATUS_UNDER_STUDY)
                 ->where('syllabus_chapter_id', '!=', $chapter->id)
-                ->update([
-                    'status' => StudentChapterCoverage::STATUS_STUDIED,
-                    'studied_at' => $now,
-                    'marked_under_study_at' => null,
-                    'updated_at' => $now,
-                ]);
-
-            foreach ($earlierIds as $chapterId) {
-                StudentChapterCoverage::query()->updateOrCreate(
-                    [
-                        'student_enrollment_id' => $enrollment->id,
-                        'syllabus_chapter_id' => $chapterId,
-                    ],
-                    [
-                        'status' => StudentChapterCoverage::STATUS_STUDIED,
-                        'studied_at' => $now,
-                        'marked_under_study_at' => null,
-                    ],
-                );
-            }
+                ->delete();
 
             StudentChapterCoverage::query()->updateOrCreate(
                 [
@@ -267,6 +232,16 @@ class ClassCoverageService
                 ],
             );
         });
+    }
+
+    public function clearCoverage(StudentEnrollment $enrollment, SyllabusChapter $chapter): void
+    {
+        $this->assertChapterBelongsToEnrollment($enrollment, $chapter);
+
+        StudentChapterCoverage::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->where('syllabus_chapter_id', $chapter->id)
+            ->delete();
     }
 
     public function markStudied(StudentEnrollment $enrollment, SyllabusChapter $chapter): void

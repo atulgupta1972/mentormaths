@@ -48,15 +48,26 @@ class SchoolStudyPlanTest extends TestCase
 
         $enrollmentId = $student->enrollments()->first()->id;
 
-        $this->assertDatabaseHas('student_chapter_coverages', [
+        $this->assertDatabaseMissing('student_chapter_coverages', [
             'student_enrollment_id' => $enrollmentId,
             'syllabus_chapter_id' => $chapters[0]->id,
-            'status' => StudentChapterCoverage::STATUS_STUDIED,
         ]);
         $this->assertDatabaseHas('student_chapter_coverages', [
             'student_enrollment_id' => $enrollmentId,
             'syllabus_chapter_id' => $chapters[1]->id,
             'status' => StudentChapterCoverage::STATUS_UNDER_STUDY,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->put(route('admin.school-study-plan.update', [$student, $chapters[1]]), [
+                'status' => 'none',
+            ])
+            ->assertRedirect(route('admin.school-study-plan.index', ['student_id' => $student->id]));
+
+        $this->assertDatabaseMissing('student_chapter_coverages', [
+            'student_enrollment_id' => $enrollmentId,
+            'syllabus_chapter_id' => $chapters[1]->id,
         ]);
     }
 
