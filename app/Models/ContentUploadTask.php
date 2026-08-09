@@ -152,7 +152,7 @@ class ContentUploadTask extends Model
             self::STATUS_IN_PROGRESS => 'In progress',
             self::STATUS_UPLOADED => 'Uploaded — verify questions',
             self::STATUS_VERIFICATION_IN_PROGRESS => 'Verification in progress',
-            self::STATUS_VERIFIED => 'Verified — ready to submit',
+            self::STATUS_VERIFIED => 'Verified — ready to publish',
             self::STATUS_SUBMITTED_FOR_PUBLISH => 'Submitted — admin to publish',
             self::STATUS_PUBLISHED => 'Published',
             self::STATUS_CANCELLED => 'Cancelled',

@@ -336,6 +336,11 @@ class ContentUploadTaskController extends Controller
         ]);
 
         $verification = $this->verificationPayload($contentTask, $request->user());
+        $contentTask->refresh()->load([
+            'assignee:id,name,email',
+            'assigner:id,name',
+            'textbookChapter.textbook.gradeLevel',
+        ]);
 
         return Inertia::render('Admin/ContentTasks/Show', [
             'task' => $this->serializeTask($contentTask, detailed: true),
@@ -393,6 +398,16 @@ class ContentUploadTaskController extends Controller
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
+        }
+
+        $run->refresh();
+        $contentTask->refresh();
+
+        if ($contentTask->status === ContentUploadTask::STATUS_VERIFIED) {
+            return back()->with(
+                'success',
+                "Marked {$marked} question(s) verified. All done — use Publish below to finish.",
+            );
         }
 
         return back()->with('success', "Marked {$marked} question(s) verified.");
@@ -482,7 +497,7 @@ class ContentUploadTaskController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Task marked published. Use textbook chapter publish for live content.');
+        return back()->with('success', 'Task marked published.');
     }
 
     private static function chapterLabel(SyllabusChapter $chapter): string
@@ -536,6 +551,10 @@ class ContentUploadTaskController extends Controller
                 ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
                 ContentUploadTask::STATUS_PUBLISHED,
             ], true);
+            $data['can_publish'] = in_array($task->status, [
+                ContentUploadTask::STATUS_VERIFIED,
+                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ], true);
         }
 
         return $data;
@@ -561,6 +580,7 @@ class ContentUploadTaskController extends Controller
         }
 
         $verification = $this->verificationService->forTask($task, $user);
+        $this->verificationService->maybeCompleteRunIfAllVerified($verification['run']);
 
         return [
             'run_id' => $verification['run']->id,

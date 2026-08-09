@@ -204,12 +204,18 @@ class ContentUploadTaskService
 
     public function publish(ContentUploadTask $task, User $admin): ContentUploadTask
     {
-        if ($task->status !== ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH) {
-            throw new \InvalidArgumentException('Task has not been submitted for publish.');
+        if (! in_array($task->status, [
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_VERIFIED,
+        ], true)) {
+            throw new \InvalidArgumentException(
+                'Verify all questions first (or wait for uploader submit) before publishing.',
+            );
         }
 
         $task->update([
             'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'submitted_at' => $task->submitted_at ?? now(),
             'published_at' => now(),
             'published_by' => $admin->id,
         ]);

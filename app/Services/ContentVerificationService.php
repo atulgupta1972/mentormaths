@@ -208,7 +208,10 @@ class ContentVerificationService
 
             $this->syncTaskStatus($run);
 
-            return $check->fresh();
+            $fresh = $check->fresh();
+            $this->maybeCompleteRunIfAllVerified($run->fresh());
+
+            return $fresh;
         });
     }
 
@@ -318,6 +321,8 @@ class ContentVerificationService
             $this->syncTaskStatus($run);
         });
 
+        $this->maybeCompleteRunIfAllVerified($run->fresh());
+
         return $marked;
     }
 
@@ -377,14 +382,66 @@ class ContentVerificationService
             throw new \InvalidArgumentException("{$incomplete} question(s) still need verification.");
         }
 
+        $this->markRunAndTaskVerified($run);
+
+        return $run->fresh();
+    }
+
+    /**
+     * When every check on the run is complete, mark run completed and task verified
+     * so the list leaves "Verifying" and admin can publish.
+     */
+    public function maybeCompleteRunIfAllVerified(?ContentVerificationRun $run): void
+    {
+        if (! $run || $run->status === ContentVerificationRun::STATUS_COMPLETED) {
+            return;
+        }
+
+        $task = $run->task;
+        if (! $task) {
+            return;
+        }
+
+        $allowedIds = $this->questionIdsForChapter($task);
+        if ($allowedIds === []) {
+            return;
+        }
+
+        $checks = ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $run->id)
+            ->whereIn('question_id', $allowedIds)
+            ->get()
+            ->keyBy('question_id');
+
+        if ($checks->count() < count($allowedIds)) {
+            return;
+        }
+
+        if ($checks->contains(fn (ContentVerificationCheck $check) => ! $check->isComplete())) {
+            return;
+        }
+
+        $this->markRunAndTaskVerified($run);
+    }
+
+    private function markRunAndTaskVerified(ContentVerificationRun $run): void
+    {
         $run->update([
             'status' => ContentVerificationRun::STATUS_COMPLETED,
             'completed_at' => now(),
         ]);
 
-        $run->task?->update(['status' => ContentUploadTask::STATUS_VERIFIED]);
+        $task = $run->task;
+        if (! $task) {
+            return;
+        }
 
-        return $run->fresh();
+        if (in_array($task->status, [
+            ContentUploadTask::STATUS_UPLOADED,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+        ], true)) {
+            $task->update(['status' => ContentUploadTask::STATUS_VERIFIED]);
+        }
     }
 
     public function resetAllVerification(ContentUploadTask $task): void
@@ -471,6 +528,7 @@ class ContentVerificationService
         }
 
         return in_array($task->status, [
+            ContentUploadTask::STATUS_VERIFIED,
             ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
             ContentUploadTask::STATUS_PUBLISHED,
         ], true);
@@ -486,6 +544,21 @@ class ContentVerificationService
 
         if ($existing) {
             return $existing;
+        }
+
+        $completed = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $user->id)
+            ->where('status', ContentVerificationRun::STATUS_COMPLETED)
+            ->latest('id')
+            ->first();
+
+        if ($completed && in_array($task->status, [
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_PUBLISHED,
+        ], true)) {
+            return $completed;
         }
 
         return DB::transaction(function () use ($task, $user) {

@@ -120,7 +120,25 @@ const formatDuration = (seconds) => {
                     :show-complete-actions="false"
                 />
 
-                <div v-if="task.status === 'submitted_for_publish'" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <div
+                    v-if="task.can_publish"
+                    class="rounded-lg border border-emerald-300 bg-emerald-50 p-4"
+                >
+                    <p class="text-sm font-semibold text-emerald-950">Ready to publish</p>
+                    <p class="mt-1 text-sm text-emerald-900">
+                        All questions are verified. Publish to clear this from the verifying list.
+                    </p>
+                    <PrimaryButton
+                        class="mt-3"
+                        type="button"
+                        :disabled="publishForm.processing"
+                        @click="publishForm.post(safeRoute('admin.content-tasks.publish', task.id, adminTaskPath('/publish')))"
+                    >
+                        {{ publishForm.processing ? 'Publishing…' : 'Publish task' }}
+                    </PrimaryButton>
+                </div>
+
+                <div v-else-if="task.status === 'submitted_for_publish'" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                     <p class="text-sm text-emerald-900">Uploader submitted this chapter for publish.</p>
                     <div class="mt-3 flex flex-wrap gap-3">
                         <PrimaryButton type="button" :disabled="publishForm.processing" @click="publishForm.post(route('admin.content-tasks.publish', task.id))">

@@ -143,6 +143,58 @@ class ContentTaskVerificationTest extends TestCase
 
         $this->assertNotNull($check);
         $this->assertTrue($check->isComplete());
+
+        // Single-question chapter → verifying finishes and becomes verified (then publishable).
+        // Seed starts as submitted_for_publish; leave that status alone when already submitted.
+        $task->refresh();
+        $this->assertTrue(in_array($task->status, [
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+        ], true));
+    }
+
+    public function test_admin_batch_verify_moves_verifying_task_to_verified_and_can_publish(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $task->update(['status' => ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('task.can_publish', false));
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $admin->id)
+            ->value('id');
+
+        $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.verification-batch', $task), [
+                'run_id' => $runId,
+                'question_ids' => [$questionId],
+            ])
+            ->assertRedirect();
+
+        $task->refresh();
+        $this->assertSame(ContentUploadTask::STATUS_VERIFIED, $task->status);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('task.can_publish', true));
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.publish', $task))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(ContentUploadTask::STATUS_PUBLISHED, $task->fresh()->status);
     }
 
     public function test_admin_can_return_selected_questions_with_remarks_in_one_email(): void

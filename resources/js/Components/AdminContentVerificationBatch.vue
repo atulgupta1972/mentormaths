@@ -273,9 +273,12 @@ const optionLine = (row) =>
             </PrimaryButton>
         </div>
 
-        <div v-if="pageQuestions.length === 0" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-6 text-sm text-emerald-950">
-            Nothing pending — all questions on this task are verified.
-        </div>
+                <div v-if="pageQuestions.length === 0" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-6 text-sm text-emerald-950">
+                    <p class="font-semibold">All questions verified.</p>
+                    <p class="mt-1 text-xs">
+                        Status should show as Verified on the task list. Use <strong>Publish</strong> below to mark the task published.
+                    </p>
+                </div>
 
         <div v-else class="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
             <table class="min-w-full divide-y divide-gray-200 text-left text-xs">
