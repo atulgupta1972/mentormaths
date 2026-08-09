@@ -40,8 +40,12 @@ class ChapterPracticeSetController extends Controller
         ]);
 
         $gradeLevel = $chapter->syllabusVersion?->gradeLevel;
+        $board = $chapter->syllabusVersion?->board;
         if ($gradeLevel) {
             $this->gradeContext->persist($request, $gradeLevel->id);
+        }
+        if ($board) {
+            $this->gradeContext->persistBoard($request, $board->id);
         }
 
         $activeYear = AcademicYear::active();
@@ -101,8 +105,12 @@ class ChapterPracticeSetController extends Controller
         $chapter->load(['syllabusVersion.board', 'syllabusVersion.gradeLevel', 'topics']);
 
         $gradeLevel = $chapter->syllabusVersion?->gradeLevel;
+        $board = $chapter->syllabusVersion?->board;
         if ($gradeLevel) {
             $this->gradeContext->persist($request, $gradeLevel->id);
+        }
+        if ($board) {
+            $this->gradeContext->persistBoard($request, $board->id);
         }
 
         $questions = $this->mixedQuestionService->questionsForChapter($chapter);

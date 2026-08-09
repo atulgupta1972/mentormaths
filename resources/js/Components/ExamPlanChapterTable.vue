@@ -1,13 +1,13 @@
 <script setup>
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { questionHubChapterUrl } from '@/utils/questionHub';
 import { Link } from '@inertiajs/vue3';
 
 const props = defineProps({
     plan: { type: Object, required: true },
     groups: { type: Array, default: () => [] },
     isAdminContext: { type: Boolean, default: false },
+    studentId: { type: [Number, String], default: null },
     assigningPlanId: { type: [Number, String], default: null },
     assignDueDate: { type: String, default: '' },
     assignProcessing: { type: Boolean, default: false },
@@ -37,8 +37,15 @@ const prepStatusClass = (row) => {
     return 'bg-indigo-50 text-indigo-800';
 };
 
-/** Opens Question bank chapter hub (practice / worksheets) — board & class come from the chapter syllabus. */
-const chapterHubHref = (chapterId) => questionHubChapterUrl(chapterId);
+/** Chapter tests hub (auto-mix / build manually) — board & class load from the chapter syllabus. */
+const chapterHubHref = (chapterId) => {
+    const url = route('admin.practice-sets.chapters.show', chapterId);
+    if (!props.studentId) {
+        return url;
+    }
+
+    return `${url}?student_id=${props.studentId}`;
+};
 
 const setHref = (set) => {
     if (!props.isAdminContext || !set.practice_set_id) {
