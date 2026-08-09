@@ -146,9 +146,11 @@ const saveQuestion = (questionId) => {
     });
 };
 
-const canManageDiagram = computed(() =>
-    Boolean(props.uploadDiagramRoute) && canEditQuestions.value,
-);
+const canManageDiagram = computed(() => {
+    const url = props.uploadDiagramRoute;
+
+    return Boolean(url) && url !== '#' && canEditQuestions.value;
+});
 
 const uploadDiagram = (questionId, event) => {
     const file = event.target?.files?.[0];

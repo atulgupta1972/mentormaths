@@ -4,6 +4,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { safeRoute } from '@/utils/routes';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -15,6 +16,8 @@ const props = defineProps({
 const page = usePage();
 const publishForm = useForm({});
 const returnForm = useForm({ reason: '' });
+
+const adminTaskPath = (suffix = '') => `/admin/content-tasks/${props.task.id}${suffix}`;
 
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
 const formatDuration = (seconds) => {
@@ -28,9 +31,10 @@ const sendBack = () => {
         return;
     }
 
-    returnForm.post(route('admin.content-tasks.return-for-reverification', props.task.id), {
-        preserveScroll: true,
-    });
+    returnForm.post(
+        safeRoute('admin.content-tasks.return-for-reverification', props.task.id, adminTaskPath('/return-for-reverification')),
+        { preserveScroll: true },
+    );
 };
 </script>
 
@@ -46,7 +50,7 @@ const sendBack = () => {
                     </h2>
                     <p class="text-sm text-gray-500">{{ task.status_label }}</p>
                 </div>
-                <Link :href="route('admin.content-tasks.index')" class="text-sm text-indigo-600 hover:underline">← All tasks</Link>
+                <Link :href="safeRoute('admin.content-tasks.index', null, '/admin/content-tasks')" class="text-sm text-indigo-600 hover:underline">← All tasks</Link>
             </div>
         </template>
 
@@ -90,7 +94,7 @@ const sendBack = () => {
                     <div class="mt-3 flex flex-wrap gap-3">
                         <Link
                             v-if="task.chapter?.id"
-                            :href="route('admin.textbooks.show', task.chapter.id)"
+                            :href="safeRoute('admin.textbooks.show', task.chapter.id, `/admin/textbooks/chapters/${task.chapter.id}`)"
                             class="text-sm font-medium text-indigo-700 hover:underline"
                         >
                             Open textbook chapter →
@@ -102,9 +106,9 @@ const sendBack = () => {
                     v-if="verification && task.can_verify_questions"
                     :task="task"
                     :verification="verification"
-                    :save-question-route="route('admin.content-tasks.verification-question', task.id)"
-                    :upload-diagram-route="route('admin.content-tasks.verification-diagram', task.id)"
-                    :remove-diagram-route="route('admin.content-tasks.verification-diagram.remove', task.id)"
+                    :save-question-route="safeRoute('admin.content-tasks.verification-question', task.id, adminTaskPath('/verification-question'))"
+                    :upload-diagram-route="safeRoute('admin.content-tasks.verification-diagram', task.id, adminTaskPath('/verification-diagram'))"
+                    :remove-diagram-route="safeRoute('admin.content-tasks.verification-diagram.remove', task.id, adminTaskPath('/verification-diagram/remove'))"
                     :editable-statuses="['uploaded', 'verification_in_progress', 'verified', 'submitted_for_publish', 'published']"
                     :show-complete-actions="false"
                 />

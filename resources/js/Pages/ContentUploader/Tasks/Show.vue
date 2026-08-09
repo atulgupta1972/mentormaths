@@ -2,6 +2,7 @@
 import ContentVerificationPanel from '@/Components/ContentVerificationPanel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { safeRoute } from '@/utils/routes';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { onMounted, onUnmounted } from 'vue';
 
@@ -16,6 +17,8 @@ const page = usePage();
 const agreeForm = useForm({});
 const startReviewForm = useForm({});
 
+const taskPath = (suffix = '') => `/content/tasks/${props.task.id}${suffix}`;
+
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
 const formatDuration = (seconds) => {
     const m = Math.floor(seconds / 60);
@@ -27,7 +30,7 @@ const pingSession = () => {
     if (!props.task.can_work) {
         return;
     }
-    router.post(route('content.tasks.ping-session', props.task.id), {}, {
+    router.post(safeRoute('content.tasks.ping-session', props.task.id, taskPath('/ping-session')), {}, {
         preserveScroll: true,
         preserveState: true,
         only: ['activeSeconds'],
@@ -54,7 +57,7 @@ onUnmounted(() => clearInterval(pingTimer));
                     </h2>
                     <p class="text-sm text-gray-500">{{ task.status_label }} · {{ formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</p>
                 </div>
-                <Link :href="route('content.tasks.index')" class="text-sm text-indigo-600 hover:underline">← My tasks</Link>
+                <Link :href="safeRoute('content.tasks.index', null, '/content/tasks')" class="text-sm text-indigo-600 hover:underline">← My tasks</Link>
             </div>
         </template>
 
@@ -76,7 +79,12 @@ onUnmounted(() => clearInterval(pingTimer));
                         Admin offered <strong>{{ formatInr(task.offered_amount_inr) }}</strong> for this chapter.
                         Agree to start work.
                     </p>
-                    <PrimaryButton class="mt-4" type="button" :disabled="agreeForm.processing" @click="agreeForm.post(route('content.tasks.agree', task.id))">
+                    <PrimaryButton
+                        class="mt-4"
+                        type="button"
+                        :disabled="agreeForm.processing"
+                        @click="agreeForm.post(safeRoute('content.tasks.agree', task.id, taskPath('/agree')))"
+                    >
                         I agree — start work
                     </PrimaryButton>
                 </div>
@@ -89,7 +97,7 @@ onUnmounted(() => clearInterval(pingTimer));
                         class="mt-4"
                         type="button"
                         :disabled="startReviewForm.processing"
-                        @click="startReviewForm.post(route('content.tasks.start-review', task.id))"
+                        @click="startReviewForm.post(safeRoute('content.tasks.start-review', task.id, taskPath('/start-review')))"
                     >
                         Review &amp; complete →
                     </PrimaryButton>
@@ -99,6 +107,7 @@ onUnmounted(() => clearInterval(pingTimer));
                     <p class="text-sm text-gray-700">
                         One question at a time: review details, edit if needed, then
                         <strong>Save &amp; mark verified → next</strong>.
+                        Upload a figure when the question needs one.
                     </p>
                     <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline">
                         Open textbook chapter →
@@ -109,11 +118,11 @@ onUnmounted(() => clearInterval(pingTimer));
                     v-if="verification"
                     :task="task"
                     :verification="verification"
-                    :save-question-route="route('content.tasks.verification-question', task.id)"
-                    :upload-diagram-route="route('content.tasks.verification-diagram', task.id)"
-                    :remove-diagram-route="route('content.tasks.verification-diagram.remove', task.id)"
-                    :complete-verification-route="route('content.tasks.complete-verification', task.id)"
-                    :submit-for-publish-route="route('content.tasks.submit-for-publish', task.id)"
+                    :save-question-route="safeRoute('content.tasks.verification-question', task.id, taskPath('/verification-question'))"
+                    :upload-diagram-route="safeRoute('content.tasks.verification-diagram', task.id, taskPath('/verification-diagram'))"
+                    :remove-diagram-route="safeRoute('content.tasks.verification-diagram.remove', task.id, taskPath('/verification-diagram/remove'))"
+                    :complete-verification-route="safeRoute('content.tasks.complete-verification', task.id, taskPath('/complete-verification'))"
+                    :submit-for-publish-route="safeRoute('content.tasks.submit-for-publish', task.id, taskPath('/submit-for-publish'))"
                 />
             </div>
         </div>
