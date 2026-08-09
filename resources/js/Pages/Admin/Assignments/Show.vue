@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import QuestionBody from '@/Components/QuestionBody.vue';
 import { formatDate, formatDateTime, formatTime } from '@/utils/dates';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link } from '@inertiajs/vue3';
@@ -27,6 +28,8 @@ const outcomeClass = (outcome) => {
 
     return 'bg-red-50 text-red-800';
 };
+
+const needsReview = (question) => question.outcome !== 'correct';
 </script>
 
 <template>
@@ -101,19 +104,49 @@ const outcomeClass = (outcome) => {
                         <div
                             v-for="question in latestResult.questions"
                             :key="question.number"
-                            class="flex flex-wrap items-start justify-between gap-3 px-4 py-3"
+                            class="px-4 py-3"
                             :class="outcomeClass(question.outcome)"
                         >
-                            <div>
-                                <p class="font-semibold">Q{{ question.number }} · {{ question.outcome_label }}</p>
-                                <p v-if="question.topic_name" class="mt-1 text-sm">
-                                    Topic: {{ question.topic_name }}
-                                    <span v-if="question.chapter_name">({{ question.chapter_name }})</span>
-                                </p>
-                                <p v-else-if="question.chapter_name" class="mt-1 text-sm">
-                                    Chapter: {{ question.chapter_name }}
-                                </p>
+                            <p class="font-semibold">Q{{ question.number }} · {{ question.outcome_label }}</p>
+                            <p v-if="question.topic_name" class="mt-1 text-sm opacity-90">
+                                Topic: {{ question.topic_name }}
+                                <span v-if="question.chapter_name">({{ question.chapter_name }})</span>
+                            </p>
+                            <p v-else-if="question.chapter_name" class="mt-1 text-sm opacity-90">
+                                Chapter: {{ question.chapter_name }}
+                            </p>
+
+                            <div v-if="question.question_text" class="mt-2 text-sm text-gray-900">
+                                <QuestionBody
+                                    :question-text="question.question_text"
+                                    :diagram-url="question.diagram_url"
+                                    :compact="true"
+                                />
                             </div>
+
+                            <dl
+                                v-if="needsReview(question) && (question.student_answer || question.correct_answer)"
+                                class="mt-2 grid gap-1 text-sm sm:grid-cols-2"
+                            >
+                                <div v-if="question.student_answer">
+                                    <dt class="text-xs text-gray-600">Wrong attempt</dt>
+                                    <dd class="font-medium text-rose-900">{{ question.student_answer }}</dd>
+                                </div>
+                                <div v-if="question.correct_answer">
+                                    <dt class="text-xs text-gray-600">Correct answer</dt>
+                                    <dd class="font-medium text-emerald-900">{{ question.correct_answer }}</dd>
+                                </div>
+                            </dl>
+                            <p
+                                v-else-if="needsReview(question) && !question.student_answer"
+                                class="mt-2 text-xs text-gray-600"
+                            >
+                                No recorded wrong answer text for this sum.
+                            </p>
+
+                            <p v-if="question.help_asked_label" class="mt-2 text-xs text-amber-900">
+                                {{ question.help_asked_label }}
+                            </p>
                         </div>
                     </div>
                 </div>
