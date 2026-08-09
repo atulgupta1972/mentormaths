@@ -105,6 +105,105 @@ class ContentTaskVerificationTest extends TestCase
         Mail::assertSent(ContentTaskReturnedUploader::class, fn ($mail) => $mail->hasTo($uploader->email));
     }
 
+    public function test_admin_can_batch_mark_questions_verified(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk();
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $admin->id)
+            ->value('id');
+
+        $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.verification-batch', $task), [
+                'run_id' => $runId,
+                'question_ids' => [$questionId],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $check = \App\Models\ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $runId)
+            ->where('question_id', $questionId)
+            ->first();
+
+        $this->assertNotNull($check);
+        $this->assertTrue($check->isComplete());
+    }
+
+    public function test_admin_can_return_selected_questions_with_remarks_in_one_email(): void
+    {
+        Mail::fake();
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk();
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $admin->id)
+            ->value('id');
+
+        $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.verification-batch', $task), [
+                'run_id' => $runId,
+                'question_ids' => [$questionId],
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.return-for-reverification', $task), [
+                'reason' => 'Please fix figures where needed.',
+                'items' => [[
+                    'question_id' => $questionId,
+                    'number' => 1,
+                    'remark' => 'Needs figure upload',
+                    'question_text' => 'What is 2 + 2?',
+                ]],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $check = \App\Models\ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $runId)
+            ->where('question_id', $questionId)
+            ->first();
+
+        $this->assertFalse($check->isComplete());
+        $this->assertStringContainsString('Needs figure upload', (string) $task->fresh()->admin_notes);
+
+        Mail::assertSent(ContentTaskReturnedUploader::class, function (ContentTaskReturnedUploader $mail) use ($uploader) {
+            return $mail->hasTo($uploader->email)
+                && count($mail->returnItems) === 1
+                && $mail->returnItems[0]['remark'] === 'Needs figure upload';
+        });
+    }
+
     public function test_start_review_marks_uploaded_and_opens_verification(): void
     {
         $this->withoutVite();

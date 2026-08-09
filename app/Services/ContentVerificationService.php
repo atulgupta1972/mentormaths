@@ -266,6 +266,103 @@ class ContentVerificationService
         return $check->fresh();
     }
 
+    /**
+     * Mark questions verified as-is (no content rewrite) — used by admin batch review.
+     *
+     * @param  list<int>  $questionIds
+     * @return int Number of questions marked verified
+     */
+    public function markVerifiedBatch(ContentVerificationRun $run, array $questionIds, User $user): int
+    {
+        $this->assertCanEditRun($run, $user);
+
+        $allowedIds = $this->questionIdsForChapter($run->task);
+        $ids = collect($questionIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0 && in_array($id, $allowedIds, true))
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === []) {
+            throw new \InvalidArgumentException('Select at least one question to mark verified.');
+        }
+
+        $marked = 0;
+
+        DB::transaction(function () use ($run, $ids, &$marked) {
+            $questions = Question::query()
+                ->whereIn('id', $ids)
+                ->get()
+                ->keyBy('id');
+
+            foreach ($ids as $questionId) {
+                $check = ContentVerificationCheck::query()->firstOrCreate(
+                    [
+                        'content_verification_run_id' => $run->id,
+                        'question_id' => $questionId,
+                    ],
+                    ['diagram_note' => 'No diagram needed'],
+                );
+
+                $question = $questions->get($questionId);
+                $payload = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, true);
+                $payload['diagram_note'] = filled($question?->diagram_path)
+                    ? 'Diagram reviewed'
+                    : 'No diagram needed';
+                $payload['verified_at'] = now();
+                $check->update($payload);
+                $marked++;
+            }
+
+            $this->syncTaskStatus($run);
+        });
+
+        return $marked;
+    }
+
+    /**
+     * Reset verification ticks only for the given question IDs (all runs on the task).
+     *
+     * @param  list<int>  $questionIds
+     */
+    public function resetVerificationForQuestions(ContentUploadTask $task, array $questionIds): void
+    {
+        $ids = collect($questionIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === []) {
+            $this->resetAllVerification($task);
+
+            return;
+        }
+
+        $runs = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->get();
+
+        foreach ($runs as $run) {
+            $reset = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, false);
+            $reset['verified_at'] = null;
+
+            ContentVerificationCheck::query()
+                ->where('content_verification_run_id', $run->id)
+                ->whereIn('question_id', $ids)
+                ->update($reset);
+
+            if ($run->status === ContentVerificationRun::STATUS_COMPLETED) {
+                $run->update([
+                    'status' => ContentVerificationRun::STATUS_IN_PROGRESS,
+                    'completed_at' => null,
+                ]);
+            }
+        }
+    }
+
     public function completeRun(ContentVerificationRun $run, User $user): ContentVerificationRun
     {
         $this->assertCanEditRun($run, $user);

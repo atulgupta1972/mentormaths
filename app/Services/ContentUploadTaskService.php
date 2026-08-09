@@ -238,10 +238,14 @@ class ContentUploadTaskService
         return $task->fresh();
     }
 
+    /**
+     * @param  list<array{question_id: int, remark?: ?string, number?: int|null, question_text?: ?string}>  $items
+     */
     public function returnForReverification(
         ContentUploadTask $task,
         User $admin,
         ?string $reason = null,
+        array $items = [],
     ): ContentUploadTask {
         if (! in_array($task->status, [
             ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
@@ -254,14 +258,62 @@ class ContentUploadTaskService
             );
         }
 
-        DB::transaction(function () use ($task, $admin, $reason) {
-            app(ContentVerificationService::class)->resetAllVerification($task);
+        $normalizedItems = collect($items)
+            ->map(function (array $item) {
+                $questionId = (int) ($item['question_id'] ?? 0);
+                if ($questionId <= 0) {
+                    return null;
+                }
+
+                return [
+                    'question_id' => $questionId,
+                    'number' => isset($item['number']) ? (int) $item['number'] : null,
+                    'question_text' => isset($item['question_text'])
+                        ? trim((string) $item['question_text'])
+                        : null,
+                    'remark' => trim((string) ($item['remark'] ?? '')),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+
+        if ($normalizedItems === [] && ! filled(trim((string) $reason))) {
+            throw new \InvalidArgumentException(
+                'Select at least one question to send back, or add an overall remark.',
+            );
+        }
+
+        DB::transaction(function () use ($task, $admin, $reason, $normalizedItems) {
+            $verification = app(ContentVerificationService::class);
+
+            if ($normalizedItems !== []) {
+                $verification->resetVerificationForQuestions(
+                    $task,
+                    array_column($normalizedItems, 'question_id'),
+                );
+            } else {
+                $verification->resetAllVerification($task);
+            }
+
+            $stamp = now()->format('Y-m-d H:i');
+            $block = "[Returned {$stamp} by {$admin->name}]";
+            if (filled(trim((string) $reason))) {
+                $block .= ' '.trim((string) $reason);
+            }
+
+            if ($normalizedItems !== []) {
+                $lines = [];
+                foreach ($normalizedItems as $item) {
+                    $label = $item['number'] ? "Q{$item['number']}" : "Question #{$item['question_id']}";
+                    $remark = $item['remark'] !== '' ? $item['remark'] : 'Please re-check / fix';
+                    $lines[] = "• {$label}: {$remark}";
+                }
+                $block .= "\n".implode("\n", $lines);
+            }
 
             $notes = trim((string) ($task->admin_notes ?? ''));
-            if ($reason) {
-                $stamp = now()->format('Y-m-d H:i');
-                $notes = trim($notes."\n\n[Returned {$stamp} by {$admin->name}] {$reason}");
-            }
+            $notes = trim($notes."\n\n".$block);
 
             $task->update([
                 'status' => ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
@@ -272,10 +324,13 @@ class ContentUploadTaskService
             ]);
         });
 
-        ContentOperationsMailer::notifyReturnedForReverification($task->fresh([
-            'assignee',
-            'textbookChapter.textbook.gradeLevel',
-        ]));
+        ContentOperationsMailer::notifyReturnedForReverification(
+            $task->fresh([
+                'assignee',
+                'textbookChapter.textbook.gradeLevel',
+            ]),
+            $normalizedItems,
+        );
 
         return $task->fresh();
     }

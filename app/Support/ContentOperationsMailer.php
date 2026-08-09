@@ -86,7 +86,10 @@ class ContentOperationsMailer
         }
     }
 
-    public static function notifyReturnedForReverification(ContentUploadTask $task): bool
+    /**
+     * @param  list<array{question_id: int, remark?: string, number?: int|null, question_text?: ?string}>  $items
+     */
+    public static function notifyReturnedForReverification(ContentUploadTask $task, array $items = []): bool
     {
         $uploader = $task->assignee;
 
@@ -95,7 +98,7 @@ class ContentOperationsMailer
         }
 
         try {
-            Mail::to($uploader->email)->send(new ContentTaskReturnedUploader($task));
+            Mail::to($uploader->email)->send(new ContentTaskReturnedUploader($task, $items));
 
             return true;
         } catch (\Throwable $e) {

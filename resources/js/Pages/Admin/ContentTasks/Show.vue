@@ -1,11 +1,11 @@
 <script setup>
+import AdminContentVerificationBatch from '@/Components/AdminContentVerificationBatch.vue';
 import ContentVerificationPanel from '@/Components/ContentVerificationPanel.vue';
-import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import SecondaryButton from '@/Components/SecondaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { safeRoute } from '@/utils/routes';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 const props = defineProps({
     task: { type: Object, required: true },
@@ -15,7 +15,7 @@ const props = defineProps({
 
 const page = usePage();
 const publishForm = useForm({});
-const returnForm = useForm({ reason: '' });
+const reviewMode = ref('batch');
 
 const adminTaskPath = (suffix = '') => `/admin/content-tasks/${props.task.id}${suffix}`;
 
@@ -24,17 +24,6 @@ const formatDuration = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}m ${s}s`;
-};
-
-const sendBack = () => {
-    if (!confirm('Send this chapter back to the uploader for re-verification? All verification ticks will be cleared.')) {
-        return;
-    }
-
-    returnForm.post(
-        safeRoute('admin.content-tasks.return-for-reverification', props.task.id, adminTaskPath('/return-for-reverification')),
-        { preserveScroll: true },
-    );
 };
 </script>
 
@@ -55,7 +44,7 @@ const sendBack = () => {
         </template>
 
         <div class="py-8">
-            <div class="mx-auto max-w-4xl space-y-4 px-4 sm:px-6">
+            <div class="mx-auto max-w-7xl space-y-4 px-4 sm:px-6">
                 <div v-if="page.props.flash?.success" class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
                     {{ page.props.flash.success }}
                 </div>
@@ -88,10 +77,9 @@ const sendBack = () => {
 
                 <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
                     <p class="text-sm text-indigo-950">
-                        Fix wrong options or explanations here (same as uploader verification), or
-                        <strong>send back to uploader</strong> so they re-verify every question.
+                        Review questions in batches of 10. Tick OK to verify, or flag with a remark to send back — one email when you finish.
                     </p>
-                    <div class="mt-3 flex flex-wrap gap-3">
+                    <div class="mt-3 flex flex-wrap items-center gap-3">
                         <Link
                             v-if="task.chapter?.id"
                             :href="safeRoute('admin.textbooks.show', task.chapter.id, `/admin/textbooks/chapters/${task.chapter.id}`)"
@@ -99,11 +87,30 @@ const sendBack = () => {
                         >
                             Open textbook chapter →
                         </Link>
+                        <button
+                            v-if="verification && task.can_verify_questions"
+                            type="button"
+                            class="text-sm font-medium text-indigo-700 hover:underline"
+                            @click="reviewMode = reviewMode === 'batch' ? 'detail' : 'batch'"
+                        >
+                            {{ reviewMode === 'batch' ? 'Switch to one-by-one edit' : 'Switch to batch table' }}
+                        </button>
                     </div>
                 </div>
 
+                <AdminContentVerificationBatch
+                    v-if="verification && task.can_verify_questions && reviewMode === 'batch'"
+                    :task="task"
+                    :verification="verification"
+                    :batch-verify-route="safeRoute('admin.content-tasks.verification-batch', task.id, adminTaskPath('/verification-batch'))"
+                    :return-route="safeRoute('admin.content-tasks.return-for-reverification', task.id, adminTaskPath('/return-for-reverification'))"
+                    :upload-diagram-route="safeRoute('admin.content-tasks.verification-diagram', task.id, adminTaskPath('/verification-diagram'))"
+                    :remove-diagram-route="safeRoute('admin.content-tasks.verification-diagram.remove', task.id, adminTaskPath('/verification-diagram/remove'))"
+                    :can-return="Boolean(task.can_return_for_reverification)"
+                />
+
                 <ContentVerificationPanel
-                    v-if="verification && task.can_verify_questions"
+                    v-else-if="verification && task.can_verify_questions"
                     :task="task"
                     :verification="verification"
                     :save-question-route="safeRoute('admin.content-tasks.verification-question', task.id, adminTaskPath('/verification-question'))"
@@ -112,30 +119,6 @@ const sendBack = () => {
                     :editable-statuses="['uploaded', 'verification_in_progress', 'verified', 'submitted_for_publish', 'published']"
                     :show-complete-actions="false"
                 />
-
-                <div v-if="task.can_return_for_reverification" class="rounded-lg border border-amber-300 bg-amber-50 p-4">
-                    <p class="text-sm font-medium text-amber-950">Send back to uploader</p>
-                    <p class="mt-1 text-sm text-amber-900">
-                        Clears all verification ticks and reopens the task for the uploader. Use when they need to fix options/explanations themselves.
-                    </p>
-                    <div class="mt-3">
-                        <InputLabel value="Message to uploader (optional)" />
-                        <textarea
-                            v-model="returnForm.reason"
-                            rows="2"
-                            class="mt-1 block w-full rounded-md border-amber-200 text-sm"
-                            placeholder="e.g. All correct answers are option A — please vary B/C/D and fix explanations."
-                        />
-                    </div>
-                    <SecondaryButton
-                        class="mt-3"
-                        type="button"
-                        :disabled="returnForm.processing"
-                        @click="sendBack"
-                    >
-                        {{ returnForm.processing ? 'Sending…' : 'Send back for re-verification' }}
-                    </SecondaryButton>
-                </div>
 
                 <div v-if="task.status === 'submitted_for_publish'" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                     <p class="text-sm text-emerald-900">Uploader submitted this chapter for publish.</p>

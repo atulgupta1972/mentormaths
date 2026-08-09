@@ -13,8 +13,12 @@ class ContentTaskReturnedUploader extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /**
+     * @param  list<array{question_id: int, remark?: string, number?: int|null, question_text?: ?string}>  $returnItems
+     */
     public function __construct(
         public ContentUploadTask $task,
+        public array $returnItems = [],
     ) {}
 
     public function envelope(): Envelope
@@ -22,9 +26,13 @@ class ContentTaskReturnedUploader extends Mailable
         $chapter = $this->task->textbookChapter;
         $grade = $chapter?->textbook?->gradeLevel?->name ?? 'Class';
         $chNo = $chapter?->chapter_number ?? '?';
+        $count = count($this->returnItems);
+        $suffix = $count > 0
+            ? " · {$count} question".($count === 1 ? '' : 's').' to fix'
+            : ' · please re-verify MCQ options';
 
         return new Envelope(
-            subject: "Mentor Maths — {$grade} Ch {$chNo} · please re-verify MCQ options",
+            subject: "Mentor Maths — {$grade} Ch {$chNo}{$suffix}",
         );
     }
 
@@ -35,6 +43,7 @@ class ContentTaskReturnedUploader extends Mailable
             with: [
                 'taskUrl' => route('content.tasks.show', $this->task),
                 'loginUrl' => route('login'),
+                'returnItems' => $this->returnItems,
             ],
         );
     }

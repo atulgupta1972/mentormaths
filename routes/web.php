@@ -325,6 +325,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks', [ContentUploadTaskController::class, 'store'])->name('content-tasks.store');
     Route::get('/content-tasks/{contentTask}', [ContentUploadTaskController::class, 'show'])->name('content-tasks.show');
     Route::post('/content-tasks/{contentTask}/verification-question', [ContentUploadTaskController::class, 'saveVerificationQuestion'])->name('content-tasks.verification-question');
+    Route::post('/content-tasks/{contentTask}/verification-batch', [ContentUploadTaskController::class, 'markVerificationBatch'])->name('content-tasks.verification-batch');
     Route::post('/content-tasks/{contentTask}/verification-diagram', [ContentUploadTaskController::class, 'uploadVerificationDiagram'])->name('content-tasks.verification-diagram');
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
     Route::post('/content-tasks/{contentTask}/return-for-reverification', [ContentUploadTaskController::class, 'returnForReverification'])->name('content-tasks.return-for-reverification');

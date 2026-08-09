@@ -375,6 +375,29 @@ class ContentUploadTaskController extends Controller
         return back()->with('success', 'Question saved.');
     }
 
+    public function markVerificationBatch(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_ids' => ['required', 'array', 'min:1'],
+            'question_ids.*' => ['integer', 'exists:questions,id'],
+        ]);
+
+        $run = $this->authorizeVerificationRun($contentTask, (int) $validated['run_id']);
+
+        try {
+            $marked = $this->verificationService->markVerifiedBatch(
+                $run,
+                $validated['question_ids'],
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Marked {$marked} question(s) verified.");
+    }
+
     public function uploadVerificationDiagram(Request $request, ContentUploadTask $contentTask): RedirectResponse
     {
         $validated = $request->validate([
@@ -425,6 +448,11 @@ class ContentUploadTaskController extends Controller
     {
         $validated = $request->validate([
             'reason' => ['nullable', 'string', 'max:2000'],
+            'items' => ['nullable', 'array'],
+            'items.*.question_id' => ['required', 'integer', 'exists:questions,id'],
+            'items.*.remark' => ['nullable', 'string', 'max:500'],
+            'items.*.number' => ['nullable', 'integer', 'min:1'],
+            'items.*.question_text' => ['nullable', 'string', 'max:500'],
         ]);
 
         try {
@@ -432,12 +460,18 @@ class ContentUploadTaskController extends Controller
                 $contentTask,
                 $request->user(),
                 $validated['reason'] ?? null,
+                $validated['items'] ?? [],
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Sent back to uploader for re-verification. They will be emailed.');
+        $count = count($validated['items'] ?? []);
+        $message = $count > 0
+            ? "Sent {$count} question(s) back to uploader. They will be emailed."
+            : 'Sent back to uploader for re-verification. They will be emailed.';
+
+        return back()->with('success', $message);
     }
 
     public function publish(ContentUploadTask $contentTask, Request $request): RedirectResponse
