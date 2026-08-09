@@ -6,8 +6,9 @@ use App\Models\ContentUploadTask;
 use App\Models\ContentUploaderPayment;
 use App\Models\User;
 use App\Support\ContentOperationsMailer;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ContentFinanceService
 {
@@ -42,6 +43,147 @@ class ContentFinanceService
     }
 
     /**
+     * @return list<array{
+     *     assignee: array{id: int, name: string, email: string}|null,
+     *     tasks: list<array<string, mixed>>,
+     *     task_ids: list<int>,
+     *     total_inr: int,
+     *     task_count: int
+     * }>
+     */
+    public function unpaidGroupedByAssignee(): array
+    {
+        return $this->unpaidPayableTasks()
+            ->groupBy(fn (ContentUploadTask $task) => (int) ($task->assigned_to_user_id ?? 0))
+            ->map(function (Collection $tasks) {
+                /** @var ContentUploadTask $first */
+                $first = $tasks->first();
+
+                return [
+                    'assignee' => $first->assignee?->only(['id', 'name', 'email']),
+                    'tasks' => $tasks
+                        ->map(fn (ContentUploadTask $task) => $this->serializeUnpaidTask($task))
+                        ->values()
+                        ->all(),
+                    'task_ids' => $tasks->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
+                    'total_inr' => (int) $tasks->sum(fn (ContentUploadTask $task) => $task->payableAmountInr()),
+                    'task_count' => $tasks->count(),
+                ];
+            })
+            ->sortBy(fn (array $group) => mb_strtolower((string) ($group['assignee']['name'] ?? '')))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<int>  $taskIds
+     * @param  array{
+     *     paid_on: string,
+     *     method: string,
+     *     upi_or_reference: string,
+     *     notes?: ?string
+     * }  $payload
+     * @return Collection<int, ContentUploaderPayment>
+     */
+    public function recordBatchPayment(array $taskIds, User $admin, array $payload): Collection
+    {
+        $taskIds = array_values(array_unique(array_map('intval', $taskIds)));
+
+        if ($taskIds === []) {
+            throw new \InvalidArgumentException('Select at least one chapter to pay.');
+        }
+
+        $tasks = ContentUploadTask::query()
+            ->whereIn('id', $taskIds)
+            ->with([
+                'assignee:id,name,email',
+                'payment',
+                'textbookChapter.textbook.gradeLevel',
+            ])
+            ->get()
+            ->keyBy('id');
+
+        if ($tasks->count() !== count($taskIds)) {
+            throw new \InvalidArgumentException('One or more chapters could not be found.');
+        }
+
+        $assigneeIds = $tasks->pluck('assigned_to_user_id')->unique()->filter()->values();
+        if ($assigneeIds->count() !== 1) {
+            throw new \InvalidArgumentException('All chapters in one payment must belong to the same uploader.');
+        }
+
+        foreach ($tasks as $task) {
+            if (! $task->isPayable()) {
+                throw new \InvalidArgumentException('One or more chapters are not ready for payment yet.');
+            }
+
+            if ($task->payment()->exists()) {
+                throw new \InvalidArgumentException('Payment is already recorded for one of the selected chapters.');
+            }
+
+            if ($task->payableAmountInr() <= 0) {
+                throw new \InvalidArgumentException('One or more chapters have no agreed amount.');
+            }
+        }
+
+        $batchId = (string) Str::uuid();
+        $reference = trim($payload['upi_or_reference']);
+        $notes = filled(trim((string) ($payload['notes'] ?? '')))
+            ? trim((string) $payload['notes'])
+            : null;
+
+        $payments = DB::transaction(function () use ($tasks, $taskIds, $admin, $payload, $batchId, $reference, $notes) {
+            $created = collect();
+
+            foreach ($taskIds as $taskId) {
+                /** @var ContentUploadTask $task */
+                $task = $tasks->get($taskId);
+
+                $created->push(ContentUploaderPayment::query()->create([
+                    'content_upload_task_id' => $task->id,
+                    'batch_id' => $batchId,
+                    'amount_inr' => $task->payableAmountInr(),
+                    'paid_on' => $payload['paid_on'],
+                    'method' => $payload['method'],
+                    'upi_or_reference' => $reference,
+                    'notes' => $notes,
+                    'paid_by_user_id' => $admin->id,
+                ]));
+            }
+
+            return $created;
+        });
+
+        $payments = ContentUploaderPayment::query()
+            ->where('batch_id', $batchId)
+            ->with([
+                'task.assignee',
+                'task.textbookChapter.textbook.gradeLevel',
+                'paidBy:id,name',
+            ])
+            ->orderBy('id')
+            ->get();
+
+        if (ContentOperationsMailer::notifyBatchPaymentRecorded($payments)) {
+            ContentUploaderPayment::query()
+                ->where('batch_id', $batchId)
+                ->update(['emailed_at' => now()]);
+
+            $payments = ContentUploaderPayment::query()
+                ->where('batch_id', $batchId)
+                ->with([
+                    'task.assignee',
+                    'task.textbookChapter.textbook.gradeLevel',
+                    'paidBy:id,name',
+                ])
+                ->orderBy('id')
+                ->get();
+        }
+
+        return $payments;
+    }
+
+    /**
      * @param  array{
      *     paid_on: string,
      *     method: string,
@@ -51,48 +193,13 @@ class ContentFinanceService
      */
     public function recordPayment(ContentUploadTask $task, User $admin, array $payload): ContentUploaderPayment
     {
-        if (! $task->isPayable()) {
-            throw new \InvalidArgumentException('This chapter is not ready for payment yet (verify/publish first).');
+        $payment = $this->recordBatchPayment([$task->id], $admin, $payload)->first();
+
+        if (! $payment) {
+            throw new \RuntimeException('Payment could not be recorded.');
         }
 
-        if ($task->payment()->exists()) {
-            throw new \InvalidArgumentException('Payment is already recorded for this chapter.');
-        }
-
-        $amount = $task->payableAmountInr();
-        if ($amount <= 0) {
-            throw new \InvalidArgumentException('No agreed amount on this task.');
-        }
-
-        $payment = DB::transaction(function () use ($task, $admin, $payload, $amount) {
-            return ContentUploaderPayment::query()->create([
-                'content_upload_task_id' => $task->id,
-                'amount_inr' => $amount,
-                'paid_on' => $payload['paid_on'],
-                'method' => $payload['method'],
-                'upi_or_reference' => trim($payload['upi_or_reference']),
-                'notes' => filled(trim((string) ($payload['notes'] ?? '')))
-                    ? trim((string) $payload['notes'])
-                    : null,
-                'paid_by_user_id' => $admin->id,
-            ]);
-        });
-
-        $payment->load([
-            'task.assignee',
-            'task.textbookChapter.textbook.gradeLevel',
-            'paidBy:id,name',
-        ]);
-
-        if (ContentOperationsMailer::notifyPaymentRecorded($payment)) {
-            $payment->update(['emailed_at' => now()]);
-        }
-
-        return $payment->fresh([
-            'task.assignee',
-            'task.textbookChapter.textbook.gradeLevel',
-            'paidBy:id,name',
-        ]);
+        return $payment;
     }
 
     /**
@@ -129,6 +236,7 @@ class ContentFinanceService
 
         return [
             'id' => $payment->id,
+            'batch_id' => $payment->batch_id,
             'amount_inr' => $payment->amount_inr,
             'paid_on' => $payment->paid_on?->toDateString(),
             'method' => $payment->method,
@@ -147,5 +255,48 @@ class ContentFinanceService
             ] : null,
             'task_id' => $task?->id,
         ];
+    }
+
+    /**
+     * @param  Collection<int, ContentUploaderPayment>  $payments
+     * @return list<array<string, mixed>>
+     */
+    public function serializePaymentsGrouped(Collection $payments): array
+    {
+        return $payments
+            ->groupBy(function (ContentUploaderPayment $payment) {
+                if ($payment->batch_id) {
+                    return 'batch:'.$payment->batch_id;
+                }
+
+                return 'single:'.$payment->id;
+            })
+            ->map(function (Collection $group) {
+                $first = $group->first();
+                $assignee = $first?->task?->assignee;
+
+                return [
+                    'batch_id' => $first?->batch_id,
+                    'paid_on' => $first?->paid_on?->toDateString(),
+                    'method' => $first?->method,
+                    'method_label' => $first?->methodLabel(),
+                    'upi_or_reference' => $first?->upi_or_reference,
+                    'notes' => $first?->notes,
+                    'emailed_at' => $group->every(fn (ContentUploaderPayment $p) => $p->emailed_at !== null)
+                        ? $group->max('emailed_at')?->toDateTimeString()
+                        : null,
+                    'paid_by' => $first?->paidBy?->only(['id', 'name']),
+                    'assignee' => $assignee?->only(['id', 'name', 'email']),
+                    'total_inr' => (int) $group->sum('amount_inr'),
+                    'chapter_count' => $group->count(),
+                    'payments' => $group
+                        ->map(fn (ContentUploaderPayment $payment) => $this->serializePayment($payment))
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->sortByDesc(fn (array $group) => $group['paid_on'] ?? '')
+            ->values()
+            ->all();
     }
 }

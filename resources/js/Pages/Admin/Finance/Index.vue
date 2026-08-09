@@ -7,17 +7,20 @@ import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
-    unpaid: { type: Array, default: () => [] },
+    unpaid_groups: { type: Array, default: () => [] },
     unpaid_total_inr: { type: Number, default: 0 },
-    payments: { type: Array, default: () => [] },
+    unpaid_chapter_count: { type: Number, default: 0 },
+    payment_groups: { type: Array, default: () => [] },
     paid_total_inr: { type: Number, default: 0 },
 });
 
 const page = usePage();
-const payingTaskId = ref(null);
+const payingGroupKey = ref(null);
+const expandedGroupKeys = ref(new Set());
+const expandedPaidKeys = ref(new Set());
 
 const form = useForm({
-    content_upload_task_id: null,
+    content_upload_task_ids: [],
     paid_on: new Date().toISOString().slice(0, 10),
     method: 'upi',
     upi_or_reference: '',
@@ -35,9 +38,43 @@ const chapterLabel = (row) => {
     return `${ch.grade_name || ''} · Ch ${ch.chapter_number} — ${ch.title}`.trim();
 };
 
-const openPayForm = (task) => {
-    payingTaskId.value = task.id;
-    form.content_upload_task_id = task.id;
+const groupKey = (group) => String(group.assignee?.id ?? 'unknown');
+
+const isGroupExpanded = (group) => expandedGroupKeys.value.has(groupKey(group));
+
+const toggleGroupChapters = (group) => {
+    const key = groupKey(group);
+    const next = new Set(expandedGroupKeys.value);
+
+    if (next.has(key)) {
+        next.delete(key);
+    } else {
+        next.add(key);
+    }
+
+    expandedGroupKeys.value = next;
+};
+
+const isPaidExpanded = (group) => expandedPaidKeys.value.has(paidGroupKey(group));
+
+const paidGroupKey = (group) => group.batch_id || `single-${group.payments?.[0]?.id ?? 'x'}`;
+
+const togglePaidChapters = (group) => {
+    const key = paidGroupKey(group);
+    const next = new Set(expandedPaidKeys.value);
+
+    if (next.has(key)) {
+        next.delete(key);
+    } else {
+        next.add(key);
+    }
+
+    expandedPaidKeys.value = next;
+};
+
+const openPayForm = (group) => {
+    payingGroupKey.value = groupKey(group);
+    form.content_upload_task_ids = [...(group.task_ids || [])];
     form.paid_on = new Date().toISOString().slice(0, 10);
     form.method = 'upi';
     form.upi_or_reference = '';
@@ -46,24 +83,29 @@ const openPayForm = (task) => {
 };
 
 const cancelPay = () => {
-    payingTaskId.value = null;
+    payingGroupKey.value = null;
     form.reset();
-    form.content_upload_task_id = null;
+    form.content_upload_task_ids = [];
+    form.paid_on = new Date().toISOString().slice(0, 10);
+    form.method = 'upi';
 };
+
+const activePayGroup = computed(() => props.unpaid_groups.find((g) => groupKey(g) === payingGroupKey.value) ?? null);
 
 const submitPayment = () => {
     form.post(route('admin.finance.payments.store'), {
         preserveScroll: true,
         onSuccess: () => {
-            payingTaskId.value = null;
+            payingGroupKey.value = null;
             form.reset();
             form.paid_on = new Date().toISOString().slice(0, 10);
             form.method = 'upi';
+            form.content_upload_task_ids = [];
         },
     });
 };
 
-const unpaidCount = computed(() => props.unpaid.length);
+const uploaderCount = computed(() => props.unpaid_groups.length);
 </script>
 
 <template>
@@ -75,7 +117,7 @@ const unpaidCount = computed(() => props.unpaid.length);
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Accounts · Finance</h2>
                     <p class="text-sm text-gray-500">
-                        Pay content uploaders for verified / published chapter work (UPI) and email them the details.
+                        Pay content uploaders for verified / published chapter work — one UPI transfer per uploader, clubbed by person.
                     </p>
                 </div>
                 <Link :href="route('admin.content-tasks.index')" class="text-sm text-indigo-600 hover:underline">
@@ -104,51 +146,78 @@ const unpaidCount = computed(() => props.unpaid.length);
                         <div>
                             <h3 class="text-sm font-semibold text-amber-950">Payments to be done</h3>
                             <p class="text-xs text-amber-900">
-                                Verified / published chapters with an agreed rate and no payment yet.
+                                Grouped by uploader — record one combined UPI payment for all their pending chapters.
                             </p>
                         </div>
                         <div class="text-right">
                             <p class="text-xs uppercase tracking-wide text-amber-800">Total due</p>
                             <p class="text-2xl font-bold text-amber-950">{{ formatInr(unpaid_total_inr) }}</p>
-                            <p class="text-xs text-amber-800">{{ unpaidCount }} chapter{{ unpaidCount === 1 ? '' : 's' }}</p>
+                            <p class="text-xs text-amber-800">
+                                {{ unpaid_chapter_count }} chapter{{ unpaid_chapter_count === 1 ? '' : 's' }}
+                                · {{ uploaderCount }} uploader{{ uploaderCount === 1 ? '' : 's' }}
+                            </p>
                         </div>
                     </div>
 
-                    <div v-if="unpaid.length === 0" class="px-4 py-8 text-center text-sm text-gray-500">
+                    <div v-if="unpaid_groups.length === 0" class="px-4 py-8 text-center text-sm text-gray-500">
                         No pending payments. Publish verified chapter work to see amounts here.
                     </div>
 
                     <div v-else class="divide-y divide-gray-100">
-                        <div v-for="task in unpaid" :key="task.id" class="px-4 py-3">
+                        <div v-for="group in unpaid_groups" :key="groupKey(group)" class="px-4 py-3">
                             <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div>
-                                    <p class="font-medium text-gray-900">{{ chapterLabel(task) }}</p>
-                                    <p class="text-xs text-gray-500">
-                                        {{ task.chapter?.textbook_name }}
-                                        · {{ task.assignee?.name || 'Uploader' }}
-                                        <span v-if="task.assignee?.email">({{ task.assignee.email }})</span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="font-semibold text-gray-900">
+                                        {{ group.assignee?.name || 'Uploader' }}
                                     </p>
-                                    <p class="mt-1 text-xs text-gray-500">{{ task.status_label }}</p>
+                                    <p v-if="group.assignee?.email" class="text-xs text-gray-500">
+                                        {{ group.assignee.email }}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        class="mt-2 text-xs font-medium text-indigo-700 hover:underline"
+                                        @click="toggleGroupChapters(group)"
+                                    >
+                                        {{ isGroupExpanded(group) ? 'Hide' : 'Show' }}
+                                        {{ group.task_count }} chapter{{ group.task_count === 1 ? '' : 's' }}
+                                    </button>
+                                    <ul v-if="isGroupExpanded(group)" class="mt-2 space-y-1 border-l-2 border-amber-200 pl-3">
+                                        <li
+                                            v-for="task in group.tasks"
+                                            :key="task.id"
+                                            class="text-xs text-gray-700"
+                                        >
+                                            <span class="font-medium">{{ chapterLabel(task) }}</span>
+                                            <span class="text-gray-500"> · {{ formatInr(task.amount_inr) }}</span>
+                                            <span class="text-gray-400"> · {{ task.status_label }}</span>
+                                        </li>
+                                    </ul>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-3">
-                                    <p class="text-lg font-semibold text-gray-900">{{ formatInr(task.amount_inr) }}</p>
+                                    <div class="text-right">
+                                        <p class="text-lg font-bold text-gray-900">{{ formatInr(group.total_inr) }}</p>
+                                        <p class="text-[10px] uppercase tracking-wide text-gray-500">
+                                            {{ group.task_count }} × clubbed
+                                        </p>
+                                    </div>
                                     <PrimaryButton
-                                        v-if="payingTaskId !== task.id"
+                                        v-if="payingGroupKey !== groupKey(group)"
                                         type="button"
                                         class="!text-xs"
-                                        @click="openPayForm(task)"
+                                        @click="openPayForm(group)"
                                     >
-                                        Record UPI payment
+                                        Record combined UPI
                                     </PrimaryButton>
                                 </div>
                             </div>
 
                             <div
-                                v-if="payingTaskId === task.id"
+                                v-if="payingGroupKey === groupKey(group)"
                                 class="mt-3 rounded-md border border-indigo-200 bg-indigo-50/60 p-3"
                             >
                                 <p class="text-xs font-semibold uppercase tracking-wide text-indigo-900">
-                                    Payment details (sent by email to uploader)
+                                    One UPI payment for {{ group.task_count }} chapter{{ group.task_count === 1 ? '' : 's' }}
+                                    ({{ formatInr(group.total_inr) }}) — emailed to {{ group.assignee?.email }}
                                 </p>
                                 <div class="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                                     <div>
@@ -174,7 +243,7 @@ const unpaidCount = computed(() => props.unpaid.length);
                                             v-model="form.upi_or_reference"
                                             type="text"
                                             class="mt-1 block w-full rounded-md border-gray-300 text-sm"
-                                            placeholder="e.g. UPI ref / UTR"
+                                            placeholder="e.g. UPI ref / UTR for the combined transfer"
                                         >
                                         <p v-if="form.errors.upi_or_reference" class="mt-1 text-xs text-rose-700">
                                             {{ form.errors.upi_or_reference }}
@@ -192,7 +261,7 @@ const unpaidCount = computed(() => props.unpaid.length);
                                 </div>
                                 <div class="mt-3 flex flex-wrap gap-2">
                                     <PrimaryButton type="button" :disabled="form.processing" @click="submitPayment">
-                                        {{ form.processing ? 'Saving…' : `Save & email ${formatInr(task.amount_inr)}` }}
+                                        {{ form.processing ? 'Saving…' : `Save & email ${formatInr(activePayGroup?.total_inr ?? group.total_inr)}` }}
                                     </PrimaryButton>
                                     <SecondaryButton type="button" :disabled="form.processing" @click="cancelPay">
                                         Cancel
@@ -207,7 +276,7 @@ const unpaidCount = computed(() => props.unpaid.length);
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-emerald-50 px-4 py-3">
                         <div>
                             <h3 class="text-sm font-semibold text-emerald-950">Payments done</h3>
-                            <p class="text-xs text-emerald-900">Recent payments with UPI / reference details.</p>
+                            <p class="text-xs text-emerald-900">Grouped by uploader and UPI transfer.</p>
                         </div>
                         <div class="text-right">
                             <p class="text-xs uppercase tracking-wide text-emerald-800">Shown total</p>
@@ -215,49 +284,52 @@ const unpaidCount = computed(() => props.unpaid.length);
                         </div>
                     </div>
 
-                    <div v-if="payments.length === 0" class="px-4 py-8 text-center text-sm text-gray-500">
+                    <div v-if="payment_groups.length === 0" class="px-4 py-8 text-center text-sm text-gray-500">
                         No payments recorded yet.
                     </div>
 
-                    <div v-else class="overflow-x-auto">
-                        <table class="min-w-full text-left text-sm">
-                            <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
-                                <tr>
-                                    <th class="px-4 py-2">Paid on</th>
-                                    <th class="px-4 py-2">Chapter</th>
-                                    <th class="px-4 py-2">Uploader</th>
-                                    <th class="px-4 py-2">Amount</th>
-                                    <th class="px-4 py-2">Method / ref</th>
-                                    <th class="px-4 py-2">Notes</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100">
-                                <tr v-for="payment in payments" :key="payment.id">
-                                    <td class="whitespace-nowrap px-4 py-2 text-gray-700">{{ payment.paid_on }}</td>
-                                    <td class="px-4 py-2">
-                                        <p class="font-medium text-gray-900">{{ chapterLabel(payment) }}</p>
-                                        <p class="text-xs text-gray-500">{{ payment.chapter?.textbook_name }}</p>
-                                    </td>
-                                    <td class="px-4 py-2 text-gray-700">
-                                        {{ payment.assignee?.name || '—' }}
-                                        <p v-if="payment.assignee?.email" class="text-xs text-gray-500">
-                                            {{ payment.assignee.email }}
-                                        </p>
-                                    </td>
-                                    <td class="whitespace-nowrap px-4 py-2 font-semibold text-gray-900">
-                                        {{ formatInr(payment.amount_inr) }}
-                                    </td>
-                                    <td class="px-4 py-2 text-gray-700">
-                                        <span class="font-medium">{{ payment.method_label }}</span>
-                                        <p class="font-mono text-xs">{{ payment.upi_or_reference }}</p>
-                                    </td>
-                                    <td class="px-4 py-2 text-xs text-gray-600">
-                                        {{ payment.notes || '—' }}
-                                        <p v-if="payment.emailed_at" class="mt-0.5 text-emerald-700">Emailed</p>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div v-else class="divide-y divide-gray-100">
+                        <div v-for="group in payment_groups" :key="paidGroupKey(group)" class="px-4 py-3">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <p class="font-semibold text-gray-900">{{ group.assignee?.name || '—' }}</p>
+                                    <p v-if="group.assignee?.email" class="text-xs text-gray-500">{{ group.assignee.email }}</p>
+                                    <p class="mt-1 text-xs text-gray-600">
+                                        Paid {{ group.paid_on }}
+                                        · {{ group.method_label }}
+                                        · <span class="font-mono">{{ group.upi_or_reference }}</span>
+                                    </p>
+                                    <button
+                                        v-if="group.chapter_count > 1"
+                                        type="button"
+                                        class="mt-1 text-xs font-medium text-indigo-700 hover:underline"
+                                        @click="togglePaidChapters(group)"
+                                    >
+                                        {{ isPaidExpanded(group) ? 'Hide' : 'Show' }} {{ group.chapter_count }} chapters
+                                    </button>
+                                    <p v-else-if="group.payments?.[0]" class="mt-1 text-xs text-gray-700">
+                                        {{ chapterLabel(group.payments[0]) }}
+                                    </p>
+                                    <ul v-if="isPaidExpanded(group)" class="mt-2 space-y-1 border-l-2 border-emerald-200 pl-3">
+                                        <li
+                                            v-for="payment in group.payments"
+                                            :key="payment.id"
+                                            class="text-xs text-gray-700"
+                                        >
+                                            {{ chapterLabel(payment) }} · {{ formatInr(payment.amount_inr) }}
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-lg font-bold text-gray-900">{{ formatInr(group.total_inr) }}</p>
+                                    <p v-if="group.chapter_count > 1" class="text-[10px] uppercase text-gray-500">
+                                        {{ group.chapter_count }} chapters
+                                    </p>
+                                    <p v-if="group.emailed_at" class="text-xs text-emerald-700">Emailed</p>
+                                    <p v-if="group.notes" class="mt-1 max-w-xs text-xs text-gray-500">{{ group.notes }}</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>

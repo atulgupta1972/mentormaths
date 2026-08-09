@@ -15,6 +15,7 @@ class ContentUploaderPayment extends Model
 
     protected $fillable = [
         'content_upload_task_id',
+        'batch_id',
         'amount_inr',
         'paid_on',
         'method',

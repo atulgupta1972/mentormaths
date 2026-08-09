@@ -6,6 +6,7 @@ use App\Mail\ContentTaskAgreementAdmin;
 use App\Mail\ContentTaskAssignedUploader;
 use App\Mail\ContentTaskReturnedUploader;
 use App\Mail\ContentTaskSubmittedForPublishAdmin;
+use App\Mail\ContentUploaderBatchPaymentMail;
 use App\Mail\ContentUploaderPaymentMail;
 use App\Models\ContentUploadTask;
 use App\Models\ContentUploaderPayment;
@@ -114,26 +115,36 @@ class ContentOperationsMailer
         }
     }
 
-    public static function notifyPaymentRecorded(ContentUploaderPayment $payment): bool
+    public static function notifyBatchPaymentRecorded(\Illuminate\Support\Collection $payments): bool
     {
-        $uploader = $payment->task?->assignee;
+        $first = $payments->first();
+        $uploader = $first?->task?->assignee;
 
         if (! $uploader || ! str_contains($uploader->email, '@')) {
             return false;
         }
 
         try {
-            Mail::to($uploader->email)->send(new ContentUploaderPaymentMail($payment));
+            if ($payments->count() === 1) {
+                Mail::to($uploader->email)->send(new ContentUploaderPaymentMail($payments->first()));
+            } else {
+                Mail::to($uploader->email)->send(new ContentUploaderBatchPaymentMail($uploader, $payments));
+            }
 
             return true;
         } catch (\Throwable $e) {
-            Log::error('Failed to send content uploader payment email.', [
-                'content_uploader_payment_id' => $payment->id,
+            Log::error('Failed to send content uploader batch payment email.', [
+                'payment_ids' => $payments->pluck('id')->all(),
                 'uploader_id' => $uploader->id,
                 'error' => $e->getMessage(),
             ]);
 
             return false;
         }
+    }
+
+    public static function notifyPaymentRecorded(ContentUploaderPayment $payment): bool
+    {
+        return self::notifyBatchPaymentRecorded(collect([$payment]));
     }
 }
