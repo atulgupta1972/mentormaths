@@ -21,6 +21,8 @@ use App\Services\StudentProgressWhatsAppService;
 use App\Services\StudentPromotionService;
 use App\Support\AssignmentMailer;
 use App\Support\StudentProgressMailer;
+use App\Support\StudentProgressWhatsAppMailer;
+use App\Support\WhatsApp\WhatsAppSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -332,12 +334,30 @@ class StudentController extends Controller
         }
 
         if ($request->boolean('send_whatsapp')) {
-            $whatsappNotifications = $this->progressWhatsAppService->notificationsForSummary($student, $summary);
+            if (WhatsAppSender::canAutoSend()) {
+                $waResult = StudentProgressWhatsAppMailer::send($student, $summary);
 
-            if ($whatsappNotifications === []) {
-                $warnings[] = 'No WhatsApp recipients — tick Notify on at least one mobile number above and click Save notification settings.';
+                if ($waResult['sent_count'] > 0) {
+                    $messages[] = "WhatsApp sent to {$waResult['sent_count']} recipient(s).";
+                }
+
+                if ($waResult['error'] === 'no_recipients') {
+                    $warnings[] = 'No WhatsApp recipients — tick Notify on at least one mobile number above and click Save notification settings.';
+                } elseif ($waResult['failed_count'] > 0) {
+                    $warnings[] = "{$waResult['failed_count']} WhatsApp message(s) could not be sent — use the copy links below to retry.";
+                    $whatsappNotifications = collect($waResult['results'])
+                        ->reject(fn (array $row) => $row['sent'] ?? false)
+                        ->values()
+                        ->all();
+                }
             } else {
-                $messages[] = count($whatsappNotifications).' WhatsApp message'.(count($whatsappNotifications) === 1 ? '' : 's').' ready below.';
+                $whatsappNotifications = $this->progressWhatsAppService->notificationsForSummary($student, $summary);
+
+                if ($whatsappNotifications === []) {
+                    $warnings[] = 'No WhatsApp recipients — tick Notify on at least one mobile number above and click Save notification settings.';
+                } else {
+                    $messages[] = count($whatsappNotifications).' WhatsApp message'.(count($whatsappNotifications) === 1 ? '' : 's').' ready below.';
+                }
             }
         }
 

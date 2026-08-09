@@ -8,6 +8,7 @@ use App\Models\GradeLevel;
 use App\Services\AdminGradeContext;
 use App\Services\PendingWorkEmailService;
 use App\Support\MailConfigStatus;
+use App\Support\WhatsAppConfigStatus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -27,6 +28,7 @@ class NotificationSettingsController extends Controller
 
         return Inertia::render('Admin/Notifications/Index', [
             'mailSettings' => MailConfigStatus::forAdmin(),
+            'whatsappSettings' => WhatsAppConfigStatus::forAdmin(),
             'activeYear' => $activeYear?->only(['id', 'name']),
             'selectedGrade' => $grade?->only(['id', 'name']),
             'gradeLevels' => GradeLevel::query()

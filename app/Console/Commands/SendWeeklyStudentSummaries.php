@@ -9,6 +9,8 @@ use App\Services\FormulaDrillReportService;
 use App\Services\StudentNotificationEmailService;
 use App\Services\StudentProgressSummaryService;
 use App\Support\StudentProgressMailer;
+use App\Support\StudentProgressWhatsAppMailer;
+use App\Support\WhatsApp\WhatsAppSender;
 use Illuminate\Console\Command;
 
 class SendWeeklyStudentSummaries extends Command
@@ -82,11 +84,23 @@ class SendWeeklyStudentSummaries extends Command
                 $failed++;
                 $this->warn("Failed for {$student->name}");
             }
+
+            if (WhatsAppSender::canAutoSend()) {
+                $waResult = StudentProgressWhatsAppMailer::send($student, $summary);
+
+                if ($waResult['sent_count'] > 0) {
+                    $this->info("  WhatsApp: {$waResult['sent_count']} sent for {$student->name}");
+                }
+
+                if ($waResult['failed_count'] > 0) {
+                    $this->warn("  WhatsApp: {$waResult['failed_count']} failed for {$student->name}");
+                }
+            }
         }
 
         $this->info("Weekly summaries: {$sent} sent, {$skipped} skipped, {$failed} failed.");
 
-        if (config('progress_summary.whatsapp_driver') === 'manual') {
+        if (! WhatsAppSender::canAutoSend()) {
             $this->comment('WhatsApp: manual mode — use student page to copy message or download PDF for parents.');
         }
 

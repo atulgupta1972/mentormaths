@@ -27,6 +27,55 @@ class StudentProgressWhatsAppService
     }
 
     /**
+     * @return list<array{mobile: string, label: string, message: string}>
+     */
+    public function notificationsForBalanceReminder(Student $student, array $summary): array
+    {
+        $message = $this->buildBalanceMessage($summary);
+        $recipients = $this->contactService->recipientsForStudent($student);
+
+        return array_map(fn (array $recipient) => [
+            'mobile' => $recipient['mobile'],
+            'label' => $recipient['label'],
+            'message' => $message,
+        ], $recipients);
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     */
+    public function buildBalanceMessage(array $summary): string
+    {
+        $lines = [
+            'Hello, this is Mentor Maths.',
+            '',
+            "Daily work reminder for {$summary['student_name']}",
+            'As of: '.($summary['as_of_label'] ?? ''),
+        ];
+
+        if ($summary['class_name'] ?? null) {
+            $lines[] = 'Class: '.$summary['class_name'];
+        }
+
+        if (($summary['stats']['balance_count'] ?? 0) === 0) {
+            $lines[] = '';
+            $lines[] = 'All caught up — nothing pending today.';
+        } else {
+            $this->appendOverdueSection($lines, $summary);
+            $this->appendPendingSection($lines, $summary);
+            $this->appendHelpSection($lines, $summary);
+        }
+
+        $lines[] = '';
+        $lines[] = 'View details:';
+        $lines[] = $summary['dashboard_url'];
+        $lines[] = '';
+        $lines[] = 'Thank you.';
+
+        return implode("\n", $lines);
+    }
+
+    /**
      * @param  array<string, mixed>  $summary
      */
     public function buildMessage(array $summary): string

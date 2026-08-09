@@ -94,7 +94,14 @@ class AssignmentMailer
         $email = self::resolveStudentEmail($student);
 
         if (! $email) {
-            return ['sent' => false, 'email' => null, 'error' => 'no_email'];
+            $whatsapp = AssignmentWhatsAppMailer::sendAssignedMany($student, $worksheets, $dueDate, $notes);
+
+            return [
+                'sent' => false,
+                'email' => null,
+                'error' => 'no_email',
+                'whatsapp' => $whatsapp,
+            ];
         }
 
         $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
@@ -110,7 +117,15 @@ class AssignmentMailer
 
             $viaLog = config('mail.default') === 'log';
 
-            return ['sent' => true, 'email' => $email, 'error' => null, 'via_log' => $viaLog];
+            $whatsapp = AssignmentWhatsAppMailer::sendAssignedMany($student, $worksheets, $dueDate, $notes);
+
+            return [
+                'sent' => true,
+                'email' => $email,
+                'error' => null,
+                'via_log' => $viaLog,
+                'whatsapp' => $whatsapp,
+            ];
         } catch (\Throwable $e) {
             Log::error('Failed to send assignment email.', [
                 'student_id' => $student->id,
@@ -119,7 +134,14 @@ class AssignmentMailer
                 'error' => $e->getMessage(),
             ]);
 
-            return ['sent' => false, 'email' => $email, 'error' => 'send_failed'];
+            $whatsapp = AssignmentWhatsAppMailer::sendAssignedMany($student, $worksheets, $dueDate, $notes);
+
+            return [
+                'sent' => false,
+                'email' => $email,
+                'error' => 'send_failed',
+                'whatsapp' => $whatsapp,
+            ];
         }
     }
 
@@ -237,22 +259,32 @@ class AssignmentMailer
      */
     public static function flashSuffixForSingle(array $result, string $studentName): ?string
     {
+        $parts = [];
+
         if ($result['sent']) {
             $to = $result['email'] ?? 'recipient';
-            $suffix = " Email sent to {$to}";
+            $emailPart = " Email sent to {$to}";
 
             if (! empty($result['via_log'])) {
-                return $suffix.' (log mailer only — not delivered; set MAIL_MAILER=smtp in .env).';
+                $emailPart .= ' (log mailer only — not delivered; set MAIL_MAILER=smtp in .env).';
+            } else {
+                $emailPart .= ' (admin CC\'d).';
             }
 
-            return $suffix.' (admin CC\'d).';
+            $parts[] = $emailPart;
+        } elseif ($result['error'] === 'no_email') {
+            $parts[] = " No email sent for {$studentName} — add a contact email on their profile or ensure their login account is linked.";
+        } elseif (($result['error'] ?? null) !== null) {
+            $parts[] = " Email could not be sent for {$studentName}.";
         }
 
-        if ($result['error'] === 'no_email') {
-            return " No email sent for {$studentName} — add a contact email on their profile or ensure their login account is linked.";
+        $whatsapp = $result['whatsapp'] ?? null;
+
+        if (is_array($whatsapp) && ($whatsapp['sent_count'] ?? 0) > 0) {
+            $parts[] = " WhatsApp sent to {$whatsapp['sent_count']} recipient(s).";
         }
 
-        return " Email could not be sent for {$studentName}.";
+        return $parts === [] ? null : implode('', $parts);
     }
 
     /**

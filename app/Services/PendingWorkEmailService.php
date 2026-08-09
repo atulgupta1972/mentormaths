@@ -6,6 +6,8 @@ use App\Models\AcademicYear;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Support\StudentDailyBalanceMailer;
+use App\Support\StudentDailyBalanceWhatsAppMailer;
+use App\Support\WhatsApp\WhatsAppSender;
 use Carbon\Carbon;
 
 class PendingWorkEmailService
@@ -44,6 +46,10 @@ class PendingWorkEmailService
         }
 
         $mailResult = StudentDailyBalanceMailer::send($student, $summary, $recipients);
+
+        if (WhatsAppSender::canAutoSend() && WhatsAppSender::channelEnabled('pending_work')) {
+            StudentDailyBalanceWhatsAppMailer::send($student, $summary);
+        }
 
         return $this->result(
             $mailResult['sent'],

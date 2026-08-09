@@ -7,6 +7,8 @@ use App\Models\StudentEnrollment;
 use App\Services\StudentNotificationEmailService;
 use App\Services\StudentProgressSummaryService;
 use App\Support\StudentDailyBalanceMailer;
+use App\Support\StudentDailyBalanceWhatsAppMailer;
+use App\Support\WhatsApp\WhatsAppSender;
 use Illuminate\Console\Command;
 
 class SendDailyStudentBalanceReminders extends Command
@@ -99,6 +101,18 @@ class SendDailyStudentBalanceReminders extends Command
             } else {
                 $failed++;
                 $this->warn("Failed for {$student->name}");
+            }
+
+            if (WhatsAppSender::canAutoSend()) {
+                $waResult = StudentDailyBalanceWhatsAppMailer::send($student, $summary);
+
+                if ($waResult['sent_count'] > 0) {
+                    $this->info("  WhatsApp: {$waResult['sent_count']} sent for {$student->name}");
+                }
+
+                if ($waResult['failed_count'] > 0) {
+                    $this->warn("  WhatsApp: {$waResult['failed_count']} failed for {$student->name}");
+                }
             }
         }
 
