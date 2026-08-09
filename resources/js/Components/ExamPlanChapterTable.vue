@@ -1,6 +1,7 @@
 <script setup>
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { questionHubChapterUrl } from '@/utils/questionHub';
 import { Link } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -37,15 +38,8 @@ const prepStatusClass = (row) => {
     return 'bg-indigo-50 text-indigo-800';
 };
 
-/** Chapter tests hub (auto-mix / build manually) — board & class load from the chapter syllabus. */
-const chapterHubHref = (chapterId) => {
-    const url = route('admin.practice-sets.chapters.show', chapterId);
-    if (!props.studentId) {
-        return url;
-    }
-
-    return `${url}?student_id=${props.studentId}`;
-};
+/** Question bank chapter hub — Add MCQs / fill blanks / written / formulas (board & class from chapter). */
+const chapterHubHref = (chapterId) => questionHubChapterUrl(chapterId);
 
 const setHref = (set) => {
     if (!props.isAdminContext || !set.practice_set_id) {
