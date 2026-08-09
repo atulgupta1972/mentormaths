@@ -13,6 +13,9 @@ use Illuminate\Support\Facades\DB;
 
 class ContentVerificationService
 {
+    public function __construct(
+        private QuestionDiagramService $diagrams,
+    ) {}
     /**
      * @return array{
      *     run: ContentVerificationRun,
@@ -64,6 +67,8 @@ class ContentVerificationService
                 'method_hint' => $question->method_hint,
                 'difficulty' => $question->difficulty,
                 'diagram_url' => $question->diagram_url,
+                'has_diagram' => filled($question->diagram_path),
+                'needs_figure' => $this->questionNeedsFigure($question),
                 'options' => $question->options->values()->map(function (QuestionOption $option, int $optionIndex) {
                     return [
                         'id' => $option->id,
@@ -207,6 +212,31 @@ class ContentVerificationService
         });
     }
 
+    public function attachDiagram(
+        ContentVerificationRun $run,
+        int $questionId,
+        \Illuminate\Http\UploadedFile $file,
+        User $user,
+    ): Question {
+        $this->assertCanEditRun($run, $user);
+        $question = $this->questionForRun($run, $questionId);
+        $this->diagrams->attach($question, $file);
+
+        return $question->fresh();
+    }
+
+    public function removeDiagram(
+        ContentVerificationRun $run,
+        int $questionId,
+        User $user,
+    ): Question {
+        $this->assertCanEditRun($run, $user);
+        $question = $this->questionForRun($run, $questionId);
+        $this->diagrams->deleteForQuestion($question);
+
+        return $question->fresh();
+    }
+
     public function saveCheck(
         ContentVerificationRun $run,
         int $questionId,
@@ -281,6 +311,41 @@ class ContentVerificationService
                 ]);
             }
         }
+    }
+
+    private function questionForRun(ContentVerificationRun $run, int $questionId): Question
+    {
+        $task = $run->task;
+        $allowedIds = $this->questionIdsForChapter($task);
+
+        if (! in_array($questionId, $allowedIds, true)) {
+            throw new \InvalidArgumentException('Question does not belong to this chapter task.');
+        }
+
+        $question = Question::query()->findOrFail($questionId);
+
+        if (! $question->isMcq()) {
+            throw new \InvalidArgumentException('Only MCQ questions support figure upload here.');
+        }
+
+        return $question;
+    }
+
+    private function questionNeedsFigure(Question $question): bool
+    {
+        if (filled($question->diagram_path)) {
+            return false;
+        }
+
+        $haystack = strtolower(strip_tags((string) $question->question_text.' '.(string) $question->explanation));
+
+        return str_contains($haystack, 'requires a figure upload')
+            || str_contains($haystack, 'needs_diagram')
+            || str_contains($haystack, 'see the figure')
+            || str_contains($haystack, 'see the graph')
+            || str_contains($haystack, 'see the diagram')
+            || str_contains($haystack, 'shown in the figure')
+            || str_contains($haystack, 'shown in the graph');
     }
 
     private function assertCanEditRun(ContentVerificationRun $run, User $user): void

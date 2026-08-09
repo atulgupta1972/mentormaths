@@ -37,6 +37,19 @@ class TextbookChapterMcqPromptService
                     'hint' => 'Substitute n = 5 into the explicit formula.',
                     'explanation' => 't5 = 3(5) − 4 = 11. Answer: B',
                     'difficulty' => 'Easy',
+                    'needs_diagram' => false,
+                ],
+                [
+                    'topic' => 'Reading a bar graph',
+                    'question' => 'The bar graph shows books sold each month. In which month were the most books sold?',
+                    'needs_diagram' => true,
+                    'diagram_file' => 'chart1.png',
+                    'chart' => 'THIS QUESTION REQUIRES A FIGURE UPLOAD — bar graph of books sold by month.',
+                    'options' => ['January', 'February', 'March', 'April'],
+                    'correct_index' => 1,
+                    'hint' => 'Compare the heights of the bars.',
+                    'explanation' => 'February has the tallest bar. Answer: B',
+                    'difficulty' => 'Easy',
                 ],
                 [
                     'topic' => 'Reading a table',
@@ -55,15 +68,7 @@ class TextbookChapterMcqPromptService
                     'hint' => 'Compare the values in the second column.',
                     'explanation' => 'Bhuvan read 8 books, which is the greatest. Answer: B',
                     'difficulty' => 'Easy',
-                ],
-                [
-                    'topic' => 'Comparing numbers',
-                    'question' => 'Which number is the greatest?',
-                    'options' => ['12', '8', '15', '19'],
-                    'correct_index' => 3,
-                    'hint' => 'Compare all four values.',
-                    'explanation' => '19 is the greatest. Answer: D',
-                    'difficulty' => 'Easy',
+                    'needs_diagram' => false,
                 ],
             ],
         ];
@@ -97,6 +102,8 @@ Return ONLY valid JSON (no markdown fences) in this exact shape:
     {
       "topic": "Short topic label (e.g. Explicit rule, AP, End-of-chapter)",
       "question": "Student-facing question text",
+      "needs_diagram": true,
+      "diagram_file": "chart1.png",
       "chart": "optional — full chart/graph description when the PDF uses a figure",
       "table": "optional — markdown table string OR {\"headers\": [...], \"rows\": [[...]]}",
       "options": ["A text", "B text", "C text", "D text"],
@@ -115,26 +122,34 @@ Rules:
 - Exactly 4 options per question when possible
 - Do not skip numbered exercises — extract ALL solvable items
 - Fix broken subscripts (t_n, u_n) in question text
-- For diagram/geometry questions, describe the figure fully in "question" and/or "chart"
+
+FIGURE / DIAGRAM FLAG (important for uploaders):
+- If the PDF question depends on a figure, graph, chart, map, geometry drawing, or photo, set:
+  `"needs_diagram": true`
+  and start `"chart"` with exactly: `THIS QUESTION REQUIRES A FIGURE UPLOAD —`
+  then describe the figure briefly.
+- Also set `"diagram_file": "chart1.png"` (unique filename) when packing a zip with that image.
+- If the question is text-only (or a table fully in JSON), set `"needs_diagram": false` and omit diagram_file.
+- Uploaders use `needs_diagram: true` to know they must upload the correct figure while reviewing.
 
 Charts and tables:
-- For **zip import with images** (recommended for bar graphs, dot plots, geometry): put PNG/JPG files in the zip and set `"diagram_file": "chart1.png"` (or `"chart_file"`) on each question. Optional `"chart"` / `"table"` text is still merged into the question as backup.
-- For **paste JSON only** (no images): flatten ALL data into `"chart"` and/or `"table"`. Example:
-  "Bar chart 'Books sold' (y-axis: number of books, 1 unit = 10 books). Jan: 30, Feb: 50, Mar: 40."
+- For **zip import with images** (recommended for bar graphs, dot plots, geometry): put PNG/JPG files in the zip and set `"diagram_file": "chart1.png"` (or `"chart_file"`) plus `"needs_diagram": true` on each question that needs the image. Optional `"chart"` / `"table"` text is still merged into the question as backup.
+- For **paste JSON only** (no images yet): still set `"needs_diagram": true` and the REQUIRED FIGURE UPLOAD sentence in `"chart"` so the uploader knows to add the figure during review. Also flatten ALL readable data into `"chart"` and/or `"table"` as backup. Example:
+  "THIS QUESTION REQUIRES A FIGURE UPLOAD — Bar chart 'Books sold' (y-axis: number of books, 1 unit = 10 books). Jan: 30, Feb: 50, Mar: 40."
   Do NOT put a grid inside "chart" — use sentences or comma-separated label: value pairs.
   Include title, axis labels, scale/units, and every category value. Never say "see graph above".
 - Tables: use structured {"headers": [...], "rows": [[...]]} or a simple markdown table string in "table".
   Include every column header and row with exact numbers. Never say "see the table above".
-- Each question must be fully solvable from JSON alone when no diagram_file is used.
+- Each question must be fully solvable from JSON alone when no diagram_file is used (or after the figure is uploaded).
 - Double-check table/chart numbers against the PDF; do not round or omit rows.
 
 Zip pack format (charts / pictures):
 - Zip contains `questions.json` plus image files (`chart1.png`, `q3.jpg`, …).
-- In JSON, set `"diagram_file": "chart1.png"` on questions that need that figure.
+- In JSON, set `"needs_diagram": true` and `"diagram_file": "chart1.png"` on questions that need that figure.
 - Multiple questions may share one image file. Filename matching is case-insensitive.
 - Upload the zip on the textbook chapter page (Step 3 — Import zip pack).
 
-After import, the admin splits questions into class sets on the review page.
+After import, the uploader reviews each question and can upload/replace missing figures.
 
 Sample:
 {$sampleJson}

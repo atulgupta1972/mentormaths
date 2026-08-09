@@ -173,6 +173,64 @@ class ContentTaskController extends Controller
         return back()->with('success', 'Question saved and marked verified.');
     }
 
+    public function uploadVerificationDiagram(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+            'diagram' => ['required', 'image', 'max:5120'],
+        ]);
+
+        $run = ContentVerificationRun::query()->findOrFail($validated['run_id']);
+
+        if ($run->content_upload_task_id !== $contentTask->id) {
+            abort(403);
+        }
+
+        try {
+            $this->verificationService->attachDiagram(
+                $run,
+                (int) $validated['question_id'],
+                $request->file('diagram'),
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Figure uploaded for this question.');
+    }
+
+    public function removeVerificationDiagram(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+        ]);
+
+        $run = ContentVerificationRun::query()->findOrFail($validated['run_id']);
+
+        if ($run->content_upload_task_id !== $contentTask->id) {
+            abort(403);
+        }
+
+        try {
+            $this->verificationService->removeDiagram(
+                $run,
+                (int) $validated['question_id'],
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Figure removed.');
+    }
+
     public function completeVerification(Request $request, ContentUploadTask $contentTask): RedirectResponse
     {
         $this->authorizeTask($contentTask, $request);

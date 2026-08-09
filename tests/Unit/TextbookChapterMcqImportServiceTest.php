@@ -69,6 +69,8 @@ class TextbookChapterMcqImportServiceTest extends TestCase
 
         $this->assertStringContainsString('Charts and tables', $payload['prompt']);
         $this->assertStringContainsString('diagram_file', $payload['prompt']);
+        $this->assertStringContainsString('needs_diagram', $payload['prompt']);
+        $this->assertStringContainsString('THIS QUESTION REQUIRES A FIGURE UPLOAD', $payload['prompt']);
         $this->assertStringContainsString('do NOT default every question to option A', $payload['prompt']);
         $this->assertStringContainsString('Books read', $payload['sample_json']);
     }

@@ -375,6 +375,52 @@ class ContentUploadTaskController extends Controller
         return back()->with('success', 'Question saved.');
     }
 
+    public function uploadVerificationDiagram(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+            'diagram' => ['required', 'image', 'max:5120'],
+        ]);
+
+        $run = $this->authorizeVerificationRun($contentTask, (int) $validated['run_id']);
+
+        try {
+            $this->verificationService->attachDiagram(
+                $run,
+                (int) $validated['question_id'],
+                $request->file('diagram'),
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Figure uploaded for this question.');
+    }
+
+    public function removeVerificationDiagram(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+        ]);
+
+        $run = $this->authorizeVerificationRun($contentTask, (int) $validated['run_id']);
+
+        try {
+            $this->verificationService->removeDiagram(
+                $run,
+                (int) $validated['question_id'],
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Figure removed.');
+    }
+
     public function returnForReverification(Request $request, ContentUploadTask $contentTask): RedirectResponse
     {
         $validated = $request->validate([

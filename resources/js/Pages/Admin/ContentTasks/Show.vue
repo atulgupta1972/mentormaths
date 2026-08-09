@@ -103,6 +103,8 @@ const sendBack = () => {
                     :task="task"
                     :verification="verification"
                     :save-question-route="route('admin.content-tasks.verification-question', task.id)"
+                    :upload-diagram-route="route('admin.content-tasks.verification-diagram', task.id)"
+                    :remove-diagram-route="route('admin.content-tasks.verification-diagram.remove', task.id)"
                     :editable-statuses="['uploaded', 'verification_in_progress', 'verified', 'submitted_for_publish', 'published']"
                     :show-complete-actions="false"
                 />

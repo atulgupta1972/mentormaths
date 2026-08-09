@@ -632,6 +632,12 @@ const quickAssignSet = (setId) => {
                                 </td>
                                 <td class="px-3 py-3 align-top font-medium text-gray-800">{{ item.label }}</td>
                                 <td class="px-3 py-3 align-top">
+                                    <p
+                                        v-if="item.needs_diagram && !item.diagram_preview_url"
+                                        class="mb-2 rounded bg-amber-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-900"
+                                    >
+                                        Requires figure upload
+                                    </p>
                                     <img
                                         v-if="item.diagram_preview_url"
                                         :src="item.diagram_preview_url"
@@ -639,7 +645,7 @@ const quickAssignSet = (setId) => {
                                         class="max-h-36 max-w-full rounded border border-gray-200 object-contain"
                                     >
                                     <p v-else-if="item.diagram_file" class="text-xs text-amber-700">{{ item.diagram_file }} (missing)</p>
-                                    <span v-else class="text-xs text-gray-400">—</span>
+                                    <span v-else-if="!item.needs_diagram" class="text-xs text-gray-400">—</span>
                                     <div class="mt-2 space-y-1">
                                         <label class="block">
                                             <span class="sr-only">Replace chart for question {{ index + 1 }}</span>
@@ -897,7 +903,9 @@ const quickAssignSet = (setId) => {
                         <h3 class="font-semibold text-emerald-950">Step 3a — Import zip pack (charts / pictures)</h3>
                         <p class="mt-1 text-sm text-emerald-900">
                             Upload a zip with <strong>questions.json</strong> plus PNG/JPG images.
-                            In JSON, set <strong>"diagram_file": "chart1.png"</strong> (or <strong>"chart_file"</strong>) on each question.
+                            In JSON, set <strong>"needs_diagram": true</strong> and
+                            <strong>"diagram_file": "chart1.png"</strong> (or <strong>"chart_file"</strong>) on each question that needs a figure.
+                            Start the chart text with <strong>THIS QUESTION REQUIRES A FIGURE UPLOAD —</strong> so reviewers know to upload the image.
                             Multiple questions can share one image. Optional <strong>chart</strong> / <strong>table</strong> text is kept as backup.
                         </p>
                     </div>

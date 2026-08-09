@@ -128,6 +128,44 @@ class ContentTaskVerificationTest extends TestCase
         $this->assertSame(ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS, $task->status);
     }
 
+    public function test_uploader_can_upload_figure_during_verification_review(): void
+    {
+        $this->withoutVite();
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.start-review', $task))
+            ->assertRedirect(route('content.tasks.show', $task));
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('verification.run_id'));
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->value('id');
+
+        $this->assertNotNull($runId);
+
+        $question = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail();
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.verification-diagram', $task), [
+                'run_id' => $runId,
+                'question_id' => $question->id,
+                'diagram' => \Illuminate\Http\UploadedFile::fake()->image('figure.png', 120, 80),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $question->refresh();
+        $this->assertNotNull($question->diagram_path);
+        $this->assertNotNull($question->diagram_url);
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask}
      */

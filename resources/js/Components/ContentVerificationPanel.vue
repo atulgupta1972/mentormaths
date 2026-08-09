@@ -2,13 +2,16 @@
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { useForm } from '@inertiajs/vue3';
-import { computed, reactive, watch } from 'vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { router, useForm } from '@inertiajs/vue3';
+import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps({
     task: { type: Object, required: true },
     verification: { type: Object, required: true },
     saveQuestionRoute: { type: String, required: true },
+    uploadDiagramRoute: { type: String, default: '' },
+    removeDiagramRoute: { type: String, default: '' },
     editableStatuses: {
         type: Array,
         default: () => ['uploaded', 'verification_in_progress'],
@@ -22,6 +25,8 @@ const completeForm = useForm({ run_id: props.verification?.run_id ?? null });
 const submitForm = useForm({});
 const questionForms = reactive({});
 const filterMode = reactive({ value: 'pending' });
+const diagramUploading = ref({});
+const diagramFileInputs = ref({});
 
 const verificationSummary = computed(() => props.verification?.summary ?? { total: 0, verified: 0, unverified: 0 });
 const canEditQuestions = computed(() => props.editableStatuses.includes(props.task.status));
@@ -137,6 +142,57 @@ const saveQuestion = (questionId) => {
             window.setTimeout(() => {
                 document.getElementById('verification-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 80);
+        },
+    });
+};
+
+const canManageDiagram = computed(() =>
+    Boolean(props.uploadDiagramRoute) && canEditQuestions.value,
+);
+
+const uploadDiagram = (questionId, event) => {
+    const file = event.target?.files?.[0];
+    if (!file || !props.uploadDiagramRoute || diagramUploading.value[questionId]) {
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('run_id', String(props.verification.run_id));
+    formData.append('question_id', String(questionId));
+    formData.append('diagram', file);
+
+    diagramUploading.value = { ...diagramUploading.value, [questionId]: true };
+
+    router.post(props.uploadDiagramRoute, formData, {
+        forceFormData: true,
+        preserveScroll: true,
+        onFinish: () => {
+            diagramUploading.value = { ...diagramUploading.value, [questionId]: false };
+            if (event.target) {
+                event.target.value = '';
+            }
+        },
+    });
+};
+
+const removeDiagram = (questionId) => {
+    if (!props.removeDiagramRoute || diagramUploading.value[questionId]) {
+        return;
+    }
+
+    if (!window.confirm('Remove this figure from the question?')) {
+        return;
+    }
+
+    diagramUploading.value = { ...diagramUploading.value, [questionId]: true };
+
+    router.post(props.removeDiagramRoute, {
+        run_id: props.verification.run_id,
+        question_id: questionId,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            diagramUploading.value = { ...diagramUploading.value, [questionId]: false };
         },
     });
 };
@@ -272,9 +328,60 @@ const saveQuestion = (questionId) => {
                     />
                 </div>
 
-                <div v-if="row.diagram_url" class="rounded-md border border-slate-200 bg-slate-50 p-3">
-                    <p class="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Diagram</p>
-                    <img :src="row.diagram_url" alt="Question diagram" class="max-h-56 rounded border border-slate-200 bg-white object-contain">
+                <div
+                    class="rounded-md border p-3"
+                    :class="row.needs_figure && !row.diagram_url
+                        ? 'border-amber-300 bg-amber-50'
+                        : 'border-slate-200 bg-slate-50'"
+                >
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                            <p class="text-xs font-medium uppercase tracking-wide text-slate-600">Figure / diagram</p>
+                            <p v-if="row.needs_figure && !row.diagram_url" class="mt-1 text-sm font-medium text-amber-900">
+                                This question requires a figure upload.
+                            </p>
+                            <p v-else-if="row.diagram_url" class="mt-1 text-sm text-slate-600">
+                                Figure attached — replace if the wrong image is linked.
+                            </p>
+                            <p v-else class="mt-1 text-sm text-slate-600">
+                                Optional: upload a PNG/JPG if this question needs a textbook figure.
+                            </p>
+                        </div>
+                        <div v-if="canManageDiagram" class="flex flex-wrap gap-2">
+                            <SecondaryButton
+                                type="button"
+                                class="!px-3 !py-1.5 !text-xs"
+                                :disabled="diagramUploading[row.question_id]"
+                                @click="diagramFileInputs[row.question_id]?.click()"
+                            >
+                                {{ diagramUploading[row.question_id]
+                                    ? 'Uploading…'
+                                    : (row.diagram_url ? 'Replace figure' : 'Upload figure') }}
+                            </SecondaryButton>
+                            <SecondaryButton
+                                v-if="row.diagram_url"
+                                type="button"
+                                class="!px-3 !py-1.5 !text-xs"
+                                :disabled="diagramUploading[row.question_id]"
+                                @click="removeDiagram(row.question_id)"
+                            >
+                                Remove
+                            </SecondaryButton>
+                            <input
+                                :ref="(el) => { if (el) diagramFileInputs[row.question_id] = el; }"
+                                type="file"
+                                accept="image/*"
+                                class="hidden"
+                                @change="uploadDiagram(row.question_id, $event)"
+                            >
+                        </div>
+                    </div>
+                    <img
+                        v-if="row.diagram_url"
+                        :src="row.diagram_url"
+                        alt="Question diagram"
+                        class="mt-3 max-h-56 rounded border border-slate-200 bg-white object-contain"
+                    >
                 </div>
 
                 <div class="flex flex-wrap items-center gap-3 pt-1">

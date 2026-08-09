@@ -110,6 +110,8 @@ onUnmounted(() => clearInterval(pingTimer));
                     :task="task"
                     :verification="verification"
                     :save-question-route="route('content.tasks.verification-question', task.id)"
+                    :upload-diagram-route="route('content.tasks.verification-diagram', task.id)"
+                    :remove-diagram-route="route('content.tasks.verification-diagram.remove', task.id)"
                     :complete-verification-route="route('content.tasks.complete-verification', task.id)"
                     :submit-for-publish-route="route('content.tasks.submit-for-publish', task.id)"
                 />

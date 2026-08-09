@@ -325,6 +325,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks', [ContentUploadTaskController::class, 'store'])->name('content-tasks.store');
     Route::get('/content-tasks/{contentTask}', [ContentUploadTaskController::class, 'show'])->name('content-tasks.show');
     Route::post('/content-tasks/{contentTask}/verification-question', [ContentUploadTaskController::class, 'saveVerificationQuestion'])->name('content-tasks.verification-question');
+    Route::post('/content-tasks/{contentTask}/verification-diagram', [ContentUploadTaskController::class, 'uploadVerificationDiagram'])->name('content-tasks.verification-diagram');
+    Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
     Route::post('/content-tasks/{contentTask}/return-for-reverification', [ContentUploadTaskController::class, 'returnForReverification'])->name('content-tasks.return-for-reverification');
     Route::post('/content-tasks/{contentTask}/publish', [ContentUploadTaskController::class, 'publish'])->name('content-tasks.publish');
 
@@ -390,6 +392,8 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/tasks/{contentTask}/start-review', [ContentTaskController::class, 'startReview'])->name('tasks.start-review');
     Route::post('/tasks/{contentTask}/verification-check', [ContentTaskController::class, 'saveVerificationCheck'])->name('tasks.verification-check');
     Route::post('/tasks/{contentTask}/verification-question', [ContentTaskController::class, 'saveVerificationQuestion'])->name('tasks.verification-question');
+    Route::post('/tasks/{contentTask}/verification-diagram', [ContentTaskController::class, 'uploadVerificationDiagram'])->name('tasks.verification-diagram');
+    Route::post('/tasks/{contentTask}/verification-diagram/remove', [ContentTaskController::class, 'removeVerificationDiagram'])->name('tasks.verification-diagram.remove');
     Route::post('/tasks/{contentTask}/complete-verification', [ContentTaskController::class, 'completeVerification'])->name('tasks.complete-verification');
     Route::post('/tasks/{contentTask}/submit-for-publish', [ContentTaskController::class, 'submitForPublish'])->name('tasks.submit-for-publish');
     Route::post('/tasks/{contentTask}/ping-session', [ContentTaskController::class, 'pingSession'])->name('tasks.ping-session');
