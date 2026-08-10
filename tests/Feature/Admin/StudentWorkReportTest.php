@@ -64,17 +64,17 @@ class StudentWorkReportTest extends TestCase
 
         [$grade, $enrollment, $admin, $assignment] = $this->seedStudentWithPendingWork();
 
-        // Continuous work keeps the original active_session_started_at (often > 20 minutes old).
-        SetAttempt::query()->create([
+        // Continuous work keeps the original active_session_started_at (often > 5 minutes old).
+        $attempt = SetAttempt::query()->create([
             'set_assignment_id' => $assignment->id,
             'attempt_number' => 1,
             'mode' => SetAttempt::MODE_BATCH,
             'current_question_index' => 3,
             'started_at' => now()->subMinutes(45),
             'active_session_started_at' => now()->subMinutes(40),
-            'updated_at' => now()->subMinutes(1),
             'status' => SetAttempt::STATUS_IN_PROGRESS,
         ]);
+        $attempt->forceFill(['updated_at' => now()->subMinutes(1)])->saveQuietly();
 
         $this->actingAs($admin)
             ->withSession(['admin_grade_level_id' => $grade->id])
@@ -85,23 +85,23 @@ class StudentWorkReportTest extends TestCase
                 ->has('report.live', 1));
     }
 
-    public function test_online_student_with_paused_open_attempt_still_counts_as_live(): void
+    public function test_online_student_with_paused_open_attempt_is_online_but_not_live_without_recent_work(): void
     {
         $this->withoutVite();
 
         [$grade, $enrollment, $admin, $assignment] = $this->seedStudentWithPendingWork();
 
-        // Tab blur pauses timing; batch tests may not update the attempt until submit.
-        SetAttempt::query()->create([
+        // Tab blur pauses timing; no answers saved for a long time.
+        $attempt = SetAttempt::query()->create([
             'set_assignment_id' => $assignment->id,
             'attempt_number' => 1,
             'mode' => SetAttempt::MODE_BATCH,
             'current_question_index' => 2,
             'started_at' => now()->subMinutes(50),
             'active_session_started_at' => null,
-            'updated_at' => now()->subMinutes(35),
             'status' => SetAttempt::STATUS_IN_PROGRESS,
         ]);
+        $attempt->forceFill(['updated_at' => now()->subMinutes(35)])->saveQuietly();
 
         $enrollment->student->user->forceFill(['last_seen_at' => now()->subMinutes(1)])->save();
 
@@ -110,9 +110,36 @@ class StudentWorkReportTest extends TestCase
             ->get(route('admin.student-work-report.index'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('report.summary.students_live_now', 1)
+                ->where('report.summary.students_live_now', 0)
                 ->where('report.summary.students_online', 1)
-                ->has('report.live', 1));
+                ->where('report.live', [])
+                ->where('report.students.0.is_online', true));
+    }
+
+    public function test_stale_in_progress_attempt_from_weeks_ago_is_not_live(): void
+    {
+        $this->withoutVite();
+
+        [$grade, $enrollment, $admin, $assignment] = $this->seedStudentWithPendingWork();
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'current_question_index' => 1,
+            'started_at' => now()->subWeeks(3),
+            'active_session_started_at' => now()->subWeeks(3),
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+        ]);
+        $attempt->forceFill(['updated_at' => now()->subWeeks(3)])->saveQuietly();
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.student-work-report.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('report.summary.students_live_now', 0)
+                ->where('report.live', []));
     }
 
     public function test_admin_can_send_class_reminders_from_work_report(): void

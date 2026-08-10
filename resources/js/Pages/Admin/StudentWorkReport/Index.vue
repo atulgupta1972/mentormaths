@@ -166,7 +166,7 @@ const statusClass = (status) => ({
                         </label>
                         <div class="ml-auto flex flex-wrap gap-3 text-sm text-gray-600">
                             <span><strong>{{ summary.students_live_now ?? 0 }}</strong> working now</span>
-                            <span><strong>{{ summary.students_online ?? 0 }}</strong> logged in (20 min)</span>
+                            <span><strong>{{ summary.students_online ?? 0 }}</strong> active (5 min)</span>
                             <span><strong>{{ summary.students_with_pending ?? 0 }}</strong> with pending work</span>
                             <span><strong>{{ summary.total_pending_items ?? 0 }}</strong> pending items</span>
                         </div>
@@ -177,7 +177,7 @@ const statusClass = (status) => ({
                         <div class="border-b border-gray-100 bg-sky-50 px-4 py-3">
                             <h3 class="text-sm font-semibold text-sky-950">Live now — students working</h3>
                             <p class="text-xs text-sky-800">
-                                Open practice/test sessions, formula drill, and basics drill. Auto-refreshes every 20 seconds.
+                                Students who answered a question, used a drill, or loaded a page in the last 5 minutes. Auto-refreshes every 20 seconds.
                             </p>
                         </div>
                         <div class="overflow-x-auto">
@@ -222,7 +222,7 @@ const statusClass = (status) => ({
                                     </tr>
                                     <tr v-if="!liveRows.length">
                                         <td colspan="4" class="px-4 py-8 text-center text-gray-500">
-                                            No students actively working in the last 20 minutes.
+                                            No students actively working in the last 5 minutes.
                                         </td>
                                     </tr>
                                 </tbody>
