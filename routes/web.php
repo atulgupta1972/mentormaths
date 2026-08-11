@@ -188,6 +188,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/school-study-plan', [SchoolStudyPlanController::class, 'index'])
         ->name('school-study-plan.index');
+    Route::post('/school-study-plan/send-reminders', [SchoolStudyPlanController::class, 'sendReminders'])
+        ->name('school-study-plan.send-reminders');
     Route::put('/school-study-plan/{student}/{syllabusChapter}', [SchoolStudyPlanController::class, 'update'])
         ->name('school-study-plan.update');
 

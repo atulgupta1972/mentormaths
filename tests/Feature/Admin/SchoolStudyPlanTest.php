@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Mail\SchoolStudyPlanReminder;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
@@ -13,6 +14,7 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class SchoolStudyPlanTest extends TestCase
@@ -37,7 +39,9 @@ class SchoolStudyPlanTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/SchoolStudyPlan/Index')
                 ->where('selectedStudent.id', $student->id)
-                ->has('classCoverage.chapters', 3));
+                ->has('classCoverage.chapters', 3)
+                ->where('summary.without_plan', 1)
+                ->where('summary.with_plan', 0));
 
         $this->actingAs($admin)
             ->withSession(['admin_grade_level_id' => $grade->id])
@@ -71,43 +75,157 @@ class SchoolStudyPlanTest extends TestCase
         ]);
     }
 
+    public function test_admin_sees_breakup_of_students_with_and_without_study_plan(): void
+    {
+        [$admin, $withoutPlan, $withPlan, $grade] = $this->seedTwoStudentsOneWithPlan();
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.school-study-plan.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/SchoolStudyPlan/Index')
+                ->where('summary.total', 2)
+                ->where('summary.with_plan', 1)
+                ->where('summary.without_plan', 1)
+                ->where('withPlanStudents.0.id', $withPlan->id)
+                ->where('withoutPlanStudents.0.id', $withoutPlan->id));
+    }
+
+    public function test_admin_can_email_students_without_study_plan(): void
+    {
+        Mail::fake();
+
+        [$admin, $withoutPlan, $withPlan, $grade] = $this->seedTwoStudentsOneWithPlan();
+
+        $withoutPlan->update([
+            'email' => 'noplan@example.com',
+            'parent1_email' => 'parent-noplan@example.com',
+        ]);
+        $withPlan->update([
+            'email' => 'hasplan@example.com',
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->post(route('admin.school-study-plan.send-reminders'))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        Mail::assertSent(SchoolStudyPlanReminder::class, function (SchoolStudyPlanReminder $mail) use ($withoutPlan) {
+            return $mail->student->is($withoutPlan)
+                && $mail->hasTo('noplan@example.com');
+        });
+
+        Mail::assertNotSent(SchoolStudyPlanReminder::class, function (SchoolStudyPlanReminder $mail) use ($withPlan) {
+            return $mail->student->is($withPlan);
+        });
+    }
+
     /**
      * @return array{0: User, 1: Student, 2: GradeLevel, 3: list<SyllabusChapter>}
      */
     private function seedAdminAndStudent(): array
     {
-        $year = AcademicYear::query()->create([
-            'name' => '2026-27',
-            'starts_on' => '2026-03-01',
-            'ends_on' => '2027-02-28',
-            'is_active' => true,
+        return $this->seedClassWithStudent('Plan Student');
+    }
+
+    /**
+     * @return array{0: User, 1: Student, 2: Student, 3: GradeLevel}
+     */
+    private function seedTwoStudentsOneWithPlan(): array
+    {
+        [$admin, $withoutPlan, $grade, $chapters] = $this->seedClassWithStudent('No Plan Student');
+
+        $withUser = User::factory()->create(['role' => User::ROLE_STUDENT, 'email' => 'withplan-login@example.com']);
+        $withPlan = Student::query()->create([
+            'user_id' => $withUser->id,
+            'name' => 'Has Plan Student',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543211',
+            'school_name' => 'School',
         ]);
 
-        $board = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
-        $grade = GradeLevel::query()->create(['name' => 'Class 8', 'sort_order' => 8, 'is_active' => true]);
-        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Mathematics']);
+        $year = AcademicYear::active();
+        $board = Board::query()->first();
 
-        $syllabus = SyllabusVersion::query()->create([
+        $enrollment = StudentEnrollment::query()->create([
+            'student_id' => $withPlan->id,
             'academic_year_id' => $year->id,
-            'grade_level_id' => $grade->id,
             'board_id' => $board->id,
-            'subject_id' => $subject->id,
+            'grade_level_id' => $grade->id,
+            'school_name' => 'School',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
         ]);
 
-        $chapters = [];
-        for ($i = 1; $i <= 3; $i++) {
-            $chapters[] = SyllabusChapter::query()->create([
-                'syllabus_version_id' => $syllabus->id,
-                'name' => "Chapter {$i}",
-                'chapter_number' => $i,
-                'sort_order' => $i,
-            ]);
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapters[0]->id,
+            'status' => StudentChapterCoverage::STATUS_UNDER_STUDY,
+            'marked_under_study_at' => now(),
+        ]);
+
+        return [$admin, $withoutPlan, $withPlan, $grade];
+    }
+
+    /**
+     * @return array{0: User, 1: Student, 2: GradeLevel, 3: list<SyllabusChapter>}
+     */
+    private function seedClassWithStudent(string $studentName): array
+    {
+        $year = AcademicYear::query()->firstOrCreate(
+            ['name' => '2026-27'],
+            [
+                'starts_on' => '2026-03-01',
+                'ends_on' => '2027-02-28',
+                'is_active' => true,
+            ],
+        );
+
+        $board = Board::query()->firstOrCreate(
+            ['code' => 'CBSE'],
+            ['name' => 'CBSE', 'is_active' => true],
+        );
+        $grade = GradeLevel::query()->firstOrCreate(
+            ['name' => 'Class 8'],
+            ['sort_order' => 8, 'is_active' => true],
+        );
+        $subject = Subject::query()->firstOrCreate(
+            ['code' => 'MATHS'],
+            ['name' => 'Mathematics'],
+        );
+
+        $syllabus = SyllabusVersion::query()->firstOrCreate(
+            [
+                'academic_year_id' => $year->id,
+                'grade_level_id' => $grade->id,
+                'board_id' => $board->id,
+                'subject_id' => $subject->id,
+            ],
+            [],
+        );
+
+        $chapters = SyllabusChapter::query()
+            ->where('syllabus_version_id', $syllabus->id)
+            ->orderBy('sort_order')
+            ->get();
+
+        if ($chapters->count() < 3) {
+            $chapters = collect();
+            for ($i = 1; $i <= 3; $i++) {
+                $chapters->push(SyllabusChapter::query()->create([
+                    'syllabus_version_id' => $syllabus->id,
+                    'name' => "Chapter {$i}",
+                    'chapter_number' => $i,
+                    'sort_order' => $i,
+                ]));
+            }
         }
 
         $studentUser = User::factory()->create(['role' => User::ROLE_STUDENT]);
         $student = Student::query()->create([
             'user_id' => $studentUser->id,
-            'name' => 'Plan Student',
+            'name' => $studentName,
             'parent1_name' => 'Parent',
             'parent1_mobile' => '9876543210',
             'school_name' => 'School',
@@ -124,6 +242,6 @@ class SchoolStudyPlanTest extends TestCase
 
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
-        return [$admin, $student, $grade, $chapters];
+        return [$admin, $student, $grade, $chapters->values()->all()];
     }
 }
