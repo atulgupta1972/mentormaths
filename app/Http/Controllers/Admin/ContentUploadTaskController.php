@@ -18,6 +18,7 @@ use App\Services\ContentRateCardService;
 use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
+use App\Services\TextbookMcqSetPlanService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -33,6 +34,7 @@ class ContentUploadTaskController extends Controller
         private AdminGradeContext $gradeContext,
         private ContentRateCardService $rateCardService,
         private ContentAllocationMatrixService $matrixService,
+        private TextbookMcqSetPlanService $setPlanService,
     ) {}
 
     public function index(Request $request): Response
@@ -561,7 +563,14 @@ class ContentUploadTaskController extends Controller
     }
 
     /**
-     * @return array{run_id: int, questions: list<array<string, mixed>>, summary: array<string, int>}|null
+     * @return array{
+     *     run_id: int,
+     *     questions: list<array<string, mixed>>,
+     *     summary: array<string, int>,
+     *     set_plan: list<array<string, mixed>>,
+     *     set_plan_summary: string,
+     *     set_plan_parts: int
+     * }|null
      */
     private function verificationPayload(ContentUploadTask $task, User $user): ?array
     {
@@ -582,10 +591,28 @@ class ContentUploadTaskController extends Controller
         $verification = $this->verificationService->forTask($task, $user);
         $this->verificationService->maybeCompleteRunIfAllVerified($verification['run']);
 
+        $chapter = $task->textbookChapter;
+        $setPlan = is_array($chapter?->mcq_set_plan) ? $chapter->mcq_set_plan : [];
+
         return [
             'run_id' => $verification['run']->id,
             'questions' => $verification['questions'],
             'summary' => $verification['summary'],
+            'set_plan' => collect($setPlan)->values()->map(function (array $row, int $index) {
+                $from = (int) ($row['q_from'] ?? 0);
+                $to = (int) ($row['q_to'] ?? 0);
+
+                return [
+                    'part' => $index + 1,
+                    'set_code' => (string) ($row['set_code'] ?? ''),
+                    'q_from' => $from,
+                    'q_to' => $to,
+                    'question_count' => max(0, $to - $from + 1),
+                    'description' => trim((string) ($row['description'] ?? '')),
+                ];
+            })->all(),
+            'set_plan_summary' => $this->setPlanService->summary($setPlan),
+            'set_plan_parts' => count($setPlan),
         ];
     }
 

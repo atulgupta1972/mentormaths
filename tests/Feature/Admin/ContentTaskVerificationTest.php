@@ -44,7 +44,10 @@ class ContentTaskVerificationTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.content-tasks.show', $task))
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->has('verification.questions', 1));
+            ->assertInertia(fn ($page) => $page
+                ->has('verification.questions', 1)
+                ->has('verification.set_plan')
+                ->where('verification.set_plan_parts', 1));
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
@@ -75,6 +78,40 @@ class ContentTaskVerificationTest extends TestCase
                 ->where('sort_order', 3)
                 ->exists()
         );
+    }
+
+    public function test_admin_verification_shows_uploader_chapter_breakup(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $chapter->update([
+            'mcq_set_plan' => [
+                [
+                    'set_code' => 'GP-C1-P1',
+                    'q_from' => 1,
+                    'q_to' => 1,
+                    'description' => 'Patterns intro',
+                ],
+            ],
+        ]);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ContentTasks/Show')
+                ->where('verification.set_plan_parts', 1)
+                ->where('verification.set_plan.0.set_code', 'GP-C1-P1')
+                ->where('verification.set_plan.0.description', 'Patterns intro')
+                ->where('verification.set_plan_summary', fn ($summary) => str_contains((string) $summary, 'GP-C1-P1')));
     }
 
     public function test_admin_can_send_task_back_for_reverification(): void

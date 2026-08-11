@@ -98,6 +98,56 @@ const formatDuration = (seconds) => {
                     </div>
                 </div>
 
+                <div
+                    v-if="verification?.set_plan?.length"
+                    class="rounded-lg border border-amber-200 bg-amber-50 p-4"
+                >
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                            <p class="text-sm font-semibold text-amber-950">
+                                Uploader chapter breakup · {{ verification.set_plan_parts }} part{{ verification.set_plan_parts === 1 ? '' : 's' }}
+                            </p>
+                            <p v-if="verification.set_plan_summary" class="mt-1 text-xs text-amber-900">
+                                Summary: {{ verification.set_plan_summary }}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-3 overflow-x-auto rounded-md border border-amber-200 bg-white">
+                        <table class="min-w-full divide-y divide-amber-100 text-sm">
+                            <thead class="bg-amber-100/70 text-left text-[11px] uppercase tracking-wide text-amber-900">
+                                <tr>
+                                    <th class="px-3 py-2">Part</th>
+                                    <th class="px-3 py-2">Set code</th>
+                                    <th class="px-3 py-2">Questions</th>
+                                    <th class="px-3 py-2">Count</th>
+                                    <th class="px-3 py-2">Description / summary</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-amber-50">
+                                <tr
+                                    v-for="row in verification.set_plan"
+                                    :key="`${row.part}-${row.set_code}`"
+                                >
+                                    <td class="px-3 py-2 font-semibold text-slate-800">{{ row.part }}</td>
+                                    <td class="px-3 py-2 font-mono text-xs font-semibold text-indigo-800">{{ row.set_code }}</td>
+                                    <td class="px-3 py-2 text-slate-700">Q{{ row.q_from }}–{{ row.q_to }}</td>
+                                    <td class="px-3 py-2 text-slate-700">{{ row.question_count }}</td>
+                                    <td class="px-3 py-2 text-slate-700">
+                                        {{ row.description || '—' }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div
+                    v-else-if="verification && task.can_verify_questions"
+                    class="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-600"
+                >
+                    No MCQ set plan saved for this chapter yet.
+                </div>
+
                 <AdminContentVerificationBatch
                     v-if="verification && task.can_verify_questions && reviewMode === 'batch'"
                     :task="task"
