@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
 use App\Models\GradeLevel;
+use App\Services\ClassCoverageService;
 use App\Services\ContentUploaderDashboardService;
 use App\Services\DashboardService;
 use App\Support\MailConfigStatus;
@@ -18,6 +19,7 @@ class DashboardController extends Controller
     public function __construct(
         private DashboardService $dashboardService,
         private ContentUploaderDashboardService $uploaderDashboard,
+        private ClassCoverageService $classCoverage,
     ) {}
 
     public function __invoke(Request $request): Response|RedirectResponse
@@ -45,6 +47,9 @@ class DashboardController extends Controller
         $boardId = $request->integer('board_id') ?: null;
         $studentData = $this->dashboardService->forStudent($enrollment, $gradeLevelId, $boardId);
         $student = $user->student;
+        $classCoverage = $enrollment
+            ? $this->classCoverage->forEnrollment($enrollment)
+            : null;
 
         $contentUploaderTasks = null;
         if ($user->isContentUploader()) {
@@ -63,6 +68,7 @@ class DashboardController extends Controller
                 ? StudentWeeklyReportEmails::display($student->parent1_email, $student->parent2_email)
                 : '',
             'contentUploaderTasks' => $contentUploaderTasks,
+            'classCoverage' => $classCoverage,
             ...$studentData,
         ]);
     }

@@ -16,6 +16,7 @@ const isContentUploader = computed(() => page.props.auth?.isContentUploader ?? f
 
 const props = defineProps({
     isAdmin: { type: Boolean, default: false },
+    classCoverage: { type: Object, default: null },
     assignments: { type: Array, default: () => [] },
     activeYear: Object,
     selectedGrade: Object,
@@ -44,6 +45,23 @@ const showManageExams = ref(false);
 const showHelpRequests = ref(false);
 const expandedStudentId = ref(null);
 const highlightedExamPlanId = ref(null);
+
+const underStudyChapter = computed(() => {
+    if (!props.classCoverage) return null;
+    const id = props.classCoverage.under_study_chapter_id;
+    if (!id) return null;
+    return (props.classCoverage.chapters || []).find((c) => c.id === id) || null;
+});
+
+const studiedChapterRows = computed(() => {
+    if (!props.classCoverage) return [];
+    return (props.classCoverage.chapters || []).filter((c) => c.studied);
+});
+
+const underStudyChapterRows = computed(() => {
+    if (!props.classCoverage) return [];
+    return (props.classCoverage.chapters || []).filter((c) => c.under_study);
+});
 
 const allExamPlans = computed(() => [
     ...(props.examPlans.upcoming || []),
@@ -762,6 +780,61 @@ const adminSetStatusClass = (set) => {
                         :upload-pending="contentUploaderTasks.uploadPending"
                         :review-pending="contentUploaderTasks.reviewPending"
                     />
+
+                    <!-- Study plan prompt (topics studied / under study) -->
+                    <div
+                        v-if="!isContentUploader && classCoverage"
+                        class="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-slate-900">My Study Plan</h3>
+                                <p class="mt-1 text-xs text-slate-500">
+                                    Studied and currently under study chapters (from school progress).
+                                </p>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-2">
+                                <Link
+                                    :href="route('student.school-study-plan.show')"
+                                    class="rounded-md bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                                >
+                                    Open full plan →
+                                </Link>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <span
+                                class="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800"
+                            >
+                                {{ studiedChapterRows.length }} studied
+                            </span>
+                            <span
+                                v-if="underStudyChapterRows.length"
+                                class="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-800"
+                            >
+                                {{ underStudyChapterRows.length }} under study
+                            </span>
+                        </div>
+
+                        <div v-if="underStudyChapter" class="mt-3 rounded-lg bg-amber-50 p-3">
+                            <p class="text-xs font-semibold text-amber-950">Please complete</p>
+                            <p class="mt-1 text-sm text-amber-900">
+                                Continue: {{ underStudyChapter.label }} — {{ underStudyChapter.name }}
+                            </p>
+                        </div>
+
+                        <div
+                            v-else-if="studiedChapterRows.length === 0"
+                            class="mt-3 rounded-lg bg-slate-50 p-3"
+                        >
+                            <p class="text-xs font-semibold text-slate-900">Please start</p>
+                            <p class="mt-1 text-sm text-slate-700">
+                                Mark one chapter as <span class="font-semibold">Under study</span> in your school plan.
+                            </p>
+                        </div>
+                    </div>
 
                     <!-- Welcome — single compact row -->
                     <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-4 py-3 text-white shadow">
