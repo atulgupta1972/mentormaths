@@ -9,6 +9,10 @@ const props = defineProps({
         type: Object,
         default: () => ({ chapters: [], under_study_chapter_id: null }),
     },
+    upcomingExams: {
+        type: Array,
+        default: () => [],
+    },
     context: {
         type: Object,
         default: null,
@@ -37,6 +41,7 @@ const subtitle = computed(() => {
             <div class="mx-auto max-w-7xl px-4 sm:px-6">
                 <ClassCoveragePanel
                     :class-coverage="classCoverage"
+                    :upcoming-exams="upcomingExams"
                     update-route-name="student.class-coverage.update"
                 />
             </div>

@@ -227,10 +227,30 @@ const accountsGroup = computed(() => ({
     ],
 }));
 
+const resourcesGroup = computed(() => ({
+    label: 'Resources',
+    active: route().current('student.resources.*'),
+    items: [
+        {
+            label: 'Formulas',
+            href: route().has('student.resources.formulas.index')
+                ? route('student.resources.formulas.index')
+                : '/student/resources/formulas',
+            active: route().current('student.resources.formulas.*'),
+            show: isStudent.value && route().has('student.resources.formulas.index'),
+        },
+    ],
+}));
+
 const navGroups = computed(() =>
-    [peopleGroup.value, teachingGroup.value, contentGroup.value, accountsGroup.value, setupGroup.value].filter(
-        (group) => group.items.some((item) => item.show !== false),
-    ),
+    [
+        peopleGroup.value,
+        teachingGroup.value,
+        contentGroup.value,
+        accountsGroup.value,
+        setupGroup.value,
+        resourcesGroup.value,
+    ].filter((group) => group.items.some((item) => item.show !== false)),
 );
 </script>
 

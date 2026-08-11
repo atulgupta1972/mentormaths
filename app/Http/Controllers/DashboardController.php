@@ -43,13 +43,12 @@ class DashboardController extends Controller
         }
 
         $enrollment = $user->student?->currentEnrollment();
+        $enrollment?->loadMissing(['gradeLevel:id,name', 'board:id,name']);
         $gradeLevelId = $request->integer('grade_level_id') ?: null;
         $boardId = $request->integer('board_id') ?: null;
         $studentData = $this->dashboardService->forStudent($enrollment, $gradeLevelId, $boardId);
         $student = $user->student;
-        $classCoverage = $enrollment
-            ? $this->classCoverage->forEnrollment($enrollment)
-            : null;
+        $classCoverage = $this->classCoverage->forEnrollment($enrollment);
 
         $contentUploaderTasks = null;
         if ($user->isContentUploader()) {
@@ -69,6 +68,10 @@ class DashboardController extends Controller
                 : '',
             'contentUploaderTasks' => $contentUploaderTasks,
             'classCoverage' => $classCoverage,
+            'studyPlanContext' => [
+                'grade_name' => $enrollment?->gradeLevel?->name,
+                'board_name' => $enrollment?->board?->name,
+            ],
             ...$studentData,
         ]);
     }

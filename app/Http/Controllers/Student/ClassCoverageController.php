@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Student;
 use App\Http\Controllers\Controller;
 use App\Models\SyllabusChapter;
 use App\Services\ClassCoverageService;
+use App\Services\ExamPlanService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -12,15 +13,28 @@ use Inertia\Response;
 
 class ClassCoverageController extends Controller
 {
-    public function __construct(private ClassCoverageService $coverageService) {}
+    public function __construct(
+        private ClassCoverageService $coverageService,
+        private ExamPlanService $examPlanService,
+    ) {}
 
     public function show(Request $request): Response
     {
         $enrollment = $request->user()->student?->currentEnrollment();
         $enrollment?->loadMissing(['gradeLevel:id,name', 'board:id,name']);
+        $examPlans = ['upcoming' => [], 'past' => []];
+        if ($enrollment) {
+            $plans = $this->examPlanService->plansForEnrollment($enrollment);
+            $split = $this->examPlanService->splitPlansByTiming($plans);
+            $examPlans = [
+                'upcoming' => $split['upcoming']->values()->all(),
+                'past' => $split['past']->values()->all(),
+            ];
+        }
 
         return Inertia::render('Student/SchoolStudyPlan', [
             'classCoverage' => $this->coverageService->forEnrollment($enrollment),
+            'upcomingExams' => $examPlans['upcoming'],
             'context' => [
                 'grade_name' => $enrollment?->gradeLevel?->name,
                 'board_name' => $enrollment?->board?->name,

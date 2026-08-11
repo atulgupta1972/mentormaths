@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import StudentAssignmentGroupTable from '@/Components/StudentAssignmentGroupTable.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
+import ClassCoveragePanel from '@/Components/ClassCoveragePanel.vue';
 import ContentUploadGuidePanel from '@/Components/ContentUploadGuidePanel.vue';
 import ContentUploaderTasksPanel from '@/Components/ContentUploaderTasksPanel.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
@@ -16,7 +17,14 @@ const isContentUploader = computed(() => page.props.auth?.isContentUploader ?? f
 
 const props = defineProps({
     isAdmin: { type: Boolean, default: false },
-    classCoverage: { type: Object, default: null },
+    classCoverage: {
+        type: Object,
+        default: () => ({ chapters: [], under_study_chapter_id: null, availability_columns: [] }),
+    },
+    studyPlanContext: {
+        type: Object,
+        default: () => ({ grade_name: null, board_name: null }),
+    },
     assignments: { type: Array, default: () => [] },
     activeYear: Object,
     selectedGrade: Object,
@@ -46,22 +54,21 @@ const showHelpRequests = ref(false);
 const expandedStudentId = ref(null);
 const highlightedExamPlanId = ref(null);
 
+const studyPlanSubtitle = computed(() => {
+    const parts = [props.studyPlanContext?.grade_name, props.studyPlanContext?.board_name].filter(Boolean);
+
+    return parts.length ? parts.join(' · ') : 'Your class syllabus';
+});
+
 const underStudyChapter = computed(() => {
-    if (!props.classCoverage) return null;
-    const id = props.classCoverage.under_study_chapter_id;
+    const id = props.classCoverage?.under_study_chapter_id;
     if (!id) return null;
     return (props.classCoverage.chapters || []).find((c) => c.id === id) || null;
 });
 
-const studiedChapterRows = computed(() => {
-    if (!props.classCoverage) return [];
-    return (props.classCoverage.chapters || []).filter((c) => c.studied);
-});
+const studiedChapterRows = computed(() => (props.classCoverage?.chapters || []).filter((c) => c.studied));
 
-const underStudyChapterRows = computed(() => {
-    if (!props.classCoverage) return [];
-    return (props.classCoverage.chapters || []).filter((c) => c.under_study);
-});
+const underStudyChapterRows = computed(() => (props.classCoverage?.chapters || []).filter((c) => c.under_study));
 
 const allExamPlans = computed(() => [
     ...(props.examPlans.upcoming || []),
@@ -256,7 +263,7 @@ const assignmentHref = (set) => (
 
 const setLabel = (set) => set.set_code || `Set ${set.set_number}`;
 
-const daysUntil = (dateStr) => {
+const daysUntilExam = (dateStr) => {
     if (!dateStr) {
         return null;
     }
@@ -264,8 +271,16 @@ const daysUntil = (dateStr) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const target = new Date(`${dateStr}T00:00:00`);
-    const diff = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
 
+    return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+};
+
+const daysUntil = (dateStr) => {
+    const diff = daysUntilExam(dateStr);
+
+    if (diff === null) {
+        return null;
+    }
     if (diff < 0) {
         return `${Math.abs(diff)}d ago`;
     }
@@ -277,6 +292,19 @@ const daysUntil = (dateStr) => {
     }
 
     return `In ${diff} days`;
+};
+
+const upcomingExamCardClass = (plan) => {
+    const days = daysUntilExam(plan.exam_date);
+
+    if (days === null || days < 0) {
+        return 'border-2 border-slate-800 bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600';
+    }
+    if (days <= 7) {
+        return 'border-[3px] border-rose-950 bg-gradient-to-br from-rose-500 via-orange-500 to-amber-500 shadow-lg shadow-rose-950/25';
+    }
+
+    return 'border-[3px] border-amber-950 bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 shadow-md shadow-amber-950/20';
 };
 
 const chapterList = (plan) => plan.chapter_names?.join(' · ') || '—';
@@ -510,15 +538,21 @@ const adminSetStatusClass = (set) => {
 </script>
 
 <template>
-    <Head title="Dashboard" />
+    <Head :title="isAdmin ? 'Dashboard' : 'My Study Plan'" />
 
     <AuthenticatedLayout>
         <template #header>
             <div>
-                <h2 class="text-xl font-semibold leading-tight text-gray-800">Dashboard</h2>
-                <p v-if="activeYear" class="text-sm text-gray-500">
+                <h2 class="text-xl font-semibold leading-tight text-gray-800">
+                    {{ isAdmin ? 'Dashboard' : 'My Study Plan' }}
+                </h2>
+                <p v-if="isAdmin && activeYear" class="text-sm text-gray-500">
                     {{ activeYear.name }}
                     <span v-if="selectedGrade"> · {{ selectedGrade.name }}</span>
+                </p>
+                <p v-else-if="!isAdmin" class="text-sm text-gray-500">
+                    {{ studyPlanSubtitle }}
+                    <span v-if="activeYear"> · {{ activeYear.name }}</span>
                 </p>
             </div>
         </template>
@@ -781,33 +815,33 @@ const adminSetStatusClass = (set) => {
                         :review-pending="contentUploaderTasks.reviewPending"
                     />
 
-                    <!-- Study plan prompt (topics studied / under study) -->
-                    <div
-                        v-if="!isContentUploader && classCoverage"
-                        class="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                    >
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                                <h3 class="text-sm font-bold text-slate-900">My Study Plan</h3>
-                                <p class="mt-1 text-xs text-slate-500">
-                                    Studied and currently under study chapters (from school progress).
-                                </p>
-                            </div>
-
-                            <div class="flex flex-wrap items-center gap-2">
-                                <Link
-                                    :href="route('student.school-study-plan.show')"
-                                    class="rounded-md bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                                >
-                                    Open full plan →
-                                </Link>
-                            </div>
+                    <!-- School study plan — primary student landing -->
+                    <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div v-if="underStudyChapter" class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-amber-950">Please complete</p>
+                            <p class="mt-1 text-sm text-amber-900">
+                                Continue your current chapter:
+                                <span class="font-semibold">{{ underStudyChapter.label }} — {{ underStudyChapter.name }}</span>
+                            </p>
                         </div>
 
+                        <div
+                            v-else-if="classCoverage.chapters?.length && studiedChapterRows.length === 0"
+                            class="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+                        >
+                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-900">Please start</p>
+                            <p class="mt-1 text-sm text-slate-700">
+                                Mark one chapter as <span class="font-semibold">Under study</span> below so we know what you are learning in school.
+                            </p>
+                        </div>
+
+                        <ClassCoveragePanel
+                            :class-coverage="classCoverage"
+                            :upcoming-exams="examPlans.upcoming || []"
+                        />
+
                         <div class="mt-3 flex flex-wrap gap-2">
-                            <span
-                                class="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800"
-                            >
+                            <span class="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800">
                                 {{ studiedChapterRows.length }} studied
                             </span>
                             <span
@@ -817,23 +851,12 @@ const adminSetStatusClass = (set) => {
                                 {{ underStudyChapterRows.length }} under study
                             </span>
                         </div>
+                    </section>
 
-                        <div v-if="underStudyChapter" class="mt-3 rounded-lg bg-amber-50 p-3">
-                            <p class="text-xs font-semibold text-amber-950">Please complete</p>
-                            <p class="mt-1 text-sm text-amber-900">
-                                Continue: {{ underStudyChapter.label }} — {{ underStudyChapter.name }}
-                            </p>
-                        </div>
-
-                        <div
-                            v-else-if="studiedChapterRows.length === 0"
-                            class="mt-3 rounded-lg bg-slate-50 p-3"
-                        >
-                            <p class="text-xs font-semibold text-slate-900">Please start</p>
-                            <p class="mt-1 text-sm text-slate-700">
-                                Mark one chapter as <span class="font-semibold">Under study</span> in your school plan.
-                            </p>
-                        </div>
+                    <div class="border-t border-slate-200 pt-2">
+                        <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Practice, exams & assignments
+                        </h3>
                     </div>
 
                     <!-- Welcome — single compact row -->
@@ -883,7 +906,8 @@ const adminSetStatusClass = (set) => {
                                 <div
                                     v-for="plan in examPlans.upcoming"
                                     :key="plan.id"
-                                    class="overflow-hidden rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 p-3.5 text-white shadow"
+                                    class="overflow-hidden rounded-xl p-3.5 text-white shadow"
+                                    :class="upcomingExamCardClass(plan)"
                                 >
                                     <div class="flex items-start justify-between gap-2">
                                         <div class="min-w-0">

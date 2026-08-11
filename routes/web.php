@@ -39,6 +39,7 @@ use App\Http\Controllers\TeacherRegistrationRequestController;
 use App\Http\Controllers\Student\BasicsDrillController;
 use App\Http\Controllers\Student\ClassCoverageController;
 use App\Http\Controllers\Student\FormulaDrillController;
+use App\Http\Controllers\Student\FormulaResourceController;
 use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
 use App\Http\Controllers\Student\PracticeSetController as StudentPracticeSetController;
 use App\Http\Controllers\Student\SelfAssignController;
@@ -345,6 +346,13 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/exam-plans', [AdminExamPlanController::class, 'store'])->name('exam-plans.store');
     Route::put('/exam-plans/{examPlan}', [AdminExamPlanController::class, 'update'])->name('exam-plans.update');
     Route::delete('/exam-plans/{examPlan}', [AdminExamPlanController::class, 'destroy'])->name('exam-plans.destroy');
+});
+
+Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->group(function () {
+    Route::get('/resources/formulas', [FormulaResourceController::class, 'index'])
+        ->name('resources.formulas.index');
+    Route::get('/resources/formulas/chapters/{syllabusChapter}', [FormulaResourceController::class, 'chapter'])
+        ->name('resources.formulas.chapter');
 });
 
 Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->name('student.')->group(function () {

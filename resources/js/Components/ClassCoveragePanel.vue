@@ -1,4 +1,5 @@
 <script setup>
+import { formatDate } from '@/utils/dates';
 import { Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -10,6 +11,10 @@ const props = defineProps({
             under_study_chapter_id: null,
             availability_columns: [],
         }),
+    },
+    upcomingExams: {
+        type: Array,
+        default: () => [],
     },
     updateRouteName: {
         type: String,
@@ -30,6 +35,90 @@ const chapters = computed(() => props.classCoverage?.chapters ?? []);
 const availabilityColumns = computed(() => props.classCoverage?.availability_columns ?? []);
 const isStudentView = computed(() => String(props.updateRouteName).startsWith('student.'));
 const columnCount = computed(() => 4 + availabilityColumns.value.length);
+
+const daysUntilExam = (dateStr) => {
+    if (!dateStr) {
+        return null;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(`${dateStr}T00:00:00`);
+
+    return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+};
+
+const upcomingExamByChapterId = computed(() => {
+    const map = new Map();
+
+    for (const plan of props.upcomingExams ?? []) {
+        if (!plan?.exam_date) {
+            continue;
+        }
+
+        const days = daysUntilExam(plan.exam_date);
+        if (days === null || days < 0) {
+            continue;
+        }
+
+        const chapterIds = plan.chapter_ids
+            ?? (plan.chapters || []).map((chapter) => chapter.id);
+
+        for (const chapterId of chapterIds) {
+            const existing = map.get(chapterId);
+            if (!existing || plan.exam_date < existing.exam_date) {
+                map.set(chapterId, plan);
+            }
+        }
+    }
+
+    return map;
+});
+
+const upcomingExamForChapter = (chapterId) => upcomingExamByChapterId.value.get(chapterId) ?? null;
+
+const chapterExamRowClass = (chapterId) => {
+    const plan = upcomingExamForChapter(chapterId);
+    if (!plan) {
+        return '';
+    }
+
+    const days = daysUntilExam(plan.exam_date);
+    if (days !== null && days <= 7) {
+        return 'bg-rose-50 ring-2 ring-inset ring-rose-950';
+    }
+
+    return 'bg-amber-50 ring-2 ring-inset ring-amber-900';
+};
+
+const chapterExamBadgeClass = (chapterId) => {
+    const plan = upcomingExamForChapter(chapterId);
+    if (!plan) {
+        return '';
+    }
+
+    const days = daysUntilExam(plan.exam_date);
+    if (days !== null && days <= 7) {
+        return 'border-rose-950 bg-rose-100 text-rose-950';
+    }
+
+    return 'border-amber-900 bg-amber-100 text-amber-950';
+};
+
+const examDueLabel = (plan) => {
+    const days = daysUntilExam(plan.exam_date);
+    if (days === 0) {
+        return 'Exam today';
+    }
+    if (days === 1) {
+        return 'Exam tomorrow';
+    }
+    if (days !== null && days > 0) {
+        return `Exam ${formatDate(plan.exam_date)}`;
+    }
+
+    return plan.title || 'Upcoming exam';
+};
 
 const mark = (chapter, status) => {
     if (savingId.value) {
@@ -165,6 +254,9 @@ const selfAssign = (item) => {
         <p class="mb-2 text-xs leading-snug text-slate-500">
             Click a chapter to see set details and scores. Tick each chapter independently — click the same box again to clear it.
         </p>
+        <p v-if="upcomingExamByChapterId.size" class="mb-2 text-xs leading-snug text-amber-900">
+            Chapters mapped to an upcoming exam are highlighted in amber (or rose if within 7 days).
+        </p>
         <p v-if="saveError" class="mb-2 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-800">
             {{ saveError }}
         </p>
@@ -195,8 +287,10 @@ const selfAssign = (item) => {
                     <template v-for="(chapter, index) in chapters" :key="chapter.id">
                         <tr
                             :class="[
-                                index % 2 === 0 ? 'bg-white' : 'bg-slate-100',
-                                isExpanded(chapter.id) ? 'bg-sky-50' : '',
+                                upcomingExamForChapter(chapter.id)
+                                    ? chapterExamRowClass(chapter.id)
+                                    : (index % 2 === 0 ? 'bg-white' : 'bg-slate-100'),
+                                isExpanded(chapter.id) && !upcomingExamForChapter(chapter.id) ? 'bg-sky-50' : '',
                                 savingId === chapter.id ? 'opacity-60' : '',
                             ]"
                         >
@@ -209,6 +303,14 @@ const selfAssign = (item) => {
                                     <span class="text-[10px] text-sky-700">{{ isExpanded(chapter.id) ? '▼' : '▶' }}</span>
                                     <span>{{ chapterTitle(chapter) }}</span>
                                 </button>
+                                <span
+                                    v-if="upcomingExamForChapter(chapter.id)"
+                                    class="ml-1 inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold leading-tight"
+                                    :class="chapterExamBadgeClass(chapter.id)"
+                                    :title="upcomingExamForChapter(chapter.id).title"
+                                >
+                                    {{ examDueLabel(upcomingExamForChapter(chapter.id)) }}
+                                </span>
                             </td>
                             <td class="px-2 py-1 align-middle text-[13px] text-slate-700">
                                 <span v-if="chapter.topics_label">{{ chapter.topics_label }}</span>

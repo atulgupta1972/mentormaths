@@ -2,7 +2,7 @@
 import MentorMathsLogo from '@/Components/MentorMathsLogo.vue';
 import { Head, Link } from '@inertiajs/vue3';
 
-const classes = ['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+const classes = ['Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
 const pillars = [
     {
@@ -40,7 +40,7 @@ const pillars = [
 ];
 
 const highlights = [
-    { value: '6–10', label: 'Classes covered' },
+    { value: '4–10', label: 'Classes covered' },
     { value: 'S·B·C', label: 'Practice tiers' },
     { value: '100%', label: 'Syllabus aligned' },
 ];
@@ -102,7 +102,7 @@ const highlights = [
             <section class="pt-8 text-center sm:pt-14">
                 <div class="mx-auto inline-flex items-center gap-2 rounded-full border border-blue-200/80 bg-white/70 px-4 py-1.5 text-sm font-medium text-blue-700 shadow-sm backdrop-blur">
                     <span class="h-2 w-2 rounded-full bg-emerald-500" />
-                    CBSE &amp; ICSE Mathematics · Class 6 to 10
+                    CBSE &amp; ICSE Mathematics · Class 4 to 10
                 </div>
 
                 <h1 class="mx-auto mt-6 max-w-3xl text-4xl font-extrabold tracking-tight text-slate-900 sm:text-6xl sm:leading-[1.1]">

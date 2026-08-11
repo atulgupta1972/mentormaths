@@ -102,7 +102,6 @@ class ClassCoverageService
             'test' => 'Test',
             'written' => 'Written',
             'fill_blank' => 'Fill in blank',
-            'formula' => 'Formula',
         ] as $key => $label) {
             $rows = collect($items[$key] ?? [])
                 ->map(fn (array $item) => $this->detailItemPayload($item))
@@ -203,7 +202,6 @@ class ClassCoverageService
             ['key' => 'test', 'label' => 'Test', 'short' => 'Test'],
             ['key' => 'written', 'label' => 'Written', 'short' => 'Writ'],
             ['key' => 'fill_blank', 'label' => 'Fill in blank', 'short' => 'Fill'],
-            ['key' => 'formula', 'label' => 'Formula', 'short' => 'Form'],
         ];
     }
 
