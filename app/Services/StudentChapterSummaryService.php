@@ -154,6 +154,14 @@ class StudentChapterSummaryService
             ->get()
             ->groupBy('syllabus_chapter_id');
 
+        $correctionCountsByWorksheet = PracticeCorrectionItem::query()
+            ->where('student_id', $enrollment->student_id)
+            ->where('status', PracticeCorrectionItem::STATUS_PENDING)
+            ->whereIn('syllabus_chapter_id', $chapterIds)
+            ->selectRaw('worksheet_id, count(*) as aggregate')
+            ->groupBy('worksheet_id')
+            ->pluck('aggregate', 'worksheet_id');
+
         $worksheetsById = $worksheets->keyBy('id');
         $worksheetsByChapter = $this->groupWorksheetsByChapter($worksheets, $chapterIds);
 
@@ -164,6 +172,7 @@ class StudentChapterSummaryService
             $textbookColumns,
             $assignmentsByWorksheet,
             $pendingCorrections,
+            $correctionCountsByWorksheet,
         ) {
             $chapterWorksheets = $worksheetsByChapter->get($chapter->id, collect());
             $chapterTextbookRows = $textbookChapters->where('syllabus_chapter_id', $chapter->id);
@@ -185,7 +194,12 @@ class StudentChapterSummaryService
                     continue;
                 }
 
-                $item = $this->buildSetItem($worksheet, $assignmentsByWorksheet);
+                $item = $this->buildSetItem(
+                    $worksheet,
+                    $assignmentsByWorksheet,
+                    null,
+                    (int) ($correctionCountsByWorksheet[$worksheet->id] ?? 0),
+                );
                 $bucket = $this->bucketForWorksheet($worksheet);
 
                 match ($bucket) {
@@ -217,7 +231,12 @@ class StudentChapterSummaryService
                         $worksheet = $worksheetsById->get($worksheetId);
 
                         if ($worksheet) {
-                            $bookItems[] = $this->buildSetItem($worksheet, $assignmentsByWorksheet, 'B');
+                            $bookItems[] = $this->buildSetItem(
+                                $worksheet,
+                                $assignmentsByWorksheet,
+                                'B',
+                                (int) ($correctionCountsByWorksheet[$worksheet->id] ?? 0),
+                            );
                         }
                     }
 
@@ -225,7 +244,12 @@ class StudentChapterSummaryService
                         $worksheet = $worksheetsById->get((int) $textbookChapter->written_worksheet_id);
 
                         if ($worksheet) {
-                            $bookItems[] = $this->buildSetItem($worksheet, $assignmentsByWorksheet, 'B');
+                            $bookItems[] = $this->buildSetItem(
+                                $worksheet,
+                                $assignmentsByWorksheet,
+                                'B',
+                                (int) ($correctionCountsByWorksheet[$worksheet->id] ?? 0),
+                            );
                         }
                     }
                 }
@@ -433,6 +457,7 @@ class StudentChapterSummaryService
         Worksheet $worksheet,
         Collection $assignmentsByWorksheet,
         ?string $prefixOverride = null,
+        int $correctionCount = 0,
     ): array {
         $assignment = $this->resolveCurrentAssignment(
             $assignmentsByWorksheet->get($worksheet->id, collect()),
@@ -481,6 +506,9 @@ class StudentChapterSummaryService
             'can_assign' => $statusMeta['can_assign'],
             'can_open' => $statusMeta['can_open'],
             'latest_score_percent' => $progress['latest_score_percent'] ?? null,
+            'correction_count' => $correctionCount,
+            'can_redo_wrong' => $correctionCount > 0,
+            'is_correction' => false,
         ];
     }
 

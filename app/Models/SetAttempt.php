@@ -24,6 +24,7 @@ class SetAttempt extends Model
         'set_assignment_id',
         'attempt_number',
         'mode',
+        'is_correction_practice',
         'current_question_index',
         'started_at',
         'active_seconds',
@@ -46,6 +47,7 @@ class SetAttempt extends Model
             'started_at' => 'datetime',
             'active_session_started_at' => 'datetime',
             'completed_at' => 'datetime',
+            'is_correction_practice' => 'boolean',
         ];
     }
 

@@ -164,6 +164,7 @@ class ClassCoverageService
             'can_assign' => (bool) ($item['can_assign'] ?? false),
             'can_open' => (bool) ($item['can_open'] ?? false),
             'can_redo_wrong' => (bool) ($item['can_redo_wrong'] ?? false),
+            'correction_count' => (int) ($item['correction_count'] ?? 0),
             'is_correction' => (bool) ($item['is_correction'] ?? false),
         ];
     }

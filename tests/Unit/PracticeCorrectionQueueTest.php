@@ -59,7 +59,35 @@ class PracticeCorrectionQueueTest extends TestCase
         $this->assertSame(0, PracticeCorrectionItem::query()->count());
     }
 
-    public function test_first_try_correct_clears_existing_pending_item(): void
+    public function test_first_try_correct_on_correction_attempt_clears_pending_item(): void
+    {
+        [$attempt, , $correctOption] = $this->seedGuidedAttempt();
+        $questionId = (int) $attempt->guidedQuestions()->value('question_id');
+        $studentId = (int) StudentEnrollment::query()
+            ->whereKey($attempt->assignment()->value('student_enrollment_id'))
+            ->value('student_id');
+
+        PracticeCorrectionItem::query()->create([
+            'student_id' => $studentId,
+            'question_id' => $questionId,
+            'source_type' => PracticeCorrectionItem::SOURCE_GUIDED_PRACTICE,
+            'failure_reason' => 'first_wrong',
+            'status' => PracticeCorrectionItem::STATUS_PENDING,
+            'first_failure_at' => now()->subDay(),
+        ]);
+
+        $attempt->update(['is_correction_practice' => true]);
+
+        app(GuidedPracticeService::class)->submitAnswer($attempt, $correctOption->id);
+
+        $this->assertSame(
+            0,
+            PracticeCorrectionItem::query()->where('status', PracticeCorrectionItem::STATUS_PENDING)->count(),
+        );
+        $this->assertSame(1, PracticeCorrectionItem::query()->where('status', PracticeCorrectionItem::STATUS_CORRECTED)->count());
+    }
+
+    public function test_regular_redo_first_try_does_not_clear_pending_item(): void
     {
         [$attempt, , $correctOption] = $this->seedGuidedAttempt();
         $questionId = (int) $attempt->guidedQuestions()->value('question_id');
@@ -78,11 +106,7 @@ class PracticeCorrectionQueueTest extends TestCase
 
         app(GuidedPracticeService::class)->submitAnswer($attempt, $correctOption->id);
 
-        $this->assertSame(
-            0,
-            PracticeCorrectionItem::query()->where('status', PracticeCorrectionItem::STATUS_PENDING)->count(),
-        );
-        $this->assertSame(1, PracticeCorrectionItem::query()->where('status', PracticeCorrectionItem::STATUS_CORRECTED)->count());
+        $this->assertSame(1, PracticeCorrectionItem::query()->where('status', PracticeCorrectionItem::STATUS_PENDING)->count());
     }
 
     public function test_give_up_queues_pending_item(): void

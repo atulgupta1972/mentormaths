@@ -120,11 +120,13 @@ class PracticeCorrectionQueueService
         }
 
         if ($guided->first_try_correct) {
-            $this->markCorrected(
-                $context['student_id'],
-                $guided->question_id,
-                PracticeCorrectionItem::CORRECTED_IN_GUIDED_PRACTICE,
-            );
+            if ($attempt->is_correction_practice) {
+                $this->markCorrected(
+                    $context['student_id'],
+                    $guided->question_id,
+                    PracticeCorrectionItem::CORRECTED_IN_STUDY_PLAN,
+                );
+            }
 
             return;
         }
@@ -170,11 +172,13 @@ class PracticeCorrectionQueueService
 
         foreach ($attempt->answers as $answer) {
             if ($answer->is_correct) {
-                $this->markCorrected(
-                    $context['student_id'],
-                    $answer->question_id,
-                    PracticeCorrectionItem::CORRECTED_IN_BATCH_TEST,
-                );
+                if ($attempt->is_correction_practice) {
+                    $this->markCorrected(
+                        $context['student_id'],
+                        $answer->question_id,
+                        PracticeCorrectionItem::CORRECTED_IN_STUDY_PLAN,
+                    );
+                }
 
                 continue;
             }
@@ -343,8 +347,6 @@ class PracticeCorrectionQueueService
         int $submissionId,
     ): void {
         if ($item->is_correct) {
-            $this->markCorrected($studentId, $item->question_id, PracticeCorrectionItem::SOURCE_WRITTEN);
-
             return;
         }
 

@@ -79,6 +79,7 @@ class PracticeCorrectionPracticeService
                 'set_assignment_id' => $assignment->id,
                 'attempt_number' => $nextNumber,
                 'mode' => SetAttempt::MODE_GUIDED,
+                'is_correction_practice' => true,
                 'started_at' => now(),
                 'active_seconds' => 0,
                 'active_session_started_at' => now(),

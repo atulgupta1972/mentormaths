@@ -412,6 +412,12 @@ const startCorrection = (item) => {
                                                 >
                                                     {{ item.status_label }}
                                                 </span>
+                                                <span
+                                                    v-if="item.correction_count > 0 && !item.is_correction"
+                                                    class="rounded bg-orange-100 px-1.5 py-px text-[10px] font-bold uppercase text-orange-900"
+                                                >
+                                                    {{ item.correction_count }} wrong
+                                                </span>
                                                 <template v-if="isStudentView">
                                                     <button
                                                         v-if="item.can_redo_wrong"
@@ -423,7 +429,7 @@ const startCorrection = (item) => {
                                                         Redo wrong
                                                     </button>
                                                     <button
-                                                        v-else-if="item.can_assign"
+                                                        v-if="item.can_assign"
                                                         type="button"
                                                         class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800 disabled:opacity-50"
                                                         :disabled="assigningWorksheetId === item.worksheet_id"

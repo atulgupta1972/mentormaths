@@ -8,7 +8,8 @@ use Illuminate\Console\Command;
 class BackfillPracticeCorrectionsCommand extends Command
 {
     protected $signature = 'practice-corrections:backfill
-                            {--student= : Limit to one student id}';
+                            {--student= : Limit to one student id}
+                            {--reset : Clear the queue before rebuilding from history}';
 
     protected $description = 'Build the wrong-answer correction queue from past guided, test, and written attempts';
 
@@ -16,6 +17,15 @@ class BackfillPracticeCorrectionsCommand extends Command
     {
         $studentId = $this->option('student');
         $studentId = is_numeric($studentId) ? (int) $studentId : null;
+
+        if ($this->option('reset')) {
+            $query = \App\Models\PracticeCorrectionItem::query();
+            if ($studentId !== null) {
+                $query->where('student_id', $studentId);
+            }
+            $deleted = $query->delete();
+            $this->warn("Cleared {$deleted} existing correction row(s).");
+        }
 
         $this->info($studentId
             ? "Backfilling correction queue for student #{$studentId}…"
