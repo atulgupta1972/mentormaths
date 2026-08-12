@@ -55,7 +55,7 @@ onUnmounted(() => clearInterval(pingTimer));
                     <h2 class="text-xl font-semibold text-gray-800">
                         {{ task.chapter?.grade_name }} · Ch {{ task.chapter?.chapter_number }}
                     </h2>
-                    <p class="text-sm text-gray-500">{{ task.status_label }} · {{ formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</p>
+                    <p class="text-sm text-gray-500">{{ task.status_label }} · {{ task.rate_description || formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</p>
                 </div>
                 <Link :href="safeRoute('content.tasks.index', null, '/content/tasks')" class="text-sm text-indigo-600 hover:underline">← My tasks</Link>
             </div>
@@ -76,7 +76,7 @@ onUnmounted(() => clearInterval(pingTimer));
 
                 <div v-if="task.awaiting_agreement" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <p class="text-sm text-gray-700">
-                        Admin offered <strong>{{ formatInr(task.offered_amount_inr) }}</strong> for this chapter.
+                        Admin offered <strong>{{ task.rate_description || formatInr(task.offered_amount_inr) }}</strong>.
                         Agree to start work.
                     </p>
                     <PrimaryButton

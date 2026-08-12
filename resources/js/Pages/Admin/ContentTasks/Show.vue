@@ -59,7 +59,10 @@ const formatDuration = (seconds) => {
                     </div>
                     <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                         <p class="text-xs uppercase text-gray-500">Agreed rate</p>
-                        <p class="font-semibold">{{ task.agreed_amount_inr ? formatInr(task.agreed_amount_inr) : formatInr(task.offered_amount_inr) }}</p>
+                        <p class="font-semibold">{{ task.rate_description || (task.agreed_amount_inr ? formatInr(task.agreed_amount_inr) : formatInr(task.offered_amount_inr)) }}</p>
+                        <p v-if="task.payable_amount_inr > 0 && task.rate_basis === 'per_question'" class="mt-1 text-xs text-gray-500">
+                            Payable now: {{ formatInr(task.payable_amount_inr) }}
+                        </p>
                     </div>
                     <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                         <p class="text-xs uppercase text-gray-500">Uploader active time</p>

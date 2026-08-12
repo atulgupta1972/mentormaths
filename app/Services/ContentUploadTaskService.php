@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
 use App\Models\SyllabusChapter;
 use App\Models\Textbook;
@@ -26,12 +27,13 @@ class ContentUploadTaskService
         array $chapterIds,
         User $admin,
         ?int $amountOverrideInr = null,
+        ?string $rateBasisOverride = null,
         ?string $duplicateOverrideReason = null,
         ?string $adminNotes = null,
     ): array {
         $tasks = [];
 
-        DB::transaction(function () use ($uploader, $chapterIds, $admin, $amountOverrideInr, $duplicateOverrideReason, $adminNotes, &$tasks) {
+        DB::transaction(function () use ($uploader, $chapterIds, $admin, $amountOverrideInr, $rateBasisOverride, $duplicateOverrideReason, $adminNotes, &$tasks) {
             foreach ($chapterIds as $chapterId) {
                 $chapter = TextbookChapter::query()->findOrFail($chapterId);
                 $duplicate = $this->duplicateGuard->check($chapter);
@@ -40,7 +42,14 @@ class ContentUploadTaskService
                     throw new \InvalidArgumentException($duplicate['reason'] ?? 'Duplicate content blocked.');
                 }
 
-                $offered = $amountOverrideInr ?? $this->rateCardService->resolveAmountForChapter($chapter);
+                if ($amountOverrideInr !== null) {
+                    $offered = $amountOverrideInr;
+                    $rateBasis = $rateBasisOverride ?? ContentRateCard::BASIS_PER_SET;
+                } else {
+                    $resolved = $this->rateCardService->resolveRateForChapter($chapter);
+                    $offered = $resolved['amount_inr'];
+                    $rateBasis = $resolved['rate_basis'];
+                }
 
                 if ($offered <= 0) {
                     throw new \InvalidArgumentException(
@@ -53,6 +62,7 @@ class ContentUploadTaskService
                     'assigned_to_user_id' => $uploader->id,
                     'assigned_by_user_id' => $admin->id,
                     'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
+                    'rate_basis' => $rateBasis,
                     'offered_amount_inr' => $offered,
                     'duplicate_override_reason' => $duplicate['blocked'] ? $duplicateOverrideReason : null,
                     'duplicate_override_by' => $duplicate['blocked'] ? $admin->id : null,
@@ -83,6 +93,7 @@ class ContentUploadTaskService
         User $uploader,
         User $admin,
         ?int $amountOverrideInr = null,
+        ?string $rateBasisOverride = null,
         ?string $duplicateOverrideReason = null,
         ?string $adminNotes = null,
     ): array {
@@ -121,6 +132,7 @@ class ContentUploadTaskService
             $textbookChapterIds,
             $admin,
             $amountOverrideInr,
+            $rateBasisOverride,
             $duplicateOverrideReason,
             $adminNotes,
         );

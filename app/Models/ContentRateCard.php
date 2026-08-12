@@ -9,11 +9,16 @@ class ContentRateCard extends Model
 {
     public const TYPE_TEXTBOOK_CHAPTER_MCQ = 'textbook_chapter_mcq';
 
+    public const BASIS_PER_SET = 'per_set';
+
+    public const BASIS_PER_QUESTION = 'per_question';
+
     protected $fillable = [
         'board_id',
         'grade_level_id',
         'syllabus_chapter_id',
         'content_type',
+        'rate_basis',
         'default_amount_inr',
         'admin_notes',
         'created_by',
@@ -33,5 +38,13 @@ class ContentRateCard extends Model
     public function syllabusChapter(): BelongsTo
     {
         return $this->belongsTo(SyllabusChapter::class);
+    }
+
+    public static function basisLabel(?string $basis): string
+    {
+        return match ($basis) {
+            self::BASIS_PER_QUESTION => 'Per question',
+            default => 'Per chapter / set',
+        };
     }
 }

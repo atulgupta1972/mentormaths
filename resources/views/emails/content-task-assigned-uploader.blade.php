@@ -36,7 +36,7 @@
             then verify each question in the checklist.
         </p>
         <p style="margin: 0;">
-            <strong>Offered rate:</strong> ₹{{ number_format((int) $task->offered_amount_inr) }} for this chapter
+            <strong>Offered rate:</strong> {{ $task->rateDescription() }}
             @if ($task->admin_notes)
                 <br><strong>Admin note:</strong> {{ $task->admin_notes }}
             @endif

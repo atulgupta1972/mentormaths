@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
+use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
 use App\Models\GradeLevel;
@@ -162,16 +163,18 @@ class ContentUploadTaskController extends Controller
                 $syllabusChapters = $syllabus?->chapters
                     ->map(function (SyllabusChapter $chapter) use ($gradeLevel, $uploadedBySyllabus, $assignedBySyllabus) {
                         $syllabusId = (int) $chapter->id;
+                        $rate = $this->rateCardService->resolveRateForSyllabusChapter(
+                            $gradeLevel->id,
+                            $chapter,
+                        );
 
                         return [
                             'id' => $chapter->id,
                             'chapter_number' => $chapter->chapter_number,
                             'name' => $chapter->name,
                             'label' => self::chapterLabel($chapter),
-                            'default_amount_inr' => $this->rateCardService->resolveAmountForSyllabusChapter(
-                                $gradeLevel->id,
-                                $chapter,
-                            ),
+                            'default_amount_inr' => $rate['amount_inr'],
+                            'default_rate_basis' => $rate['rate_basis'],
                             'assigned_for_textbooks' => array_keys($assignedBySyllabus[$syllabusId] ?? []),
                             'uploaded_for_textbooks' => array_keys($uploadedBySyllabus[$syllabusId] ?? []),
                         ];
@@ -181,14 +184,17 @@ class ContentUploadTaskController extends Controller
             }
         }
 
+        $classDefault = $gradeLevel
+            ? $this->rateCardService->resolveClassDefaultRate($gradeLevel->id)
+            : ['amount_inr' => 0, 'rate_basis' => ContentRateCard::BASIS_PER_QUESTION];
+
         return Inertia::render('Admin/ContentTasks/Create', [
             'uploaders' => $uploaders,
             'gradeLevel' => $gradeLevel?->only(['id', 'name']),
             'textbooks' => $textbooks,
             'syllabusChapters' => $syllabusChapters,
-            'classDefaultRateInr' => $gradeLevel
-                ? $this->rateCardService->resolveClassDefaultAmount($gradeLevel->id)
-                : 0,
+            'classDefaultRateInr' => $classDefault['amount_inr'],
+            'classDefaultRateBasis' => $classDefault['rate_basis'],
         ]);
     }
 
@@ -204,10 +210,27 @@ class ContentUploadTaskController extends Controller
             'book_code' => ['required_without:textbook_id', 'nullable', 'string', 'max:32', 'alpha_dash'],
             'syllabus_chapter_ids' => ['required', 'array', 'min:1'],
             'syllabus_chapter_ids.*' => ['integer', 'exists:syllabus_chapters,id'],
-            'offered_amount_inr' => ['nullable', 'integer', 'min:100', 'max:500000'],
+            'rate_basis' => ['required', Rule::in([
+                ContentRateCard::BASIS_PER_SET,
+                ContentRateCard::BASIS_PER_QUESTION,
+            ])],
+            'offered_amount_inr' => ['nullable', 'integer', 'min:1', 'max:500000'],
             'duplicate_override_reason' => ['nullable', 'string', 'max:2000'],
             'admin_notes' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        $rateBasis = $validated['rate_basis'];
+        $minAmount = $rateBasis === ContentRateCard::BASIS_PER_QUESTION ? 1 : 100;
+
+        if (isset($validated['offered_amount_inr']) && (int) $validated['offered_amount_inr'] < $minAmount) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'offered_amount_inr' => $rateBasis === ContentRateCard::BASIS_PER_QUESTION
+                        ? 'Per-question rate must be at least ₹1.'
+                        : 'Per-chapter rate must be at least ₹100.',
+                ]);
+        }
 
         $uploader = User::query()->findOrFail($validated['assigned_to_user_id']);
 
@@ -228,7 +251,8 @@ class ContentUploadTaskController extends Controller
                     continue;
                 }
 
-                if ($this->rateCardService->resolveAmountForSyllabusChapter($gradeLevel->id, $syllabusChapter) <= 0) {
+                $rate = $this->rateCardService->resolveRateForSyllabusChapter($gradeLevel->id, $syllabusChapter);
+                if ($rate['amount_inr'] <= 0) {
                     $missingRate = true;
                     break;
                 }
@@ -238,7 +262,7 @@ class ContentUploadTaskController extends Controller
                 return back()
                     ->withInput()
                     ->withErrors([
-                        'offered_amount_inr' => 'No rate in the matrix for this class. Enter a rate override (₹) above, or set class rates in the rate matrix first.',
+                        'offered_amount_inr' => 'No rate in the matrix for this class. Enter a rate override above, or set class rates in the rate matrix first.',
                     ]);
             }
         }
@@ -299,6 +323,7 @@ class ContentUploadTaskController extends Controller
                 $uploader,
                 $request->user(),
                 $amount,
+                $amount !== null ? $rateBasis : null,
                 $validated['duplicate_override_reason'] ?? null,
                 $validated['admin_notes'] ?? null,
             );
@@ -520,6 +545,10 @@ class ContentUploadTaskController extends Controller
             'id' => $task->id,
             'status' => $task->status,
             'status_label' => $task->statusLabel(),
+            'rate_basis' => $task->rate_basis,
+            'rate_basis_label' => $task->rateBasisLabel(),
+            'rate_description' => $task->rateDescription(),
+            'payable_amount_inr' => $task->payableAmountInr(),
             'offered_amount_inr' => $task->offered_amount_inr,
             'agreed_amount_inr' => $task->agreed_amount_inr,
             'agreed_at' => $task->agreed_at?->toIso8601String(),

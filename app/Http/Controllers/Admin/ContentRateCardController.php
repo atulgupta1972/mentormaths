@@ -10,6 +10,7 @@ use App\Models\SyllabusChapter;
 use App\Services\ContentRateCardService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,6 +34,8 @@ class ContentRateCardController extends Controller
                     'chapter_number' => $card->syllabusChapter->chapter_number,
                 ] : null,
                 'content_type' => $card->content_type,
+                'rate_basis' => $card->rate_basis,
+                'rate_basis_label' => ContentRateCard::basisLabel($card->rate_basis),
                 'default_amount_inr' => $card->default_amount_inr,
                 'admin_notes' => $card->admin_notes,
             ]);
@@ -51,9 +54,24 @@ class ContentRateCardController extends Controller
             'grade_level_id' => ['nullable', 'exists:grade_levels,id'],
             'syllabus_chapter_id' => ['nullable', 'exists:syllabus_chapters,id'],
             'content_type' => ['required', 'string', 'max:64'],
-            'default_amount_inr' => ['required', 'integer', 'min:100', 'max:500000'],
+            'rate_basis' => ['required', Rule::in([
+                ContentRateCard::BASIS_PER_SET,
+                ContentRateCard::BASIS_PER_QUESTION,
+            ])],
+            'default_amount_inr' => ['required', 'integer', 'min:1', 'max:500000'],
             'admin_notes' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        $minAmount = $validated['rate_basis'] === ContentRateCard::BASIS_PER_QUESTION ? 1 : 100;
+        if ((int) $validated['default_amount_inr'] < $minAmount) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'default_amount_inr' => $validated['rate_basis'] === ContentRateCard::BASIS_PER_QUESTION
+                        ? 'Per-question rate must be at least ₹1.'
+                        : 'Per-chapter rate must be at least ₹100.',
+                ]);
+        }
 
         ContentRateCard::create([
             ...$validated,
@@ -67,9 +85,24 @@ class ContentRateCardController extends Controller
     public function update(Request $request, ContentRateCard $contentRateCard): RedirectResponse
     {
         $validated = $request->validate([
-            'default_amount_inr' => ['required', 'integer', 'min:100', 'max:500000'],
+            'rate_basis' => ['required', Rule::in([
+                ContentRateCard::BASIS_PER_SET,
+                ContentRateCard::BASIS_PER_QUESTION,
+            ])],
+            'default_amount_inr' => ['required', 'integer', 'min:1', 'max:500000'],
             'admin_notes' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        $minAmount = $validated['rate_basis'] === ContentRateCard::BASIS_PER_QUESTION ? 1 : 100;
+        if ((int) $validated['default_amount_inr'] < $minAmount) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'default_amount_inr' => $validated['rate_basis'] === ContentRateCard::BASIS_PER_QUESTION
+                        ? 'Per-question rate must be at least ₹1.'
+                        : 'Per-chapter rate must be at least ₹100.',
+                ]);
+        }
 
         $contentRateCard->update([
             ...$validated,

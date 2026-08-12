@@ -30,6 +30,7 @@ class ContentUploadTask extends Model
         'assigned_to_user_id',
         'assigned_by_user_id',
         'status',
+        'rate_basis',
         'offered_amount_inr',
         'agreed_amount_inr',
         'agreed_at',
@@ -92,7 +93,61 @@ class ContentUploadTask extends Model
 
     public function payableAmountInr(): int
     {
+        $unit = $this->rateUnitInr();
+
+        if ($unit <= 0) {
+            return 0;
+        }
+
+        if ($this->rate_basis === ContentRateCard::BASIS_PER_QUESTION) {
+            return $unit * $this->uploadedQuestionCount();
+        }
+
+        return $unit;
+    }
+
+    public function rateUnitInr(): int
+    {
         return (int) ($this->agreed_amount_inr ?? $this->offered_amount_inr ?? 0);
+    }
+
+    public function uploadedQuestionCount(): int
+    {
+        $this->loadMissing('textbookChapter');
+
+        $worksheetIds = $this->textbookChapter?->mcqWorksheetIds() ?? [];
+
+        if ($worksheetIds === []) {
+            return 0;
+        }
+
+        return (int) \Illuminate\Support\Facades\DB::table('worksheet_question')
+            ->whereIn('worksheet_id', $worksheetIds)
+            ->distinct()
+            ->count('question_id');
+    }
+
+    public function rateBasisLabel(): string
+    {
+        return ContentRateCard::basisLabel($this->rate_basis);
+    }
+
+    public function rateDescription(): string
+    {
+        $unit = $this->rateUnitInr();
+
+        if ($this->rate_basis === ContentRateCard::BASIS_PER_QUESTION) {
+            $count = $this->uploadedQuestionCount();
+            $total = $this->payableAmountInr();
+
+            if ($count > 0) {
+                return '₹'.number_format($unit).' per question × '.$count.' = ₹'.number_format($total);
+            }
+
+            return '₹'.number_format($unit).' per verified question';
+        }
+
+        return '₹'.number_format($unit).' per chapter';
     }
 
     public function isPayable(): bool

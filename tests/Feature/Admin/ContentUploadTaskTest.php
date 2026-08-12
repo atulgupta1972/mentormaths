@@ -63,12 +63,14 @@ class ContentUploadTaskTest extends TestCase
                 'book_name' => 'Ganita Prakash',
                 'book_code' => 'GP',
                 'syllabus_chapter_ids' => [$syllabusChapter->id],
+                'rate_basis' => ContentRateCard::BASIS_PER_SET,
             ])
             ->assertRedirect(route('admin.content-tasks.index'));
 
         $task = ContentUploadTask::query()->firstOrFail();
         $this->assertSame(ContentUploadTask::STATUS_PENDING_AGREEMENT, $task->status);
         $this->assertSame(6000, $task->offered_amount_inr);
+        $this->assertSame(ContentRateCard::BASIS_PER_SET, $task->rate_basis);
 
         Mail::assertSent(ContentTaskAssignedUploader::class, function ($mail) use ($uploader) {
             if (! $mail->hasTo($uploader->email)) {
@@ -118,6 +120,7 @@ class ContentUploadTaskTest extends TestCase
                 'book_name' => 'Ganita Prakash',
                 'book_code' => 'GP',
                 'syllabus_chapter_ids' => [$syllabusChapter->id],
+                'rate_basis' => ContentRateCard::BASIS_PER_SET,
                 'offered_amount_inr' => 5000,
             ])
             ->assertRedirect(route('admin.content-tasks.index'))
@@ -169,6 +172,7 @@ class ContentUploadTaskTest extends TestCase
                 'book_name' => 'Ganita Prakash',
                 'book_code' => 'GP',
                 'syllabus_chapter_ids' => [$syllabusChapter->id],
+                'rate_basis' => ContentRateCard::BASIS_PER_SET,
                 'offered_amount_inr' => 5000,
             ])
             ->assertRedirect();
@@ -183,7 +187,7 @@ class ContentUploadTaskTest extends TestCase
                 ->where("matrix.cells.{$grade->id}.{$uploader->id}.count", 1));
     }
 
-    public function test_store_requires_rate_when_matrix_empty(): void
+    public function test_store_uses_default_per_question_rate_when_matrix_empty(): void
     {
         [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
 
@@ -192,17 +196,45 @@ class ContentUploadTaskTest extends TestCase
 
         $this->actingAs($admin)
             ->withSession(['admin_grade_level_id' => $grade->id])
-            ->from(route('admin.content-tasks.create'))
             ->post(route('admin.content-tasks.store'), [
                 'assigned_to_user_id' => $uploader->id,
                 'book_name' => 'Ganita Prakash',
                 'book_code' => 'GP',
                 'syllabus_chapter_ids' => [$syllabusChapter->id],
+                'rate_basis' => ContentRateCard::BASIS_PER_QUESTION,
             ])
-            ->assertRedirect(route('admin.content-tasks.create'))
-            ->assertSessionHasErrors('offered_amount_inr');
+            ->assertRedirect(route('admin.content-tasks.index'));
 
-        $this->assertSame(0, ContentUploadTask::query()->count());
+        $task = ContentUploadTask::query()->firstOrFail();
+        $this->assertSame(ContentRateCard::BASIS_PER_QUESTION, $task->rate_basis);
+        $this->assertSame(2, $task->offered_amount_inr);
+    }
+
+    public function test_admin_can_assign_per_question_rate_override(): void
+    {
+        Mail::fake();
+
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->post(route('admin.content-tasks.store'), [
+                'assigned_to_user_id' => $uploader->id,
+                'book_name' => 'Ganita Prakash',
+                'book_code' => 'GP',
+                'syllabus_chapter_ids' => [$syllabusChapter->id],
+                'rate_basis' => ContentRateCard::BASIS_PER_QUESTION,
+                'offered_amount_inr' => 2,
+            ])
+            ->assertRedirect(route('admin.content-tasks.index'));
+
+        $task = ContentUploadTask::query()->firstOrFail();
+        $this->assertSame(ContentRateCard::BASIS_PER_QUESTION, $task->rate_basis);
+        $this->assertSame(2, $task->offered_amount_inr);
+        $this->assertStringContainsString('per verified question', $task->rateDescription());
     }
 
     public function test_duplicate_assignment_blocked_without_override(): void
@@ -256,6 +288,7 @@ class ContentUploadTaskTest extends TestCase
                 'assigned_to_user_id' => $other->id,
                 'textbook_id' => $textbook->id,
                 'syllabus_chapter_ids' => [$syllabusChapter->id],
+                'rate_basis' => ContentRateCard::BASIS_PER_SET,
             ])
             ->assertRedirect(route('admin.content-tasks.create'))
             ->assertSessionHas('error');

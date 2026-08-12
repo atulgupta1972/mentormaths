@@ -238,7 +238,7 @@ const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
                                         </span>
                                     </td>
                                     <td class="px-3 py-2">{{ row.question_count || '—' }}</td>
-                                    <td class="px-3 py-2">{{ formatInr(row.agreed_amount_inr || row.offered_amount_inr) }}</td>
+                                    <td class="px-3 py-2">{{ row.rate_description || formatInr(row.agreed_amount_inr || row.offered_amount_inr) }}</td>
                                     <td class="px-3 py-2 text-right">
                                         <Link :href="route('admin.content-tasks.show', row.id)" class="text-indigo-600 hover:underline">Open</Link>
                                     </td>
@@ -271,7 +271,7 @@ const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
                                     <p class="text-xs text-gray-500">{{ task.chapter?.title }}</p>
                                 </td>
                                 <td class="px-4 py-3">{{ task.assignee?.name }}</td>
-                                <td class="px-4 py-3">{{ formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</td>
+                                <td class="px-4 py-3">{{ task.rate_description || formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</td>
                                 <td class="px-4 py-3">{{ task.status_label }}</td>
                                 <td class="px-4 py-3 text-right">
                                     <Link :href="route('admin.content-tasks.show', task.id)" class="text-indigo-600 hover:underline">View</Link>

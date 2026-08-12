@@ -4,7 +4,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 defineProps({
     rateCards: { type: Array, default: () => [] },
@@ -20,14 +20,19 @@ const form = useForm({
     grade_level_id: '',
     syllabus_chapter_id: '',
     content_type: 'textbook_chapter_mcq',
-    default_amount_inr: 5000,
+    rate_basis: 'per_question',
+    default_amount_inr: 2,
     admin_notes: '',
 });
 
 const editForm = useForm({
+    rate_basis: 'per_question',
     default_amount_inr: 0,
     admin_notes: '',
 });
+
+const formMinRate = computed(() => (form.rate_basis === 'per_question' ? 1 : 100));
+const editMinRate = computed(() => (editForm.rate_basis === 'per_question' ? 1 : 100));
 
 const submit = () => {
     form.transform((data) => ({
@@ -43,6 +48,7 @@ const submit = () => {
 
 const startEdit = (card) => {
     editingId.value = card.id;
+    editForm.rate_basis = card.rate_basis || 'per_set';
     editForm.default_amount_inr = card.default_amount_inr;
     editForm.admin_notes = card.admin_notes ?? '';
     editForm.clearErrors();
@@ -66,6 +72,14 @@ const saveEdit = (cardId) => {
 
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
 
+const formatRate = (card) => {
+    if (card.rate_basis === 'per_question') {
+        return `${formatInr(card.default_amount_inr)}/Q`;
+    }
+
+    return formatInr(card.default_amount_inr);
+};
+
 const scopeLabel = (card) => {
     const parts = [
         card.board?.name || 'Any board',
@@ -85,7 +99,7 @@ const scopeLabel = (card) => {
         <template #header>
             <div>
                 <h2 class="text-xl font-semibold text-gray-800">Content rate matrix</h2>
-                <p class="text-sm text-gray-500">Default pay per chapter. More specific rows override broader ones.</p>
+                <p class="text-sm text-gray-500">Default pay per chapter or per question. More specific rows override broader ones.</p>
             </div>
         </template>
 
@@ -111,8 +125,15 @@ const scopeLabel = (card) => {
                         </select>
                     </div>
                     <div>
-                        <InputLabel value="Default amount (₹)" />
-                        <input v-model="form.default_amount_inr" type="number" min="100" class="mt-1 block w-full rounded-md border-gray-300 text-sm" required>
+                        <InputLabel value="Payment basis" />
+                        <select v-model="form.rate_basis" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                            <option value="per_question">Per question</option>
+                            <option value="per_set">Per chapter / set</option>
+                        </select>
+                    </div>
+                    <div>
+                        <InputLabel :value="form.rate_basis === 'per_question' ? 'Rate (₹ per question)' : 'Rate (₹ per chapter)'" />
+                        <input v-model="form.default_amount_inr" type="number" :min="formMinRate" class="mt-1 block w-full rounded-md border-gray-300 text-sm" required>
                     </div>
                     <div class="sm:col-span-2">
                         <InputLabel value="Notes (e.g. diagram-heavy chapters)" />
@@ -128,6 +149,7 @@ const scopeLabel = (card) => {
                         <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                             <tr>
                                 <th class="px-4 py-3">Scope</th>
+                                <th class="px-4 py-3">Basis</th>
                                 <th class="px-4 py-3">Amount</th>
                                 <th class="px-4 py-3">Notes</th>
                                 <th class="px-4 py-3 text-right">Actions</th>
@@ -137,14 +159,25 @@ const scopeLabel = (card) => {
                             <tr v-for="card in rateCards" :key="card.id" :class="editingId === card.id ? 'bg-sky-50/60' : ''">
                                 <td class="px-4 py-3">{{ scopeLabel(card) }}</td>
                                 <td class="px-4 py-3">
+                                    <select
+                                        v-if="editingId === card.id"
+                                        v-model="editForm.rate_basis"
+                                        class="rounded-md border-gray-300 text-sm"
+                                    >
+                                        <option value="per_question">Per question</option>
+                                        <option value="per_set">Per chapter</option>
+                                    </select>
+                                    <span v-else>{{ card.rate_basis_label || 'Per chapter / set' }}</span>
+                                </td>
+                                <td class="px-4 py-3">
                                     <input
                                         v-if="editingId === card.id"
                                         v-model="editForm.default_amount_inr"
                                         type="number"
-                                        min="100"
+                                        :min="editMinRate"
                                         class="w-28 rounded-md border-gray-300 text-sm"
                                     >
-                                    <span v-else class="font-medium">{{ formatInr(card.default_amount_inr) }}</span>
+                                    <span v-else class="font-medium">{{ formatRate(card) }}</span>
                                 </td>
                                 <td class="px-4 py-3">
                                     <input
@@ -176,7 +209,7 @@ const scopeLabel = (card) => {
                                 </td>
                             </tr>
                             <tr v-if="!rateCards.length">
-                                <td colspan="4" class="px-4 py-8 text-center text-gray-500">No rates configured yet.</td>
+                                <td colspan="5" class="px-4 py-8 text-center text-gray-500">No rates configured yet.</td>
                             </tr>
                         </tbody>
                     </table>
