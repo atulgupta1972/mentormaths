@@ -7,6 +7,7 @@ use App\Models\FormulaDrillSession;
 use App\Models\FormulaQuestionStat;
 use App\Models\Question;
 use App\Models\Student;
+use App\Support\AnswerValidationService;
 use Carbon\Carbon;
 
 class FormulaDrillSessionService
@@ -14,6 +15,7 @@ class FormulaDrillSessionService
     public function __construct(
         private FormulaDrillPoolService $poolService,
         private PracticeCorrectionQueueService $correctionQueue,
+        private AnswerValidationService $answerValidation,
     ) {}
 
     public function todayDate(): Carbon
@@ -26,7 +28,7 @@ class FormulaDrillSessionService
         return FormulaDrillSession::query()
             ->where('student_id', $student->id)
             ->whereDate('drill_date', $this->todayDate())
-            ->with(['items.question.options'])
+            ->with(['items.question.options', 'items.question.blankAnswer'])
             ->first();
     }
 
@@ -123,7 +125,7 @@ class FormulaDrillSessionService
             $this->markQuestionShown($student->id, $row['question_id']);
         }
 
-        return $session->load(['items.question.options']);
+        return $session->load(['items.question.options', 'items.question.blankAnswer']);
     }
 
     /**
@@ -210,9 +212,9 @@ class FormulaDrillSessionService
     }
 
     /**
-     * @return array{correct: bool, exhausted: bool, attempts_left: int, correct_option_id: ?int, session_complete: bool}
+     * @return array{correct: bool, exhausted: bool, attempts_left: int, correct_option_id: ?int, correct_answer: ?string, session_complete: bool}
      */
-    public function submitAnswer(FormulaDrillSession $session, FormulaDrillItem $item, int $optionId): array
+    public function submitAnswer(FormulaDrillSession $session, FormulaDrillItem $item, ?int $optionId = null, ?string $answerText = null): array
     {
         $maxAttempts = (int) config('formula_drill.max_attempts_per_question', 4);
 
@@ -220,7 +222,16 @@ class FormulaDrillSessionService
             throw new \InvalidArgumentException('This formula question is already completed.');
         }
 
-        $question = $item->question ?? Question::query()->with('options')->findOrFail($item->question_id);
+        $question = $item->question ?? Question::query()->with(['options', 'blankAnswer'])->findOrFail($item->question_id);
+
+        if ($question->isFillInBlank()) {
+            return $this->submitFillBlankAnswer($session, $item, $question, trim((string) ($answerText ?? '')), $maxAttempts);
+        }
+
+        if ($optionId === null) {
+            throw new \InvalidArgumentException('Select an option before submitting.');
+        }
+
         $option = $question->options->firstWhere('id', $optionId);
 
         if (! $option) {
@@ -284,12 +295,96 @@ class FormulaDrillSessionService
             'exhausted' => false,
             'attempts_left' => $maxAttempts - $item->attempt_count,
             'correct_option_id' => null,
+            'correct_answer' => null,
             'session_complete' => false,
         ];
     }
 
     /**
-     * @return array{correct: bool, exhausted: bool, attempts_left: int, correct_option_id: ?int, session_complete: bool}
+     * @return array{correct: bool, exhausted: bool, attempts_left: int, correct_option_id: ?int, correct_answer: ?string, session_complete: bool}
+     */
+    private function submitFillBlankAnswer(
+        FormulaDrillSession $session,
+        FormulaDrillItem $item,
+        Question $question,
+        string $answerText,
+        int $maxAttempts,
+    ): array {
+        if ($answerText === '') {
+            throw new \InvalidArgumentException('Enter an answer before submitting.');
+        }
+
+        $item->attempt_count++;
+        $isCorrect = $this->answerValidation->isCorrect($question, $answerText);
+
+        if (! $isCorrect) {
+            $item->failure_count++;
+        }
+
+        $stat = FormulaQuestionStat::query()->firstOrCreate(
+            [
+                'student_id' => $session->student_id,
+                'question_id' => $question->id,
+            ],
+            [
+                'total_failures' => 0,
+                'times_shown' => 0,
+                'times_correct' => 0,
+                'times_exhausted' => 0,
+                'needs_review' => false,
+            ],
+        );
+
+        if ($isCorrect) {
+            $item->status = FormulaDrillItem::STATUS_CORRECT;
+            $item->completed_at = now();
+            $item->save();
+
+            $stat->times_correct++;
+            $stat->needs_review = $item->failure_count > 0;
+            $stat->last_correct_at = now();
+            $stat->save();
+
+            return $this->advanceSession($session, true, false, $maxAttempts - $item->attempt_count, null);
+        }
+
+        if ($item->attempt_count >= $maxAttempts) {
+            $item->status = FormulaDrillItem::STATUS_EXHAUSTED;
+            $item->completed_at = now();
+            $item->save();
+
+            $stat->times_exhausted++;
+            $stat->needs_review = true;
+            $stat->save();
+
+            $question->loadMissing('blankAnswer');
+
+            return $this->advanceSession(
+                $session,
+                false,
+                true,
+                0,
+                null,
+                $question->blankAnswer?->correct_answer,
+            );
+        }
+
+        $item->save();
+        $stat->total_failures++;
+        $stat->save();
+
+        return [
+            'correct' => false,
+            'exhausted' => false,
+            'attempts_left' => $maxAttempts - $item->attempt_count,
+            'correct_option_id' => null,
+            'correct_answer' => null,
+            'session_complete' => false,
+        ];
+    }
+
+    /**
+     * @return array{correct: bool, exhausted: bool, attempts_left: int, correct_option_id: ?int, correct_answer: ?string, session_complete: bool}
      */
     private function advanceSession(
         FormulaDrillSession $session,
@@ -297,10 +392,11 @@ class FormulaDrillSessionService
         bool $exhausted,
         int $attemptsLeft,
         ?int $correctOptionId,
+        ?string $correctAnswer = null,
     ): array {
         $session->increment('questions_completed');
         $session->refresh();
-        $session->load('items');
+        $session->load(['items.question.options', 'items.question.blankAnswer']);
 
         if ($session->questions_completed >= $session->questions_total) {
             $session->update([
@@ -313,6 +409,7 @@ class FormulaDrillSessionService
                 'exhausted' => $exhausted,
                 'attempts_left' => $attemptsLeft,
                 'correct_option_id' => $exhausted ? $correctOptionId : null,
+                'correct_answer' => $exhausted ? $correctAnswer : null,
                 'session_complete' => true,
             ];
         }
@@ -322,6 +419,7 @@ class FormulaDrillSessionService
             'exhausted' => $exhausted,
             'attempts_left' => $attemptsLeft,
             'correct_option_id' => $exhausted ? $correctOptionId : null,
+            'correct_answer' => $exhausted ? $correctAnswer : null,
             'session_complete' => false,
         ];
     }
@@ -386,7 +484,27 @@ class FormulaDrillSessionService
     public function itemPayload(FormulaDrillItem $item): array
     {
         $question = $item->question;
+        $question->loadMissing(['options', 'blankAnswer']);
         $maxAttempts = (int) config('formula_drill.max_attempts_per_question', 4);
+
+        $questionPayload = [
+            'id' => $question->id,
+            'type' => $question->type,
+            'question_text' => $question->question_text,
+            'explanation' => $question->explanation,
+        ];
+
+        if ($question->isFillInBlank()) {
+            $questionPayload['answer_format'] = $question->blankAnswer?->answer_format;
+            $questionPayload['answer_format_label'] = $this->answerValidation->formatLabel($question->blankAnswer?->answer_format);
+            $questionPayload['options'] = [];
+        } else {
+            $questionPayload['options'] = $question->options->map(fn ($option, $index) => [
+                'id' => $option->id,
+                'letter' => chr(65 + $index),
+                'option_text' => $option->option_text,
+            ])->values()->all();
+        }
 
         return [
             'id' => $item->id,
@@ -394,16 +512,7 @@ class FormulaDrillSessionService
             'attempt_count' => $item->attempt_count,
             'attempts_left' => max(0, $maxAttempts - $item->attempt_count),
             'is_practice_correction' => $item->practice_correction_item_id !== null,
-            'question' => [
-                'id' => $question->id,
-                'question_text' => $question->question_text,
-                'explanation' => $question->explanation,
-                'options' => $question->options->map(fn ($option, $index) => [
-                    'id' => $option->id,
-                    'letter' => chr(65 + $index),
-                    'option_text' => $option->option_text,
-                ])->values()->all(),
-            ],
+            'question' => $questionPayload,
         ];
     }
 }

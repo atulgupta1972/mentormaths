@@ -2,6 +2,7 @@
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
+import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import axios from 'axios';
@@ -48,6 +49,7 @@ const currentItem = ref(props.current);
 const sessionState = ref(props.session);
 const progressLabel = ref(props.progress_label);
 const selectedOptionId = ref(null);
+const blankAnswer = ref('');
 const submitting = ref(false);
 const feedback = ref(null);
 const disabledOptions = ref([]);
@@ -61,9 +63,29 @@ watch(
 );
 
 const question = computed(() => currentItem.value?.question ?? null);
+const isFillInBlank = computed(() => question.value?.type === 'fill_in_blank');
+
+const blankPlaceholder = computed(() => {
+    const format = question.value?.answer_format;
+
+    if (format === 'integer') {
+        return 'Enter a whole number';
+    }
+
+    if (format === 'decimal') {
+        return 'Enter a decimal';
+    }
+
+    if (format === 'fraction') {
+        return 'Enter a fraction, e.g. 3/4';
+    }
+
+    return 'Enter your answer';
+});
 
 const resetQuestionState = () => {
     selectedOptionId.value = null;
+    blankAnswer.value = '';
     feedback.value = null;
     disabledOptions.value = [];
     submitting.value = false;
@@ -78,16 +100,28 @@ const selectOption = (optionId) => {
 };
 
 const submitAnswer = async () => {
-    if (!selectedOptionId.value || !currentItem.value || submitting.value) {
+    if (!currentItem.value || submitting.value) {
+        return;
+    }
+
+    if (isFillInBlank.value) {
+        if (!blankAnswer.value.trim()) {
+            return;
+        }
+    } else if (!selectedOptionId.value) {
         return;
     }
 
     submitting.value = true;
 
     try {
+        const payloadBody = isFillInBlank.value
+            ? { answer_text: blankAnswer.value.trim() }
+            : { option_id: selectedOptionId.value };
+
         const { data: payload } = await axios.post(
             route('student.formula-drill.answer', currentItem.value.id),
-            { option_id: selectedOptionId.value },
+            payloadBody,
         );
 
         feedback.value = payload;
@@ -182,7 +216,24 @@ const optionClass = (optionId) => {
 
                     <QuestionBody :question-text="question.question_text" />
 
-                    <div class="mt-5 space-y-2">
+                    <div v-if="isFillInBlank" class="mt-5 space-y-3">
+                        <p v-if="question.answer_format_label" class="text-xs font-medium uppercase tracking-wide text-gray-500">
+                            {{ question.answer_format_label }}
+                        </p>
+                        <TextInput
+                            :key="question.id"
+                            v-model="blankAnswer"
+                            type="text"
+                            inputmode="decimal"
+                            autocomplete="off"
+                            class="block w-full max-w-xs text-lg"
+                            :placeholder="blankPlaceholder"
+                            :disabled="submitting || feedback?.correct || feedback?.exhausted"
+                            @keyup.enter="submitAnswer"
+                        />
+                    </div>
+
+                    <div v-else class="mt-5 space-y-2">
                         <button
                             v-for="(option, optIndex) in question.options"
                             :key="option.id"
@@ -212,7 +263,8 @@ const optionClass = (optionId) => {
                         class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
                     >
                         <p class="font-medium">Maximum attempts reached — we&apos;ll ask again at the end of today&apos;s drill.</p>
-                        <p v-if="question.explanation" class="mt-1">{{ question.explanation }}</p>
+                        <p v-if="feedback.correct_answer" class="mt-1">Correct answer: {{ feedback.correct_answer }}</p>
+                        <p v-else-if="question.explanation" class="mt-1">{{ question.explanation }}</p>
                     </div>
 
                     <div
@@ -228,7 +280,7 @@ const optionClass = (optionId) => {
                         </p>
                         <PrimaryButton
                             type="button"
-                            :disabled="!selectedOptionId || submitting || feedback?.correct || feedback?.exhausted"
+                            :disabled="(isFillInBlank ? !blankAnswer.trim() : !selectedOptionId) || submitting || feedback?.correct || feedback?.exhausted"
                             @click="submitAnswer"
                         >
                             {{ submitting ? 'Checking…' : 'Submit answer' }}

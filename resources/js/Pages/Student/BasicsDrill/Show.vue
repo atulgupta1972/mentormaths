@@ -2,6 +2,7 @@
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
+import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import axios from 'axios';
@@ -28,6 +29,7 @@ const chart = computed(() => sessionState.value.chart);
 const currentItem = computed(() => sessionState.value.current_item);
 const secondsPerBlank = computed(() => sessionState.value.seconds_per_blank || 5);
 const isFormulaMcq = computed(() => currentItem.value?.is_formula_mcq);
+const isFormulaFillBlank = computed(() => currentItem.value?.is_formula_fill_blank);
 const correctionIntro = computed(() => sessionState.value.correction_intro ?? null);
 const showCorrectionIntro = computed(
     () => isFinalCorrection.value && correctionIntro.value && !correctionIntroDismissed.value,
@@ -114,7 +116,7 @@ const clearTimer = () => {
 };
 
 const startTimer = () => {
-    if (isFinalCorrection.value || isFormulaMcq.value) {
+    if (isFinalCorrection.value || isFormulaMcq.value || isFormulaFillBlank.value) {
         clearTimer();
 
         return;
@@ -142,7 +144,7 @@ const focusAnswerInput = () => {
 watch(
     () => currentItem.value?.id,
     (id) => {
-        if (id && !isShowPhase.value && !reveal.value && !isFormulaMcq.value) {
+        if (id && !isShowPhase.value && !reveal.value && !isFormulaMcq.value && !isFormulaFillBlank.value) {
             answer.value = '';
             startTimer();
             focusAnswerInput();
@@ -393,6 +395,35 @@ const mcqOptionClass = (optionId) => {
                     </PrimaryButton>
                 </div>
 
+                <div v-else-if="currentItem && isFormulaFillBlank && !reveal" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
+                    <QuestionBody :question-text="currentItem.question.question_text" />
+
+                    <div class="mt-5 space-y-3">
+                        <p v-if="currentItem.question.answer_format_label" class="text-xs font-medium uppercase tracking-wide text-gray-500">
+                            {{ currentItem.question.answer_format_label }}
+                        </p>
+                        <TextInput
+                            :key="currentItem.id"
+                            v-model="answer"
+                            type="text"
+                            inputmode="decimal"
+                            autocomplete="off"
+                            class="block w-full max-w-xs text-lg"
+                            placeholder="Enter your answer"
+                            :disabled="submitting"
+                            @keyup.enter="submitAnswer(false)"
+                        />
+                    </div>
+
+                    <PrimaryButton
+                        class="mt-6 w-full justify-center"
+                        :disabled="!answer.trim() || submitting"
+                        @click="submitAnswer(false)"
+                    >
+                        Submit
+                    </PrimaryButton>
+                </div>
+
                 <div v-else-if="currentItem && isFormulaMcq && !reveal" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
                     <QuestionBody :question-text="currentItem.question.question_text" />
 
@@ -419,7 +450,7 @@ const mcqOptionClass = (optionId) => {
                     </PrimaryButton>
                 </div>
 
-                <div v-else-if="currentItem && !reveal" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
+                <div v-else-if="currentItem && !reveal && !isFormulaMcq && !isFormulaFillBlank" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
                     <p class="text-center text-3xl font-bold text-gray-900">{{ currentItem.prompt }} = ?</p>
 
                     <div v-if="!isFinalCorrection" class="mt-4">

@@ -7,6 +7,7 @@ use App\Models\BasicsDrillProgress;
 use App\Models\BasicsDrillSession;
 use App\Models\BasicsFactStat;
 use App\Models\Student;
+use App\Support\AnswerValidationService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -16,6 +17,7 @@ class BasicsDrillSessionService
         private BasicsDrillSettingsService $settingsService,
         private DailyDrillCorrectionService $correctionService,
         private FormulaDrillSessionService $formulaService,
+        private AnswerValidationService $answerValidation,
     ) {}
 
     public function todayDate(): Carbon
@@ -207,6 +209,10 @@ class BasicsDrillSessionService
         $settings = $this->settingsService->forStudent($session->student);
 
         if ($session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION) {
+            if ($item->isFormulaFillBlank()) {
+                return $this->submitCorrectionFillBlank($item, $answer, $settings);
+            }
+
             return $this->submitCorrectionNumericAnswer($item, $answer, $timedOut, $settings);
         }
 
@@ -246,6 +252,38 @@ class BasicsDrillSessionService
             'prompt' => $item->promptLabel(),
             'item_id' => $item->id,
             'session' => $this->formatSession($session->fresh(['items']), $settings),
+        ];
+    }
+
+    public function submitCorrectionFillBlank(BasicsDrillItem $item, ?string $answer, array $settings): array
+    {
+        $session = $item->session()->with(['items', 'student'])->firstOrFail();
+
+        abort_unless($session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION, 422);
+        abort_unless($item->isFormulaFillBlank(), 422);
+
+        $result = $this->correctionService->submitFillBlankAnswer($item, (string) ($answer ?? ''));
+        $session = $session->fresh(['items', 'student']);
+
+        if ($result['correct']) {
+            $next = $this->nextPendingCorrectionItem($session);
+
+            if ($next) {
+                return [
+                    ...$result,
+                    'next_item' => $this->formatItem($next),
+                    'session' => $this->formatSession($session, $settings),
+                ];
+            }
+
+            $this->completeSession($session);
+
+            return $this->formatCompletionPayload($session, $settings, $result);
+        }
+
+        return [
+            ...$result,
+            'session' => $this->formatSession($session, $settings),
         ];
     }
 
@@ -858,22 +896,30 @@ class BasicsDrillSessionService
             'prompt' => $item->promptLabel(),
             'round' => $item->round,
             'is_formula_mcq' => $item->isFormulaMcq(),
+            'is_formula_fill_blank' => $item->isFormulaFillBlank(),
         ];
 
-        if ($item->isFormulaMcq()) {
-            $item->loadMissing('question.options');
+        if ($item->isFormulaMcq() || $item->isFormulaFillBlank()) {
+            $item->loadMissing('question.options', 'question.blankAnswer');
             $question = $item->question;
 
             $payload['question'] = [
                 'id' => $question->id,
+                'type' => $question->type,
                 'question_text' => $question->question_text,
                 'explanation' => $question->explanation,
-                'options' => $question->options->map(fn ($option, $index) => [
+            ];
+
+            if ($item->isFormulaFillBlank()) {
+                $payload['question']['answer_format'] = $question->blankAnswer?->answer_format;
+                $payload['question']['answer_format_label'] = $this->answerValidation->formatLabel($question->blankAnswer?->answer_format);
+            } else {
+                $payload['question']['options'] = $question->options->map(fn ($option, $index) => [
                     'id' => $option->id,
                     'letter' => chr(65 + $index),
                     'option_text' => $option->option_text,
-                ])->values()->all(),
-            ];
+                ])->values()->all();
+            }
         }
 
         return $payload;

@@ -58,7 +58,24 @@ class BasicsDrillItem extends Model
 
     public function isFormulaMcq(): bool
     {
-        return $this->fact_type === self::TYPE_FORMULA && $this->question_id !== null;
+        if ($this->fact_type !== self::TYPE_FORMULA || $this->question_id === null) {
+            return false;
+        }
+
+        $this->loadMissing('question');
+
+        return $this->question?->isMcq() ?? false;
+    }
+
+    public function isFormulaFillBlank(): bool
+    {
+        if ($this->fact_type !== self::TYPE_FORMULA || $this->question_id === null) {
+            return false;
+        }
+
+        $this->loadMissing('question');
+
+        return $this->question?->isFillInBlank() ?? false;
     }
 
     public function promptLabel(): string

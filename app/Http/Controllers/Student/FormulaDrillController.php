@@ -39,7 +39,8 @@ class FormulaDrillController extends Controller
         abort_unless($student, 403);
 
         $validated = $request->validate([
-            'option_id' => ['required', 'integer', 'exists:question_options,id'],
+            'option_id' => ['nullable', 'integer', 'exists:question_options,id'],
+            'answer_text' => ['nullable', 'string', 'max:64'],
         ]);
 
         $session = $this->sessionService->todaysSession($student);
@@ -49,9 +50,14 @@ class FormulaDrillController extends Controller
         abort_unless($item->formula_drill_session_id === $session->id, 403);
         abort_unless($session->student_id === $student->id, 403);
 
-        $result = $this->sessionService->submitAnswer($session, $item, (int) $validated['option_id']);
+        $result = $this->sessionService->submitAnswer(
+            $session,
+            $item,
+            isset($validated['option_id']) ? (int) $validated['option_id'] : null,
+            $validated['answer_text'] ?? null,
+        );
 
-        $session->refresh()->load(['items.question.options']);
+        $session->refresh()->load(['items.question.options', 'items.question.blankAnswer']);
 
         return response()->json([
             ...$result,

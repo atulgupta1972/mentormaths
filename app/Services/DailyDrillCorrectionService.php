@@ -9,12 +9,14 @@ use App\Models\FormulaDrillSession;
 use App\Models\PracticeCorrectionItem;
 use App\Models\Question;
 use App\Models\Student;
+use App\Support\AnswerValidationService;
 
 class DailyDrillCorrectionService
 {
     public function __construct(
         private FormulaDrillSessionService $formulaService,
         private PracticeCorrectionQueueService $correctionQueue,
+        private AnswerValidationService $answerValidation,
     ) {}
 
     public function needsFinalCorrection(Student $student): bool
@@ -262,6 +264,39 @@ class DailyDrillCorrectionService
         }
 
         return true;
+    }
+
+    /**
+     * @return array{correct: bool, reveal: bool, correct_answer?: string, prompt?: string, item_id?: int}
+     */
+    public function submitFillBlankAnswer(BasicsDrillItem $item, string $answerText): array
+    {
+        $question = $item->question ?? Question::query()->with('blankAnswer')->findOrFail($item->question_id);
+        $answerText = trim($answerText);
+
+        if ($answerText === '') {
+            throw new \InvalidArgumentException('Enter an answer before submitting.');
+        }
+
+        if ($this->answerValidation->isCorrect($question, $answerText)) {
+            $item->update(['status' => BasicsDrillItem::STATUS_CORRECT]);
+            $this->markSourcesCorrected($item);
+
+            return [
+                'correct' => true,
+                'reveal' => false,
+            ];
+        }
+
+        $question->loadMissing('blankAnswer');
+
+        return [
+            'correct' => false,
+            'reveal' => true,
+            'correct_answer' => $question->blankAnswer?->correct_answer,
+            'prompt' => $question->question_text,
+            'item_id' => $item->id,
+        ];
     }
 
     /**

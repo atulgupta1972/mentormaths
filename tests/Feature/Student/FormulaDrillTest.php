@@ -8,7 +8,9 @@ use App\Models\FormulaDrillSession;
 use App\Models\FormulaDrillItem;
 use App\Models\FormulaQuestionStat;
 use App\Models\GradeLevel;
+use App\Models\PracticeCorrectionItem;
 use App\Models\Question;
+use App\Models\QuestionBlankAnswer;
 use App\Models\QuestionOption;
 use App\Models\SetAssignment;
 use App\Models\Student;
@@ -487,6 +489,58 @@ class FormulaDrillTest extends TestCase
         $failures = app(\App\Services\DailyDrillCorrectionService::class)->failureDescriptors($student);
         $this->assertCount(1, $failures);
         $this->assertSame($item->id, $failures[0]['formula_drill_item_id']);
+    }
+
+    public function test_formula_drill_shows_fill_in_blank_for_practice_correction_item(): void
+    {
+        ['student' => $student, 'user' => $user, 'topic' => $topic] = $this->seedStudentWithCompletedChapter();
+
+        config(['formula_drill.daily_question_count' => 0, 'formula_drill.daily_correction_count' => 1]);
+
+        $fillBlank = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_FILL_IN_BLANK,
+            'bank_purpose' => QuestionBankPurpose::PRACTICE_SET,
+            'question_text' => '(-12) + 8 = ____',
+            'explanation' => 'Difference is 4, sign negative: -4',
+        ]);
+
+        QuestionBlankAnswer::query()->create([
+            'question_id' => $fillBlank->id,
+            'answer_format' => 'integer',
+            'correct_answer' => '-4',
+        ]);
+
+        PracticeCorrectionItem::query()->create([
+            'student_id' => $student->id,
+            'question_id' => $fillBlank->id,
+            'syllabus_chapter_id' => $topic->syllabus_chapter_id,
+            'source_type' => PracticeCorrectionItem::SOURCE_GUIDED_PRACTICE,
+            'failure_reason' => 'first_wrong',
+            'status' => PracticeCorrectionItem::STATUS_PENDING,
+            'first_failure_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)
+            ->get(route('student.formula-drill.show'))
+            ->assertOk();
+
+        $response->assertInertia(fn ($page) => $page
+            ->component('Student/FormulaDrill/Show')
+            ->where('current.question.type', Question::TYPE_FILL_IN_BLANK)
+            ->where('current.is_practice_correction', true)
+            ->has('current.question.options', 0)
+        );
+
+        $item = FormulaDrillSession::query()->where('student_id', $student->id)->firstOrFail()->items()->firstOrFail();
+
+        $this->actingAs($user)
+            ->postJson(route('student.formula-drill.answer', $item), [
+                'answer_text' => '-4',
+            ])
+            ->assertOk()
+            ->assertJsonPath('correct', true)
+            ->assertJsonPath('session_complete', true);
     }
 
     public function test_admin_bypasses_formula_drill_gate(): void
