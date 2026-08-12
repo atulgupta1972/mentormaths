@@ -16,6 +16,95 @@ use Illuminate\Support\Collection;
 class PracticeCorrectionQueueService
 {
     /**
+     * @return array{guided: int, batch: int, written: int, pending: int}
+     */
+    public function backfill(?int $studentId = null): array
+    {
+        $stats = [
+            'guided' => 0,
+            'batch' => 0,
+            'written' => 0,
+            'pending' => 0,
+        ];
+
+        $guidedQuery = GuidedAttemptQuestion::query()
+            ->whereIn('phase', [
+                GuidedAttemptQuestion::PHASE_DONE,
+                GuidedAttemptQuestion::PHASE_GIVEN_UP,
+            ])
+            ->with([
+                'attempt.assignment.enrollment.student',
+                'attempt.assignment.practiceSet',
+            ]);
+
+        if ($studentId !== null) {
+            $guidedQuery->whereHas(
+                'attempt.assignment.enrollment',
+                fn ($query) => $query->where('student_id', $studentId),
+            );
+        }
+
+        foreach ($guidedQuery->cursor() as $guided) {
+            $attempt = $guided->attempt;
+
+            if (! $attempt) {
+                continue;
+            }
+
+            $this->syncFromGuidedQuestion($guided, $attempt);
+            $stats['guided']++;
+        }
+
+        $batchQuery = SetAttempt::query()
+            ->where('status', SetAttempt::STATUS_SUBMITTED)
+            ->where('mode', SetAttempt::MODE_BATCH)
+            ->with([
+                'answers',
+                'assignment.enrollment.student',
+                'assignment.practiceSet',
+            ]);
+
+        if ($studentId !== null) {
+            $batchQuery->whereHas(
+                'assignment.enrollment',
+                fn ($query) => $query->where('student_id', $studentId),
+            );
+        }
+
+        foreach ($batchQuery->cursor() as $attempt) {
+            $this->syncFromBatchAttempt($attempt);
+            $stats['batch']++;
+        }
+
+        $writtenQuery = WrittenSubmission::query()
+            ->with([
+                'items',
+                'assignment.enrollment.student',
+                'assignment.practiceSet',
+            ])
+            ->whereHas('items');
+
+        if ($studentId !== null) {
+            $writtenQuery->whereHas(
+                'assignment.enrollment',
+                fn ($query) => $query->where('student_id', $studentId),
+            );
+        }
+
+        foreach ($writtenQuery->cursor() as $submission) {
+            $this->syncFromWrittenSubmission($submission);
+            $stats['written']++;
+        }
+
+        $stats['pending'] = PracticeCorrectionItem::query()
+            ->when($studentId !== null, fn ($query) => $query->where('student_id', $studentId))
+            ->where('status', PracticeCorrectionItem::STATUS_PENDING)
+            ->count();
+
+        return $stats;
+    }
+
+    /**
      * Sync queue state when a guided question reaches done / gave up.
      */
     public function syncFromGuidedQuestion(GuidedAttemptQuestion $guided, SetAttempt $attempt): void
