@@ -245,7 +245,9 @@ class BasicsDrillTest extends TestCase
                 'answer' => (string) $rightItem->correct_answer,
             ])
             ->assertOk()
-            ->assertJsonPath('session.phase', BasicsDrillSession::PHASE_FINAL_CORRECTION);
+            ->assertJsonPath('session.phase', BasicsDrillSession::PHASE_FINAL_CORRECTION)
+            ->assertJsonPath('session.correction_intro.percent', fn ($value) => $value >= 0 && $value <= 100)
+            ->assertJsonPath('session.correction_intro.headline', 'Good work done!');
 
         $session->refresh();
         $correction = $session->items()->where('round', BasicsDrillItem::ROUND_CORRECTION)->firstOrFail();
@@ -255,7 +257,8 @@ class BasicsDrillTest extends TestCase
                 'answer' => (string) $correction->correct_answer,
             ])
             ->assertOk()
-            ->assertJsonPath('completed', true);
+            ->assertJsonPath('completed', true)
+            ->assertJsonPath('completion_summary.headline', '100% — You made it!');
 
         $this->actingAs($user)->get(route('dashboard'))->assertOk();
     }

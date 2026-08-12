@@ -273,12 +273,7 @@ class BasicsDrillSessionService
 
             $this->completeSession($session);
 
-            return [
-                ...$result,
-                'completed' => true,
-                'redirect' => route('dashboard'),
-                'session' => $this->formatSession($session->fresh(['items']), $settings),
-            ];
+            return $this->formatCompletionPayload($session, $settings, $result);
         }
 
         return [
@@ -323,6 +318,24 @@ class BasicsDrillSessionService
         $settings ??= $this->settingsService->forStudent($session->student);
         $current = $this->currentItem($session);
 
+        $isFinalCorrection = $session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION;
+        $correctionIntro = null;
+
+        if ($isFinalCorrection && $session->student) {
+            $correctionStarted = $session->items
+                ->where('round', BasicsDrillItem::ROUND_CORRECTION)
+                ->contains(fn (BasicsDrillItem $item) => $item->status !== BasicsDrillItem::STATUS_PENDING);
+
+            if (! $correctionStarted) {
+                $stats = $this->correctionService->mainRoundFirstTryStats($session->student);
+                $copy = $this->correctionService->motivationalCopy($stats['percent'], $stats['to_fix']);
+                $correctionIntro = [
+                    ...$stats,
+                    ...$copy,
+                ];
+            }
+        }
+
         return [
             'id' => $session->id,
             'status' => $session->status,
@@ -335,8 +348,9 @@ class BasicsDrillSessionService
             'current_item' => $current ? $this->formatItem($current) : null,
             'progress_label' => $this->progressLabel($session),
             'is_show_phase' => str_ends_with($session->phase, '_show'),
-            'is_final_correction' => $session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION,
-            'correction_total' => $session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION
+            'is_final_correction' => $isFinalCorrection,
+            'correction_intro' => $correctionIntro,
+            'correction_total' => $isFinalCorrection
                 ? $session->items->where('round', BasicsDrillItem::ROUND_CORRECTION)->count()
                 : 0,
             'is_complete' => $session->isComplete(),
@@ -414,13 +428,10 @@ class BasicsDrillSessionService
 
             $this->completeSession($session);
 
-            return [
+            return $this->formatCompletionPayload($session, $settings, [
                 'correct' => true,
                 'reveal' => false,
-                'completed' => true,
-                'redirect' => route('dashboard'),
-                'session' => $this->formatSession($session->fresh(['items']), $settings),
-            ];
+            ]);
         }
 
         $session->update(['phase' => $nextPhase]);
@@ -430,6 +441,26 @@ class BasicsDrillSessionService
             'reveal' => false,
             'phase_change' => $nextPhase,
             'next_item' => null,
+            'session' => $this->formatSession($session->fresh(['items']), $settings),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function formatCompletionPayload(BasicsDrillSession $session, array $settings, array $payload): array
+    {
+        $session->loadMissing('student');
+        $summary = $session->student
+            ? $this->correctionService->completionSummary($session->student)
+            : null;
+
+        return [
+            ...$payload,
+            'completed' => true,
+            'redirect' => route('dashboard'),
+            'completion_summary' => $summary,
             'session' => $this->formatSession($session->fresh(['items']), $settings),
         ];
     }
@@ -491,13 +522,10 @@ class BasicsDrillSessionService
 
             $this->completeSession($session);
 
-            return [
+            return $this->formatCompletionPayload($session, $settings, [
                 'correct' => true,
                 'reveal' => false,
-                'completed' => true,
-                'redirect' => route('dashboard'),
-                'session' => $this->formatSession($session->fresh(['items']), $settings),
-            ];
+            ]);
         }
 
         return [

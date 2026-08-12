@@ -15,6 +15,8 @@ const sessionState = ref({ ...props.session });
 const answer = ref('');
 const submitting = ref(false);
 const reveal = ref(null);
+const completionSummary = ref(null);
+const correctionIntroDismissed = ref(false);
 const secondsLeft = ref(0);
 const answerInputRef = ref(null);
 const selectedOptionId = ref(null);
@@ -26,8 +28,16 @@ const chart = computed(() => sessionState.value.chart);
 const currentItem = computed(() => sessionState.value.current_item);
 const secondsPerBlank = computed(() => sessionState.value.seconds_per_blank || 5);
 const isFormulaMcq = computed(() => currentItem.value?.is_formula_mcq);
+const correctionIntro = computed(() => sessionState.value.correction_intro ?? null);
+const showCorrectionIntro = computed(
+    () => isFinalCorrection.value && correctionIntro.value && !correctionIntroDismissed.value,
+);
 
 const phaseTitle = computed(() => {
+    if (showCorrectionIntro.value) {
+        return 'Almost there!';
+    }
+
     if (isFinalCorrection.value) {
         return 'Fix your mistakes';
     }
@@ -61,6 +71,10 @@ const goDashboard = () => {
 const handleAdvancePayload = (payload) => {
     if (payload.session) {
         applySession(payload.session);
+
+        if (payload.session.correction_intro) {
+            correctionIntroDismissed.value = false;
+        }
     }
 
     if (payload.next_item) {
@@ -70,13 +84,26 @@ const handleAdvancePayload = (payload) => {
         };
     }
 
+    if (payload.completion_summary) {
+        completionSummary.value = payload.completion_summary;
+        applySession(payload.session ?? sessionState.value);
+
+        return true;
+    }
+
     if (payload.completed || payload.session?.is_complete) {
-        router.visit(payload.redirect || route('dashboard'));
+        if (! payload.completion_summary) {
+            router.visit(payload.redirect || route('dashboard'));
+        }
 
         return true;
     }
 
     return false;
+};
+
+const startCorrectionRound = () => {
+    correctionIntroDismissed.value = true;
 };
 
 const clearTimer = () => {
@@ -278,7 +305,10 @@ const mcqOptionClass = (optionId) => {
             <div>
                 <h2 class="text-xl font-semibold text-gray-800">{{ phaseTitle }}</h2>
                 <p class="text-sm text-gray-500">
-                    <template v-if="isFinalCorrection">
+                    <template v-if="showCorrectionIntro">
+                        One last push — you&apos;re doing brilliantly.
+                    </template>
+                    <template v-else-if="isFinalCorrection">
                         Answer each wrong item correctly on your first try to finish today&apos;s drill.
                     </template>
                     <template v-else>
@@ -291,7 +321,61 @@ const mcqOptionClass = (optionId) => {
 
         <div class="py-8">
             <div class="mx-auto max-w-2xl space-y-6 px-4 sm:px-6">
-                <div v-if="isShowPhase && chart" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
+                <div
+                    v-if="showCorrectionIntro"
+                    class="overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 p-8 text-center text-white shadow-xl"
+                >
+                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-200">
+                        Daily drill
+                    </p>
+                    <h3 class="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">
+                        {{ correctionIntro.headline }}
+                    </h3>
+                    <p class="mt-6 text-base text-indigo-100">
+                        You got
+                        <span class="text-5xl font-black text-white sm:text-6xl">{{ correctionIntro.percent }}%</span>
+                        correct on the first attempt.
+                    </p>
+                    <p class="mx-auto mt-4 max-w-md text-sm text-indigo-100">
+                        {{ correctionIntro.first_try_correct }} of {{ correctionIntro.total }} right first time —
+                        that&apos;s solid work. Now lock in the rest.
+                    </p>
+                    <p class="mx-auto mt-8 max-w-lg text-xl font-bold leading-snug text-amber-300 sm:text-2xl">
+                        {{ correctionIntro.call_to_action }}
+                    </p>
+                    <PrimaryButton
+                        class="mt-8 border-0 bg-white px-8 py-3 text-base font-bold text-indigo-700 hover:bg-indigo-50"
+                        @click="startCorrectionRound"
+                    >
+                        Let&apos;s make it 100%
+                    </PrimaryButton>
+                </div>
+
+                <div
+                    v-else-if="completionSummary"
+                    class="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 p-8 text-center text-white shadow-xl"
+                >
+                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-100">
+                        Drill complete
+                    </p>
+                    <h3 class="mt-3 text-4xl font-extrabold tracking-tight sm:text-5xl">
+                        {{ completionSummary.headline }}
+                    </h3>
+                    <p v-if="completionSummary.main_first_try_percent < 100" class="mt-4 text-lg text-emerald-100">
+                        You started at {{ completionSummary.main_first_try_percent }}% first-try — and you finished strong.
+                    </p>
+                    <p class="mx-auto mt-6 max-w-lg text-lg font-semibold leading-relaxed text-white">
+                        {{ completionSummary.message }}
+                    </p>
+                    <PrimaryButton
+                        class="mt-8 border-0 bg-white px-8 py-3 text-base font-bold text-emerald-700 hover:bg-emerald-50"
+                        @click="goDashboard"
+                    >
+                        Go to dashboard
+                    </PrimaryButton>
+                </div>
+
+                <div v-else-if="isShowPhase && chart" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
                     <h3 class="text-lg font-semibold text-indigo-700">{{ chart.title }}</h3>
                     <p class="mt-1 text-sm text-gray-600">Study this chart. When ready, tap Start — order will be random.</p>
                     <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">

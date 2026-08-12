@@ -57,6 +57,107 @@ class DailyDrillCorrectionService
     }
 
     /**
+     * @return array{total: int, first_try_correct: int, percent: int, to_fix: int}
+     */
+    public function mainRoundFirstTryStats(Student $student): array
+    {
+        $total = 0;
+        $firstTryCorrect = 0;
+
+        $formulaSession = $this->formulaService->todaysSession($student);
+
+        if ($formulaSession && $formulaSession->status !== FormulaDrillSession::STATUS_SKIPPED) {
+            foreach ($formulaSession->items as $item) {
+                if (! $item->isMainRound() || ! $item->isDone()) {
+                    continue;
+                }
+
+                $total++;
+
+                if ($item->status === FormulaDrillItem::STATUS_CORRECT && $item->failure_count === 0) {
+                    $firstTryCorrect++;
+                }
+            }
+        }
+
+        $basicsSession = BasicsDrillSession::query()
+            ->where('student_id', $student->id)
+            ->whereDate('drill_date', app(BasicsDrillSessionService::class)->todayDate())
+            ->with('items')
+            ->first();
+
+        if ($basicsSession) {
+            foreach ($basicsSession->items as $item) {
+                if ($item->round !== BasicsDrillItem::ROUND_MAIN) {
+                    continue;
+                }
+
+                if (! in_array($item->status, [
+                    BasicsDrillItem::STATUS_CORRECT,
+                    BasicsDrillItem::STATUS_FAILED,
+                    BasicsDrillItem::STATUS_REVEALED,
+                ], true)) {
+                    continue;
+                }
+
+                $total++;
+
+                if ($item->status === BasicsDrillItem::STATUS_CORRECT) {
+                    $firstTryCorrect++;
+                }
+            }
+        }
+
+        $toFix = count($this->failureDescriptors($student));
+        $percent = $total > 0 ? (int) round(($firstTryCorrect / $total) * 100) : 100;
+
+        return [
+            'total' => $total,
+            'first_try_correct' => $firstTryCorrect,
+            'percent' => $percent,
+            'to_fix' => $toFix,
+        ];
+    }
+
+    /**
+     * @return array{headline: string, call_to_action: string}
+     */
+    public function motivationalCopy(int $percent, int $toFix): array
+    {
+        $headline = match (true) {
+            $percent >= 90 => 'Outstanding work!',
+            $percent >= 75 => 'Great work done!',
+            $percent >= 50 => 'Good work done!',
+            default => 'Nice effort — keep pushing!',
+        };
+
+        $callToAction = $toFix === 1
+            ? 'Now make it 100% — fix this last one on your first try!'
+            : "Now make it 100% — fix these {$toFix} on your first try!";
+
+        return [
+            'headline' => $headline,
+            'call_to_action' => $callToAction,
+        ];
+    }
+
+    /**
+     * @return array{main_first_try_percent: int, headline: string, message: string}
+     */
+    public function completionSummary(Student $student): array
+    {
+        $stats = $this->mainRoundFirstTryStats($student);
+
+        return [
+            'main_first_try_percent' => $stats['percent'],
+            'headline' => '100% — You made it!',
+            'message' => $stats['percent'] >= 100
+                ? 'Perfect first-try score across today\'s drill. Keep this momentum going!'
+                : "You started at {$stats['percent']}% first-try correct and finished strong. That's how champions learn!",
+        ];
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function failureDescriptors(Student $student): array
