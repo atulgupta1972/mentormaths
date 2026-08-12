@@ -71,7 +71,7 @@ class DailyDrillCorrectionService
                     continue;
                 }
 
-                if ($item->status !== FormulaDrillItem::STATUS_FAILED) {
+                if (! $item->needsEndCorrection()) {
                     continue;
                 }
 

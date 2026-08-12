@@ -48,6 +48,11 @@ class FormulaDrillItem extends Model
         return $this->belongsTo(Question::class);
     }
 
+    public function needsEndCorrection(): bool
+    {
+        return $this->failure_count > 0 || $this->status === self::STATUS_EXHAUSTED;
+    }
+
     public function isDone(): bool
     {
         return in_array($this->status, [

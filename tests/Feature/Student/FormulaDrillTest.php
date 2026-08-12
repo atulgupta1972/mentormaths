@@ -5,6 +5,7 @@ namespace Tests\Feature\Student;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\FormulaDrillSession;
+use App\Models\FormulaDrillItem;
 use App\Models\FormulaQuestionStat;
 use App\Models\GradeLevel;
 use App\Models\Question;
@@ -452,6 +453,40 @@ class FormulaDrillTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertRedirect(route('student.basics-drill.show'));
+    }
+
+    public function test_formula_wrong_on_first_try_is_queued_for_end_correction_even_when_later_correct(): void
+    {
+        ['student' => $student, 'user' => $user, 'formulaQuestion' => $question] = $this->seedStudentWithCompletedChapter();
+
+        config(['formula_drill.daily_question_count' => 1]);
+
+        $this->actingAs($user)->get(route('student.formula-drill.show'))->assertOk();
+
+        $session = FormulaDrillSession::query()->where('student_id', $student->id)->firstOrFail();
+        $item = $session->items()->firstOrFail();
+        $wrongOptionId = $question->options()->where('is_correct', false)->value('id');
+        $correctOptionId = $question->options()->where('is_correct', true)->value('id');
+
+        $this->actingAs($user)
+            ->postJson(route('student.formula-drill.answer', $item), ['option_id' => $wrongOptionId])
+            ->assertOk()
+            ->assertJsonPath('correct', false)
+            ->assertJsonPath('exhausted', false);
+
+        $this->actingAs($user)
+            ->postJson(route('student.formula-drill.answer', $item), ['option_id' => $correctOptionId])
+            ->assertOk()
+            ->assertJsonPath('correct', true)
+            ->assertJsonPath('session_complete', true);
+
+        $item->refresh();
+        $this->assertSame(FormulaDrillItem::STATUS_CORRECT, $item->status);
+        $this->assertTrue($item->needsEndCorrection());
+
+        $failures = app(\App\Services\DailyDrillCorrectionService::class)->failureDescriptors($student);
+        $this->assertCount(1, $failures);
+        $this->assertSame($item->id, $failures[0]['formula_drill_item_id']);
     }
 
     public function test_admin_bypasses_formula_drill_gate(): void

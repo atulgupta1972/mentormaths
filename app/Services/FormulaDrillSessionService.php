@@ -210,10 +210,12 @@ class FormulaDrillSessionService
     }
 
     /**
-     * @return array{correct: bool, failed: bool, correct_option_id: ?int, session_complete: bool}
+     * @return array{correct: bool, exhausted: bool, attempts_left: int, correct_option_id: ?int, session_complete: bool}
      */
     public function submitAnswer(FormulaDrillSession $session, FormulaDrillItem $item, int $optionId): array
     {
+        $maxAttempts = (int) config('formula_drill.max_attempts_per_question', 4);
+
         if ($item->formula_drill_session_id !== $session->id || $item->isDone()) {
             throw new \InvalidArgumentException('This formula question is already completed.');
         }
@@ -246,39 +248,54 @@ class FormulaDrillSessionService
             ],
         );
 
-        $correctOptionId = $question->options->firstWhere('is_correct', true)?->id;
-
         if ($isCorrect) {
             $item->status = FormulaDrillItem::STATUS_CORRECT;
             $item->completed_at = now();
             $item->save();
 
             $stat->times_correct++;
-            $stat->needs_review = false;
+            $stat->needs_review = $item->failure_count > 0;
             $stat->last_correct_at = now();
             $stat->save();
 
-            return $this->advanceSession($session, true, false, $correctOptionId);
+            return $this->advanceSession($session, true, false, $maxAttempts, $optionId);
         }
 
-        $item->status = FormulaDrillItem::STATUS_FAILED;
-        $item->completed_at = now();
-        $item->save();
+        if ($item->attempt_count >= $maxAttempts) {
+            $item->status = FormulaDrillItem::STATUS_EXHAUSTED;
+            $item->completed_at = now();
+            $item->save();
 
+            $stat->times_exhausted++;
+            $stat->needs_review = true;
+            $stat->save();
+
+            $correctOptionId = $question->options->firstWhere('is_correct', true)?->id;
+
+            return $this->advanceSession($session, false, true, 0, $correctOptionId);
+        }
+
+        $item->save();
         $stat->total_failures++;
-        $stat->needs_review = true;
         $stat->save();
 
-        return $this->advanceSession($session, false, true, $correctOptionId);
+        return [
+            'correct' => false,
+            'exhausted' => false,
+            'attempts_left' => $maxAttempts - $item->attempt_count,
+            'correct_option_id' => null,
+            'session_complete' => false,
+        ];
     }
 
     /**
-     * @return array{correct: bool, failed: bool, correct_option_id: ?int, session_complete: bool}
+     * @return array{correct: bool, exhausted: bool, attempts_left: int, correct_option_id: ?int, session_complete: bool}
      */
     private function advanceSession(
         FormulaDrillSession $session,
         bool $correct,
-        bool $failed,
+        bool $exhausted,
+        int $attemptsLeft,
         ?int $correctOptionId,
     ): array {
         $session->increment('questions_completed');
@@ -293,16 +310,18 @@ class FormulaDrillSessionService
 
             return [
                 'correct' => $correct,
-                'failed' => $failed,
-                'correct_option_id' => $failed ? $correctOptionId : null,
+                'exhausted' => $exhausted,
+                'attempts_left' => $attemptsLeft,
+                'correct_option_id' => $exhausted ? $correctOptionId : null,
                 'session_complete' => true,
             ];
         }
 
         return [
             'correct' => $correct,
-            'failed' => $failed,
-            'correct_option_id' => $failed ? $correctOptionId : null,
+            'exhausted' => $exhausted,
+            'attempts_left' => $attemptsLeft,
+            'correct_option_id' => $exhausted ? $correctOptionId : null,
             'session_complete' => false,
         ];
     }
@@ -367,11 +386,13 @@ class FormulaDrillSessionService
     public function itemPayload(FormulaDrillItem $item): array
     {
         $question = $item->question;
+        $maxAttempts = (int) config('formula_drill.max_attempts_per_question', 4);
 
         return [
             'id' => $item->id,
             'sort_order' => $item->sort_order,
             'attempt_count' => $item->attempt_count,
+            'attempts_left' => max(0, $maxAttempts - $item->attempt_count),
             'is_practice_correction' => $item->practice_correction_item_id !== null,
             'question' => [
                 'id' => $question->id,
