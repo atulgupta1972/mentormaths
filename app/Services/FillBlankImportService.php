@@ -395,6 +395,7 @@ PROMPT;
         }
 
         return [
+            'source_index' => isset($item['source_index']) ? (int) $item['source_index'] : ($index + 1),
             'question_text' => $questionText,
             'topic_name' => trim((string) ($item['topic'] ?? $item['topic_name'] ?? '')),
             'syllabus_topic_id' => $item['syllabus_topic_id'] ?? $item['topic_id'] ?? null,

@@ -32,6 +32,7 @@ class TextbookChapter extends Model
         'mcq_worksheet_id',
         'mcq_worksheet_ids',
         'written_worksheet_id',
+        'fill_blank_worksheet_id',
         'published_at',
         'published_by',
         'created_by',
@@ -83,6 +84,11 @@ class TextbookChapter extends Model
     public function writtenWorksheet(): BelongsTo
     {
         return $this->belongsTo(Worksheet::class, 'written_worksheet_id');
+    }
+
+    public function fillBlankWorksheet(): BelongsTo
+    {
+        return $this->belongsTo(Worksheet::class, 'fill_blank_worksheet_id');
     }
 
     public function publisher(): BelongsTo

@@ -112,6 +112,7 @@ class StudentChapterSummaryService
         $textbookWorksheetIds = $textbookChapters
             ->flatMap(fn (TextbookChapter $row) => array_merge(
                 $row->mcqWorksheetIds(),
+                $row->fill_blank_worksheet_id ? [(int) $row->fill_blank_worksheet_id] : [],
                 $row->written_worksheet_id ? [(int) $row->written_worksheet_id] : [],
             ))
             ->unique()
@@ -229,6 +230,19 @@ class StudentChapterSummaryService
                 if ($textbookChapter) {
                     foreach ($textbookChapter->mcqWorksheetIds() as $worksheetId) {
                         $worksheet = $worksheetsById->get($worksheetId);
+
+                        if ($worksheet) {
+                            $bookItems[] = $this->buildSetItem(
+                                $worksheet,
+                                $assignmentsByWorksheet,
+                                'B',
+                                (int) ($correctionCountsByWorksheet[$worksheet->id] ?? 0),
+                            );
+                        }
+                    }
+
+                    if ($textbookChapter->fill_blank_worksheet_id) {
+                        $worksheet = $worksheetsById->get((int) $textbookChapter->fill_blank_worksheet_id);
 
                         if ($worksheet) {
                             $bookItems[] = $this->buildSetItem(
@@ -632,6 +646,10 @@ class StudentChapterSummaryService
     {
         foreach ($textbookChapters as $textbookChapter) {
             if (in_array($worksheet->id, $textbookChapter->mcqWorksheetIds(), true)) {
+                return true;
+            }
+
+            if ((int) $textbookChapter->fill_blank_worksheet_id === (int) $worksheet->id) {
                 return true;
             }
 

@@ -12,6 +12,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 const props = defineProps({
     chapter: { type: Object, required: true },
     mcqImport: { type: Object, required: true },
+    fillBlankConversion: { type: Object, default: null },
     publishedSets: { type: Array, default: () => [] },
     students: { type: Array, default: () => [] },
     gradeLevels: { type: Array, default: () => [] },
@@ -32,9 +33,13 @@ const page = usePage();
 const items = ref(cloneItems(props.chapter.items));
 const setPlan = ref(clonePlan(props.chapter.mcq_set_plan));
 const copied = ref(false);
+const conversionCopied = ref(false);
 const jsonInput = ref('');
+const fillBlankJsonInput = ref('');
 
 const importForm = useForm({ json: '' });
+const fillBlankImportForm = useForm({ json: '' });
+const publishFillBlankForm = useForm({});
 const zipImportForm = useForm({ pack: null });
 const zipPackInput = ref(null);
 
@@ -217,6 +222,35 @@ const copyPrompt = async () => {
         copied.value = false;
     }, 2000);
 };
+
+const copyConversionPrompt = async () => {
+    await navigator.clipboard.writeText(props.fillBlankConversion?.prompt || '');
+    conversionCopied.value = true;
+    window.setTimeout(() => {
+        conversionCopied.value = false;
+    }, 2000);
+};
+
+const importFillBlank = () => {
+    fillBlankImportForm.json = fillBlankJsonInput.value;
+    fillBlankImportForm.post(chapterRoute('import-fill-blank'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            fillBlankJsonInput.value = '';
+            applyFromProps();
+        },
+    });
+};
+
+const publishFillBlankAndWritten = () => {
+    publishFillBlankForm.post(chapterRoute('publish-fill-blank-written'), {
+        preserveScroll: true,
+        onSuccess: () => applyFromProps(),
+    });
+};
+
+const fillBlankReadyCount = computed(() => props.chapter.fill_blank_ready_count ?? 0);
+const canPublishFillBlank = computed(() => fillBlankReadyCount.value > 0);
 
 const importMcq = () => {
     importForm.json = jsonInput.value;
@@ -863,6 +897,81 @@ const quickAssignSet = (setId) => {
                 >
                     Published MCQ sets:
                     <strong>{{ publishedMcqSetCodes.join(', ') }}</strong>.
+                </div>
+
+                <div v-if="hasItems && fillBlankConversion && !hideUploaderEditPanels" class="space-y-4 rounded-lg border-2 border-violet-300 bg-violet-50 p-6 shadow-sm">
+                    <div>
+                        <h3 class="font-semibold text-violet-950">Step 4 — Fill in blank &amp; written (from MCQs)</h3>
+                        <p class="mt-1 text-sm text-violet-900">
+                            MCQs are already imported. Use AI to convert each MCQ into a fill-in-blank question
+                            (same order, numeric answers from the MCQ correct option).
+                            Import the JSON below, then publish online set
+                            <strong>{{ chapter.fill_blank_set_code || fillBlankConversion.fill_blank_set_code }}</strong>
+                            and written
+                            <strong>{{ chapter.written_set_code || fillBlankConversion.written_set_code }}</strong>.
+                            MCQ sets are not changed.
+                        </p>
+                        <p v-if="fillBlankReadyCount" class="mt-2 text-sm font-medium text-violet-950">
+                            {{ fillBlankReadyCount }} of {{ items.length }} converted and ready to publish.
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <p class="text-sm text-violet-900">
+                            1. Download <strong>mcq-reference.json</strong> ({{ fillBlankConversion.question_count }} questions)
+                            · 2. Copy prompt into Cursor/Claude with that file attached
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            <a
+                                :href="chapterRoute('mcq-reference', '#')"
+                                class="inline-flex items-center rounded-md border border-violet-400 bg-white px-3 py-2 text-sm font-medium text-violet-900 hover:bg-violet-100"
+                            >
+                                Download MCQ reference JSON
+                            </a>
+                            <SecondaryButton type="button" @click="copyConversionPrompt">
+                                {{ conversionCopied ? 'Copied!' : 'Copy conversion prompt' }}
+                            </SecondaryButton>
+                        </div>
+                    </div>
+
+                    <textarea
+                        :value="fillBlankConversion.prompt"
+                        rows="10"
+                        readonly
+                        class="w-full rounded-md border-violet-200 bg-white font-mono text-xs text-gray-800"
+                    />
+
+                    <details class="text-sm text-violet-900">
+                        <summary class="cursor-pointer font-medium">Sample fill-blank JSON</summary>
+                        <pre class="mt-2 overflow-x-auto rounded-md bg-white p-3 text-xs">{{ fillBlankConversion.sample_json }}</pre>
+                    </details>
+
+                    <div class="border-t border-violet-200 pt-4">
+                        <InputLabel value="3. Paste AI fill-blank JSON" />
+                        <textarea
+                            v-model="fillBlankJsonInput"
+                            rows="8"
+                            class="mt-1 w-full rounded-md border-violet-300 font-mono text-xs"
+                            placeholder='{"questions": [ { "source_index": 1, "question": "... ____.", ... } ]}'
+                        />
+                        <InputError :message="fillBlankImportForm.errors.json" class="mt-1" />
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <PrimaryButton
+                                type="button"
+                                :disabled="fillBlankImportForm.processing || !fillBlankJsonInput.trim()"
+                                @click="importFillBlank"
+                            >
+                                {{ fillBlankImportForm.processing ? 'Importing…' : 'Import fill-blank JSON' }}
+                            </PrimaryButton>
+                            <PrimaryButton
+                                type="button"
+                                :disabled="publishFillBlankForm.processing || !canPublishFillBlank"
+                                @click="publishFillBlankAndWritten"
+                            >
+                                {{ publishFillBlankForm.processing ? 'Publishing…' : 'Publish fill-blank + written' }}
+                            </PrimaryButton>
+                        </div>
+                    </div>
                 </div>
 
                 <div v-if="!hasItems" class="rounded-lg border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-950">

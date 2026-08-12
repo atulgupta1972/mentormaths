@@ -9,7 +9,7 @@ class TextbookSetCodeService
     public const MCQ_BATCH_SIZE = 20;
 
     /**
-     * @return array{mcq: string, written: string}
+     * @return array{mcq: string, fill_blank: string, written: string}
      */
     public function codes(TextbookChapter $chapter): array
     {
@@ -18,10 +18,12 @@ class TextbookSetCodeService
         $gradeCode = $this->gradeCode($chapter);
         $bookCode = $this->bookCode($chapter);
         $chapterNum = str_pad((string) $chapter->chapter_number, 2, '0', STR_PAD_LEFT);
+        $base = "{$gradeCode}-{$bookCode}-CH{$chapterNum}";
 
         return [
-            'mcq' => "{$gradeCode}-{$bookCode}-CH{$chapterNum}-M",
-            'written' => "{$gradeCode}-{$bookCode}-CH{$chapterNum}-W",
+            'mcq' => "{$base}-M",
+            'fill_blank' => "{$base}-F",
+            'written' => "{$base}-W",
         ];
     }
 

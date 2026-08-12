@@ -58,11 +58,14 @@ class TextbookChapterPublishService
             $chapter,
             $questionCount,
         );
+        $hasDerivedFillBlank = collect($items)->contains(
+            fn (array $item) => filled($item['fill_blank_question_text'] ?? null),
+        );
 
-        return DB::transaction(function () use ($chapter, $items, $publisher, $topic, $syllabusChapter, $writtenCode, $resolvedPlan) {
+        return DB::transaction(function () use ($chapter, $items, $publisher, $topic, $syllabusChapter, $writtenCode, $resolvedPlan, $hasDerivedFillBlank) {
             $this->deleteExistingMcqWorksheets($chapter);
 
-            if ($chapter->written_worksheet_id) {
+            if (! $hasDerivedFillBlank && $chapter->written_worksheet_id) {
                 $chapter->writtenWorksheet?->questions()->detach();
                 $chapter->writtenWorksheet?->delete();
             }
@@ -81,7 +84,7 @@ class TextbookChapterPublishService
 
                 $approvedItems[] = $item;
 
-                if ($item['include_in_written'] ?? true) {
+                if (($item['include_in_written'] ?? true) && ! filled($item['fill_blank_question_text'] ?? null)) {
                     $writtenQuestions[] = $this->createWrittenQuestion($topic, $item, $publisher->id, $position);
                 }
 
@@ -95,13 +98,17 @@ class TextbookChapterPublishService
             }
 
             $mcqWorksheetIds = $this->createMcqWorksheets($chapter, $syllabusChapter, $publisher, $mcqQuestionsByPosition, $resolvedPlan);
-            $writtenWorksheet = $this->createWrittenWorksheet(
-                $chapter,
-                $syllabusChapter,
-                $publisher,
-                $writtenQuestions,
-                $writtenCode,
-            );
+            $writtenWorksheet = null;
+
+            if (! $hasDerivedFillBlank) {
+                $writtenWorksheet = $this->createWrittenWorksheet(
+                    $chapter,
+                    $syllabusChapter,
+                    $publisher,
+                    $writtenQuestions,
+                    $writtenCode,
+                );
+            }
 
             $chapter->update([
                 'extraction_items' => $items,
@@ -109,13 +116,90 @@ class TextbookChapterPublishService
                 'status' => TextbookChapter::STATUS_PUBLISHED,
                 'mcq_worksheet_id' => $mcqWorksheetIds[0] ?? null,
                 'mcq_worksheet_ids' => $mcqWorksheetIds !== [] ? $mcqWorksheetIds : null,
-                'written_worksheet_id' => $writtenWorksheet?->id,
+                'written_worksheet_id' => $hasDerivedFillBlank
+                    ? $chapter->written_worksheet_id
+                    : ($writtenWorksheet?->id),
                 'published_at' => now(),
                 'published_by' => $publisher->id,
                 'extraction_error' => null,
             ]);
 
-            return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet']);
+            return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet', 'fillBlankWorksheet']);
+        });
+    }
+
+    public function publishFillBlankAndWritten(TextbookChapter $chapter, User $publisher): TextbookChapter
+    {
+        $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.gradeLevel']);
+
+        $items = $chapter->extraction_items ?? [];
+        $fillBlankItems = collect($items)
+            ->filter(fn (array $item) => filled($item['fill_blank_question_text'] ?? null)
+                && filled($item['fill_blank_correct_answer'] ?? null))
+            ->values();
+
+        if ($fillBlankItems->isEmpty()) {
+            throw new InvalidArgumentException('Import fill-in-blank JSON first (Step 4).');
+        }
+
+        $syllabusChapter = $chapter->syllabusChapter;
+        if (! $syllabusChapter) {
+            throw new InvalidArgumentException('Syllabus chapter is missing.');
+        }
+
+        $codes = $this->setCodeService->codes($chapter);
+        $topic = $this->textbookTopic($syllabusChapter);
+
+        return DB::transaction(function () use ($chapter, $items, $publisher, $topic, $syllabusChapter, $codes) {
+            if ($chapter->fill_blank_worksheet_id) {
+                $chapter->fillBlankWorksheet?->questions()->detach();
+                $chapter->fillBlankWorksheet?->delete();
+            }
+
+            if ($chapter->written_worksheet_id) {
+                $chapter->writtenWorksheet?->questions()->detach();
+                $chapter->writtenWorksheet?->delete();
+            }
+
+            $fillBlankQuestions = [];
+            $writtenQuestions = [];
+
+            foreach ($items as $index => $item) {
+                if (! filled($item['fill_blank_question_text'] ?? null)
+                    || ! filled($item['fill_blank_correct_answer'] ?? null)) {
+                    continue;
+                }
+
+                $fields = $this->fillBlankFields($item);
+                $fillBlankQuestions[] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
+
+                if ($item['include_in_written'] ?? true) {
+                    $writtenQuestions[] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
+                }
+            }
+
+            $fillBlankWorksheet = $this->createFillBlankWorksheet(
+                $chapter,
+                $syllabusChapter,
+                $publisher,
+                $fillBlankQuestions,
+                $codes['fill_blank'],
+            );
+
+            $writtenWorksheet = $this->createWrittenWorksheet(
+                $chapter,
+                $syllabusChapter,
+                $publisher,
+                $writtenQuestions,
+                $codes['written'],
+            );
+
+            $chapter->update([
+                'fill_blank_worksheet_id' => $fillBlankWorksheet->id,
+                'written_worksheet_id' => $writtenWorksheet?->id,
+            ]);
+
+            return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet', 'fillBlankWorksheet']);
         });
     }
 
@@ -238,10 +322,94 @@ class TextbookChapterPublishService
     }
 
     /**
+     * @param  list<Question>  $questions
+     */
+    private function createFillBlankWorksheet(
+        TextbookChapter $chapter,
+        SyllabusChapter $syllabusChapter,
+        User $publisher,
+        array $questions,
+        string $fillBlankCode,
+    ): Worksheet {
+        if ($questions === []) {
+            throw new InvalidArgumentException('No fill-in-blank questions to publish.');
+        }
+
+        $worksheet = Worksheet::create([
+            'title' => "{$chapter->title} — Textbook fill in blank",
+            'set_number' => 1,
+            'set_code' => $fillBlankCode,
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+            'created_by' => $publisher->id,
+        ]);
+
+        foreach ($questions as $index => $question) {
+            $worksheet->questions()->attach($question->id, ['sort_order' => $index + 1]);
+        }
+
+        return $worksheet;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array{question_text: string, correct_answer: string, answer_format: string, decimal_places: mixed, explanation: mixed, method_hint: mixed}
+     */
+    private function fillBlankFields(array $item): array
+    {
+        return [
+            'question_text' => trim((string) ($item['fill_blank_question_text'] ?? $item['question_text'] ?? '')),
+            'correct_answer' => trim((string) ($item['fill_blank_correct_answer'] ?? $item['correct_answer'] ?? '')),
+            'answer_format' => (string) ($item['fill_blank_answer_format'] ?? $item['answer_format'] ?? 'text'),
+            'decimal_places' => $item['fill_blank_decimal_places'] ?? null,
+            'explanation' => $item['fill_blank_explanation'] ?? $item['explanation'] ?? null,
+            'method_hint' => $item['fill_blank_method_hint'] ?? $item['method_hint'] ?? null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  array{question_text: string, correct_answer: string, answer_format: string, decimal_places: mixed, explanation: mixed, method_hint: mixed}  $fields
+     */
+    private function createFillBlankQuestion(SyllabusTopic $topic, array $item, array $fields, int $userId): Question
+    {
+        $question = Question::create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_FILL_IN_BLANK,
+            'question_text' => $fields['question_text'],
+            'explanation' => QuestionMethodHint::sanitizeExplanation($fields['explanation'] ?? null),
+            'method_hint' => filled($fields['method_hint'] ?? null)
+                ? trim((string) $fields['method_hint'])
+                : QuestionMethodHint::inferFromQuestionText($fields['question_text']),
+            'source' => Question::SOURCE_PDF,
+            'bank_purpose' => QuestionBankPurpose::PRACTICE_SET,
+            'created_by' => $userId,
+        ]);
+
+        QuestionBlankAnswer::create([
+            'question_id' => $question->id,
+            'answer_format' => $this->normalizeAnswerFormat((string) $fields['answer_format']),
+            'correct_answer' => $fields['correct_answer'],
+            'decimal_places' => $fields['decimal_places'] ?? null,
+        ]);
+
+        $this->attachStagingDiagram($question, $item);
+
+        return $question;
+    }
+
+    /**
      * @param  array<string, mixed>  $item
      */
     private function createWrittenQuestion(SyllabusTopic $topic, array $item, int $userId, int $sort): Question
     {
+        if (filled($item['fill_blank_question_text'] ?? null)) {
+            return $this->createFillBlankQuestion($topic, $item, $this->fillBlankFields($item), $userId);
+        }
+
         $question = Question::create([
             'syllabus_topic_id' => $topic->id,
             'type' => Question::TYPE_FILL_IN_BLANK,

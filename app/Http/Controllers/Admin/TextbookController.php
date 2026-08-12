@@ -13,6 +13,8 @@ use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\SetAssignmentService;
+use App\Services\TextbookChapterConversionPromptService;
+use App\Services\TextbookChapterFillBlankImportService;
 use App\Services\TextbookChapterMcqImportService;
 use App\Services\TextbookChapterMcqPromptService;
 use App\Services\TextbookChapterPublishService;
@@ -33,6 +35,8 @@ class TextbookController extends Controller
         private TextbookChapterPublishService $publishService,
         private TextbookChapterMcqPromptService $mcqPromptService,
         private TextbookChapterMcqImportService $mcqImportService,
+        private TextbookChapterConversionPromptService $conversionPromptService,
+        private TextbookChapterFillBlankImportService $fillBlankImportService,
         private TextbookSetCodeService $setCodeService,
         private TextbookMcqSetPlanService $setPlanService,
         private SetAssignmentService $assignmentService,
@@ -192,6 +196,7 @@ class TextbookController extends Controller
             'syllabusChapter',
             'mcqWorksheet',
             'writtenWorksheet',
+            'fillBlankWorksheet',
         ]);
 
         $gradeLevel = $textbookChapter->textbook?->gradeLevel;
@@ -202,6 +207,12 @@ class TextbookController extends Controller
         $activeYear = AcademicYear::active();
         $aiPrompt = $this->mcqPromptService->payload($textbookChapter);
         $itemCount = count($textbookChapter->extraction_items ?? []);
+        $fillBlankConversion = $itemCount > 0
+            ? $this->conversionPromptService->payload($textbookChapter)
+            : null;
+        $fillBlankReadyCount = $this->fillBlankImportService->fillBlankReadyCount(
+            $textbookChapter->extraction_items ?? [],
+        );
         $mcqSetPlan = $textbookChapter->mcq_set_plan
             ?? ($itemCount > 0 ? $this->setPlanService->defaultPlan($textbookChapter, $itemCount) : []);
 
@@ -288,11 +299,16 @@ class TextbookController extends Controller
                 'mcq_worksheet_id' => $textbookChapter->mcq_worksheet_id,
                 'mcq_worksheet_ids' => $textbookChapter->mcqWorksheetIds(),
                 'written_worksheet_id' => $textbookChapter->written_worksheet_id,
+                'fill_blank_worksheet_id' => $textbookChapter->fill_blank_worksheet_id,
                 'mcq_set_code' => $textbookChapter->mcqWorksheet?->set_code ?? $aiPrompt['mcq_set_code'],
                 'mcq_set_codes' => $this->publishedMcqSetCodes($textbookChapter),
                 'written_set_code' => $textbookChapter->writtenWorksheet?->set_code ?? $aiPrompt['written_set_code'],
+                'fill_blank_set_code' => $textbookChapter->fillBlankWorksheet?->set_code
+                    ?? ($fillBlankConversion['fill_blank_set_code'] ?? null),
+                'fill_blank_ready_count' => $fillBlankReadyCount,
             ],
             'mcqImport' => $aiPrompt,
+            'fillBlankConversion' => $fillBlankConversion,
             'publishedSets' => $publishedSets,
             'students' => $this->assignmentService
                 ->activeStudentsForAssignment($activeYear?->id)
@@ -485,6 +501,59 @@ class TextbookController extends Controller
 
         return $this->redirectToChapterShow($textbookChapter)
             ->with('success', $message);
+    }
+
+    public function importFillBlank(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        abort_unless(count($textbookChapter->extraction_items ?? []) > 0, 422, 'Import MCQs first.');
+
+        $validated = $request->validate([
+            'json' => ['required', 'string'],
+        ]);
+
+        try {
+            $result = $this->fillBlankImportService->import($textbookChapter, $validated['json']);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return $this->redirectToChapterShow($textbookChapter->fresh())
+            ->with('success', "{$result['merged_count']} fill-in-blank question(s) merged ({$result['total_mcq']} MCQs in chapter). Publish fill-blank + written when ready.");
+    }
+
+    public function publishFillBlankAndWritten(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        try {
+            $chapter = $this->publishService->publishFillBlankAndWritten($textbookChapter, $request->user());
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $codes = $this->setCodeService->codes($chapter);
+
+        return $this->redirectToChapterShow($chapter)
+            ->with('success', "Published online fill-blank {$codes['fill_blank']} and written {$codes['written']}. MCQ sets unchanged.");
+    }
+
+    public function downloadMcqReference(TextbookChapter $textbookChapter)
+    {
+        abort_unless(count($textbookChapter->extraction_items ?? []) > 0, 422, 'Import MCQs first.');
+
+        $reference = $this->conversionPromptService->mcqReference(
+            $textbookChapter,
+            $textbookChapter->extraction_items ?? [],
+        );
+
+        $filename = sprintf(
+            'mcq-reference-ch%02d.json',
+            $textbookChapter->chapter_number,
+        );
+
+        return response()->streamDownload(
+            fn () => print(json_encode($reference, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)),
+            $filename,
+            ['Content-Type' => 'application/json'],
+        );
     }
 
     public function resetImport(TextbookChapter $textbookChapter): RedirectResponse

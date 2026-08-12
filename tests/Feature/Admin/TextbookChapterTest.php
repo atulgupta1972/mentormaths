@@ -223,6 +223,98 @@ class TextbookChapterTest extends TestCase
         $this->assertTrue(Storage::disk('public')->exists($question->diagram_path));
     }
 
+    public function test_admin_can_import_fill_blank_from_mcq_and_publish_fill_blank_written(): void
+    {
+        Storage::fake('public');
+
+        [$grade, $syllabusChapter, $admin] = $this->seedClassNineChapterEight();
+
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'GP',
+            'created_by' => $admin->id,
+        ]);
+
+        $textbookChapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => $syllabusChapter->name,
+            'pdf_path' => 'textbooks/1/chapters/8/chapter.pdf',
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'created_by' => $admin->id,
+            'extraction_items' => [[
+                'id' => 'mcq-1',
+                'label' => 'Mean · Q1',
+                'question_text' => 'Runs 67, 55, 18 and 35 — what is the total?',
+                'correct_answer' => '175',
+                'approved' => true,
+                'include_in_mcq' => true,
+                'include_in_written' => false,
+                'mcq_options' => [
+                    ['text' => '128', 'is_correct' => false],
+                    ['text' => '175', 'is_correct' => true],
+                    ['text' => '190', 'is_correct' => false],
+                    ['text' => '200', 'is_correct' => false],
+                ],
+            ]],
+            'mcq_set_plan' => [[
+                'set_code' => 'C9-GP-CH08-M',
+                'q_from' => 1,
+                'q_to' => 1,
+                'description' => '',
+            ]],
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.publish', $textbookChapter), [
+                'items' => $textbookChapter->extraction_items,
+            ])
+            ->assertRedirect();
+
+        $textbookChapter->refresh();
+        $mcqWorksheetId = $textbookChapter->mcq_worksheet_id;
+
+        $fillBlankJson = json_encode([
+            'questions' => [[
+                'source_index' => 1,
+                'topic' => 'Mean',
+                'question' => 'Runs 67, 55, 18 and 35 — the total is ____.',
+                'answer_format' => 'integer',
+                'correct_answer' => '175',
+                'method_hint' => 'Add all values.',
+                'explanation' => '67+55+18+35 = 175.',
+                'difficulty' => 'Easy',
+            ]],
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.import-fill-blank', $textbookChapter), ['json' => $fillBlankJson])
+            ->assertRedirect();
+
+        $textbookChapter->refresh();
+        $this->assertSame('Runs 67, 55, 18 and 35 — the total is ____.', $textbookChapter->extraction_items[0]['fill_blank_question_text']);
+        $this->assertTrue($textbookChapter->extraction_items[0]['include_in_written']);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.publish-fill-blank-written', $textbookChapter))
+            ->assertRedirect();
+
+        $textbookChapter->refresh();
+        $this->assertSame($mcqWorksheetId, $textbookChapter->mcq_worksheet_id);
+        $this->assertNotNull($textbookChapter->fill_blank_worksheet_id);
+        $this->assertNotNull($textbookChapter->written_worksheet_id);
+
+        $fillBlank = Worksheet::query()->findOrFail($textbookChapter->fill_blank_worksheet_id);
+        $written = Worksheet::query()->findOrFail($textbookChapter->written_worksheet_id);
+
+        $this->assertSame('C9-GP-CH08-F', $fillBlank->set_code);
+        $this->assertSame('C9-GP-CH08-W', $written->set_code);
+        $this->assertSame(1, $fillBlank->questions()->count());
+        $this->assertSame(1, $written->questions()->count());
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @param  array<string, string>  $images
