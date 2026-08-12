@@ -18,6 +18,7 @@ class SetAttemptService
     public function __construct(
         private GuidedPracticeService $guidedPractice,
         private AnswerValidationService $answerValidation,
+        private PracticeCorrectionQueueService $correctionQueue,
     ) {}
 
     public function start(SetAssignment $assignment): SetAttempt
@@ -130,6 +131,8 @@ class SetAttemptService
             $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
 
             $freshAttempt = $attempt->fresh(['answers', 'assignment.practiceSet']);
+
+            $this->correctionQueue->syncFromBatchAttempt($freshAttempt);
 
             AssignmentMailer::sendCompleted($freshAttempt);
 

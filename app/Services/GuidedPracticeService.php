@@ -19,6 +19,7 @@ class GuidedPracticeService
 {
     public function __construct(
         private AnswerValidationService $answerValidation,
+        private PracticeCorrectionQueueService $correctionQueue,
     ) {}
     public function initialize(SetAttempt $attempt): void
     {
@@ -237,6 +238,7 @@ class GuidedPracticeService
             };
 
             if ($current->fresh()->isFinished()) {
+                $this->correctionQueue->syncFromGuidedQuestion($current->fresh(), $attempt);
                 $this->advanceOrFinalize($attempt);
             }
 
@@ -317,6 +319,7 @@ class GuidedPracticeService
                 'final_is_correct' => false,
             ]);
 
+            $this->correctionQueue->syncFromGuidedQuestion($current->fresh(), $attempt);
             $this->queueForResolution($attempt, $current);
             $this->advanceOrFinalize($attempt);
 
@@ -478,6 +481,8 @@ class GuidedPracticeService
         ]);
 
         $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
+
+        $this->correctionQueue->syncFromBatchAttempt($attempt->fresh(['guidedQuestions', 'answers']));
 
         AssignmentMailer::sendCompleted($attempt->fresh([
             'guidedQuestions.question.topic.chapter',

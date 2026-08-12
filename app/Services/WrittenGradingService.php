@@ -19,6 +19,7 @@ class WrittenGradingService
         private WrittenSheetPdfService $pdfService,
         private PdfPageImageService $pageImageService,
         private WrittenUploadOptimizer $uploadOptimizer,
+        private PracticeCorrectionQueueService $correctionQueue,
     ) {}
 
     public function grade(WrittenSubmission $submission): WrittenSubmission
@@ -268,6 +269,8 @@ class WrittenGradingService
 
         $submission = $submission->fresh(['items']);
         WrittenSubmissionMailer::sendGraded($submission);
+
+        $this->correctionQueue->syncFromWrittenSubmission($submission);
 
         return $submission;
     }

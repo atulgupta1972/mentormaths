@@ -17,6 +17,7 @@ class WrittenSubmissionService
 {
     public function __construct(
         private WrittenUploadOptimizer $uploadOptimizer,
+        private PracticeCorrectionQueueService $correctionQueue,
     ) {}
 
     /**
@@ -247,6 +248,8 @@ class WrittenSubmissionService
 
         $submission = $submission->fresh(['items']);
         WrittenSubmissionMailer::sendGraded($submission);
+
+        $this->correctionQueue->syncFromWrittenSubmission($submission);
 
         return $submission;
     }
