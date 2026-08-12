@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\PracticeCorrectionItem;
 use App\Models\Question;
 use App\Models\SetAssignment;
 use App\Models\StudentEnrollment;
@@ -146,6 +147,13 @@ class StudentChapterSummaryService
             ->get()
             ->groupBy('worksheet_id');
 
+        $pendingCorrections = PracticeCorrectionItem::query()
+            ->where('student_id', $enrollment->student_id)
+            ->where('status', PracticeCorrectionItem::STATUS_PENDING)
+            ->whereIn('syllabus_chapter_id', $chapterIds)
+            ->get()
+            ->groupBy('syllabus_chapter_id');
+
         $worksheetsById = $worksheets->keyBy('id');
         $worksheetsByChapter = $this->groupWorksheetsByChapter($worksheets, $chapterIds);
 
@@ -155,11 +163,13 @@ class StudentChapterSummaryService
             $textbookChapters,
             $textbookColumns,
             $assignmentsByWorksheet,
+            $pendingCorrections,
         ) {
             $chapterWorksheets = $worksheetsByChapter->get($chapter->id, collect());
             $chapterTextbookRows = $textbookChapters->where('syllabus_chapter_id', $chapter->id);
 
             $practice = [];
+            $practiceCorrection = [];
             $tests = [];
             $written = [];
             $fillBlank = [];
@@ -185,6 +195,16 @@ class StudentChapterSummaryService
                     'formula' => $formula[] = $item,
                     default => $practice[] = $item,
                 };
+            }
+
+            foreach (($pendingCorrections->get($chapter->id) ?? collect())->groupBy('worksheet_id') as $worksheetId => $items) {
+                $worksheet = $worksheetsById->get((int) $worksheetId);
+
+                if (! $worksheet) {
+                    continue;
+                }
+
+                $practiceCorrection[] = $this->buildCorrectionItem($worksheet, $items->count());
             }
 
             foreach ($textbookColumns as $bookColumn) {
@@ -220,6 +240,7 @@ class StudentChapterSummaryService
                 'label' => ExamPlanService::chapterLabel($chapter),
                 'counts' => [
                     'practice' => count($practice),
+                    'practice_correction' => count($practiceCorrection),
                     'test' => count($tests),
                     'written' => count($written),
                     'fill_blank' => count($fillBlank),
@@ -228,6 +249,7 @@ class StudentChapterSummaryService
                 ],
                 'items' => [
                     'practice' => $practice,
+                    'practice_correction' => $practiceCorrection,
                     'test' => $tests,
                     'written' => $written,
                     'fill_blank' => $fillBlank,
@@ -459,6 +481,36 @@ class StudentChapterSummaryService
             'can_assign' => $statusMeta['can_assign'],
             'can_open' => $statusMeta['can_open'],
             'latest_score_percent' => $progress['latest_score_percent'] ?? null,
+        ];
+    }
+
+    private function buildCorrectionItem(Worksheet $worksheet, int $wrongCount): array
+    {
+        $bucket = $this->bucketForWorksheet($worksheet);
+        $prefix = match ($bucket) {
+            'test' => 'T',
+            'written' => 'W',
+            'fill_blank' => 'F',
+            'formula' => 'Fm',
+            default => 'P',
+        };
+
+        $setNumber = $worksheet->set_number ?: 1;
+
+        return [
+            'worksheet_id' => $worksheet->id,
+            'set_code' => $worksheet->set_code,
+            'set_number' => $setNumber,
+            'short_label' => "{$prefix}{$setNumber}",
+            'question_count' => $wrongCount,
+            'correction_count' => $wrongCount,
+            'delivery_mode' => $worksheet->delivery_mode,
+            'status' => 'correction_pending',
+            'status_label' => 'REDO WRONG',
+            'can_assign' => false,
+            'can_open' => false,
+            'can_redo_wrong' => $wrongCount > 0,
+            'is_correction' => true,
         ];
     }
 

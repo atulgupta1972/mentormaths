@@ -210,6 +210,7 @@ const statusClass = (status) => ({
     in_progress: 'bg-sky-100 text-sky-900',
     pending: 'bg-slate-100 text-slate-700',
     not_assigned: 'bg-slate-100 text-slate-600',
+    correction_pending: 'bg-orange-100 text-orange-900',
 }[status] ?? 'bg-slate-100 text-slate-700');
 
 const itemHref = (item) => {
@@ -240,6 +241,21 @@ const selfAssign = (item) => {
     assigningWorksheetId.value = item.worksheet_id;
 
     router.post(route('student.worksheets.self-assign', item.worksheet_id), {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            assigningWorksheetId.value = null;
+        },
+    });
+};
+
+const startCorrection = (item) => {
+    if (! isStudentView.value || ! item.worksheet_id || assigningWorksheetId.value) {
+        return;
+    }
+
+    assigningWorksheetId.value = item.worksheet_id;
+
+    router.post(route('student.worksheets.correction-practice', item.worksheet_id), {}, {
         preserveScroll: true,
         onFinish: () => {
             assigningWorksheetId.value = null;
@@ -398,7 +414,16 @@ const selfAssign = (item) => {
                                                 </span>
                                                 <template v-if="isStudentView">
                                                     <button
-                                                        v-if="item.can_assign"
+                                                        v-if="item.can_redo_wrong"
+                                                        type="button"
+                                                        class="rounded bg-orange-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-orange-800 disabled:opacity-50"
+                                                        :disabled="assigningWorksheetId === item.worksheet_id"
+                                                        @click.stop="startCorrection(item)"
+                                                    >
+                                                        Redo wrong
+                                                    </button>
+                                                    <button
+                                                        v-else-if="item.can_assign"
                                                         type="button"
                                                         class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800 disabled:opacity-50"
                                                         :disabled="assigningWorksheetId === item.worksheet_id"

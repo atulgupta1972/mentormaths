@@ -42,6 +42,7 @@ use App\Http\Controllers\Student\FormulaDrillController;
 use App\Http\Controllers\Student\FormulaResourceController;
 use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
 use App\Http\Controllers\Student\PracticeSetController as StudentPracticeSetController;
+use App\Http\Controllers\Student\PracticeCorrectionController;
 use App\Http\Controllers\Student\SelfAssignController;
 use App\Http\Controllers\Student\WrittenAssignmentController as StudentWrittenAssignmentController;
 use App\Http\Controllers\StudentProfileController;
@@ -377,6 +378,7 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
         ->name('school-study-plan.show');
 
     Route::post('/worksheets/{worksheet}/self-assign', [SelfAssignController::class, 'store'])->name('worksheets.self-assign');
+    Route::post('/worksheets/{worksheet}/correction-practice', [PracticeCorrectionController::class, 'store'])->name('worksheets.correction-practice');
     Route::get('/assignments/{assignment}', [StudentPracticeSetController::class, 'showAssignment'])->name('assignments.show');
     Route::post('/assignments/{assignment}/start', [StudentPracticeSetController::class, 'startAttempt'])->name('assignments.start');
     Route::get('/written-assignments/{assignment}', [StudentWrittenAssignmentController::class, 'show'])->name('written-assignments.show');

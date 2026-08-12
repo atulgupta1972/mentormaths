@@ -99,6 +99,7 @@ class ClassCoverageService
 
         foreach ([
             'practice' => 'Practice',
+            'practice_correction' => 'Practice · Correction',
             'test' => 'Test',
             'written' => 'Written',
             'fill_blank' => 'Fill in blank',
@@ -162,6 +163,8 @@ class ClassCoverageService
             'delivery_mode' => $item['delivery_mode'] ?? null,
             'can_assign' => (bool) ($item['can_assign'] ?? false),
             'can_open' => (bool) ($item['can_open'] ?? false),
+            'can_redo_wrong' => (bool) ($item['can_redo_wrong'] ?? false),
+            'is_correction' => (bool) ($item['is_correction'] ?? false),
         ];
     }
 
@@ -199,6 +202,7 @@ class ClassCoverageService
     {
         return [
             ['key' => 'practice', 'label' => 'Practice set', 'short' => 'Prac'],
+            ['key' => 'practice_correction', 'label' => 'Practice correction', 'short' => 'Corr'],
             ['key' => 'test', 'label' => 'Test', 'short' => 'Test'],
             ['key' => 'written', 'label' => 'Written', 'short' => 'Writ'],
             ['key' => 'fill_blank', 'label' => 'Fill in blank', 'short' => 'Fill'],

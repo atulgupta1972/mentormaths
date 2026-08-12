@@ -36,10 +36,40 @@ class GuidedPracticeService
         $assignment = $attempt->assignment()->with('practiceSet.questions')->first();
         $questions = $this->orderedWorksheetQuestions($assignment->practiceSet);
 
-        foreach ($questions as $index => $question) {
+        $this->createGuidedQuestions($attempt, $questions->pluck('id')->all());
+    }
+
+    /**
+     * @param  list<int>  $questionIds
+     */
+    public function initializeForQuestionIds(SetAttempt $attempt, array $questionIds): void
+    {
+        if ($questionIds === []) {
+            throw new \InvalidArgumentException('No questions selected for correction practice.');
+        }
+
+        if ($attempt->guidedQuestions()->exists()) {
+            if (! $attempt->isGuided()) {
+                $attempt->update(['mode' => SetAttempt::MODE_GUIDED]);
+            }
+
+            $this->ensureAttemptReady($attempt);
+
+            return;
+        }
+
+        $this->createGuidedQuestions($attempt, $questionIds);
+    }
+
+    /**
+     * @param  list<int>  $questionIds
+     */
+    private function createGuidedQuestions(SetAttempt $attempt, array $questionIds): void
+    {
+        foreach (array_values($questionIds) as $index => $questionId) {
             GuidedAttemptQuestion::create([
                 'set_attempt_id' => $attempt->id,
-                'question_id' => $question->id,
+                'question_id' => $questionId,
                 'sort_order' => $index,
                 'phase' => $index === 0
                     ? GuidedAttemptQuestion::PHASE_ANSWERING
