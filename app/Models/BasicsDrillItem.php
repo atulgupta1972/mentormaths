@@ -13,9 +13,13 @@ class BasicsDrillItem extends Model
 
     public const TYPE_CUBE = 'cube';
 
+    public const TYPE_FORMULA = 'formula';
+
     public const ROUND_MAIN = 'main';
 
     public const ROUND_RETRY = 'retry';
+
+    public const ROUND_CORRECTION = 'correction';
 
     public const STATUS_PENDING = 'pending';
 
@@ -27,6 +31,10 @@ class BasicsDrillItem extends Model
 
     protected $fillable = [
         'basics_drill_session_id',
+        'question_id',
+        'practice_correction_item_id',
+        'source_formula_drill_item_id',
+        'source_basics_drill_item_id',
         'fact_type',
         'fact_key',
         'operand_a',
@@ -43,12 +51,23 @@ class BasicsDrillItem extends Model
         return $this->belongsTo(BasicsDrillSession::class, 'basics_drill_session_id');
     }
 
+    public function question(): BelongsTo
+    {
+        return $this->belongsTo(Question::class);
+    }
+
+    public function isFormulaMcq(): bool
+    {
+        return $this->fact_type === self::TYPE_FORMULA && $this->question_id !== null;
+    }
+
     public function promptLabel(): string
     {
         return match ($this->fact_type) {
             self::TYPE_TABLE => "{$this->operand_a} × {$this->operand_b}",
             self::TYPE_SQUARE => "{$this->operand_a}²",
             self::TYPE_CUBE => "{$this->operand_a}³",
+            self::TYPE_FORMULA => 'Formula',
             default => $this->fact_key,
         };
     }

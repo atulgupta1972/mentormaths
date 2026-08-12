@@ -32,6 +32,8 @@ class BasicsDrillSession extends Model
 
     public const PHASE_CUBES_RETRY = 'cubes_retry';
 
+    public const PHASE_FINAL_CORRECTION = 'final_correction';
+
     public const PHASE_COMPLETED = 'completed';
 
     protected $fillable = [

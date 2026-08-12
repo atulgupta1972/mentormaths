@@ -451,7 +451,7 @@ class FormulaDrillTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('dashboard'))
-            ->assertOk();
+            ->assertRedirect(route('student.basics-drill.show'));
     }
 
     public function test_admin_bypasses_formula_drill_gate(): void

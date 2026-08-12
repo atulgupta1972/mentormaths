@@ -217,6 +217,49 @@ class BasicsDrillTest extends TestCase
         $this->assertTrue($session->fresh()->isComplete());
     }
 
+    public function test_wrong_table_answer_is_retried_in_final_correction_before_dashboard(): void
+    {
+        ['student' => $student, 'user' => $user] = $this->seedStudentWithFormulaComplete();
+
+        $this->actingAs($user)->get(route('student.basics-drill.show'))->assertOk();
+
+        $session = BasicsDrillSession::query()->where('student_id', $student->id)->firstOrFail();
+
+        $this->actingAs($user)->postJson(route('student.basics-drill.start', $session))->assertOk();
+
+        $items = $session->fresh('items')->items->values();
+        $wrongItem = $items->firstOrFail();
+        $rightItem = $items->last();
+
+        $this->actingAs($user)
+            ->postJson(route('student.basics-drill.answer', $wrongItem), ['answer' => '0'])
+            ->assertOk()
+            ->assertJsonPath('reveal', true);
+
+        $this->actingAs($user)
+            ->postJson(route('student.basics-drill.acknowledge', $wrongItem))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->postJson(route('student.basics-drill.answer', $rightItem), [
+                'answer' => (string) $rightItem->correct_answer,
+            ])
+            ->assertOk()
+            ->assertJsonPath('session.phase', BasicsDrillSession::PHASE_FINAL_CORRECTION);
+
+        $session->refresh();
+        $correction = $session->items()->where('round', BasicsDrillItem::ROUND_CORRECTION)->firstOrFail();
+
+        $this->actingAs($user)
+            ->postJson(route('student.basics-drill.answer', $correction), [
+                'answer' => (string) $correction->correct_answer,
+            ])
+            ->assertOk()
+            ->assertJsonPath('completed', true);
+
+        $this->actingAs($user)->get(route('dashboard'))->assertOk();
+    }
+
     public function test_admin_can_open_basics_drill_settings(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);

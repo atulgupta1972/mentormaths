@@ -11,12 +11,20 @@ class FormulaDrillItem extends Model
 
     public const STATUS_CORRECT = 'correct';
 
+    public const STATUS_FAILED = 'failed';
+
     public const STATUS_EXHAUSTED = 'exhausted';
+
+    public const ROUND_MAIN = 'main';
+
+    public const ROUND_CORRECTION = 'correction';
 
     protected $fillable = [
         'formula_drill_session_id',
         'question_id',
+        'practice_correction_item_id',
         'sort_order',
+        'round',
         'status',
         'attempt_count',
         'failure_count',
@@ -42,6 +50,15 @@ class FormulaDrillItem extends Model
 
     public function isDone(): bool
     {
-        return in_array($this->status, [self::STATUS_CORRECT, self::STATUS_EXHAUSTED], true);
+        return in_array($this->status, [
+            self::STATUS_CORRECT,
+            self::STATUS_FAILED,
+            self::STATUS_EXHAUSTED,
+        ], true);
+    }
+
+    public function isMainRound(): bool
+    {
+        return ($this->round ?? self::ROUND_MAIN) === self::ROUND_MAIN;
     }
 }

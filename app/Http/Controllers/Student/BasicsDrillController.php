@@ -59,6 +59,22 @@ class BasicsDrillController extends Controller
         );
     }
 
+    public function submitMcqAnswer(Request $request, BasicsDrillItem $item): JsonResponse
+    {
+        $session = $item->session;
+        $this->authorizeSession($request, $session);
+
+        $validated = $request->validate([
+            'option_id' => ['required', 'integer', 'exists:question_options,id'],
+        ]);
+
+        $session->load(['items', 'student']);
+
+        return response()->json(
+            $this->sessionService->submitCorrectionMcq($item, (int) $validated['option_id']),
+        );
+    }
+
     public function acknowledge(Request $request, BasicsDrillItem $item): JsonResponse
     {
         $session = $item->session;

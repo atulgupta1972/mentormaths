@@ -1,5 +1,7 @@
 <script setup>
+import McqOptionLine from '@/Components/McqOptionLine.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import QuestionBody from '@/Components/QuestionBody.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import axios from 'axios';
@@ -15,14 +17,21 @@ const submitting = ref(false);
 const reveal = ref(null);
 const secondsLeft = ref(0);
 const answerInputRef = ref(null);
+const selectedOptionId = ref(null);
 let timerId = null;
 
 const isShowPhase = computed(() => sessionState.value.is_show_phase);
+const isFinalCorrection = computed(() => sessionState.value.is_final_correction);
 const chart = computed(() => sessionState.value.chart);
 const currentItem = computed(() => sessionState.value.current_item);
 const secondsPerBlank = computed(() => sessionState.value.seconds_per_blank || 5);
+const isFormulaMcq = computed(() => currentItem.value?.is_formula_mcq);
 
 const phaseTitle = computed(() => {
+    if (isFinalCorrection.value) {
+        return 'Fix your mistakes';
+    }
+
     const phase = sessionState.value.phase || '';
 
     if (phase.includes('table')) {
@@ -42,6 +51,7 @@ const applySession = (next) => {
     sessionState.value = { ...next };
     reveal.value = null;
     answer.value = '';
+    selectedOptionId.value = null;
 };
 
 const goDashboard = () => {
@@ -51,6 +61,13 @@ const goDashboard = () => {
 const handleAdvancePayload = (payload) => {
     if (payload.session) {
         applySession(payload.session);
+    }
+
+    if (payload.next_item) {
+        sessionState.value = {
+            ...sessionState.value,
+            current_item: payload.next_item,
+        };
     }
 
     if (payload.completed || payload.session?.is_complete) {
@@ -70,6 +87,12 @@ const clearTimer = () => {
 };
 
 const startTimer = () => {
+    if (isFinalCorrection.value || isFormulaMcq.value) {
+        clearTimer();
+
+        return;
+    }
+
     clearTimer();
     secondsLeft.value = secondsPerBlank.value;
 
@@ -92,7 +115,7 @@ const focusAnswerInput = () => {
 watch(
     () => currentItem.value?.id,
     (id) => {
-        if (id && !isShowPhase.value && !reveal.value) {
+        if (id && !isShowPhase.value && !reveal.value && !isFormulaMcq.value) {
             answer.value = '';
             startTimer();
             focusAnswerInput();
@@ -149,6 +172,41 @@ const submitAnswer = async (timedOut = false) => {
                 itemId: payload.item_id,
                 prompt: payload.prompt,
                 correctAnswer: payload.correct_answer,
+                isMcq: false,
+            };
+
+            return;
+        }
+
+        if (handleAdvancePayload(payload)) {
+            return;
+        }
+
+        applySession(payload.session);
+    } finally {
+        submitting.value = false;
+    }
+};
+
+const submitMcqAnswer = async () => {
+    if (!selectedOptionId.value || !currentItem.value || submitting.value || reveal.value) {
+        return;
+    }
+
+    submitting.value = true;
+
+    try {
+        const payload = await postJson(route('student.basics-drill.mcq-answer', currentItem.value.id), {
+            option_id: selectedOptionId.value,
+        });
+
+        if (payload.reveal) {
+            applySession(payload.session);
+            reveal.value = {
+                itemId: payload.item_id,
+                prompt: payload.prompt,
+                correctOptionId: payload.correct_option_id,
+                isMcq: true,
             };
 
             return;
@@ -178,7 +236,16 @@ const acknowledgeReveal = async () => {
             return;
         }
 
-        applySession(payload.session);
+        if (payload.next_item) {
+            sessionState.value = {
+                ...sessionState.value,
+                current_item: payload.next_item,
+            };
+        }
+
+        reveal.value = null;
+        selectedOptionId.value = null;
+        answer.value = '';
     } finally {
         submitting.value = false;
     }
@@ -195,6 +262,12 @@ const timerPercent = computed(() => {
 
     return Math.max(0, Math.round((secondsLeft.value / secondsPerBlank.value) * 100));
 });
+
+const mcqOptionClass = (optionId) => {
+    return selectedOptionId.value === optionId
+        ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300'
+        : 'border-gray-200 bg-white hover:border-indigo-300';
+};
 </script>
 
 <template>
@@ -205,7 +278,12 @@ const timerPercent = computed(() => {
             <div>
                 <h2 class="text-xl font-semibold text-gray-800">{{ phaseTitle }}</h2>
                 <p class="text-sm text-gray-500">
-                    Memorise, then type answers quickly.
+                    <template v-if="isFinalCorrection">
+                        Answer each wrong item correctly on your first try to finish today&apos;s drill.
+                    </template>
+                    <template v-else>
+                        Memorise, then type answers quickly.
+                    </template>
                     <span v-if="sessionState.progress_label"> · {{ sessionState.progress_label }}</span>
                 </p>
             </div>
@@ -231,10 +309,36 @@ const timerPercent = computed(() => {
                     </PrimaryButton>
                 </div>
 
+                <div v-else-if="currentItem && isFormulaMcq && !reveal" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
+                    <QuestionBody :question-text="currentItem.question.question_text" />
+
+                    <div class="mt-5 space-y-2">
+                        <button
+                            v-for="(option, optIndex) in currentItem.question.options"
+                            :key="option.id"
+                            type="button"
+                            class="block w-full rounded-lg border p-3 text-left transition"
+                            :class="mcqOptionClass(option.id)"
+                            :disabled="submitting"
+                            @click="selectedOptionId = option.id"
+                        >
+                            <McqOptionLine :index="optIndex" :text="option.option_text" />
+                        </button>
+                    </div>
+
+                    <PrimaryButton
+                        class="mt-6 w-full justify-center"
+                        :disabled="!selectedOptionId || submitting"
+                        @click="submitMcqAnswer"
+                    >
+                        Submit
+                    </PrimaryButton>
+                </div>
+
                 <div v-else-if="currentItem && !reveal" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
                     <p class="text-center text-3xl font-bold text-gray-900">{{ currentItem.prompt }} = ?</p>
 
-                    <div class="mt-4">
+                    <div v-if="!isFinalCorrection" class="mt-4">
                         <div class="mb-1 flex justify-between text-xs text-gray-500">
                             <span>Time left</span>
                             <span>{{ secondsLeft }}s</span>
@@ -271,10 +375,13 @@ const timerPercent = computed(() => {
                 >
                     <div class="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-xl">
                         <p class="text-sm text-gray-600">{{ reveal.prompt }}</p>
-                        <p class="mt-4 text-6xl font-bold text-rose-600">{{ reveal.correctAnswer }}</p>
-                        <p class="mt-3 text-sm text-gray-600">Remember this, then continue.</p>
+                        <p v-if="!reveal.isMcq" class="mt-4 text-6xl font-bold text-rose-600">{{ reveal.correctAnswer }}</p>
+                        <p v-else class="mt-4 text-lg font-semibold text-rose-600">See the correct option marked when you continue.</p>
+                        <p class="mt-3 text-sm text-gray-600">
+                            {{ isFinalCorrection ? 'Try again — first attempt must be correct.' : 'Remember this, then continue.' }}
+                        </p>
                         <PrimaryButton class="mt-6 w-full justify-center" :disabled="submitting" @click="acknowledgeReveal">
-                            Got it
+                            Try again
                         </PrimaryButton>
                     </div>
                 </div>

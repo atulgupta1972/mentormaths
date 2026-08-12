@@ -14,6 +14,8 @@ class BasicsDrillSessionService
 {
     public function __construct(
         private BasicsDrillSettingsService $settingsService,
+        private DailyDrillCorrectionService $correctionService,
+        private FormulaDrillSessionService $formulaService,
     ) {}
 
     public function todayDate(): Carbon
@@ -24,10 +26,14 @@ class BasicsDrillSessionService
     public function gatePassed(Student $student): bool
     {
         if (! $this->settingsService->isEnabledForEnrollment($student->currentEnrollment())) {
-            return true;
+            return ! $this->correctionService->needsFinalCorrection($student);
         }
 
         $session = $this->todaysSession($student);
+
+        if ($this->correctionService->needsFinalCorrection($student)) {
+            return false;
+        }
 
         return $session?->isComplete() ?? false;
     }
@@ -46,6 +52,10 @@ class BasicsDrillSessionService
         $existing = $this->todaysSession($student);
 
         if ($existing) {
+            if ($this->shouldEnterFinalCorrection($student, $existing)) {
+                return $this->beginFinalCorrection($existing);
+            }
+
             return $this->recoverStuckSession($existing);
         }
 
@@ -77,6 +87,19 @@ class BasicsDrillSessionService
         }
 
         if ($firstPhase === BasicsDrillSession::PHASE_COMPLETED) {
+            if ($this->formulaService->gatePassed($student)
+                && $this->correctionService->hasUncorrectedFailures($student)) {
+                $session = BasicsDrillSession::query()->create([
+                    'student_id' => $student->id,
+                    'student_enrollment_id' => $student->currentEnrollment()?->id,
+                    'drill_date' => $this->todayDate(),
+                    'status' => BasicsDrillSession::STATUS_IN_PROGRESS,
+                    'phase' => BasicsDrillSession::PHASE_FINAL_CORRECTION,
+                ]);
+
+                return $this->beginFinalCorrection($session);
+            }
+
             return BasicsDrillSession::query()->create([
                 'student_id' => $student->id,
                 'student_enrollment_id' => $student->currentEnrollment()?->id,
@@ -180,8 +203,13 @@ class BasicsDrillSessionService
 
     public function submitAnswer(BasicsDrillItem $item, ?string $answer, bool $timedOut): array
     {
-        $session = $item->session()->with('items')->firstOrFail();
+        $session = $item->session()->with(['items', 'student'])->firstOrFail();
         $settings = $this->settingsService->forStudent($session->student);
+
+        if ($session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION) {
+            return $this->submitCorrectionNumericAnswer($item, $answer, $timedOut, $settings);
+        }
+
         $correctAnswer = (string) $item->correct_answer;
         $normalized = preg_replace('/\D+/', '', (string) $answer) ?: '';
         $isCorrect = ! $timedOut && $normalized !== '' && $normalized === $correctAnswer;
@@ -221,10 +249,56 @@ class BasicsDrillSessionService
         ];
     }
 
+    public function submitCorrectionMcq(BasicsDrillItem $item, int $optionId): array
+    {
+        $session = $item->session()->with(['items', 'student'])->firstOrFail();
+        $settings = $this->settingsService->forStudent($session->student);
+
+        abort_unless($session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION, 422);
+        abort_unless($item->isFormulaMcq(), 422);
+
+        $result = $this->correctionService->submitMcqAnswer($item, $optionId);
+        $session = $session->fresh(['items', 'student']);
+
+        if ($result['correct']) {
+            $next = $this->nextPendingCorrectionItem($session);
+
+            if ($next) {
+                return [
+                    ...$result,
+                    'next_item' => $this->formatItem($next),
+                    'session' => $this->formatSession($session, $settings),
+                ];
+            }
+
+            $this->completeSession($session);
+
+            return [
+                ...$result,
+                'completed' => true,
+                'redirect' => route('dashboard'),
+                'session' => $this->formatSession($session->fresh(['items']), $settings),
+            ];
+        }
+
+        return [
+            ...$result,
+            'session' => $this->formatSession($session, $settings),
+        ];
+    }
+
     public function acknowledgeReveal(BasicsDrillItem $item): array
     {
-        $session = $item->session()->with('items')->firstOrFail();
+        $session = $item->session()->with(['items', 'student'])->firstOrFail();
         $settings = $this->settingsService->forStudent($session->student);
+
+        if ($session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION) {
+            return [
+                'next_item' => $this->formatItem($item),
+                'session' => $this->formatSession($session, $settings),
+                'retry_same' => true,
+            ];
+        }
 
         $item->update(['status' => BasicsDrillItem::STATUS_REVEALED]);
 
@@ -261,77 +335,32 @@ class BasicsDrillSessionService
             'current_item' => $current ? $this->formatItem($current) : null,
             'progress_label' => $this->progressLabel($session),
             'is_show_phase' => str_ends_with($session->phase, '_show'),
+            'is_final_correction' => $session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION,
+            'correction_total' => $session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION
+                ? $session->items->where('round', BasicsDrillItem::ROUND_CORRECTION)->count()
+                : 0,
             'is_complete' => $session->isComplete(),
         ];
     }
 
-    private function advanceAfterPhase(BasicsDrillSession $session, array $settings): array
+    public function completeSession(BasicsDrillSession $session): void
     {
-        $factType = $this->factTypeForPhase($session->phase);
-        $missed = $session->items->filter(
-            fn (BasicsDrillItem $item) => $item->round === BasicsDrillItem::ROUND_MAIN
-                && $item->fact_type === $factType
-                && in_array($item->status, [
-                    BasicsDrillItem::STATUS_FAILED,
-                    BasicsDrillItem::STATUS_REVEALED,
-                ], true),
-        );
-
-        if ($missed->isNotEmpty() && str_ends_with($session->phase, '_drill')) {
-            $retryPhase = str_replace('_drill', '_retry', $session->phase);
-            $session->update(['phase' => $retryPhase]);
-            $this->ensureRetryItems($session->fresh(['items']));
-
-            $fresh = $session->fresh(['items', 'student']);
-            $next = $this->nextPendingItem($fresh);
-
-            // No retry rows created — continue rather than blank screen.
-            if (! $next) {
-                return $this->advanceAfterPhase($fresh, $settings);
-            }
-
-            return [
-                'correct' => true,
-                'reveal' => false,
-                'phase_change' => $retryPhase,
-                'next_item' => $this->formatItem($next),
-                'session' => $this->formatSession($fresh, $settings),
-            ];
+        if ($session->status === BasicsDrillSession::STATUS_COMPLETED) {
+            return;
         }
 
-        $nextPhase = $this->nextPhaseAfter($session, $settings);
-
-        if ($nextPhase === BasicsDrillSession::PHASE_COMPLETED) {
-            $this->completeSession($session);
-
-            return [
-                'correct' => true,
-                'reveal' => false,
-                'completed' => true,
-                'redirect' => route('dashboard'),
-                'session' => $this->formatSession($session->fresh(['items']), $settings),
-            ];
-        }
-
-        $session->update(['phase' => $nextPhase]);
-
-        return [
-            'correct' => true,
-            'reveal' => false,
-            'phase_change' => $nextPhase,
-            'next_item' => null,
-            'session' => $this->formatSession($session->fresh(['items']), $settings),
-        ];
-    }
-
-    private function completeSession(BasicsDrillSession $session): void
-    {
         DB::transaction(function () use ($session) {
             $session->update([
                 'status' => BasicsDrillSession::STATUS_COMPLETED,
                 'phase' => BasicsDrillSession::PHASE_COMPLETED,
                 'completed_at' => now(),
             ]);
+
+            if ($session->table_number === null
+                && $session->square_batch_start === null
+                && $session->cube_batch_start === null) {
+                return;
+            }
 
             $settings = $this->settingsService->forStudent($session->student);
             $progress = $this->progressFor($session->student);
@@ -364,21 +393,142 @@ class BasicsDrillSessionService
         });
     }
 
+    private function advanceAfterPhase(BasicsDrillSession $session, array $settings): array
+    {
+        $nextPhase = $this->nextPhaseAfter($session, $settings);
+
+        if ($nextPhase === BasicsDrillSession::PHASE_COMPLETED) {
+            if ($this->correctionService->ensureCorrectionItems($session->fresh(['items', 'student']))) {
+                $session->update(['phase' => BasicsDrillSession::PHASE_FINAL_CORRECTION]);
+                $fresh = $session->fresh(['items', 'student']);
+                $next = $this->nextPendingCorrectionItem($fresh);
+
+                return [
+                    'correct' => true,
+                    'reveal' => false,
+                    'phase_change' => BasicsDrillSession::PHASE_FINAL_CORRECTION,
+                    'next_item' => $next ? $this->formatItem($next) : null,
+                    'session' => $this->formatSession($fresh, $settings),
+                ];
+            }
+
+            $this->completeSession($session);
+
+            return [
+                'correct' => true,
+                'reveal' => false,
+                'completed' => true,
+                'redirect' => route('dashboard'),
+                'session' => $this->formatSession($session->fresh(['items']), $settings),
+            ];
+        }
+
+        $session->update(['phase' => $nextPhase]);
+
+        return [
+            'correct' => true,
+            'reveal' => false,
+            'phase_change' => $nextPhase,
+            'next_item' => null,
+            'session' => $this->formatSession($session->fresh(['items']), $settings),
+        ];
+    }
+
+    private function beginFinalCorrection(BasicsDrillSession $session): BasicsDrillSession
+    {
+        $this->correctionService->ensureCorrectionItems($session);
+        $session->update([
+            'status' => BasicsDrillSession::STATUS_IN_PROGRESS,
+            'phase' => BasicsDrillSession::PHASE_FINAL_CORRECTION,
+        ]);
+
+        return $session->fresh(['items', 'student']);
+    }
+
+    private function shouldEnterFinalCorrection(Student $student, BasicsDrillSession $session): bool
+    {
+        if ($session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION) {
+            return false;
+        }
+
+        if ($session->isComplete() && $this->correctionService->hasUncorrectedFailures($student)) {
+            return true;
+        }
+
+        return $session->status === BasicsDrillSession::STATUS_SKIPPED
+            && $this->formulaService->gatePassed($student)
+            && $this->correctionService->hasUncorrectedFailures($student);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function submitCorrectionNumericAnswer(
+        BasicsDrillItem $item,
+        ?string $answer,
+        bool $timedOut,
+        array $settings,
+    ): array {
+        $session = $item->session()->with(['items', 'student'])->firstOrFail();
+        $correctAnswer = (string) $item->correct_answer;
+        $normalized = preg_replace('/\D+/', '', (string) $answer) ?: '';
+        $isCorrect = ! $timedOut && $normalized !== '' && $normalized === $correctAnswer;
+
+        if ($isCorrect) {
+            $item->update(['status' => BasicsDrillItem::STATUS_CORRECT]);
+            $this->correctionService->markSourcesCorrected($item);
+            $session = $session->fresh(['items', 'student']);
+            $next = $this->nextPendingCorrectionItem($session);
+
+            if ($next) {
+                return [
+                    'correct' => true,
+                    'reveal' => false,
+                    'next_item' => $this->formatItem($next),
+                    'session' => $this->formatSession($session, $settings),
+                ];
+            }
+
+            $this->completeSession($session);
+
+            return [
+                'correct' => true,
+                'reveal' => false,
+                'completed' => true,
+                'redirect' => route('dashboard'),
+                'session' => $this->formatSession($session->fresh(['items']), $settings),
+            ];
+        }
+
+        return [
+            'correct' => false,
+            'reveal' => true,
+            'correct_answer' => (int) $item->correct_answer,
+            'prompt' => $item->promptLabel(),
+            'item_id' => $item->id,
+            'session' => $this->formatSession($session->fresh(['items']), $settings),
+        ];
+    }
+
+    private function nextPendingCorrectionItem(BasicsDrillSession $session): ?BasicsDrillItem
+    {
+        return $session->items
+            ->where('round', BasicsDrillItem::ROUND_CORRECTION)
+            ->firstWhere('status', BasicsDrillItem::STATUS_PENDING);
+    }
+
     private function nextPhaseAfter(BasicsDrillSession $session, array $settings): string
     {
         return match ($session->phase) {
-            BasicsDrillSession::PHASE_TABLE_DRILL,
-            BasicsDrillSession::PHASE_TABLE_RETRY => $settings['squares_enabled']
+            BasicsDrillSession::PHASE_TABLE_DRILL => $settings['squares_enabled']
                 ? BasicsDrillSession::PHASE_SQUARES_SHOW
                 : ($settings['cubes_enabled']
                     ? BasicsDrillSession::PHASE_CUBES_SHOW
                     : BasicsDrillSession::PHASE_COMPLETED),
-            BasicsDrillSession::PHASE_SQUARES_DRILL,
-            BasicsDrillSession::PHASE_SQUARES_RETRY => $settings['cubes_enabled']
+            BasicsDrillSession::PHASE_SQUARES_DRILL => $settings['cubes_enabled']
                 ? BasicsDrillSession::PHASE_CUBES_SHOW
                 : BasicsDrillSession::PHASE_COMPLETED,
-            BasicsDrillSession::PHASE_CUBES_DRILL,
-            BasicsDrillSession::PHASE_CUBES_RETRY => BasicsDrillSession::PHASE_COMPLETED,
+            BasicsDrillSession::PHASE_CUBES_DRILL => BasicsDrillSession::PHASE_COMPLETED,
             default => BasicsDrillSession::PHASE_COMPLETED,
         };
     }
@@ -645,6 +795,10 @@ class BasicsDrillSessionService
 
     private function currentItem(BasicsDrillSession $session): ?BasicsDrillItem
     {
+        if ($session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION) {
+            return $this->nextPendingCorrectionItem($session);
+        }
+
         if (str_ends_with($session->phase, '_show') || $session->isComplete()) {
             return null;
         }
@@ -670,16 +824,43 @@ class BasicsDrillSessionService
      */
     private function formatItem(BasicsDrillItem $item): array
     {
-        return [
+        $payload = [
             'id' => $item->id,
             'fact_type' => $item->fact_type,
             'prompt' => $item->promptLabel(),
             'round' => $item->round,
+            'is_formula_mcq' => $item->isFormulaMcq(),
         ];
+
+        if ($item->isFormulaMcq()) {
+            $item->loadMissing('question.options');
+            $question = $item->question;
+
+            $payload['question'] = [
+                'id' => $question->id,
+                'question_text' => $question->question_text,
+                'explanation' => $question->explanation,
+                'options' => $question->options->map(fn ($option, $index) => [
+                    'id' => $option->id,
+                    'letter' => chr(65 + $index),
+                    'option_text' => $option->option_text,
+                ])->values()->all(),
+            ];
+        }
+
+        return $payload;
     }
 
     private function progressLabel(BasicsDrillSession $session): string
     {
+        if ($session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION) {
+            $items = $session->items->where('round', BasicsDrillItem::ROUND_CORRECTION);
+            $done = $items->where('status', BasicsDrillItem::STATUS_CORRECT)->count();
+            $total = $items->count();
+
+            return $total > 0 ? "Correction {$done}/{$total}" : '';
+        }
+
         $factType = $this->factTypeForPhase($session->phase);
         $round = str_ends_with($session->phase, '_retry')
             ? BasicsDrillItem::ROUND_RETRY

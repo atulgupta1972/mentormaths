@@ -364,6 +364,7 @@ Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->nam
     Route::get('/basics-drill', [BasicsDrillController::class, 'show'])->name('basics-drill.show');
     Route::post('/basics-drill/sessions/{session}/start', [BasicsDrillController::class, 'start'])->name('basics-drill.start');
     Route::post('/basics-drill/items/{item}/answer', [BasicsDrillController::class, 'submitAnswer'])->name('basics-drill.answer');
+    Route::post('/basics-drill/items/{item}/mcq-answer', [BasicsDrillController::class, 'submitMcqAnswer'])->name('basics-drill.mcq-answer');
     Route::post('/basics-drill/items/{item}/acknowledge', [BasicsDrillController::class, 'acknowledge'])->name('basics-drill.acknowledge');
 });
 
