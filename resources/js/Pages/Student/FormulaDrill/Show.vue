@@ -231,7 +231,11 @@ const optionClass = (optionId) => {
             <div>
                 <h2 class="text-xl font-semibold text-gray-800">Daily formula drill</h2>
                 <p class="text-sm text-gray-500">
-                    Complete {{ sessionState.questions_total }} formulas to unlock today&apos;s work
+                    Complete {{ sessionState.formula_count ?? sessionState.questions_total }} formula{{ (sessionState.formula_count ?? sessionState.questions_total) === 1 ? '' : 's' }}
+                    <template v-if="sessionState.revision_count">
+                        + {{ sessionState.revision_count }} revision
+                    </template>
+                    to unlock today&apos;s work
                     <span v-if="sessionState.pool_size"> · Pool of {{ sessionState.pool_size }}</span>
                 </p>
                 <p v-if="poolNote" class="mt-1 text-xs text-indigo-700">

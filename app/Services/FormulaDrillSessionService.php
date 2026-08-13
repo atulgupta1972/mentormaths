@@ -54,9 +54,16 @@ class FormulaDrillSessionService
     {
         $existing = $this->todaysSession($student);
 
+        $dailyCount = (int) config('formula_drill.daily_question_count', 5);
+        $correctionCount = (int) config('formula_drill.daily_correction_count', 5);
+        $plannedMax = $dailyCount + $correctionCount;
+
         if ($existing) {
             if ($existing->status === FormulaDrillSession::STATUS_SKIPPED
                 && $this->poolService->poolSize($student) > 0) {
+                $existing->delete();
+            } elseif ($existing->status === FormulaDrillSession::STATUS_IN_PROGRESS
+                && $existing->questions_total > $plannedMax) {
                 $existing->delete();
             } else {
                 return $existing;
@@ -64,8 +71,6 @@ class FormulaDrillSessionService
         }
 
         $poolIds = $this->poolService->poolQuestionIds($student);
-        $dailyCount = (int) config('formula_drill.daily_question_count', 10);
-        $correctionCount = (int) config('formula_drill.daily_correction_count', 5);
 
         $correctionItems = $this->correctionQueue->selectForDailyDrill($student, $correctionCount);
         $correctionQuestionIds = $correctionItems->pluck('question_id')->all();
@@ -525,9 +530,14 @@ class FormulaDrillSessionService
      */
     public function sessionPayload(FormulaDrillSession $session): array
     {
+        $session->loadMissing('items');
         $current = $this->currentItem($session);
 
         $student = $session->student ?? Student::query()->find($session->student_id);
+        $revisionCount = $session->items
+            ->filter(fn (FormulaDrillItem $item) => $item->practice_correction_item_id !== null)
+            ->count();
+        $formulaCount = max(0, $session->questions_total - $revisionCount);
 
         return [
             'session' => [
@@ -536,6 +546,8 @@ class FormulaDrillSessionService
                 'drill_date' => $session->drill_date->toDateString(),
                 'questions_total' => $session->questions_total,
                 'questions_completed' => $session->questions_completed,
+                'formula_count' => $formulaCount,
+                'revision_count' => $revisionCount,
                 'pool_size' => $session->pool_size,
                 'is_complete' => $session->isComplete(),
             ],

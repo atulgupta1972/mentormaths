@@ -414,6 +414,41 @@ class FormulaDrillTest extends TestCase
         ]);
     }
 
+    public function test_oversized_in_progress_session_is_rebuilt_to_five_formulas(): void
+    {
+        ['student' => $student, 'user' => $user, 'formulaQuestion' => $question] = $this->seedStudentWithCompletedChapter();
+
+        $old = FormulaDrillSession::query()->create([
+            'student_id' => $student->id,
+            'student_enrollment_id' => $student->currentEnrollment()?->id,
+            'drill_date' => now(config('formula_drill.timezone', 'Asia/Kolkata'))->startOfDay(),
+            'status' => FormulaDrillSession::STATUS_IN_PROGRESS,
+            'questions_total' => 15,
+            'questions_completed' => 1,
+            'pool_size' => 30,
+        ]);
+
+        FormulaDrillItem::query()->create([
+            'formula_drill_session_id' => $old->id,
+            'question_id' => $question->id,
+            'sort_order' => 1,
+            'round' => FormulaDrillItem::ROUND_MAIN,
+            'status' => FormulaDrillItem::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('student.formula-drill.show'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Student/FormulaDrill/Show')
+                ->where('session.questions_total', 1)
+                ->where('session.formula_count', 1)
+                ->where('session.revision_count', 0)
+            );
+
+        $this->assertDatabaseMissing('formula_drill_sessions', ['id' => $old->id]);
+    }
+
     public function test_skipped_session_retries_when_pool_becomes_available(): void
     {
         ['student' => $student, 'user' => $user] = $this->seedStudentWithAssignedChapter();
