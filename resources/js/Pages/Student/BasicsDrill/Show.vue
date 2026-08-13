@@ -345,12 +345,13 @@ const mcqOptionClass = (optionId) => {
                     <p class="mx-auto mt-8 max-w-lg text-xl font-bold leading-snug text-amber-300 sm:text-2xl">
                         {{ correctionIntro.call_to_action }}
                     </p>
-                    <PrimaryButton
-                        class="mt-8 border-0 bg-white px-8 py-3 text-base font-bold text-indigo-700 hover:bg-indigo-50"
+                    <button
+                        type="button"
+                        class="mt-8 inline-flex items-center justify-center rounded-md bg-white px-8 py-3 text-base font-bold text-gray-900 shadow-sm hover:bg-indigo-50"
                         @click="startCorrectionRound"
                     >
                         Let&apos;s make it 100%
-                    </PrimaryButton>
+                    </button>
                 </div>
 
                 <div
@@ -369,12 +370,13 @@ const mcqOptionClass = (optionId) => {
                     <p class="mx-auto mt-6 max-w-lg text-lg font-semibold leading-relaxed text-white">
                         {{ completionSummary.message }}
                     </p>
-                    <PrimaryButton
-                        class="mt-8 border-0 bg-white px-8 py-3 text-base font-bold text-emerald-700 hover:bg-emerald-50"
+                    <button
+                        type="button"
+                        class="mt-8 inline-flex items-center justify-center rounded-md bg-white px-8 py-3 text-base font-bold text-gray-900 shadow-sm hover:bg-emerald-50"
                         @click="goDashboard"
                     >
                         Go to dashboard
-                    </PrimaryButton>
+                    </button>
                 </div>
 
                 <div v-else-if="isShowPhase && chart" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
