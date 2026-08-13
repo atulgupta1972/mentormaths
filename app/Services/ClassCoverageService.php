@@ -159,6 +159,7 @@ class ClassCoverageService
             'status_label' => $displayStatus,
             'score_percent' => $percent,
             'assignment_id' => $item['assignment_id'] ?? null,
+            'target_date' => $item['target_date'] ?? null,
             'latest_attempt_id' => $item['latest_attempt_id'] ?? null,
             'delivery_mode' => $item['delivery_mode'] ?? null,
             'can_assign' => (bool) ($item['can_assign'] ?? false),

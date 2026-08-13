@@ -60,7 +60,9 @@ class StudentChapterSummaryServiceTest extends TestCase
         $this->assertSame(2, $row['counts']['practice']);
         $this->assertSame(1, $row['counts']['test']);
         $this->assertSame('DONE(80%)', $row['items']['practice'][0]['status_label']);
+        $this->assertSame(now()->addWeek()->toDateString(), $row['items']['practice'][0]['target_date']);
         $this->assertSame('NOT DONE', $row['items']['practice'][1]['status_label']);
+        $this->assertNull($row['items']['practice'][1]['target_date']);
         $this->assertTrue($row['items']['practice'][1]['can_assign']);
     }
 

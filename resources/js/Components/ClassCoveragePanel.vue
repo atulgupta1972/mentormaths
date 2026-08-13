@@ -462,6 +462,12 @@ const startCorrection = (item) => {
                                                     {{ item.status_label }}
                                                 </span>
                                                 <span
+                                                    v-if="item.target_date"
+                                                    class="text-[10px] font-semibold text-slate-600"
+                                                >
+                                                    due {{ formatDate(item.target_date) }}
+                                                </span>
+                                                <span
                                                     v-if="item.correction_count > 0 && !item.is_correction"
                                                     class="rounded bg-orange-100 px-1.5 py-px text-[10px] font-bold uppercase text-orange-900"
                                                 >

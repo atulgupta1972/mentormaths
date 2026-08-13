@@ -514,6 +514,7 @@ class StudentChapterSummaryService
             'question_count' => (int) ($worksheet->questions_count ?? 0),
             'delivery_mode' => $worksheet->delivery_mode ?? WorksheetDeliveryMode::ONLINE,
             'assignment_id' => $assignment?->id,
+            'target_date' => $assignment?->due_date?->toDateString(),
             'latest_attempt_id' => $progress['latest_attempt_id'] ?? null,
             'status' => $statusMeta['status'],
             'status_label' => $statusMeta['status_label'],
