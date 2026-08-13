@@ -1,6 +1,6 @@
 <script setup>
 import { formatDate } from '@/utils/dates';
-import { Link, router } from '@inertiajs/vue3';
+import { Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
@@ -24,6 +24,10 @@ const props = defineProps({
         type: Object,
         default: () => ({}),
     },
+    assignStudentId: {
+        type: [Number, String, null],
+        default: null,
+    },
 });
 
 const savingId = ref(null);
@@ -34,7 +38,51 @@ const expandedChapterIds = ref(new Set());
 const chapters = computed(() => props.classCoverage?.chapters ?? []);
 const availabilityColumns = computed(() => props.classCoverage?.availability_columns ?? []);
 const isStudentView = computed(() => String(props.updateRouteName).startsWith('student.'));
+const canStaffAssign = computed(() => ! isStudentView.value && Boolean(props.assignStudentId) && route().has('admin.practice-sets.assign'));
 const columnCount = computed(() => 4 + availabilityColumns.value.length);
+
+const todayDate = () => {
+    const date = new Date();
+    const pad = (value) => String(value).padStart(2, '0');
+
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const pendingAssignKey = ref(null);
+const staffAssignForm = useForm({
+    student_id: null,
+    target_date: todayDate(),
+});
+
+const itemKey = (groupKey, item) => `${groupKey}-${item.worksheet_id}`;
+
+const canAssignItem = (item) => canStaffAssign.value && item.worksheet_id && ! item.is_correction;
+
+const openStaffAssign = (item, groupKey) => {
+    pendingAssignKey.value = itemKey(groupKey, item);
+    staffAssignForm.student_id = props.assignStudentId;
+    staffAssignForm.target_date = todayDate();
+    saveError.value = '';
+};
+
+const confirmStaffAssign = (item) => {
+    if (! item.worksheet_id || staffAssignForm.processing) {
+        return;
+    }
+
+    staffAssignForm.student_id = props.assignStudentId;
+    staffAssignForm.post(route('admin.practice-sets.assign', item.worksheet_id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            pendingAssignKey.value = null;
+            saveError.value = '';
+        },
+        onError: (errors) => {
+            const first = Object.values(errors ?? {})[0];
+            saveError.value = Array.isArray(first) ? first[0] : (first || 'Could not assign. Please try again.');
+        },
+    });
+};
 
 const daysUntilExam = (dateStr) => {
     if (!dateStr) {
@@ -269,6 +317,7 @@ const startCorrection = (item) => {
         <h3 class="mb-1 text-sm font-semibold text-slate-800">Class coverage & available content</h3>
         <p class="mb-2 text-xs leading-snug text-slate-500">
             Click a chapter to see set details and scores. Tick each chapter independently — click the same box again to clear it.
+            <span v-if="canStaffAssign"> Click a set to assign it — target date defaults to today.</span>
         </p>
         <p v-if="upcomingExamByChapterId.size" class="mb-2 text-xs leading-snug text-amber-900">
             Chapters mapped to an upcoming exam are highlighted in amber (or rose if within 7 days).
@@ -401,7 +450,7 @@ const startCorrection = (item) => {
                                             <div
                                                 v-for="item in group.items"
                                                 :key="`${group.key}-${item.worksheet_id}`"
-                                                class="inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 shadow-sm"
+                                                class="inline-flex flex-wrap items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 shadow-sm"
                                             >
                                                 <span class="font-mono text-[11px] font-bold text-slate-900">
                                                     {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
@@ -445,6 +494,42 @@ const startCorrection = (item) => {
                                                     >
                                                         Open
                                                     </Link>
+                                                </template>
+                                                <template v-else-if="canAssignItem(item)">
+                                                    <button
+                                                        v-if="pendingAssignKey !== itemKey(group.key, item)"
+                                                        type="button"
+                                                        class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800"
+                                                        @click.stop="openStaffAssign(item, group.key)"
+                                                    >
+                                                        {{ item.status === 'not_assigned' ? 'Assign' : 'Reassign' }}
+                                                    </button>
+                                                    <form
+                                                        v-else
+                                                        class="inline-flex items-center gap-1"
+                                                        @submit.prevent="confirmStaffAssign(item)"
+                                                    >
+                                                        <input
+                                                            v-model="staffAssignForm.target_date"
+                                                            type="date"
+                                                            class="rounded border-slate-300 px-1 py-0.5 text-[11px]"
+                                                            required
+                                                        >
+                                                        <button
+                                                            type="submit"
+                                                            class="rounded bg-emerald-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+                                                            :disabled="staffAssignForm.processing"
+                                                        >
+                                                            {{ staffAssignForm.processing ? 'Saving…' : 'Save' }}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="text-[10px] text-slate-500 hover:underline"
+                                                            @click.stop="pendingAssignKey = null"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </form>
                                                 </template>
                                             </div>
                                         </div>

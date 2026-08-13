@@ -54,6 +54,7 @@ const contextLabel = computed(() => {
 const page = usePage();
 const flashSuccess = computed(() => page.props.flash?.success ?? '');
 const flashWarning = computed(() => page.props.flash?.warning ?? '');
+const flashError = computed(() => page.props.flash?.error ?? '');
 
 const sendReminders = () => {
     const count = props.summary?.without_plan_with_email || 0;
@@ -108,6 +109,12 @@ const sendReminders = () => {
                         class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
                     >
                         {{ flashWarning }}
+                    </div>
+                    <div
+                        v-if="flashError"
+                        class="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800"
+                    >
+                        {{ flashError }}
                     </div>
 
                     <div class="grid gap-3 sm:grid-cols-4">
@@ -232,6 +239,7 @@ const sendReminders = () => {
                             :class-coverage="classCoverage"
                             update-route-name="admin.school-study-plan.update"
                             :update-route-params="updateRouteParams"
+                            :assign-student-id="selectedStudent.id"
                         />
                     </div>
                 </template>

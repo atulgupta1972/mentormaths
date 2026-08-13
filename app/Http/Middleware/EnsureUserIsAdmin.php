@@ -10,7 +10,17 @@ class EnsureUserIsAdmin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user()?->isAdmin()) {
+        $user = $request->user();
+
+        if ($user?->isAdmin()) {
+            return $next($request);
+        }
+
+        if ($user?->isMentor() && $request->routeIs([
+            'admin.school-study-plan.*',
+            'admin.practice-sets.assign',
+            'admin.grade-context.update',
+        ])) {
             return $next($request);
         }
 

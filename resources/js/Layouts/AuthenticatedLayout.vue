@@ -13,6 +13,7 @@ import { assignToClassPath, safeRoute } from '@/utils/routes';
 const showingNavigationDropdown = ref(false);
 const page = usePage();
 const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
+const isMentor = computed(() => page.props.auth?.isMentor ?? false);
 const isContentUploader = computed(() => page.props.auth?.isContentUploader ?? false);
 const isStudent = computed(() => page.props.auth?.isStudent ?? false);
 
@@ -299,6 +300,14 @@ const navGroups = computed(() =>
                                     My chapters
                                 </NavLink>
 
+                                <NavLink
+                                    v-if="isMentor && !isAdmin && route().has('admin.school-study-plan.index')"
+                                    :href="route('admin.school-study-plan.index')"
+                                    :active="route().current('admin.school-study-plan.*')"
+                                >
+                                    School study plans
+                                </NavLink>
+
                                 <NavDropdown
                                     v-for="group in navGroups"
                                     :key="group.label"
@@ -310,7 +319,7 @@ const navGroups = computed(() =>
                         </div>
 
                         <div class="hidden shrink-0 items-center gap-2 sm:flex sm:gap-3">
-                            <AdminClassSelector v-if="isAdmin" />
+                            <AdminClassSelector v-if="isAdmin || isMentor" />
                             <span class="hidden max-w-[7rem] truncate text-sm text-gray-500 lg:inline">
                                 {{ $page.props.auth.user.name }}
                             </span>
@@ -332,7 +341,7 @@ const navGroups = computed(() =>
 
                         <!-- Mobile toggle -->
                         <div class="flex shrink-0 items-center gap-2 sm:hidden">
-                            <AdminClassSelector v-if="isAdmin" />
+                            <AdminClassSelector v-if="isAdmin || isMentor" />
                             <button
                                 type="button"
                                 class="inline-flex items-center justify-center rounded-md p-2 text-gray-500 hover:bg-gray-100"
@@ -395,6 +404,14 @@ const navGroups = computed(() =>
                             :active="route().current('content.chapters.*')"
                         >
                             My chapters
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            v-if="isMentor && !isAdmin && route().has('admin.school-study-plan.index')"
+                            :href="route('admin.school-study-plan.index')"
+                            :active="route().current('admin.school-study-plan.*')"
+                        >
+                            School study plans
                         </ResponsiveNavLink>
 
                         <ResponsiveNavGroup

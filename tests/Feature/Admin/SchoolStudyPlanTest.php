@@ -11,8 +11,14 @@ use App\Models\StudentChapterCoverage;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
+use App\Models\SetAssignment;
 use App\Models\SyllabusVersion;
 use App\Models\User;
+use App\Models\Worksheet;
+use App\Services\UserGroupService;
+use App\Support\PracticeSetScope;
+use App\Support\PracticeSetTier;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -26,6 +32,7 @@ class SchoolStudyPlanTest extends TestCase
         parent::setUp();
 
         $this->withoutVite();
+        $this->withoutMiddleware(PreventRequestForgery::class);
     }
 
     public function test_admin_can_view_and_update_student_school_study_plan(): void
@@ -120,6 +127,51 @@ class SchoolStudyPlanTest extends TestCase
         Mail::assertNotSent(SchoolStudyPlanReminder::class, function (SchoolStudyPlanReminder $mail) use ($withPlan) {
             return $mail->student->is($withPlan);
         });
+    }
+
+    public function test_admin_can_assign_worksheet_from_study_plan_with_today_target(): void
+    {
+        [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
+        $worksheet = $this->seedChapterWorksheet($chapters[1], $admin);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->from(route('admin.school-study-plan.index', ['student_id' => $student->id]))
+            ->post(route('admin.practice-sets.assign', $worksheet), [
+                'student_id' => $student->id,
+                'target_date' => now()->toDateString(),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('set_assignments', [
+            'worksheet_id' => $worksheet->id,
+            'status' => SetAssignment::STATUS_ASSIGNED,
+            'due_date' => now()->toDateString(),
+        ]);
+    }
+
+    public function test_mentor_can_open_study_plan_and_assign_worksheet(): void
+    {
+        [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
+        $worksheet = $this->seedChapterWorksheet($chapters[1], $admin);
+
+        $mentor = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($mentor, User::ROLE_MENTOR);
+
+        $this->actingAs($mentor)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.school-study-plan.index', ['student_id' => $student->id]))
+            ->assertOk();
+
+        $this->actingAs($mentor)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->post(route('admin.practice-sets.assign', $worksheet), [
+                'student_id' => $student->id,
+                'target_date' => now()->toDateString(),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
     }
 
     /**
@@ -243,5 +295,19 @@ class SchoolStudyPlanTest extends TestCase
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
         return [$admin, $student, $grade, $chapters->values()->all()];
+    }
+
+    private function seedChapterWorksheet(SyllabusChapter $chapter, User $admin): Worksheet
+    {
+        return Worksheet::query()->create([
+            'title' => $chapter->name.' practice',
+            'set_number' => 2,
+            'set_code' => 'P2',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
     }
 }

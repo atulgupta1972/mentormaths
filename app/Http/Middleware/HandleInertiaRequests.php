@@ -41,7 +41,7 @@ class HandleInertiaRequests extends Middleware
                 'isContentUploader' => $user?->isContentUploader() ?? false,
                 'isMentor' => $user?->isMentor() ?? false,
             ],
-            'gradeContext' => fn () => $user?->isAdmin()
+            'gradeContext' => fn () => ($user?->isAdmin() || $user?->isMentor())
                 ? app(AdminGradeContext::class)->sharedPayload($request)
                 : null,
             'flash' => [
