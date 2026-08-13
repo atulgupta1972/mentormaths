@@ -985,7 +985,7 @@ const quickAssignSet = (setId) => {
                     <h3 class="font-semibold">Textbook MCQ workflow</h3>
                     <ol class="mt-2 list-decimal space-y-1 pl-5">
                         <li>PDF is stored on the server (download link above — or upload the same PDF to Claude/Gemini).</li>
-                        <li>Copy the AI prompt → paste in Cursor, Claude, or Gemini with the chapter PDF.</li>
+                        <li>Copy the AI prompt → paste in Cursor, Claude, or Gemini with the chapter PDF. The prompt requires <strong>100% coverage</strong> — every example and every exercise item as an MCQ.</li>
                         <li>Import MCQs — paste JSON <strong>or upload a .zip pack</strong> with <strong>questions.json</strong> + chart images.</li>
                         <li>Edit the <strong>set plan matrix</strong> on the review page (one set for small chapters, split for large ones) → <strong>Publish</strong>.</li>
                     </ol>
@@ -995,7 +995,7 @@ const quickAssignSet = (setId) => {
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h3 class="font-semibold text-gray-900">Step 2 — AI prompt</h3>
-                            <p class="mt-1 text-sm text-gray-600">Copy this into Claude/Cursor/Gemini along with the chapter PDF.</p>
+                            <p class="mt-1 text-sm text-gray-600">Copy this into Claude/Cursor/Gemini along with the chapter PDF. It tells the AI to cover every example and exercise — do not accept a partial extract.</p>
                         </div>
                         <SecondaryButton type="button" @click="copyPrompt">
                             {{ copied ? 'Copied!' : 'Copy prompt' }}

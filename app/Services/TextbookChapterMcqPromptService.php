@@ -77,23 +77,32 @@ class TextbookChapterMcqPromptService
         $varyRule = McqGenerationPrompt::VARY_CORRECT_OPTION_RULE;
 
         $prompt = <<<PROMPT
-Extract every gradable maths MCQ from this textbook chapter PDF.
+GOAL: 100% content coverage. Convert this entire textbook chapter PDF into MCQs. Do not stop early. Do not summarise. Do not sample.
+
+Every solvable maths item in the PDF must become one MCQ — including worked examples. Missing even one example or exercise is a failed extraction. If you are unsure whether an item is a question, include it.
 
 Context:
 - Class: {$grade}{$ageLine}
 - Book: {$book} (code {$bookCode})
 - Chapter {$chapterNum}: {$title}
 
-INCLUDE:
-- Worked examples ("Example 1", "Example 2", …)
-- Inline "Exercise:" prompts in the chapter body
-- Numbered questions in Exercise sets and End-of-Chapter exercises
-- Starred (*) hard questions — mark difficulty "Hard"
+MUST INCLUDE (do not skip any of these):
+- Worked examples ("Example 1", "Example 2", "Solved example", "Let us see", "Illustration", …) — turn the example into an MCQ that asks the same calculation/result
+- Try these / Let's do / Do this / Check your progress / Now try / Practice items in the chapter body
+- Inline "Exercise:" prompts and unnumbered questions mixed into the text
+- Every numbered question in Exercise sets, Try these, and End-of-chapter exercises (1, 2, 3… and 1(a), 1(b), 1(c) — each part is its own MCQ)
+- Starred (*) / challenge / higher-order questions — mark difficulty "Hard"
+- Questions that use a figure, graph, table, or diagram — still include them (flag needs_diagram)
 
-EXCLUDE:
-- "Think and Reflect" discussion prompts
-- Theory-only paragraphs with no student answer
-- Graph-paper pages
+EXCLUDE only:
+- "Think and Reflect" / open discussion with no single maths answer
+- Theory-only paragraphs with no student calculation or answer
+- Graph-paper / blank practice pages with no printed question
+
+COVERAGE CHECK before you finish:
+- Walk the PDF page by page. Count examples + exercise items (including sub-parts).
+- Your JSON question count must match that total. If it does not, go back and add the missing ones.
+- Never write "and so on", "similarly for the rest", or skip "easy" examples because an exercise looks the same.
 
 Return ONLY valid JSON (no markdown fences) in this exact shape:
 
@@ -120,7 +129,8 @@ Rules:
 - correct_index is 0-based (0 = A, 1 = B, 2 = C, 3 = D)
 {$varyRule}
 - Exactly 4 options per question when possible
-- Do not skip numbered exercises — extract ALL solvable items
+- Do not skip examples, try-these, or numbered exercises — extract ALL solvable items for 100% coverage
+- One PDF item = one MCQ. Split multi-part questions (a)(b)(c) into separate MCQs
 - Fix broken subscripts (t_n, u_n) in question text
 
 FIGURE / DIAGRAM FLAG (important for uploaders):
