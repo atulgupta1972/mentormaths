@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Question;
 use App\Models\QuestionResolutionItem;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
@@ -14,6 +15,7 @@ class QuestionResolutionService
 {
     public function __construct(
         private AnswerValidationService $answerValidation,
+        private PracticeCorrectionQueueService $correctionQueue,
     ) {}
     /**
      * @return list<array<string, mixed>>
@@ -64,6 +66,37 @@ class QuestionResolutionService
     }
 
     /**
+     * Queue a sum for teacher help when the student is stuck outside guided practice.
+     */
+    public function queueHelpRequest(Student $student, Question $question): void
+    {
+        $enrollment = $student->currentEnrollment();
+
+        if (! $enrollment) {
+            throw new \InvalidArgumentException('No active enrollment found.');
+        }
+
+        $existing = QuestionResolutionItem::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->where('question_id', $question->id)
+            ->where('status', QuestionResolutionItem::STATUS_PENDING)
+            ->first();
+
+        if ($existing) {
+            $existing->update(['gave_up_at' => now()]);
+
+            return;
+        }
+
+        QuestionResolutionItem::create([
+            'student_enrollment_id' => $enrollment->id,
+            'question_id' => $question->id,
+            'status' => QuestionResolutionItem::STATUS_PENDING,
+            'gave_up_at' => now(),
+        ]);
+    }
+
+    /**
      * @return array{correct: bool, message: string, resolved: bool}
      */
     public function submitAnswer(QuestionResolutionItem $item, ?int $optionId = null, ?string $answerText = null): array
@@ -72,7 +105,7 @@ class QuestionResolutionService
             throw new \InvalidArgumentException('This question is already resolved.');
         }
 
-        $item->loadMissing(['question.options', 'question.blankAnswer']);
+        $item->loadMissing(['question.options', 'question.blankAnswer', 'enrollment.student']);
 
         if ($item->question->isFillInBlank()) {
             if (! filled($answerText)) {
@@ -108,10 +141,16 @@ class QuestionResolutionService
             'clearance_method' => QuestionResolutionItem::CLEARANCE_ANSWERED,
         ]);
 
+        $student = $item->enrollment?->student;
+
+        if ($student && $item->question) {
+            $this->correctionQueue->flagNeedsRevisionAfterTeacherHelp($student, $item->question);
+        }
+
         return [
             'correct' => true,
             'resolved' => true,
-            'message' => 'Well done — this sum is cleared from your help list.',
+            'message' => 'Well done — this sum is cleared from your help list. It will come back in daily drill so you can show you can do it on your own.',
         ];
     }
 

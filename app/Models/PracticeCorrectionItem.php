@@ -25,6 +25,8 @@ class PracticeCorrectionItem extends Model
 
     public const CORRECTED_IN_BATCH_TEST = 'batch_test';
 
+    public const REASON_TEACHER_HELP = 'teacher_help';
+
     protected $fillable = [
         'student_id',
         'question_id',

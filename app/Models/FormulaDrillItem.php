@@ -15,6 +15,8 @@ class FormulaDrillItem extends Model
 
     public const STATUS_EXHAUSTED = 'exhausted';
 
+    public const STATUS_HELP_REQUESTED = 'help_requested';
+
     public const ROUND_MAIN = 'main';
 
     public const ROUND_CORRECTION = 'correction';
@@ -59,7 +61,13 @@ class FormulaDrillItem extends Model
             self::STATUS_CORRECT,
             self::STATUS_FAILED,
             self::STATUS_EXHAUSTED,
+            self::STATUS_HELP_REQUESTED,
         ], true);
+    }
+
+    public function isPracticeCorrection(): bool
+    {
+        return $this->practice_correction_item_id !== null;
     }
 
     public function isMainRound(): bool

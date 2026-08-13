@@ -1,6 +1,7 @@
 <script setup>
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -51,6 +52,7 @@ const progressLabel = ref(props.progress_label);
 const selectedOptionId = ref(null);
 const blankAnswer = ref('');
 const submitting = ref(false);
+const requestingHelp = ref(false);
 const feedback = ref(null);
 const disabledOptions = ref([]);
 
@@ -64,6 +66,7 @@ watch(
 
 const question = computed(() => currentItem.value?.question ?? null);
 const isFillInBlank = computed(() => question.value?.type === 'fill_in_blank');
+const canRequestTeacherHelp = computed(() => currentItem.value?.can_request_teacher_help === true);
 
 const blankPlaceholder = computed(() => {
     const format = question.value?.answer_format;
@@ -158,6 +161,44 @@ const submitAnswer = async () => {
             error: error.response?.data?.message || 'Could not save answer. Try again.',
         };
         submitting.value = false;
+    }
+};
+
+const requestTeacherHelp = async () => {
+    if (!currentItem.value || submitting.value || requestingHelp.value) {
+        return;
+    }
+
+    if (!confirm('Ask your teacher for help on this sum? It goes on your help list and you move to the next question.')) {
+        return;
+    }
+
+    requestingHelp.value = true;
+
+    try {
+        const { data: payload } = await axios.post(
+            route('student.formula-drill.request-help', currentItem.value.id),
+        );
+
+        sessionState.value = payload.session.session;
+        progressLabel.value = payload.session.progress_label;
+
+        if (payload.session_complete) {
+            setTimeout(() => {
+                router.visit(route('dashboard'));
+            }, 1200);
+
+            return;
+        }
+
+        currentItem.value = payload.session.current;
+        resetQuestionState();
+    } catch (error) {
+        feedback.value = {
+            error: error.response?.data?.message || 'Could not send help request. Try again.',
+        };
+    } finally {
+        requestingHelp.value = false;
     }
 };
 
@@ -274,17 +315,33 @@ const optionClass = (optionId) => {
                         Not quite — {{ feedback.attempts_left }} attempt{{ feedback.attempts_left === 1 ? '' : 's' }} left. Try again.
                     </div>
 
-                    <div class="mt-6 flex items-center justify-between">
+                    <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
                         <p class="text-xs text-gray-500">
-                            {{ currentItem.attempts_left }} attempt{{ currentItem.attempts_left === 1 ? '' : 's' }} left on this formula
+                            <template v-if="currentItem.is_practice_correction">
+                                Revision sum — {{ currentItem.attempts_left }} attempt{{ currentItem.attempts_left === 1 ? '' : 's' }} left
+                            </template>
+                            <template v-else>
+                                {{ currentItem.attempts_left }} attempt{{ currentItem.attempts_left === 1 ? '' : 's' }} left on this formula
+                            </template>
                         </p>
-                        <PrimaryButton
-                            type="button"
-                            :disabled="(isFillInBlank ? !blankAnswer.trim() : !selectedOptionId) || submitting || feedback?.correct || feedback?.exhausted"
-                            @click="submitAnswer"
-                        >
-                            {{ submitting ? 'Checking…' : 'Submit answer' }}
-                        </PrimaryButton>
+                        <div class="flex flex-wrap gap-2">
+                            <SecondaryButton
+                                v-if="canRequestTeacherHelp"
+                                type="button"
+                                class="!border-rose-200 !text-rose-800 hover:!bg-rose-50"
+                                :disabled="submitting || requestingHelp || feedback?.correct || feedback?.exhausted"
+                                @click="requestTeacherHelp"
+                            >
+                                {{ requestingHelp ? 'Sending…' : 'I need teacher help' }}
+                            </SecondaryButton>
+                            <PrimaryButton
+                                type="button"
+                                :disabled="(isFillInBlank ? !blankAnswer.trim() : !selectedOptionId) || submitting || requestingHelp || feedback?.correct || feedback?.exhausted"
+                                @click="submitAnswer"
+                            >
+                                {{ submitting ? 'Checking…' : 'Submit answer' }}
+                            </PrimaryButton>
+                        </div>
                     </div>
                 </div>
 

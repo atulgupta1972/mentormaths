@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\FormulaDrillItem;
 use App\Models\FormulaDrillSession;
 use App\Models\FormulaQuestionStat;
+use App\Models\PracticeCorrectionItem;
 use App\Models\Question;
 use App\Models\Student;
 use App\Support\AnswerValidationService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class FormulaDrillSessionService
 {
@@ -16,6 +18,7 @@ class FormulaDrillSessionService
         private FormulaDrillPoolService $poolService,
         private PracticeCorrectionQueueService $correctionQueue,
         private AnswerValidationService $answerValidation,
+        private QuestionResolutionService $resolutionService,
     ) {}
 
     public function todayDate(): Carbon
@@ -269,6 +272,8 @@ class FormulaDrillSessionService
             $stat->last_correct_at = now();
             $stat->save();
 
+            $this->markPracticeCorrectionIfFirstTry($session, $item);
+
             return $this->advanceSession($session, true, false, $maxAttempts, $optionId);
         }
 
@@ -345,6 +350,8 @@ class FormulaDrillSessionService
             $stat->last_correct_at = now();
             $stat->save();
 
+            $this->markPracticeCorrectionIfFirstTry($session, $item);
+
             return $this->advanceSession($session, true, false, $maxAttempts - $item->attempt_count, null);
         }
 
@@ -381,6 +388,57 @@ class FormulaDrillSessionService
             'correct_answer' => null,
             'session_complete' => false,
         ];
+    }
+
+    /**
+     * @return array{help_requested: bool, session_complete: bool, session: array<string, mixed>}
+     */
+    public function requestTeacherHelp(FormulaDrillSession $session, FormulaDrillItem $item): array
+    {
+        if ($item->formula_drill_session_id !== $session->id || $item->isDone()) {
+            throw new \InvalidArgumentException('This question is already completed.');
+        }
+
+        if (! $item->isPracticeCorrection()) {
+            throw new \InvalidArgumentException('Teacher help is only available on revision sums, not formula recall.');
+        }
+
+        $session->loadMissing('student');
+        $student = $session->student;
+
+        if (! $student) {
+            throw new \InvalidArgumentException('Student record is missing.');
+        }
+
+        $question = $item->question ?? Question::query()->findOrFail($item->question_id);
+
+        return DB::transaction(function () use ($session, $item, $student, $question) {
+            $this->resolutionService->queueHelpRequest($student, $question);
+            $this->correctionQueue->flagNeedsRevisionAfterTeacherHelp($student, $question);
+
+            $item->update([
+                'status' => FormulaDrillItem::STATUS_HELP_REQUESTED,
+                'completed_at' => now(),
+            ]);
+
+            $session->increment('questions_completed');
+            $session->refresh()->load(['items.question.options', 'items.question.blankAnswer']);
+
+            $sessionComplete = $session->questions_completed >= $session->questions_total;
+
+            if ($sessionComplete) {
+                $session->update([
+                    'status' => FormulaDrillSession::STATUS_COMPLETED,
+                    'completed_at' => now(),
+                ]);
+            }
+
+            return [
+                'help_requested' => true,
+                'session_complete' => $sessionComplete,
+                'session' => $this->sessionPayload($session),
+            ];
+        });
     }
 
     /**
@@ -422,6 +480,19 @@ class FormulaDrillSessionService
             'correct_answer' => $exhausted ? $correctAnswer : null,
             'session_complete' => false,
         ];
+    }
+
+    private function markPracticeCorrectionIfFirstTry(FormulaDrillSession $session, FormulaDrillItem $item): void
+    {
+        if (! $item->isPracticeCorrection() || $item->failure_count > 0) {
+            return;
+        }
+
+        $this->correctionQueue->markCorrected(
+            $session->student_id,
+            $item->question_id,
+            PracticeCorrectionItem::CORRECTED_IN_DAILY_DRILL,
+        );
     }
 
     private function markQuestionShown(int $studentId, int $questionId): void
@@ -512,6 +583,7 @@ class FormulaDrillSessionService
             'attempt_count' => $item->attempt_count,
             'attempts_left' => max(0, $maxAttempts - $item->attempt_count),
             'is_practice_correction' => $item->practice_correction_item_id !== null,
+            'can_request_teacher_help' => $item->isPracticeCorrection() && ! $item->isDone(),
             'question' => $questionPayload,
         ];
     }

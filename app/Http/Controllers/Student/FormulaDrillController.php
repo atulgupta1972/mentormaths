@@ -64,4 +64,22 @@ class FormulaDrillController extends Controller
             'session' => $this->sessionService->sessionPayload($session),
         ]);
     }
+
+    public function requestTeacherHelp(Request $request, FormulaDrillItem $item): JsonResponse
+    {
+        $student = $request->user()->student;
+
+        abort_unless($student, 403);
+
+        $session = $this->sessionService->todaysSession($student);
+
+        abort_unless($session && ! $session->isComplete(), 422, 'Today\'s formula drill is already complete.');
+
+        abort_unless($item->formula_drill_session_id === $session->id, 403);
+        abort_unless($session->student_id === $student->id, 403);
+
+        $result = $this->sessionService->requestTeacherHelp($session, $item);
+
+        return response()->json($result);
+    }
 }

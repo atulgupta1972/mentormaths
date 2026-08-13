@@ -46,6 +46,23 @@ class QuestionResolutionServiceTest extends TestCase
         Mail::assertNothingSent();
     }
 
+    public function test_clearing_teacher_help_keeps_sum_in_revision_queue(): void
+    {
+        [$item, $student] = $this->seedResolutionItem(withOptions: true);
+        $option = $item->question->options->firstWhere('is_correct', true);
+
+        app(QuestionResolutionService::class)->submitAnswer($item->fresh(['question.options', 'enrollment.student']), $option->id);
+
+        $queued = \App\Models\PracticeCorrectionItem::query()
+            ->where('student_id', $student->id)
+            ->where('question_id', $item->question_id)
+            ->first();
+
+        $this->assertNotNull($queued);
+        $this->assertSame(\App\Models\PracticeCorrectionItem::STATUS_PENDING, $queued->status);
+        $this->assertSame(\App\Models\PracticeCorrectionItem::REASON_TEACHER_HELP, $queued->failure_reason);
+    }
+
     public function test_batch_clearance_email_sends_once_with_all_items(): void
     {
         Mail::fake();

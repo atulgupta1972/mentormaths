@@ -237,6 +237,42 @@ class PracticeCorrectionQueueService
     }
 
     /**
+     * Teacher help clears the stuck screen, but the sum must still return in drill / study-plan revision.
+     */
+    public function flagNeedsRevisionAfterTeacherHelp(Student $student, Question $question): PracticeCorrectionItem
+    {
+        $pending = PracticeCorrectionItem::query()
+            ->where('student_id', $student->id)
+            ->where('question_id', $question->id)
+            ->where('status', PracticeCorrectionItem::STATUS_PENDING)
+            ->first();
+
+        if ($pending) {
+            $pending->update([
+                'failure_reason' => PracticeCorrectionItem::REASON_TEACHER_HELP,
+                'status' => PracticeCorrectionItem::STATUS_PENDING,
+                'corrected_at' => null,
+                'corrected_in' => null,
+            ]);
+
+            return $pending->fresh();
+        }
+
+        $chapterId = $question->topic?->syllabus_chapter_id
+            ?? $question->loadMissing('topic')->topic?->syllabus_chapter_id;
+
+        return PracticeCorrectionItem::query()->create([
+            'student_id' => $student->id,
+            'question_id' => $question->id,
+            'syllabus_chapter_id' => $chapterId,
+            'source_type' => PracticeCorrectionItem::SOURCE_GUIDED_PRACTICE,
+            'failure_reason' => PracticeCorrectionItem::REASON_TEACHER_HELP,
+            'status' => PracticeCorrectionItem::STATUS_PENDING,
+            'first_failure_at' => now(),
+        ]);
+    }
+
+    /**
      * @return Collection<int, PracticeCorrectionItem>
      */
     public function pendingForStudent(int $studentId): Collection
