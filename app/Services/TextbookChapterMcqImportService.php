@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\Question;
 use App\Models\TextbookChapter;
+use App\Models\Worksheet;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
@@ -121,6 +123,129 @@ class TextbookChapterMcqImportService
         }
     }
 
+    /**
+     * @return array{chapter: TextbookChapter, added_count: int, total_count: int}
+     */
+    public function append(TextbookChapter $chapter, string $json): array
+    {
+        $incoming = $this->parseToItems($json);
+        $existing = $chapter->extraction_items ?? [];
+        $offset = count($existing);
+
+        $mergedIncoming = [];
+        foreach ($incoming as $index => $item) {
+            $item['id'] = 'mcq-'.($offset + $index + 1);
+            $topic = trim((string) ($item['topic'] ?? ''));
+            $item['label'] = $topic !== '' ? $topic.' · Q'.($offset + $index + 1) : 'Q'.($offset + $index + 1);
+            $mergedIncoming[] = $item;
+        }
+
+        $merged = array_values(array_merge($existing, $mergedIncoming));
+        $setPlan = $this->extendSetPlan($chapter, count($merged));
+
+        $chapter->update([
+            'extraction_items' => $merged,
+            'mcq_set_plan' => $setPlan,
+            'extracted_at' => now(),
+            'extraction_error' => null,
+        ]);
+
+        return [
+            'chapter' => $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet']),
+            'added_count' => count($mergedIncoming),
+            'total_count' => count($merged),
+        ];
+    }
+
+    /**
+     * @return array{chapter: TextbookChapter, added_count: int, total_count: int, diagram_count: int}
+     */
+    public function appendZip(TextbookChapter $chapter, UploadedFile $zip): array
+    {
+        $extracted = $this->zipImport->extract($zip);
+
+        try {
+            if ($extracted['type'] !== QuestionZipImportService::TYPE_MCQ) {
+                throw new InvalidArgumentException('Zip must contain MCQ questions (options + correct_index).');
+            }
+
+            $existing = $chapter->extraction_items ?? [];
+            $offset = count($existing);
+            $incoming = [];
+            $diagramCount = 0;
+
+            foreach ($extracted['items'] as $index => $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                $diagramSource = $extracted['diagram_paths'][$index] ?? null;
+                $diagramFile = trim((string) ($row['diagram_file'] ?? $row['chart_file'] ?? $row['diagram'] ?? ''));
+                $stagingPath = null;
+
+                if ($diagramSource && is_file($diagramSource)) {
+                    $stagingPath = $this->persistStagingDiagram($chapter, $diagramSource);
+                    $diagramCount++;
+                }
+
+                $normalized = $this->normalizeImportedRow(
+                    $row,
+                    $offset + $index,
+                    $stagingPath,
+                    $diagramFile !== '' ? $diagramFile : null,
+                );
+
+                if (trim((string) ($normalized['question_text'] ?? '')) === '') {
+                    continue;
+                }
+
+                $incoming[] = $normalized;
+            }
+
+            if ($incoming === []) {
+                throw new InvalidArgumentException('Could not parse any questions from the zip JSON.');
+            }
+
+            $merged = array_values(array_merge($existing, $incoming));
+            $setPlan = $this->extendSetPlan($chapter, count($merged));
+
+            $chapter->update([
+                'extraction_items' => $merged,
+                'mcq_set_plan' => $setPlan,
+                'extracted_at' => now(),
+                'extraction_error' => null,
+            ]);
+
+            return [
+                'chapter' => $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet']),
+                'added_count' => count($incoming),
+                'total_count' => count($merged),
+                'diagram_count' => $diagramCount,
+            ];
+        } finally {
+            if (is_dir($extracted['temp_dir'])) {
+                File::deleteDirectory($extracted['temp_dir']);
+            }
+        }
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function extendSetPlan(TextbookChapter $chapter, int $questionCount): array
+    {
+        $plan = $chapter->mcq_set_plan ?? [];
+
+        if ($plan === []) {
+            return $this->setPlanService->defaultPlan($chapter, $questionCount);
+        }
+
+        $last = count($plan) - 1;
+        $plan[$last]['q_to'] = $questionCount;
+
+        return $plan;
+    }
+
     public function deleteStagingDiagrams(TextbookChapter $chapter): void
     {
         Storage::disk('public')->deleteDirectory($this->stagingDiagramDirectory($chapter));
@@ -188,7 +313,7 @@ class TextbookChapterMcqImportService
         );
     }
 
-    private function publishedQuestionForItemIndex(TextbookChapter $chapter, int $itemIndex): ?\App\Models\Question
+    private function publishedQuestionForItemIndex(TextbookChapter $chapter, int $itemIndex): ?Question
     {
         if ($chapter->status !== TextbookChapter::STATUS_PUBLISHED) {
             return null;
@@ -202,7 +327,7 @@ class TextbookChapterMcqImportService
             return null;
         }
 
-        $worksheets = \App\Models\Worksheet::query()
+        $worksheets = Worksheet::query()
             ->whereIn('id', $worksheetIds)
             ->orderBy('set_number')
             ->get()
@@ -227,6 +352,14 @@ class TextbookChapterMcqImportService
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    public function deleteStagingPathForItem(array $item): void
+    {
+        $this->deleteStagingPath($item['diagram_staging_path'] ?? null);
     }
 
     private function deleteStagingPath(?string $path): void

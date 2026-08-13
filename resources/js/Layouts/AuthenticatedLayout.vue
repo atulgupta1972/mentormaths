@@ -286,9 +286,17 @@ const navGroups = computed(() =>
                                 <NavLink
                                     v-if="isContentUploader && route().has('content.tasks.index')"
                                     :href="route('content.tasks.index')"
-                                    :active="route().current('content.*')"
+                                    :active="route().current('content.tasks.*')"
                                 >
                                     My content tasks
+                                </NavLink>
+
+                                <NavLink
+                                    v-if="isContentUploader && route().has('content.chapters.index')"
+                                    :href="route('content.chapters.index')"
+                                    :active="route().current('content.chapters.*')"
+                                >
+                                    My chapters
                                 </NavLink>
 
                                 <NavDropdown
@@ -371,6 +379,22 @@ const navGroups = computed(() =>
                             :active="route().current('student.school-study-plan.*')"
                         >
                             My School Study Plan
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            v-if="isContentUploader && route().has('content.tasks.index')"
+                            :href="route('content.tasks.index')"
+                            :active="route().current('content.tasks.*')"
+                        >
+                            My content tasks
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            v-if="isContentUploader && route().has('content.chapters.index')"
+                            :href="route('content.chapters.index')"
+                            :active="route().current('content.chapters.*')"
+                        >
+                            My chapters
                         </ResponsiveNavLink>
 
                         <ResponsiveNavGroup

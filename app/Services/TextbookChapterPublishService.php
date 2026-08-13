@@ -16,6 +16,7 @@ use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -126,6 +127,119 @@ class TextbookChapterPublishService
 
             return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet', 'fillBlankWorksheet']);
         });
+    }
+
+    /**
+     * Publish newly appended MCQs onto the existing last worksheet without wiping assigned sets.
+     *
+     * @param  list<array<string, mixed>>  $newItems
+     * @return array{added_count: int}
+     */
+    public function appendPublishedMcqs(TextbookChapter $chapter, array $newItems, User $publisher): array
+    {
+        $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.gradeLevel']);
+
+        $syllabusChapter = $chapter->syllabusChapter;
+        if (! $syllabusChapter) {
+            throw new InvalidArgumentException('Syllabus chapter is missing.');
+        }
+
+        $worksheetIds = $chapter->mcqWorksheetIds();
+        if ($worksheetIds === []) {
+            return ['added_count' => 0];
+        }
+
+        $approved = collect($newItems)
+            ->filter(fn (array $item) => ($item['approved'] ?? true) && trim((string) ($item['question_text'] ?? '')) !== '')
+            ->values();
+
+        if ($approved->isEmpty()) {
+            return ['added_count' => 0];
+        }
+
+        $topic = $this->textbookTopic($syllabusChapter);
+        $lastWorksheet = Worksheet::query()->find($worksheetIds[array_key_last($worksheetIds)]);
+        if (! $lastWorksheet) {
+            throw new InvalidArgumentException('Published MCQ worksheet is missing.');
+        }
+
+        return DB::transaction(function () use ($chapter, $approved, $publisher, $topic, $lastWorksheet) {
+            $nextSort = (int) $lastWorksheet->questions()->max('worksheet_question.sort_order');
+            $created = 0;
+
+            foreach ($approved as $item) {
+                if (! ($item['include_in_mcq'] ?? true)) {
+                    continue;
+                }
+
+                $question = $this->createMcqQuestion($topic, $item, $publisher->id, $nextSort + $created + 1);
+                $lastWorksheet->questions()->attach($question->id, ['sort_order' => $nextSort + $created + 1]);
+                $created++;
+            }
+
+            $plan = $chapter->mcq_set_plan ?? [];
+            if ($plan !== []) {
+                $last = count($plan) - 1;
+                $plan[$last]['q_to'] = count($chapter->extraction_items ?? []);
+                $chapter->update(['mcq_set_plan' => $plan]);
+            }
+
+            return ['added_count' => $created];
+        });
+    }
+
+    public function removePublishedMcqAtIndex(TextbookChapter $chapter, int $itemIndex): void
+    {
+        $question = $this->publishedQuestionForItemIndex($chapter, $itemIndex);
+        if (! $question) {
+            return;
+        }
+
+        $question->worksheets()->detach();
+
+        $hasAttempts = DB::table('set_attempt_answers')->where('question_id', $question->id)->exists();
+        if (! $hasAttempts) {
+            $question->options()->delete();
+            $question->blankAnswer()->delete();
+            $question->delete();
+        }
+    }
+
+    public function publishedQuestionForItemIndex(TextbookChapter $chapter, int $itemIndex): ?Question
+    {
+        $position = $itemIndex + 1;
+        $setPlan = $chapter->mcq_set_plan ?? [];
+        $worksheetIds = $chapter->mcqWorksheetIds();
+
+        if ($setPlan === [] || $worksheetIds === []) {
+            return null;
+        }
+
+        $worksheets = Worksheet::query()
+            ->whereIn('id', $worksheetIds)
+            ->orderBy('set_number')
+            ->get()
+            ->values();
+
+        foreach ($setPlan as $planIndex => $row) {
+            $qFrom = (int) ($row['q_from'] ?? 0);
+            $qTo = (int) ($row['q_to'] ?? 0);
+
+            if ($position < $qFrom || $position > $qTo) {
+                continue;
+            }
+
+            $worksheet = $worksheets[$planIndex] ?? null;
+            if (! $worksheet) {
+                return null;
+            }
+
+            $questions = $worksheet->questions()->orderByPivot('sort_order')->get();
+
+            return $questions[$position - $qFrom] ?? null;
+        }
+
+        return null;
     }
 
     public function publishFillBlankAndWritten(TextbookChapter $chapter, User $publisher): TextbookChapter
@@ -496,9 +610,9 @@ class TextbookChapterPublishService
 
     /**
      * @param  array<string, mixed>  $item
-     * @return \Illuminate\Support\Collection<int, array{text: string, is_correct: bool}>
+     * @return Collection<int, array{text: string, is_correct: bool}>
      */
-    private function fallbackMcqOptions(array $item): \Illuminate\Support\Collection
+    private function fallbackMcqOptions(array $item): Collection
     {
         $correct = trim((string) ($item['correct_answer'] ?? '—'));
 

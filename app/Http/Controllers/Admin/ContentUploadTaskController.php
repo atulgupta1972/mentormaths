@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
+use App\Models\ContentQuestionDeleteRequest;
 use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
-use App\Models\GradeLevel;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
@@ -15,7 +15,10 @@ use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Services\AdminGradeContext;
 use App\Services\ContentAllocationMatrixService;
+use App\Services\ContentChapterQuestionService;
+use App\Services\ContentDuplicateGuardService;
 use App\Services\ContentRateCardService;
+use App\Services\ContentUploaderChapterLibraryService;
 use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
@@ -36,6 +39,8 @@ class ContentUploadTaskController extends Controller
         private ContentRateCardService $rateCardService,
         private ContentAllocationMatrixService $matrixService,
         private TextbookMcqSetPlanService $setPlanService,
+        private ContentChapterQuestionService $chapterQuestions,
+        private ContentUploaderChapterLibraryService $chapterLibrary,
     ) {}
 
     public function index(Request $request): Response
@@ -305,7 +310,7 @@ class ContentUploadTaskController extends Controller
                     continue;
                 }
 
-                $guard = app(\App\Services\ContentDuplicateGuardService::class)->check($existing);
+                $guard = app(ContentDuplicateGuardService::class)->check($existing);
                 if ($guard['blocked']) {
                     $blocked[] = $existing->title ?: ('chapter #'.$syllabusChapterId);
                 }
@@ -373,6 +378,7 @@ class ContentUploadTaskController extends Controller
             'task' => $this->serializeTask($contentTask, detailed: true),
             'verification' => $verification,
             'activeSeconds' => $this->sessionService->totalActiveSeconds($contentTask),
+            'deleteRequests' => $this->chapterLibrary->pendingDeleteRequestsForTask($contentTask),
         ]);
     }
 
@@ -525,6 +531,48 @@ class ContentUploadTaskController extends Controller
         }
 
         return back()->with('success', 'Task marked published.');
+    }
+
+    public function approveQuestionDelete(Request $request, ContentUploadTask $contentTask, ContentQuestionDeleteRequest $deleteRequest): RedirectResponse
+    {
+        abort_unless((int) $deleteRequest->content_upload_task_id === (int) $contentTask->id, 404);
+
+        $validated = $request->validate([
+            'admin_note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $this->chapterQuestions->approveDeleteRequest(
+                $deleteRequest,
+                $request->user(),
+                $validated['admin_note'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Question deleted.');
+    }
+
+    public function rejectQuestionDelete(Request $request, ContentUploadTask $contentTask, ContentQuestionDeleteRequest $deleteRequest): RedirectResponse
+    {
+        abort_unless((int) $deleteRequest->content_upload_task_id === (int) $contentTask->id, 404);
+
+        $validated = $request->validate([
+            'admin_note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $this->chapterQuestions->rejectDeleteRequest(
+                $deleteRequest,
+                $request->user(),
+                $validated['admin_note'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Delete request rejected.');
     }
 
     private static function chapterLabel(SyllabusChapter $chapter): string

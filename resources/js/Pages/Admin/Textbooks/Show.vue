@@ -473,6 +473,13 @@ const quickAssignSet = (setId) => {
                     </a>
                     <Link
                         v-if="uploaderMode"
+                        :href="safeRoute('content.chapters.show', chapter.id, `/content/chapters/${chapter.id}`)"
+                        class="text-sm text-indigo-600 hover:underline"
+                    >
+                        View all questions
+                    </Link>
+                    <Link
+                        v-if="uploaderMode"
                         :href="safeRoute('content.tasks.index', null, '/content/tasks')"
                         class="text-sm text-indigo-600 hover:underline"
                     >

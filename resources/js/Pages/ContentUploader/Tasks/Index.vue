@@ -33,6 +33,13 @@ const chapterHref = (task) => {
             <div>
                 <h2 class="text-xl font-semibold text-gray-800">My content tasks</h2>
                 <p class="text-sm text-gray-500">Upload chapter MCQs, then review every question before submit.</p>
+                <Link
+                    v-if="route().has('content.chapters.index')"
+                    :href="route('content.chapters.index')"
+                    class="mt-1 inline-block text-sm font-medium text-indigo-600 hover:underline"
+                >
+                    Browse class → chapter → questions
+                </Link>
             </div>
         </template>
 

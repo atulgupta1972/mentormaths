@@ -18,16 +18,17 @@ class ContentTextbookAccessService
             return false;
         }
 
+        return $this->assignedTask($user, $chapter) !== null;
+    }
+
+    public function assignedTask(User $user, TextbookChapter $chapter): ?ContentUploadTask
+    {
         return ContentUploadTask::query()
             ->where('textbook_chapter_id', $chapter->id)
             ->where('assigned_to_user_id', $user->id)
-            ->whereIn('status', [
-                ContentUploadTask::STATUS_IN_PROGRESS,
-                ContentUploadTask::STATUS_UPLOADED,
-                ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
-                ContentUploadTask::STATUS_VERIFIED,
-            ])
-            ->exists();
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->latest('id')
+            ->first();
     }
 
     public function authorizeChapter(User $user, TextbookChapter $chapter): void

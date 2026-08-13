@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\DB;
 
 class ContentUploadTask extends Model
 {
@@ -91,6 +92,19 @@ class ContentUploadTask extends Model
         return $this->hasOne(ContentUploaderPayment::class);
     }
 
+    public function questionDeleteRequests(): HasMany
+    {
+        return $this->hasMany(ContentQuestionDeleteRequest::class);
+    }
+
+    public function isLockedForUploaderDelete(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_SUBMITTED_FOR_PUBLISH,
+            self::STATUS_PUBLISHED,
+        ], true);
+    }
+
     public function payableAmountInr(): int
     {
         $unit = $this->rateUnitInr();
@@ -121,7 +135,7 @@ class ContentUploadTask extends Model
             return 0;
         }
 
-        return (int) \Illuminate\Support\Facades\DB::table('worksheet_question')
+        return (int) DB::table('worksheet_question')
             ->whereIn('worksheet_id', $worksheetIds)
             ->distinct()
             ->count('question_id');

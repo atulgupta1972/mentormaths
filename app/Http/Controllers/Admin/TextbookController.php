@@ -4,11 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
+use App\Models\ContentUploadTask;
+use App\Models\GradeLevel;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
-use App\Models\GradeLevel;
 use App\Models\Textbook;
-use App\Models\ContentUploadTask;
 use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
@@ -329,6 +329,10 @@ class TextbookController extends Controller
 
     public function importMcq(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
+        if ($redirect = $this->rejectLockedUploaderReplace($request, $textbookChapter)) {
+            return $redirect;
+        }
+
         $validated = $request->validate([
             'json' => ['required', 'string'],
         ]);
@@ -347,6 +351,10 @@ class TextbookController extends Controller
 
     public function importMcqZip(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
+        if ($redirect = $this->rejectLockedUploaderReplace($request, $textbookChapter)) {
+            return $redirect;
+        }
+
         $uploadedZip = $request->file('pack');
         if ($uploadedZip) {
             UploadedFileDiagnostics::assertValid($uploadedZip, 'pack');
@@ -474,6 +482,10 @@ class TextbookController extends Controller
 
     public function publish(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
+        if ($redirect = $this->rejectLockedUploaderReplace($request, $textbookChapter)) {
+            return $redirect;
+        }
+
         $items = $textbookChapter->extraction_items ?? [];
         $setPlan = $textbookChapter->mcq_set_plan;
 
@@ -550,7 +562,7 @@ class TextbookController extends Controller
         );
 
         return response()->streamDownload(
-            fn () => print(json_encode($reference, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)),
+            fn () => print (json_encode($reference, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)),
             $filename,
             ['Content-Type' => 'application/json'],
         );
@@ -558,6 +570,10 @@ class TextbookController extends Controller
 
     public function resetImport(TextbookChapter $textbookChapter): RedirectResponse
     {
+        if ($redirect = $this->rejectLockedUploaderReplace(request(), $textbookChapter)) {
+            return $redirect;
+        }
+
         $this->mcqImportService->deleteStagingDiagrams($textbookChapter);
 
         $textbookChapter->update([
@@ -623,6 +639,29 @@ class TextbookController extends Controller
         $request ??= request();
 
         return $request->routeIs('content.*');
+    }
+
+    private function rejectLockedUploaderReplace(Request $request, TextbookChapter $textbookChapter): ?RedirectResponse
+    {
+        if (! $this->isContentUploaderContext($request)) {
+            return null;
+        }
+
+        $task = ContentUploadTask::query()
+            ->where('textbook_chapter_id', $textbookChapter->id)
+            ->where('assigned_to_user_id', $request->user()?->id)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->latest('id')
+            ->first();
+
+        if (! $task?->isLockedForUploaderDelete()) {
+            return null;
+        }
+
+        return back()->with(
+            'error',
+            'This chapter is already submitted. Use My chapters to add more questions, or ask admin to delete one.',
+        );
     }
 
     private function redirectToChapterShow(TextbookChapter $chapter): RedirectResponse

@@ -2,9 +2,9 @@
 
 use App\Http\Controllers\Admin\AcademicYearController;
 use App\Http\Controllers\Admin\BasicsDrillSettingsController;
+use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ChapterHeadController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
-use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ClassAssignmentController;
 use App\Http\Controllers\Admin\ClassHubController;
 use App\Http\Controllers\Admin\ContentCoverageController;
@@ -22,8 +22,8 @@ use App\Http\Controllers\Admin\QuestionAuditController;
 use App\Http\Controllers\Admin\QuestionController;
 use App\Http\Controllers\Admin\QuestionHubController;
 use App\Http\Controllers\Admin\RegistrationRequestController as AdminRegistrationRequestController;
-use App\Http\Controllers\Admin\SetAssignmentController;
 use App\Http\Controllers\Admin\SchoolStudyPlanController;
+use App\Http\Controllers\Admin\SetAssignmentController;
 use App\Http\Controllers\Admin\StudentController;
 use App\Http\Controllers\Admin\StudentWorkReportController;
 use App\Http\Controllers\Admin\SyllabusVersionController;
@@ -31,21 +31,22 @@ use App\Http\Controllers\Admin\TeacherRegistrationRequestController as AdminTeac
 use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WrittenSheetController;
+use App\Http\Controllers\ContentUploader\ChapterLibraryController;
 use App\Http\Controllers\ContentUploader\ContentTaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
-use App\Http\Controllers\TeacherRegistrationRequestController;
 use App\Http\Controllers\Student\BasicsDrillController;
 use App\Http\Controllers\Student\ClassCoverageController;
+use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
 use App\Http\Controllers\Student\FormulaDrillController;
 use App\Http\Controllers\Student\FormulaResourceController;
-use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
-use App\Http\Controllers\Student\PracticeSetController as StudentPracticeSetController;
 use App\Http\Controllers\Student\PracticeCorrectionController;
+use App\Http\Controllers\Student\PracticeSetController as StudentPracticeSetController;
 use App\Http\Controllers\Student\SelfAssignController;
 use App\Http\Controllers\Student\WrittenAssignmentController as StudentWrittenAssignmentController;
 use App\Http\Controllers\StudentProfileController;
+use App\Http\Controllers\TeacherRegistrationRequestController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -338,6 +339,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
     Route::post('/content-tasks/{contentTask}/return-for-reverification', [ContentUploadTaskController::class, 'returnForReverification'])->name('content-tasks.return-for-reverification');
     Route::post('/content-tasks/{contentTask}/publish', [ContentUploadTaskController::class, 'publish'])->name('content-tasks.publish');
+    Route::post('/content-tasks/{contentTask}/delete-requests/{deleteRequest}/approve', [ContentUploadTaskController::class, 'approveQuestionDelete'])->name('content-tasks.delete-requests.approve');
+    Route::post('/content-tasks/{contentTask}/delete-requests/{deleteRequest}/reject', [ContentUploadTaskController::class, 'rejectQuestionDelete'])->name('content-tasks.delete-requests.reject');
 
     Route::get('/finance', [ContentFinanceController::class, 'index'])->name('finance.index');
     Route::post('/finance/payments', [ContentFinanceController::class, 'storePayment'])->name('finance.payments.store');
@@ -407,6 +410,13 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
 });
 
 Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->name('content.')->group(function () {
+    Route::get('/chapters', [ChapterLibraryController::class, 'index'])->name('chapters.index');
+    Route::get('/chapters/{textbookChapter}', [ChapterLibraryController::class, 'show'])->name('chapters.show');
+    Route::post('/chapters/{textbookChapter}/append-mcq', [ChapterLibraryController::class, 'appendMcq'])->name('chapters.append-mcq');
+    Route::post('/chapters/{textbookChapter}/append-mcq-zip', [ChapterLibraryController::class, 'appendMcqZip'])->name('chapters.append-mcq-zip');
+    Route::post('/chapters/{textbookChapter}/delete-question', [ChapterLibraryController::class, 'destroyQuestion'])->name('chapters.delete-question');
+    Route::post('/chapters/{textbookChapter}/request-delete', [ChapterLibraryController::class, 'requestDelete'])->name('chapters.request-delete');
+
     Route::get('/tasks', [ContentTaskController::class, 'index'])->name('tasks.index');
     Route::get('/tasks/{contentTask}', [ContentTaskController::class, 'show'])->name('tasks.show');
     Route::post('/tasks/{contentTask}/agree', [ContentTaskController::class, 'agree'])->name('tasks.agree');

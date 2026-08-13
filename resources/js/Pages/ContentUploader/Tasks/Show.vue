@@ -57,7 +57,16 @@ onUnmounted(() => clearInterval(pingTimer));
                     </h2>
                     <p class="text-sm text-gray-500">{{ task.status_label }} · {{ task.rate_description || formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</p>
                 </div>
-                <Link :href="safeRoute('content.tasks.index', null, '/content/tasks')" class="text-sm text-indigo-600 hover:underline">← My tasks</Link>
+                <div class="flex flex-wrap gap-3">
+                    <Link
+                        v-if="task.textbook_chapter_id"
+                        :href="safeRoute('content.chapters.show', task.textbook_chapter_id, `/content/chapters/${task.textbook_chapter_id}`)"
+                        class="text-sm text-indigo-600 hover:underline"
+                    >
+                        View all questions
+                    </Link>
+                    <Link :href="safeRoute('content.tasks.index', null, '/content/tasks')" class="text-sm text-indigo-600 hover:underline">← My tasks</Link>
+                </div>
             </div>
         </template>
 

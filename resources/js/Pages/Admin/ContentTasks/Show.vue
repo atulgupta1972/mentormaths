@@ -11,7 +11,23 @@ const props = defineProps({
     task: { type: Object, required: true },
     verification: { type: Object, default: null },
     activeSeconds: { type: Number, default: 0 },
+    deleteRequests: { type: Array, default: () => [] },
 });
+
+const approveDeleteForm = useForm({ admin_note: '' });
+const rejectDeleteForm = useForm({ admin_note: '' });
+
+const approveDelete = (id) => {
+    approveDeleteForm.post(route('admin.content-tasks.delete-requests.approve', [props.task.id, id]), {
+        preserveScroll: true,
+    });
+};
+
+const rejectDelete = (id) => {
+    rejectDeleteForm.post(route('admin.content-tasks.delete-requests.reject', [props.task.id, id]), {
+        preserveScroll: true,
+    });
+};
 
 const page = usePage();
 const publishForm = useForm({});
@@ -76,6 +92,41 @@ const formatDuration = (seconds) => {
 
                 <div v-if="task.admin_notes" class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm whitespace-pre-wrap">
                     <strong>Admin notes:</strong><br>{{ task.admin_notes }}
+                </div>
+
+                <div v-if="deleteRequests.length" class="rounded-lg border border-rose-200 bg-rose-50 p-4">
+                    <p class="text-sm font-semibold text-rose-950">Question delete requests</p>
+                    <p class="mt-1 text-sm text-rose-900">Uploader cannot delete after publish. Approve only if the question should be removed.</p>
+                    <div class="mt-3 space-y-3">
+                        <div
+                            v-for="row in deleteRequests"
+                            :key="row.id"
+                            class="rounded-md border border-rose-100 bg-white p-3 text-sm"
+                        >
+                            <p class="font-medium text-gray-900">Q{{ row.item_index + 1 }} · {{ row.question_text || 'Question' }}</p>
+                            <p class="mt-1 text-gray-600"><strong>Reason:</strong> {{ row.reason }}</p>
+                            <p class="mt-1 text-xs text-gray-500">{{ row.requester_name }} · {{ row.status }}</p>
+                            <div v-if="row.status === 'pending'" class="mt-2 flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    class="rounded-md bg-rose-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-800 disabled:opacity-50"
+                                    :disabled="approveDeleteForm.processing"
+                                    @click="approveDelete(row.id)"
+                                >
+                                    Delete question
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                    :disabled="rejectDeleteForm.processing"
+                                    @click="rejectDelete(row.id)"
+                                >
+                                    Reject
+                                </button>
+                            </div>
+                            <p v-else-if="row.admin_note" class="mt-1 text-xs text-gray-500">Note: {{ row.admin_note }}</p>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
