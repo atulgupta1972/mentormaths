@@ -24,8 +24,8 @@ class FormulaDrillPoolService
     ) {}
 
     /**
-     * Formula inventory: all formulas from the previous grade syllabus, plus formulas
-     * from topics the student has completed or been assigned in their current enrollment.
+     * Formula inventory: every formula from the previous grade syllabus, plus every
+     * formula from the student's current class syllabus (same board / year).
      *
      * @return list<int>
      */
@@ -160,16 +160,22 @@ class FormulaDrillPoolService
     }
 
     /**
-     * Current-grade pool: formulas from chapters the student has been assigned or completed.
+     * Current-grade pool: every formula topic on the student's current class syllabus.
      *
      * @return list<int>
      */
     private function currentGradeTopicIds(StudentEnrollment $enrollment): array
     {
-        return array_values(array_unique(array_merge(
-            $this->completedTopicIdsForEnrollment($enrollment),
-            $this->assignedTopicIdsForEnrollment($enrollment),
-        )));
+        $syllabusVersion = $this->examPlanService->syllabusVersionForEnrollment($enrollment);
+
+        if (! $syllabusVersion) {
+            return [];
+        }
+
+        return SyllabusTopic::query()
+            ->whereHas('chapter', fn ($query) => $query->where('syllabus_version_id', $syllabusVersion->id))
+            ->pluck('id')
+            ->all();
     }
 
     /**

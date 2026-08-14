@@ -719,4 +719,72 @@ class FormulaDrillTest extends TestCase
         $this->assertContains($class7Question->id, $selectedIds);
         $this->assertContains($extraQuestion->id, $selectedIds);
     }
+
+    public function test_needs_review_does_not_repeat_before_unseen_pool_is_finished(): void
+    {
+        [
+            'student' => $student,
+            'user' => $user,
+            'class6Question' => $class6Question,
+            'class7Question' => $class7Question,
+            'class7Topic' => $class7Topic,
+        ] = $this->seedClass7StudentWithPreviousGradeFormulas();
+
+        $extraQuestion = $this->createFormulaQuestion($class7Topic, 'Product of −2 and −3 is:', '6');
+
+        FormulaQuestionStat::query()->create([
+            'student_id' => $student->id,
+            'question_id' => $class6Question->id,
+            'total_failures' => 3,
+            'times_shown' => 2,
+            'times_correct' => 0,
+            'times_exhausted' => 1,
+            'needs_review' => true,
+            'last_shown_date' => now()->subDay()->toDateString(),
+        ]);
+
+        config(['formula_drill.daily_question_count' => 1, 'formula_drill.daily_correction_count' => 0]);
+
+        $this->actingAs($user)
+            ->get(route('student.formula-drill.show'))
+            ->assertOk();
+
+        $selectedIds = FormulaDrillSession::query()
+            ->where('student_id', $student->id)
+            ->firstOrFail()
+            ->items()
+            ->pluck('question_id')
+            ->all();
+
+        $this->assertCount(1, $selectedIds);
+        $this->assertNotContains($class6Question->id, $selectedIds);
+        $this->assertTrue(in_array($selectedIds[0], [$class7Question->id, $extraQuestion->id], true));
+    }
+
+    public function test_current_class_pool_includes_formulas_from_unassigned_chapters(): void
+    {
+        [
+            'student' => $student,
+            'class7Topic' => $class7Topic,
+        ] = $this->seedClass7StudentWithPreviousGradeFormulas();
+
+        $otherChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $class7Topic->chapter->syllabus_version_id,
+            'chapter_number' => 99,
+            'name' => 'Unassigned Chapter',
+            'sort_order' => 99,
+        ]);
+
+        $otherTopic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $otherChapter->id,
+            'name' => 'Later topic',
+            'sort_order' => 1,
+        ]);
+
+        $unassignedFormula = $this->createFormulaQuestion($otherTopic, 'Zero has no:', 'reciprocal');
+
+        $poolIds = app(\App\Services\FormulaDrillPoolService::class)->poolQuestionIds($student);
+
+        $this->assertContains($unassignedFormula->id, $poolIds);
+    }
 }

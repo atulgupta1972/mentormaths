@@ -137,32 +137,17 @@ class FormulaDrillSessionService
     }
 
     /**
+     * Pick up to $limit formula questions with no repeats until every pool formula
+     * has been shown at least once. Review retries only start after that full pass.
+     *
      * @param  list<int>  $poolIds
      * @return list<int>
      */
     private function selectQuestionIds(Student $student, array $poolIds, int $limit): array
     {
-        if ($poolIds === []) {
+        if ($poolIds === [] || $limit <= 0) {
             return [];
         }
-
-        $reviewIds = FormulaQuestionStat::query()
-            ->where('student_id', $student->id)
-            ->where('needs_review', true)
-            ->whereIn('question_id', $poolIds)
-            ->orderByDesc('total_failures')
-            ->orderBy('last_shown_date')
-            ->pluck('question_id')
-            ->all();
-
-        $selected = array_slice($reviewIds, 0, $limit);
-        $remaining = $limit - count($selected);
-
-        if ($remaining <= 0) {
-            return $selected;
-        }
-
-        $alreadySelected = collect($selected);
 
         $shownQuestionIds = FormulaQuestionStat::query()
             ->where('student_id', $student->id)
@@ -172,17 +157,39 @@ class FormulaDrillSessionService
             ->all();
 
         $neverShownIds = collect($poolIds)
-            ->diff($alreadySelected)
             ->diff($shownQuestionIds)
             ->shuffle()
-            ->values();
+            ->values()
+            ->all();
 
-        foreach ($neverShownIds as $questionId) {
+        $selected = array_slice($neverShownIds, 0, $limit);
+
+        if (count($selected) >= $limit) {
+            return $selected;
+        }
+
+        // Full pool has been shown at least once — now allow carefully ordered repeats.
+        $selectedLookup = collect($selected);
+
+        $reviewIds = FormulaQuestionStat::query()
+            ->where('student_id', $student->id)
+            ->where('needs_review', true)
+            ->whereIn('question_id', $poolIds)
+            ->where('times_shown', '>', 0)
+            ->orderByDesc('total_failures')
+            ->orderBy('last_shown_date')
+            ->pluck('question_id')
+            ->reject(fn (int $id) => $selectedLookup->contains($id))
+            ->values()
+            ->all();
+
+        foreach ($reviewIds as $questionId) {
             if (count($selected) >= $limit) {
                 return $selected;
             }
 
             $selected[] = $questionId;
+            $selectedLookup->push($questionId);
         }
 
         if (count($selected) >= $limit) {
@@ -192,6 +199,7 @@ class FormulaDrillSessionService
         $leastRecentlyShown = FormulaQuestionStat::query()
             ->where('student_id', $student->id)
             ->whereIn('question_id', $poolIds)
+            ->where('times_shown', '>', 0)
             ->orderBy('last_shown_date')
             ->orderBy('times_shown')
             ->pluck('question_id');
@@ -199,7 +207,7 @@ class FormulaDrillSessionService
         $repeatCandidates = $leastRecentlyShown
             ->merge(collect($poolIds)->shuffle())
             ->unique()
-            ->reject(fn (int $id) => collect($selected)->contains($id))
+            ->reject(fn (int $id) => $selectedLookup->contains($id))
             ->values();
 
         foreach ($repeatCandidates as $questionId) {
