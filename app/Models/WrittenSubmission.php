@@ -123,6 +123,36 @@ class WrittenSubmission extends Model
                     'url' => Storage::disk('public')->url($path),
                     'kind' => $kind,
                     'label' => 'Page '.($index + 1).($kind === 'pdf' ? ' (PDF)' : ''),
+                    'page' => $index + 1,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * Persisted raster pages used for AI grading (photos + PDF page renders).
+     *
+     * @return list<array{url: string, kind: string, label: string, page: int, path: string}>
+     */
+    public function gradingPageFiles(): array
+    {
+        $directory = 'written-submissions/'.$this->id.'/grading-pages';
+
+        if (! Storage::disk('public')->exists($directory)) {
+            return [];
+        }
+
+        return collect(Storage::disk('public')->files($directory))
+            ->filter(fn (string $path) => preg_match('/\.(jpe?g|png|webp|gif)$/i', $path) === 1)
+            ->sort()
+            ->values()
+            ->map(function (string $path, int $index) {
+                return [
+                    'url' => Storage::disk('public')->url($path),
+                    'kind' => 'image',
+                    'label' => 'Page '.($index + 1),
+                    'page' => $index + 1,
+                    'path' => $path,
                 ];
             })
             ->all();

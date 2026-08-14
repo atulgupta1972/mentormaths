@@ -71,6 +71,7 @@ const reassignForm = useForm({ target_date: '', notes: '' });
 const retryAiForm = useForm({});
 const retryQuestionForm = useForm({ question_number: null });
 const readingQuestionNumber = ref(null);
+const previewPageOverride = ref({});
 const gradeForm = useForm({ feedback: '', remarks: '', handwriting_rating: '', items: [] });
 const gradingAssignmentId = ref(null);
 const revisionForm = useForm({ files: [], skip_ai: false, append: false });
@@ -530,23 +531,87 @@ const questionResult = (row, question) =>
     row.question_results?.find((result) => result.question_id === question.id)
     || null;
 
-const questionPreviewUrl = (row, question) => {
-    const result = questionResult(row, question);
-
-    if (result?.source_image_url) {
-        return result.source_image_url;
+const previewPagesForRow = (row) => {
+    const gradingPages = (row.grading_page_files || []).filter((file) => file.kind === 'image');
+    if (gradingPages.length) {
+        return gradingPages;
     }
 
-    const files = row.upload_files || [];
-    const imageFile = files.find((file) => file.kind === 'image');
+    const uploadImages = (row.upload_files || []).filter((file) => file.kind === 'image');
+    if (uploadImages.length) {
+        return uploadImages;
+    }
 
-    return imageFile?.url || null;
+    return row.upload_files || [];
+};
+
+const inferredPageIndex = (row, question, index) => {
+    const pages = previewPagesForRow(row);
+    const pageCount = pages.length;
+    if (!pageCount) {
+        return null;
+    }
+
+    const results = row.question_results || [];
+    const distinctSourcePages = [...new Set(
+        results
+            .map((result) => Number(result.source_page))
+            .filter((page) => page >= 1 && page <= pageCount),
+    )];
+
+    const result = questionResult(row, question);
+    const trustSourcePage = distinctSourcePages.length > 1
+        || pageCount === 1
+        || results.length <= 1;
+
+    if (trustSourcePage && result?.source_page >= 1 && result.source_page <= pageCount) {
+        return result.source_page;
+    }
+
+    const questionNumber = question.number || index + 1;
+    const totalQuestions = Math.max(gradeSheetQuestions.value?.length || 1, 1);
+
+    return Math.max(1, Math.min(pageCount, Math.ceil((questionNumber * pageCount) / totalQuestions)));
+};
+
+const activePreviewPage = (row, question, index) => {
+    const override = previewPageOverride.value[question.id];
+    if (override) {
+        return override;
+    }
+
+    return inferredPageIndex(row, question, index) || 1;
+};
+
+const questionPreviewUrl = (row, question, index = 0) => {
+    const pages = previewPagesForRow(row);
+    if (!pages.length) {
+        const result = questionResult(row, question);
+        return result?.source_image_url || null;
+    }
+
+    const page = activePreviewPage(row, question, index);
+    return pages[page - 1]?.url || pages[0]?.url || null;
+};
+
+const shiftPreviewPage = (row, question, index, delta) => {
+    const pages = previewPagesForRow(row);
+    if (pages.length < 2) {
+        return;
+    }
+
+    const current = activePreviewPage(row, question, index);
+    const next = ((current - 1 + delta + pages.length) % pages.length) + 1;
+    previewPageOverride.value = {
+        ...previewPageOverride.value,
+        [question.id]: next,
+    };
 };
 
 const readQuestionAgain = (assignmentId, question, index) => {
     const number = question.number || index + 1;
 
-    if (!confirm(`Ask AI to read Q${number} again from the uploaded pages?`)) {
+    if (!confirm(`Ask AI to read Q${number} again from all uploaded pages?`)) {
         return;
     }
 
@@ -557,7 +622,12 @@ const readQuestionAgain = (assignmentId, question, index) => {
         onFinish: () => {
             readingQuestionNumber.value = null;
         },
-        onSuccess: () => reloadAssignmentRow(assignmentId),
+        onSuccess: () => {
+            const next = { ...previewPageOverride.value };
+            delete next[question.id];
+            previewPageOverride.value = next;
+            reloadAssignmentRow(assignmentId);
+        },
     });
 };
 
@@ -1528,21 +1598,41 @@ const progressLabel = (p) => {
                                                         >
                                                             <div class="flex flex-wrap items-start gap-3">
                                                                 <div class="w-full max-w-[11rem] shrink-0">
-                                                                    <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                                                                        Student page
-                                                                        <span v-if="questionResult(row, question)?.source_page">
-                                                                            · p{{ questionResult(row, question).source_page }}
-                                                                        </span>
-                                                                    </p>
+                                                                    <div class="mb-1 flex items-center justify-between gap-1">
+                                                                        <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                                                            Student page
+                                                                            <span v-if="previewPagesForRow(row).length">
+                                                                                · {{ activePreviewPage(row, question, index) }}/{{ previewPagesForRow(row).length }}
+                                                                            </span>
+                                                                        </p>
+                                                                        <div v-if="previewPagesForRow(row).length > 1" class="flex gap-1">
+                                                                            <button
+                                                                                type="button"
+                                                                                class="rounded border border-slate-300 px-1.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-50"
+                                                                                title="Previous page"
+                                                                                @click="shiftPreviewPage(row, question, index, -1)"
+                                                                            >
+                                                                                ‹
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                class="rounded border border-slate-300 px-1.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-50"
+                                                                                title="Next page"
+                                                                                @click="shiftPreviewPage(row, question, index, 1)"
+                                                                            >
+                                                                                ›
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
                                                                     <a
-                                                                        v-if="questionPreviewUrl(row, question)"
-                                                                        :href="questionPreviewUrl(row, question)"
+                                                                        v-if="questionPreviewUrl(row, question, index)"
+                                                                        :href="questionPreviewUrl(row, question, index)"
                                                                         target="_blank"
                                                                         rel="noopener"
                                                                         class="block overflow-hidden rounded border border-slate-200 bg-slate-50"
                                                                     >
                                                                         <img
-                                                                            :src="questionPreviewUrl(row, question)"
+                                                                            :src="questionPreviewUrl(row, question, index)"
                                                                             :alt="`Q${question.number || index + 1} answer page`"
                                                                             class="max-h-40 w-full object-contain object-top"
                                                                         >

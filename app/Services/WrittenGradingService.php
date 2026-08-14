@@ -103,13 +103,9 @@ class WrittenGradingService
         }
 
         $preferredPage = (int) ($item->source_page ?? 0);
+        // Always send every page for a re-read so a wrong stored page cannot hide the answer.
         $parts = $prepared['parts'];
         $pages = $prepared['pages'];
-
-        if ($preferredPage >= 1 && $preferredPage <= count($parts)) {
-            $parts = [$parts[$preferredPage - 1]];
-            $pages = [$pages[$preferredPage - 1]];
-        }
 
         $questionPayload = $this->questionPayload([$question], $questionNumber);
         $prompt = $this->buildSingleQuestionPrompt($questionPayload[0], $submission->assignment->practiceSet->set_code, count($parts));
@@ -124,7 +120,7 @@ class WrittenGradingService
         }
 
         $score = max(0, min(1, (int) ($row['score'] ?? 0)));
-        $sourcePage = $this->resolveSourcePage($row, $pages, $preferredPage > 0 ? $preferredPage : null);
+        $sourcePage = $this->resolveSourcePage($row, $pages, $preferredPage > 0 ? $preferredPage : null, $questionNumber, 1);
         $sourceImagePath = $sourcePage ? ($pages[$sourcePage - 1]['path'] ?? null) : ($pages[0]['path'] ?? null);
 
         $item->update([
@@ -336,6 +332,7 @@ class WrittenGradingService
             'Match each answer to a question by the label written on the answer sheet (Q1, Q2, Q3, …).',
             'Answers should appear on the sheet in ascending question order (Q1 at the top, then Q2, then Q3, …).',
             "There are {$pageCount} image page(s) attached in order. Use 1-based source_page for the page where the labelled final answer appears.",
+            'Earlier questions (Q1, Q2…) are usually on earlier pages; later questions are usually on later pages. Do not put every answer on page 1 unless they truly all appear there.',
             'Read the uploaded photo(s) of the answer sheet. Ignore rough-work pages unless they show the labelled final answer.',
             'For each question number, extract the student answer, check working/method where visible, and compare to the correct answer.',
             '',
@@ -433,7 +430,7 @@ class WrittenGradingService
             $score = (int) ($row['score'] ?? 0);
             $score = max(0, min(1, $score));
             $totalScore += $score;
-            $sourcePage = $this->resolveSourcePage($row, $pages, null);
+            $sourcePage = $this->resolveSourcePage($row, $pages, null, $number, $maxScore);
             $sourceImagePath = $sourcePage ? ($pages[$sourcePage - 1]['path'] ?? null) : null;
 
             WrittenSubmissionItem::create([
@@ -482,22 +479,38 @@ class WrittenGradingService
      * @param  array<string, mixed>  $row
      * @param  list<array{index: int, path: string}>  $pages
      */
-    private function resolveSourcePage(array $row, array $pages, ?int $fallback): ?int
-    {
+    private function resolveSourcePage(
+        array $row,
+        array $pages,
+        ?int $fallback,
+        ?int $questionNumber = null,
+        int $questionCount = 1,
+    ): ?int {
         $pageCount = count($pages);
 
         if ($pageCount === 0) {
             return null;
         }
 
-        $candidate = isset($row['source_page']) ? (int) $row['source_page'] : ($fallback ?? 0);
-
-        if ($candidate < 1 || $candidate > $pageCount) {
-            return $fallback && $fallback >= 1 && $fallback <= $pageCount
-                ? $fallback
-                : ($pageCount === 1 ? 1 : null);
+        if ($pageCount === 1) {
+            return 1;
         }
 
-        return $candidate;
+        $candidate = isset($row['source_page']) ? (int) $row['source_page'] : 0;
+
+        if ($candidate >= 1 && $candidate <= $pageCount) {
+            return $candidate;
+        }
+
+        if ($fallback && $fallback >= 1 && $fallback <= $pageCount) {
+            return $fallback;
+        }
+
+        if ($questionNumber && $questionCount > 0) {
+            // Spread questions across pages when the model omits source_page.
+            return max(1, min($pageCount, (int) ceil(($questionNumber * $pageCount) / max($questionCount, 1))));
+        }
+
+        return null;
     }
 }

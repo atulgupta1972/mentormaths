@@ -398,6 +398,7 @@ class WrittenSubmissionService
             'grading_stage' => $progress['stage'],
             'upload_urls' => $submission->uploadUrls(),
             'upload_files' => $submission->uploadFiles(),
+            'grading_page_files' => $submission->gradingPageFiles(),
             'can_retry' => in_array($submission->status, [
                 WrittenSubmission::STATUS_GRADED,
                 WrittenSubmission::STATUS_FAILED,
