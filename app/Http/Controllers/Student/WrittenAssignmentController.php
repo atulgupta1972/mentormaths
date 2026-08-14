@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SetAssignment;
 use App\Models\Worksheet;
 use App\Models\WrittenSubmission;
+use App\Services\SetAttemptService;
 use App\Services\WrittenSubmissionService;
 use App\Support\WrittenSubmissionLimits;
 use Illuminate\Http\RedirectResponse;
@@ -17,7 +18,47 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class WrittenAssignmentController extends Controller
 {
-    public function __construct(private WrittenSubmissionService $submissionService) {}
+    public function __construct(
+        private WrittenSubmissionService $submissionService,
+        private SetAttemptService $attemptService,
+    ) {}
+
+    public function index(Request $request): Response|RedirectResponse
+    {
+        $student = $request->user()->student;
+        $enrollment = $student?->currentEnrollment();
+
+        if (! $enrollment) {
+            return redirect()->route('dashboard')->with('error', 'No active enrollment found.');
+        }
+
+        $assignments = collect($this->attemptService->dashboardForEnrollment($enrollment))
+            ->filter(fn (array $row) => ($row['delivery_mode'] ?? null) === 'written')
+            ->values()
+            ->all();
+
+        $buckets = [
+            'upload_pending' => collect($assignments)->filter(
+                fn (array $row) => ! in_array($row['status'], ['green', 'green-late', 'checking'], true),
+            )->values()->all(),
+            'under_review' => collect($assignments)->filter(
+                fn (array $row) => ($row['status'] ?? null) === 'checking',
+            )->values()->all(),
+            'done' => collect($assignments)->filter(
+                fn (array $row) => in_array($row['status'], ['green', 'green-late'], true),
+            )->values()->all(),
+        ];
+
+        return Inertia::render('Student/WrittenSheets/Index', [
+            'buckets' => $buckets,
+            'counts' => [
+                'upload_pending' => count($buckets['upload_pending']),
+                'under_review' => count($buckets['under_review']),
+                'done' => count($buckets['done']),
+                'total' => count($assignments),
+            ],
+        ]);
+    }
 
     public function show(Request $request, SetAssignment $assignment): Response|RedirectResponse
     {

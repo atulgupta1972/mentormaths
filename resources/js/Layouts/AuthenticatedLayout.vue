@@ -60,6 +60,7 @@ const teachingGroup = computed(() => ({
         || route().current('admin.practice-sets.*')
         || route().current('admin.catch-up.*')
         || route().current('admin.written-sheets.*')
+        || route().current('admin.written-review.*')
         || route().current('admin.textbooks.*')
         || route().current('admin.formula-bank.*')
         || route().current('admin.basics-drill.*')
@@ -103,6 +104,12 @@ const teachingGroup = computed(() => ({
             href: route('admin.written-sheets.index'),
             active: route().current('admin.written-sheets.*'),
             show: isAdmin.value,
+        },
+        {
+            label: 'Written review',
+            href: route('admin.written-review.index'),
+            active: route().current('admin.written-review.*'),
+            show: isAdmin.value && route().has('admin.written-review.index'),
         },
         {
             label: 'Textbook content',
@@ -230,7 +237,7 @@ const accountsGroup = computed(() => ({
 
 const resourcesGroup = computed(() => ({
     label: 'Resources',
-    active: route().current('student.resources.*'),
+    active: route().current('student.resources.*') || route().current('student.written-assignments.*'),
     items: [
         {
             label: 'Formulas',
@@ -239,6 +246,14 @@ const resourcesGroup = computed(() => ({
                 : '/student/resources/formulas',
             active: route().current('student.resources.formulas.*'),
             show: isStudent.value && route().has('student.resources.formulas.index'),
+        },
+        {
+            label: 'Written tests',
+            href: route().has('student.written-assignments.index')
+                ? route('student.written-assignments.index')
+                : '/student/written-assignments',
+            active: route().current('student.written-assignments.*'),
+            show: isStudent.value && route().has('student.written-assignments.index'),
         },
     ],
 }));

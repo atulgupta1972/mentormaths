@@ -31,6 +31,7 @@ use App\Http\Controllers\Admin\TeacherRegistrationRequestController as AdminTeac
 use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WrittenSheetController;
+use App\Http\Controllers\Admin\WrittenReviewController;
 use App\Http\Controllers\ContentUploader\ChapterLibraryController;
 use App\Http\Controllers\ContentUploader\ContentTaskController;
 use App\Http\Controllers\DashboardController;
@@ -272,6 +273,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/catch-up/import', [CatchUpSetController::class, 'import'])->name('catch-up.import');
 
     Route::get('/written-sheets', [WrittenSheetController::class, 'index'])->name('written-sheets.index');
+    Route::get('/written-review', [WrittenReviewController::class, 'index'])->name('written-review.index');
     Route::get('/written-sheets/create', [WrittenSheetController::class, 'create'])->name('written-sheets.create');
     Route::post('/written-sheets/chapter-prompt', [WrittenSheetController::class, 'chapterPrompt'])->name('written-sheets.chapter-prompt');
     Route::post('/written-sheets/stage-pdf', [WrittenSheetController::class, 'stagePdf'])->name('written-sheets.stage-pdf');
@@ -389,6 +391,7 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
     Route::post('/worksheets/{worksheet}/correction-practice', [PracticeCorrectionController::class, 'store'])->name('worksheets.correction-practice');
     Route::get('/assignments/{assignment}', [StudentPracticeSetController::class, 'showAssignment'])->name('assignments.show');
     Route::post('/assignments/{assignment}/start', [StudentPracticeSetController::class, 'startAttempt'])->name('assignments.start');
+    Route::get('/written-assignments', [StudentWrittenAssignmentController::class, 'index'])->name('written-assignments.index');
     Route::get('/written-assignments/{assignment}', [StudentWrittenAssignmentController::class, 'show'])->name('written-assignments.show');
     Route::post('/written-assignments/{assignment}/upload', [StudentWrittenAssignmentController::class, 'storeUpload'])->name('written-assignments.upload');
     Route::get('/written-assignments/{assignment}/download', [StudentWrittenAssignmentController::class, 'download'])->name('written-assignments.download');

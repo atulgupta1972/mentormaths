@@ -103,8 +103,12 @@ class DashboardService
                 fn (array $row) => in_array($row['status'], ['green', 'green-late'], true),
             )->sortBy(fn (array $row) => $row['submitted_at'] ?? '9999-12-31 23:59:59')->values()->all();
 
+            $underReview = $assignments->filter(
+                fn (array $row) => ($row['status'] ?? null) === 'checking',
+            )->sortBy(fn (array $row) => $row['submitted_at'] ?? '9999-12-31 23:59:59')->values()->all();
+
             $pending = $assignments->filter(
-                fn (array $row) => ! in_array($row['status'], ['green', 'green-late'], true),
+                fn (array $row) => ! in_array($row['status'], ['green', 'green-late', 'checking'], true),
             )->sortBy(fn (array $row) => $row['target_date'] ?? '9999-12-31')->values()->all();
 
             $studentHelp = $helpByStudent->get($enrollment->student_id, collect());
@@ -119,6 +123,7 @@ class DashboardService
                 'exam_plans' => $allPlans->values()->all(),
                 'syllabus_chapters' => $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all(),
                 'assignments_pending' => $pending,
+                'assignments_under_review' => $underReview,
                 'assignments_completed' => $completed,
                 'help_requests' => $studentHelp->values()->all(),
                 'help_requests_count' => $studentHelp->count(),
@@ -127,6 +132,7 @@ class DashboardService
 
         $upcomingExamsCount = collect($students)->sum(fn (array $row) => count($row['upcoming_exams']));
         $pendingSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_pending']));
+        $underReviewSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_under_review']));
         $completedSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_completed']));
         $helpRequestsCount = count($helpRequests);
         $contentPublishQueue = ContentUploadTask::query()
@@ -159,6 +165,7 @@ class DashboardService
                 'students_count' => count($students),
                 'upcoming_exams_count' => $upcomingExamsCount,
                 'pending_sets_count' => $pendingSetsCount,
+                'under_review_sets_count' => $underReviewSetsCount,
                 'completed_sets_count' => $completedSetsCount,
                 'help_requests_count' => $helpRequestsCount,
                 'content_publish_queue_count' => count($contentPublishQueue),
@@ -184,6 +191,9 @@ class DashboardService
             'past_exams' => count($examPlans['past']),
             'sets_todo' => $assignmentsCollection->filter(
                 fn (array $row) => ! in_array($row['status'], ['green', 'green-late', 'checking'], true),
+            )->count(),
+            'sets_under_review' => $assignmentsCollection->filter(
+                fn (array $row) => ($row['status'] ?? null) === 'checking',
             )->count(),
             'sets_done' => $assignmentsCollection->filter(
                 fn (array $row) => in_array($row['status'], ['green', 'green-late'], true),

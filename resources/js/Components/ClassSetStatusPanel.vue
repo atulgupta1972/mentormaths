@@ -14,6 +14,7 @@ const props = defineProps({
     gradeLevelName: { type: String, default: '' },
     boardId: { type: [Number, String, null], default: null },
     canAssign: { type: Boolean, default: true },
+    writtenOnly: { type: Boolean, default: false },
 });
 
 const page = usePage();
@@ -34,7 +35,7 @@ const selectedMonth = ref('');
 const showPractice = ref(true);
 const showTests = ref(true);
 const showCatchUp = ref(true);
-const showOnline = ref(true);
+const showOnline = ref(!props.writtenOnly);
 const showWritten = ref(true);
 
 const assignForm = useForm({ student_id: '', target_date: '', notes: '' });
@@ -42,12 +43,20 @@ const bulkForm = useForm({ grade_level_id: '', board_id: '', target_date: '', no
 const reassignForm = useForm({ target_date: '', notes: '' });
 const deassignForm = useForm({});
 
-const statusLegend = [
-    { label: 'Done', boxClass: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-    { label: 'In progress', boxClass: 'bg-amber-100 text-amber-900 border-amber-200' },
-    { label: 'Not done', boxClass: 'bg-rose-100 text-rose-800 border-rose-200' },
-    { label: 'Not assigned', boxClass: 'bg-slate-100 text-slate-400 border-slate-200' },
-];
+const statusLegend = computed(() => (props.writtenOnly
+    ? [
+        { label: 'Upload work', boxClass: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+        { label: 'Under review', boxClass: 'bg-violet-100 text-violet-900 border-violet-200' },
+        { label: 'Teacher check', boxClass: 'bg-amber-100 text-amber-900 border-amber-200' },
+        { label: 'Graded', boxClass: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+        { label: 'Not assigned', boxClass: 'bg-slate-100 text-slate-400 border-slate-200' },
+    ]
+    : [
+        { label: 'Done', boxClass: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+        { label: 'In progress', boxClass: 'bg-amber-100 text-amber-900 border-amber-200' },
+        { label: 'Not done', boxClass: 'bg-rose-100 text-rose-800 border-rose-200' },
+        { label: 'Not assigned', boxClass: 'bg-slate-100 text-slate-400 border-slate-200' },
+    ]));
 
 const syllabusChapters = computed(() => props.chapters.filter((chapter) => !chapter.is_extra));
 
@@ -161,6 +170,14 @@ const cellStatus = (progress, set = null) => {
 
     if (set?.delivery_mode === 'written') {
         if (progress.written_submission_status === 'graded' && progress.latest_score != null) {
+            if (progress.needs_teacher_review) {
+                return {
+                    label: 'Teacher check',
+                    boxClass: `${box} bg-amber-100 text-amber-900 border-amber-300`,
+                    title: 'AI finished — click to verify steps / edit marks',
+                };
+            }
+
             return {
                 label: progress.latest_score_label || formatScoreLabel(progress.latest_score, progress.latest_max_score),
                 boxClass: `${box} bg-emerald-100 text-emerald-800 border-emerald-300`,
@@ -170,17 +187,17 @@ const cellStatus = (progress, set = null) => {
 
         if (progress.written_submission_status === 'processing') {
             return {
-                label: 'Checking…',
-                boxClass: `${box} bg-amber-100 text-amber-900 border-amber-300`,
-                title: 'AI checking — click to view',
+                label: 'Under review',
+                boxClass: `${box} bg-violet-100 text-violet-900 border-violet-300`,
+                title: 'AI checking — click to view or mark manually',
             };
         }
 
         if (progress.written_submission_status === 'uploaded') {
             return {
-                label: 'Uploaded',
-                boxClass: `${box} bg-sky-100 text-sky-800 border-sky-300`,
-                title: 'Uploaded — click to view or mark',
+                label: 'Under review',
+                boxClass: `${box} bg-violet-100 text-violet-900 border-violet-300`,
+                title: 'Uploaded — waiting for AI / click to view or mark',
             };
         }
 
@@ -444,14 +461,17 @@ const chapterRowClass = (chapter) => (chapter.is_extra ? 'bg-violet-50/70' : '')
                             <input v-model="showCatchUp" type="checkbox" class="rounded border-gray-300 text-indigo-600" />
                             Correction sets
                         </label>
-                        <label class="inline-flex items-center gap-1 text-[10px] text-gray-700">
-                            <input v-model="showOnline" type="checkbox" class="rounded border-gray-300 text-indigo-600" />
-                            Online
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-[10px] text-gray-700">
-                            <input v-model="showWritten" type="checkbox" class="rounded border-gray-300 text-indigo-600" />
-                            Written
-                        </label>
+                        <template v-if="!writtenOnly">
+                            <label class="inline-flex items-center gap-1 text-[10px] text-gray-700">
+                                <input v-model="showOnline" type="checkbox" class="rounded border-gray-300 text-indigo-600" />
+                                Online
+                            </label>
+                            <label class="inline-flex items-center gap-1 text-[10px] text-gray-700">
+                                <input v-model="showWritten" type="checkbox" class="rounded border-gray-300 text-indigo-600" />
+                                Written
+                            </label>
+                        </template>
+                        <span v-else class="text-[10px] font-semibold text-violet-800">Written only</span>
                     </div>
                     <div v-if="canAssign" class="flex items-center gap-2">
                         <InputLabel value="Target date" class="!mb-0 shrink-0 !text-xs" />

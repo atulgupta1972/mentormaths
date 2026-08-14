@@ -123,7 +123,7 @@ class AssignmentProgress
             WrittenSubmission::STATUS_PROCESSING,
         ], true)) {
             $submittedAt = $submission->uploaded_at?->toDateTimeString();
-            $status = 'yellow';
+            $status = 'checking';
         } elseif ($submission?->status === WrittenSubmission::STATUS_FAILED) {
             $status = 'overdue';
         } elseif ($overdue) {
@@ -131,6 +131,10 @@ class AssignmentProgress
         }
 
         $progress = WrittenSubmissionProgress::forSubmission($submission);
+        $needsTeacherReview = $submission?->status === WrittenSubmission::STATUS_GRADED
+            && ($submission->relationLoaded('items')
+                ? $submission->items->contains(fn ($item) => (bool) $item->needs_review)
+                : $submission->items()->where('needs_review', true)->exists());
 
         return [
             'assignment_id' => $assignment->id,
@@ -181,6 +185,7 @@ class AssignmentProgress
             'grading_progress' => $progress['percent'],
             'grading_stage' => $progress['stage'],
             'grading_error' => $submission?->grading_error,
+            'needs_teacher_review' => (bool) $needsTeacherReview,
             'status' => $status,
         ];
     }

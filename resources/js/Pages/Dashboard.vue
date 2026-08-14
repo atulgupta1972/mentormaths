@@ -377,11 +377,17 @@ const studentsByClass = computed(() => {
 });
 
 const studentSummary = (student) => {
+    const underReview = student.assignments_under_review?.length || 0;
     const parts = [
         `${student.upcoming_exams.length} exam${student.upcoming_exams.length === 1 ? '' : 's'}`,
         `${student.assignments_pending.length} todo`,
-        `${student.assignments_completed.length} done`,
     ];
+
+    if (underReview > 0) {
+        parts.push(`${underReview} under review`);
+    }
+
+    parts.push(`${student.assignments_completed.length} done`);
 
     if (student.help_requests_count > 0) {
         parts.push(`${student.help_requests_count} need help`);
@@ -486,6 +492,9 @@ const adminSetStatusClass = (set) => {
     if (set.status === 'green' || set.status === 'green-late') {
         return 'border-emerald-200 bg-emerald-50 text-emerald-900';
     }
+    if (set.status === 'checking') {
+        return 'border-violet-200 bg-violet-50 text-violet-900';
+    }
     if (set.is_overdue) {
         return 'border-rose-200 bg-rose-50 text-rose-900';
     }
@@ -550,7 +559,7 @@ const adminSetStatusClass = (set) => {
                         :grade-levels="gradeLevels"
                     />
 
-                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                         <div class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-violet-700">{{ stats.students_count || 0 }}</p>
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Students</p>
@@ -578,6 +587,10 @@ const adminSetStatusClass = (set) => {
                         <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-amber-700">{{ stats.pending_sets_count || 0 }}</p>
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">To do</p>
+                        </div>
+                        <div class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-2.5 text-center shadow-sm">
+                            <p class="text-2xl font-extrabold leading-none text-violet-700">{{ stats.under_review_sets_count || 0 }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Under review</p>
                         </div>
                         <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-emerald-700">{{ stats.completed_sets_count || 0 }}</p>
@@ -740,6 +753,22 @@ const adminSetStatusClass = (set) => {
                                     <p v-else class="mt-1 text-[11px] text-gray-500">All caught up.</p>
                                 </div>
 
+                                <div v-if="student.assignments_under_review?.length">
+                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-violet-700">Under review</h4>
+                                    <div class="mt-1 flex flex-wrap gap-1">
+                                        <Link
+                                            v-for="set in student.assignments_under_review"
+                                            :key="`review-${set.assignment_id}`"
+                                            :href="adminAssignmentHref(set, student.student_id)"
+                                            class="rounded border px-2 py-1 text-[11px] font-mono font-semibold"
+                                            :class="adminSetStatusClass(set)"
+                                        >
+                                            {{ setLabel(set) }}
+                                            <span class="font-sans font-medium"> · review</span>
+                                        </Link>
+                                    </div>
+                                </div>
+
                                 <div v-if="student.assignments_completed.length">
                                     <h4 class="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Sets done</h4>
                                     <div class="mt-1 flex flex-wrap gap-1">
@@ -829,6 +858,12 @@ const adminSetStatusClass = (set) => {
                         <div class="flex flex-wrap items-center gap-2 text-xs">
                             <span class="rounded-full bg-white/20 px-2.5 py-0.5">{{ stats.upcoming_exams || 0 }} exams</span>
                             <span class="rounded-full bg-amber-300/40 px-2.5 py-0.5">{{ stats.sets_todo || 0 }} to do</span>
+                            <span
+                                v-if="stats.sets_under_review"
+                                class="rounded-full bg-violet-300/50 px-2.5 py-0.5"
+                            >
+                                {{ stats.sets_under_review }} under review
+                            </span>
                             <span class="rounded-full bg-violet-300/40 px-2.5 py-0.5">{{ stats.sets_done || 0 }} done</span>
                             <Link
                                 :href="route('student.resolutions.history')"
@@ -1035,21 +1070,32 @@ const adminSetStatusClass = (set) => {
                         </section>
                     </div>
 
-                    <!-- Submitted — AI checking -->
+                    <!-- Submitted — under review (AI / teacher) -->
                     <section
                         v-if="checkingAssignments.length"
                         class="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-indigo-50 to-sky-50 p-4 shadow-sm"
                     >
                         <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-900">
-                            Submitted — being checked · {{ checkingAssignments.length }}
+                            Under review · {{ checkingAssignments.length }}
                         </h3>
-                        <p class="mb-3 text-xs text-violet-800">
-                            We will email you when checking is finished. You can continue with other work below.
+                        <p class="mb-2 text-xs text-violet-800">
+                            Your written work is uploaded. AI is checking it (or a teacher will review the steps). Open a chip to see photos and status.
                         </p>
+                        <div class="mb-3 flex flex-wrap gap-1.5">
+                            <Link
+                                v-for="set in checkingAssignments"
+                                :key="`chip-review-${set.assignment_id}`"
+                                :href="assignmentHref(set)"
+                                class="rounded border border-violet-300 bg-white px-2.5 py-1 text-[11px] font-mono font-semibold text-violet-900 shadow-sm hover:bg-violet-50"
+                            >
+                                {{ setLabel(set) }}
+                                <span class="font-sans font-medium"> · under review</span>
+                            </Link>
+                        </div>
                         <StudentAssignmentGroupTable
                             :groups="checkingByChapter"
                             variant="checking"
-                            count-suffix="checking"
+                            count-suffix="under review"
                         />
                     </section>
 
