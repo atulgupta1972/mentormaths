@@ -18,6 +18,8 @@ class WrittenSubmissionItem extends Model
         'is_correct',
         'confidence',
         'needs_review',
+        'source_page',
+        'source_image_path',
     ];
 
     protected function casts(): array
@@ -36,5 +38,14 @@ class WrittenSubmissionItem extends Model
     public function question(): BelongsTo
     {
         return $this->belongsTo(Question::class);
+    }
+
+    public function sourceImageUrl(): ?string
+    {
+        if (! $this->source_image_path) {
+            return null;
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk('public')->url($this->source_image_path);
     }
 }

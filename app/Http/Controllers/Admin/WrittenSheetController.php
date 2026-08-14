@@ -939,6 +939,30 @@ class WrittenSheetController extends Controller
         return back()->with('success', 'AI checking queued again for this upload.');
     }
 
+    public function retryAiQuestion(Request $request, SetAssignment $assignment): RedirectResponse
+    {
+        $assignment->loadMissing(['practiceSet', 'writtenSubmissions']);
+        abort_unless($assignment->practiceSet?->isWritten(), 404);
+
+        $validated = $request->validate([
+            'question_number' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $submission = $assignment->latestWrittenSubmission();
+
+        if (! $submission) {
+            return back()->with('error', 'No upload found for this assignment.');
+        }
+
+        try {
+            $this->submissionService->retryAiQuestion($submission, (int) $validated['question_number']);
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Q'.$validated['question_number'].' re-read by AI. Check the AI read value and mark Correct/Wrong if needed.');
+    }
+
     public function uploadWork(Request $request, SetAssignment $assignment): RedirectResponse
     {
         return $this->uploadRevision($request, $assignment);

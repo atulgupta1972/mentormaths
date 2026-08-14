@@ -295,6 +295,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/written-assignments/{assignment}/upload-revision', [WrittenSheetController::class, 'uploadRevision'])->name('written-assignments.upload-revision');
     Route::post('/written-assignments/{assignment}/upload-work', [WrittenSheetController::class, 'uploadWork'])->name('written-assignments.upload-work');
     Route::post('/written-assignments/{assignment}/retry-ai', [WrittenSheetController::class, 'retryAiGrading'])->name('written-assignments.retry-ai');
+    Route::post('/written-assignments/{assignment}/retry-ai-question', [WrittenSheetController::class, 'retryAiQuestion'])->name('written-assignments.retry-ai-question');
 
     Route::get('/textbooks', [TextbookController::class, 'index'])->name('textbooks.index');
     Route::get('/textbooks/create', [TextbookController::class, 'create'])->name('textbooks.create');

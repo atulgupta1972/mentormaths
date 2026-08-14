@@ -69,6 +69,8 @@ const assignForm = useForm({ student_id: '', target_date: '', notes: '' });
 const bulkForm = useForm({ student_ids: [], target_date: '', notes: '' });
 const reassignForm = useForm({ target_date: '', notes: '' });
 const retryAiForm = useForm({});
+const retryQuestionForm = useForm({ question_number: null });
+const readingQuestionNumber = ref(null);
 const gradeForm = useForm({ feedback: '', remarks: '', handwriting_rating: '', items: [] });
 const gradingAssignmentId = ref(null);
 const revisionForm = useForm({ files: [], skip_ai: false, append: false });
@@ -520,6 +522,41 @@ const retryAiCheck = (assignmentId) => {
 
     retryAiForm.post(route('admin.written-assignments.retry-ai', assignmentId), {
         preserveScroll: true,
+        onSuccess: () => reloadAssignmentRow(assignmentId),
+    });
+};
+
+const questionResult = (row, question) =>
+    row.question_results?.find((result) => result.question_id === question.id)
+    || null;
+
+const questionPreviewUrl = (row, question) => {
+    const result = questionResult(row, question);
+
+    if (result?.source_image_url) {
+        return result.source_image_url;
+    }
+
+    const files = row.upload_files || [];
+    const imageFile = files.find((file) => file.kind === 'image');
+
+    return imageFile?.url || null;
+};
+
+const readQuestionAgain = (assignmentId, question, index) => {
+    const number = question.number || index + 1;
+
+    if (!confirm(`Ask AI to read Q${number} again from the uploaded pages?`)) {
+        return;
+    }
+
+    readingQuestionNumber.value = number;
+    retryQuestionForm.question_number = number;
+    retryQuestionForm.post(route('admin.written-assignments.retry-ai-question', assignmentId), {
+        preserveScroll: true,
+        onFinish: () => {
+            readingQuestionNumber.value = null;
+        },
         onSuccess: () => reloadAssignmentRow(assignmentId),
     });
 };
@@ -1487,9 +1524,34 @@ const progressLabel = (p) => {
                                                         <div
                                                             v-for="(question, index) in gradeSheetQuestions"
                                                             :key="question.id"
-                                                            class="border-b border-gray-100 px-3 py-2 last:border-b-0"
+                                                            class="border-b border-gray-100 px-3 py-3 last:border-b-0"
                                                         >
-                                                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                                            <div class="flex flex-wrap items-start gap-3">
+                                                                <div class="w-full max-w-[11rem] shrink-0">
+                                                                    <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                                                        Student page
+                                                                        <span v-if="questionResult(row, question)?.source_page">
+                                                                            · p{{ questionResult(row, question).source_page }}
+                                                                        </span>
+                                                                    </p>
+                                                                    <a
+                                                                        v-if="questionPreviewUrl(row, question)"
+                                                                        :href="questionPreviewUrl(row, question)"
+                                                                        target="_blank"
+                                                                        rel="noopener"
+                                                                        class="block overflow-hidden rounded border border-slate-200 bg-slate-50"
+                                                                    >
+                                                                        <img
+                                                                            :src="questionPreviewUrl(row, question)"
+                                                                            :alt="`Q${question.number || index + 1} answer page`"
+                                                                            class="max-h-40 w-full object-contain object-top"
+                                                                        >
+                                                                    </a>
+                                                                    <p v-else class="rounded border border-dashed border-slate-200 px-2 py-6 text-center text-[11px] text-slate-500">
+                                                                        No page preview
+                                                                    </p>
+                                                                </div>
+
                                                                 <div class="min-w-0 flex-1 text-sm">
                                                                     <p class="font-semibold text-gray-900">Q{{ question.number || index + 1 }}</p>
                                                                     <p class="mt-0.5 text-gray-700" v-html="question.question_text" />
@@ -1497,7 +1559,13 @@ const progressLabel = (p) => {
                                                                         <div>
                                                                             <dt class="text-gray-500">AI read</dt>
                                                                             <dd class="font-medium text-gray-800">
-                                                                                {{ row.question_results?.find((r) => r.question_id === question.id)?.extracted_answer || '—' }}
+                                                                                {{ questionResult(row, question)?.extracted_answer || '—' }}
+                                                                                <span
+                                                                                    v-if="questionResult(row, question)?.needs_review"
+                                                                                    class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+                                                                                >
+                                                                                    needs check
+                                                                                </span>
                                                                             </dd>
                                                                         </div>
                                                                         <div>
@@ -1507,8 +1575,15 @@ const progressLabel = (p) => {
                                                                             </dd>
                                                                         </div>
                                                                     </dl>
+                                                                    <p
+                                                                        v-if="questionResult(row, question)?.note"
+                                                                        class="mt-1 text-xs text-slate-600"
+                                                                    >
+                                                                        {{ questionResult(row, question).note }}
+                                                                    </p>
                                                                 </div>
-                                                                <div class="flex shrink-0 gap-2">
+
+                                                                <div class="flex shrink-0 flex-col gap-2">
                                                                     <button
                                                                         type="button"
                                                                         class="rounded-md px-3 py-1.5 text-xs font-bold"
@@ -1528,6 +1603,18 @@ const progressLabel = (p) => {
                                                                         @click="setQuestionResult(question.id, false)"
                                                                     >
                                                                         ✗ Wrong
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        class="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-900 disabled:opacity-60"
+                                                                        :disabled="retryQuestionForm.processing && readingQuestionNumber === (question.number || index + 1)"
+                                                                        @click="readQuestionAgain(row.assignment_id, question, index)"
+                                                                    >
+                                                                        {{
+                                                                            retryQuestionForm.processing && readingQuestionNumber === (question.number || index + 1)
+                                                                                ? 'Reading…'
+                                                                                : 'Read again'
+                                                                        }}
                                                                     </button>
                                                                 </div>
                                                             </div>

@@ -84,6 +84,128 @@ class WrittenSubmissionGradingTest extends TestCase
         $this->assertSame(1, $submission->max_score);
     }
 
+    public function test_grading_prompt_warns_against_minus_on_fractions_and_stores_source_page(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'summary' => 'Good.',
+                                'items' => [
+                                    [
+                                        'question_number' => 1,
+                                        'extracted_answer' => '1/2',
+                                        'step_feedback' => 'Correct.',
+                                        'score' => 1,
+                                        'is_correct' => true,
+                                        'confidence' => 0.9,
+                                        'needs_review' => false,
+                                        'source_page' => 1,
+                                    ],
+                                ],
+                            ]),
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $service = app(WrittenSubmissionService::class);
+        $submission = $service->store($assignment, [UploadedFile::fake()->image('answer.jpg')]);
+
+        app(WrittenGradingService::class)->grade($submission->fresh());
+
+        $request = Http::recorded()[0][0] ?? null;
+        $this->assertNotNull($request);
+        $body = $request->data();
+        $prompt = data_get($body, 'messages.1.content.0.text');
+        $this->assertIsString($prompt);
+        $this->assertStringContainsString('Do not read 1/2 as -1/2', $prompt);
+        $this->assertStringContainsString('source_page', $prompt);
+
+        $item = $submission->fresh()->items()->first();
+        $this->assertSame('1/2', $item->extracted_answer);
+        $this->assertSame(1, $item->source_page);
+        $this->assertNotNull($item->source_image_path);
+        $this->assertNotNull($item->sourceImageUrl());
+    }
+
+    public function test_admin_can_re_read_one_question_without_wiping_others(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.api_key' => 'test-key']);
+
+        Http::fake([
+            'api.openai.com/*' => Http::sequence()
+                ->push([
+                    'choices' => [
+                        [
+                            'message' => [
+                                'content' => json_encode([
+                                    'summary' => 'Mixed.',
+                                    'items' => [
+                                        [
+                                            'question_number' => 1,
+                                            'extracted_answer' => '-1/2',
+                                            'step_feedback' => 'Sign error?',
+                                            'score' => 0,
+                                            'is_correct' => false,
+                                            'confidence' => 0.5,
+                                            'needs_review' => true,
+                                            'source_page' => 1,
+                                        ],
+                                    ],
+                                ]),
+                            ],
+                        ],
+                    ],
+                ])
+                ->push([
+                    'choices' => [
+                        [
+                            'message' => [
+                                'content' => json_encode([
+                                    'summary' => 'Re-read Q1.',
+                                    'items' => [
+                                        [
+                                            'question_number' => 1,
+                                            'extracted_answer' => '1/2',
+                                            'step_feedback' => 'Final answer is 1/2.',
+                                            'score' => 1,
+                                            'is_correct' => true,
+                                            'confidence' => 0.95,
+                                            'needs_review' => false,
+                                            'source_page' => 1,
+                                        ],
+                                    ],
+                                ]),
+                            ],
+                        ],
+                    ],
+                ]),
+        ]);
+
+        [$assignment] = $this->seedWrittenAssignment();
+        $service = app(WrittenSubmissionService::class);
+        $submission = $service->store($assignment, [UploadedFile::fake()->image('answer.jpg')]);
+        app(WrittenGradingService::class)->grade($submission->fresh());
+
+        $this->assertSame('-1/2', $assignment->latestWrittenSubmission()->items()->first()->extracted_answer);
+
+        $service->retryAiQuestion($assignment->latestWrittenSubmission(), 1);
+
+        $item = $assignment->latestWrittenSubmission()->items()->first();
+        $this->assertSame('1/2', $item->extracted_answer);
+        $this->assertTrue($item->is_correct);
+        $this->assertSame(1, (int) $assignment->latestWrittenSubmission()->score);
+    }
+
     public function test_graded_payload_includes_correct_answer_and_allows_retry_upload(): void
     {
         Storage::fake('public');

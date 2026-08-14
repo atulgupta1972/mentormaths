@@ -209,6 +209,9 @@ class AssignmentProgress
             'is_correct' => $item->is_correct,
             'extracted_answer' => $item->extracted_answer,
             'note' => $item->step_feedback,
+            'needs_review' => (bool) $item->needs_review,
+            'source_page' => $item->source_page,
+            'source_image_url' => $item->sourceImageUrl(),
         ])->values()->all();
     }
 

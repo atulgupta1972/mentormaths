@@ -311,8 +311,11 @@ class WrittenSubmissionService
 
     public function retryAiGrading(WrittenSubmission $submission): void
     {
-        if ($submission->status !== WrittenSubmission::STATUS_FAILED) {
-            throw new \InvalidArgumentException('Only failed uploads can be sent for AI checking again.');
+        if (! in_array($submission->status, [
+            WrittenSubmission::STATUS_FAILED,
+            WrittenSubmission::STATUS_GRADED,
+        ], true)) {
+            throw new \InvalidArgumentException('Only graded or failed uploads can be sent for AI checking again.');
         }
 
         if ($submission->upload_paths === [] || $submission->upload_paths === null) {
@@ -421,8 +424,26 @@ class WrittenSubmissionService
                     'is_correct' => $item->is_correct,
                     'confidence' => $item->confidence,
                     'needs_review' => $item->needs_review,
+                    'source_page' => $item->source_page,
+                    'source_image_url' => $item->sourceImageUrl(),
                 ];
             })->values()->all(),
         ];
+    }
+
+    public function retryAiQuestion(WrittenSubmission $submission, int $questionNumber): WrittenSubmissionItem
+    {
+        if ($submission->upload_paths === [] || $submission->upload_paths === null) {
+            throw new \InvalidArgumentException('No uploaded files found for this submission.');
+        }
+
+        if (! in_array($submission->status, [
+            WrittenSubmission::STATUS_GRADED,
+            WrittenSubmission::STATUS_FAILED,
+        ], true)) {
+            throw new \InvalidArgumentException('Re-read is available after AI has finished or failed.');
+        }
+
+        return app(WrittenGradingService::class)->gradeQuestion($submission, $questionNumber);
     }
 }
