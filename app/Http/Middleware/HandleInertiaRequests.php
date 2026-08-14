@@ -59,6 +59,7 @@ class HandleInertiaRequests extends Middleware
                 'save_confirmation' => fn () => $request->session()->get('save_confirmation'),
             ],
             'contentUploaderGuideUrl' => '/guides/content-uploader-guide.html',
+            'appTimezone' => config('app.timezone'),
         ];
     }
 }

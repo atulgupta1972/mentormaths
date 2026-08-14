@@ -1,4 +1,5 @@
 <script setup>
+import { formatDateTime } from '@/utils/dates';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -38,16 +39,7 @@ const auditBadge = (set) => {
     return { label: 'Not audited', class: 'bg-gray-100 text-gray-700' };
 };
 
-const formatWhen = (value) => {
-    if (!value) return '—';
-    return new Date(value).toLocaleString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-};
+const formatWhen = (value) => formatDateTime(value);
 </script>
 
 <template>

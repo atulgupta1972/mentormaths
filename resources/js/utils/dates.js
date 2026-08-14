@@ -1,3 +1,7 @@
+export const APP_TIMEZONE = 'Asia/Kolkata';
+
+const IST_OFFSET = '+05:30';
+
 export function parseAppDate(value) {
     if (!value) {
         return null;
@@ -14,13 +18,13 @@ export function parseAppDate(value) {
     }
 
     if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-        const date = new Date(`${text}T00:00:00`);
+        const date = new Date(`${text}T00:00:00${IST_OFFSET}`);
 
         return Number.isNaN(date.getTime()) ? null : date;
     }
 
     if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)) {
-        const date = new Date(text.replace(' ', 'T'));
+        const date = new Date(`${text.replace(' ', 'T')}${IST_OFFSET}`);
 
         return Number.isNaN(date.getTime()) ? null : date;
     }
@@ -30,6 +34,22 @@ export function parseAppDate(value) {
     return Number.isNaN(date.getTime()) ? null : date;
 }
 
+const dateFormatOptions = {
+    timeZone: APP_TIMEZONE,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+};
+
+const dateTimeFormatOptions = {
+    timeZone: APP_TIMEZONE,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+};
+
 export function formatDate(value, fallback = '—') {
     const date = parseAppDate(value);
 
@@ -37,11 +57,7 @@ export function formatDate(value, fallback = '—') {
         return fallback;
     }
 
-    return date.toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-    });
+    return date.toLocaleDateString('en-IN', dateFormatOptions);
 }
 
 export function formatDateTime(value, fallback = '—') {
@@ -51,13 +67,7 @@ export function formatDateTime(value, fallback = '—') {
         return fallback;
     }
 
-    return date.toLocaleString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-    });
+    return date.toLocaleString('en-IN', dateTimeFormatOptions);
 }
 
 export function formatTime(seconds) {

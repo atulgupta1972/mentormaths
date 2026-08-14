@@ -8,6 +8,7 @@ import ContentUploadGuidePanel from '@/Components/ContentUploadGuidePanel.vue';
 import ContentUploaderTasksPanel from '@/Components/ContentUploaderTasksPanel.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
+import { formatDate, formatDateTime, formatTime as formatDuration } from '@/utils/dates';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref } from 'vue';
 
@@ -194,48 +195,7 @@ const topicLabel = (set) => {
     return '—';
 };
 
-const formatDate = (d) => {
-    if (!d) {
-        return '';
-    }
-
-    return new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-    });
-};
-
-const formatTime = (seconds) => {
-    if (!seconds) {
-        return '';
-    }
-
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-
-    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-};
-
-const formatDateTime = (value) => {
-    if (!value) {
-        return '';
-    }
-
-    const date = new Date(String(value).includes('T') ? value : value.replace(' ', 'T'));
-
-    if (Number.isNaN(date.getTime())) {
-        return '';
-    }
-
-    return date.toLocaleString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-    });
-};
+const formatTime = (seconds) => formatDuration(seconds) === '—' ? '' : formatDuration(seconds);
 
 const completedAssignmentHref = (set) => {
     if (set.delivery_mode === 'written') {

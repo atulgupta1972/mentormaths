@@ -1,4 +1,5 @@
 <script setup>
+import { formatDateTime } from '@/utils/dates';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -79,20 +80,7 @@ const studentRows = computed(() => {
 
 const summary = computed(() => props.report.summary ?? {});
 
-const formatWhen = (iso) => {
-    if (!iso) {
-        return '—';
-    }
-
-    const date = new Date(iso);
-
-    return date.toLocaleString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        day: 'numeric',
-        month: 'short',
-    });
-};
+const formatWhen = (iso) => formatDateTime(iso);
 
 const progressPercent = (done, total) => {
     if (!total) {

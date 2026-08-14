@@ -1,4 +1,5 @@
 <script setup>
+import { formatDateTime } from '@/utils/dates';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -100,16 +101,7 @@ const runAudit = () => {
     });
 };
 
-const formatWhen = (value) => {
-    if (!value) return '—';
-    return new Date(value).toLocaleString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-};
+const formatWhen = (value) => formatDateTime(value);
 
 const suggestedAnswer = (issues) => {
     const mismatch = issues.find((issue) => issue.issue_type === 'answer_mismatch');
