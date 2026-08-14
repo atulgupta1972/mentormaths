@@ -2,7 +2,7 @@
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     tasks: { type: Object, required: true },
@@ -59,6 +59,61 @@ const flashSuccess = computed(() => page.props.flash?.success);
 const flashError = computed(() => page.props.flash?.error);
 const emailSent = computed(() => page.props.flash?.email_sent);
 const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
+
+const drillFilter = ref(null);
+
+watch(
+    () => [props.matrix.drill?.grade?.id, props.matrix.drill?.uploader?.id],
+    () => {
+        drillFilter.value = null;
+    },
+);
+
+const drillBreakup = computed(() => props.matrix.drill?.breakup ?? {
+    under_review: 0,
+    submitted: 0,
+    published: 0,
+});
+
+const filteredDrillChapters = computed(() => {
+    const chapters = props.matrix.drill?.chapters ?? [];
+    if (!drillFilter.value) {
+        return chapters;
+    }
+
+    return chapters.filter((row) => row.breakup_bucket === drillFilter.value);
+});
+
+const setDrillFilter = (bucket) => {
+    drillFilter.value = drillFilter.value === bucket ? null : bucket;
+};
+
+const breakupCards = computed(() => [
+    {
+        key: 'under_review',
+        label: 'Under review',
+        hint: 'Assigned, uploading, or verifying',
+        count: drillBreakup.value.under_review ?? 0,
+        idle: 'bg-sky-50 text-sky-950 ring-sky-200 hover:bg-sky-100',
+        active: 'bg-sky-600 text-white ring-sky-600',
+    },
+    {
+        key: 'submitted',
+        label: 'Submitted',
+        hint: 'Click to review & publish',
+        count: drillBreakup.value.submitted ?? 0,
+        idle: 'bg-violet-50 text-violet-950 ring-violet-200 hover:bg-violet-100',
+        active: 'bg-violet-600 text-white ring-violet-600',
+    },
+    {
+        key: 'published',
+        label: 'Published',
+        hint: 'Live for students',
+        count: drillBreakup.value.published ?? 0,
+        idle: 'bg-emerald-50 text-emerald-950 ring-emerald-200 hover:bg-emerald-100',
+        active: 'bg-emerald-600 text-white ring-emerald-600',
+    },
+]);
 </script>
 
 <template>
@@ -214,7 +269,29 @@ const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
                         <button type="button" class="text-sm text-indigo-600 hover:underline" @click="closeDrill">Close</button>
                     </div>
 
-                    <div class="mt-4 overflow-hidden rounded-md ring-1 ring-slate-200">
+                    <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                        <button
+                            v-for="card in breakupCards"
+                            :key="card.key"
+                            type="button"
+                            class="rounded-lg px-3 py-3 text-left ring-1 transition"
+                            :class="drillFilter === card.key ? card.active : card.idle"
+                            @click="setDrillFilter(card.key)"
+                        >
+                            <p class="text-xs font-semibold uppercase tracking-wide opacity-80">{{ card.label }}</p>
+                            <p class="mt-1 text-2xl font-semibold">{{ card.count }}</p>
+                            <p class="mt-1 text-xs opacity-80">{{ card.hint }}</p>
+                        </button>
+                    </div>
+
+                    <p class="mt-3 text-xs text-slate-500">
+                        <template v-if="drillFilter === 'submitted'">Showing submitted chapters — open one to review questions and publish.</template>
+                        <template v-else-if="drillFilter === 'under_review'">Showing chapters still under review (not yet submitted).</template>
+                        <template v-else-if="drillFilter === 'published'">Showing published chapters.</template>
+                        <template v-else>Click a count above to filter. Submitted opens review &amp; publish.</template>
+                    </p>
+
+                    <div class="mt-3 overflow-hidden rounded-md ring-1 ring-slate-200">
                         <table class="min-w-full divide-y divide-slate-100 text-sm">
                             <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                                 <tr>
@@ -227,7 +304,7 @@ const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
-                                <tr v-for="row in matrix.drill.chapters" :key="row.id">
+                                <tr v-for="row in filteredDrillChapters" :key="row.id">
                                     <td class="px-3 py-2">
                                         <p class="font-medium text-slate-900">Ch {{ row.chapter?.chapter_number }} — {{ row.chapter?.title }}</p>
                                     </td>
@@ -240,7 +317,18 @@ const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
                                     <td class="px-3 py-2">{{ row.question_count || '—' }}</td>
                                     <td class="px-3 py-2">{{ row.rate_description || formatInr(row.agreed_amount_inr || row.offered_amount_inr) }}</td>
                                     <td class="px-3 py-2 text-right">
-                                        <Link :href="route('admin.content-tasks.show', row.id)" class="text-indigo-600 hover:underline">Open</Link>
+                                        <Link
+                                            :href="route('admin.content-tasks.show', row.id)"
+                                            class="font-medium hover:underline"
+                                            :class="row.can_review_and_publish ? 'text-violet-700' : 'text-indigo-600'"
+                                        >
+                                            {{ row.can_review_and_publish ? 'Review & publish' : 'Open' }}
+                                        </Link>
+                                    </td>
+                                </tr>
+                                <tr v-if="!filteredDrillChapters.length">
+                                    <td colspan="6" class="px-3 py-6 text-center text-slate-500">
+                                        No chapters in this bucket.
                                     </td>
                                 </tr>
                             </tbody>

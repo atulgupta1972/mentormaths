@@ -144,7 +144,121 @@ class ContentUploadTaskTest extends TestCase
                 ->where('matrix.database_total', 1)
                 ->where('matrix.drill.uploader.name', 'Matrix Mentor')
                 ->has('matrix.drill.chapters', 1)
-                ->where('matrix.drill.chapters.0.status_group', 'awaiting'));
+                ->where('matrix.drill.chapters.0.status_group', 'awaiting')
+                ->where('matrix.drill.breakup.under_review', 1)
+                ->where('matrix.drill.breakup.submitted', 0)
+                ->where('matrix.drill.breakup.published', 0));
+    }
+
+    public function test_allocation_matrix_drill_down_breaks_up_review_submitted_and_published(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash',
+            'code' => 'GP-DRILL',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $uploader = User::factory()->create([
+            'name' => 'Breakup Mentor',
+            'role' => User::ROLE_TEACHER,
+        ]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $reviewSyllabus = $syllabusChapter;
+        $submittedSyllabus = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabusChapter->syllabus_version_id,
+            'name' => 'Submitted topic',
+            'chapter_number' => 'Ch 2',
+            'sort_order' => 2,
+        ]);
+        $publishedSyllabus = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabusChapter->syllabus_version_id,
+            'name' => 'Published topic',
+            'chapter_number' => 'Ch 3',
+            'sort_order' => 3,
+        ]);
+
+        $reviewChapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $reviewSyllabus->id,
+            'chapter_number' => 1,
+            'title' => 'Review chapter',
+            'pdf_path' => null,
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $submittedChapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $submittedSyllabus->id,
+            'chapter_number' => 2,
+            'title' => 'Submitted chapter',
+            'pdf_path' => null,
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $publishedChapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $publishedSyllabus->id,
+            'chapter_number' => 3,
+            'title' => 'Published chapter',
+            'pdf_path' => null,
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+
+        ContentUploadTask::create([
+            'textbook_chapter_id' => $reviewChapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            'offered_amount_inr' => 5000,
+            'agreed_amount_inr' => 5000,
+            'agreed_at' => now(),
+        ]);
+        $submitted = ContentUploadTask::create([
+            'textbook_chapter_id' => $submittedChapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'offered_amount_inr' => 5000,
+            'agreed_amount_inr' => 5000,
+            'agreed_at' => now(),
+            'submitted_at' => now(),
+        ]);
+        ContentUploadTask::create([
+            'textbook_chapter_id' => $publishedChapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'offered_amount_inr' => 5000,
+            'agreed_amount_inr' => 5000,
+            'agreed_at' => now(),
+            'submitted_at' => now(),
+            'published_at' => now(),
+            'published_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.index', [
+                'drill_grade_id' => $grade->id,
+                'drill_uploader_id' => $uploader->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ContentTasks/Index')
+                ->where('matrix.drill.breakup.under_review', 1)
+                ->where('matrix.drill.breakup.submitted', 1)
+                ->where('matrix.drill.breakup.published', 1)
+                ->has('matrix.drill.chapters', 3)
+                ->where('matrix.drill.chapters', function ($chapters) use ($submitted) {
+                    return collect($chapters)->contains(fn ($row) => (int) $row['id'] === $submitted->id
+                        && $row['breakup_bucket'] === 'submitted'
+                        && $row['can_review_and_publish'] === true);
+                }));
     }
 
     public function test_allocation_matrix_shows_assignments_without_board_filter(): void

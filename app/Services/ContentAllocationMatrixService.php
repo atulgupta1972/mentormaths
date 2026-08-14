@@ -160,10 +160,17 @@ class ContentAllocationMatrixService
             $grade = collect($gradeRows)->firstWhere('id', $drillGradeId);
             $uploader = collect($uploaders)->firstWhere('id', $drillUploaderId);
 
+            $chapters = $drillTasks->map(fn (ContentUploadTask $task) => $this->serializeDrillRow($task))->values();
+
             $drill = [
                 'grade' => $grade,
                 'uploader' => $uploader,
-                'chapters' => $drillTasks->map(fn (ContentUploadTask $task) => $this->serializeDrillRow($task))->all(),
+                'chapters' => $chapters->all(),
+                'breakup' => [
+                    'under_review' => $chapters->where('breakup_bucket', 'under_review')->count(),
+                    'submitted' => $chapters->where('breakup_bucket', 'submitted')->count(),
+                    'published' => $chapters->where('breakup_bucket', 'published')->count(),
+                ],
             ];
         }
 
@@ -215,11 +222,15 @@ class ContentAllocationMatrixService
         $chapter = $task->textbookChapter;
         $questionCount = $this->questionCountForChapter($chapter);
 
+        $breakupBucket = $this->breakupBucket($task->status);
+
         return [
             'id' => $task->id,
             'status' => $task->status,
             'status_label' => $this->shortStatusLabel($task->status, $questionCount),
             'status_group' => $this->statusGroup($task->status),
+            'breakup_bucket' => $breakupBucket,
+            'can_review_and_publish' => $breakupBucket === 'submitted',
             'offered_amount_inr' => $task->offered_amount_inr,
             'agreed_amount_inr' => $task->agreed_amount_inr,
             'question_count' => $questionCount,
@@ -285,6 +296,15 @@ class ContentAllocationMatrixService
             ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH => 'submitted',
             ContentUploadTask::STATUS_PUBLISHED => 'published',
             default => 'other',
+        };
+    }
+
+    private function breakupBucket(string $status): string
+    {
+        return match ($status) {
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH => 'submitted',
+            ContentUploadTask::STATUS_PUBLISHED => 'published',
+            default => 'under_review',
         };
     }
 }
