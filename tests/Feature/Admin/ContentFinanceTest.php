@@ -6,6 +6,7 @@ use App\Mail\ContentUploaderBatchPaymentMail;
 use App\Mail\ContentUploaderPaymentMail;
 use App\Models\AcademicYear;
 use App\Models\Board;
+use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
 use App\Models\ContentUploaderPayment;
 use App\Models\GradeLevel;
@@ -43,6 +44,46 @@ class ContentFinanceTest extends TestCase
                 ->where('unpaid_total_inr', 100)
                 ->where('unpaid_chapter_count', 1)
                 ->has('payment_groups', 0));
+    }
+
+    public function test_finance_shows_per_question_rate_and_calculation(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $uploader, , , , , $chapter] = $this->seedBase(chapterNumber: 4);
+
+        $chapter->update([
+            'extraction_items' => [
+                ['question' => 'Q1'],
+                ['question' => 'Q2'],
+                ['question' => 'Q3'],
+            ],
+        ]);
+
+        ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $chapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'rate_basis' => ContentRateCard::BASIS_PER_QUESTION,
+            'offered_amount_inr' => 2,
+            'agreed_amount_inr' => 2,
+            'agreed_at' => now(),
+            'published_at' => now(),
+            'published_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.finance.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Finance/Index')
+                ->where('unpaid_groups.0.total_inr', 6)
+                ->where('unpaid_groups.0.tasks.0.rate_unit_inr', 2)
+                ->where('unpaid_groups.0.tasks.0.question_count', 3)
+                ->where('unpaid_groups.0.tasks.0.rate_agreed_label', '₹2 per question')
+                ->where('unpaid_groups.0.tasks.0.calculation_label', '3 questions × ₹2 = ₹6')
+                ->where('unpaid_total_inr', 6));
     }
 
     public function test_admin_can_record_upi_payment_and_email_uploader(): void

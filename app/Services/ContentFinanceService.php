@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
 use App\Models\ContentUploaderPayment;
 use App\Models\User;
@@ -36,6 +37,7 @@ class ContentFinanceService
             ->with([
                 'assignee:id,name,email',
                 'textbookChapter.textbook.gradeLevel',
+                'textbookChapter',
             ])
             ->orderBy('published_at')
             ->orderBy('id')
@@ -99,6 +101,7 @@ class ContentFinanceService
                 'assignee:id,name,email',
                 'payment',
                 'textbookChapter.textbook.gradeLevel',
+                'textbookChapter',
             ])
             ->get()
             ->keyBy('id');
@@ -214,6 +217,15 @@ class ContentFinanceService
             'status' => $task->status,
             'status_label' => $task->statusLabel(),
             'amount_inr' => $task->payableAmountInr(),
+            'rate_basis' => $task->rate_basis,
+            'rate_basis_label' => $task->rateBasisLabel(),
+            'rate_unit_inr' => $task->rateUnitInr(),
+            'question_count' => $task->rate_basis === ContentRateCard::BASIS_PER_QUESTION
+                ? $task->uploadedQuestionCount()
+                : null,
+            'rate_agreed_label' => $task->rateAgreedLabel(),
+            'calculation_label' => $task->calculationLabel(),
+            'rate_description' => $task->rateDescription(),
             'published_at' => $task->published_at?->toDateString(),
             'assignee' => $task->assignee?->only(['id', 'name', 'email']),
             'chapter' => $chapter ? [
@@ -238,6 +250,9 @@ class ContentFinanceService
             'id' => $payment->id,
             'batch_id' => $payment->batch_id,
             'amount_inr' => $payment->amount_inr,
+            'rate_agreed_label' => $task?->rateAgreedLabel(),
+            'calculation_label' => $task?->calculationLabel(),
+            'rate_description' => $task?->rateDescription(),
             'paid_on' => $payment->paid_on?->toDateString(),
             'method' => $payment->method,
             'method_label' => $payment->methodLabel(),

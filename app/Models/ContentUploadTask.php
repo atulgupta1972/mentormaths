@@ -52,6 +52,8 @@ class ContentUploadTask extends Model
         ];
     }
 
+    private ?int $resolvedQuestionCount = null;
+
     public function textbookChapter(): BelongsTo
     {
         return $this->belongsTo(TextbookChapter::class);
@@ -127,18 +129,38 @@ class ContentUploadTask extends Model
 
     public function uploadedQuestionCount(): int
     {
-        $this->loadMissing('textbookChapter');
-
-        $worksheetIds = $this->textbookChapter?->mcqWorksheetIds() ?? [];
-
-        if ($worksheetIds === []) {
-            return 0;
+        if ($this->resolvedQuestionCount !== null) {
+            return $this->resolvedQuestionCount;
         }
 
-        return (int) DB::table('worksheet_question')
-            ->whereIn('worksheet_id', $worksheetIds)
-            ->distinct()
-            ->count('question_id');
+        $this->loadMissing('textbookChapter');
+        $chapter = $this->textbookChapter;
+
+        if (! $chapter) {
+            return $this->resolvedQuestionCount = 0;
+        }
+
+        $worksheetIds = $chapter->mcqWorksheetIds();
+
+        if ($chapter->fill_blank_worksheet_id) {
+            $worksheetIds[] = (int) $chapter->fill_blank_worksheet_id;
+            $worksheetIds = array_values(array_unique($worksheetIds));
+        }
+
+        if ($worksheetIds !== []) {
+            $fromWorksheets = (int) DB::table('worksheet_question')
+                ->whereIn('worksheet_id', $worksheetIds)
+                ->distinct()
+                ->count('question_id');
+
+            if ($fromWorksheets > 0) {
+                return $this->resolvedQuestionCount = $fromWorksheets;
+            }
+        }
+
+        $items = $chapter->extraction_items ?? [];
+
+        return $this->resolvedQuestionCount = is_array($items) ? count($items) : 0;
     }
 
     public function rateBasisLabel(): string
@@ -146,22 +168,49 @@ class ContentUploadTask extends Model
         return ContentRateCard::basisLabel($this->rate_basis);
     }
 
-    public function rateDescription(): string
+    public function rateAgreedLabel(): string
     {
         $unit = $this->rateUnitInr();
 
+        if ($this->rate_basis === ContentRateCard::BASIS_PER_QUESTION) {
+            return '₹'.number_format($unit).' per question';
+        }
+
+        return '₹'.number_format($unit).' per chapter';
+    }
+
+    public function calculationLabel(): string
+    {
+        $unit = $this->rateUnitInr();
+
+        if ($this->rate_basis !== ContentRateCard::BASIS_PER_QUESTION) {
+            return '₹'.number_format($unit).' per chapter';
+        }
+
+        $count = $this->uploadedQuestionCount();
+        $total = $this->payableAmountInr();
+
+        if ($count <= 0) {
+            return 'No questions counted yet — ₹0 until questions are uploaded';
+        }
+
+        return $count.' questions × ₹'.number_format($unit).' = ₹'.number_format($total);
+    }
+
+    public function rateDescription(): string
+    {
         if ($this->rate_basis === ContentRateCard::BASIS_PER_QUESTION) {
             $count = $this->uploadedQuestionCount();
             $total = $this->payableAmountInr();
 
             if ($count > 0) {
-                return '₹'.number_format($unit).' per question × '.$count.' = ₹'.number_format($total);
+                return $this->rateAgreedLabel().' × '.$count.' = ₹'.number_format($total);
             }
 
-            return '₹'.number_format($unit).' per verified question';
+            return $this->rateAgreedLabel();
         }
 
-        return '₹'.number_format($unit).' per chapter';
+        return $this->rateAgreedLabel();
     }
 
     public function isPayable(): bool

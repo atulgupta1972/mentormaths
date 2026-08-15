@@ -16,7 +16,6 @@ const props = defineProps({
 
 const page = usePage();
 const payingGroupKey = ref(null);
-const expandedGroupKeys = ref(new Set());
 const expandedPaidKeys = ref(new Set());
 
 const form = useForm({
@@ -39,21 +38,6 @@ const chapterLabel = (row) => {
 };
 
 const groupKey = (group) => String(group.assignee?.id ?? 'unknown');
-
-const isGroupExpanded = (group) => expandedGroupKeys.value.has(groupKey(group));
-
-const toggleGroupChapters = (group) => {
-    const key = groupKey(group);
-    const next = new Set(expandedGroupKeys.value);
-
-    if (next.has(key)) {
-        next.delete(key);
-    } else {
-        next.add(key);
-    }
-
-    expandedGroupKeys.value = next;
-};
 
 const isPaidExpanded = (group) => expandedPaidKeys.value.has(paidGroupKey(group));
 
@@ -173,23 +157,20 @@ const uploaderCount = computed(() => props.unpaid_groups.length);
                                     <p v-if="group.assignee?.email" class="text-xs text-gray-500">
                                         {{ group.assignee.email }}
                                     </p>
-                                    <button
-                                        type="button"
-                                        class="mt-2 text-xs font-medium text-indigo-700 hover:underline"
-                                        @click="toggleGroupChapters(group)"
-                                    >
-                                        {{ isGroupExpanded(group) ? 'Hide' : 'Show' }}
-                                        {{ group.task_count }} chapter{{ group.task_count === 1 ? '' : 's' }}
-                                    </button>
-                                    <ul v-if="isGroupExpanded(group)" class="mt-2 space-y-1 border-l-2 border-amber-200 pl-3">
+                                    <ul class="mt-2 space-y-2 border-l-2 border-amber-200 pl-3">
                                         <li
                                             v-for="task in group.tasks"
                                             :key="task.id"
                                             class="text-xs text-gray-700"
                                         >
-                                            <span class="font-medium">{{ chapterLabel(task) }}</span>
-                                            <span class="text-gray-500"> · {{ formatInr(task.amount_inr) }}</span>
-                                            <span class="text-gray-400"> · {{ task.status_label }}</span>
+                                            <p class="font-medium text-gray-900">{{ chapterLabel(task) }}</p>
+                                            <p class="text-gray-600">
+                                                Rate agreed: {{ task.rate_agreed_label || formatInr(task.rate_unit_inr || task.amount_inr) }}
+                                            </p>
+                                            <p class="text-gray-600">
+                                                Calculation: {{ task.calculation_label || formatInr(task.amount_inr) }}
+                                            </p>
+                                            <p class="text-gray-400">{{ task.status_label }}</p>
                                         </li>
                                     </ul>
                                 </div>
@@ -197,7 +178,7 @@ const uploaderCount = computed(() => props.unpaid_groups.length);
                                     <div class="text-right">
                                         <p class="text-lg font-bold text-gray-900">{{ formatInr(group.total_inr) }}</p>
                                         <p class="text-[10px] uppercase tracking-wide text-gray-500">
-                                            {{ group.task_count }} × clubbed
+                                            {{ group.task_count }} chapter{{ group.task_count === 1 ? '' : 's' }} to pay
                                         </p>
                                     </div>
                                     <PrimaryButton
@@ -309,14 +290,22 @@ const uploaderCount = computed(() => props.unpaid_groups.length);
                                     </button>
                                     <p v-else-if="group.payments?.[0]" class="mt-1 text-xs text-gray-700">
                                         {{ chapterLabel(group.payments[0]) }}
+                                        <span v-if="group.payments[0].calculation_label" class="block text-gray-600">
+                                            {{ group.payments[0].rate_agreed_label }} · {{ group.payments[0].calculation_label }}
+                                        </span>
                                     </p>
-                                    <ul v-if="isPaidExpanded(group)" class="mt-2 space-y-1 border-l-2 border-emerald-200 pl-3">
+                                    <ul v-if="isPaidExpanded(group)" class="mt-2 space-y-2 border-l-2 border-emerald-200 pl-3">
                                         <li
                                             v-for="payment in group.payments"
                                             :key="payment.id"
                                             class="text-xs text-gray-700"
                                         >
-                                            {{ chapterLabel(payment) }} · {{ formatInr(payment.amount_inr) }}
+                                            <p>{{ chapterLabel(payment) }}</p>
+                                            <p v-if="payment.rate_agreed_label || payment.calculation_label" class="text-gray-600">
+                                                {{ payment.rate_agreed_label }}
+                                                <span v-if="payment.calculation_label"> · {{ payment.calculation_label }}</span>
+                                            </p>
+                                            <p>{{ formatInr(payment.amount_inr) }}</p>
                                         </li>
                                     </ul>
                                 </div>
