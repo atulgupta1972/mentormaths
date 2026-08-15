@@ -148,6 +148,61 @@ class QuestionResolutionServiceTest extends TestCase
         $this->assertSame('Topics — doubts cleared', $mailable->envelope()->subject);
     }
 
+    public function test_pending_help_includes_set_code_and_edit_link(): void
+    {
+        [$item, $student] = $this->seedResolutionItem();
+        $yearId = $student->currentEnrollment()->academic_year_id;
+
+        $payload = app(QuestionResolutionService::class)
+            ->pendingForStudentIds([$student->id], $yearId)
+            ->first();
+
+        $this->assertNotNull($payload);
+        $this->assertSame('S711', $payload['set_code']);
+        $this->assertSame($item->question_id, $payload['question_id']);
+        $this->assertSame(route('admin.questions.sets.show', $item->assignment->worksheet_id), $payload['set_url']);
+        $this->assertSame(route('admin.questions.edit', $item->question_id), $payload['edit_url']);
+    }
+
+    public function test_queue_help_request_copies_assignment_and_falls_back_to_worksheet(): void
+    {
+        [$item, $student] = $this->seedResolutionItem();
+        $item->delete();
+
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $item->question->syllabus_topic_id,
+            'question_text' => 'What is 9 + 1?',
+            'type' => Question::TYPE_MCQ,
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+        $item->assignment->practiceSet->questions()->attach($question->id, ['sort_order' => 2]);
+
+        app(QuestionResolutionService::class)->queueHelpRequest($student, $question, $item->set_assignment_id);
+
+        $this->assertDatabaseHas('question_resolution_items', [
+            'question_id' => $question->id,
+            'set_assignment_id' => $item->set_assignment_id,
+            'status' => QuestionResolutionItem::STATUS_PENDING,
+        ]);
+
+        $fromWorksheetOnly = Question::query()->create([
+            'syllabus_topic_id' => $item->question->syllabus_topic_id,
+            'question_text' => 'What is 1 + 1?',
+            'type' => Question::TYPE_MCQ,
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+        $item->assignment->practiceSet->questions()->attach($fromWorksheetOnly->id, ['sort_order' => 3]);
+
+        app(QuestionResolutionService::class)->queueHelpRequest($student, $fromWorksheetOnly);
+
+        $payload = app(QuestionResolutionService::class)
+            ->pendingForStudentIds([$student->id])
+            ->firstWhere('question_id', $fromWorksheetOnly->id);
+
+        $this->assertSame('S711', $payload['set_code']);
+        $this->assertSame(route('admin.questions.edit', $fromWorksheetOnly), $payload['edit_url']);
+    }
+
     public function test_mailer_skips_when_student_has_no_email(): void
     {
         Mail::fake();

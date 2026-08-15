@@ -169,7 +169,7 @@ const requestTeacherHelp = async () => {
         return;
     }
 
-    if (!confirm('Ask your teacher for help on this sum? It goes on your help list and you move to the next question.')) {
+    if (!confirm("Ask your teacher for help on this sum? It goes on your help list, you skip it at the end of today's drill, and you move to the next question.")) {
         return;
     }
 

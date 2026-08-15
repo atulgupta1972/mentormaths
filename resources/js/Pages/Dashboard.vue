@@ -635,7 +635,7 @@ const adminSetStatusClass = (set) => {
                             Students asked for help · {{ helpRequests.length }}
                         </h3>
                         <p class="mt-1 text-xs text-rose-800">
-                            These sums were given up during guided practice. Explain in class, then the student retries from their dashboard.
+                            These sums were given up during guided practice or daily revision. Explain in class, then the student retries from their dashboard. Open the set to check or fix the stored answer.
                         </p>
                         <div class="mt-3 space-y-2">
                             <div
@@ -652,11 +652,27 @@ const adminSetStatusClass = (set) => {
                                             {{ item.student_name }}
                                         </Link>
                                         <span v-if="item.class_name" class="text-xs text-gray-500">{{ item.class_name }}</span>
-                                        <span v-if="item.set_code" class="font-mono text-xs font-semibold text-indigo-600">{{ item.set_code }}</span>
+                                        <Link
+                                            v-if="item.set_code && item.set_url"
+                                            :href="item.set_url"
+                                            class="font-mono text-xs font-semibold text-indigo-600 hover:underline"
+                                        >
+                                            {{ item.set_code }}
+                                        </Link>
+                                        <span v-else-if="item.set_code" class="font-mono text-xs font-semibold text-indigo-600">{{ item.set_code }}</span>
                                     </div>
                                     <p class="mt-1 line-clamp-2 text-sm text-gray-800">{{ item.question_text }}</p>
                                 </div>
-                                <p class="shrink-0 text-xs text-gray-500">{{ formatHelpDate(item.gave_up_at) }}</p>
+                                <div class="flex shrink-0 flex-col items-end gap-1">
+                                    <p class="text-xs text-gray-500">{{ formatHelpDate(item.gave_up_at) }}</p>
+                                    <Link
+                                        v-if="item.edit_url"
+                                        :href="item.edit_url"
+                                        class="text-xs font-semibold text-indigo-700 hover:underline"
+                                    >
+                                        Edit question
+                                    </Link>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -731,7 +747,23 @@ const adminSetStatusClass = (set) => {
                                             :key="item.id"
                                             class="rounded border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] text-gray-800"
                                         >
-                                            <span v-if="item.set_code" class="font-mono font-semibold text-indigo-700">{{ item.set_code }}</span>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <Link
+                                                    v-if="item.set_code && item.set_url"
+                                                    :href="item.set_url"
+                                                    class="font-mono font-semibold text-indigo-700 hover:underline"
+                                                >
+                                                    {{ item.set_code }}
+                                                </Link>
+                                                <span v-else-if="item.set_code" class="font-mono font-semibold text-indigo-700">{{ item.set_code }}</span>
+                                                <Link
+                                                    v-if="item.edit_url"
+                                                    :href="item.edit_url"
+                                                    class="font-sans font-semibold text-indigo-700 hover:underline"
+                                                >
+                                                    Edit
+                                                </Link>
+                                            </div>
                                             <span class="block line-clamp-2">{{ item.question_text }}</span>
                                         </li>
                                     </ul>

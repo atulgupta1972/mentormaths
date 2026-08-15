@@ -423,10 +423,15 @@ class FormulaDrillSessionService
             throw new \InvalidArgumentException('Student record is missing.');
         }
 
+        $item->loadMissing('practiceCorrectionItem');
         $question = $item->question ?? Question::query()->findOrFail($item->question_id);
 
         return DB::transaction(function () use ($session, $item, $student, $question) {
-            $this->resolutionService->queueHelpRequest($student, $question);
+            $this->resolutionService->queueHelpRequest(
+                $student,
+                $question,
+                $item->practiceCorrectionItem?->set_assignment_id,
+            );
             $this->correctionQueue->flagNeedsRevisionAfterTeacherHelp($student, $question);
 
             $item->update([

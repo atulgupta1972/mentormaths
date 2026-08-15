@@ -50,8 +50,17 @@ class FormulaDrillItem extends Model
         return $this->belongsTo(Question::class);
     }
 
+    public function practiceCorrectionItem(): BelongsTo
+    {
+        return $this->belongsTo(PracticeCorrectionItem::class);
+    }
+
     public function needsEndCorrection(): bool
     {
+        if ($this->status === self::STATUS_HELP_REQUESTED) {
+            return false;
+        }
+
         return $this->failure_count > 0 || $this->status === self::STATUS_EXHAUSTED;
     }
 

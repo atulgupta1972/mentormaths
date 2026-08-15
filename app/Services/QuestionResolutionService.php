@@ -25,6 +25,7 @@ class QuestionResolutionService
         return QuestionResolutionItem::query()
             ->with([
                 'question.options',
+                'question.worksheets:id,set_code,set_number',
                 'assignment.practiceSet:id,set_code,set_number',
             ])
             ->where('student_enrollment_id', $enrollmentId)
@@ -41,7 +42,7 @@ class QuestionResolutionService
      */
     public function formatItem(QuestionResolutionItem $item): array
     {
-        $item->loadMissing(['question.options', 'question.blankAnswer', 'assignment.practiceSet']);
+        $item->loadMissing(['question.options', 'question.blankAnswer', 'question.worksheets', 'assignment.practiceSet']);
 
         return [
             'id' => $item->id,
@@ -50,7 +51,7 @@ class QuestionResolutionService
             'answer_format' => $item->question->blankAnswer?->answer_format,
             'answer_format_label' => $this->answerValidation->formatLabel($item->question->blankAnswer?->answer_format),
             'gave_up_at' => $item->gave_up_at?->toDateTimeString(),
-            'set_code' => $item->assignment?->practiceSet?->set_code,
+            ...$this->adminSetLinks($item),
             'question_text' => $item->question->question_text,
             'diagram_url' => $item->question->diagram_url,
             'options' => $item->question->isMcq()
@@ -68,7 +69,7 @@ class QuestionResolutionService
     /**
      * Queue a sum for teacher help when the student is stuck outside guided practice.
      */
-    public function queueHelpRequest(Student $student, Question $question): void
+    public function queueHelpRequest(Student $student, Question $question, ?int $setAssignmentId = null): void
     {
         $enrollment = $student->currentEnrollment();
 
@@ -83,7 +84,13 @@ class QuestionResolutionService
             ->first();
 
         if ($existing) {
-            $existing->update(['gave_up_at' => now()]);
+            $payload = ['gave_up_at' => now()];
+
+            if ($setAssignmentId && ! $existing->set_assignment_id) {
+                $payload['set_assignment_id'] = $setAssignmentId;
+            }
+
+            $existing->update($payload);
 
             return;
         }
@@ -91,6 +98,7 @@ class QuestionResolutionService
         QuestionResolutionItem::create([
             'student_enrollment_id' => $enrollment->id,
             'question_id' => $question->id,
+            'set_assignment_id' => $setAssignmentId,
             'status' => QuestionResolutionItem::STATUS_PENDING,
             'gave_up_at' => now(),
         ]);
@@ -320,10 +328,11 @@ class QuestionResolutionService
 
         $query = QuestionResolutionItem::query()
             ->with([
-                'question:id,question_text',
+                'question:id,question_text,type',
+                'question.worksheets:id,set_code,set_number',
                 'enrollment.student:id,name',
                 'enrollment.gradeLevel:id,name',
-                'assignment.practiceSet:id,set_code',
+                'assignment.practiceSet:id,set_code,set_number',
             ])
             ->where('status', QuestionResolutionItem::STATUS_PENDING)
             ->whereHas('enrollment', function ($q) use ($studentIds, $academicYearId) {
@@ -339,9 +348,56 @@ class QuestionResolutionService
             'student_id' => $item->enrollment->student_id,
             'student_name' => $item->enrollment->student?->name,
             'class_name' => $item->enrollment->gradeLevel?->name,
-            'set_code' => $item->assignment?->practiceSet?->set_code,
+            ...$this->adminSetLinks($item),
             'question_text' => $item->question->question_text,
             'gave_up_at' => $item->gave_up_at?->toDateTimeString(),
         ]);
+    }
+
+    /**
+     * @return array{
+     *     question_id: ?int,
+     *     question_type: ?string,
+     *     set_code: ?string,
+     *     set_number: mixed,
+     *     worksheet_id: ?int,
+     *     set_url: ?string,
+     *     edit_url: ?string
+     * }
+     */
+    private function adminSetLinks(QuestionResolutionItem $item): array
+    {
+        $item->loadMissing(['question.worksheets', 'assignment.practiceSet']);
+
+        $question = $item->question;
+        $worksheet = $item->assignment?->practiceSet
+            ?? $question?->worksheets->first();
+
+        $setCode = $worksheet?->set_code;
+        $worksheetId = $worksheet?->id;
+
+        $setUrl = null;
+        if ($worksheetId) {
+            $setUrl = route('admin.questions.sets.show', $worksheetId);
+        } elseif (filled($setCode)) {
+            $setUrl = route('admin.questions.set-code', ['code' => $setCode]);
+        }
+
+        $editUrl = null;
+        if ($question) {
+            $editUrl = $question->isFillInBlank() && filled($setCode)
+                ? route('admin.questions.set-code', ['code' => $setCode]).'#question-'.$question->id
+                : route('admin.questions.edit', $question);
+        }
+
+        return [
+            'question_id' => $item->question_id,
+            'question_type' => $question?->type,
+            'set_code' => $setCode,
+            'set_number' => $worksheet?->set_number,
+            'worksheet_id' => $worksheetId,
+            'set_url' => $setUrl,
+            'edit_url' => $editUrl,
+        ];
     }
 }

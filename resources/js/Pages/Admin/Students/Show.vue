@@ -225,13 +225,29 @@ const destroyStudent = () => {
                         </span>
                     </h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Sums the student gave up during guided practice. Explain in class, then they retry from their dashboard.
+                        Sums the student gave up during guided practice or daily revision. Explain in class, then they retry from their dashboard. Open the set to check or fix the stored answer.
                     </p>
                     <ul v-if="resolutionItems.length" class="mt-4 divide-y divide-gray-100">
                         <li v-for="item in resolutionItems" :key="item.id" class="py-3">
                             <div class="flex flex-wrap items-start justify-between gap-2">
                                 <div>
-                                    <p v-if="item.set_code" class="font-mono text-sm font-semibold text-indigo-600">{{ item.set_code }}</p>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <Link
+                                            v-if="item.set_code && item.set_url"
+                                            :href="item.set_url"
+                                            class="font-mono text-sm font-semibold text-indigo-600 hover:underline"
+                                        >
+                                            {{ item.set_code }}
+                                        </Link>
+                                        <span v-else-if="item.set_code" class="font-mono text-sm font-semibold text-indigo-600">{{ item.set_code }}</span>
+                                        <Link
+                                            v-if="item.edit_url"
+                                            :href="item.edit_url"
+                                            class="text-sm font-semibold text-indigo-700 hover:underline"
+                                        >
+                                            Edit question
+                                        </Link>
+                                    </div>
                                     <p class="mt-1 text-sm text-gray-800">{{ item.question_text }}</p>
                                 </div>
                                 <p class="text-xs text-gray-500">

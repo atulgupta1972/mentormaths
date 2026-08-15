@@ -33,6 +33,15 @@ class FormulaDrillTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withoutMiddleware([
+            \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+        ]);
+    }
+
     /**
      * @return array{student: Student, user: User, formulaQuestion: Question, topic: SyllabusTopic}
      */
@@ -599,10 +608,18 @@ class FormulaDrillTest extends TestCase
             'correct_answer' => '-4',
         ]);
 
+        $assignment = SetAssignment::query()
+            ->where('student_enrollment_id', $student->currentEnrollment()->id)
+            ->firstOrFail();
+
+        $assignment->practiceSet->questions()->attach($fillBlank->id, ['sort_order' => 1]);
+
         $correctionItem = PracticeCorrectionItem::query()->create([
             'student_id' => $student->id,
             'question_id' => $fillBlank->id,
             'syllabus_chapter_id' => $topic->syllabus_chapter_id,
+            'worksheet_id' => $assignment->worksheet_id,
+            'set_assignment_id' => $assignment->id,
             'source_type' => PracticeCorrectionItem::SOURCE_GUIDED_PRACTICE,
             'failure_reason' => 'first_wrong',
             'status' => PracticeCorrectionItem::STATUS_PENDING,
@@ -625,8 +642,22 @@ class FormulaDrillTest extends TestCase
 
         $this->assertDatabaseHas('question_resolution_items', [
             'question_id' => $fillBlank->id,
+            'set_assignment_id' => $assignment->id,
             'status' => QuestionResolutionItem::STATUS_PENDING,
         ]);
+
+        $adminHelp = app(\App\Services\QuestionResolutionService::class)
+            ->pendingForStudentIds([$student->id])
+            ->first();
+
+        $this->assertNotNull($adminHelp);
+        $this->assertSame($assignment->practiceSet->set_code, $adminHelp['set_code']);
+        $this->assertSame($assignment->worksheet_id, $adminHelp['worksheet_id']);
+        $this->assertSame(route('admin.questions.sets.show', $assignment->worksheet_id), $adminHelp['set_url']);
+        $this->assertSame(
+            route('admin.questions.set-code', ['code' => $assignment->practiceSet->set_code]).'#question-'.$fillBlank->id,
+            $adminHelp['edit_url'],
+        );
 
         $correctionItem->refresh();
         $this->assertSame(PracticeCorrectionItem::REASON_TEACHER_HELP, $correctionItem->failure_reason);
@@ -638,6 +669,70 @@ class FormulaDrillTest extends TestCase
         $selected = app(\App\Services\PracticeCorrectionQueueService::class)
             ->selectForDailyDrill($student, 5);
         $this->assertTrue($selected->contains('id', $correctionItem->id));
+    }
+
+    public function test_wrong_revision_then_teacher_help_skips_end_of_day_correction(): void
+    {
+        ['student' => $student, 'user' => $user, 'topic' => $topic] = $this->seedStudentWithCompletedChapter();
+
+        config(['formula_drill.daily_question_count' => 0, 'formula_drill.daily_correction_count' => 1]);
+
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_MCQ,
+            'bank_purpose' => QuestionBankPurpose::PRACTICE_SET,
+            'question_text' => '(-4) × [7 - (-3 + 5)] + (-6) × 2 = ____',
+        ]);
+
+        QuestionOption::query()->create([
+            'question_id' => $question->id,
+            'option_text' => '-20',
+            'is_correct' => false,
+            'sort_order' => 1,
+        ]);
+
+        QuestionOption::query()->create([
+            'question_id' => $question->id,
+            'option_text' => '-40',
+            'is_correct' => true,
+            'sort_order' => 2,
+        ]);
+
+        PracticeCorrectionItem::query()->create([
+            'student_id' => $student->id,
+            'question_id' => $question->id,
+            'syllabus_chapter_id' => $topic->syllabus_chapter_id,
+            'source_type' => PracticeCorrectionItem::SOURCE_GUIDED_PRACTICE,
+            'failure_reason' => 'first_wrong',
+            'status' => PracticeCorrectionItem::STATUS_PENDING,
+            'first_failure_at' => now(),
+        ]);
+
+        $this->actingAs($user)->get(route('student.formula-drill.show'))->assertOk();
+
+        $item = FormulaDrillSession::query()->where('student_id', $student->id)->firstOrFail()->items()->firstOrFail();
+        $wrongOptionId = $question->options()->where('is_correct', false)->value('id');
+
+        $this->actingAs($user)
+            ->postJson(route('student.formula-drill.answer', $item), ['option_id' => $wrongOptionId])
+            ->assertOk()
+            ->assertJsonPath('correct', false);
+
+        $item->refresh();
+        $this->assertGreaterThan(0, $item->failure_count);
+        $this->assertTrue($item->needsEndCorrection());
+
+        $this->actingAs($user)
+            ->postJson(route('student.formula-drill.request-help', $item))
+            ->assertOk()
+            ->assertJsonPath('help_requested', true);
+
+        $item->refresh();
+        $this->assertSame(FormulaDrillItem::STATUS_HELP_REQUESTED, $item->status);
+        $this->assertFalse($item->needsEndCorrection());
+
+        $failures = app(\App\Services\DailyDrillCorrectionService::class)->failureDescriptors($student);
+        $this->assertSame([], $failures);
     }
 
     public function test_admin_bypasses_formula_drill_gate(): void
