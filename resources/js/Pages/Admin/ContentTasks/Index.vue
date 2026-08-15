@@ -15,12 +15,45 @@ const props = defineProps({
 const page = usePage();
 const formatInr = (amount) => (amount ? `₹${Number(amount).toLocaleString('en-IN')}` : '—');
 
-const cellCount = (gradeId, uploaderId) =>
-    props.matrix.cells?.[String(gradeId)]?.[String(uploaderId)]?.count ?? 0;
+const buckets = [
+    {
+        key: 'under_review',
+        label: 'Under review',
+        short: 'Review',
+        idle: 'bg-sky-50 text-sky-900 ring-sky-200 hover:bg-sky-100',
+        active: 'bg-sky-600 text-white ring-sky-600',
+        heading: 'text-sky-800',
+    },
+    {
+        key: 'submitted',
+        label: 'Submitted',
+        short: 'Submitted',
+        idle: 'bg-violet-50 text-violet-900 ring-violet-200 hover:bg-violet-100',
+        active: 'bg-violet-600 text-white ring-violet-600',
+        heading: 'text-violet-800',
+    },
+    {
+        key: 'published',
+        label: 'Published',
+        short: 'Published',
+        idle: 'bg-emerald-50 text-emerald-900 ring-emerald-200 hover:bg-emerald-100',
+        active: 'bg-emerald-600 text-white ring-emerald-600',
+        heading: 'text-emerald-800',
+    },
+];
+
+const cellBucketCount = (gradeId, uploaderId, bucket) =>
+    props.matrix.cells?.[String(gradeId)]?.[String(uploaderId)]?.breakup?.[bucket] ?? 0;
 
 const isDrillOpen = (gradeId, uploaderId) =>
     Number(props.filters.drill_grade_id) === Number(gradeId)
     && Number(props.filters.drill_uploader_id) === Number(uploaderId);
+
+const matrixQuery = (extra = {}) => ({
+    board_id: props.matrix.board_id || undefined,
+    status: props.filters.status || undefined,
+    ...extra,
+});
 
 const setBoard = (boardId) => {
     router.get(route('admin.content-tasks.index'), {
@@ -29,14 +62,23 @@ const setBoard = (boardId) => {
     }, { preserveState: true, replace: true });
 };
 
-const toggleDrill = (gradeId, uploaderId) => {
+const toggleDrill = (gradeId, uploaderId, bucket) => {
     const open = isDrillOpen(gradeId, uploaderId);
-    router.get(route('admin.content-tasks.index'), {
-        board_id: props.matrix.board_id || undefined,
-        status: props.filters.status || undefined,
-        drill_grade_id: open ? undefined : gradeId,
-        drill_uploader_id: open ? undefined : uploaderId,
-    }, { preserveState: true, replace: true, preserveScroll: true });
+    if (open && drillFilter.value === bucket) {
+        closeDrill();
+        return;
+    }
+
+    if (open) {
+        drillFilter.value = bucket;
+        return;
+    }
+
+    router.get(route('admin.content-tasks.index'), matrixQuery({
+        drill_grade_id: gradeId,
+        drill_uploader_id: uploaderId,
+        drill_bucket: bucket,
+    }), { preserveState: true, replace: true, preserveScroll: true });
 };
 
 const closeDrill = () => {
@@ -63,10 +105,11 @@ const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
 const drillFilter = ref(null);
 
 watch(
-    () => [props.matrix.drill?.grade?.id, props.matrix.drill?.uploader?.id],
+    () => [props.matrix.drill?.grade?.id, props.matrix.drill?.uploader?.id, props.filters.drill_bucket],
     () => {
-        drillFilter.value = null;
+        drillFilter.value = props.filters.drill_bucket || null;
     },
+    { immediate: true },
 );
 
 const drillBreakup = computed(() => props.matrix.drill?.breakup ?? {
@@ -124,7 +167,7 @@ const breakupCards = computed(() => [
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Content allocation matrix</h2>
-                    <p class="text-sm text-gray-500">See what is assigned to whom — click a count to drill into chapters & status.</p>
+                    <p class="text-sm text-gray-500">People with assigned chapters only — three counts each: under review, submitted, published.</p>
                 </div>
                 <div class="flex gap-2">
                     <Link :href="route('admin.content-rate-cards.index')" class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
@@ -175,7 +218,7 @@ const breakupCards = computed(() => [
                             <span v-if="(matrix.database_total ?? 0) !== (matrix.total_assignments ?? 0)">
                                 ({{ matrix.database_total }} in database)
                             </span>.
-                            Click a number to see chapters &amp; status.
+                            Click a count to see those chapters.
                         </p>
                     </div>
 
@@ -206,18 +249,28 @@ const breakupCards = computed(() => [
                         <table class="min-w-full border-collapse text-sm">
                             <thead>
                                 <tr class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                                    <th class="sticky left-0 z-10 border border-slate-200 bg-slate-50 px-3 py-2">Class</th>
+                                    <th rowspan="2" class="sticky left-0 z-10 border border-slate-200 bg-slate-50 px-3 py-2 align-bottom">Class</th>
                                     <th
                                         v-for="uploader in matrix.uploaders"
                                         :key="uploader.id"
-                                        class="border border-slate-200 px-3 py-2"
+                                        colspan="3"
+                                        class="border border-slate-200 px-3 py-2 text-center"
                                         :title="uploader.email"
                                     >
-                                        Content upload<br>
-                                        <span class="normal-case tracking-normal text-slate-800">{{ uploader.name }}</span>
+                                        {{ uploader.name }}
                                     </th>
-                                    <th class="border border-dashed border-slate-200 px-3 py-2 text-slate-400">MCQ bank</th>
-                                    <th class="border border-dashed border-slate-200 px-3 py-2 text-slate-400">Fill in blanks</th>
+                                </tr>
+                                <tr class="bg-slate-50 text-center text-[10px] font-semibold uppercase tracking-wide">
+                                    <template v-for="uploader in matrix.uploaders" :key="`hdr-${uploader.id}`">
+                                        <th
+                                            v-for="bucket in buckets"
+                                            :key="`${uploader.id}-${bucket.key}`"
+                                            class="border border-slate-200 px-2 py-1"
+                                            :class="bucket.heading"
+                                        >
+                                            {{ bucket.short }}
+                                        </th>
+                                    </template>
                                 </tr>
                             </thead>
                             <tbody>
@@ -225,30 +278,31 @@ const breakupCards = computed(() => [
                                     <td class="sticky left-0 z-10 border border-slate-200 bg-white px-3 py-2 font-medium text-slate-900">
                                         {{ grade.name }}
                                     </td>
-                                    <td
-                                        v-for="uploader in matrix.uploaders"
-                                        :key="`${grade.id}-${uploader.id}`"
-                                        class="border border-slate-200 px-2 py-1 text-center"
-                                    >
-                                        <button
-                                            v-if="cellCount(grade.id, uploader.id) > 0"
-                                            type="button"
-                                            class="min-w-[2.5rem] rounded-md px-2 py-1 text-sm font-semibold ring-1 transition"
-                                            :class="isDrillOpen(grade.id, uploader.id)
-                                                ? 'bg-indigo-600 text-white ring-indigo-600'
-                                                : 'bg-indigo-50 text-indigo-900 ring-indigo-200 hover:bg-indigo-100'"
-                                            @click="toggleDrill(grade.id, uploader.id)"
+                                    <template v-for="uploader in matrix.uploaders" :key="`${grade.id}-${uploader.id}`">
+                                        <td
+                                            v-for="bucket in buckets"
+                                            :key="`${grade.id}-${uploader.id}-${bucket.key}`"
+                                            class="border border-slate-200 px-1 py-1 text-center"
                                         >
-                                            {{ cellCount(grade.id, uploader.id) }}
-                                        </button>
-                                        <span v-else class="text-slate-300">—</span>
-                                    </td>
-                                    <td class="border border-dashed border-slate-200 px-3 py-2 text-center text-slate-300">—</td>
-                                    <td class="border border-dashed border-slate-200 px-3 py-2 text-center text-slate-300">—</td>
+                                            <button
+                                                v-if="cellBucketCount(grade.id, uploader.id, bucket.key) > 0"
+                                                type="button"
+                                                class="min-w-[2.25rem] rounded-md px-2 py-1 text-sm font-semibold ring-1 transition"
+                                                :class="isDrillOpen(grade.id, uploader.id) && drillFilter === bucket.key
+                                                    ? bucket.active
+                                                    : bucket.idle"
+                                                :title="`${uploader.name} · ${bucket.label}`"
+                                                @click="toggleDrill(grade.id, uploader.id, bucket.key)"
+                                            >
+                                                {{ cellBucketCount(grade.id, uploader.id, bucket.key) }}
+                                            </button>
+                                            <span v-else class="text-slate-300">—</span>
+                                        </td>
+                                    </template>
                                 </tr>
                                 <tr v-if="!matrix.uploaders.length">
-                                    <td :colspan="4" class="border border-slate-200 px-4 py-6 text-center text-slate-500">
-                                        No content uploaders yet. Approve mentors with content uploader access, then assign chapters.
+                                    <td class="border border-slate-200 px-4 py-6 text-center text-slate-500">
+                                        No assigned content uploaders in this view.
                                     </td>
                                 </tr>
                             </tbody>

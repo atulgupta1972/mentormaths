@@ -253,6 +253,9 @@ class ContentUploadTaskTest extends TestCase
                 ->where('matrix.drill.breakup.under_review', 1)
                 ->where('matrix.drill.breakup.submitted', 1)
                 ->where('matrix.drill.breakup.published', 1)
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.breakup.under_review", 1)
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.breakup.submitted", 1)
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.breakup.published", 1)
                 ->has('matrix.drill.chapters', 3)
                 ->where('matrix.drill.chapters', function ($chapters) use ($submitted) {
                     return collect($chapters)->contains(fn ($row) => (int) $row['id'] === $submitted->id
@@ -263,14 +266,23 @@ class ContentUploadTaskTest extends TestCase
 
     public function test_allocation_matrix_shows_assignments_without_board_filter(): void
     {
-        Mail::fake();
-
         [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
 
-        ContentRateCard::create([
+        $textbook = Textbook::create([
             'grade_level_id' => $grade->id,
-            'content_type' => ContentRateCard::TYPE_TEXTBOOK_CHAPTER_MCQ,
-            'default_amount_inr' => 5000,
+            'name' => 'Ganita Prakash',
+            'code' => 'GP-VISIBLE',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $chapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 1,
+            'title' => 'Assigned chapter',
+            'pdf_path' => null,
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
         ]);
 
         $uploader = User::factory()->create([
@@ -279,17 +291,20 @@ class ContentUploadTaskTest extends TestCase
         ]);
         app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
 
-        $this->actingAs($admin)
-            ->withSession(['admin_grade_level_id' => $grade->id])
-            ->post(route('admin.content-tasks.store'), [
-                'assigned_to_user_id' => $uploader->id,
-                'book_name' => 'Ganita Prakash',
-                'book_code' => 'GP',
-                'syllabus_chapter_ids' => [$syllabusChapter->id],
-                'rate_basis' => ContentRateCard::BASIS_PER_SET,
-                'offered_amount_inr' => 5000,
-            ])
-            ->assertRedirect();
+        $idle = User::factory()->create([
+            'name' => 'Idle Mentor',
+            'role' => User::ROLE_TEACHER,
+        ]);
+        app(UserGroupService::class)->attachGroupByCode($idle, User::ROLE_CONTENT_UPLOADER);
+        GradeLevel::query()->create(['name' => 'Class 11', 'sort_order' => 11, 'is_active' => true]);
+
+        ContentUploadTask::create([
+            'textbook_chapter_id' => $chapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            'offered_amount_inr' => 5000,
+        ]);
 
         $this->actingAs($admin)
             ->get(route('admin.content-tasks.index'))
@@ -298,7 +313,10 @@ class ContentUploadTaskTest extends TestCase
                 ->component('Admin/ContentTasks/Index')
                 ->where('matrix.board_id', null)
                 ->where('matrix.total_assignments', 1)
-                ->where("matrix.cells.{$grade->id}.{$uploader->id}.count", 1));
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.count", 1)
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.breakup.under_review", 1)
+                ->where('matrix.uploaders', fn ($uploaders) => collect($uploaders)->pluck('id')->map(fn ($id) => (int) $id)->all() === [(int) $uploader->id])
+                ->where('matrix.grades', fn ($grades) => collect($grades)->pluck('id')->map(fn ($id) => (int) $id)->all() === [(int) $grade->id]));
     }
 
     public function test_store_uses_default_per_question_rate_when_matrix_empty(): void

@@ -49,6 +49,10 @@ class ContentUploadTaskController extends Controller
         $boardId = $request->filled('board_id') ? $request->integer('board_id') : null;
         $drillGradeId = $request->integer('drill_grade_id') ?: null;
         $drillUploaderId = $request->integer('drill_uploader_id') ?: null;
+        $drillBucket = $request->string('drill_bucket')->toString();
+        if (! in_array($drillBucket, ['under_review', 'submitted', 'published'], true)) {
+            $drillBucket = null;
+        }
 
         $tasks = ContentUploadTask::query()
             ->with([
@@ -70,6 +74,7 @@ class ContentUploadTaskController extends Controller
                 'board_id' => $boardId,
                 'drill_grade_id' => $drillGradeId,
                 'drill_uploader_id' => $drillUploaderId,
+                'drill_bucket' => $drillBucket,
             ],
             'statuses' => $this->statusOptions(),
             'matrix' => $this->matrixService->build($boardId, $drillGradeId, $drillUploaderId),

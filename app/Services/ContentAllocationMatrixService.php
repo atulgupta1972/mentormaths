@@ -122,13 +122,20 @@ class ContentAllocationMatrixService
             $uploaders = array_values(array_merge($uploaders, $extraUploaders));
         }
 
+        $emptyCell = fn () => [
+            'count' => 0,
+            'statuses' => [],
+            'breakup' => [
+                'under_review' => 0,
+                'submitted' => 0,
+                'published' => 0,
+            ],
+        ];
+
         $cells = [];
         foreach ($gradeRows as $grade) {
             foreach ($uploaders as $uploader) {
-                $cells[(string) $grade['id']][(string) $uploader['id']] = [
-                    'count' => 0,
-                    'statuses' => [],
-                ];
+                $cells[(string) $grade['id']][(string) $uploader['id']] = $emptyCell();
             }
         }
 
@@ -142,13 +149,36 @@ class ContentAllocationMatrixService
             $gKey = (string) $gradeId;
             $uKey = (string) $uploaderId;
             if (! isset($cells[$gKey][$uKey])) {
-                $cells[$gKey][$uKey] = ['count' => 0, 'statuses' => []];
+                $cells[$gKey][$uKey] = $emptyCell();
             }
 
             $cells[$gKey][$uKey]['count']++;
             $status = $task->status;
             $cells[$gKey][$uKey]['statuses'][$status] = ($cells[$gKey][$uKey]['statuses'][$status] ?? 0) + 1;
+            $bucket = $this->breakupBucket($status);
+            $cells[$gKey][$uKey]['breakup'][$bucket] = ($cells[$gKey][$uKey]['breakup'][$bucket] ?? 0) + 1;
         }
+
+        $uploaders = array_values(array_filter($uploaders, function (array $uploader) use ($cells) {
+            foreach ($cells as $gradeCells) {
+                if (($gradeCells[(string) $uploader['id']]['count'] ?? 0) > 0) {
+                    return true;
+                }
+            }
+
+            return false;
+        }));
+
+        $gradeRows = array_values(array_filter($gradeRows, function (array $grade) use ($cells, $uploaders) {
+            $gradeCells = $cells[(string) $grade['id']] ?? [];
+            foreach ($uploaders as $uploader) {
+                if (($gradeCells[(string) $uploader['id']]['count'] ?? 0) > 0) {
+                    return true;
+                }
+            }
+
+            return false;
+        }));
 
         $drill = null;
         if ($drillGradeId && $drillUploaderId) {
