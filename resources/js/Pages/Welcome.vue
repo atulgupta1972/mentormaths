@@ -232,7 +232,10 @@ const highlights = [
                 <a href="https://mentormaths.in" class="font-medium text-blue-600 hover:text-blue-800">mentormaths.in</a>
                 · CBSE &amp; ICSE Mathematics
             </p>
-            <p class="mt-1 text-xs text-slate-400">Plan · Practice · Perform</p>
+            <p class="mt-2 text-xs text-slate-400">
+                <Link :href="route('privacy')" class="hover:text-slate-600 hover:underline">Privacy policy</Link>
+                · Plan · Practice · Perform
+            </p>
         </footer>
     </div>
 </template>

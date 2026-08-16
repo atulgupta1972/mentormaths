@@ -17,5 +17,9 @@ import { Link } from '@inertiajs/vue3';
         >
             <slot />
         </div>
+
+        <p class="mt-4 text-center text-xs text-slate-500">
+            <Link :href="route('privacy')" class="hover:text-slate-700 hover:underline">Privacy policy</Link>
+        </p>
     </div>
 </template>

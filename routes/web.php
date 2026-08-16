@@ -55,6 +55,10 @@ Route::get('/', function () {
     return Inertia::render('Welcome');
 })->name('home');
 
+Route::get('/privacy', function () {
+    return Inertia::render('Privacy');
+})->name('privacy');
+
 Route::get('/register/request', [RegistrationRequestController::class, 'create'])
     ->name('registration.create');
 Route::post('/register/request', [RegistrationRequestController::class, 'store'])
