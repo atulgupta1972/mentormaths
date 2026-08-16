@@ -5,12 +5,15 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     uploaders: { type: Array, default: () => [] },
     gradeLevel: { type: Object, default: null },
+    boards: { type: Array, default: () => [] },
+    selectedBoard: { type: Object, default: null },
+    selectedBoardId: { type: [Number, String, null], default: null },
     textbooks: { type: Array, default: () => [] },
     syllabusChapters: { type: Array, default: () => [] },
     classDefaultRateInr: { type: Number, default: 0 },
@@ -18,27 +21,19 @@ const props = defineProps({
 });
 
 const page = usePage();
+const setBoard = (boardId) => {
+    router.get(route('admin.content-tasks.create'), {
+        board_id: boardId || undefined,
+    }, { replace: true });
+};
 const useNewBook = ref(props.textbooks.length === 0);
 const selectedTextbookId = ref(props.textbooks[0]?.id ?? '');
 const rateSectionRef = ref(null);
 const showRateRequired = ref(false);
 
-watch(
-    () => props.textbooks,
-    (books) => {
-        if (books.length === 0) {
-            useNewBook.value = true;
-            selectedTextbookId.value = '';
-        } else if (!selectedTextbookId.value) {
-            selectedTextbookId.value = books[0].id;
-            useNewBook.value = false;
-        }
-    },
-    { immediate: true },
-);
-
 const form = useForm({
     assigned_to_user_id: props.uploaders[0]?.id ?? '',
+    board_id: props.selectedBoardId ?? '',
     textbook_id: '',
     book_name: 'Ganita Prakash Part I',
     book_code: 'GP',
@@ -48,6 +43,27 @@ const form = useForm({
     duplicate_override_reason: '',
     admin_notes: '',
 });
+
+watch(
+    () => [props.selectedBoardId, props.textbooks],
+    () => {
+        form.board_id = props.selectedBoardId ?? '';
+        const books = props.textbooks;
+        form.syllabus_chapter_ids = [];
+
+        if (books.length === 0) {
+            useNewBook.value = true;
+            selectedTextbookId.value = '';
+            return;
+        }
+
+        const stillValid = books.some((book) => Number(book.id) === Number(selectedTextbookId.value));
+        if (!stillValid) {
+            selectedTextbookId.value = books[0].id;
+            useNewBook.value = false;
+        }
+    },
+);
 
 const isPerQuestion = computed(() => form.rate_basis === 'per_question');
 const minRateInr = computed(() => (isPerQuestion.value ? 1 : 100));
@@ -199,6 +215,7 @@ const submit = () => {
 
     form.transform((data) => ({
         ...data,
+        board_id: props.selectedBoardId || data.board_id || null,
         textbook_id: useNewBook.value ? null : selectedTextbookId.value,
         book_name: useNewBook.value ? data.book_name : null,
         book_code: useNewBook.value ? data.book_code : null,
@@ -231,7 +248,7 @@ const applySuggestedRate = () => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Assign chapters to uploader</h2>
-                    <p class="text-sm text-gray-500">Class → textbook master → syllabus chapters. One uploader per chapter.</p>
+                    <p class="text-sm text-gray-500">Class → board → textbook master → syllabus chapters. One uploader per chapter.</p>
                 </div>
                 <Link
                     :href="route('admin.content-rate-cards.index')"
@@ -254,9 +271,27 @@ const applySuggestedRate = () => {
 
                 <form v-else class="space-y-4 rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200" @submit.prevent="submit">
                     <div class="rounded-md bg-sky-50 px-4 py-3 text-sm text-sky-900">
-                        Assigning for <strong>{{ gradeLevel.name }}</strong>.
+                        Assigning for <strong>{{ gradeLevel.name }}</strong>
+                        <span v-if="selectedBoard"> · <strong>{{ selectedBoard.code || selectedBoard.name }}</strong></span>.
                         Default rates come from the <Link :href="route('admin.content-rate-cards.index')" class="underline">rate matrix</Link>
                         (currently {{ classDefaultRateBasis === 'per_question' ? `${formatInr(classDefaultRateInr || 2)} per question` : `${formatInr(classDefaultRateInr || 5000)} per chapter` }}).
+                    </div>
+
+                    <div v-if="boards.length">
+                        <InputLabel value="Board" />
+                        <select
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                            :value="selectedBoardId || ''"
+                            @change="setBoard($event.target.value ? Number($event.target.value) : '')"
+                        >
+                            <option v-for="board in boards" :key="board.id" :value="board.id">
+                                {{ board.code }} — {{ board.name }}
+                            </option>
+                        </select>
+                        <p class="mt-1 text-xs text-gray-500">
+                            Syllabus chapters and books below are for this board only.
+                        </p>
+                        <InputError :message="form.errors.board_id" class="mt-1" />
                     </div>
 
                     <div>
@@ -343,7 +378,7 @@ const applySuggestedRate = () => {
                         <InputError :message="form.errors.syllabus_chapter_ids" class="mt-1" />
                     </div>
                     <div v-else class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                        No syllabus chapters found for {{ gradeLevel.name }}. Check academic year and syllabus setup.
+                        No syllabus chapters found for {{ gradeLevel.name }}{{ selectedBoard ? ` · ${selectedBoard.code || selectedBoard.name}` : '' }}. Check academic year, board, and syllabus setup.
                     </div>
 
                     <div

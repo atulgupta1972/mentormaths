@@ -3,17 +3,16 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\AcademicYear;
 use App\Models\ContentQuestionDeleteRequest;
 use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
 use App\Models\SyllabusChapter;
-use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Services\AdminGradeContext;
+use App\Services\ClassAssignmentService;
 use App\Services\ContentAllocationMatrixService;
 use App\Services\ContentChapterQuestionService;
 use App\Services\ContentDuplicateGuardService;
@@ -36,6 +35,7 @@ class ContentUploadTaskController extends Controller
         private ContentVerificationService $verificationService,
         private ContentWorkSessionService $sessionService,
         private AdminGradeContext $gradeContext,
+        private ClassAssignmentService $classAssignment,
         private ContentRateCardService $rateCardService,
         private ContentAllocationMatrixService $matrixService,
         private TextbookMcqSetPlanService $setPlanService,
@@ -95,11 +95,43 @@ class ContentUploadTaskController extends Controller
 
         $textbooks = [];
         $syllabusChapters = [];
+        $boards = [];
+        $selectedBoard = null;
+        $selectedBoardId = null;
 
         if ($gradeLevel) {
+            $boards = $this->classAssignment->boardsForGrade($gradeLevel);
+            $selectedBoardId = $this->gradeContext->resolveBoardId($request);
+
+            if (! $selectedBoardId) {
+                $selectedBoardId = $this->classAssignment->defaultBoardIdForGrade($gradeLevel);
+                if ($selectedBoardId) {
+                    $this->gradeContext->persistBoard($request, $selectedBoardId);
+                }
+            }
+
+            $boardIds = collect($boards)->pluck('id')->map(fn ($id) => (int) $id);
+            if ($selectedBoardId && $boardIds->isNotEmpty() && ! $boardIds->contains($selectedBoardId)) {
+                $selectedBoardId = $this->classAssignment->defaultBoardIdForGrade($gradeLevel);
+                $this->gradeContext->persistBoard($request, $selectedBoardId);
+            }
+
+            $selectedBoard = collect($boards)->firstWhere('id', $selectedBoardId);
+            $syllabus = $this->classAssignment->syllabusForGrade($gradeLevel, $selectedBoardId);
+
+            $syllabusChapterIds = $syllabus
+                ? $syllabus->chapters()->orderBy('sort_order')->pluck('id')
+                : collect();
+
             $textbooks = Textbook::query()
                 ->where('grade_level_id', $gradeLevel->id)
                 ->orderBy('name')
+                ->when($syllabusChapterIds->isNotEmpty(), function ($query) use ($syllabusChapterIds) {
+                    $query->where(function ($inner) use ($syllabusChapterIds) {
+                        $inner->whereDoesntHave('chapters')
+                            ->orWhereHas('chapters', fn ($chapters) => $chapters->whereIn('syllabus_chapter_id', $syllabusChapterIds));
+                    });
+                })
                 ->get(['id', 'name', 'code'])
                 ->map(fn (Textbook $book) => [
                     'id' => $book->id,
@@ -110,13 +142,8 @@ class ContentUploadTaskController extends Controller
                 ->values()
                 ->all();
 
-            $activeYear = AcademicYear::active();
-            if ($activeYear) {
-                $syllabus = SyllabusVersion::query()
-                    ->with(['chapters' => fn ($q) => $q->orderBy('sort_order')])
-                    ->where('academic_year_id', $activeYear->id)
-                    ->where('grade_level_id', $gradeLevel->id)
-                    ->first();
+            if ($syllabus) {
+                $syllabus->load(['chapters' => fn ($q) => $q->orderBy('sort_order')]);
 
                 $tasksForGrade = ContentUploadTask::query()
                     ->whereHas('textbookChapter.textbook', fn ($q) => $q->where('grade_level_id', $gradeLevel->id))
@@ -170,7 +197,7 @@ class ContentUploadTaskController extends Controller
                     $uploadedBySyllabus[$syllabusId][$textbookId] = true;
                 }
 
-                $syllabusChapters = $syllabus?->chapters
+                $syllabusChapters = $syllabus->chapters
                     ->map(function (SyllabusChapter $chapter) use ($gradeLevel, $uploadedBySyllabus, $assignedBySyllabus) {
                         $syllabusId = (int) $chapter->id;
                         $rate = $this->rateCardService->resolveRateForSyllabusChapter(
@@ -190,7 +217,7 @@ class ContentUploadTaskController extends Controller
                         ];
                     })
                     ->values()
-                    ->all() ?? [];
+                    ->all();
             }
         }
 
@@ -201,6 +228,13 @@ class ContentUploadTaskController extends Controller
         return Inertia::render('Admin/ContentTasks/Create', [
             'uploaders' => $uploaders,
             'gradeLevel' => $gradeLevel?->only(['id', 'name']),
+            'boards' => $boards,
+            'selectedBoard' => $selectedBoard ? [
+                'id' => $selectedBoard['id'],
+                'code' => $selectedBoard['code'] ?? '',
+                'name' => $selectedBoard['name'] ?? '',
+            ] : null,
+            'selectedBoardId' => $selectedBoardId,
             'textbooks' => $textbooks,
             'syllabusChapters' => $syllabusChapters,
             'classDefaultRateInr' => $classDefault['amount_inr'],
@@ -215,6 +249,7 @@ class ContentUploadTaskController extends Controller
 
         $validated = $request->validate([
             'assigned_to_user_id' => ['required', 'exists:users,id'],
+            'board_id' => ['nullable', 'integer', 'exists:boards,id'],
             'textbook_id' => ['nullable', 'integer', Rule::exists('textbooks', 'id')],
             'book_name' => ['required_without:textbook_id', 'nullable', 'string', 'max:255'],
             'book_code' => ['required_without:textbook_id', 'nullable', 'string', 'max:32', 'alpha_dash'],
@@ -228,6 +263,32 @@ class ContentUploadTaskController extends Controller
             'duplicate_override_reason' => ['nullable', 'string', 'max:2000'],
             'admin_notes' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        $boardId = isset($validated['board_id'])
+            ? (int) $validated['board_id']
+            : $this->gradeContext->resolveBoardId($request);
+
+        if ($boardId) {
+            $this->gradeContext->persistBoard($request, $boardId);
+        }
+
+        $syllabus = $this->classAssignment->syllabusForGrade($gradeLevel, $boardId);
+        $allowedChapterIds = $syllabus
+            ? $syllabus->chapters()->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : [];
+
+        $unknownChapters = array_diff(
+            array_map('intval', $validated['syllabus_chapter_ids']),
+            $allowedChapterIds,
+        );
+
+        if ($unknownChapters !== []) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'syllabus_chapter_ids' => 'Select syllabus chapters from the chosen board.',
+                ]);
+        }
 
         $rateBasis = $validated['rate_basis'];
         $minAmount = $rateBasis === ContentRateCard::BASIS_PER_QUESTION ? 1 : 100;

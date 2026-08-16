@@ -428,6 +428,49 @@ class ContentUploadTaskTest extends TestCase
         $this->assertSame(1, ContentUploadTask::query()->count());
     }
 
+    public function test_assign_form_lists_chapters_for_the_selected_board_only(): void
+    {
+        $this->withoutVite();
+
+        [$grade, $cbseChapter, $admin] = $this->seedGradeAndAdmin();
+        $cbseId = $cbseChapter->syllabusVersion->board_id;
+        $yearId = $cbseChapter->syllabusVersion->academic_year_id;
+        $subjectId = $cbseChapter->syllabusVersion->subject_id;
+
+        $icse = Board::query()->create(['code' => 'ICSE', 'name' => 'ICSE', 'is_active' => true]);
+        $icseSyllabus = SyllabusVersion::query()->create([
+            'academic_year_id' => $yearId,
+            'grade_level_id' => $grade->id,
+            'board_id' => $icse->id,
+            'subject_id' => $subjectId,
+        ]);
+        $icseChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $icseSyllabus->id,
+            'name' => 'Rational and Irrational Numbers',
+            'chapter_number' => 'Ch 1',
+            'sort_order' => 1,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.content-tasks.create', ['board_id' => $cbseId]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ContentTasks/Create')
+                ->where('selectedBoardId', $cbseId)
+                ->has('boards', 2)
+                ->where('syllabusChapters', fn ($chapters) => collect($chapters)->pluck('id')->map(fn ($id) => (int) $id)->all() === [(int) $cbseChapter->id]));
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.content-tasks.create', ['board_id' => $icse->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ContentTasks/Create')
+                ->where('selectedBoard.code', 'ICSE')
+                ->where('syllabusChapters', fn ($chapters) => collect($chapters)->pluck('id')->map(fn ($id) => (int) $id)->all() === [(int) $icseChapter->id]));
+    }
+
     /**
      * @return array{0: GradeLevel, 1: SyllabusChapter, 2: User}
      */
