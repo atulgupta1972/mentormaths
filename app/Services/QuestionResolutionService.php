@@ -352,7 +352,7 @@ class QuestionResolutionService
             'student_name' => $item->enrollment->student?->name,
             'class_name' => $item->enrollment->gradeLevel?->name,
             ...$this->adminSetLinks($item),
-            'question_text' => $item->question->question_text,
+            'question_text' => mb_convert_encoding((string) $item->question->question_text, 'UTF-8', 'UTF-8'),
             'gave_up_at' => $item->gave_up_at?->toDateTimeString(),
         ]);
     }

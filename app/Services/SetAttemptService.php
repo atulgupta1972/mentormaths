@@ -159,36 +159,58 @@ class SetAttemptService
 
     public function dashboardForEnrollment(StudentEnrollment $enrollment): array
     {
-        $assignments = SetAssignment::query()
+        return $this->dashboardKeyedByEnrollmentId([$enrollment->id])[$enrollment->id] ?? [];
+    }
+
+    /**
+     * @param  list<int>  $enrollmentIds
+     * @return array<int, list<array<string, mixed>>>
+     */
+    public function dashboardKeyedByEnrollmentId(array $enrollmentIds): array
+    {
+        if ($enrollmentIds === []) {
+            return [];
+        }
+
+        $grouped = [];
+
+        SetAssignment::query()
             ->with([
                 'practiceSet' => fn ($q) => $q
                     ->withCount('questions')
                     ->with(['chapter:id,name,sort_order', 'topic:id,name,syllabus_chapter_id', 'topic.chapter:id,name,sort_order']),
-                'attempts' => fn ($q) => $q->orderByDesc('attempt_number')->limit(1),
-                'writtenSubmissions' => fn ($q) => $q->latest('id')->limit(1),
+                'attempts' => fn ($q) => $q->orderByDesc('attempt_number'),
+                'writtenSubmissions' => fn ($q) => $q->latest('id'),
             ])
-            ->where('student_enrollment_id', $enrollment->id)
+            ->whereIn('student_enrollment_id', $enrollmentIds)
             ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
             ->whereHas('practiceSet', fn ($q) => $q->where('status', 'published'))
             ->get()
             ->filter(fn (SetAssignment $assignment) => $assignment->practiceSet !== null)
-            ->map(function (SetAssignment $assignment) {
-            if ($assignment->practiceSet->isWritten()) {
-                return AssignmentProgress::formatWrittenStudentDashboardSummary(
-                    $assignment,
-                    $assignment->writtenSubmissions->first(),
-                );
-            }
+            ->each(function (SetAssignment $assignment) use (&$grouped) {
+                if ($assignment->practiceSet->isWritten()) {
+                    $row = AssignmentProgress::formatWrittenStudentDashboardSummary(
+                        $assignment,
+                        $assignment->writtenSubmissions->first(),
+                    );
+                } else {
+                    $row = AssignmentProgress::formatStudentDashboardSummary(
+                        $assignment,
+                        $assignment->attempts->first(),
+                    );
+                }
 
-            $latest = $assignment->attempts->first();
+                $grouped[(int) $assignment->student_enrollment_id][] = $row;
+            });
 
-            return AssignmentProgress::formatStudentDashboardSummary($assignment, $latest);
-        })->sortBy([
-            ['set_code', 'asc'],
-            ['set_number', 'asc'],
-        ])->values()->all();
+        foreach ($grouped as $enrollmentId => $rows) {
+            $grouped[$enrollmentId] = collect($rows)->sortBy([
+                ['set_code', 'asc'],
+                ['set_number', 'asc'],
+            ])->values()->all();
+        }
 
-        return $assignments;
+        return $grouped;
     }
 
     /**

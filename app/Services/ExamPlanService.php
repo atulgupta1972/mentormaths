@@ -216,10 +216,12 @@ class ExamPlanService
             ),
         )->values()->all();
 
+        $examDate = $plan->exam_date?->toDateString();
+
         $data = [
             'id' => $plan->id,
-            'exam_date' => $plan->exam_date->toDateString(),
-            'suggested_due_date' => $plan->exam_date->copy()->subDay()->toDateString(),
+            'exam_date' => $examDate,
+            'suggested_due_date' => $plan->exam_date?->copy()->subDay()->toDateString(),
             'title' => $plan->title,
             'exam_type' => $plan->exam_type,
             'exam_type_label' => $plan->typeLabel(),
@@ -528,10 +530,10 @@ class ExamPlanService
     {
         $today = now()->toDateString();
 
-        $upcoming = $plans->filter(fn (array $plan) => $plan['exam_date'] >= $today && $plan['status'] === ExamPlan::STATUS_PLANNED)
+        $upcoming = $plans->filter(fn (array $plan) => filled($plan['exam_date']) && $plan['exam_date'] >= $today && $plan['status'] === ExamPlan::STATUS_PLANNED)
             ->values();
 
-        $past = $plans->filter(fn (array $plan) => $plan['exam_date'] < $today || $plan['status'] === ExamPlan::STATUS_COMPLETED)
+        $past = $plans->filter(fn (array $plan) => ! filled($plan['exam_date']) || $plan['exam_date'] < $today || $plan['status'] === ExamPlan::STATUS_COMPLETED)
             ->sortByDesc('exam_date')
             ->values();
 

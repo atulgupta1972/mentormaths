@@ -10,7 +10,8 @@ import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmai
 import { formatScoreLabel } from '@/utils/scores';
 import { formatDate, formatDateTime, formatTime as formatDuration } from '@/utils/dates';
 import { Head, Link, usePage } from '@inertiajs/vue3';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import axios from 'axios';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const page = usePage();
 
@@ -54,6 +55,22 @@ const showManageExams = ref(false);
 const showHelpRequests = ref(false);
 const expandedStudentId = ref(null);
 const highlightedExamPlanId = ref(null);
+const studentRows = ref([]);
+const loadingStudentId = ref(null);
+
+watch(() => props.students, (rows) => {
+    const previous = new Map(studentRows.value.map((row) => [row.student_id, row]));
+
+    studentRows.value = (rows || []).map((row) => {
+        const existing = previous.get(row.student_id);
+
+        if (existing?.detail_loaded) {
+            return { ...row, ...existing, detail_loaded: true };
+        }
+
+        return { ...row };
+    });
+}, { immediate: true });
 
 const studyPlanSubtitle = computed(() => {
     const parts = [props.studyPlanContext?.grade_name, props.studyPlanContext?.board_name].filter(Boolean);
@@ -350,8 +367,30 @@ const prepAssignmentHref = (prep) => (
         : route('student.assignments.show', prep.assignment_id)
 );
 
-const toggleStudent = (studentId) => {
-    expandedStudentId.value = expandedStudentId.value === studentId ? null : studentId;
+const toggleStudent = async (studentId) => {
+    if (expandedStudentId.value === studentId) {
+        expandedStudentId.value = null;
+        return;
+    }
+
+    expandedStudentId.value = studentId;
+
+    const student = studentRows.value.find((row) => row.student_id === studentId);
+
+    if (!student || student.detail_loaded || loadingStudentId.value === studentId) {
+        return;
+    }
+
+    loadingStudentId.value = studentId;
+
+    try {
+        const { data } = await axios.get(route('admin.dashboard.student', studentId));
+        Object.assign(student, data, { detail_loaded: true });
+    } catch (error) {
+        console.error(error);
+    } finally {
+        loadingStudentId.value = null;
+    }
 };
 
 const toggleHelpRequests = () => {
@@ -365,7 +404,7 @@ const toggleHelpRequests = () => {
 const studentsByClass = computed(() => {
     const groups = {};
 
-    for (const student of props.students) {
+    for (const student of studentRows.value) {
         const key = student.class_name || 'Other';
         if (!groups[key]) {
             groups[key] = [];
@@ -677,7 +716,7 @@ const adminSetStatusClass = (set) => {
                         </div>
                     </section>
 
-                    <div v-if="students.length === 0" class="rounded-xl bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
+                    <div v-if="studentRows.length === 0" class="rounded-xl bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
                         No active students{{ selectedGrade ? ` in ${selectedGrade.name}` : '' }} for this year.
                     </div>
 
@@ -730,6 +769,9 @@ const adminSetStatusClass = (set) => {
                                         </button>
 
                                         <div v-if="expandedStudentId === student.student_id" class="space-y-3 border-t border-gray-100 bg-white px-2.5 py-2.5">
+                                <p v-if="loadingStudentId === student.student_id" class="text-[11px] font-medium text-gray-500">
+                                    Loading exam plan…
+                                </p>
                                 <ExamPlanPanel
                                     :plans="student.exam_plans || []"
                                     :syllabus-chapters="student.syllabus_chapters || []"

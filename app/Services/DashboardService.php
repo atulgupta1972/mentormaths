@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AcademicYear;
 use App\Models\ContentUploadTask;
+use App\Models\ExamPlan;
 use App\Models\StudentEnrollment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -88,10 +89,46 @@ class DashboardService
         }
 
         $helpByStudent = collect($helpRequests)->groupBy('student_id');
+        $enrollmentIds = $enrollments->pluck('id')->all();
 
-        $students = $enrollments->map(function (StudentEnrollment $enrollment) use ($helpByStudent) {
+        try {
+            $assignmentsByEnrollment = $this->attemptService->dashboardKeyedByEnrollmentId($enrollmentIds);
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard failed to load assignments.', ['message' => $e->getMessage()]);
+            $assignmentsByEnrollment = [];
+        }
+
+        try {
+            $examPlansByEnrollment = ExamPlan::query()
+                ->with([
+                    'chapters:id,chapter_number,name,sort_order',
+                    'topics:id,syllabus_chapter_id,name,sort_order',
+                ])
+                ->whereIn('student_enrollment_id', $enrollmentIds)
+                ->orderBy('exam_date')
+                ->get()
+                ->groupBy(fn (ExamPlan $plan) => (int) $plan->student_enrollment_id);
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard failed to load exam plans.', ['message' => $e->getMessage()]);
+            $examPlansByEnrollment = collect();
+        }
+
+        $students = $enrollments->map(function (StudentEnrollment $enrollment) use (
+            $helpByStudent,
+            $assignmentsByEnrollment,
+            $examPlansByEnrollment,
+        ) {
             try {
-                return $this->serializeAdminStudentRow($enrollment, $helpByStudent);
+                $planGroup = $examPlansByEnrollment->get($enrollment->id)
+                    ?? $examPlansByEnrollment->get((string) $enrollment->id)
+                    ?? collect();
+
+                return $this->serializeAdminStudentListRow(
+                    $enrollment,
+                    $helpByStudent,
+                    $assignmentsByEnrollment[(int) $enrollment->id] ?? [],
+                    $planGroup,
+                );
             } catch (Throwable $e) {
                 Log::error('Admin dashboard failed to load a student row.', [
                     'student_id' => $enrollment->student_id,
@@ -99,23 +136,7 @@ class DashboardService
                     'message' => $e->getMessage(),
                 ]);
 
-                $studentHelp = $helpByStudent->get($enrollment->student_id, collect());
-
-                return [
-                    'student_id' => $enrollment->student_id,
-                    'student_name' => $enrollment->student?->name,
-                    'class_name' => $enrollment->gradeLevel?->name,
-                    'grade_level_id' => $enrollment->grade_level_id,
-                    'upcoming_exams' => [],
-                    'past_exams' => [],
-                    'exam_plans' => [],
-                    'syllabus_chapters' => [],
-                    'assignments_pending' => [],
-                    'assignments_under_review' => [],
-                    'assignments_completed' => [],
-                    'help_requests' => $studentHelp->values()->all(),
-                    'help_requests_count' => $studentHelp->count(),
-                ];
+                return $this->emptyAdminStudentRow($enrollment, $helpByStudent);
             }
         })->values()->all();
 
@@ -199,6 +220,72 @@ class DashboardService
     }
 
     /**
+     * Full exam-plan payload used when an admin expands one student.
+     *
+     * @return array<string, mixed>
+     */
+    public function adminStudentDetail(StudentEnrollment $enrollment): array
+    {
+        $helpByStudent = collect($this->resolutionService
+            ->pendingForStudentIds([$enrollment->student_id], $enrollment->academic_year_id)
+            ->values()
+            ->all())->groupBy('student_id');
+
+        return $this->serializeAdminStudentRow($enrollment, $helpByStudent);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int|string, \Illuminate\Support\Collection<int, array<string, mixed>>>  $helpByStudent
+     * @return array<string, mixed>
+     */
+    private function emptyAdminStudentRow(StudentEnrollment $enrollment, $helpByStudent): array
+    {
+        $studentHelp = $helpByStudent->get($enrollment->student_id, collect());
+
+        return [
+            'student_id' => $enrollment->student_id,
+            'student_name' => $enrollment->student?->name,
+            'class_name' => $enrollment->gradeLevel?->name,
+            'grade_level_id' => $enrollment->grade_level_id,
+            'upcoming_exams' => [],
+            'past_exams' => [],
+            'exam_plans' => [],
+            'syllabus_chapters' => [],
+            'assignments_pending' => [],
+            'assignments_under_review' => [],
+            'assignments_completed' => [],
+            'help_requests' => $studentHelp->values()->all(),
+            'help_requests_count' => $studentHelp->count(),
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int|string, \Illuminate\Support\Collection<int, array<string, mixed>>>  $helpByStudent
+     * @param  list<array<string, mixed>>  $assignments
+     * @param  \Illuminate\Support\Collection<int, ExamPlan>  $examPlans
+     * @return array<string, mixed>
+     */
+    private function serializeAdminStudentListRow(
+        StudentEnrollment $enrollment,
+        $helpByStudent,
+        array $assignments,
+        $examPlans,
+    ): array {
+        $formattedPlans = collect($examPlans)
+            ->map(fn (ExamPlan $plan) => $this->examPlanService->formatPlan($plan, false, false));
+        $split = $this->examPlanService->splitPlansByTiming($formattedPlans);
+
+        return $this->adminStudentPayload(
+            $enrollment,
+            $helpByStudent,
+            collect($assignments),
+            $split,
+            $formattedPlans,
+            [],
+        );
+    }
+
+    /**
      * @param  \Illuminate\Support\Collection<int|string, \Illuminate\Support\Collection<int, array<string, mixed>>>  $helpByStudent
      * @return array<string, mixed>
      */
@@ -208,6 +295,32 @@ class DashboardService
         $split = $this->examPlanService->splitPlansByTiming($allPlans);
         $assignments = collect($this->attemptService->dashboardForEnrollment($enrollment));
 
+        return $this->adminStudentPayload(
+            $enrollment,
+            $helpByStudent,
+            $assignments,
+            $split,
+            $allPlans,
+            $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all(),
+        );
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int|string, \Illuminate\Support\Collection<int, array<string, mixed>>>  $helpByStudent
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $assignments
+     * @param  array{upcoming: \Illuminate\Support\Collection, past: \Illuminate\Support\Collection}  $split
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $allPlans
+     * @param  list<array<string, mixed>>  $syllabusChapters
+     * @return array<string, mixed>
+     */
+    private function adminStudentPayload(
+        StudentEnrollment $enrollment,
+        $helpByStudent,
+        $assignments,
+        array $split,
+        $allPlans,
+        array $syllabusChapters,
+    ): array {
         $completed = $assignments->filter(
             fn (array $row) => in_array($row['status'], ['green', 'green-late'], true),
         )->sortBy(fn (array $row) => $row['submitted_at'] ?? '9999-12-31 23:59:59')->values()->all();
@@ -230,7 +343,7 @@ class DashboardService
             'upcoming_exams' => $split['upcoming']->values()->all(),
             'past_exams' => $split['past']->values()->all(),
             'exam_plans' => $allPlans->values()->all(),
-            'syllabus_chapters' => $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all(),
+            'syllabus_chapters' => $syllabusChapters,
             'assignments_pending' => $pending,
             'assignments_under_review' => $underReview,
             'assignments_completed' => $completed,

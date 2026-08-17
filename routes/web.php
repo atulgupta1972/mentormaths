@@ -162,6 +162,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('students.index');
     Route::get('/students/{student}', [StudentController::class, 'show'])
         ->name('students.show');
+    Route::get('/dashboard/students/{student}', [DashboardController::class, 'student'])
+        ->name('dashboard.student');
     Route::post('/students/{student}/toggle-active', [StudentController::class, 'toggleActive'])
         ->name('students.toggle-active');
     Route::delete('/students/{student}', [StudentController::class, 'destroy'])

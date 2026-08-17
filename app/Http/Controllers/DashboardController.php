@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
 use App\Models\GradeLevel;
+use App\Models\Student;
 use App\Services\ClassCoverageService;
 use App\Services\ContentUploaderDashboardService;
 use App\Services\DashboardService;
 use App\Support\MailConfigStatus;
 use App\Support\StudentWeeklyReportEmails;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -36,13 +38,29 @@ class DashboardController extends Controller
                 $adminDashboard = $this->dashboardService->emptyAdminPayload($request);
             }
 
-            return Inertia::render('Dashboard', [
-                'isAdmin' => true,
-                'mailSettings' => MailConfigStatus::forAdmin(),
-                'gradeLevels' => GradeLevel::query()
+            try {
+                $mailSettings = MailConfigStatus::forAdmin();
+            } catch (Throwable $e) {
+                Log::error('Admin dashboard failed to load mail settings.', ['message' => $e->getMessage()]);
+                $mailSettings = null;
+            }
+
+            try {
+                $gradeLevels = GradeLevel::query()
                     ->where('is_active', true)
                     ->orderBy('sort_order')
-                    ->get(['id', 'name']),
+                    ->get(['id', 'name'])
+                    ->map(fn (GradeLevel $grade) => $grade->only(['id', 'name']))
+                    ->all();
+            } catch (Throwable $e) {
+                Log::error('Admin dashboard failed to load grade levels.', ['message' => $e->getMessage()]);
+                $gradeLevels = [];
+            }
+
+            return Inertia::render('Dashboard', [
+                'isAdmin' => true,
+                'mailSettings' => $mailSettings,
+                'gradeLevels' => $gradeLevels,
                 ...$adminDashboard,
             ]);
         }
@@ -83,5 +101,31 @@ class DashboardController extends Controller
             ],
             ...$studentData,
         ]);
+    }
+
+    public function student(Request $request, Student $student): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $enrollment = $student->currentEnrollment();
+
+        if (! $enrollment) {
+            abort(404);
+        }
+
+        $enrollment->loadMissing(['student:id,name', 'gradeLevel:id,name']);
+
+        try {
+            return response()->json($this->dashboardService->adminStudentDetail($enrollment));
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard failed to load student detail.', [
+                'student_id' => $student->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Could not load this student.',
+            ], 500);
+        }
     }
 }

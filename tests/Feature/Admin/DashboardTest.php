@@ -28,7 +28,21 @@ class DashboardTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Dashboard')
                 ->where('isAdmin', true)
-                ->where('stats.students_count', 1));
+                ->where('stats.students_count', 1)
+                ->where('students.0.syllabus_chapters', []));
+    }
+
+    public function test_admin_can_load_one_student_dashboard_detail(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $enrollment] = $this->seedAdminDashboard();
+
+        $this->actingAs($admin)
+            ->getJson(route('admin.dashboard.student', $enrollment->student_id))
+            ->assertOk()
+            ->assertJsonPath('student_id', $enrollment->student_id)
+            ->assertJsonPath('help_requests_count', 0);
     }
 
     public function test_admin_dashboard_still_loads_when_help_requests_fail(): void

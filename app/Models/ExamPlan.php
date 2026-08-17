@@ -89,6 +89,10 @@ class ExamPlan extends Model
 
     public function isUpcoming(): bool
     {
+        if (! $this->exam_date) {
+            return false;
+        }
+
         return $this->status === self::STATUS_PLANNED
             && $this->exam_date->toDateString() >= now()->toDateString();
     }
