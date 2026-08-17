@@ -280,6 +280,21 @@ class BasicsDrillTest extends TestCase
                 ->has('excludedTables'));
     }
 
+    public function test_admin_basics_drill_settings_tolerate_a_null_timezone(): void
+    {
+        config([
+            'basics_drill.timezone' => null,
+            'formula_drill.timezone' => null,
+        ]);
+
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $this->withoutVite()
+            ->actingAs($admin)
+            ->get(route('admin.basics-drill.index'))
+            ->assertOk();
+    }
+
     public function test_admin_can_save_excluded_tables(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
@@ -354,6 +369,11 @@ class BasicsDrillTest extends TestCase
 
     public function test_admin_coverage_shows_last_drill_and_mistakes_class_wise(): void
     {
+        config([
+            'basics_drill.timezone' => null,
+            'formula_drill.timezone' => null,
+        ]);
+
         ['student' => $student, 'grade' => $grade] = $this->seedStudentWithFormulaComplete();
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
 

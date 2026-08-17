@@ -125,7 +125,7 @@ class BasicsDrillCoverageService
                         'student_id' => $student->id,
                         'student_name' => $student->name,
                         'student_url' => route('admin.students.show', $student),
-                        'last_date' => $session?->drill_date?->timezone(config('basics_drill.timezone', 'Asia/Kolkata'))->format('j M'),
+                        'last_date' => $this->formatLocalDate($session?->drill_date),
                         'last_status' => $session?->status,
                         'last_table' => $settings['tables_enabled'] ? $session?->table_number : null,
                         'last_squares' => ($settings['squares_enabled'] ?? false)
@@ -145,7 +145,7 @@ class BasicsDrillCoverageService
                         'formula_pool' => $formulaSnapshot['pool'],
                         'formula_next' => $formulaSnapshot['next'],
                         'formula_status' => $formulaSession?->status,
-                        'formula_date' => $formulaSession?->drill_date?->timezone(config('formula_drill.timezone', 'Asia/Kolkata'))->format('j M'),
+                        'formula_date' => $this->formatLocalDate($formulaSession?->drill_date),
                         'formula_last_score' => $formulaSnapshot['last_score'],
                         'miss_count' => count($misses),
                         'misses' => $misses,
@@ -414,6 +414,20 @@ class BasicsDrillCoverageService
             ])
             ->values()
             ->all();
+    }
+
+    private function formatLocalDate(mixed $date): ?string
+    {
+        if (! $date) {
+            return null;
+        }
+
+        $tz = config('basics_drill.timezone')
+            ?: config('formula_drill.timezone')
+            ?: config('app.timezone')
+            ?: 'Asia/Kolkata';
+
+        return $date->copy()->timezone($tz)->format('j M');
     }
 
     private function shortFormulaLabel(?string $text): string

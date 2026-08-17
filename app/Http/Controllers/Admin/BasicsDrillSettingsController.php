@@ -8,8 +8,10 @@ use App\Services\BasicsDrillCoverageService;
 use App\Services\BasicsDrillSettingsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class BasicsDrillSettingsController extends Controller
 {
@@ -20,11 +22,23 @@ class BasicsDrillSettingsController extends Controller
 
     public function index(): Response
     {
+        try {
+            $coverage = $this->coverageService->classMatrix();
+        } catch (Throwable $e) {
+            Log::error('Basics drill coverage failed.', [
+                'message' => $e->getMessage(),
+            ]);
+            $coverage = [
+                'totals' => ['students' => 0, 'with_mistakes' => 0, 'never_started' => 0],
+                'classes' => [],
+            ];
+        }
+
         return Inertia::render('Admin/BasicsDrill/Index', [
             'rows' => $this->settingsService->adminIndexRows(),
             'defaults' => $this->settingsService->defaults(),
             'excludedTables' => $this->settingsService->excludedTables(),
-            'coverage' => $this->coverageService->classMatrix(),
+            'coverage' => $coverage,
         ]);
     }
 

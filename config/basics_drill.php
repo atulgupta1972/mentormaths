@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'timezone' => env('BASICS_DRILL_TIMEZONE', config('formula_drill.timezone')),
+    'timezone' => env('BASICS_DRILL_TIMEZONE', 'Asia/Kolkata'),
 
     'defaults' => [
         'tables_enabled' => true,
