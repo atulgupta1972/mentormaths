@@ -1,7 +1,7 @@
 <script setup>
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -9,6 +9,7 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     statuses: { type: Array, default: () => [] },
     matrix: { type: Object, required: true },
+    uploaders: { type: Array, default: () => [] },
     pendingPublishCount: { type: Number, default: 0 },
 });
 
@@ -157,6 +158,77 @@ const breakupCards = computed(() => [
         active: 'bg-emerald-600 text-white ring-emerald-600',
     },
 ]);
+
+const selectedTaskIds = ref([]);
+const bulkReassignForm = useForm({
+    task_ids: [],
+    assigned_to_user_id: '',
+    note: '',
+});
+
+const reassignableDrillChapters = computed(() =>
+    filteredDrillChapters.value.filter((row) => row.can_reassign),
+);
+
+const selectedCount = computed(() => selectedTaskIds.value.length);
+
+const allReassignableSelected = computed(() => {
+    const ids = reassignableDrillChapters.value.map((row) => row.id);
+    return ids.length > 0 && ids.every((id) => selectedTaskIds.value.includes(id));
+});
+
+const someReassignableSelected = computed(() =>
+    selectedCount.value > 0 && !allReassignableSelected.value,
+);
+
+const isSelected = (id) => selectedTaskIds.value.includes(id);
+
+const toggleRow = (id, canReassign) => {
+    if (!canReassign) {
+        return;
+    }
+
+    if (isSelected(id)) {
+        selectedTaskIds.value = selectedTaskIds.value.filter((rowId) => rowId !== id);
+        return;
+    }
+
+    selectedTaskIds.value = [...selectedTaskIds.value, id];
+};
+
+const toggleSelectAll = () => {
+    if (allReassignableSelected.value) {
+        const drop = new Set(reassignableDrillChapters.value.map((row) => row.id));
+        selectedTaskIds.value = selectedTaskIds.value.filter((id) => !drop.has(id));
+        return;
+    }
+
+    selectedTaskIds.value = [
+        ...new Set([
+            ...selectedTaskIds.value,
+            ...reassignableDrillChapters.value.map((row) => row.id),
+        ]),
+    ];
+};
+
+const submitBulkReassign = () => {
+    bulkReassignForm.task_ids = selectedTaskIds.value;
+    bulkReassignForm.post(route('admin.content-tasks.bulk-reassign'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            selectedTaskIds.value = [];
+            bulkReassignForm.reset();
+        },
+    });
+};
+
+watch(
+    () => filteredDrillChapters.value.map((row) => row.id).join(','),
+    () => {
+        const visible = new Set(filteredDrillChapters.value.map((row) => row.id));
+        selectedTaskIds.value = selectedTaskIds.value.filter((id) => visible.has(id));
+    },
+);
 </script>
 
 <template>
@@ -345,10 +417,71 @@ const breakupCards = computed(() => [
                         <template v-else>Click a count above to filter. Submitted opens review &amp; publish.</template>
                     </p>
 
+                    <form
+                        v-if="reassignableDrillChapters.length"
+                        class="mt-3 flex flex-wrap items-end gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3"
+                        @submit.prevent="submitBulkReassign"
+                    >
+                        <p class="w-full text-sm text-slate-700 sm:w-auto sm:flex-1">
+                            <template v-if="selectedCount">
+                                <strong>{{ selectedCount }}</strong> selected — reassign them together instead of one by one.
+                            </template>
+                            <template v-else>
+                                Tick chapters below, or select all, then choose a new uploader.
+                            </template>
+                        </p>
+                        <div class="min-w-[14rem] flex-1">
+                            <label class="text-xs font-medium text-gray-600">New uploader</label>
+                            <select
+                                v-model="bulkReassignForm.assigned_to_user_id"
+                                required
+                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                            >
+                                <option value="" disabled>Select uploader</option>
+                                <option
+                                    v-for="person in uploaders"
+                                    :key="person.id"
+                                    :value="person.id"
+                                    :disabled="person.id === matrix.drill?.uploader?.id"
+                                >
+                                    {{ person.name }}{{ person.id === matrix.drill?.uploader?.id ? ' (current)' : '' }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="min-w-[12rem] flex-1">
+                            <label class="text-xs font-medium text-gray-600">Note (optional)</label>
+                            <input
+                                v-model="bulkReassignForm.note"
+                                type="text"
+                                maxlength="500"
+                                placeholder="Could not finish"
+                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                            >
+                        </div>
+                        <PrimaryButton
+                            type="submit"
+                            :disabled="bulkReassignForm.processing || !selectedCount || !bulkReassignForm.assigned_to_user_id"
+                        >
+                            {{ bulkReassignForm.processing ? 'Reassigning…' : `Reassign ${selectedCount}` }}
+                        </PrimaryButton>
+                    </form>
+
                     <div class="mt-3 overflow-hidden rounded-md ring-1 ring-slate-200">
                         <table class="min-w-full divide-y divide-slate-100 text-sm">
                             <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                                 <tr>
+                                    <th class="w-10 px-3 py-2">
+                                        <input
+                                            type="checkbox"
+                                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-40"
+                                            :checked="allReassignableSelected"
+                                            :indeterminate="someReassignableSelected"
+                                            :disabled="!reassignableDrillChapters.length"
+                                            title="Select all reassignable chapters"
+                                            @change="toggleSelectAll"
+                                        >
+                                        <span class="sr-only">Select all</span>
+                                    </th>
                                     <th class="px-3 py-2">Chapter</th>
                                     <th class="px-3 py-2">Book</th>
                                     <th class="px-3 py-2">Status</th>
@@ -359,6 +492,16 @@ const breakupCards = computed(() => [
                             </thead>
                             <tbody class="divide-y divide-slate-100">
                                 <tr v-for="row in filteredDrillChapters" :key="row.id">
+                                    <td class="px-3 py-2">
+                                        <input
+                                            v-if="row.can_reassign"
+                                            type="checkbox"
+                                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                            :checked="isSelected(row.id)"
+                                            :aria-label="`Select chapter ${row.chapter?.chapter_number}`"
+                                            @change="toggleRow(row.id, true)"
+                                        >
+                                    </td>
                                     <td class="px-3 py-2">
                                         <p class="font-medium text-slate-900">Ch {{ row.chapter?.chapter_number }} — {{ row.chapter?.title }}</p>
                                     </td>
@@ -388,7 +531,7 @@ const breakupCards = computed(() => [
                                     </td>
                                 </tr>
                                 <tr v-if="!filteredDrillChapters.length">
-                                    <td colspan="6" class="px-3 py-6 text-center text-slate-500">
+                                    <td colspan="7" class="px-3 py-6 text-center text-slate-500">
                                         No chapters in this bucket.
                                     </td>
                                 </tr>

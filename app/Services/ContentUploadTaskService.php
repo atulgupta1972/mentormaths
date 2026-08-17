@@ -149,10 +149,88 @@ class ContentUploadTaskService
         User $admin,
         ?string $note = null,
     ): array {
-        if (! $newUploader->isContentUploader() || ! $newUploader->isActiveAccount()) {
-            throw new \InvalidArgumentException('Selected user is not an active content uploader.');
+        $this->assertActiveUploader($newUploader);
+        $previousName = $this->applyReassignment($task, $newUploader, $admin, $note);
+        $fresh = $task->fresh(['assignee', 'textbookChapter.textbook.gradeLevel']);
+        $emailSent = ContentOperationsMailer::notifyAssigned($newUploader, [$fresh]);
+
+        return [
+            'task' => $fresh,
+            'email_sent' => $emailSent,
+            'previous_name' => $previousName,
+        ];
+    }
+
+    /**
+     * @param  list<int>  $taskIds
+     * @return array{moved_count: int, skipped_count: int, skipped: list<string>, email_sent: bool, previous_names: list<string>}
+     */
+    public function reassignMany(
+        array $taskIds,
+        User $newUploader,
+        User $admin,
+        ?string $note = null,
+    ): array {
+        $this->assertActiveUploader($newUploader);
+
+        $ids = collect($taskIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+
+        $tasks = ContentUploadTask::query()
+            ->with(['assignee:id,name,email', 'textbookChapter:id,title'])
+            ->whereIn('id', $ids->all())
+            ->get()
+            ->keyBy('id');
+
+        $moved = [];
+        $skipped = [];
+        $previousNames = [];
+
+        foreach ($ids as $id) {
+            $task = $tasks->get($id);
+            if (! $task) {
+                $skipped[] = "Chapter {$id} was not found.";
+                continue;
+            }
+
+            try {
+                $previousNames[] = $this->applyReassignment($task, $newUploader, $admin, $note);
+                $moved[] = $task->fresh(['assignee', 'textbookChapter.textbook.gradeLevel']);
+            } catch (\InvalidArgumentException $e) {
+                $chapter = $task->textbookChapter?->title ?: "chapter {$task->id}";
+                $skipped[] = "{$chapter}: {$e->getMessage()}";
+            }
         }
 
+        $emailSent = $moved !== []
+            ? ContentOperationsMailer::notifyAssigned($newUploader, $moved)
+            : false;
+
+        return [
+            'moved_count' => count($moved),
+            'skipped_count' => count($skipped),
+            'skipped' => $skipped,
+            'email_sent' => $emailSent,
+            'previous_names' => array_values(array_unique($previousNames)),
+        ];
+    }
+
+    private function assertActiveUploader(User $uploader): void
+    {
+        if (! $uploader->isContentUploader() || ! $uploader->isActiveAccount()) {
+            throw new \InvalidArgumentException('Selected user is not an active content uploader.');
+        }
+    }
+
+    private function applyReassignment(
+        ContentUploadTask $task,
+        User $newUploader,
+        User $admin,
+        ?string $note = null,
+    ): string {
         if ((int) $newUploader->id === (int) $task->assigned_to_user_id) {
             throw new \InvalidArgumentException('This chapter is already assigned to that uploader.');
         }
@@ -167,7 +245,7 @@ class ContentUploadTaskService
             throw new \InvalidArgumentException('This chapter already has a payment recorded.');
         }
 
-        $task->loadMissing('assignee');
+        $task->loadMissing(['assignee', 'textbookChapter:id,title']);
         $previousName = $task->assignee?->name ?? 'previous uploader';
 
         $stamp = now()->format('Y-m-d H:i');
@@ -185,14 +263,7 @@ class ContentUploadTaskService
             'admin_notes' => $notes !== '' ? $notes : null,
         ]);
 
-        $fresh = $task->fresh(['assignee', 'textbookChapter.textbook.gradeLevel']);
-        $emailSent = ContentOperationsMailer::notifyAssigned($newUploader, [$fresh]);
-
-        return [
-            'task' => $fresh,
-            'email_sent' => $emailSent,
-            'previous_name' => $previousName,
-        ];
+        return $previousName;
     }
 
     public function agree(ContentUploadTask $task, User $uploader): ContentUploadTask

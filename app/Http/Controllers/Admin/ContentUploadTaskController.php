@@ -78,6 +78,7 @@ class ContentUploadTaskController extends Controller
             ],
             'statuses' => $this->statusOptions(),
             'matrix' => $this->matrixService->build($boardId, $drillGradeId, $drillUploaderId),
+            'uploaders' => $this->contentUploaders(),
             'pendingPublishCount' => ContentUploadTask::query()
                 ->where('status', ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH)
                 ->count(),
@@ -470,6 +471,52 @@ class ContentUploadTaskController extends Controller
         }
 
         $success = "Reassigned from {$result['previous_name']} to {$uploader->name}.";
+        $success .= $result['email_sent']
+            ? " Assignment email sent to {$uploader->email}."
+            : ' Warning: assignment email could not be sent — check mail settings.';
+
+        return back()
+            ->with('success', $success)
+            ->with('email_sent', $result['email_sent']);
+    }
+
+    public function bulkReassign(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'task_ids' => ['required', 'array', 'min:1', 'max:50'],
+            'task_ids.*' => ['integer', 'exists:content_upload_tasks,id'],
+            'assigned_to_user_id' => ['required', 'integer', 'exists:users,id'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $uploader = User::query()->findOrFail($validated['assigned_to_user_id']);
+
+        try {
+            $result = $this->taskService->reassignMany(
+                $validated['task_ids'],
+                $uploader,
+                $request->user(),
+                $validated['note'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($result['moved_count'] === 0) {
+            $firstSkip = $result['skipped'][0] ?? 'None of the selected chapters could be reassigned.';
+
+            return back()->with('error', $firstSkip);
+        }
+
+        $from = $result['previous_names'] !== []
+            ? ' from '.implode(', ', $result['previous_names'])
+            : '';
+        $success = "Reassigned {$result['moved_count']} chapter(s){$from} to {$uploader->name}.";
+
+        if ($result['skipped_count'] > 0) {
+            $success .= ' '.$result['skipped_count'].' skipped.';
+        }
+
         $success .= $result['email_sent']
             ? " Assignment email sent to {$uploader->email}."
             : ' Warning: assignment email could not be sent — check mail settings.';
