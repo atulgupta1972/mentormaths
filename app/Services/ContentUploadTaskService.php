@@ -138,6 +138,63 @@ class ContentUploadTaskService
         );
     }
 
+    /**
+     * Hand an unfinished chapter to another uploader. Existing PDF / questions stay on the chapter.
+     *
+     * @return array{task: ContentUploadTask, email_sent: bool, previous_name: string}
+     */
+    public function reassign(
+        ContentUploadTask $task,
+        User $newUploader,
+        User $admin,
+        ?string $note = null,
+    ): array {
+        if (! $newUploader->isContentUploader() || ! $newUploader->isActiveAccount()) {
+            throw new \InvalidArgumentException('Selected user is not an active content uploader.');
+        }
+
+        if ((int) $newUploader->id === (int) $task->assigned_to_user_id) {
+            throw new \InvalidArgumentException('This chapter is already assigned to that uploader.');
+        }
+
+        if (! $task->canReassign()) {
+            throw new \InvalidArgumentException(
+                'This chapter cannot be reassigned once it is submitted, published, or cancelled.',
+            );
+        }
+
+        if ($task->payment()->exists()) {
+            throw new \InvalidArgumentException('This chapter already has a payment recorded.');
+        }
+
+        $task->loadMissing('assignee');
+        $previousName = $task->assignee?->name ?? 'previous uploader';
+
+        $stamp = now()->format('Y-m-d H:i');
+        $block = "[Reassigned {$stamp} by {$admin->name}] {$previousName} → {$newUploader->name}";
+        if (filled(trim((string) $note))) {
+            $block .= '. '.trim((string) $note);
+        }
+
+        $notes = trim((string) ($task->admin_notes ?? ''));
+        $notes = trim($notes."\n\n".$block);
+
+        $task->update([
+            'assigned_to_user_id' => $newUploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'admin_notes' => $notes !== '' ? $notes : null,
+        ]);
+
+        $fresh = $task->fresh(['assignee', 'textbookChapter.textbook.gradeLevel']);
+        $emailSent = ContentOperationsMailer::notifyAssigned($newUploader, [$fresh]);
+
+        return [
+            'task' => $fresh,
+            'email_sent' => $emailSent,
+            'previous_name' => $previousName,
+        ];
+    }
+
     public function agree(ContentUploadTask $task, User $uploader): ContentUploadTask
     {
         if ($task->assigned_to_user_id !== $uploader->id) {

@@ -12,10 +12,15 @@ const props = defineProps({
     verification: { type: Object, default: null },
     activeSeconds: { type: Number, default: 0 },
     deleteRequests: { type: Array, default: () => [] },
+    uploaders: { type: Array, default: () => [] },
 });
 
 const approveDeleteForm = useForm({ admin_note: '' });
 const rejectDeleteForm = useForm({ admin_note: '' });
+const reassignForm = useForm({
+    assigned_to_user_id: '',
+    note: '',
+});
 
 const approveDelete = (id) => {
     approveDeleteForm.post(route('admin.content-tasks.delete-requests.approve', [props.task.id, id]), {
@@ -26,6 +31,13 @@ const approveDelete = (id) => {
 const rejectDelete = (id) => {
     rejectDeleteForm.post(route('admin.content-tasks.delete-requests.reject', [props.task.id, id]), {
         preserveScroll: true,
+    });
+};
+
+const reassign = () => {
+    reassignForm.post(route('admin.content-tasks.reassign', props.task.id), {
+        preserveScroll: true,
+        onSuccess: () => reassignForm.reset(),
     });
 };
 
@@ -85,6 +97,50 @@ const formatDuration = (seconds) => {
                         <p class="font-semibold">{{ formatDuration(activeSeconds) }}</p>
                     </div>
                 </div>
+
+                <form
+                    v-if="task.can_reassign"
+                    class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                    @submit.prevent="reassign"
+                >
+                    <p class="font-semibold text-gray-900">Reassign to another uploader</p>
+                    <p class="mt-1 text-sm text-gray-500">
+                        Use this when the current uploader cannot finish. The chapter, PDF, and any questions already imported stay — only the assignee changes.
+                    </p>
+                    <div class="mt-3 flex flex-wrap items-end gap-3">
+                        <div class="min-w-[16rem] flex-1">
+                            <label class="text-xs font-medium text-gray-600">New uploader</label>
+                            <select
+                                v-model="reassignForm.assigned_to_user_id"
+                                required
+                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                            >
+                                <option value="" disabled>Select uploader</option>
+                                <option
+                                    v-for="person in uploaders"
+                                    :key="person.id"
+                                    :value="person.id"
+                                    :disabled="person.id === task.assignee?.id"
+                                >
+                                    {{ person.name }}{{ person.id === task.assignee?.id ? ' (current)' : '' }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="min-w-[16rem] flex-1">
+                            <label class="text-xs font-medium text-gray-600">Note (optional)</label>
+                            <input
+                                v-model="reassignForm.note"
+                                type="text"
+                                maxlength="500"
+                                placeholder="Could not finish"
+                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                            >
+                        </div>
+                        <PrimaryButton type="submit" :disabled="reassignForm.processing || !reassignForm.assigned_to_user_id">
+                            {{ reassignForm.processing ? 'Reassigning…' : 'Reassign' }}
+                        </PrimaryButton>
+                    </div>
+                </form>
 
                 <div v-if="task.duplicate_override_reason" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
                     <strong>Duplicate override:</strong> {{ task.duplicate_override_reason }}

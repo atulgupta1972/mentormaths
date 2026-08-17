@@ -341,6 +341,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/content-tasks/create', [ContentUploadTaskController::class, 'create'])->name('content-tasks.create');
     Route::post('/content-tasks', [ContentUploadTaskController::class, 'store'])->name('content-tasks.store');
     Route::get('/content-tasks/{contentTask}', [ContentUploadTaskController::class, 'show'])->name('content-tasks.show');
+    Route::post('/content-tasks/{contentTask}/reassign', [ContentUploadTaskController::class, 'reassign'])->name('content-tasks.reassign');
     Route::post('/content-tasks/{contentTask}/verification-question', [ContentUploadTaskController::class, 'saveVerificationQuestion'])->name('content-tasks.verification-question');
     Route::post('/content-tasks/{contentTask}/verification-batch', [ContentUploadTaskController::class, 'markVerificationBatch'])->name('content-tasks.verification-batch');
     Route::post('/content-tasks/{contentTask}/verification-diagram', [ContentUploadTaskController::class, 'uploadVerificationDiagram'])->name('content-tasks.verification-diagram');

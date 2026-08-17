@@ -378,6 +378,13 @@ const breakupCards = computed(() => [
                                         >
                                             {{ row.can_review_and_publish ? 'Review & publish' : 'Open' }}
                                         </Link>
+                                        <Link
+                                            v-if="row.can_reassign"
+                                            :href="route('admin.content-tasks.show', row.id)"
+                                            class="ml-3 text-slate-600 hover:underline"
+                                        >
+                                            Reassign
+                                        </Link>
                                     </td>
                                 </tr>
                                 <tr v-if="!filteredDrillChapters.length">
@@ -417,6 +424,13 @@ const breakupCards = computed(() => [
                                 <td class="px-4 py-3">{{ task.status_label }}</td>
                                 <td class="px-4 py-3 text-right">
                                     <Link :href="route('admin.content-tasks.show', task.id)" class="text-indigo-600 hover:underline">View</Link>
+                                    <Link
+                                        v-if="task.can_reassign"
+                                        :href="route('admin.content-tasks.show', task.id)"
+                                        class="ml-3 text-slate-600 hover:underline"
+                                    >
+                                        Reassign
+                                    </Link>
                                 </td>
                             </tr>
                             <tr v-if="!tasks.data.length">

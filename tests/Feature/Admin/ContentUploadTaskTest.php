@@ -428,6 +428,118 @@ class ContentUploadTaskTest extends TestCase
         $this->assertSame(1, ContentUploadTask::query()->count());
     }
 
+    public function test_admin_can_reassign_unfinished_chapter_to_another_uploader(): void
+    {
+        $this->withoutMiddleware([
+            \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+        ]);
+        Mail::fake();
+
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Test Book',
+            'code' => 'TB-RE',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $chapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 1,
+            'title' => 'Reassign me',
+            'pdf_path' => 'textbooks/sample.pdf',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $first = User::factory()->create(['name' => 'First Uploader', 'role' => User::ROLE_TEACHER]);
+        $second = User::factory()->create(['name' => 'Second Uploader', 'role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($first, User::ROLE_CONTENT_UPLOADER);
+        app(UserGroupService::class)->attachGroupByCode($second, User::ROLE_CONTENT_UPLOADER);
+
+        $task = ContentUploadTask::create([
+            'textbook_chapter_id' => $chapter->id,
+            'assigned_to_user_id' => $first->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 5000,
+            'agreed_amount_inr' => 5000,
+            'agreed_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->from(route('admin.content-tasks.show', $task))
+            ->post(route('admin.content-tasks.reassign', $task), [
+                'assigned_to_user_id' => $second->id,
+                'note' => 'Could not finish',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $task->refresh();
+        $this->assertSame($second->id, $task->assigned_to_user_id);
+        $this->assertSame(ContentUploadTask::STATUS_IN_PROGRESS, $task->status);
+        $this->assertStringContainsString('First Uploader → Second Uploader', (string) $task->admin_notes);
+        $this->assertStringContainsString('Could not finish', (string) $task->admin_notes);
+        $this->assertSame(1, ContentUploadTask::query()->count());
+
+        Mail::assertSent(ContentTaskAssignedUploader::class, fn ($mail) => $mail->hasTo($second->email));
+    }
+
+    public function test_admin_cannot_reassign_published_chapter(): void
+    {
+        $this->withoutMiddleware([
+            \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+        ]);
+
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Test Book',
+            'code' => 'TB-PUB',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $chapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 1,
+            'title' => 'Published chapter',
+            'pdf_path' => null,
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+
+        $first = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        $second = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($first, User::ROLE_CONTENT_UPLOADER);
+        app(UserGroupService::class)->attachGroupByCode($second, User::ROLE_CONTENT_UPLOADER);
+
+        $task = ContentUploadTask::create([
+            'textbook_chapter_id' => $chapter->id,
+            'assigned_to_user_id' => $first->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'offered_amount_inr' => 5000,
+            'agreed_amount_inr' => 5000,
+            'published_at' => now(),
+            'published_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->from(route('admin.content-tasks.show', $task))
+            ->post(route('admin.content-tasks.reassign', $task), [
+                'assigned_to_user_id' => $second->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame($first->id, $task->fresh()->assigned_to_user_id);
+    }
+
     public function test_assign_form_lists_chapters_for_the_selected_board_only(): void
     {
         $this->withoutVite();

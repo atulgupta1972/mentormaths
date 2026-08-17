@@ -445,7 +445,38 @@ class ContentUploadTaskController extends Controller
             'verification' => $verification,
             'activeSeconds' => $this->sessionService->totalActiveSeconds($contentTask),
             'deleteRequests' => $this->chapterLibrary->pendingDeleteRequestsForTask($contentTask),
+            'uploaders' => $this->contentUploaders(),
         ]);
+    }
+
+    public function reassign(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'assigned_to_user_id' => ['required', 'integer', 'exists:users,id'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $uploader = User::query()->findOrFail($validated['assigned_to_user_id']);
+
+        try {
+            $result = $this->taskService->reassign(
+                $contentTask,
+                $uploader,
+                $request->user(),
+                $validated['note'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $success = "Reassigned from {$result['previous_name']} to {$uploader->name}.";
+        $success .= $result['email_sent']
+            ? " Assignment email sent to {$uploader->email}."
+            : ' Warning: assignment email could not be sent — check mail settings.';
+
+        return back()
+            ->with('success', $success)
+            ->with('email_sent', $result['email_sent']);
     }
 
     public function saveVerificationQuestion(Request $request, ContentUploadTask $contentTask): RedirectResponse
@@ -669,6 +700,7 @@ class ContentUploadTaskController extends Controller
             'submitted_at' => $task->submitted_at?->toIso8601String(),
             'published_at' => $task->published_at?->toIso8601String(),
             'assignee' => $task->assignee?->only(['id', 'name', 'email']),
+            'can_reassign' => $task->canReassign(),
             'chapter' => $chapter ? [
                 'id' => $chapter->id,
                 'chapter_number' => $chapter->chapter_number,
@@ -757,6 +789,18 @@ class ContentUploadTaskController extends Controller
             'set_plan_summary' => $this->setPlanService->summary($setPlan),
             'set_plan_parts' => count($setPlan),
         ];
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array{id: int, name: string, email: string}>
+     */
+    private function contentUploaders()
+    {
+        return User::query()
+            ->whereHas('groups', fn ($q) => $q->where('code', User::ROLE_CONTENT_UPLOADER))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
     }
 
     private function authorizeVerificationRun(ContentUploadTask $task, int $runId): ContentVerificationRun

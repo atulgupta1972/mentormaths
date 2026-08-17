@@ -227,6 +227,15 @@ class ContentUploadTask extends Model
         return $this->status === self::STATUS_PENDING_AGREEMENT;
     }
 
+    public function canReassign(): bool
+    {
+        return ! in_array($this->status, [
+            self::STATUS_SUBMITTED_FOR_PUBLISH,
+            self::STATUS_PUBLISHED,
+            self::STATUS_CANCELLED,
+        ], true);
+    }
+
     public function canAssigneeWork(): bool
     {
         return in_array($this->status, [

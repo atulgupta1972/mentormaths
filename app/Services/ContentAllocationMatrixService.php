@@ -261,6 +261,7 @@ class ContentAllocationMatrixService
             'status_group' => $this->statusGroup($task->status),
             'breakup_bucket' => $breakupBucket,
             'can_review_and_publish' => $breakupBucket === 'submitted',
+            'can_reassign' => $task->canReassign(),
             'offered_amount_inr' => $task->offered_amount_inr,
             'agreed_amount_inr' => $task->agreed_amount_inr,
             'question_count' => $questionCount,
