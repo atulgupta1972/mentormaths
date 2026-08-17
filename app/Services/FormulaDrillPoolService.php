@@ -31,13 +31,21 @@ class FormulaDrillPoolService
      */
     public function poolQuestionIds(Student $student): array
     {
-        if (! FormulaDrillSchema::isReady()) {
-            return [];
-        }
-
         $enrollment = $student->currentEnrollment();
 
         if (! $enrollment) {
+            return [];
+        }
+
+        return $this->poolQuestionIdsForEnrollment($enrollment);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function poolQuestionIdsForEnrollment(StudentEnrollment $enrollment): array
+    {
+        if (! FormulaDrillSchema::isReady()) {
             return [];
         }
 
@@ -47,6 +55,43 @@ class FormulaDrillPoolService
             $this->formulaIdsForTopicIds($this->previousGradeTopicIds($enrollment)),
             $this->formulaIdsForTopicIds($this->currentGradeTopicIds($enrollment)),
         );
+    }
+
+    /**
+     * Formula pool for coverage: id plus chapter label, in syllabus order.
+     *
+     * @return list<array{id: int, chapter_label: string, sort: int}>
+     */
+    public function poolCatalogForEnrollment(StudentEnrollment $enrollment): array
+    {
+        $ids = $this->poolQuestionIdsForEnrollment($enrollment);
+
+        if ($ids === []) {
+            return [];
+        }
+
+        return Question::query()
+            ->whereIn('id', $ids)
+            ->with(['topic.chapter:id,name,chapter_number,sort_order'])
+            ->get()
+            ->map(function (Question $question) {
+                $chapter = $question->topic?->chapter;
+                $name = $chapter?->name ?: 'Formulas';
+                $number = trim((string) ($chapter?->chapter_number ?? ''));
+                $label = $number !== '' ? "Ch {$number} {$name}" : $name;
+
+                return [
+                    'id' => (int) $question->id,
+                    'chapter_label' => $label,
+                    'sort' => (int) ($chapter?->sort_order ?? 999),
+                ];
+            })
+            ->sortBy([
+                ['sort', 'asc'],
+                ['id', 'asc'],
+            ])
+            ->values()
+            ->all();
     }
 
     public function poolSize(Student $student): int

@@ -390,6 +390,7 @@ class BasicsDrillTest extends TestCase
                 ->where('coverage.classes.0.students.0.last_squares', '6²–7²')
                 ->where('coverage.classes.0.students.0.last_cubes', '2³')
                 ->where('coverage.classes.0.students.0.next_table', 9)
+                ->where('coverage.classes.0.students.0.formula_pool', 0)
                 ->where('coverage.classes.0.students.0.misses.0.label', '7 × 8')
                 ->where('coverage.classes.0.students.0.misses.0.times_failed', 3));
     }

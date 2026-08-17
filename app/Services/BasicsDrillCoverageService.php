@@ -6,7 +6,10 @@ use App\Models\AcademicYear;
 use App\Models\BasicsDrillProgress;
 use App\Models\BasicsDrillSession;
 use App\Models\BasicsFactStat;
+use App\Models\FormulaDrillSession;
+use App\Models\FormulaQuestionStat;
 use App\Models\StudentEnrollment;
+use App\Support\FormulaDrillSchema;
 use Illuminate\Support\Collection;
 
 class BasicsDrillCoverageService
@@ -14,6 +17,7 @@ class BasicsDrillCoverageService
     public function __construct(
         private BasicsDrillSettingsService $settings,
         private BasicsDrillReportService $report,
+        private FormulaDrillPoolService $formulaPool,
     ) {}
 
     /**
@@ -64,6 +68,9 @@ class BasicsDrillCoverageService
 
         $latestByStudent = $this->latestSessions($studentIds);
         $mistakesByStudent = $this->mistakesByStudent($studentIds);
+        $formulaLatestByStudent = $this->latestFormulaSessions($studentIds);
+        $formulaStatsByStudent = $this->formulaStatsByStudent($studentIds);
+        $formulaCatalogByKey = [];
 
         $settingsByGrade = [];
         $classes = [];
@@ -79,17 +86,34 @@ class BasicsDrillCoverageService
 
             $students = $rows
                 ->sortBy(fn (StudentEnrollment $enrollment) => mb_strtolower($enrollment->student->name))
-                ->map(function (StudentEnrollment $enrollment) use ($progressByStudent, $latestByStudent, $mistakesByStudent, $settings, &$totals) {
+                ->map(function (StudentEnrollment $enrollment) use (
+                    $progressByStudent,
+                    $latestByStudent,
+                    $mistakesByStudent,
+                    $formulaLatestByStudent,
+                    $formulaStatsByStudent,
+                    &$formulaCatalogByKey,
+                    $settings,
+                    &$totals,
+                ) {
                     $student = $enrollment->student;
                     $progress = $progressByStudent->get($student->id);
                     $session = $latestByStudent->get($student->id);
+                    $formulaSession = $formulaLatestByStudent->get($student->id);
                     $misses = $mistakesByStudent->get($student->id, collect())->values()->all();
+                    $formulaSnapshot = $this->formulaSnapshot(
+                        $enrollment,
+                        $formulaStatsByStudent->get($student->id, collect()),
+                        $formulaSession,
+                        $formulaCatalogByKey,
+                    );
+                    $misses = array_values(array_merge($misses, $formulaSnapshot['misses']));
 
                     $totals['students']++;
                     if ($misses !== []) {
                         $totals['with_mistakes']++;
                     }
-                    if (! $session) {
+                    if (! $session && ! $formulaSession) {
                         $totals['never_started']++;
                     }
 
@@ -117,6 +141,12 @@ class BasicsDrillCoverageService
                         'next_cubes' => ($settings['cubes_enabled'] ?? false)
                             ? $this->batchLabel($progress?->cube_batch_start, $settings, 'cube')
                             : null,
+                        'formula_seen' => $formulaSnapshot['seen'],
+                        'formula_pool' => $formulaSnapshot['pool'],
+                        'formula_next' => $formulaSnapshot['next'],
+                        'formula_status' => $formulaSession?->status,
+                        'formula_date' => $formulaSession?->drill_date?->timezone(config('formula_drill.timezone', 'Asia/Kolkata'))->format('j M'),
+                        'formula_last_score' => $formulaSnapshot['last_score'],
                         'miss_count' => count($misses),
                         'misses' => $misses,
                     ];
@@ -129,7 +159,7 @@ class BasicsDrillCoverageService
                 'grade_name' => $grade?->name ?? 'Class',
                 'student_count' => count($students),
                 'mistake_count' => count(array_filter($students, fn (array $row) => $row['miss_count'] > 0)),
-                'never_started_count' => count(array_filter($students, fn (array $row) => $row['last_date'] === null)),
+                'never_started_count' => count(array_filter($students, fn (array $row) => $row['last_date'] === null && $row['formula_date'] === null)),
                 'students' => $students,
             ];
         }
@@ -220,5 +250,185 @@ class BasicsDrillCoverageService
         }
 
         return $start.$suffix.'–'.$end.$suffix;
+    }
+
+    /**
+     * @param  list<int>  $studentIds
+     * @return Collection<int, FormulaDrillSession>
+     */
+    private function latestFormulaSessions(array $studentIds): Collection
+    {
+        if ($studentIds === [] || ! FormulaDrillSchema::isReady()) {
+            return collect();
+        }
+
+        $latestIds = FormulaDrillSession::query()
+            ->selectRaw('MAX(id) as id')
+            ->whereIn('student_id', $studentIds)
+            ->whereIn('status', [
+                FormulaDrillSession::STATUS_IN_PROGRESS,
+                FormulaDrillSession::STATUS_COMPLETED,
+            ])
+            ->groupBy('student_id')
+            ->pluck('id');
+
+        return FormulaDrillSession::query()
+            ->whereIn('id', $latestIds)
+            ->get()
+            ->keyBy('student_id');
+    }
+
+    /**
+     * @param  list<int>  $studentIds
+     * @return Collection<int, Collection<int, FormulaQuestionStat>>
+     */
+    private function formulaStatsByStudent(array $studentIds): Collection
+    {
+        if ($studentIds === [] || ! FormulaDrillSchema::isReady()) {
+            return collect();
+        }
+
+        return FormulaQuestionStat::query()
+            ->whereIn('student_id', $studentIds)
+            ->with(['question:id,question_text'])
+            ->get()
+            ->groupBy('student_id');
+    }
+
+    /**
+     * @param  Collection<int, FormulaQuestionStat>  $stats
+     * @param  array<string, list<array{id: int, chapter_label: string, sort: int}>>  $catalogCache
+     * @return array{seen: int, pool: int, next: ?string, last_score: ?string, misses: list<array<string, mixed>>}
+     */
+    private function formulaSnapshot(
+        StudentEnrollment $enrollment,
+        Collection $stats,
+        ?FormulaDrillSession $session,
+        array &$catalogCache,
+    ): array {
+        $cacheKey = $enrollment->academic_year_id.'-'.$enrollment->grade_level_id.'-'.($enrollment->board_id ?? 'none');
+        $catalog = $catalogCache[$cacheKey] ??= $this->formulaPool->poolCatalogForEnrollment($enrollment);
+        $poolIds = array_column($catalog, 'id');
+        $poolLookup = array_flip($poolIds);
+
+        $seenIds = $stats
+            ->filter(fn (FormulaQuestionStat $stat) => ($stat->times_shown ?? 0) > 0 && isset($poolLookup[$stat->question_id]))
+            ->pluck('question_id')
+            ->unique()
+            ->all();
+
+        $reviewCount = $stats
+            ->filter(fn (FormulaQuestionStat $stat) => $stat->needs_review && isset($poolLookup[$stat->question_id]))
+            ->count();
+
+        $lastScore = null;
+        if ($session && (int) $session->questions_total > 0) {
+            $lastScore = ((int) $session->questions_completed).'/'.((int) $session->questions_total);
+        }
+
+        return [
+            'seen' => count($seenIds),
+            'pool' => count($catalog),
+            'next' => $this->formulaNextLabel($catalog, $seenIds, $reviewCount),
+            'last_score' => $lastScore,
+            'misses' => $this->formulaMisses($stats, $poolLookup),
+        ];
+    }
+
+    /**
+     * @param  list<array{id: int, chapter_label: string, sort: int}>  $catalog
+     * @param  list<int>  $seenIds
+     */
+    private function formulaNextLabel(array $catalog, array $seenIds, int $reviewCount): ?string
+    {
+        if ($catalog === []) {
+            return null;
+        }
+
+        $seenLookup = array_flip($seenIds);
+        $remainingByChapter = [];
+
+        foreach ($catalog as $row) {
+            if (isset($seenLookup[$row['id']])) {
+                continue;
+            }
+
+            $label = $row['chapter_label'];
+            $remainingByChapter[$label] ??= 0;
+            $remainingByChapter[$label]++;
+        }
+
+        if ($remainingByChapter === []) {
+            if ($reviewCount > 0) {
+                return "Review ×{$reviewCount}";
+            }
+
+            return 'Repeat cycle';
+        }
+
+        $parts = [];
+        $shown = 0;
+        foreach ($remainingByChapter as $label => $count) {
+            if ($shown >= 2) {
+                $leftoverChapters = count($remainingByChapter) - 2;
+                if ($leftoverChapters > 0) {
+                    $parts[] = "+{$leftoverChapters} ch";
+                }
+                break;
+            }
+
+            $parts[] = "{$label} ×{$count}";
+            $shown++;
+        }
+
+        return implode(', ', $parts);
+    }
+
+    /**
+     * @param  Collection<int, FormulaQuestionStat>  $stats
+     * @param  array<int, int>  $poolLookup
+     * @return list<array<string, mixed>>
+     */
+    private function formulaMisses(Collection $stats, array $poolLookup): array
+    {
+        if ($poolLookup === []) {
+            return [];
+        }
+
+        return $stats
+            ->filter(function (FormulaQuestionStat $stat) use ($poolLookup) {
+                if (! isset($poolLookup[$stat->question_id])) {
+                    return false;
+                }
+
+                return $stat->needs_review || $stat->total_failures > 0;
+            })
+            ->sortByDesc(fn (FormulaQuestionStat $stat) => ($stat->needs_review ? 1000 : 0) + $stat->total_failures)
+            ->take(3)
+            ->map(fn (FormulaQuestionStat $stat) => [
+                'fact_type' => 'formula',
+                'fact_key' => 'f'.$stat->question_id,
+                'label' => $this->shortFormulaLabel($stat->question?->question_text),
+                'times_failed' => $stat->total_failures,
+                'needs_review' => $stat->needs_review,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function shortFormulaLabel(?string $text): string
+    {
+        $plain = trim(html_entity_decode(strip_tags((string) $text), ENT_QUOTES, 'UTF-8'));
+        $plain = preg_replace('/\s+/u', ' ', $plain) ?: '';
+
+        if ($plain === '') {
+            return 'Formula';
+        }
+
+        if (mb_strlen($plain) <= 36) {
+            return $plain;
+        }
+
+        return mb_substr($plain, 0, 34).'…';
     }
 }

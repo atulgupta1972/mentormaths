@@ -88,6 +88,33 @@ const nextLabel = (student) => {
     return joinBits(bits);
 };
 
+const formulaCovered = (student) => {
+    if (!student.formula_pool) {
+        return '—';
+    }
+
+    return `${student.formula_seen}/${student.formula_pool}`;
+};
+
+const drillWhen = (student) => {
+    if (student.last_status === 'in_progress' || student.formula_status === 'in_progress') {
+        return 'Tonight';
+    }
+    if (student.last_date || student.formula_date) {
+        return student.last_date || student.formula_date;
+    }
+
+    return 'Not started';
+};
+
+const missChipClass = (miss) => {
+    if (miss.fact_type === 'formula') {
+        return miss.needs_review ? 'bg-indigo-100 text-indigo-900' : 'bg-indigo-50 text-indigo-800';
+    }
+
+    return miss.needs_review ? 'bg-amber-100 text-amber-900' : 'bg-rose-50 text-rose-800';
+};
+
 const visibleStudents = (grade) => {
     const students = grade.students || [];
     if (!mistakesOnly.value) {
@@ -107,8 +134,8 @@ const totals = computed(() => props.coverage?.totals || { students: 0, with_mist
     <AuthenticatedLayout>
         <template #header>
             <div>
-                <h2 class="text-xl font-semibold text-gray-800">Tables, squares & cubes</h2>
-                <p class="text-sm text-gray-500">Class-wise daily memorisation drill (after formula).</p>
+                <h2 class="text-xl font-semibold text-gray-800">Nightly drills</h2>
+                <p class="text-sm text-gray-500">Formulas, then tables, squares & cubes — class-wise coverage.</p>
             </div>
         </template>
 
@@ -274,8 +301,10 @@ const totals = computed(() => props.coverage?.totals || { students: 0, with_mist
                                 <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                                     <tr>
                                         <th class="px-4 py-2 font-medium">Student</th>
-                                        <th class="px-4 py-2 font-medium">Last</th>
-                                        <th class="px-4 py-2 font-medium">Next</th>
+                                        <th class="px-4 py-2 font-medium">Tables last</th>
+                                        <th class="px-4 py-2 font-medium">Tables next</th>
+                                        <th class="px-4 py-2 font-medium">Formulas</th>
+                                        <th class="px-4 py-2 font-medium">Formulas next</th>
                                         <th class="px-4 py-2 font-medium">Misses</th>
                                     </tr>
                                 </thead>
@@ -290,9 +319,7 @@ const totals = computed(() => props.coverage?.totals || { students: 0, with_mist
                                                 {{ student.student_name }}
                                             </Link>
                                             <p class="text-xs text-gray-400">
-                                                <template v-if="student.last_status === 'in_progress'">Tonight</template>
-                                                <template v-else-if="student.last_date">{{ student.last_date }}</template>
-                                                <template v-else>Not started</template>
+                                                {{ drillWhen(student) }}
                                             </p>
                                         </td>
                                         <td class="whitespace-nowrap px-4 py-2 font-mono text-xs text-gray-800">
@@ -301,13 +328,22 @@ const totals = computed(() => props.coverage?.totals || { students: 0, with_mist
                                         <td class="whitespace-nowrap px-4 py-2 font-mono text-xs text-gray-800">
                                             {{ nextLabel(student) }}
                                         </td>
+                                        <td class="whitespace-nowrap px-4 py-2 text-xs text-gray-800">
+                                            <p class="font-mono">{{ formulaCovered(student) }}</p>
+                                            <p v-if="student.formula_last_score" class="text-gray-400">
+                                                last {{ student.formula_last_score }}
+                                            </p>
+                                        </td>
+                                        <td class="px-4 py-2 text-xs text-gray-700">
+                                            {{ student.formula_next || '—' }}
+                                        </td>
                                         <td class="px-4 py-2">
                                             <div v-if="student.misses.length" class="flex flex-wrap gap-1">
                                                 <span
                                                     v-for="miss in student.misses"
                                                     :key="miss.fact_key"
                                                     class="rounded-full px-2 py-0.5 text-xs"
-                                                    :class="miss.needs_review ? 'bg-amber-100 text-amber-900' : 'bg-rose-50 text-rose-800'"
+                                                    :class="missChipClass(miss)"
                                                 >
                                                     {{ miss.label }}
                                                     <span class="text-[10px] opacity-70">×{{ miss.times_failed }}</span>
@@ -317,7 +353,7 @@ const totals = computed(() => props.coverage?.totals || { students: 0, with_mist
                                         </td>
                                     </tr>
                                     <tr v-if="visibleStudents(grade).length === 0">
-                                        <td colspan="4" class="px-4 py-3 text-xs text-gray-400">
+                                        <td colspan="6" class="px-4 py-3 text-xs text-gray-400">
                                             No students with mistakes in this class.
                                         </td>
                                     </tr>

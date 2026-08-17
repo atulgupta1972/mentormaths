@@ -882,4 +882,49 @@ class FormulaDrillTest extends TestCase
 
         $this->assertContains($unassignedFormula->id, $poolIds);
     }
+
+    public function test_admin_coverage_includes_formula_progress(): void
+    {
+        [
+            'student' => $student,
+            'formulaQuestion' => $seenQuestion,
+            'topic' => $topic,
+        ] = $this->seedStudentWithCompletedChapter();
+
+        $this->createFormulaQuestion($topic, 'Product of two negatives is:', 'positive');
+
+        FormulaQuestionStat::query()->create([
+            'student_id' => $student->id,
+            'question_id' => $seenQuestion->id,
+            'times_shown' => 2,
+            'times_correct' => 1,
+            'total_failures' => 2,
+            'needs_review' => true,
+        ]);
+
+        FormulaDrillSession::query()->create([
+            'student_id' => $student->id,
+            'drill_date' => now(config('formula_drill.timezone', 'Asia/Kolkata'))->subDay()->startOfDay(),
+            'status' => FormulaDrillSession::STATUS_COMPLETED,
+            'questions_total' => 1,
+            'questions_completed' => 1,
+            'pool_size' => 2,
+            'completed_at' => now()->subDay(),
+        ]);
+
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $this->withoutVite()
+            ->actingAs($admin)
+            ->get(route('admin.basics-drill.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/BasicsDrill/Index')
+                ->where('coverage.classes.0.students.0.formula_seen', 1)
+                ->where('coverage.classes.0.students.0.formula_pool', 2)
+                ->where('coverage.classes.0.students.0.formula_next', 'Ch 1 Integers ×1')
+                ->where('coverage.classes.0.students.0.formula_last_score', '1/1')
+                ->where('coverage.classes.0.students.0.misses.0.fact_type', 'formula')
+                ->where('coverage.classes.0.students.0.misses.0.times_failed', 2));
+    }
 }
