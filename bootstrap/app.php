@@ -17,7 +17,6 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
-            \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
             \App\Http\Middleware\RecordUserLastSeen::class,
         ]);
 
@@ -34,16 +33,18 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*'),
         );
 
-        $exceptions->respond(function (Response $response, Throwable $exception, Request $request) {
-            if ($response->getStatusCode() < 500 || ! $request->routeIs('dashboard')) {
+        $exceptions->respond(function (Response $response, \Throwable $exception, Request $request) {
+            if ($response->getStatusCode() < 500 || $request->path() !== 'dashboard') {
                 return $response;
             }
 
-            if (! $request->user()?->isAdmin() || $request->attributes->get('dashboard_500_handled')) {
+            if ($request->attributes->get('dashboard_500_handled')) {
                 return $response;
             }
 
             $request->attributes->set('dashboard_500_handled', true);
+
+            $message = $exception->getMessage().' ('.$exception->getFile().':'.$exception->getLine().')';
 
             Log::error('Admin dashboard 500 captured.', [
                 'message' => $exception->getMessage(),
@@ -51,33 +52,34 @@ return Application::configure(basePath: dirname(__DIR__))
                 'line' => $exception->getLine(),
             ]);
 
-            try {
-                $payload = app(\App\Services\DashboardService::class)->emptyAdminPayload($request);
-            } catch (Throwable) {
-                $payload = [
-                    'activeYear' => null,
-                    'selectedGrade' => null,
-                    'stats' => [
-                        'students_count' => 0,
-                        'upcoming_exams_count' => 0,
-                        'pending_sets_count' => 0,
-                        'under_review_sets_count' => 0,
-                        'completed_sets_count' => 0,
-                        'help_requests_count' => 0,
-                        'content_publish_queue_count' => 0,
-                    ],
-                    'students' => [],
-                    'helpRequests' => [],
-                    'contentPublishQueue' => [],
-                    'examTypeOptions' => [],
-                ];
-            }
+            @file_put_contents(
+                storage_path('logs/dashboard-last-error.txt'),
+                now()->toDateTimeString()."\n".$message."\n".$exception->getTraceAsString()
+            );
+
+            $payload = [
+                'activeYear' => null,
+                'selectedGrade' => null,
+                'stats' => [
+                    'students_count' => 0,
+                    'upcoming_exams_count' => 0,
+                    'pending_sets_count' => 0,
+                    'under_review_sets_count' => 0,
+                    'completed_sets_count' => 0,
+                    'help_requests_count' => 0,
+                    'content_publish_queue_count' => 0,
+                ],
+                'students' => [],
+                'helpRequests' => [],
+                'contentPublishQueue' => [],
+                'examTypeOptions' => [],
+            ];
 
             return Inertia::render('Dashboard', [
-                'isAdmin' => true,
+                'isAdmin' => (bool) $request->user()?->isAdmin(),
                 'mailSettings' => null,
                 'gradeLevels' => [],
-                'loadError' => $exception->getMessage().' ('.$exception->getFile().':'.$exception->getLine().')',
+                'loadError' => $message,
                 ...$payload,
             ])->toResponse($request)->setStatusCode(200);
         });

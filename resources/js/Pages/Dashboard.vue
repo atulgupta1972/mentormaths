@@ -418,17 +418,21 @@ const studentsByClass = computed(() => {
 });
 
 const studentSummary = (student) => {
-    const underReview = student.assignments_under_review?.length || 0;
+    const underReview = student.assignments_under_review_count
+        ?? (student.assignments_under_review?.length || 0);
+    const exams = student.upcoming_exams_count ?? (student.upcoming_exams?.length || 0);
+    const todo = student.assignments_pending_count ?? (student.assignments_pending?.length || 0);
+    const done = student.assignments_completed_count ?? (student.assignments_completed?.length || 0);
     const parts = [
-        `${student.upcoming_exams.length} exam${student.upcoming_exams.length === 1 ? '' : 's'}`,
-        `${student.assignments_pending.length} todo`,
+        `${exams} exam${exams === 1 ? '' : 's'}`,
+        `${todo} todo`,
     ];
 
     if (underReview > 0) {
         parts.push(`${underReview} under review`);
     }
 
-    parts.push(`${student.assignments_completed.length} done`);
+    parts.push(`${done} done`);
 
     if (student.help_requests_count > 0) {
         parts.push(`${student.help_requests_count} need help`);

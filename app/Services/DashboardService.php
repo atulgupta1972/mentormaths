@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\AcademicYear;
 use App\Models\ContentUploadTask;
 use App\Models\ExamPlan;
+use App\Models\QuestionResolutionItem;
+use App\Models\SetAssignment;
 use App\Models\StudentEnrollment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -77,75 +79,86 @@ class DashboardService
             ->values();
 
         $studentIds = $enrollments->pluck('student_id')->all();
-
-        try {
-            $helpRequests = $this->resolutionService
-                ->pendingForStudentIds($studentIds, $activeYear->id)
-                ->values()
-                ->all();
-        } catch (Throwable $e) {
-            Log::error('Admin dashboard failed to load help requests.', ['message' => $e->getMessage()]);
-            $helpRequests = [];
-        }
-
-        $helpByStudent = collect($helpRequests)->groupBy('student_id');
         $enrollmentIds = $enrollments->pluck('id')->all();
 
+        $helpCounts = collect();
         try {
-            $assignmentsByEnrollment = $this->attemptService->dashboardKeyedByEnrollmentId($enrollmentIds);
+            if ($studentIds !== []) {
+                $helpCounts = QuestionResolutionItem::query()
+                    ->select('student_enrollments.student_id')
+                    ->selectRaw('count(*) as c')
+                    ->join('student_enrollments', 'student_enrollments.id', '=', 'question_resolution_items.student_enrollment_id')
+                    ->where('question_resolution_items.status', QuestionResolutionItem::STATUS_PENDING)
+                    ->whereIn('student_enrollments.student_id', $studentIds)
+                    ->where('student_enrollments.academic_year_id', $activeYear->id)
+                    ->groupBy('student_enrollments.student_id')
+                    ->pluck('c', 'student_id');
+            }
         } catch (Throwable $e) {
-            Log::error('Admin dashboard failed to load assignments.', ['message' => $e->getMessage()]);
-            $assignmentsByEnrollment = [];
+            Log::error('Admin dashboard failed to count help requests.', ['message' => $e->getMessage()]);
         }
 
+        $examCounts = collect();
+        $assignmentCounts = collect();
         try {
-            $examPlansByEnrollment = ExamPlan::query()
-                ->with([
-                    'chapters:id,chapter_number,name,sort_order',
-                    'topics:id,syllabus_chapter_id,name,sort_order',
-                ])
-                ->whereIn('student_enrollment_id', $enrollmentIds)
-                ->orderBy('exam_date')
-                ->get()
-                ->groupBy(fn (ExamPlan $plan) => (int) $plan->student_enrollment_id);
+            if ($enrollmentIds !== []) {
+                $examCounts = ExamPlan::query()
+                    ->selectRaw('student_enrollment_id, count(*) as c')
+                    ->whereIn('student_enrollment_id', $enrollmentIds)
+                    ->where('status', ExamPlan::STATUS_PLANNED)
+                    ->whereDate('exam_date', '>=', now()->toDateString())
+                    ->groupBy('student_enrollment_id')
+                    ->pluck('c', 'student_enrollment_id');
+
+                $assignmentCounts = SetAssignment::query()
+                    ->selectRaw('student_enrollment_id, status, count(*) as c')
+                    ->whereIn('student_enrollment_id', $enrollmentIds)
+                    ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
+                    ->groupBy('student_enrollment_id', 'status')
+                    ->get()
+                    ->groupBy('student_enrollment_id');
+            }
         } catch (Throwable $e) {
-            Log::error('Admin dashboard failed to load exam plans.', ['message' => $e->getMessage()]);
-            $examPlansByEnrollment = collect();
+            Log::error('Admin dashboard failed to count exams/assignments.', ['message' => $e->getMessage()]);
         }
 
         $students = $enrollments->map(function (StudentEnrollment $enrollment) use (
-            $helpByStudent,
-            $assignmentsByEnrollment,
-            $examPlansByEnrollment,
+            $helpCounts,
+            $examCounts,
+            $assignmentCounts,
         ) {
-            try {
-                $planGroup = $examPlansByEnrollment->get($enrollment->id)
-                    ?? $examPlansByEnrollment->get((string) $enrollment->id)
-                    ?? collect();
+            $byStatus = $assignmentCounts->get($enrollment->id)
+                ?? $assignmentCounts->get((string) $enrollment->id)
+                ?? collect();
+            $completed = (int) $byStatus->firstWhere('status', SetAssignment::STATUS_COMPLETED)?->c;
+            $total = (int) $byStatus->sum('c');
+            $helpCount = (int) ($helpCounts->get($enrollment->student_id) ?? $helpCounts->get((string) $enrollment->student_id) ?? 0);
+            $examCount = (int) ($examCounts->get($enrollment->id) ?? $examCounts->get((string) $enrollment->id) ?? 0);
 
-                return $this->serializeAdminStudentListRow(
-                    $enrollment,
-                    $helpByStudent,
-                    $assignmentsByEnrollment[(int) $enrollment->id] ?? [],
-                    $planGroup,
-                );
-            } catch (Throwable $e) {
-                Log::error('Admin dashboard failed to load a student row.', [
-                    'student_id' => $enrollment->student_id,
-                    'enrollment_id' => $enrollment->id,
-                    'message' => $e->getMessage(),
-                ]);
-
-                return $this->emptyAdminStudentRow($enrollment, $helpByStudent);
-            }
+            return [
+                'student_id' => $enrollment->student_id,
+                'student_name' => $enrollment->student?->name,
+                'class_name' => $enrollment->gradeLevel?->name,
+                'grade_level_id' => $enrollment->grade_level_id,
+                'upcoming_exams' => [],
+                'upcoming_exams_count' => $examCount,
+                'past_exams' => [],
+                'exam_plans' => [],
+                'syllabus_chapters' => [],
+                'assignments_pending' => [],
+                'assignments_pending_count' => max(0, $total - $completed),
+                'assignments_under_review' => [],
+                'assignments_under_review_count' => 0,
+                'assignments_completed' => [],
+                'assignments_completed_count' => $completed,
+                'help_requests' => [],
+                'help_requests_count' => $helpCount,
+            ];
         })->values()->all();
 
-        $upcomingExamsCount = collect($students)->sum(fn (array $row) => count($row['upcoming_exams']));
-        $pendingSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_pending']));
-        $underReviewSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_under_review']));
-        $completedSetsCount = collect($students)->sum(fn (array $row) => count($row['assignments_completed']));
-        $helpRequestsCount = count($helpRequests);
+        $helpRequestsCount = (int) $helpCounts->sum();
 
+        $contentPublishQueue = [];
         try {
             $contentPublishQueue = ContentUploadTask::query()
                 ->with([
@@ -171,7 +184,6 @@ class DashboardService
                 ->all();
         } catch (Throwable $e) {
             Log::error('Admin dashboard failed to load the content publish queue.', ['message' => $e->getMessage()]);
-            $contentPublishQueue = [];
         }
 
         return [
@@ -179,15 +191,15 @@ class DashboardService
             'selectedGrade' => $grade?->only(['id', 'name']),
             'stats' => [
                 'students_count' => count($students),
-                'upcoming_exams_count' => $upcomingExamsCount,
-                'pending_sets_count' => $pendingSetsCount,
-                'under_review_sets_count' => $underReviewSetsCount,
-                'completed_sets_count' => $completedSetsCount,
+                'upcoming_exams_count' => collect($students)->sum(fn (array $row) => (int) ($row['upcoming_exams_count'] ?? 0)),
+                'pending_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_pending_count'] ?? 0)),
+                'under_review_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_under_review_count'] ?? 0)),
+                'completed_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_completed_count'] ?? 0)),
                 'help_requests_count' => $helpRequestsCount,
                 'content_publish_queue_count' => count($contentPublishQueue),
             ],
             'students' => $students,
-            'helpRequests' => $helpRequests,
+            'helpRequests' => [],
             'contentPublishQueue' => $contentPublishQueue,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ];
