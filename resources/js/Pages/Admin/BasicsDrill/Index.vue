@@ -22,6 +22,31 @@ const excludeForm = useForm({
     excluded_tables_text: (props.excludedTables || []).join(', '),
 });
 
+const tableChoices = Array.from({ length: 19 }, (_, i) => i + 2);
+const extraTableChoices = Array.from({ length: 10 }, (_, i) => i + 21);
+const showExtraTables = ref((props.excludedTables || []).some((n) => n > 20));
+
+const excludedSet = computed(() => {
+    const parts = String(excludeForm.excluded_tables_text || '')
+        .split(/[\s,;]+/)
+        .map((part) => Number.parseInt(part, 10))
+        .filter((n) => n >= 2 && n <= 30);
+
+    return new Set(parts);
+});
+
+const toggleExcludedTable = (n) => {
+    const next = new Set(excludedSet.value);
+
+    if (next.has(n)) {
+        next.delete(n);
+    } else {
+        next.add(n);
+    }
+
+    excludeForm.excluded_tables_text = [...next].sort((a, b) => a - b).join(', ');
+};
+
 const forms = Object.fromEntries(
     props.rows.map((row) => [
         row.grade_level_id,
@@ -149,31 +174,61 @@ const totals = computed(() => props.coverage?.totals || { students: 0, with_mist
                 </div>
 
                 <form
-                    class="rounded-lg bg-white px-4 py-4 shadow-sm ring-1 ring-gray-200"
+                    class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 shadow-sm"
                     @submit.prevent="saveExcluded"
                 >
-                    <p class="font-semibold text-gray-900">Exclude tables (all classes)</p>
-                    <p class="mt-1 text-sm text-gray-500">
-                        These numbers are skipped in the daily rotation for every class. Example: <span class="font-mono">10, 11</span>
+                    <p class="font-semibold text-amber-950">Exclude tables (all classes)</p>
+                    <p class="mt-1 text-sm text-amber-900/80">
+                        Click a table to skip it in the nightly drill for every class. Typical skip: 10 and 11.
                     </p>
-                    <div class="mt-3 flex flex-wrap items-end gap-3">
-                        <div class="min-w-[16rem] flex-1">
-                            <InputLabel value="Skip tables" />
-                            <input
-                                v-model="excludeForm.excluded_tables_text"
-                                type="text"
-                                placeholder="10, 11"
-                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
-                            >
-                        </div>
+                    <div class="mt-3 flex flex-wrap gap-1.5">
+                        <button
+                            v-for="n in tableChoices"
+                            :key="n"
+                            type="button"
+                            class="min-w-[2.5rem] rounded-md px-2 py-1.5 text-sm font-semibold ring-1"
+                            :class="excludedSet.has(n)
+                                ? 'bg-rose-600 text-white ring-rose-700'
+                                : 'bg-white text-gray-800 ring-gray-300 hover:bg-gray-50'"
+                            @click="toggleExcludedTable(n)"
+                        >
+                            {{ n }}
+                        </button>
+                    </div>
+                    <div v-if="showExtraTables" class="mt-1.5 flex flex-wrap gap-1.5">
+                        <button
+                            v-for="n in extraTableChoices"
+                            :key="n"
+                            type="button"
+                            class="min-w-[2.5rem] rounded-md px-2 py-1.5 text-sm font-semibold ring-1"
+                            :class="excludedSet.has(n)
+                                ? 'bg-rose-600 text-white ring-rose-700'
+                                : 'bg-white text-gray-800 ring-gray-300 hover:bg-gray-50'"
+                            @click="toggleExcludedTable(n)"
+                        >
+                            {{ n }}
+                        </button>
+                    </div>
+                    <div class="mt-3 flex flex-wrap items-center gap-3">
                         <PrimaryButton type="submit" :disabled="excludeForm.processing">
                             Save exclusions
                         </PrimaryButton>
+                        <button
+                            type="button"
+                            class="text-xs font-medium text-amber-900 underline"
+                            @click="showExtraTables = !showExtraTables"
+                        >
+                            {{ showExtraTables ? 'Hide 21–30' : 'Show 21–30' }}
+                        </button>
                     </div>
-                    <p v-if="excludedTables.length" class="mt-2 text-xs text-gray-500">
-                        Currently skipping: {{ excludedTables.join(', ') }}
+                    <p class="mt-2 text-xs text-amber-900/80">
+                        {{ excludedTables.length
+                            ? `Currently skipping: ${excludedTables.join(', ')}`
+                            : 'No tables excluded yet — click 10 and 11, then Save exclusions.' }}
                     </p>
-                    <p v-else class="mt-2 text-xs text-gray-500">No tables excluded.</p>
+                    <p v-if="excludeForm.errors.excluded_tables_text" class="mt-1 text-xs text-rose-700">
+                        {{ excludeForm.errors.excluded_tables_text }}
+                    </p>
                 </form>
 
                 <div
@@ -261,6 +316,11 @@ const totals = computed(() => props.coverage?.totals || { students: 0, with_mist
                         <PrimaryButton type="submit" class="mt-4" :disabled="forms[row.grade_level_id].processing">
                             Save {{ row.grade_name }}
                         </PrimaryButton>
+                        <p class="mt-2 text-xs text-gray-500">
+                            Tables skipped for every class:
+                            <span class="font-semibold">{{ excludedTables.length ? excludedTables.join(', ') : 'none' }}</span>
+                            (use the yellow box above).
+                        </p>
                     </form>
                 </div>
 

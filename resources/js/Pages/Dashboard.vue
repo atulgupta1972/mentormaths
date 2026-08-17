@@ -585,6 +585,13 @@ const adminSetStatusClass = (set) => {
                                 <Link :href="route('admin.practice-sets.index')" class="rounded-md bg-white/15 px-2.5 py-1 font-medium hover:bg-white/25">
                                     Sets
                                 </Link>
+                                <Link
+                                    v-if="route().has('admin.basics-drill.index')"
+                                    :href="route('admin.basics-drill.index')"
+                                    class="rounded-md bg-white/15 px-2.5 py-1 font-medium hover:bg-white/25"
+                                >
+                                    Nightly drills
+                                </Link>
                             </div>
                         </div>
                     </div>

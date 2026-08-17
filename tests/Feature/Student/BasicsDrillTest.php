@@ -280,6 +280,23 @@ class BasicsDrillTest extends TestCase
                 ->has('excludedTables'));
     }
 
+    public function test_admin_can_save_excluded_tables(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $this->actingAs($admin)
+            ->from(route('admin.basics-drill.index'))
+            ->put(route('admin.basics-drill.globals.update'), [
+                'excluded_tables_text' => '10, 11',
+            ])
+            ->assertRedirect(route('admin.basics-drill.index'));
+
+        $this->assertSame(
+            [10, 11],
+            app(\App\Services\BasicsDrillSettingsService::class)->excludedTables(),
+        );
+    }
+
     public function test_excluded_tables_are_skipped_when_opening_todays_session(): void
     {
         ['student' => $student, 'grade' => $grade] = $this->seedStudentWithFormulaComplete();

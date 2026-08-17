@@ -90,6 +90,12 @@ class BasicsDrillSettingsService
      */
     public function saveExcludedTables(array|string|null $input): array
     {
+        if (! Schema::hasTable('basics_drill_globals')) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'excluded_tables_text' => 'Run php artisan migrate so excluded tables can be saved.',
+            ]);
+        }
+
         $tables = $this->normalizeExcludedTables($input);
 
         $row = BasicsDrillGlobal::query()->first() ?? new BasicsDrillGlobal;
