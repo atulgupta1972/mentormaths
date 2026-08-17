@@ -172,36 +172,48 @@ class SetAttemptService
             return [];
         }
 
-        $grouped = [];
-
-        SetAssignment::query()
+        $assignments = SetAssignment::query()
             ->with([
                 'practiceSet' => fn ($q) => $q
                     ->withCount('questions')
                     ->with(['chapter:id,name,sort_order', 'topic:id,name,syllabus_chapter_id', 'topic.chapter:id,name,sort_order']),
-                'attempts' => fn ($q) => $q->orderByDesc('attempt_number'),
-                'writtenSubmissions' => fn ($q) => $q->latest('id'),
             ])
             ->whereIn('student_enrollment_id', $enrollmentIds)
             ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
             ->whereHas('practiceSet', fn ($q) => $q->where('status', 'published'))
             ->get()
             ->filter(fn (SetAssignment $assignment) => $assignment->practiceSet !== null)
-            ->each(function (SetAssignment $assignment) use (&$grouped) {
-                if ($assignment->practiceSet->isWritten()) {
-                    $row = AssignmentProgress::formatWrittenStudentDashboardSummary(
-                        $assignment,
-                        $assignment->writtenSubmissions->first(),
-                    );
-                } else {
-                    $row = AssignmentProgress::formatStudentDashboardSummary(
-                        $assignment,
-                        $assignment->attempts->first(),
-                    );
-                }
+            ->values();
 
-                $grouped[(int) $assignment->student_enrollment_id][] = $row;
-            });
+        $assignmentIds = $assignments->pluck('id')->all();
+        $latestAttempts = $this->latestAttemptsByAssignmentId($assignmentIds);
+        $latestSubmissions = $this->latestWrittenSubmissionsByAssignmentId($assignmentIds);
+
+        $grouped = [];
+
+        foreach ($assignments as $assignment) {
+            $attempts = collect();
+            $latest = $latestAttempts->get($assignment->id);
+            if ($latest) {
+                $attempts = collect([$latest]);
+            }
+            $assignment->setRelation('attempts', $attempts);
+
+            $submissions = collect();
+            $submission = $latestSubmissions->get($assignment->id);
+            if ($submission) {
+                $submissions = collect([$submission]);
+            }
+            $assignment->setRelation('writtenSubmissions', $submissions);
+
+            if ($assignment->practiceSet->isWritten()) {
+                $row = AssignmentProgress::formatWrittenStudentDashboardSummary($assignment, $submission);
+            } else {
+                $row = AssignmentProgress::formatStudentDashboardSummary($assignment, $latest);
+            }
+
+            $grouped[(int) $assignment->student_enrollment_id][] = $row;
+        }
 
         foreach ($grouped as $enrollmentId => $rows) {
             $grouped[$enrollmentId] = collect($rows)->sortBy([
@@ -211,6 +223,48 @@ class SetAttemptService
         }
 
         return $grouped;
+    }
+
+    /**
+     * @param  list<int>  $assignmentIds
+     * @return \Illuminate\Support\Collection<int, SetAttempt>
+     */
+    private function latestAttemptsByAssignmentId(array $assignmentIds)
+    {
+        if ($assignmentIds === []) {
+            return collect();
+        }
+
+        return SetAttempt::query()
+            ->whereIn('id', function ($query) use ($assignmentIds) {
+                $query->selectRaw('MAX(id)')
+                    ->from('set_attempts')
+                    ->whereIn('set_assignment_id', $assignmentIds)
+                    ->groupBy('set_assignment_id');
+            })
+            ->get()
+            ->keyBy('set_assignment_id');
+    }
+
+    /**
+     * @param  list<int>  $assignmentIds
+     * @return \Illuminate\Support\Collection<int, \App\Models\WrittenSubmission>
+     */
+    private function latestWrittenSubmissionsByAssignmentId(array $assignmentIds)
+    {
+        if ($assignmentIds === []) {
+            return collect();
+        }
+
+        return \App\Models\WrittenSubmission::query()
+            ->whereIn('id', function ($query) use ($assignmentIds) {
+                $query->selectRaw('MAX(id)')
+                    ->from('written_submissions')
+                    ->whereIn('set_assignment_id', $assignmentIds)
+                    ->groupBy('set_assignment_id');
+            })
+            ->get()
+            ->keyBy('set_assignment_id');
     }
 
     /**

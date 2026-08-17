@@ -96,7 +96,7 @@ class AssignmentProgress
             'kind_label' => $assignment->practiceSet->isCatchUp()
                 ? 'Catch-up'
                 : ($assignment->practiceSet->isChapterTest() ? 'Test' : 'Practice'),
-            'question_count' => $assignment->practiceSet->questions_count ?? $assignment->practiceSet->questions()->count(),
+                'question_count' => $practiceSet->questions_count ?? 0,
             'assignment_status' => $assignment->status,
             'target_date' => $assignment->due_date?->toDateString(),
             'assigned_at' => $assignment->assigned_at?->toDateTimeString(),
@@ -194,7 +194,7 @@ class AssignmentProgress
             'is_catch_up' => $practiceSet->isCatchUp(),
             'kind_label' => $practiceSet->isChapterTest() ? 'Written test' : 'Written practice',
             'delivery_mode' => 'written',
-            'question_count' => $practiceSet->questions_count ?? $practiceSet->questions()->count(),
+            'question_count' => $practiceSet->questions_count ?? 0,
             'assignment_status' => $assignment->status,
             'target_date' => $assignment->due_date?->toDateString(),
             'assigned_at' => $assignment->assigned_at?->toDateTimeString(),

@@ -149,7 +149,7 @@ const teachingGroup = computed(() => ({
         },
         {
             label: 'Basics drill',
-            href: route('admin.basics-drill.index'),
+            href: safeRoute('admin.basics-drill.index', undefined, '/admin/basics-drill'),
             active: route().current('admin.basics-drill.*'),
             show: isAdmin.value,
         },

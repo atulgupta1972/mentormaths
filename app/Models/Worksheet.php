@@ -169,7 +169,7 @@ class Worksheet extends Model
 
     public function getDisplayTitleAttribute(): string
     {
-        $count = $this->questions_count ?? $this->questions()->count();
+        $count = (int) ($this->getAttributes()['questions_count'] ?? 0);
 
         if ($this->isCatchUp()) {
             return ($this->set_code ? $this->set_code.' · ' : '')

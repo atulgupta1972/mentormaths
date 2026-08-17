@@ -20,6 +20,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Vite::prefetch(concurrency: 3);
+        try {
+            Vite::prefetch(concurrency: 3);
+        } catch (\Throwable) {
+            // Never block pages if the Vite manifest is missing after a deploy.
+        }
     }
 }

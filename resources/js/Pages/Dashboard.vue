@@ -9,6 +9,7 @@ import ContentUploaderTasksPanel from '@/Components/ContentUploaderTasksPanel.vu
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { formatDate, formatDateTime, formatTime as formatDuration } from '@/utils/dates';
+import { hasRoute, safeRoute } from '@/utils/routes';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
@@ -49,6 +50,7 @@ const props = defineProps({
     contentUploaderTasks: { type: Object, default: null },
     mailSettings: { type: Object, default: null },
     gradeLevels: { type: Array, default: () => [] },
+    loadError: { type: String, default: null },
 });
 
 const showManageExams = ref(false);
@@ -569,6 +571,14 @@ const adminSetStatusClass = (set) => {
             <div class="mx-auto max-w-7xl space-y-4 sm:px-6 lg:px-8">
                 <!-- Admin dashboard -->
                 <template v-if="isAdmin">
+                    <div
+                        v-if="loadError"
+                        class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+                    >
+                        <p class="font-semibold">Dashboard could not load some data.</p>
+                        <p class="mt-1 font-mono text-xs break-all">{{ loadError }}</p>
+                    </div>
+
                     <div class="rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 px-4 py-3 text-white shadow">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -586,8 +596,8 @@ const adminSetStatusClass = (set) => {
                                     Sets
                                 </Link>
                                 <Link
-                                    v-if="route().has('admin.basics-drill.index')"
-                                    :href="route('admin.basics-drill.index')"
+                                    v-if="hasRoute('admin.basics-drill.index')"
+                                    :href="safeRoute('admin.basics-drill.index')"
                                     class="rounded-md bg-white/15 px-2.5 py-1 font-medium hover:bg-white/25"
                                 >
                                     Nightly drills

@@ -35,7 +35,10 @@ class DashboardController extends Controller
                 $adminDashboard = $this->dashboardService->forAdmin($request);
             } catch (Throwable $e) {
                 Log::error('Admin dashboard failed to load.', ['message' => $e->getMessage()]);
-                $adminDashboard = $this->dashboardService->emptyAdminPayload($request);
+                $adminDashboard = [
+                    ...$this->dashboardService->emptyAdminPayload($request),
+                    'loadError' => $e->getMessage(),
+                ];
             }
 
             try {
@@ -57,12 +60,24 @@ class DashboardController extends Controller
                 $gradeLevels = [];
             }
 
-            return Inertia::render('Dashboard', [
-                'isAdmin' => true,
-                'mailSettings' => $mailSettings,
-                'gradeLevels' => $gradeLevels,
-                ...$adminDashboard,
-            ]);
+            try {
+                return Inertia::render('Dashboard', [
+                    'isAdmin' => true,
+                    'mailSettings' => $mailSettings,
+                    'gradeLevels' => $gradeLevels,
+                    ...$adminDashboard,
+                ]);
+            } catch (Throwable $e) {
+                Log::error('Admin dashboard failed to render.', ['message' => $e->getMessage()]);
+
+                return Inertia::render('Dashboard', [
+                    'isAdmin' => true,
+                    'mailSettings' => null,
+                    'gradeLevels' => [],
+                    'loadError' => $e->getMessage(),
+                    ...$this->dashboardService->emptyAdminPayload($request),
+                ]);
+            }
         }
 
         if ($user->isContentUploader() && ! $user->student) {
