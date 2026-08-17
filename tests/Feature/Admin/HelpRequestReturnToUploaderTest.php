@@ -94,6 +94,24 @@ class HelpRequestReturnToUploaderTest extends TestCase
         $this->assertFalse($firstCheck->isComplete());
         $this->assertTrue($secondCheck->isComplete());
 
+        Mail::assertNothingSent();
+
+        $correction = \App\Models\ContentQuestionCorrection::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('question_id', $firstQuestionId)
+            ->where('status', \App\Models\ContentQuestionCorrection::STATUS_PENDING)
+            ->first();
+
+        $this->assertNotNull($correction);
+
+        $dashboard = app(\App\Services\ContentUploaderDashboardService::class)->forUser($uploader);
+        $this->assertSame(1, $dashboard['summary']['corrections_pending']);
+        $this->assertSame($correction->id, $dashboard['correctionsPending'][0]['id']);
+
+        $this->actingAs($uploader)
+            ->post(route('content.corrections.start', $correction))
+            ->assertRedirect(route('content.tasks.show', $task));
+
         Mail::assertSent(ContentTaskReturnedUploader::class, function (ContentTaskReturnedUploader $mail) use ($uploader, $firstQuestionId, $secondQuestionId) {
             return $mail->hasTo($uploader->email)
                 && count($mail->returnItems) === 1

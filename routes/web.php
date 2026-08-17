@@ -436,6 +436,7 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/tasks/{contentTask}/agree', [ContentTaskController::class, 'agree'])->name('tasks.agree');
     Route::post('/tasks/{contentTask}/mark-uploaded', [ContentTaskController::class, 'markUploaded'])->name('tasks.mark-uploaded');
     Route::post('/tasks/{contentTask}/start-review', [ContentTaskController::class, 'startReview'])->name('tasks.start-review');
+    Route::post('/corrections/{correction}/start', [ContentTaskController::class, 'startCorrection'])->name('corrections.start');
     Route::post('/tasks/{contentTask}/verification-check', [ContentTaskController::class, 'saveVerificationCheck'])->name('tasks.verification-check');
     Route::post('/tasks/{contentTask}/verification-question', [ContentTaskController::class, 'saveVerificationQuestion'])->name('tasks.verification-question');
     Route::post('/tasks/{contentTask}/verification-diagram', [ContentTaskController::class, 'uploadVerificationDiagram'])->name('tasks.verification-diagram');

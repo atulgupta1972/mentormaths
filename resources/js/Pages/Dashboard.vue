@@ -975,12 +975,13 @@ const adminSetStatusClass = (set) => {
                     <ContentUploadGuidePanel v-if="isContentUploader" variant="uploader" />
 
                     <ContentUploaderTasksPanel
-                        v-if="contentUploaderTasks?.summary?.total_active"
+                        v-if="contentUploaderTasks?.summary?.total_active || contentUploaderTasks?.correctionsPending?.length"
                         class="mb-4"
                         compact
                         :summary="contentUploaderTasks.summary"
                         :upload-pending="contentUploaderTasks.uploadPending"
                         :review-pending="contentUploaderTasks.reviewPending"
+                        :corrections-pending="contentUploaderTasks.correctionsPending"
                     />
 
                     <!-- School study plan — primary student landing -->

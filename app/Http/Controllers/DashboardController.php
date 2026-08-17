@@ -99,6 +99,7 @@ class DashboardController extends Controller
                 'summary' => $dashboard['summary'],
                 'uploadPending' => $dashboard['uploadPending'],
                 'reviewPending' => $dashboard['reviewPending'],
+                'correctionsPending' => $dashboard['correctionsPending'],
             ];
         }
 

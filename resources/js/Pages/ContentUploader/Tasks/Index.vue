@@ -5,9 +5,10 @@ import { Head, Link, router } from '@inertiajs/vue3';
 
 defineProps({
     tasks: { type: Array, default: () => [] },
-    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, total_active: 0 }) },
+    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, corrections_pending: 0, total_active: 0 }) },
     uploadPending: { type: Array, default: () => [] },
     reviewPending: { type: Array, default: () => [] },
+    correctionsPending: { type: Array, default: () => [] },
 });
 
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
@@ -49,6 +50,7 @@ const chapterHref = (task) => {
                     :summary="summary"
                     :upload-pending="uploadPending"
                     :review-pending="reviewPending"
+                    :corrections-pending="correctionsPending"
                 />
 
                 <div v-if="tasks.length" class="space-y-2">

@@ -254,6 +254,12 @@ const removeDiagram = (questionId) => {
                     {{ row.is_verified ? 'Verified' : 'Needs review' }}
                 </span>
             </div>
+            <p
+                v-if="row.correction_remark"
+                class="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900"
+            >
+                Admin: {{ row.correction_remark }}
+            </p>
 
             <div v-if="questionForms[row.question_id]" class="space-y-3">
                 <div>

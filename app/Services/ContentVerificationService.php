@@ -44,6 +44,12 @@ class ContentVerificationService
             ->get()
             ->keyBy('question_id');
 
+        $correctionRemarks = \App\Models\ContentQuestionCorrection::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('status', \App\Models\ContentQuestionCorrection::STATUS_PENDING)
+            ->get()
+            ->keyBy('question_id');
+
         $questions = $questionIds === []
             ? collect()
             : Question::query()
@@ -53,9 +59,10 @@ class ContentVerificationService
                 ->sortBy(fn (Question $question) => array_search($question->id, $questionIds, true))
                 ->values();
 
-        $rows = $questions->map(function (Question $question, int $index) use ($checks, $questionMeta) {
+        $rows = $questions->map(function (Question $question, int $index) use ($checks, $questionMeta, $correctionRemarks) {
             $check = $checks->get($question->id);
             $meta = $questionMeta[$question->id] ?? [];
+            $correction = $correctionRemarks->get($question->id);
 
             return [
                 'number' => $index + 1,
@@ -69,6 +76,7 @@ class ContentVerificationService
                 'diagram_url' => $question->diagram_url,
                 'has_diagram' => filled($question->diagram_path),
                 'needs_figure' => $this->questionNeedsFigure($question),
+                'correction_remark' => $correction?->remark,
                 'options' => $question->options->values()->map(function (QuestionOption $option, int $optionIndex) {
                     return [
                         'id' => $option->id,
@@ -210,6 +218,7 @@ class ContentVerificationService
 
             $fresh = $check->fresh();
             $this->maybeCompleteRunIfAllVerified($run->fresh());
+            app(ContentUploadTaskService::class)->completeQuestionCorrection($run->task, (int) $question->id);
 
             return $fresh;
         });
@@ -316,6 +325,7 @@ class ContentVerificationService
                 $payload['verified_at'] = now();
                 $check->update($payload);
                 $marked++;
+                app(ContentUploadTaskService::class)->completeQuestionCorrection($run->task, (int) $questionId);
             }
 
             $this->syncTaskStatus($run);

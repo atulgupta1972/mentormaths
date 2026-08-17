@@ -99,6 +99,11 @@ class ContentUploadTask extends Model
         return $this->hasMany(ContentQuestionDeleteRequest::class);
     }
 
+    public function questionCorrections(): HasMany
+    {
+        return $this->hasMany(ContentQuestionCorrection::class);
+    }
+
     public function isLockedForUploaderDelete(): bool
     {
         return $this->published_at !== null

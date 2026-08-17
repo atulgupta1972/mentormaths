@@ -697,7 +697,7 @@ class ContentUploadTaskController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Sent this sum to the uploader to fix. Other questions stay as they are.');
+        return back()->with('success', 'This sum is on the uploader dashboard to correct. They get an email when they open it.');
     }
 
     public function publish(ContentUploadTask $contentTask, Request $request): RedirectResponse

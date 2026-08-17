@@ -4,9 +4,10 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Link, router } from '@inertiajs/vue3';
 
 const props = defineProps({
-    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, total_active: 0 }) },
+    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, corrections_pending: 0, total_active: 0 }) },
     uploadPending: { type: Array, default: () => [] },
     reviewPending: { type: Array, default: () => [] },
+    correctionsPending: { type: Array, default: () => [] },
     compact: { type: Boolean, default: false },
 });
 
@@ -14,6 +15,10 @@ const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
 
 const startReview = (taskId) => {
     router.post(route('content.tasks.start-review', taskId));
+};
+
+const startCorrection = (correctionId) => {
+    router.post(route('content.corrections.start', correctionId));
 };
 
 const chapterHref = (task) => {
@@ -27,7 +32,7 @@ const chapterHref = (task) => {
 
 <template>
     <section
-        v-if="summary.total_active > 0 || uploadPending.length || reviewPending.length"
+        v-if="summary.total_active > 0 || uploadPending.length || reviewPending.length || correctionsPending.length"
         class="rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 to-indigo-50 p-4 shadow-sm"
         :class="compact ? '' : 'space-y-4'"
     >
@@ -48,6 +53,33 @@ const chapterHref = (task) => {
             <span class="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-900">
                 Review pending: {{ summary.review_pending }}
             </span>
+            <span
+                v-if="summary.corrections_pending"
+                class="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-900"
+            >
+                To correct: {{ summary.corrections_pending }}
+            </span>
+        </div>
+
+        <div v-if="correctionsPending.length" class="mt-4 space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-rose-800">Sums to correct</p>
+            <div
+                v-for="item in correctionsPending"
+                :key="`fix-${item.id}`"
+                class="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-rose-200"
+            >
+                <div class="min-w-0 flex-1">
+                    <p class="text-xs font-semibold text-rose-800">{{ item.chapter_label }}</p>
+                    <p class="mt-1 text-sm font-medium text-gray-900">
+                        <span v-if="item.question_number">Q{{ item.question_number }} · </span>
+                        {{ item.question_text || 'Question to fix' }}
+                    </p>
+                    <p v-if="item.remark" class="mt-1 text-xs text-rose-700">{{ item.remark }}</p>
+                </div>
+                <PrimaryButton type="button" class="!py-2 !text-xs" @click="startCorrection(item.id)">
+                    Correct this →
+                </PrimaryButton>
+            </div>
         </div>
 
         <div v-if="reviewPending.length" class="mt-4 space-y-2">

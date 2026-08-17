@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ContentQuestionCorrection;
 use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
 use App\Models\Question;
@@ -567,6 +568,8 @@ class ContentUploadTaskService
                 'question_text' => $question->question_text,
                 'remark' => $this->remarkForHelpIssue($issue, $remark),
             ]],
+            notifyNow: false,
+            source: ContentQuestionCorrection::SOURCE_HELP_REQUEST,
         );
     }
 
@@ -618,6 +621,8 @@ class ContentUploadTaskService
         User $admin,
         ?string $reason = null,
         array $items = [],
+        bool $notifyNow = true,
+        string $source = ContentQuestionCorrection::SOURCE_ADMIN_RETURN,
     ): ContentUploadTask {
         $hasSpecificItems = collect($items)->contains(fn (array $item) => (int) ($item['question_id'] ?? 0) > 0);
 
@@ -669,7 +674,7 @@ class ContentUploadTaskService
             );
         }
 
-        DB::transaction(function () use ($task, $admin, $reason, $normalizedItems) {
+        DB::transaction(function () use ($task, $admin, $reason, $normalizedItems, $source) {
             $verification = app(ContentVerificationService::class);
 
             if ($normalizedItems !== []) {
@@ -693,6 +698,31 @@ class ContentUploadTaskService
                     $label = $item['number'] ? "Q{$item['number']}" : "Question #{$item['question_id']}";
                     $remark = $item['remark'] !== '' ? $item['remark'] : 'Please re-check / fix';
                     $lines[] = "• {$label}: {$remark}";
+
+                    $existing = ContentQuestionCorrection::query()
+                        ->where('content_upload_task_id', $task->id)
+                        ->where('question_id', $item['question_id'])
+                        ->where('status', ContentQuestionCorrection::STATUS_PENDING)
+                        ->first();
+
+                    $payload = [
+                        'question_number' => $item['number'],
+                        'question_text' => $item['question_text'],
+                        'remark' => $remark,
+                        'source' => $source,
+                        'requested_by' => $admin->id,
+                    ];
+
+                    if ($existing) {
+                        $existing->update($payload);
+                    } else {
+                        ContentQuestionCorrection::query()->create([
+                            'content_upload_task_id' => $task->id,
+                            'question_id' => $item['question_id'],
+                            'status' => ContentQuestionCorrection::STATUS_PENDING,
+                            ...$payload,
+                        ]);
+                    }
                 }
                 $block .= "\n".implode("\n", $lines);
             }
@@ -707,14 +737,79 @@ class ContentUploadTaskService
             ]);
         });
 
-        ContentOperationsMailer::notifyReturnedForReverification(
+        if ($notifyNow) {
+            $this->notifyReturned($task, $normalizedItems);
+        }
+
+        return $task->fresh();
+    }
+
+    /**
+     * @param  list<array{question_id: int, remark?: string, number?: int|null, question_text?: ?string}>  $items
+     */
+    public function notifyReturned(ContentUploadTask $task, array $items = []): bool
+    {
+        $sent = ContentOperationsMailer::notifyReturnedForReverification(
             $task->fresh([
                 'assignee',
                 'textbookChapter.textbook.gradeLevel',
             ]),
-            $normalizedItems,
+            $items,
         );
 
+        if ($sent && $items !== []) {
+            ContentQuestionCorrection::query()
+                ->where('content_upload_task_id', $task->id)
+                ->where('status', ContentQuestionCorrection::STATUS_PENDING)
+                ->whereIn('question_id', array_column($items, 'question_id'))
+                ->whereNull('notified_at')
+                ->update(['notified_at' => now()]);
+        }
+
+        return $sent;
+    }
+
+    public function startQuestionCorrection(ContentQuestionCorrection $correction, User $uploader): ContentUploadTask
+    {
+        $task = $correction->task;
+
+        if (! $task || $task->assigned_to_user_id !== $uploader->id) {
+            throw new \InvalidArgumentException('You are not assigned to this correction.');
+        }
+
+        if (! $correction->isPending()) {
+            throw new \InvalidArgumentException('This sum is already corrected.');
+        }
+
+        if (! $correction->notified_at) {
+            $this->notifyReturned($task, [[
+                'question_id' => (int) $correction->question_id,
+                'number' => $correction->question_number,
+                'question_text' => $correction->question_text,
+                'remark' => $correction->remark,
+            ]]);
+            $correction->refresh();
+        }
+
+        if (in_array($task->status, [
+            ContentUploadTask::STATUS_IN_PROGRESS,
+            ContentUploadTask::STATUS_UPLOADED,
+        ], true)) {
+            $this->startReview($task, $uploader);
+        }
+
         return $task->fresh();
+    }
+
+    public function completeQuestionCorrection(ContentUploadTask $task, int $questionId): void
+    {
+        ContentQuestionCorrection::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('question_id', $questionId)
+            ->where('status', ContentQuestionCorrection::STATUS_PENDING)
+            ->update([
+                'status' => ContentQuestionCorrection::STATUS_COMPLETED,
+                'completed_at' => now(),
+            ]);
     }
 }
