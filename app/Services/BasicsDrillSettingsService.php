@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\BasicsDrillGlobal;
 use App\Models\BasicsDrillSetting;
 use App\Models\GradeLevel;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
+use Illuminate\Support\Facades\Schema;
 
 class BasicsDrillSettingsService
 {
@@ -14,7 +16,10 @@ class BasicsDrillSettingsService
      */
     public function defaults(): array
     {
-        return config('basics_drill.defaults', []);
+        $defaults = config('basics_drill.defaults', []);
+        $defaults['excluded_tables'] = $this->excludedTables();
+
+        return $defaults;
     }
 
     /**
@@ -59,7 +64,118 @@ class BasicsDrillSettingsService
             'squares_per_day' => $row->squares_per_day,
             'cubes_per_day' => $row->cubes_per_day,
             'seconds_per_blank' => $row->seconds_per_blank,
+            'excluded_tables' => $defaults['excluded_tables'] ?? [],
         ];
+    }
+
+    /**
+     * Tables skipped in the daily rotation for every class.
+     *
+     * @return list<int>
+     */
+    public function excludedTables(): array
+    {
+        if (! Schema::hasTable('basics_drill_globals')) {
+            return [];
+        }
+
+        $row = BasicsDrillGlobal::query()->first();
+
+        return $this->normalizeExcludedTables($row?->excluded_tables ?? []);
+    }
+
+    /**
+     * @param  list<int>|string|null  $input
+     * @return list<int>
+     */
+    public function saveExcludedTables(array|string|null $input): array
+    {
+        $tables = $this->normalizeExcludedTables($input);
+
+        $row = BasicsDrillGlobal::query()->first() ?? new BasicsDrillGlobal;
+        $row->excluded_tables = $tables;
+        $row->save();
+
+        return $tables;
+    }
+
+    /**
+     * @param  list<int>|string|null  $input
+     * @return list<int>
+     */
+    public function normalizeExcludedTables(array|string|null $input): array
+    {
+        if (is_string($input)) {
+            $parts = preg_split('/[\s,;]+/', $input, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        } else {
+            $parts = $input ?? [];
+        }
+
+        $tables = [];
+        foreach ($parts as $part) {
+            if (! is_numeric($part)) {
+                continue;
+            }
+            $n = (int) $part;
+            if ($n >= 2 && $n <= 30) {
+                $tables[$n] = $n;
+            }
+        }
+
+        $tables = array_values($tables);
+        sort($tables);
+
+        return $tables;
+    }
+
+    /**
+     * @param  array<string, mixed>  $settings
+     * @return list<int>
+     */
+    public function allowedTableNumbers(array $settings): array
+    {
+        $from = (int) ($settings['table_from'] ?? 2);
+        $to = (int) ($settings['table_to'] ?? 19);
+        $excluded = array_flip($settings['excluded_tables'] ?? $this->excludedTables());
+
+        $numbers = [];
+        for ($n = $from; $n <= $to; $n++) {
+            if (! isset($excluded[$n])) {
+                $numbers[] = $n;
+            }
+        }
+
+        return $numbers;
+    }
+
+    /**
+     * First allowed table at or after $candidate, wrapping to the start of the range.
+     *
+     * @param  array<string, mixed>  $settings
+     */
+    public function firstAllowedAtOrAfter(int $candidate, array $settings): ?int
+    {
+        $allowed = $this->allowedTableNumbers($settings);
+
+        if ($allowed === []) {
+            return null;
+        }
+
+        foreach ($allowed as $n) {
+            if ($n >= $candidate) {
+                return $n;
+            }
+        }
+
+        return $allowed[0];
+    }
+
+    /**
+     * @param  array<string, mixed>  $settings
+     */
+    public function nextTableAfter(int $current, array $settings): ?int
+    {
+        return $this->firstAllowedAtOrAfter($current + 1, $settings);
     }
 
     /**

@@ -92,4 +92,9 @@ class BasicsDrillReportService
 
         return $stat->fact_key;
     }
+
+    public function labelForStat(BasicsFactStat $stat): string
+    {
+        return $this->factLabel($stat);
+    }
 }

@@ -319,6 +319,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/formula-bank', [FormulaBankController::class, 'index'])->name('formula-bank.index');
     Route::get('/basics-drill', [BasicsDrillSettingsController::class, 'index'])->name('basics-drill.index');
+    Route::put('/basics-drill/globals', [BasicsDrillSettingsController::class, 'updateGlobals'])->name('basics-drill.globals.update');
     Route::put('/basics-drill/classes/{gradeLevel}', [BasicsDrillSettingsController::class, 'update'])->name('basics-drill.update');
     Route::get('/formula-bank/classes/{grade}', [FormulaBankController::class, 'classShow'])->name('formula-bank.classes.show');
     Route::get('/formula-bank/topics/{topic}', [FormulaBankController::class, 'topicShow'])->name('formula-bank.topics.show');

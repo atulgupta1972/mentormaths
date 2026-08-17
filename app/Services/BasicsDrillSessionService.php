@@ -418,11 +418,10 @@ class BasicsDrillSessionService
             $progress = $this->progressFor($session->student);
 
             if ($settings['tables_enabled'] && $session->table_number !== null) {
-                $next = $session->table_number + 1;
-                if ($next > ($settings['table_to'] ?? 19)) {
-                    $next = $settings['table_from'] ?? 2;
+                $next = $this->settingsService->nextTableAfter((int) $session->table_number, $settings);
+                if ($next !== null) {
+                    $progress->update(['next_table' => $next]);
                 }
-                $progress->update(['next_table' => $next]);
             }
 
             if ($settings['squares_enabled'] && $session->square_batch_start !== null) {
@@ -975,15 +974,20 @@ class BasicsDrillSessionService
             return null;
         }
 
-        $n = $progress->next_table;
-        if ($n < ($settings['table_from'] ?? 2)) {
-            $n = $settings['table_from'] ?? 2;
-        }
-        if ($n > ($settings['table_to'] ?? 19)) {
+        $resolved = $this->settingsService->firstAllowedAtOrAfter(
+            (int) $progress->next_table,
+            $settings,
+        );
+
+        if ($resolved === null) {
             return null;
         }
 
-        return $n;
+        if ($resolved !== (int) $progress->next_table) {
+            $progress->update(['next_table' => $resolved]);
+        }
+
+        return $resolved;
     }
 
     /**

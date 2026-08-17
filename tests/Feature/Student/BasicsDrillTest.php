@@ -4,8 +4,10 @@ namespace Tests\Feature\Student;
 
 use App\Models\AcademicYear;
 use App\Models\BasicsDrillItem;
+use App\Models\BasicsDrillProgress;
 use App\Models\BasicsDrillSession;
 use App\Models\BasicsDrillSetting;
+use App\Models\BasicsFactStat;
 use App\Models\Board;
 use App\Models\FormulaDrillSession;
 use App\Models\GradeLevel;
@@ -13,6 +15,8 @@ use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\User;
+use App\Services\BasicsDrillSessionService;
+use App\Services\BasicsDrillSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -270,6 +274,123 @@ class BasicsDrillTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.basics-drill.index'))
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->component('Admin/BasicsDrill/Index'));
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/BasicsDrill/Index')
+                ->has('coverage.classes')
+                ->has('excludedTables'));
+    }
+
+    public function test_excluded_tables_are_skipped_when_opening_todays_session(): void
+    {
+        ['student' => $student, 'grade' => $grade] = $this->seedStudentWithFormulaComplete();
+
+        BasicsDrillSetting::query()->where('grade_level_id', $grade->id)->update([
+            'table_from' => 3,
+            'table_to' => 19,
+        ]);
+
+        app(BasicsDrillSettingsService::class)->saveExcludedTables([10, 11]);
+
+        BasicsDrillProgress::query()->create([
+            'student_id' => $student->id,
+            'next_table' => 10,
+            'square_batch_start' => 2,
+            'cube_batch_start' => 2,
+        ]);
+
+        $session = app(BasicsDrillSessionService::class)->getOrCreateTodaysSession($student);
+
+        $this->assertSame(12, $session->table_number);
+        $this->assertSame(12, BasicsDrillProgress::query()->where('student_id', $student->id)->value('next_table'));
+    }
+
+    public function test_completed_table_advances_past_excluded_tables(): void
+    {
+        ['student' => $student, 'grade' => $grade] = $this->seedStudentWithFormulaComplete();
+
+        BasicsDrillSetting::query()->where('grade_level_id', $grade->id)->update([
+            'table_from' => 3,
+            'table_to' => 19,
+        ]);
+
+        app(BasicsDrillSettingsService::class)->saveExcludedTables('10, 11');
+
+        $progress = BasicsDrillProgress::query()->create([
+            'student_id' => $student->id,
+            'next_table' => 9,
+            'square_batch_start' => 2,
+            'cube_batch_start' => 2,
+        ]);
+
+        $session = BasicsDrillSession::query()->create([
+            'student_id' => $student->id,
+            'drill_date' => now(config('basics_drill.timezone', 'Asia/Kolkata'))->startOfDay(),
+            'status' => BasicsDrillSession::STATUS_IN_PROGRESS,
+            'phase' => BasicsDrillSession::PHASE_TABLE_DRILL,
+            'table_number' => 9,
+        ]);
+
+        app(BasicsDrillSessionService::class)->completeSession($session);
+
+        $this->assertSame(12, $progress->fresh()->next_table);
+    }
+
+    public function test_admin_coverage_shows_last_drill_and_mistakes_class_wise(): void
+    {
+        ['student' => $student, 'grade' => $grade] = $this->seedStudentWithFormulaComplete();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        BasicsDrillSetting::query()->where('grade_level_id', $grade->id)->update([
+            'table_from' => 3,
+            'table_to' => 19,
+            'squares_enabled' => true,
+            'cubes_enabled' => true,
+            'squares_per_day' => 2,
+            'cubes_per_day' => 1,
+        ]);
+
+        BasicsDrillProgress::query()->create([
+            'student_id' => $student->id,
+            'next_table' => 9,
+            'square_batch_start' => 8,
+            'cube_batch_start' => 3,
+        ]);
+
+        BasicsDrillSession::query()->create([
+            'student_id' => $student->id,
+            'drill_date' => now(config('basics_drill.timezone', 'Asia/Kolkata'))->subDay()->startOfDay(),
+            'status' => BasicsDrillSession::STATUS_COMPLETED,
+            'phase' => BasicsDrillSession::PHASE_COMPLETED,
+            'table_number' => 8,
+            'square_batch_start' => 6,
+            'cube_batch_start' => 2,
+            'completed_at' => now()->subDay(),
+        ]);
+
+        BasicsFactStat::query()->create([
+            'student_id' => $student->id,
+            'fact_type' => BasicsDrillItem::TYPE_TABLE,
+            'fact_key' => '7x8',
+            'times_shown' => 4,
+            'times_correct' => 1,
+            'times_failed' => 3,
+            'needs_review' => true,
+        ]);
+
+        $this->withoutVite()
+            ->actingAs($admin)
+            ->get(route('admin.basics-drill.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/BasicsDrill/Index')
+                ->where('coverage.totals.students', 1)
+                ->where('coverage.totals.with_mistakes', 1)
+                ->where('coverage.classes.0.grade_name', 'Class 7')
+                ->where('coverage.classes.0.students.0.last_table', 8)
+                ->where('coverage.classes.0.students.0.last_squares', '6²–7²')
+                ->where('coverage.classes.0.students.0.last_cubes', '2³')
+                ->where('coverage.classes.0.students.0.next_table', 9)
+                ->where('coverage.classes.0.students.0.misses.0.label', '7 × 8')
+                ->where('coverage.classes.0.students.0.misses.0.times_failed', 3));
     }
 }
