@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ContentUploadTask;
 use App\Models\Question;
 use App\Models\QuestionResolutionItem;
 use App\Models\Student;
@@ -16,13 +17,14 @@ class QuestionResolutionService
     public function __construct(
         private AnswerValidationService $answerValidation,
         private PracticeCorrectionQueueService $correctionQueue,
+        private ContentUploadTaskService $contentUploadTasks,
     ) {}
     /**
      * @return list<array<string, mixed>>
      */
-    public function pendingForEnrollment(int $enrollmentId): array
+    public function pendingForEnrollment(int $enrollmentId, bool $forAdmin = false): array
     {
-        return QuestionResolutionItem::query()
+        $items = QuestionResolutionItem::query()
             ->with([
                 'question.options',
                 'question.worksheets:id,set_code,set_number',
@@ -33,7 +35,20 @@ class QuestionResolutionService
             ->orderByDesc('gave_up_at')
             ->get()
             ->filter(fn (QuestionResolutionItem $item) => $item->question !== null)
-            ->map(fn (QuestionResolutionItem $item) => $this->formatItem($item))
+            ->values();
+
+        $uploaderByQuestion = $forAdmin
+            ? $this->contentUploadTasks->tasksKeyedByQuestionId($items->pluck('question_id')->all())
+            : collect();
+
+        return $items
+            ->map(function (QuestionResolutionItem $item) use ($forAdmin, $uploaderByQuestion) {
+                if (! $forAdmin) {
+                    return $this->formatItem($item);
+                }
+
+                return $this->formatItem($item, $uploaderByQuestion->get((int) $item->question_id));
+            })
             ->values()
             ->all();
     }
@@ -41,11 +56,11 @@ class QuestionResolutionService
     /**
      * @return array<string, mixed>
      */
-    public function formatItem(QuestionResolutionItem $item): array
+    public function formatItem(QuestionResolutionItem $item, ?ContentUploadTask $uploadTask = null): array
     {
         $item->loadMissing(['question.options', 'question.blankAnswer', 'question.worksheets', 'assignment.practiceSet']);
 
-        return [
+        $payload = [
             'id' => $item->id,
             'question_id' => $item->question_id,
             'question_type' => $item->question->type,
@@ -65,6 +80,12 @@ class QuestionResolutionService
                 })->all()
                 : [],
         ];
+
+        if ($uploadTask !== null || func_num_args() > 1) {
+            $payload = array_merge($payload, $this->contentUploadTasks->uploaderReturnPayload($uploadTask));
+        }
+
+        return $payload;
     }
 
     /**
@@ -344,17 +365,26 @@ class QuestionResolutionService
                 }
             });
 
-        return $query->orderByDesc('gave_up_at')->get()
+        $items = $query->orderByDesc('gave_up_at')->get()
             ->filter(fn (QuestionResolutionItem $item) => $item->enrollment && $item->question)
-            ->map(fn (QuestionResolutionItem $item) => [
-            'id' => $item->id,
-            'student_id' => $item->enrollment->student_id,
-            'student_name' => $item->enrollment->student?->name,
-            'class_name' => $item->enrollment->gradeLevel?->name,
-            ...$this->adminSetLinks($item),
-            'question_text' => mb_convert_encoding((string) $item->question->question_text, 'UTF-8', 'UTF-8'),
-            'gave_up_at' => $item->gave_up_at?->toDateTimeString(),
-        ]);
+            ->values();
+
+        $uploaderByQuestion = $this->contentUploadTasks->tasksKeyedByQuestionId($items->pluck('question_id')->all());
+
+        return $items->map(function (QuestionResolutionItem $item) use ($uploaderByQuestion) {
+            return [
+                'id' => $item->id,
+                'student_id' => $item->enrollment->student_id,
+                'student_name' => $item->enrollment->student?->name,
+                'class_name' => $item->enrollment->gradeLevel?->name,
+                ...$this->adminSetLinks($item),
+                'question_text' => mb_convert_encoding((string) $item->question->question_text, 'UTF-8', 'UTF-8'),
+                'gave_up_at' => $item->gave_up_at?->toDateTimeString(),
+                ...$this->contentUploadTasks->uploaderReturnPayload(
+                    $uploaderByQuestion->get((int) $item->question_id),
+                ),
+            ];
+        });
     }
 
     /**

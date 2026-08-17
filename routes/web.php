@@ -350,6 +350,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks/{contentTask}/verification-diagram', [ContentUploadTaskController::class, 'uploadVerificationDiagram'])->name('content-tasks.verification-diagram');
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
     Route::post('/content-tasks/{contentTask}/return-for-reverification', [ContentUploadTaskController::class, 'returnForReverification'])->name('content-tasks.return-for-reverification');
+    Route::post('/help-requests/{item}/return-to-uploader', [ContentUploadTaskController::class, 'returnHelpRequestQuestion'])->name('help-requests.return-to-uploader');
     Route::post('/content-tasks/{contentTask}/publish', [ContentUploadTaskController::class, 'publish'])->name('content-tasks.publish');
     Route::post('/content-tasks/{contentTask}/delete-requests/{deleteRequest}/approve', [ContentUploadTaskController::class, 'approveQuestionDelete'])->name('content-tasks.delete-requests.approve');
     Route::post('/content-tasks/{contentTask}/delete-requests/{deleteRequest}/reject', [ContentUploadTaskController::class, 'rejectQuestionDelete'])->name('content-tasks.delete-requests.reject');

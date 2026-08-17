@@ -120,7 +120,7 @@ class StudentController extends Controller
             'syllabusChapters' => $syllabusChapters,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
             'resolutionItems' => $resolutionEnrollment
-                ? $this->resolutionService->pendingForEnrollment($resolutionEnrollment->id)
+                ? $this->resolutionService->pendingForEnrollment($resolutionEnrollment->id, true)
                 : [],
             'helpRequestsCount' => $resolutionEnrollment
                 ? $this->resolutionService->pendingCountForEnrollment($resolutionEnrollment->id)

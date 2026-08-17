@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ContactNumbersPanel from '@/Components/ContactNumbersPanel.vue';
 import StudentEmailContactsPanel from '@/Components/StudentEmailContactsPanel.vue';
 import FormulaDrillStatsPanel from '@/Components/FormulaDrillStatsPanel.vue';
+import HelpRequestUploaderReturn from '@/Components/HelpRequestUploaderReturn.vue';
 import StudentProgressSummaryPanel from '@/Components/StudentProgressSummaryPanel.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
@@ -225,7 +226,7 @@ const destroyStudent = () => {
                         </span>
                     </h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Sums the student gave up during guided practice or daily revision. Explain in class, then they retry from their dashboard. Open the set to check or fix the stored answer.
+                        Sums the student gave up during guided practice or daily revision. Explain in class, then they retry from their dashboard. Open the set to check the stored answer. If the answer is wrong or the sum is incomplete, send only that sum back to the uploader.
                     </p>
                     <ul v-if="resolutionItems.length" class="mt-4 divide-y divide-gray-100">
                         <li v-for="item in resolutionItems" :key="item.id" class="py-3">
@@ -249,6 +250,7 @@ const destroyStudent = () => {
                                         </Link>
                                     </div>
                                     <p class="mt-1 text-sm text-gray-800">{{ item.question_text }}</p>
+                                    <HelpRequestUploaderReturn :item="item" />
                                 </div>
                                 <p class="text-xs text-gray-500">
                                     Given up {{ item.gave_up_at ? new Date(item.gave_up_at).toLocaleDateString('en-IN') : '—' }}

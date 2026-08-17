@@ -4,11 +4,13 @@ namespace App\Services;
 
 use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
+use App\Models\Question;
 use App\Models\SyllabusChapter;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Support\ContentOperationsMailer;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ContentUploadTaskService
@@ -385,6 +387,230 @@ class ContentUploadTaskService
     }
 
     /**
+     * Latest non-cancelled upload task that owns this live question.
+     */
+    public function taskForQuestion(Question $question): ?ContentUploadTask
+    {
+        return $this->tasksKeyedByQuestionId([(int) $question->id])->get((int) $question->id);
+    }
+
+    /**
+     * @param  list<int>  $questionIds
+     * @return Collection<int, ContentUploadTask>
+     */
+    public function tasksKeyedByQuestionId(array $questionIds): Collection
+    {
+        $ids = collect($questionIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        $questions = Question::query()
+            ->with(['worksheets', 'topic:id,syllabus_chapter_id'])
+            ->whereIn('id', $ids->all())
+            ->get()
+            ->keyBy('id');
+
+        $worksheetIds = $questions
+            ->flatMap(fn (Question $question) => $question->worksheets->pluck('id'))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $chapters = $this->chaptersForWorksheetIds($worksheetIds);
+        $mapped = collect();
+
+        foreach ($questions as $question) {
+            $questionWorksheetIds = $question->worksheets->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $chapter = $chapters->first(function (TextbookChapter $chapter) use ($questionWorksheetIds) {
+                $owned = array_filter([
+                    ...$chapter->mcqWorksheetIds(),
+                    (int) ($chapter->fill_blank_worksheet_id ?? 0),
+                    (int) ($chapter->written_worksheet_id ?? 0),
+                ]);
+
+                return array_intersect($owned, $questionWorksheetIds) !== [];
+            });
+
+            if ($chapter) {
+                $mapped[$question->id] = $chapter->id;
+            }
+        }
+
+        $missing = $ids->filter(fn (int $id) => ! $mapped->has($id));
+        if ($missing->isNotEmpty()) {
+            $syllabusChapterIds = $questions
+                ->only($missing->all())
+                ->map(fn (Question $question) => (int) ($question->topic?->syllabus_chapter_id ?? 0))
+                ->filter(fn (int $id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($syllabusChapterIds !== []) {
+                $bySyllabus = TextbookChapter::query()
+                    ->whereIn('syllabus_chapter_id', $syllabusChapterIds)
+                    ->get()
+                    ->groupBy('syllabus_chapter_id');
+
+                foreach ($missing as $questionId) {
+                    $syllabusChapterId = (int) ($questions->get($questionId)?->topic?->syllabus_chapter_id ?? 0);
+                    $chapter = $bySyllabus->get($syllabusChapterId)?->first();
+                    if ($chapter) {
+                        $mapped[$questionId] = $chapter->id;
+                    }
+                }
+            }
+        }
+
+        if ($mapped->isEmpty()) {
+            return collect();
+        }
+
+        $tasks = ContentUploadTask::query()
+            ->with(['assignee:id,name,email', 'textbookChapter.textbook.gradeLevel'])
+            ->whereIn('textbook_chapter_id', $mapped->unique()->values()->all())
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->latest()
+            ->get()
+            ->groupBy('textbook_chapter_id');
+
+        return $mapped->mapWithKeys(function (int $chapterId, int $questionId) use ($tasks) {
+            $task = $tasks->get($chapterId)?->first();
+
+            return $task ? [$questionId => $task] : [];
+        });
+    }
+
+    /**
+     * @return array{
+     *     can_return_to_uploader: bool,
+     *     content_task_id: int|null,
+     *     uploader_name: ?string,
+     *     chapter_label: ?string
+     * }
+     */
+    public function uploaderReturnPayload(?ContentUploadTask $task): array
+    {
+        if (! $task) {
+            return [
+                'can_return_to_uploader' => false,
+                'content_task_id' => null,
+                'uploader_name' => null,
+                'chapter_label' => null,
+            ];
+        }
+
+        $chapter = $task->textbookChapter;
+        $grade = $chapter?->textbook?->gradeLevel?->name;
+        $chapterLabel = $chapter
+            ? trim(($grade ? $grade.' ' : '').'Ch '.$chapter->chapter_number.' — '.$chapter->title)
+            : null;
+
+        return [
+            'can_return_to_uploader' => $this->canReturnSpecificQuestions($task),
+            'content_task_id' => $task->id,
+            'uploader_name' => $task->assignee?->name,
+            'chapter_label' => $chapterLabel,
+        ];
+    }
+
+    public function remarkForHelpIssue(string $issue, ?string $remark = null): string
+    {
+        $extra = trim((string) $remark);
+
+        $base = match ($issue) {
+            'wrong_answer' => 'Wrong answer — please correct the key/options',
+            'incomplete' => 'Sum is incomplete — please complete the question',
+            default => $extra !== '' ? $extra : 'Please fix this question',
+        };
+
+        if ($issue !== 'other' && $extra !== '') {
+            return $base.': '.$extra;
+        }
+
+        return $base;
+    }
+
+    public function returnHelpRequestQuestion(
+        Question $question,
+        User $admin,
+        string $issue,
+        ?string $remark = null,
+    ): ContentUploadTask {
+        $task = $this->taskForQuestion($question);
+
+        if (! $task) {
+            throw new \InvalidArgumentException('No content uploader is assigned to this question. Edit it yourself.');
+        }
+
+        if (! $this->canReturnSpecificQuestions($task)) {
+            throw new \InvalidArgumentException('This chapter cannot be sent back to the uploader yet.');
+        }
+
+        $question->loadMissing('worksheets');
+        $sortOrder = $question->worksheets->first()?->pivot?->sort_order;
+
+        return $this->returnForReverification(
+            $task,
+            $admin,
+            'Student asked for teacher help. Admin found a content issue — fix only this sum.',
+            [[
+                'question_id' => (int) $question->id,
+                'number' => $sortOrder ? (int) $sortOrder : null,
+                'question_text' => $question->question_text,
+                'remark' => $this->remarkForHelpIssue($issue, $remark),
+            ]],
+        );
+    }
+
+    public function canReturnSpecificQuestions(ContentUploadTask $task): bool
+    {
+        return in_array($task->status, [
+            ContentUploadTask::STATUS_IN_PROGRESS,
+            ContentUploadTask::STATUS_UPLOADED,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_PUBLISHED,
+        ], true);
+    }
+
+    /**
+     * @param  list<int>  $worksheetIds
+     * @return Collection<int, TextbookChapter>
+     */
+    private function chaptersForWorksheetIds(array $worksheetIds): Collection
+    {
+        if ($worksheetIds === []) {
+            return collect();
+        }
+
+        $direct = TextbookChapter::query()
+            ->where(function ($query) use ($worksheetIds) {
+                $query->whereIn('mcq_worksheet_id', $worksheetIds)
+                    ->orWhereIn('fill_blank_worksheet_id', $worksheetIds)
+                    ->orWhereIn('written_worksheet_id', $worksheetIds);
+            })
+            ->get();
+
+        $fromJson = TextbookChapter::query()
+            ->whereNotNull('mcq_worksheet_ids')
+            ->get()
+            ->filter(function (TextbookChapter $chapter) use ($worksheetIds) {
+                return array_intersect($chapter->mcqWorksheetIds(), $worksheetIds) !== [];
+            });
+
+        return $direct->concat($fromJson)->unique('id')->values();
+    }
+
+    /**
      * @param  list<array{question_id: int, remark?: ?string, number?: int|null, question_text?: ?string}>  $items
      */
     public function returnForReverification(
@@ -393,12 +619,25 @@ class ContentUploadTaskService
         ?string $reason = null,
         array $items = [],
     ): ContentUploadTask {
-        if (! in_array($task->status, [
-            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
-            ContentUploadTask::STATUS_VERIFIED,
-            ContentUploadTask::STATUS_PUBLISHED,
-            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
-        ], true)) {
+        $hasSpecificItems = collect($items)->contains(fn (array $item) => (int) ($item['question_id'] ?? 0) > 0);
+
+        $allowed = $hasSpecificItems
+            ? [
+                ContentUploadTask::STATUS_IN_PROGRESS,
+                ContentUploadTask::STATUS_UPLOADED,
+                ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+                ContentUploadTask::STATUS_VERIFIED,
+                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                ContentUploadTask::STATUS_PUBLISHED,
+            ]
+            : [
+                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                ContentUploadTask::STATUS_VERIFIED,
+                ContentUploadTask::STATUS_PUBLISHED,
+                ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            ];
+
+        if (! in_array($task->status, $allowed, true)) {
             throw new \InvalidArgumentException(
                 'This chapter can be sent back for a re-check after upload, submit, or publish.',
             );

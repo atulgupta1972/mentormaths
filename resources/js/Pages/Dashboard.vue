@@ -6,6 +6,7 @@ import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
 import ClassCoveragePanel from '@/Components/ClassCoveragePanel.vue';
 import ContentUploadGuidePanel from '@/Components/ContentUploadGuidePanel.vue';
 import ContentUploaderTasksPanel from '@/Components/ContentUploaderTasksPanel.vue';
+import HelpRequestUploaderReturn from '@/Components/HelpRequestUploaderReturn.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { formatDate, formatDateTime, formatTime as formatDuration } from '@/utils/dates';
@@ -813,6 +814,7 @@ const adminSetStatusClass = (set) => {
                                     >
                                         Edit question
                                     </Link>
+                                    <HelpRequestUploaderReturn :item="item" compact />
                                 </div>
                             </div>
                         </div>
@@ -909,6 +911,7 @@ const adminSetStatusClass = (set) => {
                                                 </Link>
                                             </div>
                                             <span class="block line-clamp-2">{{ item.question_text }}</span>
+                                            <HelpRequestUploaderReturn :item="item" compact />
                                         </li>
                                     </ul>
                                 </div>

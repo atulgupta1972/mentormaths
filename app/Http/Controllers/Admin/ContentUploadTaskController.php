@@ -7,6 +7,7 @@ use App\Models\ContentQuestionDeleteRequest;
 use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
+use App\Models\QuestionResolutionItem;
 use App\Models\SyllabusChapter;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
@@ -664,6 +665,39 @@ class ContentUploadTaskController extends Controller
             : 'Sent back to uploader for re-verification. They will be emailed.';
 
         return back()->with('success', $message);
+    }
+
+    public function returnHelpRequestQuestion(Request $request, QuestionResolutionItem $item): RedirectResponse
+    {
+        abort_unless($item->status === QuestionResolutionItem::STATUS_PENDING, 404);
+
+        $validated = $request->validate([
+            'issue' => ['required', 'in:wrong_answer,incomplete,other'],
+            'remark' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if ($validated['issue'] === 'other' && ! filled(trim((string) ($validated['remark'] ?? '')))) {
+            return back()->with('error', 'Add a short note so the uploader knows what to fix.');
+        }
+
+        $item->loadMissing('question');
+
+        if (! $item->question) {
+            return back()->with('error', 'This question is no longer available.');
+        }
+
+        try {
+            $this->taskService->returnHelpRequestQuestion(
+                $item->question,
+                $request->user(),
+                $validated['issue'],
+                $validated['remark'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Sent this sum to the uploader to fix. Other questions stay as they are.');
     }
 
     public function publish(ContentUploadTask $contentTask, Request $request): RedirectResponse
