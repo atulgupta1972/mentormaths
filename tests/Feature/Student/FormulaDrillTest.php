@@ -270,6 +270,116 @@ class FormulaDrillTest extends TestCase
     }
 
     /**
+     * ICSE / SBSE Class 7 student with no own-board formulas, plus CBSE Class 6+7 formulas.
+     *
+     * @return array{
+     *     student: Student,
+     *     user: User,
+     *     icseClass7Topic: SyllabusTopic,
+     *     cbseClass6Question: Question,
+     *     cbseClass7Question: Question,
+     * }
+     */
+    private function seedNonCbseClass7StudentWithEmptyOwnFormulas(string $boardCode): array
+    {
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+
+        $cbse = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
+        $otherBoard = Board::query()->create(['code' => $boardCode, 'name' => $boardCode, 'is_active' => true]);
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
+        $grade6 = GradeLevel::query()->create(['name' => 'Class 6', 'sort_order' => 6, 'is_active' => true]);
+        $grade7 = GradeLevel::query()->create(['name' => 'Class 7', 'sort_order' => 7, 'is_active' => true]);
+
+        $cbseSyllabus6 = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade6->id,
+            'board_id' => $cbse->id,
+            'subject_id' => $subject->id,
+            'name' => 'CBSE Class 6',
+        ]);
+        $cbseChapter6 = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $cbseSyllabus6->id,
+            'chapter_number' => 1,
+            'name' => 'Fractions',
+            'sort_order' => 1,
+        ]);
+        $cbseTopic6 = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $cbseChapter6->id,
+            'name' => 'Basics',
+            'sort_order' => 1,
+        ]);
+
+        $cbseSyllabus7 = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade7->id,
+            'board_id' => $cbse->id,
+            'subject_id' => $subject->id,
+            'name' => 'CBSE Class 7',
+        ]);
+        $cbseChapter7 = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $cbseSyllabus7->id,
+            'chapter_number' => 1,
+            'name' => 'Integers',
+            'sort_order' => 1,
+        ]);
+        $cbseTopic7 = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $cbseChapter7->id,
+            'name' => 'Introduction',
+            'sort_order' => 1,
+        ]);
+
+        $otherSyllabus7 = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade7->id,
+            'board_id' => $otherBoard->id,
+            'subject_id' => $subject->id,
+            'name' => $boardCode.' Class 7',
+        ]);
+        $otherChapter7 = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $otherSyllabus7->id,
+            'chapter_number' => 1,
+            'name' => 'Integers',
+            'sort_order' => 1,
+        ]);
+        $otherTopic7 = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $otherChapter7->id,
+            'name' => 'Introduction',
+            'sort_order' => 1,
+        ]);
+
+        $user = User::factory()->create(['role' => User::ROLE_STUDENT]);
+        $student = Student::query()->create([
+            'user_id' => $user->id,
+            'name' => $boardCode.' Class 7 Student',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543210',
+            'school_name' => 'Demo',
+        ]);
+
+        StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $year->id,
+            'board_id' => $otherBoard->id,
+            'grade_level_id' => $grade7->id,
+            'school_name' => 'Demo',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        return [
+            'student' => $student,
+            'user' => $user,
+            'icseClass7Topic' => $otherTopic7,
+            'cbseClass6Question' => $this->createFormulaQuestion($cbseTopic6, 'Half of 10 is:', '5'),
+            'cbseClass7Question' => $this->createFormulaQuestion($cbseTopic7, 'Additive inverse of −8 is:', '8'),
+        ];
+    }
+
+    /**
      * @return array{
      *     student: Student,
      *     user: User,
@@ -756,6 +866,61 @@ class FormulaDrillTest extends TestCase
 
         $this->assertContains($class6Question->id, $poolIds);
         $this->assertContains($class7Question->id, $poolIds);
+    }
+
+    public function test_icse_class_7_uses_cbse_class_6_and_7_formulas_when_icse_bank_empty(): void
+    {
+        [
+            'student' => $student,
+            'cbseClass6Question' => $cbseClass6Question,
+            'cbseClass7Question' => $cbseClass7Question,
+        ] = $this->seedNonCbseClass7StudentWithEmptyOwnFormulas('ICSE');
+
+        $poolService = app(\App\Services\FormulaDrillPoolService::class);
+        $poolIds = $poolService->poolQuestionIds($student);
+        $breakdown = $poolService->poolBreakdown($student);
+
+        $this->assertContains($cbseClass6Question->id, $poolIds);
+        $this->assertContains($cbseClass7Question->id, $poolIds);
+        $this->assertTrue($breakdown['using_cbse_fallback']);
+        $this->assertSame('Class 6', $breakdown['previous_grade_name']);
+        $this->assertSame(1, $breakdown['previous_grade_count']);
+        $this->assertSame(1, $breakdown['current_grade_count']);
+    }
+
+    public function test_sbse_class_7_uses_cbse_class_6_and_7_formulas_when_sbse_bank_empty(): void
+    {
+        [
+            'student' => $student,
+            'cbseClass6Question' => $cbseClass6Question,
+            'cbseClass7Question' => $cbseClass7Question,
+        ] = $this->seedNonCbseClass7StudentWithEmptyOwnFormulas('SBSE');
+
+        $poolIds = app(\App\Services\FormulaDrillPoolService::class)->poolQuestionIds($student);
+
+        $this->assertContains($cbseClass6Question->id, $poolIds);
+        $this->assertContains($cbseClass7Question->id, $poolIds);
+    }
+
+    public function test_icse_uses_own_formulas_once_class_formulas_exist(): void
+    {
+        [
+            'student' => $student,
+            'icseClass7Topic' => $icseClass7Topic,
+            'cbseClass6Question' => $cbseClass6Question,
+            'cbseClass7Question' => $cbseClass7Question,
+        ] = $this->seedNonCbseClass7StudentWithEmptyOwnFormulas('ICSE');
+
+        $icseQuestion = $this->createFormulaQuestion($icseClass7Topic, 'ICSE additive inverse of −8 is:', '8');
+
+        $poolService = app(\App\Services\FormulaDrillPoolService::class);
+        $poolIds = $poolService->poolQuestionIds($student);
+        $breakdown = $poolService->poolBreakdown($student);
+
+        $this->assertContains($icseQuestion->id, $poolIds);
+        $this->assertNotContains($cbseClass6Question->id, $poolIds);
+        $this->assertNotContains($cbseClass7Question->id, $poolIds);
+        $this->assertFalse($breakdown['using_cbse_fallback']);
     }
 
     public function test_class_9_student_gets_all_class_8_formulas_in_drill_pool(): void

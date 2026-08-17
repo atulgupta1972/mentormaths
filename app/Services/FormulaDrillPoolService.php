@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Question;
 use App\Models\SetAssignment;
@@ -19,6 +20,8 @@ use Illuminate\Support\Collection;
 
 class FormulaDrillPoolService
 {
+    public const SHARED_FORMULA_BOARD_CODE = 'CBSE';
+
     public function __construct(
         private ExamPlanService $examPlanService,
     ) {}
@@ -26,6 +29,10 @@ class FormulaDrillPoolService
     /**
      * Formula inventory: every formula from the previous grade syllabus, plus every
      * formula from the student's current class syllabus (same board / year).
+     *
+     * If the student's board is not CBSE and that board has no current-class formulas
+     * yet (ICSE / SBSE course still being uploaded), use CBSE formulas for the
+     * previous class and current class instead.
      *
      * @return list<int>
      */
@@ -49,12 +56,9 @@ class FormulaDrillPoolService
             return [];
         }
 
-        $enrollment->loadMissing('gradeLevel');
+        $parts = $this->poolPartsForEnrollment($enrollment);
 
-        return $this->mergePools(
-            $this->formulaIdsForTopicIds($this->previousGradeTopicIds($enrollment)),
-            $this->formulaIdsForTopicIds($this->currentGradeTopicIds($enrollment)),
-        );
+        return $this->mergePools($parts['previous_ids'], $parts['current_ids']);
     }
 
     /**
@@ -104,42 +108,39 @@ class FormulaDrillPoolService
      *     previous_grade_name: ?string,
      *     previous_grade_count: int,
      *     current_grade_count: int,
-     *     total: int
+     *     total: int,
+     *     using_cbse_fallback: bool
      * }
      */
     public function poolBreakdown(Student $student): array
     {
+        $empty = [
+            'previous_grade_name' => null,
+            'previous_grade_count' => 0,
+            'current_grade_count' => 0,
+            'total' => 0,
+            'using_cbse_fallback' => false,
+        ];
+
         if (! FormulaDrillSchema::isReady()) {
-            return [
-                'previous_grade_name' => null,
-                'previous_grade_count' => 0,
-                'current_grade_count' => 0,
-                'total' => 0,
-            ];
+            return $empty;
         }
 
         $enrollment = $student->currentEnrollment();
 
         if (! $enrollment) {
-            return [
-                'previous_grade_name' => null,
-                'previous_grade_count' => 0,
-                'current_grade_count' => 0,
-                'total' => 0,
-            ];
+            return $empty;
         }
 
-        $enrollment->loadMissing('gradeLevel');
-
-        $previousIds = $this->formulaIdsForTopicIds($this->previousGradeTopicIds($enrollment));
-        $currentIds = $this->formulaIdsForTopicIds($this->currentGradeTopicIds($enrollment));
+        $parts = $this->poolPartsForEnrollment($enrollment);
         $previousGrade = $this->resolvePreviousGrade($enrollment);
 
         return [
             'previous_grade_name' => $previousGrade?->name,
-            'previous_grade_count' => count($previousIds),
-            'current_grade_count' => count(array_diff($currentIds, $previousIds)),
-            'total' => count($this->mergePools($previousIds, $currentIds)),
+            'previous_grade_count' => count($parts['previous_ids']),
+            'current_grade_count' => count(array_diff($parts['current_ids'], $parts['previous_ids'])),
+            'total' => count($this->mergePools($parts['previous_ids'], $parts['current_ids'])),
+            'using_cbse_fallback' => $parts['using_cbse_fallback'],
         ];
     }
 
@@ -169,6 +170,95 @@ class FormulaDrillPoolService
         }
 
         return array_values(array_unique($chapterIds));
+    }
+
+    /**
+     * @return array{previous_ids: list<int>, current_ids: list<int>, using_cbse_fallback: bool}
+     */
+    private function poolPartsForEnrollment(StudentEnrollment $enrollment): array
+    {
+        $enrollment->loadMissing(['gradeLevel', 'board']);
+
+        $currentIds = $this->formulaIdsForTopicIds($this->currentGradeTopicIds($enrollment));
+        $previousIds = $this->formulaIdsForTopicIds($this->previousGradeTopicIds($enrollment));
+
+        if ($currentIds !== [] || ! $this->shouldFallBackToCbseFormulas($enrollment)) {
+            return [
+                'previous_ids' => $previousIds,
+                'current_ids' => $currentIds,
+                'using_cbse_fallback' => false,
+            ];
+        }
+
+        $cbseBoardId = $this->sharedFormulaBoardId();
+
+        if (! $cbseBoardId) {
+            return [
+                'previous_ids' => $previousIds,
+                'current_ids' => $currentIds,
+                'using_cbse_fallback' => false,
+            ];
+        }
+
+        $currentIds = $this->formulaIdsForTopicIds(
+            $this->topicIdsForGradeOnBoard($enrollment, (int) $enrollment->grade_level_id, $cbseBoardId)
+        );
+        $previousGrade = $this->resolvePreviousGrade($enrollment);
+        $previousIds = $previousGrade
+            ? $this->formulaIdsForTopicIds(
+                $this->topicIdsForGradeOnBoard($enrollment, (int) $previousGrade->id, $cbseBoardId)
+            )
+            : [];
+
+        return [
+            'previous_ids' => $previousIds,
+            'current_ids' => $currentIds,
+            'using_cbse_fallback' => $currentIds !== [] || $previousIds !== [],
+        ];
+    }
+
+    private function shouldFallBackToCbseFormulas(StudentEnrollment $enrollment): bool
+    {
+        $code = strtoupper(trim((string) ($enrollment->board?->code ?? '')));
+
+        return $code !== '' && $code !== self::SHARED_FORMULA_BOARD_CODE;
+    }
+
+    private function sharedFormulaBoardId(): ?int
+    {
+        $id = Board::query()
+            ->where('code', self::SHARED_FORMULA_BOARD_CODE)
+            ->value('id');
+
+        return $id ? (int) $id : null;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function topicIdsForGradeOnBoard(StudentEnrollment $enrollment, int $gradeLevelId, int $boardId): array
+    {
+        $mathsSubjectId = Subject::query()->where('code', 'MATHS')->value('id');
+
+        if (! $mathsSubjectId) {
+            return [];
+        }
+
+        $syllabusVersion = SyllabusVersion::query()
+            ->where('academic_year_id', $enrollment->academic_year_id)
+            ->where('grade_level_id', $gradeLevelId)
+            ->where('board_id', $boardId)
+            ->where('subject_id', $mathsSubjectId)
+            ->first();
+
+        if (! $syllabusVersion) {
+            return [];
+        }
+
+        return SyllabusTopic::query()
+            ->whereHas('chapter', fn ($query) => $query->where('syllabus_version_id', $syllabusVersion->id))
+            ->pluck('id')
+            ->all();
     }
 
     /**
@@ -237,27 +327,7 @@ class FormulaDrillPoolService
             return [];
         }
 
-        $mathsSubjectId = Subject::query()->where('code', 'MATHS')->value('id');
-
-        if (! $mathsSubjectId) {
-            return [];
-        }
-
-        $syllabusVersion = SyllabusVersion::query()
-            ->where('academic_year_id', $enrollment->academic_year_id)
-            ->where('grade_level_id', $previousGrade->id)
-            ->where('board_id', $enrollment->board_id)
-            ->where('subject_id', $mathsSubjectId)
-            ->first();
-
-        if (! $syllabusVersion) {
-            return [];
-        }
-
-        return SyllabusTopic::query()
-            ->whereHas('chapter', fn ($query) => $query->where('syllabus_version_id', $syllabusVersion->id))
-            ->pluck('id')
-            ->all();
+        return $this->topicIdsForGradeOnBoard($enrollment, (int) $previousGrade->id, (int) $enrollment->board_id);
     }
 
     private function resolvePreviousGrade(StudentEnrollment $enrollment): ?GradeLevel

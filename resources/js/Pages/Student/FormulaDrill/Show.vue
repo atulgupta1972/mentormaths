@@ -31,7 +31,15 @@ const props = defineProps({
 const poolNote = computed(() => {
     const breakdown = props.pool_breakdown;
 
-    if (!breakdown?.previous_grade_name || breakdown.previous_grade_count <= 0) {
+    if (!breakdown) {
+        return null;
+    }
+
+    if (breakdown.using_cbse_fallback) {
+        return 'Using CBSE formulas for your class and the previous class until your board formula bank is uploaded.';
+    }
+
+    if (!breakdown.previous_grade_name || breakdown.previous_grade_count <= 0) {
         return null;
     }
 
@@ -239,7 +247,8 @@ const optionClass = (optionId) => {
                     <span v-if="sessionState.pool_size"> · Pool of {{ sessionState.pool_size }}</span>
                 </p>
                 <p v-if="poolNote" class="mt-1 text-xs text-indigo-700">
-                    Includes {{ poolNote }}
+                    <template v-if="pool_breakdown?.using_cbse_fallback">{{ poolNote }}</template>
+                    <template v-else>Includes {{ poolNote }}</template>
                 </p>
             </div>
         </template>
