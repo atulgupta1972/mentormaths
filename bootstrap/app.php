@@ -72,6 +72,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 'students' => [],
                 'helpRequests' => [],
                 'contentPublishQueue' => [],
+                'contentRecheckQueue' => [],
                 'examTypeOptions' => [],
             ];
 

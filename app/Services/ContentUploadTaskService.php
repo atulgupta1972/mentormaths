@@ -400,7 +400,7 @@ class ContentUploadTaskService
             ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
         ], true)) {
             throw new \InvalidArgumentException(
-                'Only submitted, verified, or in-progress verification tasks can be sent back for re-verification.',
+                'This chapter can be sent back for a re-check after upload, submit, or publish.',
             );
         }
 
@@ -464,8 +464,6 @@ class ContentUploadTaskService
             $task->update([
                 'status' => ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
                 'submitted_at' => null,
-                'published_at' => null,
-                'published_by' => null,
                 'admin_notes' => $notes !== '' ? $notes : null,
             ]);
         });

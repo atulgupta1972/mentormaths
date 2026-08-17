@@ -101,10 +101,11 @@ class ContentUploadTask extends Model
 
     public function isLockedForUploaderDelete(): bool
     {
-        return in_array($this->status, [
-            self::STATUS_SUBMITTED_FOR_PUBLISH,
-            self::STATUS_PUBLISHED,
-        ], true);
+        return $this->published_at !== null
+            || in_array($this->status, [
+                self::STATUS_SUBMITTED_FOR_PUBLISH,
+                self::STATUS_PUBLISHED,
+            ], true);
     }
 
     public function payableAmountInr(): int

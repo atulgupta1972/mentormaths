@@ -5,10 +5,17 @@ namespace Tests\Feature\Admin;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
+use App\Models\ContentUploadTask;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
+use App\Models\Subject;
+use App\Models\SyllabusChapter;
+use App\Models\SyllabusVersion;
+use App\Models\Textbook;
+use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Services\QuestionResolutionService;
+use App\Services\UserGroupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -64,6 +71,69 @@ class DashboardTest extends TestCase
                 ->where('isAdmin', true)
                 ->where('stats.students_count', 1)
                 ->where('helpRequests', []));
+    }
+
+    public function test_admin_dashboard_lists_published_content_for_recheck(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $enrollment] = $this->seedAdminDashboard();
+        $grade = $enrollment->gradeLevel;
+
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Mathematics']);
+        $year = AcademicYear::active();
+        $board = Board::query()->first();
+        $syllabus = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+        ]);
+        $syllabusChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabus->id,
+            'name' => 'Polynomials',
+            'chapter_number' => 'Ch 2',
+            'sort_order' => 2,
+        ]);
+        $textbook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash',
+            'code' => 'GP',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $chapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 2,
+            'title' => 'Polynomials',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+        $task = ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $chapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'offered_amount_inr' => 1000,
+            'agreed_amount_inr' => 1000,
+            'agreed_at' => now(),
+            'published_at' => now(),
+            'published_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Dashboard')
+                ->has('contentRecheckQueue', 1)
+                ->where('contentRecheckQueue.0.id', $task->id)
+                ->where('contentRecheckQueue.0.chapter_title', 'Polynomials'));
     }
 
     /**

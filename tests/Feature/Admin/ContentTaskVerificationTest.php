@@ -142,6 +142,50 @@ class ContentTaskVerificationTest extends TestCase
         Mail::assertSent(ContentTaskReturnedUploader::class, fn ($mail) => $mail->hasTo($uploader->email));
     }
 
+    public function test_admin_can_send_published_task_back_without_deleting_questions(): void
+    {
+        Mail::fake();
+        $this->withoutVite();
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class);
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $publishedAt = now()->subDay();
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'published_at' => $publishedAt,
+            'published_by' => $admin->id,
+        ]);
+
+        $worksheetIds = $chapter->fresh()->mcqWorksheetIds();
+        $this->assertNotEmpty($worksheetIds);
+
+        $this->actingAs($admin)
+            ->from(route('dashboard'))
+            ->post(route('admin.content-tasks.return-for-reverification', $task), [
+                'reason' => 'Please re-check every question. Do not delete any.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $task->refresh();
+        $this->assertSame(ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS, $task->status);
+        $this->assertNotNull($task->published_at);
+        $this->assertTrue($task->isLockedForUploaderDelete());
+        $this->assertSame($worksheetIds, $chapter->fresh()->mcqWorksheetIds());
+        $this->assertSame(1, Worksheet::query()->findOrFail($worksheetIds[0])->questions()->count());
+
+        $this->actingAs($uploader)
+            ->from(route('content.chapters.show', $chapter))
+            ->post(route('content.chapters.delete-question', $chapter), ['item_index' => 0])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame(1, count($chapter->fresh()->extraction_items ?? []));
+        Mail::assertSent(ContentTaskReturnedUploader::class, fn ($mail) => $mail->hasTo($uploader->email));
+    }
+
     public function test_admin_can_batch_mark_questions_verified(): void
     {
         $this->withoutVite();

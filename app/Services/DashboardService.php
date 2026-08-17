@@ -159,31 +159,40 @@ class DashboardService
         $helpRequestsCount = (int) $helpCounts->sum();
 
         $contentPublishQueue = [];
+        $contentRecheckQueue = [];
         try {
-            $contentPublishQueue = ContentUploadTask::query()
+            $contentTaskQuery = fn () => ContentUploadTask::query()
                 ->with([
                     'assignee:id,name',
                     'textbookChapter:id,chapter_number,title,textbook_id',
                     'textbookChapter.textbook:id,name,grade_level_id',
                     'textbookChapter.textbook.gradeLevel:id,name',
                 ])
+                ->when(
+                    $grade,
+                    fn ($q) => $q->whereHas(
+                        'textbookChapter.textbook',
+                        fn ($inner) => $inner->where('grade_level_id', $grade->id),
+                    ),
+                );
+
+            $contentPublishQueue = $contentTaskQuery()
                 ->where('status', ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH)
                 ->latest('submitted_at')
                 ->limit(20)
                 ->get()
-                ->map(fn (ContentUploadTask $task) => [
-                    'id' => $task->id,
-                    'assignee_name' => $task->assignee?->name,
-                    'chapter_number' => $task->textbookChapter?->chapter_number,
-                    'chapter_title' => $task->textbookChapter?->title,
-                    'grade_name' => $task->textbookChapter?->textbook?->gradeLevel?->name,
-                    'textbook_name' => $task->textbookChapter?->textbook?->name,
-                    'submitted_at' => $task->submitted_at?->toIso8601String(),
-                    'agreed_amount_inr' => $task->agreed_amount_inr,
-                ])
+                ->map(fn (ContentUploadTask $task) => $this->serializeDashboardContentTask($task))
+                ->all();
+
+            $contentRecheckQueue = $contentTaskQuery()
+                ->where('status', ContentUploadTask::STATUS_PUBLISHED)
+                ->latest('published_at')
+                ->limit(30)
+                ->get()
+                ->map(fn (ContentUploadTask $task) => $this->serializeDashboardContentTask($task))
                 ->all();
         } catch (Throwable $e) {
-            Log::error('Admin dashboard failed to load the content publish queue.', ['message' => $e->getMessage()]);
+            Log::error('Admin dashboard failed to load the content queues.', ['message' => $e->getMessage()]);
         }
 
         return [
@@ -197,10 +206,12 @@ class DashboardService
                 'completed_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_completed_count'] ?? 0)),
                 'help_requests_count' => $helpRequestsCount,
                 'content_publish_queue_count' => count($contentPublishQueue),
+                'content_recheck_queue_count' => count($contentRecheckQueue),
             ],
             'students' => $students,
             'helpRequests' => [],
             'contentPublishQueue' => $contentPublishQueue,
+            'contentRecheckQueue' => $contentRecheckQueue,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ];
     }
@@ -223,10 +234,12 @@ class DashboardService
                 'completed_sets_count' => 0,
                 'help_requests_count' => 0,
                 'content_publish_queue_count' => 0,
+                'content_recheck_queue_count' => 0,
             ],
             'students' => [],
             'helpRequests' => [],
             'contentPublishQueue' => [],
+            'contentRecheckQueue' => [],
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ];
     }
@@ -361,6 +374,26 @@ class DashboardService
             'assignments_completed' => $completed,
             'help_requests' => $studentHelp->values()->all(),
             'help_requests_count' => $studentHelp->count(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeDashboardContentTask(ContentUploadTask $task): array
+    {
+        return [
+            'id' => $task->id,
+            'status' => $task->status,
+            'status_label' => $task->statusLabel(),
+            'assignee_name' => $task->assignee?->name,
+            'chapter_number' => $task->textbookChapter?->chapter_number,
+            'chapter_title' => $task->textbookChapter?->title,
+            'grade_name' => $task->textbookChapter?->textbook?->gradeLevel?->name,
+            'textbook_name' => $task->textbookChapter?->textbook?->name,
+            'submitted_at' => $task->submitted_at?->toIso8601String(),
+            'published_at' => $task->published_at?->toIso8601String(),
+            'agreed_amount_inr' => $task->agreed_amount_inr,
         ];
     }
 
