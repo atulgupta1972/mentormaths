@@ -32,6 +32,7 @@ class QuestionResolutionService
             ->where('status', QuestionResolutionItem::STATUS_PENDING)
             ->orderByDesc('gave_up_at')
             ->get()
+            ->filter(fn (QuestionResolutionItem $item) => $item->question !== null)
             ->map(fn (QuestionResolutionItem $item) => $this->formatItem($item))
             ->values()
             ->all();
@@ -343,7 +344,9 @@ class QuestionResolutionService
                 }
             });
 
-        return $query->orderByDesc('gave_up_at')->get()->map(fn (QuestionResolutionItem $item) => [
+        return $query->orderByDesc('gave_up_at')->get()
+            ->filter(fn (QuestionResolutionItem $item) => $item->enrollment && $item->question)
+            ->map(fn (QuestionResolutionItem $item) => [
             'id' => $item->id,
             'student_id' => $item->enrollment->student_id,
             'student_name' => $item->enrollment->student?->name,

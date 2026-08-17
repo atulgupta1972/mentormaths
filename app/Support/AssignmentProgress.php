@@ -35,12 +35,49 @@ class AssignmentProgress
 
     public static function formatAssignmentSummary(SetAssignment $assignment, ?SetAttempt $latest): array
     {
+        $practiceSet = $assignment->practiceSet;
+
+        if (! $practiceSet) {
+            $overdue = self::isOverdue($assignment);
+
+            return [
+                'assignment_id' => $assignment->id,
+                'practice_set_id' => $assignment->worksheet_id,
+                'set_code' => 'Unknown set',
+                'set_number' => null,
+                'tier' => null,
+                'tier_label' => null,
+                'display_title' => 'Unknown set',
+                'topic_id' => null,
+                'topic_name' => null,
+                'chapter_name' => null,
+                'scope' => 'topic',
+                'is_catch_up' => false,
+                'kind_label' => 'Practice',
+                'question_count' => 0,
+                'assignment_status' => $assignment->status,
+                'target_date' => $assignment->due_date?->toDateString(),
+                'assigned_at' => $assignment->assigned_at?->toDateTimeString(),
+                'reassigned_at' => $assignment->reassigned_at?->toDateTimeString(),
+                'is_overdue' => $overdue,
+                'attempt_count' => $assignment->attempts->count(),
+                'latest_score' => $latest?->score,
+                'latest_max_score' => $latest?->max_score,
+                'latest_score_percent' => ScoreLabel::percent($latest?->score, $latest?->max_score),
+                'latest_score_label' => ScoreLabel::format($latest?->score, $latest?->max_score),
+                'latest_time_seconds' => $latest?->time_seconds,
+                'submitted_at' => $latest?->completed_at?->toDateTimeString(),
+                'submission_timing' => $latest?->submission_timing,
+                'status' => self::dashboardStatus($assignment, $latest, $overdue),
+            ];
+        }
+
         $overdue = self::isOverdue($assignment);
 
         return [
             'assignment_id' => $assignment->id,
             'practice_set_id' => $assignment->worksheet_id,
-            'set_code' => $assignment->practiceSet->set_code,
+            'set_code' => $practiceSet->set_code,
             'set_number' => $assignment->practiceSet->set_number,
             'tier' => $assignment->practiceSet->tier,
             'tier_label' => $assignment->practiceSet->tier_label,

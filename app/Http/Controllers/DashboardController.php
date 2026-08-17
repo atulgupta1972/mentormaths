@@ -11,8 +11,10 @@ use App\Support\MailConfigStatus;
 use App\Support\StudentWeeklyReportEmails;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class DashboardController extends Controller
 {
@@ -27,6 +29,13 @@ class DashboardController extends Controller
         $user = $request->user();
 
         if ($user->isAdmin()) {
+            try {
+                $adminDashboard = $this->dashboardService->forAdmin($request);
+            } catch (Throwable $e) {
+                Log::error('Admin dashboard failed to load.', ['message' => $e->getMessage()]);
+                $adminDashboard = $this->dashboardService->emptyAdminPayload($request);
+            }
+
             return Inertia::render('Dashboard', [
                 'isAdmin' => true,
                 'mailSettings' => MailConfigStatus::forAdmin(),
@@ -34,7 +43,7 @@ class DashboardController extends Controller
                     ->where('is_active', true)
                     ->orderBy('sort_order')
                     ->get(['id', 'name']),
-                ...$this->dashboardService->forAdmin($request),
+                ...$adminDashboard,
             ]);
         }
 

@@ -170,9 +170,9 @@ class SetAttemptService
             ->where('student_enrollment_id', $enrollment->id)
             ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
             ->whereHas('practiceSet', fn ($q) => $q->where('status', 'published'))
-            ->get();
-
-        return $assignments->map(function (SetAssignment $assignment) {
+            ->get()
+            ->filter(fn (SetAssignment $assignment) => $assignment->practiceSet !== null)
+            ->map(function (SetAssignment $assignment) {
             if ($assignment->practiceSet->isWritten()) {
                 return AssignmentProgress::formatWrittenStudentDashboardSummary(
                     $assignment,
@@ -187,6 +187,8 @@ class SetAttemptService
             ['set_code', 'asc'],
             ['set_number', 'asc'],
         ])->values()->all();
+
+        return $assignments;
     }
 
     /**

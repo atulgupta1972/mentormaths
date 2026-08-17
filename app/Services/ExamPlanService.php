@@ -402,6 +402,7 @@ class ExamPlanService
             })
             ->orderBy('due_date')
             ->get()
+            ->filter(fn (SetAssignment $assignment) => $assignment->practiceSet !== null)
             ->map(function (SetAssignment $assignment) {
                 $latest = $assignment->attempts->first();
                 $summary = AssignmentProgress::formatAssignmentSummary($assignment, $latest);
