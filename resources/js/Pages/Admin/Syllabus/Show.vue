@@ -24,6 +24,7 @@ const newHeadName = ref('');
 const addHeadError = ref('');
 const addHeadSaving = ref(false);
 const targetRowIndex = ref(null);
+const targetGroupIndexes = ref([]);
 const newHeadInput = ref(null);
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 const hasSavedRows = computed(() => (props.rows?.length ?? 0) > 0);
@@ -37,12 +38,6 @@ const rowHasContent = (row) => (
 const hasTableRows = computed(() => form.rows.some(rowHasContent));
 
 const canClearSyllabus = computed(() => hasSavedRows.value || hasTableRows.value);
-
-const readOnlyFilteredRows = computed(() => {
-    const query = search.value.trim().toLowerCase();
-
-    return props.rows.filter((row) => query === '' || rowMatchesSearch(row, query));
-});
 
 const form = useForm({
     rows: props.rows.length
@@ -125,12 +120,12 @@ const applyPreviewRows = (rows, filename) => {
         snapshotSavedRows();
     }
 
-    form.rows = rows.map((row) => ({
+    form.rows = stampClientGroups(rows.map((row) => ({
         ...emptyRow(),
         ...row,
         id: null,
         chapter_id: null,
-    }));
+    })));
     previewActive.value = true;
     previewFilename.value = filename;
     lastPreviewedFile.value = filename;
@@ -316,6 +311,7 @@ function emptyRow() {
         chapter_number: '',
         chapter_name: '',
         chapter_head_id: '',
+        client_group: null,
         topic_name: '',
         learning_outcomes: '',
         difficulty: '',
@@ -325,19 +321,61 @@ function emptyRow() {
 }
 
 const addRow = () => {
-    const last = form.rows[form.rows.length - 1];
+    addChapter();
+};
+
+const newClientGroup = () => `g-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const stampClientGroups = (rows) => {
+    let lastStampKey = null;
+    let lastGroup = null;
+
+    return rows.map((row) => {
+        const copy = { ...row };
+
+        if (copy.chapter_id) {
+            lastStampKey = `id:${copy.chapter_id}`;
+            lastGroup = null;
+
+            return copy;
+        }
+
+        if (copy.client_group) {
+            lastStampKey = `cg:${copy.client_group}`;
+            lastGroup = copy.client_group;
+
+            return copy;
+        }
+
+        const stampKey = `new:${copy.chapter_number}|${copy.chapter_name}`;
+
+        if (stampKey === lastStampKey && lastGroup) {
+            copy.client_group = lastGroup;
+        } else {
+            copy.client_group = newClientGroup();
+            lastGroup = copy.client_group;
+            lastStampKey = stampKey;
+        }
+
+        return copy;
+    });
+};
+
+const addChapter = () => {
     form.rows.push({
         ...emptyRow(),
-        chapter_number: last?.chapter_number || '',
-        chapter_name: last?.chapter_name || '',
-        chapter_id: last?.chapter_id || null,
-        chapter_head_id: last?.chapter_head_id || '',
+        client_group: newClientGroup(),
     });
+    nextTick(resizeAllFields);
 };
 
 const chapterRowKey = (row) => {
     if (row.chapter_id) {
         return `id:${row.chapter_id}`;
+    }
+
+    if (row.client_group) {
+        return `cg:${row.client_group}`;
     }
 
     return `new:${row.chapter_number}|${row.chapter_name}`;
@@ -404,9 +442,37 @@ const addTopicForRow = (index) => {
         chapter_number: source.chapter_number,
         chapter_name: source.chapter_name,
         chapter_head_id: source.chapter_head_id,
+        client_group: source.client_group || null,
     });
 
     nextTick(resizeAllFields);
+};
+
+const addTopicToGroup = (group) => {
+    const lastIndex = group.allIndexes[group.allIndexes.length - 1];
+    addTopicForRow(lastIndex);
+};
+
+const setChapterField = (group, field, value) => {
+    const next = field === 'chapter_head_id' && value !== ''
+        ? Number(value) || value
+        : value;
+
+    group.allIndexes.forEach((index) => {
+        if (form.rows[index]) {
+            form.rows[index][field] = next;
+        }
+    });
+};
+
+const removeChapterGroup = (group) => {
+    if (!confirm(`Remove chapter ${group.chapter_number || ''} ${group.chapter_name || ''} and its ${group.allIndexes.length} topic row(s)?`)) {
+        return;
+    }
+
+    [...group.allIndexes].sort((a, b) => b - a).forEach((index) => {
+        form.rows.splice(index, 1);
+    });
 };
 
 const submitQuickTopic = () => {
@@ -477,12 +543,78 @@ const rowMatchesSearch = (row, query) => {
     return fields.some((field) => String(field ?? '').toLowerCase().includes(query));
 };
 
-const filteredRows = computed(() => {
+const groupedRows = computed(() => {
     const query = search.value.trim().toLowerCase();
+    const groups = [];
+    let current = null;
 
-    return form.rows
-        .map((row, index) => ({ row, index }))
-        .filter(({ row }) => query === '' || rowMatchesSearch(row, query));
+    form.rows.forEach((row, index) => {
+        const key = chapterRowKey(row);
+
+        if (!current || current.key !== key) {
+            current = {
+                key,
+                chapter_id: row.chapter_id,
+                chapter_number: row.chapter_number,
+                chapter_name: row.chapter_name,
+                chapter_head_id: row.chapter_head_id,
+                allIndexes: [],
+                topics: [],
+            };
+            groups.push(current);
+        }
+
+        current.allIndexes.push(index);
+        current.topics.push({ row, index });
+        current.chapter_number = row.chapter_number;
+        current.chapter_name = row.chapter_name;
+        current.chapter_head_id = row.chapter_head_id;
+    });
+
+    if (query === '') {
+        return groups;
+    }
+
+    return groups
+        .map((group) => ({
+            ...group,
+            topics: group.topics.filter(({ row }) => rowMatchesSearch(row, query)),
+        }))
+        .filter((group) => group.topics.length > 0);
+});
+
+const readOnlyGroupedRows = computed(() => {
+    const query = search.value.trim().toLowerCase();
+    const groups = [];
+    let current = null;
+
+    (props.rows || []).forEach((row) => {
+        const key = chapterRowKey(row);
+
+        if (!current || current.key !== key) {
+            current = {
+                key,
+                chapter_number: row.chapter_number,
+                chapter_name: row.chapter_name,
+                chapter_head_name: row.chapter_head_name,
+                topics: [],
+            };
+            groups.push(current);
+        }
+
+        current.topics.push(row);
+    });
+
+    if (query === '') {
+        return groups;
+    }
+
+    return groups
+        .map((group) => ({
+            ...group,
+            topics: group.topics.filter((row) => rowMatchesSearch(row, query)),
+        }))
+        .filter((group) => group.topics.length > 0);
 });
 
 const clearSearch = () => {
@@ -537,11 +669,12 @@ const submitCarryForward = () => {
     carryForm.post(route('admin.syllabus.carry-forward', props.version.id));
 };
 
-const startAddHead = async (rowIndex = null) => {
+const startAddHead = async (rowIndex = null, groupIndexes = []) => {
     addingHead.value = true;
     newHeadName.value = '';
     addHeadError.value = '';
     targetRowIndex.value = rowIndex;
+    targetGroupIndexes.value = groupIndexes;
     await nextTick();
     newHeadInput.value?.focus();
 };
@@ -551,6 +684,7 @@ const cancelAddHead = () => {
     newHeadName.value = '';
     addHeadError.value = '';
     targetRowIndex.value = null;
+    targetGroupIndexes.value = [];
 };
 
 const saveNewHead = async () => {
@@ -571,7 +705,13 @@ const saveNewHead = async () => {
             chapterHeadsList.value.sort((a, b) => a.name.localeCompare(b.name));
         }
 
-        if (targetRowIndex.value !== null && form.rows[targetRowIndex.value]) {
+        if (targetGroupIndexes.value.length) {
+            targetGroupIndexes.value.forEach((index) => {
+                if (form.rows[index]) {
+                    form.rows[index].chapter_head_id = data.chapterHead.id;
+                }
+            });
+        } else if (targetRowIndex.value !== null && form.rows[targetRowIndex.value]) {
             form.rows[targetRowIndex.value].chapter_head_id = data.chapterHead.id;
         }
 
@@ -711,8 +851,9 @@ const saveNewHead = async () => {
                         · Rows: <strong>{{ isAdmin ? form.rows.length : rows.length }}</strong>
                     </p>
                     <p v-if="isAdmin" class="mt-2 text-xs text-gray-500">
-                        Tag each chapter with a chapter head (e.g. Integers) to browse topics across all classes.
-                        Use <strong>+ Add</strong> in the table to create a new head without leaving this page.
+                        <strong>Chapter head</strong> is the mentor theme (e.g. Integers).
+                        <strong>Chapter name</strong> is the textbook title — edit both once per chapter; topics sit underneath so you do not repeat them.
+                        Use <strong>+ Add</strong> to create a new head without leaving this page.
                     </p>
                 </div>
 
@@ -850,9 +991,9 @@ const saveNewHead = async () => {
 
                 <div v-if="isAdmin" class="overflow-hidden rounded-lg bg-white shadow-sm">
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-                        <h3 class="font-medium text-gray-900">Syllabus table</h3>
+                        <h3 class="font-medium text-gray-900">Syllabus by chapter</h3>
                         <div class="flex gap-2">
-                            <SecondaryButton type="button" @click="addRow">Add row</SecondaryButton>
+                            <SecondaryButton type="button" @click="addChapter">Add chapter</SecondaryButton>
                             <DangerButton
                                 v-if="canClearSyllabus"
                                 type="button"
@@ -887,10 +1028,11 @@ const saveNewHead = async () => {
                         </div>
                         <p class="text-sm text-gray-500">
                             <template v-if="search.trim()">
-                                Showing <strong>{{ filteredRows.length }}</strong> of {{ form.rows.length }} rows
+                                Showing <strong>{{ groupedRows.reduce((sum, group) => sum + group.topics.length, 0) }}</strong>
+                                topic(s) in {{ groupedRows.length }} chapter(s)
                             </template>
                             <template v-else>
-                                {{ form.rows.length }} rows
+                                {{ groupedRows.length }} chapter(s) · {{ form.rows.length }} topic row(s)
                             </template>
                         </p>
                     </div>
@@ -912,8 +1054,7 @@ const saveNewHead = async () => {
                                             </button>
                                         </div>
                                     </th>
-                                    <th class="min-w-[160px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter name</th>
-                                    <th class="min-w-[180px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Topic</th>
+                                    <th class="min-w-[180px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter name / Topic</th>
                                     <th class="min-w-[260px] px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Key Concepts</th>
                                     <th class="px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Difficulty</th>
                                     <th class="px-2 py-3 text-left text-xs font-medium uppercase text-gray-500">Periods</th>
@@ -923,7 +1064,7 @@ const saveNewHead = async () => {
                             </thead>
                             <tbody class="divide-y divide-gray-200 bg-white">
                                 <tr v-if="addingHead" class="bg-indigo-50">
-                                    <td colspan="9" class="px-4 py-3">
+                                    <td colspan="8" class="px-4 py-3">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="text-sm font-medium text-indigo-900">New chapter head:</span>
                                             <input
@@ -945,98 +1086,119 @@ const saveNewHead = async () => {
                                         </div>
                                     </td>
                                 </tr>
-                                <tr v-for="{ row, index } in filteredRows" :key="index">
-                                    <td class="align-top px-2 py-2">
-                                        <input
-                                            v-model="row.chapter_number"
-                                            type="text"
-                                            class="w-16 rounded-md border-gray-300 text-sm"
-                                            placeholder="Ch 1"
-                                        />
-                                    </td>
-                                    <td class="align-top px-2 py-2">
-                                        <select v-model="row.chapter_head_id" class="w-full min-w-[130px] rounded-md border-gray-300 text-sm">
-                                            <option value="">—</option>
-                                            <option v-for="head in chapterHeadsList" :key="head.id" :value="head.id">{{ head.name }}</option>
-                                        </select>
-                                        <button
-                                            type="button"
-                                            class="mt-1 text-xs text-indigo-600 hover:underline"
-                                            @click="startAddHead(index)"
-                                        >
-                                            + Add
-                                        </button>
-                                    </td>
-                                    <td class="align-top px-2 py-2">
-                                        <textarea
-                                            v-model="row.chapter_name"
-                                            rows="2"
-                                            class="syllabus-field w-full min-w-[150px] rounded-md border-gray-300 text-sm"
-                                            placeholder="Chapter title in book"
-                                            @input="autoResize"
-                                        />
-                                        <button
-                                            type="button"
-                                            class="mt-1 text-xs text-emerald-700 hover:underline"
-                                            @click="addTopicForRow(index)"
-                                        >
-                                            + Topic
-                                        </button>
-                                    </td>
-                                    <td class="align-top px-2 py-2">
-                                        <textarea
-                                            v-model="row.topic_name"
-                                            rows="2"
-                                            class="syllabus-field w-full min-w-[170px] rounded-md border-gray-300 text-sm"
-                                            placeholder="Sub-topic"
-                                            @input="autoResize"
-                                        />
-                                    </td>
-                                    <td class="align-top px-2 py-2">
-                                        <textarea
-                                            v-model="row.learning_outcomes"
-                                            rows="3"
-                                            class="syllabus-field w-full min-w-[250px] rounded-md border-gray-300 text-sm"
-                                            @input="autoResize"
-                                        />
-                                    </td>
-                                    <td class="align-top px-2 py-2">
-                                        <select v-model="row.difficulty" class="rounded-md border-gray-300 text-sm">
-                                            <option value="">—</option>
-                                            <option value="Easy">Easy</option>
-                                            <option value="Medium">Medium</option>
-                                            <option value="Hard">Hard</option>
-                                        </select>
-                                    </td>
-                                    <td class="align-top px-2 py-2">
-                                        <input
-                                            v-model="row.planned_periods"
-                                            type="number"
-                                            min="0"
-                                            class="w-16 rounded-md border-gray-300 text-sm"
-                                        />
-                                    </td>
-                                    <td class="align-top px-2 py-2">
-                                        <textarea
-                                            v-model="row.remarks"
-                                            rows="2"
-                                            class="syllabus-field w-full min-w-[130px] rounded-md border-gray-300 text-sm"
-                                            @input="autoResize"
-                                        />
-                                    </td>
-                                    <td class="align-top px-2 py-2">
-                                        <DangerButton type="button" class="!px-2 !py-1 text-xs" @click="removeRow(index)">
-                                            Remove
-                                        </DangerButton>
-                                    </td>
-                                </tr>
+                                <template v-for="group in groupedRows" :key="group.key">
+                                    <tr class="bg-slate-100">
+                                        <td class="align-top px-2 py-2">
+                                            <input
+                                                :value="group.chapter_number"
+                                                type="text"
+                                                class="w-16 rounded-md border-gray-300 bg-white text-sm font-semibold"
+                                                placeholder="Ch 1"
+                                                @input="setChapterField(group, 'chapter_number', $event.target.value)"
+                                            />
+                                        </td>
+                                        <td class="align-top px-2 py-2">
+                                            <select
+                                                :value="group.chapter_head_id || ''"
+                                                class="w-full min-w-[130px] rounded-md border-gray-300 bg-white text-sm"
+                                                @change="setChapterField(group, 'chapter_head_id', $event.target.value)"
+                                            >
+                                                <option value="">—</option>
+                                                <option v-for="head in chapterHeadsList" :key="head.id" :value="head.id">{{ head.name }}</option>
+                                            </select>
+                                            <button
+                                                type="button"
+                                                class="mt-1 text-xs text-indigo-600 hover:underline"
+                                                @click="startAddHead(group.allIndexes[0], group.allIndexes)"
+                                            >
+                                                + Add
+                                            </button>
+                                        </td>
+                                        <td colspan="5" class="align-top px-2 py-2">
+                                            <div class="flex flex-wrap items-start gap-2">
+                                                <textarea
+                                                    :value="group.chapter_name"
+                                                    rows="1"
+                                                    class="syllabus-field min-w-[220px] flex-1 rounded-md border-gray-300 bg-white text-sm font-medium"
+                                                    placeholder="Textbook chapter title (edit once for all topics below)"
+                                                    @input="setChapterField(group, 'chapter_name', $event.target.value); autoResize($event)"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    class="mt-1 shrink-0 text-xs font-semibold text-emerald-700 hover:underline"
+                                                    @click="addTopicToGroup(group)"
+                                                >
+                                                    + Topic
+                                                </button>
+                                            </div>
+                                            <p class="mt-1 text-xs text-slate-500">
+                                                {{ group.allIndexes.length }} topic{{ group.allIndexes.length === 1 ? '' : 's' }}
+                                                · chapter name is the book title · head is the mentor theme
+                                            </p>
+                                        </td>
+                                        <td class="align-top px-2 py-2">
+                                            <DangerButton type="button" class="!px-2 !py-1 text-xs" @click="removeChapterGroup(group)">
+                                                Remove chapter
+                                            </DangerButton>
+                                        </td>
+                                    </tr>
+                                    <tr v-for="{ row, index } in group.topics" :key="`${group.key}-${index}`">
+                                        <td colspan="2" class="bg-slate-50 px-2 py-2 text-xs text-slate-400"></td>
+                                        <td class="align-top px-2 py-2">
+                                            <textarea
+                                                v-model="row.topic_name"
+                                                rows="2"
+                                                class="syllabus-field w-full min-w-[170px] rounded-md border-gray-300 text-sm"
+                                                placeholder="Sub-topic"
+                                                @input="autoResize"
+                                            />
+                                        </td>
+                                        <td class="align-top px-2 py-2">
+                                            <textarea
+                                                v-model="row.learning_outcomes"
+                                                rows="3"
+                                                class="syllabus-field w-full min-w-[250px] rounded-md border-gray-300 text-sm"
+                                                @input="autoResize"
+                                            />
+                                        </td>
+                                        <td class="align-top px-2 py-2">
+                                            <select v-model="row.difficulty" class="rounded-md border-gray-300 text-sm">
+                                                <option value="">—</option>
+                                                <option value="Easy">Easy</option>
+                                                <option value="Medium">Medium</option>
+                                                <option value="Hard">Hard</option>
+                                            </select>
+                                        </td>
+                                        <td class="align-top px-2 py-2">
+                                            <input
+                                                v-model="row.planned_periods"
+                                                type="number"
+                                                min="0"
+                                                class="w-16 rounded-md border-gray-300 text-sm"
+                                            />
+                                        </td>
+                                        <td class="align-top px-2 py-2">
+                                            <textarea
+                                                v-model="row.remarks"
+                                                rows="2"
+                                                class="syllabus-field w-full min-w-[130px] rounded-md border-gray-300 text-sm"
+                                                @input="autoResize"
+                                            />
+                                        </td>
+                                        <td class="align-top px-2 py-2">
+                                            <DangerButton type="button" class="!px-2 !py-1 text-xs" @click="removeRow(index)">
+                                                Remove
+                                            </DangerButton>
+                                        </td>
+                                    </tr>
+                                </template>
                                 <tr v-if="form.rows.length === 0">
-                                    <td colspan="9" class="px-4 py-8 text-center text-gray-500">
-                                        No rows yet. Click "Add row" to enter chapters and topics.
+                                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                                        No chapters yet. Click "Add chapter" to enter a textbook chapter, then add topics under it.
                                     </td>
                                 </tr>
-                                <tr v-else-if="filteredRows.length === 0">
-                                    <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                                <tr v-else-if="groupedRows.length === 0">
+                                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">
                                         No rows match "{{ search }}". <button type="button" class="text-indigo-600 hover:underline" @click="clearSearch">Clear search</button>
                                     </td>
                                 </tr>
@@ -1065,22 +1227,31 @@ const saveNewHead = async () => {
                                 <tr>
                                     <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Ch</th>
                                     <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Head</th>
-                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter</th>
-                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Topic</th>
+                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Chapter / Topic</th>
                                     <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Key concepts</th>
                                     <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Difficulty</th>
+                                    <th class="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Periods</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200 bg-white">
-                                <tr v-for="(row, index) in readOnlyFilteredRows" :key="index">
-                                    <td class="px-3 py-2">{{ row.chapter_number || '—' }}</td>
-                                    <td class="px-3 py-2">{{ row.chapter_head_name || '—' }}</td>
-                                    <td class="px-3 py-2">{{ row.chapter_name || '—' }}</td>
-                                    <td class="px-3 py-2 font-medium text-gray-900">{{ row.topic_name || '—' }}</td>
-                                    <td class="px-3 py-2 whitespace-pre-wrap text-gray-600">{{ row.learning_outcomes || '—' }}</td>
-                                    <td class="px-3 py-2">{{ row.difficulty || '—' }}</td>
-                                </tr>
-                                <tr v-if="readOnlyFilteredRows.length === 0">
+                                <template v-for="group in readOnlyGroupedRows" :key="group.key">
+                                    <tr class="bg-slate-100">
+                                        <td class="px-3 py-2 font-semibold">{{ group.chapter_number || '—' }}</td>
+                                        <td class="px-3 py-2">{{ group.chapter_head_name || '—' }}</td>
+                                        <td colspan="4" class="px-3 py-2 font-medium text-slate-900">
+                                            {{ group.chapter_name || '—' }}
+                                            <span class="ml-2 text-xs font-normal text-slate-500">{{ group.topics.length }} topic{{ group.topics.length === 1 ? '' : 's' }}</span>
+                                        </td>
+                                    </tr>
+                                    <tr v-for="(row, topicIndex) in group.topics" :key="`${group.key}-${topicIndex}`">
+                                        <td colspan="2" class="bg-slate-50 px-3 py-2"></td>
+                                        <td class="px-3 py-2 font-medium text-gray-900">{{ row.topic_name || '—' }}</td>
+                                        <td class="px-3 py-2 whitespace-pre-wrap text-gray-600">{{ row.learning_outcomes || '—' }}</td>
+                                        <td class="px-3 py-2">{{ row.difficulty || '—' }}</td>
+                                        <td class="px-3 py-2">{{ row.planned_periods || '—' }}</td>
+                                    </tr>
+                                </template>
+                                <tr v-if="readOnlyGroupedRows.length === 0">
                                     <td colspan="6" class="px-4 py-8 text-center text-gray-500">No syllabus rows to show.</td>
                                 </tr>
                             </tbody>
