@@ -382,6 +382,41 @@ const chapterRowKey = (row) => {
     return `new:${row.chapter_number}|${row.chapter_name}`;
 };
 
+const chapterSortParts = (raw) => {
+    let text = String(raw ?? '').trim();
+    let part = 1;
+
+    const partMatch = text.match(/^\s*p(?:art)?\s*-?\s*(\d+)\s*[-–:,]?\s*/i);
+
+    if (partMatch) {
+        part = Number(partMatch[1]);
+        text = text.slice(partMatch[0].length);
+    }
+
+    const chapterMatch = text.match(/(?:ch(?:apter)?|\bc)\s*-?\s*(\d+)/i)
+        || text.match(/(\d+)/);
+
+    return {
+        part,
+        chapter: chapterMatch ? Number(chapterMatch[1]) : 9999,
+    };
+};
+
+const compareChapterGroups = (a, b) => {
+    const left = chapterSortParts(a.chapter_number);
+    const right = chapterSortParts(b.chapter_number);
+
+    if (left.part !== right.part) {
+        return left.part - right.part;
+    }
+
+    if (left.chapter !== right.chapter) {
+        return left.chapter - right.chapter;
+    }
+
+    return String(a.chapter_number ?? '').localeCompare(String(b.chapter_number ?? ''), undefined, { numeric: true });
+};
+
 const distinctChapters = computed(() => {
     const seen = new Map();
 
@@ -547,41 +582,6 @@ const rowMatchesSearch = (row, query) => {
     ];
 
     return fields.some((field) => String(field ?? '').toLowerCase().includes(query));
-};
-
-const chapterSortParts = (raw) => {
-    let text = String(raw ?? '').trim();
-    let part = 1;
-
-    const partMatch = text.match(/^\s*p(?:art)?\s*-?\s*(\d+)\s*[-–:,]?\s*/i);
-
-    if (partMatch) {
-        part = Number(partMatch[1]);
-        text = text.slice(partMatch[0].length);
-    }
-
-    const chapterMatch = text.match(/(?:ch(?:apter)?|\bc)\s*-?\s*(\d+)/i)
-        || text.match(/(\d+)/);
-
-    return {
-        part,
-        chapter: chapterMatch ? Number(chapterMatch[1]) : 9999,
-    };
-};
-
-const compareChapterGroups = (a, b) => {
-    const left = chapterSortParts(a.chapter_number);
-    const right = chapterSortParts(b.chapter_number);
-
-    if (left.part !== right.part) {
-        return left.part - right.part;
-    }
-
-    if (left.chapter !== right.chapter) {
-        return left.chapter - right.chapter;
-    }
-
-    return String(a.chapter_number ?? '').localeCompare(String(b.chapter_number ?? ''), undefined, { numeric: true });
 };
 
 const groupedRows = computed(() => {
