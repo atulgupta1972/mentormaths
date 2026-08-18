@@ -6,6 +6,7 @@ use App\Models\ChapterHead;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
+use App\Models\TextbookChapter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -97,21 +98,27 @@ class SyllabusImportService
 
     /**
      * @param  list<array<string, mixed>>  $rows
+     * @return array{kept_content_chapters: list<string>}
      */
-    public function syncRows(SyllabusVersion $version, array $rows, bool $replaceExisting = false): void
+    public function syncRows(SyllabusVersion $version, array $rows, bool $replaceExisting = false): array
     {
-        DB::transaction(function () use ($version, $rows, $replaceExisting) {
+        $keptContentChapters = [];
+
+        DB::transaction(function () use ($version, $rows, $replaceExisting, &$keptContentChapters) {
+            $protectedChapterIds = $this->protectedChapterIds($version);
+
             if ($replaceExisting) {
-                $chapterIds = $version->chapters()->pluck('id');
+                $deletableIds = $version->chapters()->pluck('id')->diff($protectedChapterIds);
                 SyllabusTopic::query()
-                    ->whereIn('syllabus_chapter_id', $chapterIds)
+                    ->whereIn('syllabus_chapter_id', $deletableIds)
                     ->delete();
-                $version->chapters()->delete();
+                $version->chapters()->whereIn('id', $deletableIds)->delete();
             }
 
             $keptTopicIds = [];
             $chapterSort = 0;
             $chapterCache = [];
+            $seenChapterIds = [];
 
             foreach ($rows as $index => $row) {
                 if (trim((string) ($row['topic_name'] ?? '')) === '' && trim((string) ($row['chapter_name'] ?? '')) === '') {
@@ -120,6 +127,7 @@ class SyllabusImportService
 
                 $chapterSort++;
                 $chapter = $this->resolveChapter($version, $row, $chapterSort, $chapterCache, createHeadsIfMissing: true);
+                $seenChapterIds[(int) $chapter->id] = true;
 
                 $topic = isset($row['id']) && $row['id']
                     ? SyllabusTopic::query()
@@ -141,13 +149,31 @@ class SyllabusImportService
             }
 
             $chapterIds = $version->chapters()->pluck('id');
+            $protectedTopicIds = SyllabusTopic::query()
+                ->whereIn('syllabus_chapter_id', $protectedChapterIds)
+                ->pluck('id');
+
             SyllabusTopic::query()
                 ->whereIn('syllabus_chapter_id', $chapterIds)
                 ->whereNotIn('id', $keptTopicIds)
+                ->whereNotIn('id', $protectedTopicIds)
                 ->delete();
+
+            $omittedProtected = $protectedChapterIds
+                ->reject(fn ($id) => isset($seenChapterIds[(int) $id]))
+                ->values();
+
+            if ($omittedProtected->isNotEmpty()) {
+                $keptContentChapters = SyllabusChapter::query()
+                    ->whereIn('id', $omittedProtected)
+                    ->get()
+                    ->map(fn (SyllabusChapter $chapter) => trim($chapter->chapter_number.' '.$chapter->name))
+                    ->all();
+            }
 
             $version->chapters()
                 ->whereDoesntHave('topics')
+                ->whereNotIn('id', $protectedChapterIds)
                 ->delete();
 
             $hasTopics = SyllabusTopic::query()
@@ -160,6 +186,8 @@ class SyllabusImportService
                     : SyllabusVersion::STATUS_DRAFT,
             ]);
         });
+
+        return ['kept_content_chapters' => $keptContentChapters];
     }
 
     /**
@@ -211,20 +239,43 @@ class SyllabusImportService
     }
 
     /**
-     * Remove every chapter and topic from a syllabus version.
+     * Remove chapters that have no uploaded book MCQs or question-bank items.
+     *
+     * @return array{kept_content_chapters: list<string>}
      */
-    public function clearAllRows(SyllabusVersion $version): void
+    public function clearAllRows(SyllabusVersion $version): array
     {
-        DB::transaction(function () use ($version) {
-            $chapterIds = $version->chapters()->pluck('id');
+        $keptContentChapters = [];
+
+        DB::transaction(function () use ($version, &$keptContentChapters) {
+            $protectedChapterIds = $this->protectedChapterIds($version);
+            $deletableIds = $version->chapters()->pluck('id')->diff($protectedChapterIds);
 
             SyllabusTopic::query()
-                ->whereIn('syllabus_chapter_id', $chapterIds)
+                ->whereIn('syllabus_chapter_id', $deletableIds)
                 ->delete();
+            $version->chapters()->whereIn('id', $deletableIds)->delete();
 
-            $version->chapters()->delete();
-            $version->update(['status' => SyllabusVersion::STATUS_DRAFT]);
+            if ($protectedChapterIds->isNotEmpty()) {
+                $keptContentChapters = SyllabusChapter::query()
+                    ->whereIn('id', $protectedChapterIds)
+                    ->get()
+                    ->map(fn (SyllabusChapter $chapter) => trim($chapter->chapter_number.' '.$chapter->name))
+                    ->all();
+            }
+
+            $hasTopics = SyllabusTopic::query()
+                ->whereIn('syllabus_chapter_id', $version->chapters()->pluck('id'))
+                ->exists();
+
+            $version->update([
+                'status' => $hasTopics
+                    ? SyllabusVersion::STATUS_PUBLISHED
+                    : SyllabusVersion::STATUS_DRAFT,
+            ]);
         });
+
+        return ['kept_content_chapters' => $keptContentChapters];
     }
 
     /**
@@ -284,9 +335,21 @@ class SyllabusImportService
 
     public function flattenToRows(SyllabusVersion $version): Collection
     {
-        $version->load(['chapters.topics', 'chapters.chapterHead']);
+        $version->load([
+            'chapters.topics' => fn ($q) => $q->withCount('questions'),
+            'chapters.chapterHead',
+            'chapters.textbookChapters.textbook',
+        ]);
 
         return $version->chapters->flatMap(function (SyllabusChapter $chapter) {
+            $books = $chapter->textbookChapters
+                ->map(fn (TextbookChapter $bookChapter) => $bookChapter->textbook?->name)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+            $hasQuestions = $chapter->topics->contains(fn (SyllabusTopic $topic) => ($topic->questions_count ?? 0) > 0);
+
             return $chapter->topics->map(fn (SyllabusTopic $topic) => [
                 'id' => $topic->id,
                 'chapter_id' => $chapter->id,
@@ -295,6 +358,8 @@ class SyllabusImportService
                 'chapter_head_id' => $chapter->chapter_head_id,
                 'chapter_head_name' => $chapter->chapterHead?->name ?? '',
                 'ncert_verified' => (bool) $chapter->ncert_verified,
+                'has_uploaded_content' => $books !== [] || $hasQuestions,
+                'content_books' => $books,
                 'topic_name' => $topic->name,
                 'learning_outcomes' => $topic->learning_outcomes ?? '',
                 'difficulty' => $topic->difficulty ?? '',
@@ -628,5 +693,30 @@ class SyllabusImportService
     private function rowIsNcertVerified(array $row): bool
     {
         return filter_var($row['ncert_verified'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Chapters that have book MCQs or question-bank items — never auto-delete.
+     *
+     * @return Collection<int, int>
+     */
+    private function protectedChapterIds(SyllabusVersion $version): Collection
+    {
+        $chapterIds = $version->chapters()->pluck('id');
+
+        if ($chapterIds->isEmpty()) {
+            return collect();
+        }
+
+        $fromBooks = TextbookChapter::query()
+            ->whereIn('syllabus_chapter_id', $chapterIds)
+            ->pluck('syllabus_chapter_id');
+
+        $fromQuestions = SyllabusTopic::query()
+            ->whereIn('syllabus_chapter_id', $chapterIds)
+            ->whereHas('questions')
+            ->pluck('syllabus_chapter_id');
+
+        return $fromBooks->merge($fromQuestions)->unique()->values();
     }
 }

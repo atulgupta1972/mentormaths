@@ -22,6 +22,7 @@ const props = defineProps({
     uploaderMode: { type: Boolean, default: false },
     contentUploadTask: { type: Object, default: null },
     textbooks: { type: Array, default: () => [] },
+    syllabusChaptersForRelink: { type: Array, default: () => [] },
 });
 
 const chapterRoute = (action, fallback = '#') =>
@@ -53,6 +54,9 @@ const changeBookForm = useForm({
     textbook_id: '',
     book_name: '',
     book_code: '',
+});
+const changeSyllabusForm = useForm({
+    syllabus_chapter_id: props.chapter.syllabus_chapter_id || '',
 });
 
 const syncForms = () => {
@@ -478,6 +482,12 @@ const submitChangeBook = () => {
     });
 };
 
+const submitChangeSyllabus = () => {
+    changeSyllabusForm.post(chapterRoute('change-syllabus'), {
+        preserveScroll: true,
+    });
+};
+
 const canChangeBook = computed(() =>
     props.uploaderMode
         ? props.contentUploadTask?.can_change_book
@@ -613,6 +623,26 @@ const canChangeBook = computed(() =>
                             {{ changeBookForm.processing ? 'Saving…' : 'Update book' }}
                         </PrimaryButton>
                         <InputError :message="changeBookForm.errors.textbook_id || changeBookForm.errors.book_name || changeBookForm.errors.book_code" />
+                    </form>
+                </div>
+
+                <div v-if="!uploaderMode && syllabusChaptersForRelink.length" class="rounded-lg border border-amber-200 bg-amber-50/50 p-4 shadow-sm">
+                    <p class="text-sm font-semibold text-amber-950">Reuse MCQs on another board</p>
+                    <p class="mt-1 text-xs text-amber-900">
+                        Current heading: <strong>{{ chapter.syllabus_chapter_label || '—' }}</strong>.
+                        The uploaded bank stays even if you drop that chapter from the syllabus editor.
+                        Relink here to the matching chapter on another board of the same class.
+                    </p>
+                    <form class="mt-3 flex flex-wrap items-end gap-2" @submit.prevent="submitChangeSyllabus">
+                        <select v-model="changeSyllabusForm.syllabus_chapter_id" class="min-w-[280px] rounded-md border-gray-300 text-sm" required>
+                            <option v-for="option in syllabusChaptersForRelink" :key="option.id" :value="option.id">
+                                {{ option.label }}
+                            </option>
+                        </select>
+                        <PrimaryButton type="submit" class="!py-1.5 !text-xs" :disabled="changeSyllabusForm.processing">
+                            {{ changeSyllabusForm.processing ? 'Moving…' : 'Move MCQ bank' }}
+                        </PrimaryButton>
+                        <InputError :message="changeSyllabusForm.errors.syllabus_chapter_id" />
                     </form>
                 </div>
 

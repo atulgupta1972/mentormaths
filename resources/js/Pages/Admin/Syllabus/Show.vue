@@ -313,6 +313,8 @@ function emptyRow() {
         chapter_head_id: '',
         client_group: null,
         ncert_verified: false,
+        has_uploaded_content: false,
+        content_books: [],
         topic_name: '',
         learning_outcomes: '',
         difficulty: '',
@@ -478,6 +480,8 @@ const addTopicForRow = (index) => {
         chapter_head_id: source.chapter_head_id,
         client_group: source.client_group || null,
         ncert_verified: Boolean(source.ncert_verified),
+        has_uploaded_content: Boolean(source.has_uploaded_content),
+        content_books: source.content_books || [],
     });
 
     nextTick(resizeAllFields);
@@ -507,6 +511,14 @@ const setChapterField = (group, field, value) => {
 };
 
 const removeChapterGroup = (group) => {
+    if (group.has_uploaded_content) {
+        const books = (group.content_books || []).join(', ') || 'a textbook';
+        window.alert(
+            `This chapter has uploaded MCQs (${books}). It cannot be deleted from the syllabus — the questions stay in the bank so you can reuse them on another board or class. Relink the book chapter from Admin → Textbooks if the heading moved.`,
+        );
+        return;
+    }
+
     if (!confirm(`Remove chapter ${group.chapter_number || ''} ${group.chapter_name || ''} and its ${group.allIndexes.length} topic row(s)?`)) {
         return;
     }
@@ -600,6 +612,8 @@ const groupedRows = computed(() => {
                 chapter_name: row.chapter_name,
                 chapter_head_id: row.chapter_head_id,
                 ncert_verified: Boolean(row.ncert_verified),
+                has_uploaded_content: Boolean(row.has_uploaded_content),
+                content_books: row.content_books || [],
                 allIndexes: [],
                 topics: [],
             };
@@ -612,6 +626,8 @@ const groupedRows = computed(() => {
         current.chapter_name = row.chapter_name;
         current.chapter_head_id = row.chapter_head_id;
         current.ncert_verified = Boolean(row.ncert_verified);
+        current.has_uploaded_content = Boolean(row.has_uploaded_content) || current.has_uploaded_content;
+        current.content_books = [...new Set([...(current.content_books || []), ...(row.content_books || [])])];
     });
 
     const sorted = [...groups].sort(compareChapterGroups);
@@ -940,7 +956,8 @@ const saveNewHead = async () => {
                     <p v-if="isAdmin" class="mt-2 text-xs text-gray-500">
                         <strong>Chapter head</strong> is the mentor theme (e.g. Integers).
                         <strong>Chapter name</strong> is the NCERT / textbook title — edit both once per chapter.
-                        Tick <strong>✓</strong> when a chapter matches the new book; it moves to <strong>Checked</strong> below so you can work through the rest.
+                        Tick <strong>✓</strong> when a chapter matches the new book; it moves to <strong>Checked</strong> below.
+                        Chapters with a <strong>MCQs saved</strong> badge already have a book bank — they are not deleted, so you can reuse them on another board or class.
                         Save syllabus to keep the ticks.
                     </p>
                 </div>
@@ -1230,6 +1247,13 @@ const saveNewHead = async () => {
                                                     @input="setChapterField(group, 'chapter_name', $event.target.value); autoResize($event)"
                                                 />
                                                 <span class="shrink-0 text-[11px] text-slate-500">{{ group.allIndexes.length }} topic{{ group.allIndexes.length === 1 ? '' : 's' }}</span>
+                                                <span
+                                                    v-if="group.has_uploaded_content"
+                                                    class="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+                                                    :title="'MCQs stay if you drop this syllabus row: ' + (group.content_books || []).join(', ')"
+                                                >
+                                                    MCQs saved{{ group.content_books?.length ? ': ' + group.content_books.join(', ') : '' }}
+                                                </span>
                                                 <button
                                                     type="button"
                                                     class="shrink-0 text-[11px] font-semibold text-emerald-700 hover:underline"
@@ -1240,8 +1264,13 @@ const saveNewHead = async () => {
                                             </div>
                                         </td>
                                         <td class="px-1.5 py-0.5">
-                                            <DangerButton type="button" class="!px-1.5 !py-0.5 text-[11px]" @click="removeChapterGroup(group)">
-                                                Remove
+                                            <DangerButton
+                                                type="button"
+                                                class="!px-1.5 !py-0.5 text-[11px]"
+                                                :class="group.has_uploaded_content ? 'opacity-60' : ''"
+                                                @click="removeChapterGroup(group)"
+                                            >
+                                                {{ group.has_uploaded_content ? 'Locked' : 'Remove' }}
                                             </DangerButton>
                                         </td>
                                     </tr>

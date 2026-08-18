@@ -302,6 +302,10 @@ class TextbookController extends Controller
                     'code' => $textbookChapter->textbook?->code,
                     'grade_name' => $textbookChapter->textbook?->gradeLevel?->name,
                 ],
+                'syllabus_chapter_id' => $textbookChapter->syllabus_chapter_id,
+                'syllabus_chapter_label' => $textbookChapter->syllabusChapter
+                    ? self::chapterLabel($textbookChapter->syllabusChapter)
+                    : null,
                 'items' => $this->mcqImportService->itemsWithDiagramPreviewUrls($textbookChapter->extraction_items ?? []),
                 'mcq_set_plan' => $mcqSetPlan,
                 'mcq_set_plan_summary' => $this->setPlanService->summary($mcqSetPlan),
@@ -334,6 +338,9 @@ class TextbookController extends Controller
             'uploaderMode' => $this->isContentUploaderContext($request),
             'contentUploadTask' => $contentUploadTask,
             'textbooks' => $gradeLevelId > 0 ? $this->bookService->textbooksForGrade($gradeLevelId) : [],
+            'syllabusChaptersForRelink' => $this->isContentUploaderContext($request)
+                ? []
+                : $this->bookService->syllabusChaptersForRelink($textbookChapter),
         ]);
     }
 
@@ -390,6 +397,31 @@ class TextbookController extends Controller
 
         return $this->redirectToChapterShow($chapter)
             ->with('success', 'Book updated to '.$chapter->textbook?->name.'.');
+    }
+
+    public function changeSyllabusChapter(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        abort_if($this->isContentUploaderContext($request), 403);
+
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'integer', Rule::exists('syllabus_chapters', 'id')],
+        ]);
+
+        try {
+            $chapter = $this->bookService->changeSyllabusChapter(
+                $textbookChapter,
+                (int) $validated['syllabus_chapter_id'],
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $label = $chapter->syllabusChapter
+            ? self::chapterLabel($chapter->syllabusChapter)
+            : 'the selected chapter';
+
+        return $this->redirectToChapterShow($chapter)
+            ->with('success', 'MCQ bank moved to '.$label.'. Students on that board/class heading can use the same questions.');
     }
 
     public function importMcq(Request $request, TextbookChapter $textbookChapter): RedirectResponse

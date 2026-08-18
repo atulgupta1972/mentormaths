@@ -7,8 +7,13 @@ use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Subject;
 use App\Models\ChapterHead;
+use App\Models\Question;
 use App\Models\SyllabusChapter;
+use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
+use App\Models\Textbook;
+use App\Models\TextbookChapter;
+use App\Models\User;
 use App\Services\SyllabusImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -136,6 +141,116 @@ class SyllabusQuickTopicTest extends TestCase
         $version = $version->fresh();
         $this->assertSame(0, $version->chapters()->count());
         $this->assertSame(SyllabusVersion::STATUS_DRAFT, $version->status);
+    }
+
+    public function test_omitting_chapter_with_textbook_mcqs_keeps_the_bank(): void
+    {
+        $version = $this->seedSyllabusVersion();
+        $service = app(SyllabusImportService::class);
+
+        $keptChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $version->id,
+            'chapter_number' => '4',
+            'name' => 'Algebra',
+            'sort_order' => 1,
+        ]);
+        $droppable = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $version->id,
+            'chapter_number' => '5',
+            'name' => 'Empty chapter',
+            'sort_order' => 2,
+        ]);
+
+        $topic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $keptChapter->id,
+            'name' => 'Textbook',
+            'sort_order' => 900,
+        ]);
+        SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $droppable->id,
+            'name' => 'Old topic',
+            'sort_order' => 1,
+        ]);
+
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $book = Textbook::query()->create([
+            'grade_level_id' => $version->grade_level_id,
+            'name' => 'NCERT Maths',
+            'code' => 'ncert',
+            'created_by' => $admin->id,
+        ]);
+        TextbookChapter::query()->create([
+            'textbook_id' => $book->id,
+            'syllabus_chapter_id' => $keptChapter->id,
+            'chapter_number' => 4,
+            'title' => 'Algebra',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'What is (a+b)^2?',
+            'source' => Question::SOURCE_PDF,
+        ]);
+
+        $result = $service->syncRows($version, [[
+            'chapter_number' => '1',
+            'chapter_name' => 'New heading',
+            'topic_name' => 'New topic',
+        ]]);
+
+        $this->assertTrue($keptChapter->exists());
+        $this->assertDatabaseHas('syllabus_chapters', ['id' => $keptChapter->id, 'name' => 'Algebra']);
+        $this->assertDatabaseMissing('syllabus_chapters', ['id' => $droppable->id]);
+        $this->assertDatabaseHas('questions', ['id' => $question->id, 'syllabus_topic_id' => $topic->id]);
+        $this->assertDatabaseHas('textbook_chapters', ['syllabus_chapter_id' => $keptChapter->id]);
+        $this->assertNotEmpty($result['kept_content_chapters']);
+    }
+
+    public function test_clear_all_keeps_chapters_with_uploaded_content(): void
+    {
+        $version = $this->seedSyllabusVersion();
+        $service = app(SyllabusImportService::class);
+
+        $keptChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $version->id,
+            'chapter_number' => '4',
+            'name' => 'Algebra',
+            'sort_order' => 1,
+        ]);
+        $topic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $keptChapter->id,
+            'name' => 'Textbook',
+            'sort_order' => 900,
+        ]);
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $book = Textbook::query()->create([
+            'grade_level_id' => $version->grade_level_id,
+            'name' => 'NCERT Maths',
+            'code' => 'ncert',
+            'created_by' => $admin->id,
+        ]);
+        TextbookChapter::query()->create([
+            'textbook_id' => $book->id,
+            'syllabus_chapter_id' => $keptChapter->id,
+            'chapter_number' => 4,
+            'title' => 'Algebra',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Keep me',
+            'source' => Question::SOURCE_PDF,
+        ]);
+
+        $result = $service->clearAllRows($version);
+
+        $this->assertSame(1, $version->fresh()->chapters()->count());
+        $this->assertDatabaseHas('questions', ['question_text' => 'Keep me']);
+        $this->assertNotEmpty($result['kept_content_chapters']);
     }
 
     public function test_replace_sync_rows_deletes_previous_topics(): void

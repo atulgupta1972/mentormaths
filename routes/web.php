@@ -320,6 +320,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');
     Route::post('/textbooks/chapters/{textbookChapter}/upload-pdf', [TextbookController::class, 'uploadPdf'])->name('textbooks.upload-pdf');
     Route::post('/textbooks/chapters/{textbookChapter}/change-book', [TextbookController::class, 'changeBook'])->name('textbooks.change-book');
+    Route::post('/textbooks/chapters/{textbookChapter}/change-syllabus', [TextbookController::class, 'changeSyllabusChapter'])->name('textbooks.change-syllabus');
 
     Route::get('/formula-bank', [FormulaBankController::class, 'index'])->name('formula-bank.index');
     Route::get('/basics-drill', [BasicsDrillSettingsController::class, 'index'])->name('basics-drill.index');

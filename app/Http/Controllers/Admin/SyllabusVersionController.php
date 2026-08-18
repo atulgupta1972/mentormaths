@@ -161,19 +161,27 @@ class SyllabusVersionController extends Controller
             'rows.*.remarks' => ['nullable', 'string'],
         ]);
 
-        $this->importService->syncRows(
+        $result = $this->importService->syncRows(
             $syllabusVersion,
             $validated['rows'],
             replaceExisting: (bool) ($validated['replace'] ?? false),
         );
 
+        $success = ($validated['replace'] ?? false)
+            ? (count($validated['rows']) > 0
+                ? 'Syllabus replaced with the preview.'
+                : 'All syllabus rows were deleted.')
+            : 'Syllabus saved.';
+
+        $kept = $result['kept_content_chapters'] ?? [];
+        if ($kept !== []) {
+            $success .= ' Kept uploaded MCQs for: '.implode(', ', $kept)
+                .'. Those chapters stay so the book bank can be reused on another board or class.';
+        }
+
         return redirect()
             ->route('admin.syllabus.show', $syllabusVersion)
-            ->with('success', ($validated['replace'] ?? false)
-                ? (count($validated['rows']) > 0
-                    ? 'Syllabus replaced with the preview.'
-                    : 'All syllabus rows were deleted.')
-                : 'Syllabus saved.');
+            ->with('success', $success);
     }
 
     public function import(Request $request): RedirectResponse
@@ -259,11 +267,17 @@ class SyllabusVersionController extends Controller
 
     public function clearRows(SyllabusVersion $syllabusVersion): RedirectResponse
     {
-        $this->importService->clearAllRows($syllabusVersion);
+        $result = $this->importService->clearAllRows($syllabusVersion);
+        $kept = $result['kept_content_chapters'] ?? [];
+
+        $success = $kept === []
+            ? 'All saved syllabus rows were deleted. Import from Excel or add rows manually.'
+            : 'Empty syllabus rows were deleted. Kept uploaded MCQs for: '.implode(', ', $kept)
+                .'. Those chapters stay so the book bank can be reused on another board or class.';
 
         return redirect()
             ->route('admin.syllabus.show', $syllabusVersion)
-            ->with('success', 'All saved syllabus rows were deleted. Import from Excel or add rows manually.');
+            ->with('success', $success);
     }
 
     private function processImport(Request $request, SyllabusVersion $version): RedirectResponse

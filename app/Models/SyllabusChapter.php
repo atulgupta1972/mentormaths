@@ -41,6 +41,11 @@ class SyllabusChapter extends Model
         return $this->hasMany(SyllabusTopic::class)->orderBy('sort_order');
     }
 
+    public function textbookChapters(): HasMany
+    {
+        return $this->hasMany(TextbookChapter::class);
+    }
+
     public function chapterPracticeSets(): HasMany
     {
         return $this->hasMany(Worksheet::class, 'syllabus_chapter_id')

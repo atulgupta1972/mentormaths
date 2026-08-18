@@ -3,10 +3,15 @@
 namespace App\Services;
 
 use App\Models\ContentUploadTask;
+use App\Models\Question;
+use App\Models\SyllabusChapter;
+use App\Models\SyllabusTopic;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\User;
+use App\Models\Worksheet;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class TextbookChapterBookService
@@ -125,6 +130,108 @@ class TextbookChapterBookService
         return $chapter->fresh(['textbook.gradeLevel']);
     }
 
+    /**
+     * @return list<array{id: int, label: string}>
+     */
+    public function syllabusChaptersForRelink(TextbookChapter $chapter): array
+    {
+        $chapter->loadMissing(['textbook', 'syllabusChapter.syllabusVersion.board']);
+
+        $gradeLevelId = (int) ($chapter->textbook?->grade_level_id ?? 0);
+        $subjectId = (int) ($chapter->syllabusChapter?->syllabusVersion?->subject_id ?? 0);
+
+        if ($gradeLevelId <= 0 || $subjectId <= 0) {
+            return [];
+        }
+
+        return SyllabusChapter::query()
+            ->with(['syllabusVersion.board:id,code,name'])
+            ->whereHas(
+                'syllabusVersion',
+                fn ($query) => $query
+                    ->where('grade_level_id', $gradeLevelId)
+                    ->where('subject_id', $subjectId),
+            )
+            ->orderBy('sort_order')
+            ->get()
+            ->map(function (SyllabusChapter $syllabusChapter) {
+                $board = $syllabusChapter->syllabusVersion?->board?->code
+                    ?: $syllabusChapter->syllabusVersion?->board?->name
+                    ?: 'Board';
+
+                return [
+                    'id' => $syllabusChapter->id,
+                    'label' => "{$board} · Ch {$syllabusChapter->chapter_number} — {$syllabusChapter->name}",
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    public function changeSyllabusChapter(TextbookChapter $chapter, int $syllabusChapterId): TextbookChapter
+    {
+        $chapter->loadMissing(['textbook', 'syllabusChapter.syllabusVersion']);
+
+        $target = SyllabusChapter::query()
+            ->with('syllabusVersion')
+            ->findOrFail($syllabusChapterId);
+
+        $gradeLevelId = (int) ($chapter->textbook?->grade_level_id ?? 0);
+        $subjectId = (int) ($chapter->syllabusChapter?->syllabusVersion?->subject_id ?? 0);
+        $targetGradeId = (int) ($target->syllabusVersion?->grade_level_id ?? 0);
+        $targetSubjectId = (int) ($target->syllabusVersion?->subject_id ?? 0);
+
+        if ($gradeLevelId <= 0 || $targetGradeId !== $gradeLevelId) {
+            throw new \InvalidArgumentException('Pick a syllabus chapter from the same class. Another class needs its own book upload.');
+        }
+
+        if ($subjectId > 0 && $targetSubjectId !== $subjectId) {
+            throw new \InvalidArgumentException('Pick a syllabus chapter from the same subject.');
+        }
+
+        if ((int) $target->id === (int) $chapter->syllabus_chapter_id) {
+            return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.board']);
+        }
+
+        $duplicate = TextbookChapter::query()
+            ->where('textbook_id', $chapter->textbook_id)
+            ->where('syllabus_chapter_id', $target->id)
+            ->whereKeyNot($chapter->id)
+            ->exists();
+
+        if ($duplicate) {
+            throw new \InvalidArgumentException('This book already has that syllabus chapter.');
+        }
+
+        return DB::transaction(function () use ($chapter, $target) {
+            $oldChapterId = (int) $chapter->syllabus_chapter_id;
+            $newTopic = $this->textbookTopic($target);
+            $questionIds = $this->questionIdsToMove($chapter, $oldChapterId);
+
+            if ($questionIds !== []) {
+                Question::query()->whereIn('id', $questionIds)->update([
+                    'syllabus_topic_id' => $newTopic->id,
+                ]);
+            }
+
+            $worksheetIds = $this->worksheetIdsForChapter($chapter);
+
+            if ($worksheetIds !== []) {
+                Worksheet::query()->whereIn('id', $worksheetIds)->update([
+                    'syllabus_chapter_id' => $target->id,
+                ]);
+            }
+
+            $chapter->update([
+                'syllabus_chapter_id' => $target->id,
+                'chapter_number' => $target->numericChapterNumber() ?: $chapter->chapter_number,
+                'title' => $target->name,
+            ]);
+
+            return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.board']);
+        });
+    }
+
     public function uploaderCanChangeBook(TextbookChapter $chapter, User $user): bool
     {
         try {
@@ -160,5 +267,69 @@ class TextbookChapterBookService
                 'This chapter is submitted or published. Ask admin to change the book.',
             );
         }
+    }
+
+    private function textbookTopic(SyllabusChapter $chapter): SyllabusTopic
+    {
+        return SyllabusTopic::query()->firstOrCreate(
+            [
+                'syllabus_chapter_id' => $chapter->id,
+                'name' => 'Textbook',
+            ],
+            [
+                'sort_order' => 900,
+                'learning_outcomes' => 'Textbook examples and exercises',
+            ],
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function worksheetIdsForChapter(TextbookChapter $chapter): array
+    {
+        return array_values(array_unique(array_filter([
+            ...$chapter->mcqWorksheetIds(),
+            (int) ($chapter->written_worksheet_id ?? 0),
+            (int) ($chapter->fill_blank_worksheet_id ?? 0),
+        ])));
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function questionIdsToMove(TextbookChapter $chapter, int $oldChapterId): array
+    {
+        $worksheetIds = $this->worksheetIdsForChapter($chapter);
+        $fromWorksheets = [];
+
+        if ($worksheetIds !== []) {
+            $fromWorksheets = Worksheet::query()
+                ->whereIn('id', $worksheetIds)
+                ->with('questions:id')
+                ->get()
+                ->flatMap(fn (Worksheet $worksheet) => $worksheet->questions->pluck('id'))
+                ->all();
+        }
+
+        $otherBooksRemain = TextbookChapter::query()
+            ->where('syllabus_chapter_id', $oldChapterId)
+            ->whereKeyNot($chapter->id)
+            ->exists();
+
+        if ($otherBooksRemain) {
+            return array_values(array_unique(array_map('intval', $fromWorksheets)));
+        }
+
+        $oldTextbookTopicIds = SyllabusTopic::query()
+            ->where('syllabus_chapter_id', $oldChapterId)
+            ->where('name', 'Textbook')
+            ->pluck('id');
+
+        $fromTopic = $oldTextbookTopicIds->isEmpty()
+            ? []
+            : Question::query()->whereIn('syllabus_topic_id', $oldTextbookTopicIds)->pluck('id')->all();
+
+        return array_values(array_unique(array_map('intval', [...$fromWorksheets, ...$fromTopic])));
     }
 }

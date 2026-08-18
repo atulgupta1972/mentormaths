@@ -6,8 +6,10 @@ use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\ContentUploadTask;
 use App\Models\GradeLevel;
+use App\Models\Question;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
+use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
@@ -93,6 +95,53 @@ class TextbookChapterBookTest extends TestCase
 
         $this->assertNotNull($chapter->pdf_path);
         Storage::disk('public')->assertExists($chapter->pdf_path);
+    }
+
+    public function test_admin_can_relink_mcq_bank_to_another_board_chapter(): void
+    {
+        [$uploader, $chapter, $task, $otherBook] = $this->seedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $sourceTopic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->syllabus_chapter_id,
+            'name' => 'Textbook',
+            'sort_order' => 900,
+        ]);
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $sourceTopic->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Factorise x^2 - 1',
+            'source' => Question::SOURCE_PDF,
+        ]);
+
+        $sourceChapter = SyllabusChapter::query()->findOrFail($chapter->syllabus_chapter_id);
+        $sourceVersion = SyllabusVersion::query()->findOrFail($sourceChapter->syllabus_version_id);
+        $otherBoard = Board::query()->create(['code' => 'ICSE', 'name' => 'ICSE', 'is_active' => true]);
+        $otherVersion = SyllabusVersion::query()->create([
+            'academic_year_id' => $sourceVersion->academic_year_id,
+            'grade_level_id' => $sourceVersion->grade_level_id,
+            'board_id' => $otherBoard->id,
+            'subject_id' => $sourceVersion->subject_id,
+        ]);
+        $targetChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $otherVersion->id,
+            'name' => 'Algebraic Identities',
+            'chapter_number' => '4',
+            'sort_order' => 4,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.change-syllabus', $chapter), [
+                'syllabus_chapter_id' => $targetChapter->id,
+            ])
+            ->assertRedirect(route('admin.textbooks.show', $chapter));
+
+        $chapter->refresh();
+        $question->refresh();
+
+        $this->assertSame($targetChapter->id, $chapter->syllabus_chapter_id);
+        $this->assertSame($targetChapter->id, $question->topic->syllabus_chapter_id);
+        $this->assertSame('Textbook', $question->topic->name);
     }
 
     /**
