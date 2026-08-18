@@ -558,7 +558,7 @@ watch(
                             <tr v-for="task in tasks.data" :key="task.id">
                                 <td class="px-4 py-3">
                                     <p class="font-medium text-gray-900">
-                                        {{ task.chapter?.grade_name }} · Ch {{ task.chapter?.chapter_number }}
+                                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }}
                                     </p>
                                     <p class="text-xs text-gray-500">{{ task.chapter?.title }}</p>
                                 </td>
