@@ -312,6 +312,7 @@ function emptyRow() {
         chapter_name: '',
         chapter_head_id: '',
         client_group: null,
+        ncert_verified: false,
         topic_name: '',
         learning_outcomes: '',
         difficulty: '',
@@ -443,6 +444,7 @@ const addTopicForRow = (index) => {
         chapter_name: source.chapter_name,
         chapter_head_id: source.chapter_head_id,
         client_group: source.client_group || null,
+        ncert_verified: Boolean(source.ncert_verified),
     });
 
     nextTick(resizeAllFields);
@@ -454,9 +456,15 @@ const addTopicToGroup = (group) => {
 };
 
 const setChapterField = (group, field, value) => {
-    const next = field === 'chapter_head_id' && value !== ''
-        ? Number(value) || value
-        : value;
+    let next = value;
+
+    if (field === 'chapter_head_id' && value !== '') {
+        next = Number(value) || value;
+    }
+
+    if (field === 'ncert_verified') {
+        next = Boolean(value);
+    }
 
     group.allIndexes.forEach((index) => {
         if (form.rows[index]) {
@@ -543,6 +551,29 @@ const rowMatchesSearch = (row, query) => {
     return fields.some((field) => String(field ?? '').toLowerCase().includes(query));
 };
 
+const chapterSortValue = (raw) => {
+    const text = String(raw ?? '');
+    const chMatch = text.match(/ch\s*-?\s*(\d+)/i);
+
+    if (chMatch) {
+        return Number(chMatch[1]);
+    }
+
+    const any = text.match(/(\d+)/);
+
+    return any ? Number(any[1]) : 9999;
+};
+
+const compareChapterGroups = (a, b) => {
+    const byNumber = chapterSortValue(a.chapter_number) - chapterSortValue(b.chapter_number);
+
+    if (byNumber !== 0) {
+        return byNumber;
+    }
+
+    return String(a.chapter_number ?? '').localeCompare(String(b.chapter_number ?? ''), undefined, { numeric: true });
+};
+
 const groupedRows = computed(() => {
     const query = search.value.trim().toLowerCase();
     const groups = [];
@@ -558,6 +589,7 @@ const groupedRows = computed(() => {
                 chapter_number: row.chapter_number,
                 chapter_name: row.chapter_name,
                 chapter_head_id: row.chapter_head_id,
+                ncert_verified: Boolean(row.ncert_verified),
                 allIndexes: [],
                 topics: [],
             };
@@ -569,19 +601,40 @@ const groupedRows = computed(() => {
         current.chapter_number = row.chapter_number;
         current.chapter_name = row.chapter_name;
         current.chapter_head_id = row.chapter_head_id;
+        current.ncert_verified = Boolean(row.ncert_verified);
     });
 
+    const sorted = [...groups].sort(compareChapterGroups);
+
     if (query === '') {
-        return groups;
+        return sorted;
     }
 
-    return groups
+    return sorted
         .map((group) => ({
             ...group,
             topics: group.topics.filter(({ row }) => rowMatchesSearch(row, query)),
         }))
         .filter((group) => group.topics.length > 0);
 });
+
+const pendingChapterGroups = computed(() => groupedRows.value.filter((group) => !group.ncert_verified));
+const checkedChapterGroups = computed(() => groupedRows.value.filter((group) => group.ncert_verified));
+
+const chapterSections = computed(() => [
+    {
+        key: 'pending',
+        title: 'To check against NCERT',
+        hint: 'Sorted Ch 1, Ch 2… Tick when the heading matches the new book.',
+        groups: pendingChapterGroups.value,
+    },
+    {
+        key: 'checked',
+        title: 'Checked',
+        hint: 'Ticked chapters sit here so you can finish the rest. Untick to move back up.',
+        groups: checkedChapterGroups.value,
+    },
+]);
 
 const readOnlyGroupedRows = computed(() => {
     const query = search.value.trim().toLowerCase();
@@ -605,11 +658,13 @@ const readOnlyGroupedRows = computed(() => {
         current.topics.push(row);
     });
 
+    const sorted = [...groups].sort(compareChapterGroups);
+
     if (query === '') {
-        return groups;
+        return sorted;
     }
 
-    return groups
+    return sorted
         .map((group) => ({
             ...group,
             topics: group.topics.filter((row) => rowMatchesSearch(row, query)),
@@ -639,6 +694,27 @@ const resizeAllFields = () => {
 
 onMounted(resizeAllFields);
 
+const rowsOrderedByChapter = (rows) => {
+    const groups = [];
+    let current = null;
+
+    rows.forEach((row, index) => {
+        const key = chapterRowKey(row);
+
+        if (!current || current.key !== key) {
+            current = { key, chapter_number: row.chapter_number, indexes: [] };
+            groups.push(current);
+        }
+
+        current.indexes.push(index);
+        current.chapter_number = row.chapter_number;
+    });
+
+    return groups
+        .sort(compareChapterGroups)
+        .flatMap((group) => group.indexes.map((index) => rows[index]));
+};
+
 const saveRows = () => {
     const replacingPreview = previewActive.value;
     const rowsWithContent = form.rows.filter(rowHasContent);
@@ -648,10 +724,11 @@ const saveRows = () => {
         .transform((data) => ({
             ...data,
             replace: replacingPreview || clearingAllSaved,
-            rows: (replacingPreview ? data.rows : rowsWithContent).map((row) => ({
+            rows: rowsOrderedByChapter(replacingPreview ? data.rows : rowsWithContent).map((row) => ({
                 ...row,
                 id: replacingPreview ? null : row.id,
                 chapter_id: replacingPreview ? null : row.chapter_id,
+                ncert_verified: Boolean(row.ncert_verified),
             })),
         }))
         .put(route('admin.syllabus.rows.update', props.version.id), {
@@ -852,8 +929,9 @@ const saveNewHead = async () => {
                     </p>
                     <p v-if="isAdmin" class="mt-2 text-xs text-gray-500">
                         <strong>Chapter head</strong> is the mentor theme (e.g. Integers).
-                        <strong>Chapter name</strong> is the textbook title — edit both once per chapter; topics sit underneath so you do not repeat them.
-                        Use <strong>+ Add</strong> to create a new head without leaving this page.
+                        <strong>Chapter name</strong> is the NCERT / textbook title — edit both once per chapter.
+                        Tick <strong>✓</strong> when a chapter matches the new book; it moves to <strong>Checked</strong> below so you can work through the rest.
+                        Save syllabus to keep the ticks.
                     </p>
                 </div>
 
@@ -1032,7 +1110,7 @@ const saveNewHead = async () => {
                                 topic(s) in {{ groupedRows.length }} chapter(s)
                             </template>
                             <template v-else>
-                                {{ groupedRows.length }} chapter(s) · {{ form.rows.length }} topic row(s)
+                                {{ pendingChapterGroups.length }} to check · {{ checkedChapterGroups.length }} checked · {{ form.rows.length }} topic row(s)
                             </template>
                         </p>
                     </div>
@@ -1041,7 +1119,7 @@ const saveNewHead = async () => {
                         <table class="syllabus-matrix min-w-full divide-y divide-gray-200 text-xs">
                             <thead class="bg-gray-50">
                                 <tr>
-                                    <th class="px-1.5 py-1.5 text-left text-[11px] font-medium uppercase text-gray-500">Ch No.</th>
+                                    <th class="px-1.5 py-1.5 text-left text-[11px] font-medium uppercase text-gray-500">✓ / Ch No.</th>
                                     <th class="min-w-[140px] px-1.5 py-1.5 text-left text-[11px] font-medium uppercase text-gray-500">
                                         <div class="flex items-center gap-2">
                                             <span>Chapter head</span>
@@ -1086,16 +1164,32 @@ const saveNewHead = async () => {
                                         </div>
                                     </td>
                                 </tr>
-                                <template v-for="group in groupedRows" :key="group.key">
-                                    <tr class="bg-slate-100">
+                                <template v-for="section in chapterSections" :key="section.key">
+                                    <tr v-if="section.groups.length" :class="section.key === 'checked' ? 'bg-emerald-50' : 'bg-amber-50'">
+                                        <td colspan="8" class="px-2 py-1.5">
+                                            <span class="font-semibold text-slate-800">{{ section.title }}</span>
+                                            <span class="ml-2 text-[11px] text-slate-600">{{ section.groups.length }} chapter{{ section.groups.length === 1 ? '' : 's' }} · {{ section.hint }}</span>
+                                        </td>
+                                    </tr>
+                                    <template v-for="group in section.groups" :key="group.key">
+                                    <tr :class="group.ncert_verified ? 'bg-emerald-50/70' : 'bg-slate-100'">
                                         <td class="whitespace-nowrap px-1.5 py-0.5">
-                                            <input
-                                                :value="group.chapter_number"
-                                                type="text"
-                                                class="w-14 rounded border-gray-300 bg-white font-semibold"
-                                                placeholder="Ch 1"
-                                                @input="setChapterField(group, 'chapter_number', $event.target.value)"
-                                            />
+                                            <div class="flex items-center gap-1">
+                                                <input
+                                                    :checked="group.ncert_verified"
+                                                    type="checkbox"
+                                                    class="h-3.5 w-3.5 rounded border-gray-400 text-emerald-600"
+                                                    title="Tick when this chapter matches the new NCERT book"
+                                                    @change="setChapterField(group, 'ncert_verified', $event.target.checked)"
+                                                >
+                                                <input
+                                                    :value="group.chapter_number"
+                                                    type="text"
+                                                    class="w-14 rounded border-gray-300 bg-white font-semibold"
+                                                    placeholder="Ch 1"
+                                                    @input="setChapterField(group, 'chapter_number', $event.target.value)"
+                                                />
+                                            </div>
                                         </td>
                                         <td class="px-1.5 py-0.5">
                                             <div class="flex items-center gap-1">
@@ -1190,6 +1284,7 @@ const saveNewHead = async () => {
                                             </DangerButton>
                                         </td>
                                     </tr>
+                                    </template>
                                 </template>
                                 <tr v-if="form.rows.length === 0">
                                     <td colspan="8" class="px-4 py-8 text-center text-gray-500">

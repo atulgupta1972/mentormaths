@@ -153,6 +153,7 @@ class SyllabusVersionController extends Controller
             'rows.*.chapter_number' => ['nullable', 'string', 'max:20'],
             'rows.*.chapter_name' => ['nullable', 'string', 'max:255'],
             'rows.*.chapter_head_id' => ['nullable', 'integer', 'exists:chapter_heads,id'],
+            'rows.*.ncert_verified' => ['nullable', 'boolean'],
             'rows.*.topic_name' => ['nullable', 'string', 'max:255'],
             'rows.*.learning_outcomes' => ['nullable', 'string'],
             'rows.*.difficulty' => ['nullable', 'string', 'max:20'],

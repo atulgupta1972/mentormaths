@@ -16,7 +16,15 @@ class SyllabusChapter extends Model
         'chapter_number',
         'name',
         'sort_order',
+        'ncert_verified',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'ncert_verified' => 'boolean',
+        ];
+    }
 
     public function chapterHead(): BelongsTo
     {

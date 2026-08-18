@@ -294,6 +294,7 @@ class SyllabusImportService
                 'chapter_name' => $chapter->name,
                 'chapter_head_id' => $chapter->chapter_head_id,
                 'chapter_head_name' => $chapter->chapterHead?->name ?? '',
+                'ncert_verified' => (bool) $chapter->ncert_verified,
                 'topic_name' => $topic->name,
                 'learning_outcomes' => $topic->learning_outcomes ?? '',
                 'difficulty' => $topic->difficulty ?? '',
@@ -584,6 +585,7 @@ class SyllabusImportService
                 'name' => trim((string) ($row['chapter_name'] ?? '')) ?: $chapter->name,
                 'sort_order' => $sortOrder,
                 'chapter_head_id' => $chapterHeadId,
+                'ncert_verified' => $this->rowIsNcertVerified($row),
             ]);
 
             $chapterCache[$cacheKey] = $chapter;
@@ -606,6 +608,7 @@ class SyllabusImportService
             'chapter_number' => $number ?: (string) $sortOrder,
             'name' => $name ?: 'Chapter '.$sortOrder,
             'sort_order' => $sortOrder,
+            'ncert_verified' => $this->rowIsNcertVerified($row),
         ]);
 
         $chapterCache[$key] = $chapter;
@@ -617,5 +620,13 @@ class SyllabusImportService
     private function chapterKey(string $number, string $name): string
     {
         return $number.'|'.$name;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function rowIsNcertVerified(array $row): bool
+    {
+        return filter_var($row['ncert_verified'] ?? false, FILTER_VALIDATE_BOOLEAN);
     }
 }
