@@ -408,9 +408,7 @@ const distinctChapters = computed(() => {
         }
     }
 
-    return [...seen.values()].sort((a, b) =>
-        String(a.chapter_number).localeCompare(String(b.chapter_number), undefined, { numeric: true }),
-    );
+    return [...seen.values()].sort(compareChapterGroups);
 });
 
 const selectedQuickChapter = computed(() =>
@@ -551,24 +549,36 @@ const rowMatchesSearch = (row, query) => {
     return fields.some((field) => String(field ?? '').toLowerCase().includes(query));
 };
 
-const chapterSortValue = (raw) => {
-    const text = String(raw ?? '');
-    const chMatch = text.match(/ch\s*-?\s*(\d+)/i);
+const chapterSortParts = (raw) => {
+    let text = String(raw ?? '').trim();
+    let part = 1;
 
-    if (chMatch) {
-        return Number(chMatch[1]);
+    const partMatch = text.match(/^\s*p(?:art)?\s*-?\s*(\d+)\s*[-–:,]?\s*/i);
+
+    if (partMatch) {
+        part = Number(partMatch[1]);
+        text = text.slice(partMatch[0].length);
     }
 
-    const any = text.match(/(\d+)/);
+    const chapterMatch = text.match(/(?:ch(?:apter)?|\bc)\s*-?\s*(\d+)/i)
+        || text.match(/(\d+)/);
 
-    return any ? Number(any[1]) : 9999;
+    return {
+        part,
+        chapter: chapterMatch ? Number(chapterMatch[1]) : 9999,
+    };
 };
 
 const compareChapterGroups = (a, b) => {
-    const byNumber = chapterSortValue(a.chapter_number) - chapterSortValue(b.chapter_number);
+    const left = chapterSortParts(a.chapter_number);
+    const right = chapterSortParts(b.chapter_number);
 
-    if (byNumber !== 0) {
-        return byNumber;
+    if (left.part !== right.part) {
+        return left.part - right.part;
+    }
+
+    if (left.chapter !== right.chapter) {
+        return left.chapter - right.chapter;
     }
 
     return String(a.chapter_number ?? '').localeCompare(String(b.chapter_number ?? ''), undefined, { numeric: true });
@@ -625,7 +635,7 @@ const chapterSections = computed(() => [
     {
         key: 'pending',
         title: 'To check against NCERT',
-        hint: 'Sorted Ch 1, Ch 2… Tick when the heading matches the new book.',
+        hint: 'Sorted Ch 1, Ch 2… then Part 2 (P2-C1, P2-C2). Tick when the heading matches the new book.',
         groups: pendingChapterGroups.value,
     },
     {
