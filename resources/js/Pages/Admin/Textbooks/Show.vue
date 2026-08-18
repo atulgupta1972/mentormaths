@@ -627,11 +627,10 @@ const canChangeBook = computed(() =>
                 </div>
 
                 <div v-if="!uploaderMode && syllabusChaptersForRelink.length" class="rounded-lg border border-amber-200 bg-amber-50/50 p-4 shadow-sm">
-                    <p class="text-sm font-semibold text-amber-950">Reuse MCQs on another board</p>
+                    <p class="text-sm font-semibold text-amber-950">Reuse MCQs on another board or class</p>
                     <p class="mt-1 text-xs text-amber-900">
                         Current heading: <strong>{{ chapter.syllabus_chapter_label || '—' }}</strong>.
-                        The uploaded bank stays even if you drop that chapter from the syllabus editor.
-                        Relink here to the matching chapter on another board of the same class.
+                        Relink here if this bank belongs on another board or class of the same subject.
                     </p>
                     <form class="mt-3 flex flex-wrap items-end gap-2" @submit.prevent="submitChangeSyllabus">
                         <select v-model="changeSyllabusForm.syllabus_chapter_id" class="min-w-[280px] rounded-md border-gray-300 text-sm" required>

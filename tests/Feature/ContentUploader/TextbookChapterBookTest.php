@@ -144,6 +144,56 @@ class TextbookChapterBookTest extends TestCase
         $this->assertSame('Textbook', $question->topic->name);
     }
 
+    public function test_admin_can_move_mcq_bank_to_another_class_chapter(): void
+    {
+        [$uploader, $chapter] = $this->seedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $sourceTopic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->syllabus_chapter_id,
+            'name' => 'Textbook',
+            'sort_order' => 900,
+        ]);
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $sourceTopic->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Solve 2x = 10',
+            'source' => Question::SOURCE_PDF,
+        ]);
+
+        $sourceChapter = SyllabusChapter::query()->findOrFail($chapter->syllabus_chapter_id);
+        $sourceVersion = SyllabusVersion::query()->findOrFail($sourceChapter->syllabus_version_id);
+        $otherGrade = GradeLevel::query()->create(['name' => 'Class 8', 'sort_order' => 8, 'is_active' => true]);
+        $otherVersion = SyllabusVersion::query()->create([
+            'academic_year_id' => $sourceVersion->academic_year_id,
+            'grade_level_id' => $otherGrade->id,
+            'board_id' => $sourceVersion->board_id,
+            'subject_id' => $sourceVersion->subject_id,
+        ]);
+        $targetChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $otherVersion->id,
+            'name' => 'Linear Equations',
+            'chapter_number' => '2',
+            'sort_order' => 2,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.syllabus.chapters.move-content', [$sourceVersion, $sourceChapter]), [
+                'target_syllabus_chapter_id' => $targetChapter->id,
+            ], ['Accept' => 'application/json']);
+
+        $response->assertOk();
+        $this->assertStringContainsString('Moved MCQs', (string) $response->json('message'));
+
+        $chapter->refresh();
+        $question->refresh();
+
+        $this->assertSame($targetChapter->id, $chapter->syllabus_chapter_id);
+        $this->assertSame($otherGrade->id, $chapter->textbook->grade_level_id);
+        $this->assertSame('wrong', $chapter->textbook->code);
+        $this->assertSame($targetChapter->id, $question->topic->syllabus_chapter_id);
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask, 3: Textbook}
      */

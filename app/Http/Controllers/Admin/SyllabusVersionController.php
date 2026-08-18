@@ -7,10 +7,12 @@ use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\ChapterHead;
 use App\Models\Subject;
+use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Services\AdminGradeContext;
 use App\Services\SyllabusCarryForwardService;
 use App\Services\SyllabusImportService;
+use App\Services\TextbookChapterBookService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +25,7 @@ class SyllabusVersionController extends Controller
         private SyllabusImportService $importService,
         private SyllabusCarryForwardService $carryForwardService,
         private AdminGradeContext $gradeContext,
+        private TextbookChapterBookService $bookService,
     ) {}
 
     public function index(Request $request): Response
@@ -70,6 +73,7 @@ class SyllabusVersionController extends Controller
             'rows' => $this->importService->flattenToRows($syllabusVersion),
             'academicYears' => AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'name']),
             'chapterHeads' => ChapterHead::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
+            'contentMoveTargets' => $this->bookService->contentMoveTargets($syllabusVersion),
         ]);
     }
 
@@ -182,6 +186,40 @@ class SyllabusVersionController extends Controller
         return redirect()
             ->route('admin.syllabus.show', $syllabusVersion)
             ->with('success', $success);
+    }
+
+    public function moveChapterContent(
+        Request $request,
+        SyllabusVersion $syllabusVersion,
+        SyllabusChapter $syllabusChapter,
+    ): RedirectResponse|JsonResponse {
+        abort_unless((int) $syllabusChapter->syllabus_version_id === (int) $syllabusVersion->id, 404);
+
+        $validated = $request->validate([
+            'target_syllabus_chapter_id' => ['required', 'integer', 'exists:syllabus_chapters,id'],
+        ]);
+
+        $target = SyllabusChapter::query()->findOrFail($validated['target_syllabus_chapter_id']);
+
+        try {
+            $label = $this->bookService->moveSyllabusChapterContent($syllabusChapter, $target);
+        } catch (\InvalidArgumentException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $exception->getMessage()], 422);
+            }
+
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $message = 'Moved MCQs to '.$label.'. Remove this chapter from the table and save the syllabus.';
+
+        if ($request->expectsJson()) {
+            return response()->json(['message' => $message]);
+        }
+
+        return redirect()
+            ->route('admin.syllabus.show', $syllabusVersion)
+            ->with('success', $message);
     }
 
     public function import(Request $request): RedirectResponse

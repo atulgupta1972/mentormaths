@@ -15,6 +15,7 @@ const props = defineProps({
     rows: Array,
     academicYears: Array,
     chapterHeads: Array,
+    contentMoveTargets: { type: Array, default: () => [] },
 });
 
 const search = ref('');
@@ -512,10 +513,7 @@ const setChapterField = (group, field, value) => {
 
 const removeChapterGroup = (group) => {
     if (group.has_uploaded_content) {
-        const books = (group.content_books || []).join(', ') || 'a textbook';
-        window.alert(
-            `This chapter has uploaded MCQs (${books}). It cannot be deleted from the syllabus — the questions stay in the bank so you can reuse them on another board or class. Relink the book chapter from Admin → Textbooks if the heading moved.`,
-        );
+        openMoveDialog(group);
         return;
     }
 
@@ -523,9 +521,92 @@ const removeChapterGroup = (group) => {
         return;
     }
 
+    spliceChapterGroup(group);
+};
+
+const spliceChapterGroup = (group) => {
     [...group.allIndexes].sort((a, b) => b - a).forEach((index) => {
         form.rows.splice(index, 1);
     });
+};
+
+const moveDialog = ref({
+    open: false,
+    group: null,
+    grade_level_id: '',
+    target_syllabus_chapter_id: '',
+    saving: false,
+    error: '',
+});
+
+const openMoveDialog = (group) => {
+    if (!group.chapter_id) {
+        window.alert('Save the syllabus first, then move this chapter’s MCQs.');
+        return;
+    }
+
+    moveDialog.value = {
+        open: true,
+        group,
+        grade_level_id: props.version?.grade_level_id || props.contentMoveTargets?.[0]?.grade_level_id || '',
+        target_syllabus_chapter_id: '',
+        saving: false,
+        error: '',
+    };
+};
+
+const closeMoveDialog = () => {
+    moveDialog.value.open = false;
+    moveDialog.value.group = null;
+    moveDialog.value.saving = false;
+    moveDialog.value.error = '';
+};
+
+const moveDialogGrades = computed(() => props.contentMoveTargets || []);
+
+const moveDialogChapters = computed(() => {
+    const gradeId = Number(moveDialog.value.grade_level_id);
+    const sourceId = Number(moveDialog.value.group?.chapter_id);
+    const grade = moveDialogGrades.value.find((item) => Number(item.grade_level_id) === gradeId);
+
+    return (grade?.chapters || []).filter((chapter) => Number(chapter.id) !== sourceId);
+});
+
+watch(
+    () => moveDialog.value.grade_level_id,
+    () => {
+        moveDialog.value.target_syllabus_chapter_id = '';
+    },
+);
+
+const submitMoveChapter = async () => {
+    const group = moveDialog.value.group;
+    const targetId = moveDialog.value.target_syllabus_chapter_id;
+
+    if (!group?.chapter_id || !targetId) {
+        moveDialog.value.error = 'Choose a class and chapter.';
+        return;
+    }
+
+    moveDialog.value.saving = true;
+    moveDialog.value.error = '';
+
+    try {
+        const { data } = await window.axios.post(
+            route('admin.syllabus.chapters.move-content', [props.version.id, group.chapter_id]),
+            { target_syllabus_chapter_id: targetId },
+        );
+
+        spliceChapterGroup(group);
+        closeMoveDialog();
+        importFeedback.value = data?.message || 'MCQs moved. Save the syllabus to drop this heading.';
+        importFeedbackType.value = 'success';
+    } catch (error) {
+        moveDialog.value.error = error.response?.data?.message
+            || error.response?.data?.errors?.target_syllabus_chapter_id?.[0]
+            || 'Could not move the questions.';
+        moveDialog.value.saving = false;
+    }
 };
 
 const submitQuickTopic = () => {
@@ -957,7 +1038,7 @@ const saveNewHead = async () => {
                         <strong>Chapter head</strong> is the mentor theme (e.g. Integers).
                         <strong>Chapter name</strong> is the NCERT / textbook title — edit both once per chapter.
                         Tick <strong>✓</strong> when a chapter matches the new book; it moves to <strong>Checked</strong> below.
-                        Chapters with a <strong>MCQs saved</strong> badge already have a book bank — they are not deleted, so you can reuse them on another board or class.
+                        Chapters with a <strong>MCQs saved</strong> badge have a book bank — click <strong>Move</strong> to send those questions to another class or chapter, then save.
                         Save syllabus to keep the ticks.
                     </p>
                 </div>
@@ -1270,7 +1351,7 @@ const saveNewHead = async () => {
                                                 :class="group.has_uploaded_content ? 'opacity-60' : ''"
                                                 @click="removeChapterGroup(group)"
                                             >
-                                                {{ group.has_uploaded_content ? 'Locked' : 'Remove' }}
+                                                {{ group.has_uploaded_content ? 'Move' : 'Remove' }}
                                             </DangerButton>
                                         </td>
                                     </tr>
@@ -1412,6 +1493,55 @@ const saveNewHead = async () => {
                         </div>
                         <PrimaryButton :disabled="carryForm.processing">Carry forward</PrimaryButton>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <div
+            v-if="moveDialog.open"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+            @click.self="!moveDialog.saving && closeMoveDialog()"
+        >
+            <div class="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
+                <h3 class="text-base font-semibold text-gray-900">Move questions, then remove</h3>
+                <p class="mt-1 text-sm text-gray-600">
+                    <strong>{{ moveDialog.group?.chapter_number }} {{ moveDialog.group?.chapter_name }}</strong>
+                    has uploaded MCQs
+                    <span v-if="moveDialog.group?.content_books?.length">
+                        ({{ moveDialog.group.content_books.join(', ') }})
+                    </span>.
+                    Choose the class and chapter that should keep this bank.
+                </p>
+                <div class="mt-4 space-y-3">
+                    <div>
+                        <InputLabel value="Move to class" />
+                        <select v-model="moveDialog.grade_level_id" class="mt-1 w-full rounded-md border-gray-300 text-sm" :disabled="moveDialog.saving">
+                            <option v-for="grade in moveDialogGrades" :key="grade.grade_level_id" :value="grade.grade_level_id">
+                                {{ grade.grade_name }}
+                            </option>
+                        </select>
+                    </div>
+                    <div>
+                        <InputLabel value="Chapter" />
+                        <select v-model="moveDialog.target_syllabus_chapter_id" class="mt-1 w-full rounded-md border-gray-300 text-sm" :disabled="moveDialog.saving" required>
+                            <option value="" disabled>Select chapter</option>
+                            <option v-for="chapter in moveDialogChapters" :key="chapter.id" :value="chapter.id">
+                                {{ chapter.label }}
+                            </option>
+                        </select>
+                        <p v-if="moveDialogChapters.length === 0" class="mt-1 text-xs text-amber-800">
+                            No other chapter on this class yet. Import or add that class syllabus first.
+                        </p>
+                    </div>
+                    <p v-if="moveDialog.error" class="text-sm text-red-700">{{ moveDialog.error }}</p>
+                </div>
+                <div class="mt-5 flex justify-end gap-2">
+                    <SecondaryButton type="button" :disabled="moveDialog.saving" @click="closeMoveDialog">
+                        Cancel
+                    </SecondaryButton>
+                    <PrimaryButton type="button" :disabled="moveDialog.saving || !moveDialog.target_syllabus_chapter_id" @click="submitMoveChapter">
+                        {{ moveDialog.saving ? 'Moving…' : 'Move questions' }}
+                    </PrimaryButton>
                 </div>
             </div>
         </div>
