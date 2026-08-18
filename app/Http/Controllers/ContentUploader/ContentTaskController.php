@@ -55,6 +55,9 @@ class ContentTaskController extends Controller
                 'awaiting_agreement' => $contentTask->isAwaitingAgreement(),
                 'needs_review' => $contentTask->uploaderBucket() === 'review_pending',
                 'textbook_chapter_id' => $contentTask->textbook_chapter_id,
+                'has_pdf' => $contentTask->textbookChapter
+                    ? app(\App\Services\TextbookChapterBookService::class)->hasStoredPdf($contentTask->textbookChapter)
+                    : false,
             ],
             'verification' => $verification ? [
                 'run_id' => $verification['run']->id,

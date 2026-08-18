@@ -23,6 +23,7 @@ use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
 use App\Services\TextbookMcqSetPlanService;
+use App\Services\TextbookChapterBookService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -42,6 +43,7 @@ class ContentUploadTaskController extends Controller
         private TextbookMcqSetPlanService $setPlanService,
         private ContentChapterQuestionService $chapterQuestions,
         private ContentUploaderChapterLibraryService $chapterLibrary,
+        private TextbookChapterBookService $bookService,
     ) {}
 
     public function index(Request $request): Response
@@ -448,6 +450,9 @@ class ContentUploadTaskController extends Controller
             'activeSeconds' => $this->sessionService->totalActiveSeconds($contentTask),
             'deleteRequests' => $this->chapterLibrary->pendingDeleteRequestsForTask($contentTask),
             'uploaders' => $this->contentUploaders(),
+            'textbooks' => $contentTask->textbookChapter?->textbook
+                ? $this->bookService->textbooksForGrade((int) $contentTask->textbookChapter->textbook->grade_level_id)
+                : [],
         ]);
     }
 
@@ -788,7 +793,11 @@ class ContentUploadTaskController extends Controller
                 'title' => $chapter->title,
                 'status' => $chapter->status,
                 'textbook_name' => $chapter->textbook?->name,
+                'textbook_code' => $chapter->textbook?->code,
+                'textbook_id' => $chapter->textbook_id,
                 'grade_name' => $chapter->textbook?->gradeLevel?->name,
+                'has_pdf' => $this->bookService->hasStoredPdf($chapter),
+                'pdf_url' => $chapter->pdfUrl(),
             ] : null,
         ];
 

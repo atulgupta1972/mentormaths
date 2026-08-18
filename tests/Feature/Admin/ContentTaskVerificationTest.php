@@ -19,6 +19,7 @@ use App\Models\Worksheet;
 use App\Services\UserGroupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ContentTaskVerificationTest extends TestCase
@@ -449,6 +450,11 @@ class ContentTaskVerificationTest extends TestCase
             'status' => TextbookChapter::STATUS_DRAFT,
             'created_by' => $admin->id,
         ]);
+
+        Storage::fake('public');
+        $pdfPath = 'textbooks/'.$textbook->id.'/chapters/'.$chapter->chapter_number.'/test.pdf';
+        Storage::disk('public')->put($pdfPath, '%PDF-1.4 test');
+        $chapter->update(['pdf_path' => $pdfPath]);
 
         $task = ContentUploadTask::query()->create([
             'textbook_chapter_id' => $chapter->id,

@@ -318,6 +318,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/textbooks/chapters/{textbookChapter}/mcq-reference', [TextbookController::class, 'downloadMcqReference'])->name('textbooks.mcq-reference');
     Route::post('/textbooks/chapters/{textbookChapter}/reset-import', [TextbookController::class, 'resetImport'])->name('textbooks.reset-import');
     Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');
+    Route::post('/textbooks/chapters/{textbookChapter}/upload-pdf', [TextbookController::class, 'uploadPdf'])->name('textbooks.upload-pdf');
+    Route::post('/textbooks/chapters/{textbookChapter}/change-book', [TextbookController::class, 'changeBook'])->name('textbooks.change-book');
 
     Route::get('/formula-bank', [FormulaBankController::class, 'index'])->name('formula-bank.index');
     Route::get('/basics-drill', [BasicsDrillSettingsController::class, 'index'])->name('basics-drill.index');
@@ -458,6 +460,8 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
         Route::post('/textbooks/chapters/{textbookChapter}/replace-diagram', [TextbookController::class, 'replaceItemDiagram'])->name('textbooks.replace-diagram');
         Route::post('/textbooks/chapters/{textbookChapter}/remove-diagram', [TextbookController::class, 'removeItemDiagram'])->name('textbooks.remove-diagram');
         Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');
+        Route::post('/textbooks/chapters/{textbookChapter}/upload-pdf', [TextbookController::class, 'uploadPdf'])->name('textbooks.upload-pdf');
+        Route::post('/textbooks/chapters/{textbookChapter}/change-book', [TextbookController::class, 'changeBook'])->name('textbooks.change-book');
     });
 });
 

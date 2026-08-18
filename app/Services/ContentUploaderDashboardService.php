@@ -9,6 +9,10 @@ use Illuminate\Support\Collection;
 
 class ContentUploaderDashboardService
 {
+    public function __construct(
+        private TextbookChapterBookService $bookService,
+    ) {}
+
     /**
      * @return array{
      *     tasks: Collection<int, array<string, mixed>>,
@@ -70,7 +74,11 @@ class ContentUploaderDashboardService
                     'question_text' => $correction->question_text,
                     'remark' => $correction->remark,
                     'chapter_label' => $chapter
-                        ? trim(($chapter->textbook?->gradeLevel?->name ? $chapter->textbook->gradeLevel->name.' · ' : '').'Ch '.$chapter->chapter_number.' — '.$chapter->title)
+                        ? trim(
+                            ($chapter->textbook?->gradeLevel?->name ? $chapter->textbook->gradeLevel->name.' · ' : '')
+                            .($chapter->textbook?->name ? $chapter->textbook->name.' · ' : '')
+                            .'Ch '.$chapter->chapter_number.' — '.$chapter->title,
+                        )
                         : 'Chapter',
                 ];
             })
@@ -83,6 +91,7 @@ class ContentUploaderDashboardService
     public function serializeTask(ContentUploadTask $task): array
     {
         $chapter = $task->textbookChapter;
+        $hasPdf = $chapter ? $this->bookService->hasStoredPdf($chapter) : false;
 
         return [
             'id' => $task->id,
@@ -98,12 +107,19 @@ class ContentUploaderDashboardService
             'submitted_at' => $task->submitted_at?->toIso8601String(),
             'bucket' => $task->uploaderBucket(),
             'bucket_label' => $task->uploaderBucketLabel(),
+            'can_change_book' => $chapter && $task->assignee
+                ? $this->bookService->uploaderCanChangeBook($chapter, $task->assignee)
+                : false,
+            'has_pdf' => $hasPdf,
             'chapter' => $chapter ? [
                 'id' => $chapter->id,
                 'chapter_number' => $chapter->chapter_number,
                 'title' => $chapter->title,
                 'textbook_name' => $chapter->textbook?->name,
+                'textbook_code' => $chapter->textbook?->code,
                 'grade_name' => $chapter->textbook?->gradeLevel?->name,
+                'pdf_url' => $chapter->pdfUrl(),
+                'has_pdf' => $hasPdf,
             ] : null,
         ];
     }

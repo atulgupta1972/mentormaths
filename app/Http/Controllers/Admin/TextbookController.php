@@ -13,6 +13,7 @@ use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\SetAssignmentService;
+use App\Services\TextbookChapterBookService;
 use App\Services\TextbookChapterConversionPromptService;
 use App\Services\TextbookChapterFillBlankImportService;
 use App\Services\TextbookChapterMcqImportService;
@@ -40,6 +41,7 @@ class TextbookController extends Controller
         private TextbookSetCodeService $setCodeService,
         private TextbookMcqSetPlanService $setPlanService,
         private SetAssignmentService $assignmentService,
+        private TextbookChapterBookService $bookService,
     ) {}
 
     public function index(Request $request): Response
@@ -259,6 +261,8 @@ class TextbookController extends Controller
                     'status_label' => $task->statusLabel(),
                     'bucket' => $task->uploaderBucket(),
                     'can_start_review' => $task->uploaderBucket() === 'review_pending',
+                    'can_change_book' => $this->bookService->uploaderCanChangeBook($textbookChapter, $request->user()),
+                    'has_pdf' => $this->bookService->hasStoredPdf($textbookChapter),
                 ];
             } else {
                 $contentUploadTask = [
@@ -273,9 +277,13 @@ class TextbookController extends Controller
                         ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
                         ContentUploadTask::STATUS_PUBLISHED,
                     ], true) && $textbookChapter->mcqWorksheetIds() !== [],
+                    'can_change_book' => true,
+                    'has_pdf' => $this->bookService->hasStoredPdf($textbookChapter),
                 ];
             }
         }
+
+        $gradeLevelId = (int) ($textbookChapter->textbook?->grade_level_id ?? 0);
 
         return Inertia::render('Admin/Textbooks/Show', [
             'chapter' => [
@@ -285,6 +293,7 @@ class TextbookController extends Controller
                 'chapter_number' => $textbookChapter->chapter_number,
                 'title' => $textbookChapter->title,
                 'pdf_url' => $textbookChapter->pdfUrl(),
+                'has_pdf' => $this->bookService->hasStoredPdf($textbookChapter),
                 'extraction_error' => $textbookChapter->extraction_error,
                 'extracted_at' => $textbookChapter->extracted_at?->toDateTimeString(),
                 'published_at' => $textbookChapter->published_at?->toDateTimeString(),
@@ -324,7 +333,63 @@ class TextbookController extends Controller
             'routeNamespace' => $this->isContentUploaderContext($request) ? 'content' : 'admin',
             'uploaderMode' => $this->isContentUploaderContext($request),
             'contentUploadTask' => $contentUploadTask,
+            'textbooks' => $gradeLevelId > 0 ? $this->bookService->textbooksForGrade($gradeLevelId) : [],
         ]);
+    }
+
+    public function uploadPdf(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $uploadedPdf = $request->file('pdf');
+        if ($uploadedPdf) {
+            UploadedFileDiagnostics::assertValid($uploadedPdf, 'pdf');
+        }
+
+        $request->validate([
+            'pdf' => ['required', 'file', 'mimes:pdf', 'max:51200'],
+        ], [
+            'pdf.required' => 'Choose a chapter PDF file.',
+            'pdf.mimes' => 'Only PDF files are allowed.',
+            'pdf.max' => 'Each chapter PDF must be under 50 MB.',
+        ]);
+
+        try {
+            $this->bookService->uploadPdf(
+                $textbookChapter,
+                $uploadedPdf,
+                $request->user(),
+                $this->isContentUploaderContext($request),
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return $this->redirectToChapterShow($textbookChapter->fresh())
+            ->with('success', 'Chapter PDF saved.');
+    }
+
+    public function changeBook(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'textbook_id' => ['nullable', 'integer', Rule::exists('textbooks', 'id')],
+            'book_name' => ['required_without:textbook_id', 'nullable', 'string', 'max:255'],
+            'book_code' => ['required_without:textbook_id', 'nullable', 'string', 'max:32', 'alpha_dash'],
+        ]);
+
+        try {
+            $chapter = $this->bookService->changeBook(
+                $textbookChapter,
+                $request->user(),
+                $validated['textbook_id'] ?? null,
+                $validated['book_name'] ?? null,
+                $validated['book_code'] ?? null,
+                ! $this->isContentUploaderContext($request),
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return $this->redirectToChapterShow($chapter)
+            ->with('success', 'Book updated to '.$chapter->textbook?->name.'.');
     }
 
     public function importMcq(Request $request, TextbookChapter $textbookChapter): RedirectResponse
@@ -484,6 +549,10 @@ class TextbookController extends Controller
     {
         if ($redirect = $this->rejectLockedUploaderReplace($request, $textbookChapter)) {
             return $redirect;
+        }
+
+        if ($this->isContentUploaderContext($request) && ! $this->bookService->hasStoredPdf($textbookChapter)) {
+            return back()->with('error', 'Upload the chapter PDF before saving MCQ sets.');
         }
 
         $items = $textbookChapter->extraction_items ?? [];

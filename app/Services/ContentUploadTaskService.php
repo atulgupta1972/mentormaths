@@ -305,6 +305,8 @@ class ContentUploadTaskService
 
         $chapter = $task->textbookChapter;
 
+        $this->assertChapterHasPdf($chapter);
+
         if ($chapter->mcqWorksheetIds() === [] && empty($chapter->extraction_items)) {
             throw new \InvalidArgumentException(
                 'Import MCQs for this chapter first (paste JSON on the textbook chapter page), approve questions, and save MCQ sets before marking upload complete.',
@@ -331,6 +333,8 @@ class ContentUploadTaskService
         if ($task->status !== ContentUploadTask::STATUS_VERIFIED) {
             throw new \InvalidArgumentException('Complete verification before submitting for publish.');
         }
+
+        $this->assertChapterHasPdf($task->textbookChapter);
 
         $task->update([
             'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
@@ -375,6 +379,8 @@ class ContentUploadTaskService
         if ($task->status === ContentUploadTask::STATUS_IN_PROGRESS) {
             return $this->markUploaded($task, $uploader);
         }
+
+        $this->assertChapterHasPdf($task->textbookChapter);
 
         if (! in_array($task->status, [
             ContentUploadTask::STATUS_UPLOADED,
@@ -811,5 +817,14 @@ class ContentUploadTaskService
                 'status' => ContentQuestionCorrection::STATUS_COMPLETED,
                 'completed_at' => now(),
             ]);
+    }
+
+    private function assertChapterHasPdf(?TextbookChapter $chapter): void
+    {
+        if (! $chapter || ! filled($chapter->pdf_path)) {
+            throw new \InvalidArgumentException(
+                'Upload the chapter PDF first (open the chapter editor and attach the textbook PDF).',
+            );
+        }
     }
 }

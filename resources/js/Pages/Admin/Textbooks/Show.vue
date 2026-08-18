@@ -21,6 +21,7 @@ const props = defineProps({
     routeNamespace: { type: String, default: 'admin' },
     uploaderMode: { type: Boolean, default: false },
     contentUploadTask: { type: Object, default: null },
+    textbooks: { type: Array, default: () => [] },
 });
 
 const chapterRoute = (action, fallback = '#') =>
@@ -46,6 +47,13 @@ const zipPackInput = ref(null);
 const draftForm = useForm({ items: items.value, mcq_set_plan: setPlan.value });
 const publishForm = useForm({ items: items.value, mcq_set_plan: setPlan.value });
 const startReviewForm = useForm({});
+const pdfForm = useForm({ pdf: null });
+const changeBookForm = useForm({
+    mode: 'existing',
+    textbook_id: '',
+    book_name: '',
+    book_code: '',
+});
 
 const syncForms = () => {
     draftForm.items = items.value;
@@ -445,6 +453,36 @@ const quickAssignSet = (setId) => {
     quickAssignForm.notes = assignNotes.value;
     quickAssignForm.post(safeRoute('admin.practice-sets.assign', setId, '#'), { preserveScroll: true });
 };
+
+const submitPdf = () => {
+    pdfForm.post(chapterRoute('upload-pdf'), {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => pdfForm.reset('pdf'),
+    });
+};
+
+const submitChangeBook = () => {
+    changeBookForm.transform((data) => ({
+        textbook_id: data.mode === 'existing' ? data.textbook_id : null,
+        book_name: data.mode === 'new' ? data.book_name : null,
+        book_code: data.mode === 'new' ? data.book_code : null,
+    })).post(chapterRoute('change-book'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            if (changeBookForm.mode === 'new') {
+                changeBookForm.book_name = '';
+                changeBookForm.book_code = '';
+            }
+        },
+    });
+};
+
+const canChangeBook = computed(() =>
+    props.uploaderMode
+        ? props.contentUploadTask?.can_change_book
+        : true,
+);
 </script>
 
 <template>
@@ -503,6 +541,79 @@ const quickAssignSet = (setId) => {
                 </div>
                 <div v-if="page.props.flash?.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
                     {{ page.props.flash.error }}
+                </div>
+
+                <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900">Chapter PDF</p>
+                            <p class="mt-1 text-xs text-gray-600">
+                                Required before review/submit. Upload the textbook PDF for this chapter.
+                            </p>
+                            <p class="mt-2">
+                                <span
+                                    class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1"
+                                    :class="chapter.has_pdf ? 'bg-emerald-50 text-emerald-800 ring-emerald-200' : 'bg-rose-50 text-rose-800 ring-rose-200'"
+                                >
+                                    {{ chapter.has_pdf ? 'PDF uploaded' : 'PDF missing' }}
+                                </span>
+                                <a
+                                    v-if="chapter.pdf_url"
+                                    :href="chapterRoute('download', chapter.pdf_url)"
+                                    class="ml-3 text-sm text-indigo-600 hover:underline"
+                                >
+                                    Download
+                                </a>
+                            </p>
+                        </div>
+                        <form class="flex flex-wrap items-end gap-2" @submit.prevent="submitPdf">
+                            <input
+                                type="file"
+                                accept=".pdf,application/pdf"
+                                class="max-w-xs text-xs"
+                                @change="pdfForm.pdf = $event.target.files?.[0] || null"
+                            >
+                            <PrimaryButton type="submit" class="!py-1.5 !text-xs" :disabled="pdfForm.processing || !pdfForm.pdf">
+                                {{ pdfForm.processing ? 'Uploading…' : chapter.has_pdf ? 'Replace PDF' : 'Upload PDF' }}
+                            </PrimaryButton>
+                        </form>
+                    </div>
+                    <InputError class="mt-1" :message="pdfForm.errors.pdf" />
+                </div>
+
+                <div v-if="canChangeBook" class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 shadow-sm">
+                    <p class="text-sm font-semibold text-indigo-950">Book / author</p>
+                    <p class="mt-1 text-xs text-indigo-900">
+                        Current: <strong>{{ chapter.book?.name }}</strong> ({{ chapter.book?.code }})
+                        <span v-if="uploaderMode"> — fix here if you picked the wrong book before submit.</span>
+                        <span v-else> — admin can re-link even after publish.</span>
+                    </p>
+                    <form class="mt-3 space-y-2" @submit.prevent="submitChangeBook">
+                        <div class="flex flex-wrap gap-4 text-xs">
+                            <label class="inline-flex items-center gap-1.5">
+                                <input v-model="changeBookForm.mode" type="radio" value="existing">
+                                Pick existing book
+                            </label>
+                            <label class="inline-flex items-center gap-1.5">
+                                <input v-model="changeBookForm.mode" type="radio" value="new">
+                                New book name + code
+                            </label>
+                        </div>
+                        <div v-if="changeBookForm.mode === 'existing'" class="flex flex-wrap items-end gap-2">
+                            <select v-model="changeBookForm.textbook_id" class="min-w-[220px] rounded-md border-gray-300 text-sm" required>
+                                <option value="" disabled>Select book</option>
+                                <option v-for="book in textbooks" :key="book.id" :value="book.id">{{ book.label }}</option>
+                            </select>
+                        </div>
+                        <div v-else class="flex flex-wrap items-end gap-2">
+                            <input v-model="changeBookForm.book_name" type="text" placeholder="Book name (e.g. RD Sharma)" class="rounded-md border-gray-300 text-sm" required>
+                            <input v-model="changeBookForm.book_code" type="text" placeholder="Code (e.g. rdsharma)" class="w-36 rounded-md border-gray-300 text-sm" required>
+                        </div>
+                        <PrimaryButton type="submit" class="!py-1.5 !text-xs" :disabled="changeBookForm.processing">
+                            {{ changeBookForm.processing ? 'Saving…' : 'Update book' }}
+                        </PrimaryButton>
+                        <InputError :message="changeBookForm.errors.textbook_id || changeBookForm.errors.book_name || changeBookForm.errors.book_code" />
+                    </form>
                 </div>
 
                 <div

@@ -53,9 +53,12 @@ onUnmounted(() => clearInterval(pingTimer));
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">
-                        {{ task.chapter?.grade_name }} · Ch {{ task.chapter?.chapter_number }}
+                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }}
                     </h2>
-                    <p class="text-sm text-gray-500">{{ task.status_label }} · {{ task.rate_description || formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</p>
+                    <p class="text-sm text-gray-500">
+                        {{ task.status_label }} · {{ task.rate_description || formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}
+                        · PDF {{ task.has_pdf ? 'uploaded' : 'missing' }}
+                    </p>
                 </div>
                 <div class="flex flex-wrap gap-3">
                     <Link

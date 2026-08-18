@@ -13,6 +13,7 @@ const props = defineProps({
     activeSeconds: { type: Number, default: 0 },
     deleteRequests: { type: Array, default: () => [] },
     uploaders: { type: Array, default: () => [] },
+    textbooks: { type: Array, default: () => [] },
 });
 
 const approveDeleteForm = useForm({ admin_note: '' });
@@ -20,6 +21,12 @@ const rejectDeleteForm = useForm({ admin_note: '' });
 const reassignForm = useForm({
     assigned_to_user_id: '',
     note: '',
+});
+const changeBookForm = useForm({
+    mode: 'existing',
+    textbook_id: '',
+    book_name: '',
+    book_code: '',
 });
 
 const approveDelete = (id) => {
@@ -38,6 +45,20 @@ const reassign = () => {
     reassignForm.post(route('admin.content-tasks.reassign', props.task.id), {
         preserveScroll: true,
         onSuccess: () => reassignForm.reset(),
+    });
+};
+
+const submitChangeBook = () => {
+    if (!props.task.chapter?.id) {
+        return;
+    }
+
+    changeBookForm.transform((data) => ({
+        textbook_id: data.mode === 'existing' ? data.textbook_id : null,
+        book_name: data.mode === 'new' ? data.book_name : null,
+        book_code: data.mode === 'new' ? data.book_code : null,
+    })).post(route('admin.textbooks.change-book', props.task.chapter.id), {
+        preserveScroll: true,
     });
 };
 
@@ -63,7 +84,7 @@ const formatDuration = (seconds) => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">
-                        {{ task.chapter?.grade_name }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
+                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
                     </h2>
                     <p class="text-sm text-gray-500">{{ task.status_label }}</p>
                 </div>
@@ -80,10 +101,15 @@ const formatDuration = (seconds) => {
                     {{ page.props.flash.error }}
                 </div>
 
-                <div class="grid gap-3 sm:grid-cols-3">
+                <div class="grid gap-3 sm:grid-cols-4">
                     <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                         <p class="text-xs uppercase text-gray-500">Uploader</p>
                         <p class="font-semibold">{{ task.assignee?.name }}</p>
+                    </div>
+                    <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
+                        <p class="text-xs uppercase text-gray-500">Book</p>
+                        <p class="font-semibold">{{ task.chapter?.textbook_name || '—' }}</p>
+                        <p class="text-xs text-gray-500">{{ task.chapter?.textbook_code }}</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                         <p class="text-xs uppercase text-gray-500">Agreed rate</p>
@@ -97,6 +123,52 @@ const formatDuration = (seconds) => {
                         <p class="font-semibold">{{ formatDuration(activeSeconds) }}</p>
                     </div>
                 </div>
+
+                <form
+                    v-if="task.chapter?.id"
+                    class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 shadow-sm"
+                    @submit.prevent="submitChangeBook"
+                >
+                    <p class="font-semibold text-indigo-950">Change book / author</p>
+                    <p class="mt-1 text-sm text-indigo-900">
+                        Use when the uploader picked the wrong book. After publish, only admin can fix this.
+                    </p>
+                    <div class="mt-3 flex flex-wrap gap-4 text-sm">
+                        <label class="inline-flex items-center gap-1.5">
+                            <input v-model="changeBookForm.mode" type="radio" value="existing">
+                            Existing book
+                        </label>
+                        <label class="inline-flex items-center gap-1.5">
+                            <input v-model="changeBookForm.mode" type="radio" value="new">
+                            New name + code
+                        </label>
+                    </div>
+                    <div class="mt-2 flex flex-wrap items-end gap-2">
+                        <select
+                            v-if="changeBookForm.mode === 'existing'"
+                            v-model="changeBookForm.textbook_id"
+                            class="min-w-[220px] rounded-md border-gray-300 text-sm"
+                            required
+                        >
+                            <option value="" disabled>Select book</option>
+                            <option v-for="book in textbooks" :key="book.id" :value="book.id">{{ book.label }}</option>
+                        </select>
+                        <template v-else>
+                            <input v-model="changeBookForm.book_name" type="text" placeholder="Book name" class="rounded-md border-gray-300 text-sm" required>
+                            <input v-model="changeBookForm.book_code" type="text" placeholder="Code" class="w-32 rounded-md border-gray-300 text-sm" required>
+                        </template>
+                        <PrimaryButton type="submit" class="!py-1.5 !text-xs" :disabled="changeBookForm.processing">
+                            Update book
+                        </PrimaryButton>
+                        <Link
+                            v-if="task.chapter?.id"
+                            :href="safeRoute('admin.textbooks.show', task.chapter.id, `/admin/textbooks/chapters/${task.chapter.id}`)"
+                            class="text-sm text-indigo-700 hover:underline"
+                        >
+                            Open chapter (PDF) →
+                        </Link>
+                    </div>
+                </form>
 
                 <form
                     v-if="task.can_reassign"
