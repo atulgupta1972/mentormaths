@@ -91,7 +91,7 @@ const chapterHref = (task) => {
             >
                 <div>
                     <p class="font-medium text-gray-900">
-                        {{ task.chapter?.grade_name }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
+                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
                     </p>
                     <p class="text-xs text-gray-500">{{ task.status_label }} · {{ formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</p>
                 </div>
@@ -110,7 +110,7 @@ const chapterHref = (task) => {
             >
                 <div>
                     <p class="font-medium text-gray-900">
-                        {{ task.chapter?.grade_name }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
+                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
                     </p>
                     <p class="text-xs text-gray-500">{{ task.status_label }} · {{ formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</p>
                 </div>
