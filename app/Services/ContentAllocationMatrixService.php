@@ -11,6 +11,10 @@ use App\Models\Worksheet;
 
 class ContentAllocationMatrixService
 {
+    public function __construct(
+        private TextbookChapterBookService $bookService,
+    ) {}
+
     /**
      * @return array{
      *     boards: list<array{id: int, code: string, name: string}>,
@@ -25,6 +29,8 @@ class ContentAllocationMatrixService
      */
     public function build(?int $boardId, ?int $drillGradeId = null, ?int $drillUploaderId = null): array
     {
+        $this->bookService->mergeAllDuplicateBookChapters();
+
         $boards = Board::query()
             ->where('is_active', true)
             ->orderBy('code')

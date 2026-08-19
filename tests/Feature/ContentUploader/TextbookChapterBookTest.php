@@ -236,13 +236,12 @@ class TextbookChapterBookTest extends TestCase
             ], ['Accept' => 'application/json'])
             ->assertOk();
 
-        $sourceBookChapter->refresh();
         $question->refresh();
 
-        $this->assertSame($targetChapter->id, $sourceBookChapter->syllabus_chapter_id);
+        $this->assertDatabaseMissing('textbook_chapters', ['id' => $sourceBookChapter->id]);
         $this->assertSame($targetChapter->id, $question->topic->syllabus_chapter_id);
         $this->assertSame(
-            2,
+            1,
             TextbookChapter::query()
                 ->where('textbook_id', $sourceBookChapter->textbook_id)
                 ->where('syllabus_chapter_id', $targetChapter->id)

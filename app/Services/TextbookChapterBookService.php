@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ContentQuestionDeleteRequest;
 use App\Models\ContentUploadTask;
 use App\Models\Question;
 use App\Models\SyllabusChapter;
@@ -12,6 +13,7 @@ use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Models\Worksheet;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -265,6 +267,33 @@ class TextbookChapterBookService
                 ]);
             }
 
+            $existing = TextbookChapter::query()
+                ->where('textbook_id', $textbook->id)
+                ->where('syllabus_chapter_id', $target->id)
+                ->whereKeyNot($chapter->id)
+                ->orderBy('id')
+                ->get();
+
+            if ($existing->isNotEmpty()) {
+                $keeper = $this->preferredKeeper($existing);
+                if (! $this->absorbBookChapter($chapter, $keeper)) {
+                    $chapter->update([
+                        'textbook_id' => $textbook->id,
+                        'syllabus_chapter_id' => $target->id,
+                        'chapter_number' => $target->numericChapterNumber() ?: $chapter->chapter_number,
+                        'title' => $target->name,
+                    ]);
+                }
+                $this->mergeDuplicatesFor((int) $textbook->id, (int) $target->id);
+
+                return TextbookChapter::query()
+                    ->where('textbook_id', $textbook->id)
+                    ->where('syllabus_chapter_id', $target->id)
+                    ->orderBy('id')
+                    ->firstOrFail()
+                    ->fresh(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.board']);
+            }
+
             $chapter->update([
                 'textbook_id' => $textbook->id,
                 'syllabus_chapter_id' => $target->id,
@@ -274,6 +303,32 @@ class TextbookChapterBookService
 
             return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.board']);
         });
+    }
+
+    /**
+     * Collapse extra textbook_chapters that share the same book + syllabus heading
+     * (left over after the unique index was dropped). Returns how many extras were absorbed.
+     */
+    public function mergeAllDuplicateBookChapters(): int
+    {
+        $pairs = TextbookChapter::query()
+            ->whereNotNull('textbook_id')
+            ->whereNotNull('syllabus_chapter_id')
+            ->get(['id', 'textbook_id', 'syllabus_chapter_id'])
+            ->groupBy(fn (TextbookChapter $row) => $row->textbook_id.'|'.$row->syllabus_chapter_id)
+            ->filter(fn (Collection $group) => $group->count() > 1);
+
+        $absorbed = 0;
+
+        foreach ($pairs as $group) {
+            $first = $group->first();
+            $absorbed += $this->mergeDuplicatesFor(
+                (int) $first->textbook_id,
+                (int) $first->syllabus_chapter_id,
+            );
+        }
+
+        return $absorbed;
     }
 
     public function moveSyllabusChapterContent(SyllabusChapter $source, SyllabusChapter $target): string
@@ -394,6 +449,176 @@ class TextbookChapterBookService
             ?: '';
 
         return trim("{$grade} {$board} · Ch {$chapter->chapter_number} — {$chapter->name}");
+    }
+
+    public function mergeDuplicatesFor(int $textbookId, int $syllabusChapterId): int
+    {
+        return (int) DB::transaction(function () use ($textbookId, $syllabusChapterId) {
+            $chapters = TextbookChapter::query()
+                ->where('textbook_id', $textbookId)
+                ->where('syllabus_chapter_id', $syllabusChapterId)
+                ->orderBy('id')
+                ->get();
+
+            if ($chapters->count() < 2) {
+                return 0;
+            }
+
+            $keeper = $this->preferredKeeper($chapters);
+            $absorbed = 0;
+
+            foreach ($chapters as $extra) {
+                if ((int) $extra->id === (int) $keeper->id) {
+                    continue;
+                }
+
+                if ($this->absorbBookChapter($extra, $keeper)) {
+                    $absorbed++;
+                }
+            }
+
+            return $absorbed;
+        });
+    }
+
+    /**
+     * @param  Collection<int, TextbookChapter>  $chapters
+     */
+    private function preferredKeeper(Collection $chapters): TextbookChapter
+    {
+        return $chapters
+            ->sortBy(function (TextbookChapter $chapter) {
+                $task = ContentUploadTask::query()->where('textbook_chapter_id', $chapter->id)->first();
+                $rank = 99 - $this->taskRank($task);
+                $worksheets = 99 - count($chapter->mcqWorksheetIds());
+
+                return sprintf('%03d-%03d-%010d', $rank, $worksheets, $chapter->id);
+            })
+            ->first();
+    }
+
+    private function absorbBookChapter(TextbookChapter $source, TextbookChapter $target): bool
+    {
+        if ((int) $source->id === (int) $target->id) {
+            return false;
+        }
+
+        $source->refresh();
+        $target->refresh();
+
+        $mcqIds = array_values(array_unique([
+            ...$target->mcqWorksheetIds(),
+            ...$source->mcqWorksheetIds(),
+        ]));
+
+        $target->forceFill([
+            'mcq_worksheet_id' => $mcqIds[0] ?? $target->mcq_worksheet_id,
+            'mcq_worksheet_ids' => $mcqIds === [] ? null : $mcqIds,
+            'written_worksheet_id' => $target->written_worksheet_id ?: $source->written_worksheet_id,
+            'fill_blank_worksheet_id' => $target->fill_blank_worksheet_id ?: $source->fill_blank_worksheet_id,
+            'pdf_path' => $target->pdf_path ?: $source->pdf_path,
+            'extraction_items' => $this->mergeJsonLists($target->extraction_items, $source->extraction_items),
+            'mcq_set_plan' => $target->mcq_set_plan ?: $source->mcq_set_plan,
+            'status' => $this->preferChapterStatus((string) $target->status, (string) $source->status),
+            'extraction_error' => $target->extraction_error ?: $source->extraction_error,
+            'extracted_at' => $target->extracted_at ?: $source->extracted_at,
+            'published_at' => $target->published_at ?: $source->published_at,
+            'published_by' => $target->published_by ?: $source->published_by,
+            'chapter_number' => $target->syllabusChapter?->numericChapterNumber() ?: $target->chapter_number,
+            'title' => $target->syllabusChapter?->name ?: $target->title,
+        ])->save();
+
+        if (! $this->rehomeOrDisposeTask($source, $target)) {
+            return false;
+        }
+
+        ContentQuestionDeleteRequest::query()
+            ->where('textbook_chapter_id', $source->id)
+            ->update([
+                'textbook_chapter_id' => $target->id,
+            ]);
+
+        $source->delete();
+
+        return true;
+    }
+
+    private function rehomeOrDisposeTask(TextbookChapter $source, TextbookChapter $target): bool
+    {
+        $sourceTask = ContentUploadTask::query()->where('textbook_chapter_id', $source->id)->first();
+        $targetTask = ContentUploadTask::query()->where('textbook_chapter_id', $target->id)->first();
+
+        if (! $sourceTask) {
+            return true;
+        }
+
+        if (! $targetTask) {
+            $sourceTask->update(['textbook_chapter_id' => $target->id]);
+
+            return true;
+        }
+
+        $sourceHasPayment = $sourceTask->payment()->exists();
+        $targetHasPayment = $targetTask->payment()->exists();
+
+        if ($this->taskRank($sourceTask) > $this->taskRank($targetTask) && ! $targetHasPayment) {
+            $targetTask->delete();
+            $sourceTask->update(['textbook_chapter_id' => $target->id]);
+
+            return true;
+        }
+
+        if (! $sourceHasPayment) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function taskRank(?ContentUploadTask $task): int
+    {
+        if (! $task) {
+            return 0;
+        }
+
+        return match ($task->status) {
+            ContentUploadTask::STATUS_PUBLISHED => 70,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH => 60,
+            ContentUploadTask::STATUS_VERIFIED => 50,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS => 40,
+            ContentUploadTask::STATUS_UPLOADED => 30,
+            ContentUploadTask::STATUS_IN_PROGRESS => 20,
+            ContentUploadTask::STATUS_PENDING_AGREEMENT => 10,
+            default => 0,
+        };
+    }
+
+    private function preferChapterStatus(string $left, string $right): string
+    {
+        $rank = [
+            TextbookChapter::STATUS_PUBLISHED => 4,
+            TextbookChapter::STATUS_REVIEW => 3,
+            TextbookChapter::STATUS_EXTRACTING => 2,
+            TextbookChapter::STATUS_DRAFT => 1,
+            TextbookChapter::STATUS_FAILED => 0,
+        ];
+
+        return ($rank[$left] ?? 0) >= ($rank[$right] ?? 0) ? $left : $right;
+    }
+
+    /**
+     * @param  mixed  $left
+     * @param  mixed  $right
+     * @return list<mixed>|null
+     */
+    private function mergeJsonLists(mixed $left, mixed $right): ?array
+    {
+        $merged = [
+            ...(is_array($left) ? $left : []),
+            ...(is_array($right) ? $right : []),
+        ];
+
+        return $merged === [] ? null : array_values($merged);
     }
 
     private function textbookTopic(SyllabusChapter $chapter): SyllabusTopic

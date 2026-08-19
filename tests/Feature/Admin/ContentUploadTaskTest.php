@@ -197,6 +197,78 @@ class ContentUploadTaskTest extends TestCase
                 ->where('matrix.drill.chapters.0.chapter.textbook_name', 'Ganita Prakash Part I'));
     }
 
+    public function test_allocation_drill_merges_duplicate_same_book_and_syllabus_chapter(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $syllabusChapter->update([
+            'name' => 'Working with Fractions',
+            'chapter_number' => 'Ch 8',
+        ]);
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'GP1',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $first = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => 'Working with Fractions',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $duplicate = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 8,
+            'title' => 'Working with Fractions',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $first->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            'offered_amount_inr' => 2,
+        ]);
+        ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $duplicate->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            'offered_amount_inr' => 2,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.index', [
+                'drill_grade_id' => $grade->id,
+                'drill_uploader_id' => $uploader->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('matrix.drill.chapters', 1)
+                ->where('matrix.drill.chapters.0.chapter.chapter_number', 'Ch 8')
+                ->where('matrix.drill.chapters.0.chapter.title', 'Working with Fractions'));
+
+        $this->assertSame(
+            1,
+            TextbookChapter::query()
+                ->where('textbook_id', $textbook->id)
+                ->where('syllabus_chapter_id', $syllabusChapter->id)
+                ->count(),
+        );
+    }
+
     public function test_allocation_matrix_drill_down_breaks_up_review_submitted_and_published(): void
     {
         [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
