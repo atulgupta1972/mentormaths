@@ -84,7 +84,7 @@ const formatDuration = (seconds) => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">
-                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
+                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
                     </h2>
                     <p class="text-sm text-gray-500">{{ task.status_label }}</p>
                 </div>

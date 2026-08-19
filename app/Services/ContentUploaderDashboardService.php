@@ -27,7 +27,7 @@ class ContentUploaderDashboardService
         $tasks = ContentUploadTask::query()
             ->where('assigned_to_user_id', $user->id)
             ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
-            ->with(['textbookChapter.textbook.gradeLevel'])
+            ->with(['textbookChapter.textbook.gradeLevel', 'textbookChapter.syllabusChapter.chapterHead'])
             ->latest()
             ->get()
             ->map(fn (ContentUploadTask $task) => $this->serializeTask($task));
@@ -77,7 +77,7 @@ class ContentUploaderDashboardService
                         ? trim(
                             ($chapter->textbook?->gradeLevel?->name ? $chapter->textbook->gradeLevel->name.' · ' : '')
                             .($chapter->textbook?->name ? $chapter->textbook->name.' · ' : '')
-                            .'Ch '.$chapter->chapter_number.' — '.$chapter->title,
+                            .$chapter->displayChapterNumber().' — '.$chapter->displayTitle(),
                         )
                         : 'Chapter',
                 ];
@@ -113,8 +113,9 @@ class ContentUploaderDashboardService
             'has_pdf' => $hasPdf,
             'chapter' => $chapter ? [
                 'id' => $chapter->id,
-                'chapter_number' => $chapter->chapter_number,
-                'title' => $chapter->title,
+                'chapter_number' => $chapter->displayChapterNumber(),
+                'title' => $chapter->displayTitle(),
+                'chapter_head_name' => $chapter->displayChapterHeadName(),
                 'textbook_name' => $chapter->textbook?->name,
                 'textbook_code' => $chapter->textbook?->code,
                 'grade_name' => $chapter->textbook?->gradeLevel?->name,

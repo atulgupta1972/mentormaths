@@ -128,6 +128,24 @@ const filteredDrillChapters = computed(() => {
     return chapters.filter((row) => row.breakup_bucket === drillFilter.value);
 });
 
+const groupedDrillChapters = computed(() => {
+    const groups = [];
+    let current = null;
+
+    for (const row of filteredDrillChapters.value) {
+        const book = row.chapter?.textbook_name || 'Book';
+
+        if (!current || current.book !== book) {
+            current = { book, rows: [] };
+            groups.push(current);
+        }
+
+        current.rows.push(row);
+    }
+
+    return groups;
+});
+
 const setDrillFilter = (bucket) => {
     drillFilter.value = drillFilter.value === bucket ? null : bucket;
 };
@@ -482,8 +500,9 @@ watch(
                                         >
                                         <span class="sr-only">Select all</span>
                                     </th>
-                                    <th class="px-3 py-2">Chapter</th>
-                                    <th class="px-3 py-2">Book</th>
+                                    <th class="px-3 py-2">Ch No.</th>
+                                    <th class="px-3 py-2">Chapter head</th>
+                                    <th class="px-3 py-2">Chapter name</th>
                                     <th class="px-3 py-2">Status</th>
                                     <th class="px-3 py-2">Questions</th>
                                     <th class="px-3 py-2">Rate</th>
@@ -491,47 +510,55 @@ watch(
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
-                                <tr v-for="row in filteredDrillChapters" :key="row.id">
-                                    <td class="px-3 py-2">
-                                        <input
-                                            v-if="row.can_reassign"
-                                            type="checkbox"
-                                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                            :checked="isSelected(row.id)"
-                                            :aria-label="`Select chapter ${row.chapter?.chapter_number}`"
-                                            @change="toggleRow(row.id, true)"
-                                        >
-                                    </td>
-                                    <td class="px-3 py-2">
-                                        <p class="font-medium text-slate-900">Ch {{ row.chapter?.chapter_number }} — {{ row.chapter?.title }}</p>
-                                    </td>
-                                    <td class="px-3 py-2 text-slate-600">{{ row.chapter?.textbook_name }}</td>
-                                    <td class="px-3 py-2">
-                                        <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1" :class="statusTone(row.status_group)">
-                                            {{ row.status_label }}
-                                        </span>
-                                    </td>
-                                    <td class="px-3 py-2">{{ row.question_count || '—' }}</td>
-                                    <td class="px-3 py-2">{{ row.rate_description || formatInr(row.agreed_amount_inr || row.offered_amount_inr) }}</td>
-                                    <td class="px-3 py-2 text-right">
-                                        <Link
-                                            :href="route('admin.content-tasks.show', row.id)"
-                                            class="font-medium hover:underline"
-                                            :class="row.can_review_and_publish ? 'text-violet-700' : 'text-indigo-600'"
-                                        >
-                                            {{ row.can_review_and_publish ? 'Review & publish' : 'Open' }}
-                                        </Link>
-                                        <Link
-                                            v-if="row.can_reassign"
-                                            :href="route('admin.content-tasks.show', row.id)"
-                                            class="ml-3 text-slate-600 hover:underline"
-                                        >
-                                            Reassign
-                                        </Link>
-                                    </td>
-                                </tr>
+                                <template v-for="group in groupedDrillChapters" :key="group.book">
+                                    <tr class="bg-slate-100">
+                                        <td colspan="8" class="px-3 py-1.5 text-xs font-semibold text-slate-800">
+                                            {{ group.book }}
+                                        </td>
+                                    </tr>
+                                    <tr v-for="row in group.rows" :key="row.id">
+                                        <td class="px-3 py-2">
+                                            <input
+                                                v-if="row.can_reassign"
+                                                type="checkbox"
+                                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                :checked="isSelected(row.id)"
+                                                :aria-label="`Select chapter ${row.chapter?.chapter_number}`"
+                                                @change="toggleRow(row.id, true)"
+                                            >
+                                        </td>
+                                        <td class="whitespace-nowrap px-3 py-2 font-semibold text-slate-900">
+                                            {{ row.chapter?.chapter_number || '—' }}
+                                        </td>
+                                        <td class="px-3 py-2 text-slate-600">{{ row.chapter?.chapter_head_name || '—' }}</td>
+                                        <td class="px-3 py-2 font-medium text-slate-900">{{ row.chapter?.title || '—' }}</td>
+                                        <td class="px-3 py-2">
+                                            <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1" :class="statusTone(row.status_group)">
+                                                {{ row.status_label }}
+                                            </span>
+                                        </td>
+                                        <td class="px-3 py-2">{{ row.question_count || '—' }}</td>
+                                        <td class="px-3 py-2">{{ row.rate_description || formatInr(row.agreed_amount_inr || row.offered_amount_inr) }}</td>
+                                        <td class="px-3 py-2 text-right">
+                                            <Link
+                                                :href="route('admin.content-tasks.show', row.id)"
+                                                class="font-medium hover:underline"
+                                                :class="row.can_review_and_publish ? 'text-violet-700' : 'text-indigo-600'"
+                                            >
+                                                {{ row.can_review_and_publish ? 'Review & publish' : 'Open' }}
+                                            </Link>
+                                            <Link
+                                                v-if="row.can_reassign"
+                                                :href="route('admin.content-tasks.show', row.id)"
+                                                class="ml-3 text-slate-600 hover:underline"
+                                            >
+                                                Reassign
+                                            </Link>
+                                        </td>
+                                    </tr>
+                                </template>
                                 <tr v-if="!filteredDrillChapters.length">
-                                    <td colspan="7" class="px-3 py-6 text-center text-slate-500">
+                                    <td colspan="8" class="px-3 py-6 text-center text-slate-500">
                                         No chapters in this bucket.
                                     </td>
                                 </tr>
@@ -558,9 +585,12 @@ watch(
                             <tr v-for="task in tasks.data" :key="task.id">
                                 <td class="px-4 py-3">
                                     <p class="font-medium text-gray-900">
-                                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }}
+                                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · {{ task.chapter?.chapter_number }}
                                     </p>
-                                    <p class="text-xs text-gray-500">{{ task.chapter?.title }}</p>
+                                    <p class="text-xs text-gray-500">
+                                        <span v-if="task.chapter?.chapter_head_name">{{ task.chapter.chapter_head_name }} · </span>
+                                        {{ task.chapter?.title }}
+                                    </p>
                                 </td>
                                 <td class="px-4 py-3">{{ task.assignee?.name }}</td>
                                 <td class="px-4 py-3">{{ task.rate_description || formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</td>

@@ -130,4 +130,25 @@ class TextbookChapter extends Model
             default => 'Awaiting MCQ import',
         };
     }
+
+    public function displayChapterNumber(): string
+    {
+        $fromSyllabus = trim((string) ($this->syllabusChapter?->chapter_number ?? ''));
+
+        return $fromSyllabus !== '' ? $fromSyllabus : (string) ($this->chapter_number ?? '');
+    }
+
+    public function displayTitle(): string
+    {
+        $fromSyllabus = trim((string) ($this->syllabusChapter?->name ?? ''));
+
+        return $fromSyllabus !== '' ? $fromSyllabus : (string) ($this->title ?? '');
+    }
+
+    public function displayChapterHeadName(): ?string
+    {
+        $name = trim((string) ($this->syllabusChapter?->chapterHead?->name ?? ''));
+
+        return $name !== '' ? $name : null;
+    }
 }

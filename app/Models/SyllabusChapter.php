@@ -69,4 +69,24 @@ class SyllabusChapter extends Model
 
         return (int) ($this->sort_order ?: 0);
     }
+
+    public static function orderKey(?string $chapterNumber): string
+    {
+        $original = trim((string) $chapterNumber);
+        $text = $original;
+        $part = 1;
+
+        if (preg_match('/^\s*p(?:art)?\s*-?\s*(\d+)\s*[-–:,]?\s*/i', $text, $matches)) {
+            $part = (int) $matches[1];
+            $text = substr($text, strlen($matches[0]));
+        }
+
+        $chapter = 9999;
+        if (preg_match('/(?:ch(?:apter)?|\bc)\s*-?\s*(\d+)/i', $text, $matches)
+            || preg_match('/(\d+)/', $text, $matches)) {
+            $chapter = (int) $matches[1];
+        }
+
+        return sprintf('%02d-%04d-%s', $part, $chapter, mb_strtolower($original));
+    }
 }

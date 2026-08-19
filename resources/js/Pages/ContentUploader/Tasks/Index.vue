@@ -142,8 +142,9 @@ const filteredTasks = computed(() => {
                                 <tr>
                                     <th class="px-2 py-1.5">Class</th>
                                     <th class="px-2 py-1.5">Book</th>
-                                    <th class="px-2 py-1.5">Ch</th>
-                                    <th class="min-w-[160px] px-2 py-1.5">Chapter title</th>
+                                    <th class="px-2 py-1.5">Ch No.</th>
+                                    <th class="min-w-[120px] px-2 py-1.5">Chapter head</th>
+                                    <th class="min-w-[160px] px-2 py-1.5">Chapter name</th>
                                     <th class="px-2 py-1.5">PDF</th>
                                     <th class="px-2 py-1.5">Status</th>
                                     <th class="px-2 py-1.5">Rate</th>
@@ -155,6 +156,7 @@ const filteredTasks = computed(() => {
                                     <td class="whitespace-nowrap px-2 py-1.5 font-medium text-gray-900">{{ task.chapter?.grade_name || '—' }}</td>
                                     <td class="px-2 py-1.5 text-gray-700">{{ task.chapter?.textbook_name || '—' }}</td>
                                     <td class="whitespace-nowrap px-2 py-1.5">{{ task.chapter?.chapter_number || '—' }}</td>
+                                    <td class="px-2 py-1.5 text-gray-600">{{ task.chapter?.chapter_head_name || '—' }}</td>
                                     <td class="px-2 py-1.5 text-gray-800">{{ task.chapter?.title || '—' }}</td>
                                     <td class="px-2 py-1.5">
                                         <span
@@ -197,7 +199,7 @@ const filteredTasks = computed(() => {
                                     </td>
                                 </tr>
                                 <tr v-if="!filteredTasks.length">
-                                    <td colspan="8" class="px-3 py-8 text-center text-gray-500">
+                                    <td colspan="9" class="px-3 py-8 text-center text-gray-500">
                                         {{ tasks.length ? 'No tasks in this bucket.' : 'No assignments yet.' }}
                                     </td>
                                 </tr>

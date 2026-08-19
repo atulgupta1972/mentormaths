@@ -60,9 +60,11 @@ class ContentUploadTaskController extends Controller
         $tasks = ContentUploadTask::query()
             ->with([
                 'assignee:id,name,email',
-                'textbookChapter:id,textbook_id,chapter_number,title,status',
+                'textbookChapter:id,textbook_id,syllabus_chapter_id,chapter_number,title,status',
                 'textbookChapter.textbook:id,grade_level_id,name',
                 'textbookChapter.textbook.gradeLevel:id,name',
+                'textbookChapter.syllabusChapter:id,name,chapter_number,chapter_head_id',
+                'textbookChapter.syllabusChapter.chapterHead:id,name',
             ])
             ->when($status !== '', fn ($q) => $q->where('status', $status))
             ->latest()
@@ -435,6 +437,7 @@ class ContentUploadTaskController extends Controller
             'assignee:id,name,email',
             'assigner:id,name',
             'textbookChapter.textbook.gradeLevel',
+            'textbookChapter.syllabusChapter.chapterHead',
         ]);
 
         $verification = $this->verificationPayload($contentTask, $request->user());
@@ -442,6 +445,7 @@ class ContentUploadTaskController extends Controller
             'assignee:id,name,email',
             'assigner:id,name',
             'textbookChapter.textbook.gradeLevel',
+            'textbookChapter.syllabusChapter.chapterHead',
         ]);
 
         return Inertia::render('Admin/ContentTasks/Show', [
@@ -789,8 +793,9 @@ class ContentUploadTaskController extends Controller
             'can_reassign' => $task->canReassign(),
             'chapter' => $chapter ? [
                 'id' => $chapter->id,
-                'chapter_number' => $chapter->chapter_number,
-                'title' => $chapter->title,
+                'chapter_number' => $chapter->displayChapterNumber(),
+                'title' => $chapter->displayTitle(),
+                'chapter_head_name' => $chapter->displayChapterHeadName(),
                 'status' => $chapter->status,
                 'textbook_name' => $chapter->textbook?->name,
                 'textbook_code' => $chapter->textbook?->code,

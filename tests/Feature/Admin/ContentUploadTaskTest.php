@@ -150,6 +150,53 @@ class ContentUploadTaskTest extends TestCase
                 ->where('matrix.drill.breakup.published', 0));
     }
 
+    public function test_allocation_drill_uses_current_syllabus_chapter_name(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $syllabusChapter->update([
+            'name' => 'Large Numbers Around Us',
+            'chapter_number' => 'Ch 1',
+        ]);
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'GP1',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $textbookChapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 16,
+            'title' => 'Old stored title',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $textbookChapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 100,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.index', [
+                'drill_grade_id' => $grade->id,
+                'drill_uploader_id' => $uploader->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('matrix.drill.chapters.0.chapter.chapter_number', 'Ch 1')
+                ->where('matrix.drill.chapters.0.chapter.title', 'Large Numbers Around Us')
+                ->where('matrix.drill.chapters.0.chapter.textbook_name', 'Ganita Prakash Part I'));
+    }
+
     public function test_allocation_matrix_drill_down_breaks_up_review_submitted_and_published(): void
     {
         [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();

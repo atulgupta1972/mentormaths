@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Board;
 use App\Models\ContentUploadTask;
 use App\Models\GradeLevel;
+use App\Models\SyllabusChapter;
 use App\Models\User;
 use App\Models\Worksheet;
 
@@ -59,7 +60,8 @@ class ContentAllocationMatrixService
                 'textbookChapter:id,textbook_id,syllabus_chapter_id,chapter_number,title,status,extraction_items,mcq_worksheet_id,mcq_worksheet_ids',
                 'textbookChapter.textbook:id,grade_level_id,name,code',
                 'textbookChapter.textbook.gradeLevel:id,name,sort_order',
-                'textbookChapter.syllabusChapter:id,name,syllabus_version_id',
+                'textbookChapter.syllabusChapter:id,name,chapter_number,chapter_head_id,syllabus_version_id',
+                'textbookChapter.syllabusChapter.chapterHead:id,name',
                 'textbookChapter.syllabusChapter.syllabusVersion:id,board_id,grade_level_id',
                 'textbookChapter.syllabusChapter.syllabusVersion.board:id,code',
             ])
@@ -190,7 +192,15 @@ class ContentAllocationMatrixService
             $grade = collect($gradeRows)->firstWhere('id', $drillGradeId);
             $uploader = collect($uploaders)->firstWhere('id', $drillUploaderId);
 
-            $chapters = $drillTasks->map(fn (ContentUploadTask $task) => $this->serializeDrillRow($task))->values();
+            $chapters = $drillTasks
+                ->map(fn (ContentUploadTask $task) => $this->serializeDrillRow($task))
+                ->sortBy(function (array $row) {
+                    $book = mb_strtolower((string) ($row['chapter']['textbook_name'] ?? ''));
+                    $number = (string) ($row['chapter']['chapter_number'] ?? '');
+
+                    return $book.'|'.SyllabusChapter::orderKey($number);
+                })
+                ->values();
 
             $drill = [
                 'grade' => $grade,
@@ -267,8 +277,9 @@ class ContentAllocationMatrixService
             'question_count' => $questionCount,
             'chapter' => [
                 'id' => $chapter?->id,
-                'chapter_number' => $chapter?->chapter_number,
-                'title' => $chapter?->title,
+                'chapter_number' => $chapter?->displayChapterNumber(),
+                'title' => $chapter?->displayTitle(),
+                'chapter_head_name' => $chapter?->displayChapterHeadName(),
                 'textbook_name' => $chapter?->textbook?->name,
                 'textbook_code' => $chapter?->textbook?->code,
                 'grade_name' => $chapter?->textbook?->gradeLevel?->name,
