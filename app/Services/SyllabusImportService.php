@@ -667,14 +667,34 @@ class SyllabusImportService
             return $chapterCache[$key];
         }
 
-        $chapter = SyllabusChapter::create([
-            'syllabus_version_id' => $version->id,
-            'chapter_head_id' => $chapterHeadId,
-            'chapter_number' => $number ?: (string) $sortOrder,
-            'name' => $name ?: 'Chapter '.$sortOrder,
-            'sort_order' => $sortOrder,
-            'ncert_verified' => $this->rowIsNcertVerified($row),
-        ]);
+        $chapter = $key === '|'
+            ? null
+            : SyllabusChapter::query()
+                ->where('syllabus_version_id', $version->id)
+                ->get()
+                ->first(fn (SyllabusChapter $existing) => $this->chapterKey(
+                    (string) $existing->chapter_number,
+                    (string) $existing->name,
+                ) === $key);
+
+        if ($chapter) {
+            $chapter->update([
+                'chapter_number' => $number ?: $chapter->chapter_number,
+                'name' => $name ?: $chapter->name,
+                'sort_order' => $sortOrder,
+                'chapter_head_id' => $chapterHeadId ?? $chapter->chapter_head_id,
+                'ncert_verified' => $this->rowIsNcertVerified($row),
+            ]);
+        } else {
+            $chapter = SyllabusChapter::create([
+                'syllabus_version_id' => $version->id,
+                'chapter_head_id' => $chapterHeadId,
+                'chapter_number' => $number ?: (string) $sortOrder,
+                'name' => $name ?: 'Chapter '.$sortOrder,
+                'sort_order' => $sortOrder,
+                'ncert_verified' => $this->rowIsNcertVerified($row),
+            ]);
+        }
 
         $chapterCache[$key] = $chapter;
         $chapterCache['id:'.$chapter->id] = $chapter;
@@ -684,7 +704,11 @@ class SyllabusImportService
 
     private function chapterKey(string $number, string $name): string
     {
-        return $number.'|'.$name;
+        if (trim($number) === '' && trim($name) === '') {
+            return '|';
+        }
+
+        return SyllabusChapter::headingKey($number, $name);
     }
 
     /**

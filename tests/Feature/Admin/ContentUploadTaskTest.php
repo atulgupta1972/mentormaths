@@ -852,6 +852,35 @@ class ContentUploadTaskTest extends TestCase
                 ->where('syllabusChapters', fn ($chapters) => collect($chapters)->pluck('id')->map(fn ($id) => (int) $id)->all() === [(int) $icseChapter->id]));
     }
 
+    public function test_assign_form_collapses_duplicate_syllabus_headings_and_uses_current_names(): void
+    {
+        $this->withoutVite();
+
+        [$grade, $chapter, $admin] = $this->seedGradeAndAdmin();
+        $boardId = $chapter->syllabusVersion->board_id;
+
+        $chapter->update([
+            'chapter_number' => 'Ch 4',
+            'name' => 'Expressions Using Letter-Numbers',
+        ]);
+
+        SyllabusChapter::query()->create([
+            'syllabus_version_id' => $chapter->syllabus_version_id,
+            'name' => 'Expressions Using Letter-Numbers',
+            'chapter_number' => '4',
+            'sort_order' => 2,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.content-tasks.create', ['board_id' => $boardId]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('syllabusChapters', 1)
+                ->where('syllabusChapters.0.name', 'Expressions Using Letter-Numbers')
+                ->where('syllabusChapters.0.label', fn ($label) => str_contains((string) $label, 'Expressions Using Letter-Numbers')));
+    }
+
     /**
      * @return array{0: GradeLevel, 1: SyllabusChapter, 2: User}
      */

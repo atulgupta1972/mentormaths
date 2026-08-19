@@ -121,6 +121,31 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertSame('NCERT: Shapes Around Us', $topic?->remarks);
     }
 
+    public function test_sync_rows_reuses_existing_chapter_with_the_same_heading(): void
+    {
+        $version = $this->seedSyllabusVersion();
+        $service = app(SyllabusImportService::class);
+
+        $service->syncRows($version, [[
+            'chapter_number' => '4',
+            'chapter_name' => 'Expressions Using Letter-Numbers',
+            'topic_name' => 'Letters for numbers',
+            'learning_outcomes' => null,
+            'remarks' => null,
+        ]]);
+
+        $service->syncRows($version, [[
+            'chapter_number' => 'Ch 4',
+            'chapter_name' => 'Expressions Using Letter-Numbers',
+            'topic_name' => 'Letters for numbers',
+            'learning_outcomes' => null,
+            'remarks' => null,
+        ]]);
+
+        $this->assertSame(1, $version->fresh()->chapters()->count());
+        $this->assertSame('Ch 4', $version->fresh()->chapters()->first()?->chapter_number);
+    }
+
     public function test_clear_all_rows_removes_chapters_and_topics(): void
     {
         $version = $this->seedSyllabusVersion();

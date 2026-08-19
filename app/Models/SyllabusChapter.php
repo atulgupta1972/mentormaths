@@ -89,4 +89,12 @@ class SyllabusChapter extends Model
 
         return sprintf('%02d-%04d-%s', $part, $chapter, mb_strtolower($original));
     }
+
+    public static function headingKey(?string $chapterNumber, string $name): string
+    {
+        $order = self::orderKey($chapterNumber);
+        [$part, $chapter] = array_pad(explode('-', $order, 3), 2, '00');
+
+        return "{$part}-{$chapter}|".mb_strtolower(trim($name));
+    }
 }

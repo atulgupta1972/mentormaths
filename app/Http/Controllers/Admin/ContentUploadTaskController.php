@@ -106,6 +106,8 @@ class ContentUploadTaskController extends Controller
         $selectedBoardId = null;
 
         if ($gradeLevel) {
+            $this->bookService->mergeAllDuplicateBookChapters();
+
             $boards = $this->classAssignment->boardsForGrade($gradeLevel);
             $selectedBoardId = $this->gradeContext->resolveBoardId($request);
 
@@ -216,12 +218,40 @@ class ContentUploadTaskController extends Controller
                             'chapter_number' => $chapter->chapter_number,
                             'name' => $chapter->name,
                             'label' => self::chapterLabel($chapter),
+                            'heading_key' => SyllabusChapter::headingKey($chapter->chapter_number, (string) $chapter->name),
+                            'sort_key' => SyllabusChapter::orderKey($chapter->chapter_number),
                             'default_amount_inr' => $rate['amount_inr'],
                             'default_rate_basis' => $rate['rate_basis'],
                             'assigned_for_textbooks' => array_keys($assignedBySyllabus[$syllabusId] ?? []),
                             'uploaded_for_textbooks' => array_keys($uploadedBySyllabus[$syllabusId] ?? []),
                         ];
                     })
+                    ->groupBy('heading_key')
+                    ->map(function ($group) {
+                        $rows = collect($group);
+                        $preferred = $rows
+                            ->sortByDesc(fn (array $row) => count($row['uploaded_for_textbooks']) * 10 + count($row['assigned_for_textbooks']))
+                            ->first();
+
+                        $preferred['assigned_for_textbooks'] = $rows
+                            ->flatMap(fn (array $row) => $row['assigned_for_textbooks'])
+                            ->unique()
+                            ->values()
+                            ->all();
+                        $preferred['uploaded_for_textbooks'] = $rows
+                            ->flatMap(fn (array $row) => $row['uploaded_for_textbooks'])
+                            ->unique()
+                            ->values()
+                            ->all();
+                        $preferred['label'] = trim((string) ($preferred['chapter_number'] ?? '')) !== ''
+                            ? $preferred['chapter_number'].' — '.$preferred['name']
+                            : $preferred['name'];
+
+                        unset($preferred['heading_key'], $preferred['sort_key']);
+
+                        return $preferred;
+                    })
+                    ->sortBy(fn (array $row) => SyllabusChapter::orderKey($row['chapter_number'] ?? ''))
                     ->values()
                     ->all();
             }

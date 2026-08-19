@@ -349,6 +349,7 @@ const applySuggestedRate = () => {
 
                     <div v-if="syllabusChapters.length">
                         <InputLabel value="Syllabus chapters" />
+                        <p class="mt-1 text-xs text-gray-500">This list is the current syllabus. After you save chapter numbers or names, reopen this page.</p>
                         <div class="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
                             <label
                                 v-for="chapter in syllabusChapters"
