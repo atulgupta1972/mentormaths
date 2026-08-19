@@ -1351,7 +1351,7 @@ const saveNewHead = async () => {
                                                 <input
                                                     :value="group.chapter_number"
                                                     type="text"
-                                                    class="w-14 rounded border-gray-300 bg-white font-semibold"
+                                                    class="w-24 rounded border-gray-300 bg-white font-semibold"
                                                     placeholder="Ch 1"
                                                     @input="setChapterField(group, 'chapter_number', $event.target.value)"
                                                     @blur="refreshChapterOrder"
