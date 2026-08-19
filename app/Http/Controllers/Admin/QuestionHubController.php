@@ -12,6 +12,7 @@ use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
+use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\PracticeSetCodeService;
@@ -226,16 +227,29 @@ class QuestionHubController extends Controller
                 ->when($schema['set_number'], fn (Builder $q) => $q->orderBy('set_number'))
                 ->orderBy('id')
                 ->get()
-                ->map(fn (Worksheet $set) => [
-                    'type' => 'chapter_test',
-                    'id' => $set->id,
-                    'set_code' => $set->set_code,
-                    'tier' => $set->tier,
-                    'tier_label' => $set->tier_label,
-                    'questions_count' => $set->questions_count,
-                    'status' => $set->status,
-                ])
             : collect();
+
+        $bookContent = $this->serializeBookContent($chapter);
+        $textbookWorksheetIds = collect($bookContent)
+            ->flatMap(fn (array $book) => collect($book['parts'] ?? [])->flatMap(fn (array $part) => array_filter([
+                $part['mcq']['id'] ?? null,
+                $part['fill_blank']['id'] ?? null,
+                $part['written']['id'] ?? null,
+            ])))
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $chapterTests = $chapterTests
+            ->reject(fn (Worksheet $set) => in_array((int) $set->id, $textbookWorksheetIds, true))
+            ->map(fn (Worksheet $set) => [
+                'type' => 'chapter_test',
+                'id' => $set->id,
+                'set_code' => $set->set_code,
+                'tier' => $set->tier,
+                'tier_label' => $set->tier_label,
+                'questions_count' => $set->questions_count,
+                'status' => $set->status,
+            ]);
 
         $topicsQuery = $chapter->topics()->withCount('questions');
 
@@ -402,6 +416,7 @@ class QuestionHubController extends Controller
                 ->withCount('questions')
                 ->orderByDesc('id')
                 ->get()
+                ->reject(fn (Worksheet $sheet) => in_array((int) $sheet->id, $textbookWorksheetIds, true))
                 ->map(fn (Worksheet $sheet) => [
                     'id' => $sheet->id,
                     'set_code' => $sheet->set_code,
@@ -427,6 +442,7 @@ class QuestionHubController extends Controller
             'activeYear' => $chapter->syllabusVersion?->academicYear?->only(['id', 'name']),
             'setCards' => $setCards->values()->all(),
             'chapterTests' => $chapterTests->values()->all(),
+            'bookContent' => $bookContent,
             'writtenSheets' => $writtenSheets,
             'formulaSets' => $formulaSets,
             'stats' => [
@@ -580,6 +596,79 @@ class QuestionHubController extends Controller
         $chapter->loadMissing('syllabusVersion.gradeLevel');
 
         return (bool) $chapter->syllabusVersion?->gradeLevel;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function serializeBookContent(SyllabusChapter $chapter): array
+    {
+        $books = TextbookChapter::query()
+            ->with(['textbook:id,name,code'])
+            ->where('syllabus_chapter_id', $chapter->id)
+            ->orderBy('id')
+            ->get();
+
+        if ($books->isEmpty()) {
+            return [];
+        }
+
+        $worksheetIds = $books->flatMap(fn (TextbookChapter $row) => $row->allWorksheetIds())->unique()->filter()->all();
+
+        $worksheets = $worksheetIds === []
+            ? collect()
+            : Worksheet::query()
+                ->whereIn('id', $worksheetIds)
+                ->withCount('questions')
+                ->get()
+                ->keyBy('id');
+
+        return $books->map(function (TextbookChapter $row) use ($worksheets) {
+            $items = $row->extraction_items ?? [];
+            $fillReady = collect($items)
+                ->filter(fn (array $item) => filled($item['fill_blank_question_text'] ?? null)
+                    && filled($item['fill_blank_correct_answer'] ?? null))
+                ->count();
+
+            $parts = [];
+
+            foreach ($row->contentParts() as $part) {
+                $parts[] = [
+                    'part' => $part['part'],
+                    'mcq' => $this->hubWorksheetCard($worksheets->get($part['mcq_worksheet_id'])),
+                    'fill_blank' => $this->hubWorksheetCard($worksheets->get($part['fill_blank_worksheet_id'])),
+                    'written' => $this->hubWorksheetCard($worksheets->get($part['written_worksheet_id'])),
+                ];
+            }
+
+            return [
+                'textbook_chapter_id' => $row->id,
+                'book_name' => $row->textbook?->name,
+                'book_code' => $row->textbook?->code,
+                'mcq_count' => count($items) ?: collect($parts)->sum(fn (array $part) => (int) ($part['mcq']['questions_count'] ?? 0)),
+                'fill_blank_ready_count' => $fillReady,
+                'can_convert' => $items !== [] || $row->mcqWorksheetIds() !== [],
+                'convert_url' => route('admin.textbooks.show', $row).'#convert',
+                'parts' => $parts,
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * @return array{id: int, set_code: string, questions_count: int, status: string}|null
+     */
+    private function hubWorksheetCard(?Worksheet $worksheet): ?array
+    {
+        if (! $worksheet) {
+            return null;
+        }
+
+        return [
+            'id' => $worksheet->id,
+            'set_code' => $worksheet->set_code,
+            'questions_count' => (int) $worksheet->questions_count,
+            'status' => $worksheet->status,
+        ];
     }
 
     /**

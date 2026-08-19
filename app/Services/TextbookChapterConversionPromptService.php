@@ -25,9 +25,11 @@ class TextbookChapterConversionPromptService
         $reference = $this->mcqReference($chapter, $items);
         $referenceJson = json_encode($reference, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         $codes = $this->setCodes->codes($chapter);
+        $count = count($reference['questions']);
+        $fillPlan = $this->setCodes->fillBlankPartPlan($chapter, $count);
+        $writtenPlan = $this->setCodes->writtenPartPlan($chapter, $count);
 
         $context = $this->chapterContext($chapter);
-        $count = count($reference['questions']);
 
         $prompt = <<<PROMPT
 Convert the attached MCQ reference JSON into fill-in-the-blank questions for the same chapter.
@@ -38,18 +40,22 @@ Context:
 
 Input:
 - Attach or paste mcq_reference.json ({$count} MCQ items with correct answers).
-- Keep the SAME order and count — one fill-blank question per MCQ row (use "source_index" 1..{$count}).
+- Keep source_index matching the MCQ row (1..{$count}). You may SKIP a row (omit it) when it must stay MCQ-only.
 
 Conversion rules:
-1. Turn each MCQ into ONE blank shown as "____" in the question text.
-2. When the MCQ correct answer is numeric, the blank answer must be that number (revise the question stem so the blank is the numeric result).
-3. When the MCQ is conceptual with a text correct option, use answer_format "text" and a short blank phrase.
-4. Preserve topic names, tables, and diagram needs from the source MCQ.
-5. Re-use method_hint / explanation from the MCQ when still valid; fix so the final value in explanation equals correct_answer exactly.
-6. Do NOT include options arrays — fill-in-the-blank only.
-7. For diagram questions, keep needs_diagram true and the same diagram_file name if present.
+1. One blank per question, shown as "____" in the question text.
+2. Prefer numeric / maths blanks:
+   - whole number → answer_format "integer" (commas in 13,579 are fine; store 13579)
+   - decimal with a required form → "decimal" plus decimal_places (e.g. 2 for 2.50)
+   - fraction → "fraction" and store like 2/3 (equivalent 4/6 is accepted when students answer)
+   - short algebra token (coefficient, 4xy, x^2) → "text"
+3. SKIP (do not convert) long English / spelling answers: number names ("thirteen thousand…"), "which of the following is true", and other option-shaped items. Those stay MCQ only.
+4. Algebra expansions: do not ask for the full expansion in one blank. Split into separate questions (coefficient of x², of xy, of y²) using extra source_index copies of the same MCQ is NOT allowed — pick one numeric/token blank, or skip.
+5. Preserve topic names, tables, and diagram needs from the source MCQ.
+6. Explanation must end with the same value as correct_answer.
+7. Do NOT include options arrays.
 
-Set codes after publish: online fill-blank {$codes['fill_blank']}, written sheet {$codes['written']}.
+After publish, book content is three matching parts: MCQ {$codes['mcq']} / {$codes['mcq']}2…, fill-blank {$codes['fill_blank']}1 / {$codes['fill_blank']}2…, written {$codes['written']}1 / {$codes['written']}2….
 
 JSON format:
 {
@@ -89,8 +95,10 @@ PROMPT;
             'sample_json' => json_encode($sample, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
             'mcq_reference_json' => $referenceJson,
             'question_count' => $count,
-            'fill_blank_set_code' => $codes['fill_blank'],
-            'written_set_code' => $codes['written'],
+            'fill_blank_set_code' => $fillPlan[0]['set_code'] ?? $codes['fill_blank'].'1',
+            'fill_blank_set_codes' => array_column($fillPlan, 'set_code'),
+            'written_set_code' => $writtenPlan[0]['set_code'] ?? $codes['written'].'1',
+            'written_set_codes' => array_column($writtenPlan, 'set_code'),
         ];
     }
 

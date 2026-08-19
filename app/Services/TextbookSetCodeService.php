@@ -27,6 +27,49 @@ class TextbookSetCodeService
         ];
     }
 
+    public function fillBlankPartCode(TextbookChapter $chapter, int $partNumber, int $totalParts): string
+    {
+        return $this->codes($chapter)['fill_blank'].max(1, $partNumber);
+    }
+
+    public function writtenPartCode(TextbookChapter $chapter, int $partNumber, int $totalParts): string
+    {
+        return $this->codes($chapter)['written'].max(1, $partNumber);
+    }
+
+    /**
+     * @return list<array{part: int, count: int, set_code: string, from: int, to: int}>
+     */
+    public function fillBlankPartPlan(TextbookChapter $chapter, int $questionCount): array
+    {
+        return $this->remapPartPlan($this->mcqPartPlan($chapter, $questionCount), $chapter, 'fill_blank');
+    }
+
+    /**
+     * @return list<array{part: int, count: int, set_code: string, from: int, to: int}>
+     */
+    public function writtenPartPlan(TextbookChapter $chapter, int $questionCount): array
+    {
+        return $this->remapPartPlan($this->mcqPartPlan($chapter, $questionCount), $chapter, 'written');
+    }
+
+    /**
+     * @param  list<array{part: int, count: int, set_code: string, from: int, to: int}>  $plan
+     * @return list<array{part: int, count: int, set_code: string, from: int, to: int}>
+     */
+    private function remapPartPlan(array $plan, TextbookChapter $chapter, string $kind): array
+    {
+        $total = count($plan);
+
+        return array_map(function (array $row) use ($chapter, $kind, $total) {
+            $row['set_code'] = $kind === 'written'
+                ? $this->writtenPartCode($chapter, (int) $row['part'], $total)
+                : $this->fillBlankPartCode($chapter, (int) $row['part'], $total);
+
+            return $row;
+        }, $plan);
+    }
+
     public function mcqPartCount(int $questionCount): int
     {
         if ($questionCount <= 0) {

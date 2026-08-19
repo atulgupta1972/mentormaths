@@ -15,6 +15,7 @@ const props = defineProps({
     chapterTests: Array,
     writtenSheets: { type: Array, default: () => [] },
     formulaSets: { type: Array, default: () => [] },
+    bookContent: { type: Array, default: () => [] },
     stats: Object,
     board: Object,
 });
@@ -121,7 +122,7 @@ const clearBank = (card) => {
                     {{ boardCode }} {{ gradeLevel?.name }} · Ch {{ chapter.chapter_number }} · {{ chapter.name }}
                 </p>
                 <h2 class="text-xl font-semibold text-gray-800">Practice sets & chapter tests</h2>
-                <p class="mt-1 text-xs text-gray-500">S821 = MCQ practice · SF821 = fill-in-blank · T821 = chapter test · S821-W = written · F711 = formula / concept</p>
+                <p class="mt-1 text-xs text-gray-500">Book sets: C5-MM-CH01-M / F1 / W1 · S821 = MCQ practice · SF821 = fill-in-blank · T821 = chapter test · S821-W = written · F711 = formula</p>
             </div>
             <div class="flex flex-wrap gap-2">
                 <Link
@@ -328,6 +329,60 @@ const clearBank = (card) => {
                                     Create as {{ card.set_code }}
                                 </button>
                             </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="bookContent?.length && isAdmin" class="space-y-3">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-700">Book content — MCQ, fill-in-blank, written</h3>
+                    <p class="text-sm text-slate-600">Each part is one MCQ set plus matching fill-in-blank and written. Convert from the published MCQs, review JSON, then publish.</p>
+                    <div
+                        v-for="book in bookContent"
+                        :key="book.textbook_chapter_id"
+                        class="rounded-xl border border-slate-300 bg-white p-5 shadow-sm"
+                    >
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <p class="font-semibold text-slate-900">{{ book.book_name }} <span class="font-mono text-xs text-slate-500">({{ book.book_code }})</span></p>
+                                <p class="mt-1 text-xs text-slate-600">{{ book.fill_blank_ready_count || 0 }} of {{ book.mcq_count || 0 }} MCQs converted to fill-in-blank</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <Link
+                                    v-if="book.can_convert"
+                                    :href="book.convert_url"
+                                    class="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
+                                >
+                                    Convert MCQ → fill-in-blank
+                                </Link>
+                                <Link
+                                    v-if="book.can_convert"
+                                    :href="book.convert_url"
+                                    class="rounded-md border border-violet-300 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-900 hover:bg-violet-100"
+                                >
+                                    Convert → written
+                                </Link>
+                            </div>
+                        </div>
+                        <div v-if="book.parts?.length" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <div
+                                v-for="part in book.parts"
+                                :key="`${book.textbook_chapter_id}-part-${part.part}`"
+                                class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
+                            >
+                                <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Part {{ part.part }}</p>
+                                <p class="mt-2 font-mono text-slate-900">
+                                    {{ part.mcq?.set_code || 'MCQ pending' }}
+                                    <span class="text-xs text-slate-500">{{ part.mcq ? `${part.mcq.questions_count} Q` : '' }}</span>
+                                </p>
+                                <p class="mt-1 font-mono text-emerald-900">
+                                    {{ part.fill_blank?.set_code || 'F — convert' }}
+                                    <span class="text-xs text-slate-500">{{ part.fill_blank ? `${part.fill_blank.questions_count} Q` : '' }}</span>
+                                </p>
+                                <p class="mt-1 font-mono text-violet-900">
+                                    {{ part.written?.set_code || 'W — convert' }}
+                                    <span class="text-xs text-slate-500">{{ part.written ? `${part.written.questions_count} Q` : '' }}</span>
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>

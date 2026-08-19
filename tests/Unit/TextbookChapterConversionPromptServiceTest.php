@@ -28,8 +28,8 @@ class TextbookChapterConversionPromptServiceTest extends TestCase
         $payload = $service->payload($chapter);
 
         $this->assertStringContainsString('mcq_reference.json', $payload['prompt']);
-        $this->assertSame('C9-GP-CH08-F', $payload['fill_blank_set_code']);
-        $this->assertSame('C9-GP-CH08-W', $payload['written_set_code']);
+        $this->assertSame('C9-GP-CH08-F1', $payload['fill_blank_set_code']);
+        $this->assertSame('C9-GP-CH08-W1', $payload['written_set_code']);
         $this->assertSame(1, $payload['question_count']);
 
         $reference = json_decode($payload['mcq_reference_json'], true);

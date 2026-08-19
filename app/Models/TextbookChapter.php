@@ -32,7 +32,9 @@ class TextbookChapter extends Model
         'mcq_worksheet_id',
         'mcq_worksheet_ids',
         'written_worksheet_id',
+        'written_worksheet_ids',
         'fill_blank_worksheet_id',
+        'fill_blank_worksheet_ids',
         'published_at',
         'published_by',
         'created_by',
@@ -44,6 +46,8 @@ class TextbookChapter extends Model
             'extraction_items' => 'array',
             'mcq_set_plan' => 'array',
             'mcq_worksheet_ids' => 'array',
+            'fill_blank_worksheet_ids' => 'array',
+            'written_worksheet_ids' => 'array',
             'extracted_at' => 'datetime',
             'published_at' => 'datetime',
         ];
@@ -84,12 +88,69 @@ class TextbookChapter extends Model
     /**
      * @return list<int>
      */
+    public function fillBlankWorksheetIds(): array
+    {
+        return $this->worksheetIdList($this->fill_blank_worksheet_ids ?? [], $this->fill_blank_worksheet_id);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function writtenWorksheetIds(): array
+    {
+        return $this->worksheetIdList($this->written_worksheet_ids ?? [], $this->written_worksheet_id);
+    }
+
+    /**
+     * @return list<array{part: int, mcq_worksheet_id: int|null, fill_blank_worksheet_id: int|null, written_worksheet_id: int|null}>
+     */
+    public function contentParts(): array
+    {
+        $mcq = $this->mcqWorksheetIds();
+        $fill = $this->fillBlankWorksheetIds();
+        $written = $this->writtenWorksheetIds();
+        $count = max(count($mcq), count($fill), count($written));
+        $parts = [];
+
+        for ($index = 0; $index < $count; $index++) {
+            $parts[] = [
+                'part' => $index + 1,
+                'mcq_worksheet_id' => $mcq[$index] ?? null,
+                'fill_blank_worksheet_id' => $fill[$index] ?? null,
+                'written_worksheet_id' => $written[$index] ?? null,
+            ];
+        }
+
+        return $parts;
+    }
+
+    /**
+     * @param  mixed  $ids
+     * @return list<int>
+     */
+    private function worksheetIdList(mixed $ids, mixed $fallbackId): array
+    {
+        $list = array_values(array_filter(
+            is_array($ids) ? $ids : [],
+            fn ($id) => is_numeric($id),
+        ));
+
+        if ($list !== []) {
+            return array_map('intval', $list);
+        }
+
+        return $fallbackId ? [(int) $fallbackId] : [];
+    }
+
+    /**
+     * @return list<int>
+     */
     public function allWorksheetIds(): array
     {
         return array_values(array_unique(array_filter([
             ...$this->mcqWorksheetIds(),
-            (int) ($this->fill_blank_worksheet_id ?? 0),
-            (int) ($this->written_worksheet_id ?? 0),
+            ...$this->fillBlankWorksheetIds(),
+            ...$this->writtenWorksheetIds(),
         ])));
     }
 

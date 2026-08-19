@@ -158,6 +158,22 @@ const bookCellContent = (chapter, bookId) => {
 
 const bookItems = (chapter, bookId) => chapter.items?.books?.[String(bookId)] ?? [];
 
+const bookParts = (chapter, bookId) => {
+    const groups = new Map();
+
+    bookItems(chapter, bookId).forEach((item) => {
+        const part = Number(item.part || 1);
+        if (!groups.has(part)) {
+            groups.set(part, []);
+        }
+        groups.get(part).push(item);
+    });
+
+    return [...groups.entries()]
+        .sort((left, right) => left[0] - right[0])
+        .map(([part, items]) => ({ part, items }));
+};
+
 const statusClass = (status) => {
     switch (status) {
     case 'done':
@@ -394,15 +410,22 @@ const chapterShortLabel = (chapter) => {
                                 :key="`book-detail-${chapter.id}-${book.id}`"
                                 :class="[gridCell, 'border-l-2 border-slate-400 align-top py-1.5']"
                             >
-                                <div v-if="bookItems(chapter, book.id).length" class="space-y-1">
+                                <div v-if="bookParts(chapter, book.id).length" class="space-y-2">
                                     <div
-                                        v-for="item in bookItems(chapter, book.id)"
-                                        :key="`book-item-${item.worksheet_id}`"
-                                        class="rounded border border-slate-300 bg-white px-1.5 py-1 shadow-sm"
+                                        v-for="part in bookParts(chapter, book.id)"
+                                        :key="`book-part-${chapter.id}-${book.id}-${part.part}`"
+                                        class="space-y-1"
                                     >
-                                        <div class="font-mono text-[10px] font-bold text-slate-900">
-                                            {{ item.set_code }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
-                                        </div>
+                                        <p class="text-[9px] font-bold uppercase tracking-wide text-slate-500">Part {{ part.part }} · MCQ / fill / written</p>
+                                        <div
+                                            v-for="item in part.items"
+                                            :key="`book-item-${item.worksheet_id}`"
+                                            class="rounded border border-slate-300 bg-white px-1.5 py-1 shadow-sm"
+                                        >
+                                            <div class="font-mono text-[10px] font-bold text-slate-900">
+                                                {{ item.set_code }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
+                                            </div>
+                                            <div class="text-[9px] font-semibold uppercase text-slate-500">{{ item.kind_label || 'Book' }}</div>
                                         <div
                                             class="mt-0.5 inline-block rounded px-1 py-px text-[9px] font-bold uppercase"
                                             :class="statusClass(item.status)"
@@ -428,6 +451,7 @@ const chapterShortLabel = (chapter) => {
                                                 Open
                                             </Link>
                                         </div>
+                                    </div>
                                     </div>
                                 </div>
                                 <span v-else class="font-bold text-slate-400">—</span>

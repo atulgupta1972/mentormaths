@@ -227,21 +227,33 @@ class StudentChapterSummaryService
                 $seenWorksheetIds = [];
 
                 foreach ($chapterTextbookRows->where('textbook_id', (int) $bookColumn['id']) as $textbookChapter) {
-                    foreach ($textbookChapter->allWorksheetIds() as $worksheetId) {
-                        if (isset($seenWorksheetIds[$worksheetId])) {
-                            continue;
-                        }
+                    foreach ($textbookChapter->contentParts() as $part) {
+                        foreach ([
+                            ['mcq', 'MCQ', $part['mcq_worksheet_id']],
+                            ['fill_blank', 'Fill-in-blank', $part['fill_blank_worksheet_id']],
+                            ['written', 'Written', $part['written_worksheet_id']],
+                        ] as [$kind, $kindLabel, $worksheetId]) {
+                            if (! $worksheetId || isset($seenWorksheetIds[$worksheetId])) {
+                                continue;
+                            }
 
-                        $seenWorksheetIds[$worksheetId] = true;
-                        $worksheet = $worksheetsById->get($worksheetId);
+                            $seenWorksheetIds[$worksheetId] = true;
+                            $worksheet = $worksheetsById->get($worksheetId);
 
-                        if ($worksheet) {
-                            $bookItems[] = $this->buildSetItem(
+                            if (! $worksheet) {
+                                continue;
+                            }
+
+                            $item = $this->buildSetItem(
                                 $worksheet,
                                 $assignmentsByWorksheet,
                                 'B',
                                 (int) ($correctionCountsByWorksheet[$worksheet->id] ?? 0),
                             );
+                            $item['part'] = $part['part'];
+                            $item['kind'] = $kind;
+                            $item['kind_label'] = $kindLabel;
+                            $bookItems[] = $item;
                         }
                     }
                 }

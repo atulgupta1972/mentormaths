@@ -10,6 +10,8 @@ use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
+use App\Models\Textbook;
+use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Support\QuestionBankPurpose;
@@ -33,6 +35,42 @@ class QuestionHubTopicsTest extends TestCase
                 ->where('chapter.id', $chapter->id)
                 ->has('stats')
             );
+    }
+
+    public function test_chapter_hub_shows_book_content_convert_links(): void
+    {
+        [$chapter, $admin] = $this->seedClassSevenChapter();
+
+        $book = Textbook::query()->create([
+            'grade_level_id' => $chapter->syllabusVersion->grade_level_id,
+            'name' => 'Maths Mate',
+            'code' => 'MM',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $textbookChapter = TextbookChapter::query()->create([
+            'textbook_id' => $book->id,
+            'syllabus_chapter_id' => $chapter->id,
+            'chapter_number' => 1,
+            'title' => 'We the Travellers',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+            'extraction_items' => [[
+                'question_text' => 'What is 2 + 2?',
+                'correct_answer' => '4',
+            ]],
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.questions.chapters.show', $chapter->id))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('bookContent', 1)
+                ->where('bookContent.0.book_code', 'MM')
+                ->where('bookContent.0.can_convert', true)
+                ->where('bookContent.0.convert_url', fn ($url) => str_contains((string) $url, (string) $textbookChapter->id)
+                    && str_contains((string) $url, '#convert')));
     }
 
     public function test_chapter_hub_skips_bank_cards_when_grade_context_is_missing(): void

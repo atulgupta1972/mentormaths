@@ -261,22 +261,17 @@ class TextbookChapterPublishService
             throw new InvalidArgumentException('Syllabus chapter is missing.');
         }
 
-        $codes = $this->setCodeService->codes($chapter);
         $topic = $this->textbookTopic($syllabusChapter);
+        $mcqCount = count($items);
+        $fillPlan = $this->setCodeService->fillBlankPartPlan($chapter, $mcqCount);
+        $writtenPlan = $this->setCodeService->writtenPartPlan($chapter, $mcqCount);
 
-        return DB::transaction(function () use ($chapter, $items, $publisher, $topic, $syllabusChapter, $codes) {
-            if ($chapter->fill_blank_worksheet_id) {
-                $chapter->fillBlankWorksheet?->questions()->detach();
-                $chapter->fillBlankWorksheet?->delete();
-            }
+        return DB::transaction(function () use ($chapter, $items, $publisher, $topic, $syllabusChapter, $fillPlan, $writtenPlan) {
+            $this->deleteExistingWorksheets($chapter->fillBlankWorksheetIds());
+            $this->deleteExistingWorksheets($chapter->writtenWorksheetIds());
 
-            if ($chapter->written_worksheet_id) {
-                $chapter->writtenWorksheet?->questions()->detach();
-                $chapter->writtenWorksheet?->delete();
-            }
-
-            $fillBlankQuestions = [];
-            $writtenQuestions = [];
+            $fillBlankByIndex = [];
+            $writtenByIndex = [];
 
             foreach ($items as $index => $item) {
                 if (! filled($item['fill_blank_question_text'] ?? null)
@@ -285,32 +280,39 @@ class TextbookChapterPublishService
                 }
 
                 $fields = $this->fillBlankFields($item);
-                $fillBlankQuestions[] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
+                $sourceIndex = $index + 1;
+                $fillBlankByIndex[$sourceIndex] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
 
                 if ($item['include_in_written'] ?? true) {
-                    $writtenQuestions[] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
+                    $writtenByIndex[$sourceIndex] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
                 }
             }
 
-            $fillBlankWorksheet = $this->createFillBlankWorksheet(
+            $fillBlankIds = $this->createFillBlankWorksheets(
                 $chapter,
                 $syllabusChapter,
                 $publisher,
-                $fillBlankQuestions,
-                $codes['fill_blank'],
+                $fillBlankByIndex,
+                $fillPlan,
             );
 
-            $writtenWorksheet = $this->createWrittenWorksheet(
+            $writtenIds = $this->createWrittenWorksheets(
                 $chapter,
                 $syllabusChapter,
                 $publisher,
-                $writtenQuestions,
-                $codes['written'],
+                $writtenByIndex,
+                $writtenPlan,
             );
+
+            if ($fillBlankIds === []) {
+                throw new InvalidArgumentException('No convertible fill-in-blank questions to publish.');
+            }
 
             $chapter->update([
-                'fill_blank_worksheet_id' => $fillBlankWorksheet->id,
-                'written_worksheet_id' => $writtenWorksheet?->id,
+                'fill_blank_worksheet_id' => $fillBlankIds[0] ?? null,
+                'fill_blank_worksheet_ids' => $fillBlankIds === [] ? null : $fillBlankIds,
+                'written_worksheet_id' => $writtenIds[0] ?? null,
+                'written_worksheet_ids' => $writtenIds === [] ? null : $writtenIds,
             ]);
 
             return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet', 'fillBlankWorksheet']);
@@ -319,7 +321,15 @@ class TextbookChapterPublishService
 
     private function deleteExistingMcqWorksheets(TextbookChapter $chapter): void
     {
-        foreach ($chapter->mcqWorksheetIds() as $worksheetId) {
+        $this->deleteExistingWorksheets($chapter->mcqWorksheetIds());
+    }
+
+    /**
+     * @param  list<int>  $worksheetIds
+     */
+    private function deleteExistingWorksheets(array $worksheetIds): void
+    {
+        foreach ($worksheetIds as $worksheetId) {
             $worksheet = Worksheet::query()->find($worksheetId);
             $worksheet?->questions()->detach();
             $worksheet?->delete();
@@ -383,6 +393,90 @@ class TextbookChapterPublishService
     }
 
     /**
+     * @param  array<int, Question>  $questionsByIndex
+     * @param  list<array{part: int, count: int, set_code: string, from: int, to: int}>  $plan
+     * @return list<int>
+     */
+    private function createFillBlankWorksheets(
+        TextbookChapter $chapter,
+        SyllabusChapter $syllabusChapter,
+        User $publisher,
+        array $questionsByIndex,
+        array $plan,
+    ): array {
+        $worksheetIds = [];
+
+        foreach ($plan as $row) {
+            $chunk = [];
+
+            for ($sourceIndex = $row['from']; $sourceIndex <= $row['to']; $sourceIndex++) {
+                if (isset($questionsByIndex[$sourceIndex])) {
+                    $chunk[] = $questionsByIndex[$sourceIndex];
+                }
+            }
+
+            if ($chunk === []) {
+                continue;
+            }
+
+            $worksheetIds[] = $this->createFillBlankWorksheet(
+                $chapter,
+                $syllabusChapter,
+                $publisher,
+                $chunk,
+                $row['set_code'],
+                (int) $row['part'],
+            )->id;
+        }
+
+        return $worksheetIds;
+    }
+
+    /**
+     * @param  array<int, Question>  $questionsByIndex
+     * @param  list<array{part: int, count: int, set_code: string, from: int, to: int}>  $plan
+     * @return list<int>
+     */
+    private function createWrittenWorksheets(
+        TextbookChapter $chapter,
+        SyllabusChapter $syllabusChapter,
+        User $publisher,
+        array $questionsByIndex,
+        array $plan,
+    ): array {
+        $worksheetIds = [];
+
+        foreach ($plan as $row) {
+            $chunk = [];
+
+            for ($sourceIndex = $row['from']; $sourceIndex <= $row['to']; $sourceIndex++) {
+                if (isset($questionsByIndex[$sourceIndex])) {
+                    $chunk[] = $questionsByIndex[$sourceIndex];
+                }
+            }
+
+            if ($chunk === []) {
+                continue;
+            }
+
+            $created = $this->createWrittenWorksheet(
+                $chapter,
+                $syllabusChapter,
+                $publisher,
+                $chunk,
+                $row['set_code'],
+                (int) $row['part'],
+            );
+
+            if ($created) {
+                $worksheetIds[] = $created->id;
+            }
+        }
+
+        return $worksheetIds;
+    }
+
+    /**
      * @param  list<Question>  $writtenQuestions
      */
     private function createWrittenWorksheet(
@@ -391,14 +485,15 @@ class TextbookChapterPublishService
         User $publisher,
         array $writtenQuestions,
         string $writtenCode,
+        int $setNumber = 1,
     ): ?Worksheet {
         if ($writtenQuestions === []) {
             return null;
         }
 
         $writtenWorksheet = Worksheet::create([
-            'title' => "{$chapter->title} — Textbook written",
-            'set_number' => 1,
+            'title' => "{$chapter->title} — Textbook written".($setNumber > 1 ? " — Part {$setNumber}" : ''),
+            'set_number' => $setNumber,
             'set_code' => $writtenCode,
             'tier' => PracticeSetTier::STARTER,
             'scope' => PracticeSetScope::CHAPTER,
@@ -444,14 +539,15 @@ class TextbookChapterPublishService
         User $publisher,
         array $questions,
         string $fillBlankCode,
+        int $setNumber = 1,
     ): Worksheet {
         if ($questions === []) {
             throw new InvalidArgumentException('No fill-in-blank questions to publish.');
         }
 
         $worksheet = Worksheet::create([
-            'title' => "{$chapter->title} — Textbook fill in blank",
-            'set_number' => 1,
+            'title' => "{$chapter->title} — Textbook fill in blank".($setNumber > 1 ? " — Part {$setNumber}" : ''),
+            'set_number' => $setNumber,
             'set_code' => $fillBlankCode,
             'tier' => PracticeSetTier::STARTER,
             'scope' => PracticeSetScope::CHAPTER,

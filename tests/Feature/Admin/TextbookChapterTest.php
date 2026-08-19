@@ -309,8 +309,8 @@ class TextbookChapterTest extends TestCase
         $fillBlank = Worksheet::query()->findOrFail($textbookChapter->fill_blank_worksheet_id);
         $written = Worksheet::query()->findOrFail($textbookChapter->written_worksheet_id);
 
-        $this->assertSame('C9-GP-CH08-F', $fillBlank->set_code);
-        $this->assertSame('C9-GP-CH08-W', $written->set_code);
+        $this->assertSame('C9-GP-CH08-F1', $fillBlank->set_code);
+        $this->assertSame('C9-GP-CH08-W1', $written->set_code);
         $this->assertSame(1, $fillBlank->questions()->count());
         $this->assertSame(1, $written->questions()->count());
     }

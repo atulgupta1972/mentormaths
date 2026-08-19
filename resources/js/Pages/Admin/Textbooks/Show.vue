@@ -1046,17 +1046,18 @@ const canChangeBook = computed(() =>
                     <strong>{{ publishedMcqSetCodes.join(', ') }}</strong>.
                 </div>
 
-                <div v-if="hasItems && fillBlankConversion && !hideUploaderEditPanels" class="space-y-4 rounded-lg border-2 border-violet-300 bg-violet-50 p-6 shadow-sm">
+                <div id="convert" v-if="hasItems && fillBlankConversion && !hideUploaderEditPanels" class="space-y-4 rounded-lg border-2 border-violet-300 bg-violet-50 p-6 shadow-sm">
                     <div>
                         <h3 class="font-semibold text-violet-950">Step 4 — Fill in blank &amp; written (from MCQs)</h3>
                         <p class="mt-1 text-sm text-violet-900">
                             MCQs are already imported. Use AI to convert each MCQ into a fill-in-blank question
                             (same order, numeric answers from the MCQ correct option).
-                            Import the JSON below, then publish online set
-                            <strong>{{ chapter.fill_blank_set_code || fillBlankConversion.fill_blank_set_code }}</strong>
+                            Import the JSON below, then publish matching parts:
+                            fill-in-blank
+                            <strong>{{ (fillBlankConversion.fill_blank_set_codes || [chapter.fill_blank_set_code || fillBlankConversion.fill_blank_set_code]).join(', ') }}</strong>
                             and written
-                            <strong>{{ chapter.written_set_code || fillBlankConversion.written_set_code }}</strong>.
-                            MCQ sets are not changed.
+                            <strong>{{ (fillBlankConversion.written_set_codes || [chapter.written_set_code || fillBlankConversion.written_set_code]).join(', ') }}</strong>
+                            (same splits as the MCQ sets). Skip number-names and long English answers — those stay MCQ only.
                         </p>
                         <p v-if="fillBlankReadyCount" class="mt-2 text-sm font-medium text-violet-950">
                             {{ fillBlankReadyCount }} of {{ items.length }} converted and ready to publish.
