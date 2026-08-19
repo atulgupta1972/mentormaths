@@ -91,6 +91,7 @@ const previewWarnings = ref([]);
 const savedRowSnapshot = ref(null);
 const importFileInput = ref(null);
 const lastPreviewedFile = ref('');
+const chapterOrderKeys = ref([]);
 
 const resetImportFileInput = (event) => {
     event.target.value = '';
@@ -121,6 +122,7 @@ const applyPreviewRows = (rows, filename) => {
         snapshotSavedRows();
     }
 
+    chapterOrderKeys.value = [];
     form.rows = stampClientGroups(rows.map((row) => ({
         ...emptyRow(),
         ...row,
@@ -146,6 +148,8 @@ const applyPreviewResponse = (data, fallbackFilename) => {
 };
 
 const discardPreview = () => {
+    chapterOrderKeys.value = [];
+
     if (savedRowSnapshot.value) {
         form.rows = savedRowSnapshot.value.map((row) => ({ ...row }));
     } else {
@@ -420,6 +424,80 @@ const compareChapterGroups = (a, b) => {
     return String(a.chapter_number ?? '').localeCompare(String(b.chapter_number ?? ''), undefined, { numeric: true });
 };
 
+const buildEditorGroups = (rows) => {
+    const groups = [];
+    let current = null;
+
+    rows.forEach((row, index) => {
+        const key = chapterRowKey(row);
+
+        if (!current || current.key !== key) {
+            current = {
+                key,
+                chapter_id: row.chapter_id,
+                chapter_number: row.chapter_number,
+                chapter_name: row.chapter_name,
+                chapter_head_id: row.chapter_head_id,
+                ncert_verified: Boolean(row.ncert_verified),
+                has_uploaded_content: Boolean(row.has_uploaded_content),
+                content_books: row.content_books || [],
+                allIndexes: [],
+                topics: [],
+            };
+            groups.push(current);
+        }
+
+        current.allIndexes.push(index);
+        current.topics.push({ row, index });
+        current.chapter_number = row.chapter_number;
+        current.chapter_name = row.chapter_name;
+        current.chapter_head_id = row.chapter_head_id;
+        current.ncert_verified = Boolean(row.ncert_verified);
+        current.has_uploaded_content = Boolean(row.has_uploaded_content) || current.has_uploaded_content;
+        current.content_books = [...new Set([...(current.content_books || []), ...(row.content_books || [])])];
+    });
+
+    return groups;
+};
+
+const lockChapterOrder = (groups) => {
+    const keys = groups.map((group) => group.key);
+    const existing = new Set(keys);
+
+    if (chapterOrderKeys.value.length === 0) {
+        chapterOrderKeys.value = [...groups].sort(compareChapterGroups).map((group) => group.key);
+
+        return chapterOrderKeys.value;
+    }
+
+    const next = chapterOrderKeys.value.filter((key) => existing.has(key));
+    const known = new Set(next);
+
+    keys.forEach((key) => {
+        if (!known.has(key)) {
+            next.push(key);
+        }
+    });
+
+    chapterOrderKeys.value = next;
+
+    return next;
+};
+
+const refreshChapterOrder = () => {
+    chapterOrderKeys.value = buildEditorGroups(form.rows)
+        .sort(compareChapterGroups)
+        .map((group) => group.key);
+};
+
+watch(
+    () => [form.rows.length, form.rows.map((row) => row.chapter_id || row.client_group || '').join(',')],
+    () => {
+        lockChapterOrder(buildEditorGroups(form.rows));
+    },
+    { immediate: true },
+);
+
 const distinctChapters = computed(() => {
     const seen = new Map();
 
@@ -679,39 +757,19 @@ const rowMatchesSearch = (row, query) => {
 
 const groupedRows = computed(() => {
     const query = search.value.trim().toLowerCase();
-    const groups = [];
-    let current = null;
+    const groups = buildEditorGroups(form.rows);
+    const order = chapterOrderKeys.value;
+    const orderIndex = new Map(order.map((key, index) => [key, index]));
+    const sorted = [...groups].sort((left, right) => {
+        const leftIndex = orderIndex.has(left.key) ? orderIndex.get(left.key) : Number.MAX_SAFE_INTEGER;
+        const rightIndex = orderIndex.has(right.key) ? orderIndex.get(right.key) : Number.MAX_SAFE_INTEGER;
 
-    form.rows.forEach((row, index) => {
-        const key = chapterRowKey(row);
-
-        if (!current || current.key !== key) {
-            current = {
-                key,
-                chapter_id: row.chapter_id,
-                chapter_number: row.chapter_number,
-                chapter_name: row.chapter_name,
-                chapter_head_id: row.chapter_head_id,
-                ncert_verified: Boolean(row.ncert_verified),
-                has_uploaded_content: Boolean(row.has_uploaded_content),
-                content_books: row.content_books || [],
-                allIndexes: [],
-                topics: [],
-            };
-            groups.push(current);
+        if (leftIndex !== rightIndex) {
+            return leftIndex - rightIndex;
         }
 
-        current.allIndexes.push(index);
-        current.topics.push({ row, index });
-        current.chapter_number = row.chapter_number;
-        current.chapter_name = row.chapter_name;
-        current.chapter_head_id = row.chapter_head_id;
-        current.ncert_verified = Boolean(row.ncert_verified);
-        current.has_uploaded_content = Boolean(row.has_uploaded_content) || current.has_uploaded_content;
-        current.content_books = [...new Set([...(current.content_books || []), ...(row.content_books || [])])];
+        return compareChapterGroups(left, right);
     });
-
-    const sorted = [...groups].sort(compareChapterGroups);
 
     if (query === '') {
         return sorted;
@@ -1296,6 +1354,7 @@ const saveNewHead = async () => {
                                                     class="w-14 rounded border-gray-300 bg-white font-semibold"
                                                     placeholder="Ch 1"
                                                     @input="setChapterField(group, 'chapter_number', $event.target.value)"
+                                                    @blur="refreshChapterOrder"
                                                 />
                                             </div>
                                         </td>
