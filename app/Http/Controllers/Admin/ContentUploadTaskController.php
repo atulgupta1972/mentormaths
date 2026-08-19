@@ -22,6 +22,7 @@ use App\Services\ContentUploaderChapterLibraryService;
 use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
+use App\Services\FillBlankConversionService;
 use App\Services\TextbookMcqSetPlanService;
 use App\Services\TextbookChapterBookService;
 use Illuminate\Http\RedirectResponse;
@@ -44,6 +45,7 @@ class ContentUploadTaskController extends Controller
         private ContentChapterQuestionService $chapterQuestions,
         private ContentUploaderChapterLibraryService $chapterLibrary,
         private TextbookChapterBookService $bookService,
+        private FillBlankConversionService $fillBlankConversion,
     ) {}
 
     public function index(Request $request): Response
@@ -480,7 +482,10 @@ class ContentUploadTaskController extends Controller
 
         return Inertia::render('Admin/ContentTasks/Show', [
             'task' => $this->serializeTask($contentTask, detailed: true),
-            'verification' => $verification,
+            'verification' => $contentTask->isFillBlankConversion() ? null : $verification,
+            'conversionRows' => $contentTask->isFillBlankConversion()
+                ? $this->fillBlankConversion->rows($contentTask->textbookChapter)
+                : [],
             'activeSeconds' => $this->sessionService->totalActiveSeconds($contentTask),
             'deleteRequests' => $this->chapterLibrary->pendingDeleteRequestsForTask($contentTask),
             'uploaders' => $this->contentUploaders(),
@@ -742,12 +747,52 @@ class ContentUploadTaskController extends Controller
     public function publish(ContentUploadTask $contentTask, Request $request): RedirectResponse
     {
         try {
-            $this->taskService->publish($contentTask, $request->user());
+            if ($contentTask->isFillBlankConversion()) {
+                $this->fillBlankConversion->publish($contentTask, $request->user());
+            } else {
+                $this->taskService->publish($contentTask, $request->user());
+            }
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Task marked published.');
+        return back()->with('success', $contentTask->isFillBlankConversion()
+            ? 'Fill-in-blank and written sets published.'
+            : 'Task marked published.');
+    }
+
+    public function assignFillBlankConversion(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'textbook_chapter_id' => ['required', 'integer', 'exists:textbook_chapters,id'],
+            'assigned_to_user_id' => ['required', 'integer', 'exists:users,id'],
+            'offered_amount_inr' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'admin_notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $chapter = TextbookChapter::query()->findOrFail($validated['textbook_chapter_id']);
+        $uploader = User::query()->findOrFail($validated['assigned_to_user_id']);
+
+        if (! $uploader->groups()->where('code', User::ROLE_CONTENT_UPLOADER)->exists()) {
+            return back()->with('error', 'Pick a content uploader.');
+        }
+
+        try {
+            $task = $this->fillBlankConversion->assign(
+                $chapter,
+                $uploader,
+                $request->user(),
+                $validated['offered_amount_inr'] ?? null,
+                isset($validated['offered_amount_inr']) ? ContentRateCard::BASIS_PER_QUESTION : null,
+                $validated['admin_notes'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.content-tasks.show', $task)
+            ->with('success', "Fill-in-blank conversion assigned to {$uploader->name}.");
     }
 
     public function approveQuestionDelete(Request $request, ContentUploadTask $contentTask, ContentQuestionDeleteRequest $deleteRequest): RedirectResponse
@@ -808,6 +853,9 @@ class ContentUploadTaskController extends Controller
 
         $data = [
             'id' => $task->id,
+            'work_type' => $task->work_type ?: ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
+            'work_type_label' => $task->workTypeLabel(),
+            'is_fill_blank_conversion' => $task->isFillBlankConversion(),
             'status' => $task->status,
             'status_label' => $task->statusLabel(),
             'rate_basis' => $task->rate_basis,
@@ -840,23 +888,25 @@ class ContentUploadTaskController extends Controller
             $data['duplicate_override_reason'] = $task->duplicate_override_reason;
             $data['admin_notes'] = $task->admin_notes;
             $data['assigner'] = $task->assigner?->only(['id', 'name']);
-            $data['can_return_for_reverification'] = in_array($task->status, [
+            $data['can_return_for_reverification'] = ! $task->isFillBlankConversion() && in_array($task->status, [
                 ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
                 ContentUploadTask::STATUS_VERIFIED,
                 ContentUploadTask::STATUS_PUBLISHED,
                 ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
             ], true);
-            $data['can_verify_questions'] = in_array($task->status, [
+            $data['can_verify_questions'] = ! $task->isFillBlankConversion() && in_array($task->status, [
                 ContentUploadTask::STATUS_UPLOADED,
                 ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
                 ContentUploadTask::STATUS_VERIFIED,
                 ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
                 ContentUploadTask::STATUS_PUBLISHED,
             ], true);
-            $data['can_publish'] = in_array($task->status, [
-                ContentUploadTask::STATUS_VERIFIED,
-                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
-            ], true);
+            $data['can_publish'] = $task->isFillBlankConversion()
+                ? $task->status === ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH
+                : in_array($task->status, [
+                    ContentUploadTask::STATUS_VERIFIED,
+                    ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                ], true);
         }
 
         return $data;
@@ -874,6 +924,10 @@ class ContentUploadTaskController extends Controller
      */
     private function verificationPayload(ContentUploadTask $task, User $user): ?array
     {
+        if ($task->isFillBlankConversion()) {
+            return null;
+        }
+
         if (! in_array($task->status, [
             ContentUploadTask::STATUS_UPLOADED,
             ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,

@@ -35,9 +35,10 @@ class ContentTaskAssignedUploader extends Mailable
 
             if ($grade && $chNo) {
                 $shortTitle = $title ? ' — '.$title : '';
+                $kind = $task->isFillBlankConversion() ? 'fill-in-blank conversion assigned' : 'MCQ upload assigned';
 
                 return new Envelope(
-                    subject: "Mentor Maths — {$grade} Ch {$chNo}{$shortTitle} · MCQ upload assigned",
+                    subject: "Mentor Maths — {$grade} Ch {$chNo}{$shortTitle} · {$kind}",
                 );
             }
         }

@@ -346,6 +346,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/content-tasks', [ContentUploadTaskController::class, 'index'])->name('content-tasks.index');
     Route::get('/content-tasks/create', [ContentUploadTaskController::class, 'create'])->name('content-tasks.create');
+    Route::post('/content-tasks/assign-fill-blank-conversion', [ContentUploadTaskController::class, 'assignFillBlankConversion'])->name('content-tasks.assign-fill-blank-conversion');
     Route::post('/content-tasks', [ContentUploadTaskController::class, 'store'])->name('content-tasks.store');
     Route::post('/content-tasks/bulk-reassign', [ContentUploadTaskController::class, 'bulkReassign'])->name('content-tasks.bulk-reassign');
     Route::get('/content-tasks/{contentTask}', [ContentUploadTaskController::class, 'show'])->name('content-tasks.show');
@@ -438,6 +439,7 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
 
     Route::get('/tasks', [ContentTaskController::class, 'index'])->name('tasks.index');
     Route::get('/tasks/{contentTask}', [ContentTaskController::class, 'show'])->name('tasks.show');
+    Route::get('/tasks/{contentTask}/convert', [ContentTaskController::class, 'convert'])->name('tasks.convert');
     Route::post('/tasks/{contentTask}/agree', [ContentTaskController::class, 'agree'])->name('tasks.agree');
     Route::post('/tasks/{contentTask}/mark-uploaded', [ContentTaskController::class, 'markUploaded'])->name('tasks.mark-uploaded');
     Route::post('/tasks/{contentTask}/start-review', [ContentTaskController::class, 'startReview'])->name('tasks.start-review');
@@ -448,6 +450,9 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/tasks/{contentTask}/verification-diagram/remove', [ContentTaskController::class, 'removeVerificationDiagram'])->name('tasks.verification-diagram.remove');
     Route::post('/tasks/{contentTask}/complete-verification', [ContentTaskController::class, 'completeVerification'])->name('tasks.complete-verification');
     Route::post('/tasks/{contentTask}/submit-for-publish', [ContentTaskController::class, 'submitForPublish'])->name('tasks.submit-for-publish');
+    Route::post('/tasks/{contentTask}/convert-save', [ContentTaskController::class, 'saveConversionRow'])->name('tasks.convert-save');
+    Route::post('/tasks/{contentTask}/convert-check', [ContentTaskController::class, 'checkConversionRow'])->name('tasks.convert-check');
+    Route::post('/tasks/{contentTask}/convert-skip', [ContentTaskController::class, 'skipConversionRow'])->name('tasks.convert-skip');
     Route::post('/tasks/{contentTask}/ping-session', [ContentTaskController::class, 'pingSession'])->name('tasks.ping-session');
 
     Route::middleware('content.chapter')->group(function () {

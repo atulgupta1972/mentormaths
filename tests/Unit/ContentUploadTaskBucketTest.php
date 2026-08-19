@@ -25,4 +25,15 @@ class ContentUploadTaskBucketTest extends TestCase
 
         $this->assertSame('review_pending', $task->uploaderBucket());
     }
+
+    public function test_conversion_task_buckets_to_convert_pending_after_agree(): void
+    {
+        $task = new ContentUploadTask([
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'work_type' => ContentUploadTask::WORK_TYPE_FILL_BLANK_CONVERSION,
+        ]);
+
+        $this->assertSame('convert_pending', $task->uploaderBucket());
+        $this->assertSame('Fill-in-blank conversion', $task->uploaderBucketLabel());
+    }
 }

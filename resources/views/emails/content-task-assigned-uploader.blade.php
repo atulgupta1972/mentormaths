@@ -4,13 +4,19 @@
     You have been assigned
     <strong>{{ $tasks->count() }}</strong>
     textbook chapter{{ $tasks->count() === 1 ? '' : 's' }} for
-    <strong>content upload (MCQ)</strong> on Mentor Maths.
+    <strong>{{ $tasks->contains(fn ($task) => $task->isFillBlankConversion()) ? 'fill-in-blank conversion' : 'content upload (MCQ)' }}</strong>
+    on Mentor Maths.
 </p>
 
 <p>
-    <strong>Work type:</strong> Textbook chapter MCQ upload &amp; verification
-    (not doubt-solving / mentoring). You upload questions for the chapter(s) below,
-    check every question, then submit for admin publish.
+    @if ($tasks->contains(fn ($task) => $task->isFillBlankConversion()) && ! $tasks->contains(fn ($task) => ! $task->isFillBlankConversion()))
+        <strong>Work type:</strong> Convert published MCQs to fill-in-blank (and written).
+        Skip number-names. Check every included blank as a student (key hidden), then submit for admin publish.
+    @else
+        <strong>Work type:</strong> Textbook chapter MCQ upload &amp; verification
+        (not doubt-solving / mentoring). You upload questions for the chapter(s) below,
+        check every question, then submit for admin publish.
+    @endif
 </p>
 
 <p><strong>Assigned work (full details):</strong></p>
@@ -32,8 +38,13 @@
             @endif
         </p>
         <p style="margin: 0 0 6px;">
-            <strong>What to do:</strong> Upload MCQs for this chapter (from the textbook PDF / Cursor JSON),
-            then verify each question in the checklist.
+            <strong>What to do:</strong>
+            @if ($task->isFillBlankConversion())
+                Convert each MCQ to a fill-in-blank, Check as a student, skip number-names.
+            @else
+                Upload MCQs for this chapter (from the textbook PDF / Cursor JSON),
+                then verify each question in the checklist.
+            @endif
         </p>
         <p style="margin: 0;">
             <strong>Offered rate:</strong> {{ $task->rateDescription() }}
@@ -52,9 +63,14 @@
     <li>Log in → open <a href="{{ $tasksUrl }}">My content tasks</a>.</li>
     <li>Open each chapter task above and review class, chapter, and offered rate.</li>
     <li>Click <strong>I agree — start work</strong> only if you accept the rate.</li>
-    <li>Open the textbook chapter page → upload / import MCQs (JSON or zip with diagrams).</li>
-    <li>Mark upload complete, then verify <strong>every question</strong> (text, options, correct answer, hint, explanation, difficulty, diagram).</li>
-    <li>Submit for admin publish when verification is complete. Admin publishes after review.</li>
+    @if ($tasks->contains(fn ($task) => $task->isFillBlankConversion()) && ! $tasks->contains(fn ($task) => ! $task->isFillBlankConversion()))
+        <li>Open Convert, skip number-names, edit each blank, then <strong>Check as a student</strong>.</li>
+        <li>Submit when every included blank is Checked. Admin publishes fill-in-blank and written.</li>
+    @else
+        <li>Open the textbook chapter page → upload / import MCQs (JSON or zip with diagrams).</li>
+        <li>Mark upload complete, then verify <strong>every question</strong> (text, options, correct answer, hint, explanation, difficulty, diagram).</li>
+        <li>Submit for admin publish when verification is complete. Admin publishes after review.</li>
+    @endif
 </ol>
 
 @if ($guideUrl)

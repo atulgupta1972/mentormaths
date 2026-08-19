@@ -6,12 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\ContentQuestionCorrection;
 use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
+use App\Models\QuestionBlankAnswer;
 use App\Services\ContentUploaderDashboardService;
 use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
+use App\Services\FillBlankConversionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -22,6 +25,7 @@ class ContentTaskController extends Controller
         private ContentVerificationService $verificationService,
         private ContentWorkSessionService $sessionService,
         private ContentUploaderDashboardService $uploaderDashboard,
+        private FillBlankConversionService $fillBlankConversion,
     ) {}
 
     public function index(Request $request): Response
@@ -35,6 +39,10 @@ class ContentTaskController extends Controller
     public function show(Request $request, ContentUploadTask $contentTask): Response
     {
         $this->authorizeTask($contentTask, $request);
+
+        if ($contentTask->isFillBlankConversion()) {
+            return $this->convert($request, $contentTask);
+        }
 
         $contentTask->load(['textbookChapter.textbook.gradeLevel']);
 
@@ -79,7 +87,11 @@ class ContentTaskController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Rate agreed. You can start work on this chapter.');
+        return redirect()
+            ->route($contentTask->isFillBlankConversion() ? 'content.tasks.convert' : 'content.tasks.show', $contentTask)
+            ->with('success', $contentTask->isFillBlankConversion()
+                ? 'Rate agreed. Convert each MCQ, Check as a student, then submit.'
+                : 'Rate agreed. You can start work on this chapter.');
     }
 
     public function markUploaded(Request $request, ContentUploadTask $contentTask): RedirectResponse
@@ -280,12 +292,125 @@ class ContentTaskController extends Controller
         $this->authorizeTask($contentTask, $request);
 
         try {
-            $this->taskService->submitForPublish($contentTask, $request->user());
+            if ($contentTask->isFillBlankConversion()) {
+                $this->fillBlankConversion->submit($contentTask, $request->user());
+            } else {
+                $this->taskService->submitForPublish($contentTask, $request->user());
+            }
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Submitted for admin publish. You will be notified when live.');
+        return back()->with('success', $contentTask->isFillBlankConversion()
+            ? 'Submitted. Admin will publish fill-in-blank and written sets.'
+            : 'Submitted for admin publish. You will be notified when live.');
+    }
+
+    public function convert(Request $request, ContentUploadTask $contentTask): Response
+    {
+        $this->authorizeTask($contentTask, $request);
+        abort_unless($contentTask->isFillBlankConversion(), 404);
+
+        $contentTask->load(['textbookChapter.textbook.gradeLevel']);
+        $rows = $this->fillBlankConversion->rows($contentTask->textbookChapter);
+        $included = collect($rows)->where('skipped', false);
+        $checked = $included->where('checked', true)->count();
+
+        return Inertia::render('ContentUploader/Tasks/FillBlankConvert', [
+            'task' => $this->uploaderDashboard->serializeTask($contentTask) + [
+                'admin_notes' => $contentTask->admin_notes,
+                'can_work' => $contentTask->canAssigneeWork(),
+                'awaiting_agreement' => $contentTask->isAwaitingAgreement(),
+                'textbook_chapter_id' => $contentTask->textbook_chapter_id,
+            ],
+            'rows' => $rows,
+            'progress' => [
+                'total' => count($rows),
+                'included' => $included->count(),
+                'checked' => $checked,
+                'skipped' => collect($rows)->where('skipped', true)->count(),
+            ],
+            'formats' => collect(QuestionBlankAnswer::formats())->map(fn (string $format) => [
+                'value' => $format,
+                'label' => app(\App\Support\AnswerValidationService::class)->formatLabel($format),
+            ])->values()->all(),
+            'activeSeconds' => $this->sessionService->totalActiveSeconds($contentTask),
+        ]);
+    }
+
+    public function saveConversionRow(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $this->validatedConversionDraft($request);
+
+        try {
+            $this->fillBlankConversion->saveDraft($contentTask, (int) $validated['index'], $validated);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back();
+    }
+
+    public function checkConversionRow(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $this->validatedConversionDraft($request);
+        $validated['attempt'] = $request->validate([
+            'attempt' => ['required', 'string', 'max:500'],
+        ])['attempt'];
+
+        try {
+            $result = $this->fillBlankConversion->check(
+                $contentTask,
+                (int) $validated['index'],
+                $validated['attempt'],
+                $validated,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()
+            ->with($result['correct'] ? 'success' : 'error', $result['message'])
+            ->with('conversion_check', $result + ['index' => (int) $validated['index']]);
+    }
+
+    public function skipConversionRow(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $request->validate([
+            'index' => ['required', 'integer', 'min:0'],
+            'skipped' => ['required', 'boolean'],
+        ]);
+
+        try {
+            $this->fillBlankConversion->skip($contentTask, (int) $validated['index'], (bool) $validated['skipped']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', $validated['skipped']
+            ? 'Skipped — this stays MCQ only (number names / long English).'
+            : 'Unskipped. Convert and Check this blank.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validatedConversionDraft(Request $request): array
+    {
+        return $request->validate([
+            'index' => ['required', 'integer', 'min:0'],
+            'fill_blank_question_text' => ['required', 'string', 'max:5000'],
+            'fill_blank_correct_answer' => ['required', 'string', 'max:500'],
+            'fill_blank_answer_format' => ['required', 'string', Rule::in(QuestionBlankAnswer::formats())],
+            'fill_blank_decimal_places' => ['nullable', 'integer', 'min:1', 'max:8'],
+            'include_in_written' => ['sometimes', 'boolean'],
+        ]);
     }
 
     public function pingSession(Request $request, ContentUploadTask $contentTask): RedirectResponse

@@ -57,6 +57,7 @@ class HandleInertiaRequests extends Middleware
                 'whatsapp_notifications' => fn () => $request->session()->get('whatsapp_notifications'),
                 'guided_feedback' => fn () => $request->session()->get('guided_feedback'),
                 'save_confirmation' => fn () => $request->session()->get('save_confirmation'),
+                'conversion_check' => fn () => $request->session()->get('conversion_check'),
             ],
             'contentUploaderGuideUrl' => '/guides/content-uploader-guide.html',
             'appTimezone' => config('app.timezone'),

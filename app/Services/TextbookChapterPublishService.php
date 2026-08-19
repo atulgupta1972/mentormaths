@@ -248,8 +248,7 @@ class TextbookChapterPublishService
 
         $items = $chapter->extraction_items ?? [];
         $fillBlankItems = collect($items)
-            ->filter(fn (array $item) => filled($item['fill_blank_question_text'] ?? null)
-                && filled($item['fill_blank_correct_answer'] ?? null))
+            ->filter(fn (array $item) => $this->itemIsFillBlankReady($item))
             ->values();
 
         if ($fillBlankItems->isEmpty()) {
@@ -274,8 +273,7 @@ class TextbookChapterPublishService
             $writtenByIndex = [];
 
             foreach ($items as $index => $item) {
-                if (! filled($item['fill_blank_question_text'] ?? null)
-                    || ! filled($item['fill_blank_correct_answer'] ?? null)) {
+                if (! $this->itemIsFillBlankReady($item)) {
                     continue;
                 }
 
@@ -562,6 +560,23 @@ class TextbookChapterPublishService
         }
 
         return $worksheet;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function itemIsFillBlankReady(array $item): bool
+    {
+        if (! empty($item['fill_blank_skipped'])) {
+            return false;
+        }
+
+        if (($item['include_in_fill_blank'] ?? true) === false) {
+            return false;
+        }
+
+        return filled($item['fill_blank_question_text'] ?? null)
+            && filled($item['fill_blank_correct_answer'] ?? null);
     }
 
     /**

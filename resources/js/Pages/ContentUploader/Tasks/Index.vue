@@ -5,9 +5,10 @@ import { computed, ref } from 'vue';
 
 const props = defineProps({
     tasks: { type: Array, default: () => [] },
-    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, corrections_pending: 0, total_active: 0 }) },
+    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, convert_pending: 0, corrections_pending: 0, total_active: 0 }) },
     uploadPending: { type: Array, default: () => [] },
     reviewPending: { type: Array, default: () => [] },
+    convertPending: { type: Array, default: () => [] },
     correctionsPending: { type: Array, default: () => [] },
 });
 
@@ -27,12 +28,17 @@ const chapterHref = (task) => {
         return route('content.tasks.show', task.id);
     }
 
+    if (task.is_fill_blank_conversion) {
+        return route('content.tasks.convert', task.id);
+    }
+
     return route('content.textbooks.show', task.chapter.id);
 };
 
 const statusTone = (bucket) => ({
     upload_pending: 'bg-amber-50 text-amber-900 ring-amber-200',
     review_pending: 'bg-violet-50 text-violet-900 ring-violet-200',
+    convert_pending: 'bg-emerald-50 text-emerald-900 ring-emerald-200',
     done: 'bg-emerald-50 text-emerald-900 ring-emerald-200',
 }[bucket] || 'bg-gray-50 text-gray-700 ring-gray-200');
 
@@ -89,6 +95,14 @@ const filteredTasks = computed(() => {
                         @click="bucketFilter = 'review_pending'"
                     >
                         Review pending · {{ summary.review_pending }}
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-full px-3 py-1 text-xs font-semibold ring-1"
+                        :class="bucketFilter === 'convert_pending' ? 'bg-emerald-700 text-white ring-emerald-700' : 'bg-emerald-50 text-emerald-900 ring-emerald-200'"
+                        @click="bucketFilter = 'convert_pending'"
+                    >
+                        Convert fill-in-blank · {{ summary.convert_pending || 0 }}
                     </button>
                     <span
                         v-if="summary.corrections_pending"
@@ -183,6 +197,13 @@ const filteredTasks = computed(() => {
                                         >
                                             Review →
                                         </button>
+                                        <Link
+                                            v-else-if="task.bucket === 'convert_pending'"
+                                            :href="chapterHref(task)"
+                                            class="font-medium text-emerald-700 hover:underline"
+                                        >
+                                            Convert →
+                                        </Link>
                                         <Link
                                             v-else-if="task.bucket === 'upload_pending'"
                                             :href="chapterHref(task)"

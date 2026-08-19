@@ -34,6 +34,7 @@ class ContentUploaderDashboardService
 
         $uploadPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'upload_pending')->values();
         $reviewPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'review_pending')->values();
+        $convertPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'convert_pending')->values();
         $correctionsPending = $this->pendingCorrectionsForUser($user);
 
         return [
@@ -41,11 +42,13 @@ class ContentUploaderDashboardService
             'summary' => [
                 'upload_pending' => $uploadPending->count(),
                 'review_pending' => $reviewPending->count(),
+                'convert_pending' => $convertPending->count(),
                 'corrections_pending' => $correctionsPending->count(),
-                'total_active' => $uploadPending->count() + $reviewPending->count(),
+                'total_active' => $uploadPending->count() + $reviewPending->count() + $convertPending->count(),
             ],
             'uploadPending' => $uploadPending,
             'reviewPending' => $reviewPending,
+            'convertPending' => $convertPending,
             'correctionsPending' => $correctionsPending,
         ];
     }
@@ -95,6 +98,9 @@ class ContentUploaderDashboardService
 
         return [
             'id' => $task->id,
+            'work_type' => $task->work_type ?: ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
+            'work_type_label' => $task->workTypeLabel(),
+            'is_fill_blank_conversion' => $task->isFillBlankConversion(),
             'status' => $task->status,
             'status_label' => $task->statusLabel(),
             'rate_basis' => $task->rate_basis,

@@ -26,8 +26,13 @@ class ContentUploadTask extends Model
 
     public const STATUS_CANCELLED = 'cancelled';
 
+    public const WORK_TYPE_MCQ_UPLOAD = 'mcq_upload';
+
+    public const WORK_TYPE_FILL_BLANK_CONVERSION = 'fill_blank_conversion';
+
     protected $fillable = [
         'textbook_chapter_id',
+        'work_type',
         'assigned_to_user_id',
         'assigned_by_user_id',
         'status',
@@ -228,6 +233,18 @@ class ContentUploadTask extends Model
         ], true) && $this->payableAmountInr() > 0;
     }
 
+    public function isFillBlankConversion(): bool
+    {
+        return ($this->work_type ?: self::WORK_TYPE_MCQ_UPLOAD) === self::WORK_TYPE_FILL_BLANK_CONVERSION;
+    }
+
+    public function workTypeLabel(): string
+    {
+        return $this->isFillBlankConversion()
+            ? 'Fill-in-blank conversion'
+            : 'MCQ upload';
+    }
+
     public function isAwaitingAgreement(): bool
     {
         return $this->status === self::STATUS_PENDING_AGREEMENT;
@@ -257,6 +274,22 @@ class ContentUploadTask extends Model
      */
     public function uploaderBucket(): string
     {
+        if ($this->isFillBlankConversion()) {
+            if (in_array($this->status, [
+                self::STATUS_SUBMITTED_FOR_PUBLISH,
+                self::STATUS_PUBLISHED,
+                self::STATUS_CANCELLED,
+            ], true)) {
+                return 'done';
+            }
+
+            if ($this->status === self::STATUS_PENDING_AGREEMENT) {
+                return 'upload_pending';
+            }
+
+            return 'convert_pending';
+        }
+
         if (in_array($this->status, [
             self::STATUS_SUBMITTED_FOR_PUBLISH,
             self::STATUS_PUBLISHED,
@@ -291,8 +324,9 @@ class ContentUploadTask extends Model
     public function uploaderBucketLabel(): string
     {
         return match ($this->uploaderBucket()) {
-            'upload_pending' => 'Upload pending',
+            'upload_pending' => $this->isFillBlankConversion() ? 'Agree rate' : 'Upload pending',
             'review_pending' => 'Review pending',
+            'convert_pending' => 'Fill-in-blank conversion',
             default => 'Complete',
         };
     }
@@ -301,7 +335,9 @@ class ContentUploadTask extends Model
     {
         return match ($this->status) {
             self::STATUS_PENDING_AGREEMENT => 'Awaiting rate agreement',
-            self::STATUS_IN_PROGRESS => 'In progress',
+            self::STATUS_IN_PROGRESS => $this->isFillBlankConversion()
+                ? 'Convert fill-in-blanks'
+                : 'In progress',
             self::STATUS_UPLOADED => 'Uploaded — verify questions',
             self::STATUS_VERIFICATION_IN_PROGRESS => 'Verification in progress',
             self::STATUS_VERIFIED => 'Verified — ready to publish',

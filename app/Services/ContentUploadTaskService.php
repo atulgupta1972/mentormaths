@@ -62,6 +62,7 @@ class ContentUploadTaskService
 
                 $task = ContentUploadTask::create([
                     'textbook_chapter_id' => $chapter->id,
+                    'work_type' => ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
                     'assigned_to_user_id' => $uploader->id,
                     'assigned_by_user_id' => $admin->id,
                     'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
@@ -489,7 +490,9 @@ class ContentUploadTaskService
             ->groupBy('textbook_chapter_id');
 
         return $mapped->mapWithKeys(function (int $chapterId, int $questionId) use ($tasks) {
-            $task = $tasks->get($chapterId)?->first();
+            $chapterTasks = $tasks->get($chapterId) ?? collect();
+            $task = $chapterTasks->first(fn (ContentUploadTask $row) => ! $row->isFillBlankConversion())
+                ?? $chapterTasks->first();
 
             return $task ? [$questionId => $task] : [];
         });

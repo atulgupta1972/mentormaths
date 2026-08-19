@@ -21,6 +21,7 @@ class ContentDuplicateGuardService
 
         $existingTask = ContentUploadTask::query()
             ->where('textbook_chapter_id', $chapter->id)
+            ->where('work_type', ContentUploadTask::WORK_TYPE_MCQ_UPLOAD)
             ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
             ->first();
 

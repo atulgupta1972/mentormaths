@@ -12,7 +12,9 @@ use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
+use App\Models\ContentUploadTask;
 use App\Models\TextbookChapter;
+use App\Models\User;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\PracticeSetCodeService;
@@ -443,6 +445,11 @@ class QuestionHubController extends Controller
             'setCards' => $setCards->values()->all(),
             'chapterTests' => $chapterTests->values()->all(),
             'bookContent' => $bookContent,
+            'contentUploaders' => User::query()
+                ->whereHas('groups', fn ($q) => $q->where('code', User::ROLE_CONTENT_UPLOADER))
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'email']),
             'writtenSheets' => $writtenSheets,
             'formulaSets' => $formulaSets,
             'stats' => [
@@ -623,7 +630,15 @@ class QuestionHubController extends Controller
                 ->get()
                 ->keyBy('id');
 
-        return $books->map(function (TextbookChapter $row) use ($worksheets) {
+        $conversions = ContentUploadTask::query()
+            ->whereIn('textbook_chapter_id', $books->pluck('id'))
+            ->where('work_type', ContentUploadTask::WORK_TYPE_FILL_BLANK_CONVERSION)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->with('assignee:id,name')
+            ->get()
+            ->keyBy('textbook_chapter_id');
+
+        return $books->map(function (TextbookChapter $row) use ($worksheets, $conversions) {
             $items = $row->extraction_items ?? [];
             $fillReady = collect($items)
                 ->filter(fn (array $item) => filled($item['fill_blank_question_text'] ?? null)
@@ -641,14 +656,25 @@ class QuestionHubController extends Controller
                 ];
             }
 
+            $conversion = $conversions->get($row->id);
+            $canConvert = $items !== [] || $row->mcqWorksheetIds() !== [];
+
             return [
                 'textbook_chapter_id' => $row->id,
                 'book_name' => $row->textbook?->name,
                 'book_code' => $row->textbook?->code,
                 'mcq_count' => count($items) ?: collect($parts)->sum(fn (array $part) => (int) ($part['mcq']['questions_count'] ?? 0)),
                 'fill_blank_ready_count' => $fillReady,
-                'can_convert' => $items !== [] || $row->mcqWorksheetIds() !== [],
+                'can_convert' => $canConvert,
+                'can_assign_conversion' => $canConvert && ! $conversion,
                 'convert_url' => route('admin.textbooks.show', $row).'#convert',
+                'conversion' => $conversion ? [
+                    'task_id' => $conversion->id,
+                    'status' => $conversion->status,
+                    'status_label' => $conversion->statusLabel(),
+                    'assignee_name' => $conversion->assignee?->name,
+                    'task_url' => route('admin.content-tasks.show', $conversion),
+                ] : null,
                 'parts' => $parts,
             ];
         })->values()->all();

@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import SaveConfirmationModal from '@/Components/SaveConfirmationModal.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { questionHubClassUrl } from '@/utils/questionHub';
 
 const props = defineProps({
@@ -16,6 +16,7 @@ const props = defineProps({
     writtenSheets: { type: Array, default: () => [] },
     formulaSets: { type: Array, default: () => [] },
     bookContent: { type: Array, default: () => [] },
+    contentUploaders: { type: Array, default: () => [] },
     stats: Object,
     board: Object,
 });
@@ -90,6 +91,35 @@ const packageAsSet = (card) => {
     router.post(route('admin.practice-sets.from-topic', card.topic_id), {
         tier: card.tier,
         fill_in_blank: card.fill_in_blank ?? false,
+    });
+};
+
+const conversionForms = reactive({});
+watch(
+    () => props.bookContent,
+    (books) => {
+        (books || []).forEach((book) => {
+            if (!conversionForms[book.textbook_chapter_id]) {
+                conversionForms[book.textbook_chapter_id] = {
+                    assigned_to_user_id: '',
+                    offered_amount_inr: '',
+                };
+            }
+        });
+    },
+    { immediate: true },
+);
+
+const assignConversion = (book) => {
+    const form = conversionForms[book.textbook_chapter_id];
+    if (!form?.assigned_to_user_id) {
+        return;
+    }
+
+    router.post(route('admin.content-tasks.assign-fill-blank-conversion'), {
+        textbook_chapter_id: book.textbook_chapter_id,
+        assigned_to_user_id: form.assigned_to_user_id,
+        offered_amount_inr: form.offered_amount_inr || null,
     });
 };
 
@@ -335,7 +365,7 @@ const clearBank = (card) => {
 
                 <div v-if="bookContent?.length && isAdmin" class="space-y-3">
                     <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-700">Book content — MCQ, fill-in-blank, written</h3>
-                    <p class="text-sm text-slate-600">Each part is one MCQ set plus matching fill-in-blank and written. Convert from the published MCQs, review JSON, then publish.</p>
+                    <p class="text-sm text-slate-600">Each part is one MCQ set plus matching fill-in-blank and written. Assign conversion to any uploader — they Check as a student, then you publish.</p>
                     <div
                         v-for="book in bookContent"
                         :key="book.textbook_chapter_id"
@@ -348,20 +378,50 @@ const clearBank = (card) => {
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <Link
-                                    v-if="book.can_convert"
-                                    :href="book.convert_url"
+                                    v-if="book.conversion"
+                                    :href="book.conversion.task_url"
                                     class="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
                                 >
-                                    Convert MCQ → fill-in-blank
+                                    {{ book.conversion.status_label }} · {{ book.conversion.assignee_name }}
                                 </Link>
                                 <Link
                                     v-if="book.can_convert"
                                     :href="book.convert_url"
-                                    class="rounded-md border border-violet-300 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-900 hover:bg-violet-100"
+                                    class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                                 >
-                                    Convert → written
+                                    JSON convert (admin)
                                 </Link>
                             </div>
+                        </div>
+                        <form
+                            v-if="book.can_assign_conversion && conversionForms[book.textbook_chapter_id]"
+                            class="mt-4 flex flex-wrap items-end gap-2 rounded-lg border border-emerald-100 bg-emerald-50/50 p-3"
+                            @submit.prevent="assignConversion(book)"
+                        >
+                            <div>
+                                <label class="text-xs font-medium text-slate-600">Uploader</label>
+                                <select
+                                    v-model="conversionForms[book.textbook_chapter_id].assigned_to_user_id"
+                                    required
+                                    class="mt-1 rounded-md border-gray-300 text-sm"
+                                >
+                                    <option value="" disabled>Select</option>
+                                    <option v-for="person in contentUploaders" :key="person.id" :value="person.id">{{ person.name }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs font-medium text-slate-600">₹ / question (optional)</label>
+                                <input
+                                    v-model="conversionForms[book.textbook_chapter_id].offered_amount_inr"
+                                    type="number"
+                                    min="1"
+                                    class="mt-1 w-28 rounded-md border-gray-300 text-sm"
+                                >
+                            </div>
+                            <button type="submit" class="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800">
+                                Assign fill-in-blank conversion
+                            </button>
+                        </form>
                         </div>
                         <div v-if="book.parts?.length" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             <div
