@@ -9,14 +9,36 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('textbook_chapters', function (Blueprint $table) {
+            $table->dropForeign(['textbook_id']);
+        });
+
+        Schema::table('textbook_chapters', function (Blueprint $table) {
             $table->dropUnique(['textbook_id', 'syllabus_chapter_id']);
+        });
+
+        Schema::table('textbook_chapters', function (Blueprint $table) {
+            $table->foreign('textbook_id')
+                ->references('id')
+                ->on('textbooks')
+                ->cascadeOnDelete();
         });
     }
 
     public function down(): void
     {
         Schema::table('textbook_chapters', function (Blueprint $table) {
+            $table->dropForeign(['textbook_id']);
+        });
+
+        Schema::table('textbook_chapters', function (Blueprint $table) {
             $table->unique(['textbook_id', 'syllabus_chapter_id']);
+        });
+
+        Schema::table('textbook_chapters', function (Blueprint $table) {
+            $table->foreign('textbook_id')
+                ->references('id')
+                ->on('textbooks')
+                ->cascadeOnDelete();
         });
     }
 };
