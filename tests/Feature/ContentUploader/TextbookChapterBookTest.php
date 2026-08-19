@@ -194,6 +194,62 @@ class TextbookChapterBookTest extends TestCase
         $this->assertSame($targetChapter->id, $question->topic->syllabus_chapter_id);
     }
 
+    public function test_move_keeps_questions_when_target_already_has_the_same_book(): void
+    {
+        [$uploader, $sourceBookChapter] = $this->seedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $sourceChapter = SyllabusChapter::query()->findOrFail($sourceBookChapter->syllabus_chapter_id);
+        $sourceVersion = SyllabusVersion::query()->findOrFail($sourceChapter->syllabus_version_id);
+
+        $targetChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $sourceVersion->id,
+            'name' => 'Perimeter and Area',
+            'chapter_number' => '6',
+            'sort_order' => 6,
+        ]);
+
+        TextbookChapter::query()->create([
+            'textbook_id' => $sourceBookChapter->textbook_id,
+            'syllabus_chapter_id' => $targetChapter->id,
+            'chapter_number' => 6,
+            'title' => 'Perimeter and Area',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+
+        $sourceTopic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $sourceChapter->id,
+            'name' => 'Textbook',
+            'sort_order' => 900,
+        ]);
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $sourceTopic->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Find the perimeter of a square of side 8 cm.',
+            'source' => Question::SOURCE_PDF,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.syllabus.chapters.move-content', [$sourceVersion, $sourceChapter]), [
+                'target_syllabus_chapter_id' => $targetChapter->id,
+            ], ['Accept' => 'application/json'])
+            ->assertOk();
+
+        $sourceBookChapter->refresh();
+        $question->refresh();
+
+        $this->assertSame($targetChapter->id, $sourceBookChapter->syllabus_chapter_id);
+        $this->assertSame($targetChapter->id, $question->topic->syllabus_chapter_id);
+        $this->assertSame(
+            2,
+            TextbookChapter::query()
+                ->where('textbook_id', $sourceBookChapter->textbook_id)
+                ->where('syllabus_chapter_id', $targetChapter->id)
+                ->count(),
+        );
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask, 3: Textbook}
      */

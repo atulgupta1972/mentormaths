@@ -81,6 +81,18 @@ class TextbookChapter extends Model
         return $this->mcq_worksheet_id ? [(int) $this->mcq_worksheet_id] : [];
     }
 
+    /**
+     * @return list<int>
+     */
+    public function allWorksheetIds(): array
+    {
+        return array_values(array_unique(array_filter([
+            ...$this->mcqWorksheetIds(),
+            (int) ($this->fill_blank_worksheet_id ?? 0),
+            (int) ($this->written_worksheet_id ?? 0),
+        ])));
+    }
+
     public function writtenWorksheet(): BelongsTo
     {
         return $this->belongsTo(Worksheet::class, 'written_worksheet_id');

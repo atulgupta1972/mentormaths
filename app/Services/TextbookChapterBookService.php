@@ -246,16 +246,6 @@ class TextbookChapterBookService
 
         $textbook = $this->textbookForGrade($chapter->textbook, $targetGradeId);
 
-        $duplicate = TextbookChapter::query()
-            ->where('textbook_id', $textbook->id)
-            ->where('syllabus_chapter_id', $target->id)
-            ->whereKeyNot($chapter->id)
-            ->exists();
-
-        if ($duplicate) {
-            throw new \InvalidArgumentException('This book already has that syllabus chapter.');
-        }
-
         return DB::transaction(function () use ($chapter, $target, $textbook) {
             $oldChapterId = (int) $chapter->syllabus_chapter_id;
             $newTopic = $this->textbookTopic($target);

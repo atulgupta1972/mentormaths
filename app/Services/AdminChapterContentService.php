@@ -233,28 +233,16 @@ class AdminChapterContentService
 
             foreach ($textbookColumns as $bookColumn) {
                 $bookItems = [];
-                $textbookChapter = $chapterTextbookRows
-                    ->first(fn (TextbookChapter $row) => (int) $row->textbook_id === (int) $bookColumn['id']);
+                $seenWorksheetIds = [];
 
-                if ($textbookChapter) {
-                    foreach ($textbookChapter->mcqWorksheetIds() as $worksheetId) {
+                foreach ($chapterTextbookRows->where('textbook_id', (int) $bookColumn['id']) as $textbookChapter) {
+                    foreach ($textbookChapter->allWorksheetIds() as $worksheetId) {
+                        if (isset($seenWorksheetIds[$worksheetId])) {
+                            continue;
+                        }
+
+                        $seenWorksheetIds[$worksheetId] = true;
                         $worksheet = $worksheetsById->get($worksheetId);
-
-                        if ($worksheet) {
-                            $bookItems[] = $this->buildSetItem($worksheet, 'B');
-                        }
-                    }
-
-                    if ($textbookChapter->fill_blank_worksheet_id) {
-                        $worksheet = $worksheetsById->get((int) $textbookChapter->fill_blank_worksheet_id);
-
-                        if ($worksheet) {
-                            $bookItems[] = $this->buildSetItem($worksheet, 'B');
-                        }
-                    }
-
-                    if ($textbookChapter->written_worksheet_id) {
-                        $worksheet = $worksheetsById->get((int) $textbookChapter->written_worksheet_id);
 
                         if ($worksheet) {
                             $bookItems[] = $this->buildSetItem($worksheet, 'B');
