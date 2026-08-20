@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ChapterQuestionPlan from '@/Components/ChapterQuestionPlan.vue';
+import PracticeSetMasterProfileSelect from '@/Components/PracticeSetMasterProfileSelect.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -28,6 +29,11 @@ const props = defineProps({
     pageError: String,
     scope: { type: String, default: 'topic' },
     chapterPlan: { type: Array, default: () => [] },
+    masterProfiles: { type: Array, default: () => [] },
+    difficultyMarks: { type: Object, default: () => ({ easy: 1, medium: 2, hard: 3 }) },
+    bookOptions: { type: Array, default: () => [] },
+    selectedTextbookChapterId: { type: [Number, String, null], default: null },
+    selectedMasterProfile: { type: String, default: null },
 });
 
 const page = usePage();
@@ -51,6 +57,20 @@ const promptSettings = ref({
     hard: props.promptOptions?.hard ?? 2,
     focus: props.promptOptions?.focus ?? '',
 });
+
+const selectedMasterProfile = ref(props.selectedMasterProfile || '');
+const selectedTextbookChapterId = ref(props.selectedTextbookChapterId || '');
+
+const applyMasterProfile = (profile) => {
+    if (!profile) {
+        return;
+    }
+
+    promptSettings.value.total = profile.total;
+    promptSettings.value.easy = profile.easy;
+    promptSettings.value.medium = profile.medium;
+    promptSettings.value.hard = profile.hard;
+};
 
 const buildDefaultChapterPlan = () => (props.chapterTopics || []).map((topic, index) => ({
     topic_id: topic.id,
@@ -170,6 +190,14 @@ function buildQueryParams(overrides = {}) {
 
     if (promptSettings.value.focus) {
         params.focus = promptSettings.value.focus;
+    }
+
+    if (selectedMasterProfile.value) {
+        params.master_profile = selectedMasterProfile.value;
+    }
+
+    if (selectedTextbookChapterId.value) {
+        params.textbook_chapter_id = selectedTextbookChapterId.value;
     }
 
     if (scopeMode.value === 'chapter') {
@@ -568,8 +596,19 @@ onMounted(() => {
                 <div v-if="isTopicScope && topic" class="rounded-lg border border-indigo-100 bg-indigo-50 p-6">
                     <h3 class="font-medium text-indigo-900">Step 1 — Cursor prompt</h3>
                     <p class="mt-1 text-sm text-indigo-950">
-                        Copy this prompt to Cursor. It asks for fill-in-the-blank JSON only (no MCQ options).
+                        Pick Learner / Achiever / Expert to auto-fill counts, then copy the prompt to Cursor.
                     </p>
+
+                    <div class="mt-4">
+                        <PracticeSetMasterProfileSelect
+                            v-model="selectedMasterProfile"
+                            v-model:textbook-chapter-id="selectedTextbookChapterId"
+                            :master-profiles="masterProfiles"
+                            :difficulty-marks="difficultyMarks"
+                            :book-options="bookOptions"
+                            @apply="applyMasterProfile"
+                        />
+                    </div>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-5 max-w-3xl">
                         <div>

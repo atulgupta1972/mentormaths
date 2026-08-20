@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ChapterQuestionPlan from '@/Components/ChapterQuestionPlan.vue';
+import PracticeSetMasterProfileSelect from '@/Components/PracticeSetMasterProfileSelect.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -27,6 +28,11 @@ const props = defineProps({
     answerKeyDraft: { type: Array, default: () => [] },
     selectedQuestionIds: { type: Array, default: () => [] },
     supportsDiagrams: { type: Boolean, default: false },
+    masterProfiles: { type: Array, default: () => [] },
+    difficultyMarks: { type: Object, default: () => ({ easy: 1, medium: 2, hard: 3 }) },
+    bookOptions: { type: Array, default: () => [] },
+    selectedTextbookChapterId: { type: [Number, String, null], default: null },
+    selectedMasterProfile: { type: String, default: null },
 });
 
 const page = usePage();
@@ -38,6 +44,20 @@ const promptSettings = ref({
     hard: props.promptOptions?.hard ?? 2,
     focus: props.promptOptions?.focus ?? '',
 });
+
+const selectedMasterProfile = ref(props.selectedMasterProfile || '');
+const selectedTextbookChapterId = ref(props.selectedTextbookChapterId || '');
+
+const applyMasterProfile = (profile) => {
+    if (!profile) {
+        return;
+    }
+
+    promptSettings.value.total = profile.total;
+    promptSettings.value.easy = profile.easy;
+    promptSettings.value.medium = profile.medium;
+    promptSettings.value.hard = profile.hard;
+};
 
 const topicScope = ref(props.filters.topic_scope || 'one');
 const selectedTopicIds = ref(
@@ -290,6 +310,14 @@ function buildQueryParams() {
 
         if (promptSettings.value.focus) {
             params.focus = promptSettings.value.focus;
+        }
+
+        if (selectedMasterProfile.value) {
+            params.master_profile = selectedMasterProfile.value;
+        }
+
+        if (selectedTextbookChapterId.value) {
+            params.textbook_chapter_id = selectedTextbookChapterId.value;
         }
     }
 
@@ -1431,8 +1459,19 @@ const submit = () => {
                         <div v-if="form.chapter_id && !useChapterCursorPlan" class="rounded-lg border border-violet-200 bg-white p-3">
                             <p class="text-sm font-medium text-gray-900">Question counts for Cursor</p>
                             <p class="mt-1 text-xs text-gray-600">
-                                Set how many sums to generate, select a topic, then refresh the prompt.
+                                Select Learner / Achiever / Expert to auto-fill counts, then refresh the prompt.
                             </p>
+
+                            <div class="mt-3">
+                                <PracticeSetMasterProfileSelect
+                                    v-model="selectedMasterProfile"
+                                    v-model:textbook-chapter-id="selectedTextbookChapterId"
+                                    :master-profiles="masterProfiles"
+                                    :difficulty-marks="difficultyMarks"
+                                    :book-options="bookOptions"
+                                    @apply="applyMasterProfile"
+                                />
+                            </div>
 
                             <div class="mt-3 grid gap-3 sm:grid-cols-5 max-w-3xl">
                                 <div>

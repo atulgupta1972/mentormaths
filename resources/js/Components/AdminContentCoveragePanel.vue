@@ -108,6 +108,37 @@ const questionSuffix = (item) => {
     return count > 0 ? ` (${count})` : '';
 };
 
+const TIER_ORDER = ['starter', 'builder', 'champion', 'chapter_test'];
+
+const groupItemsByTier = (items) => {
+    const map = new Map();
+
+    for (const item of items ?? []) {
+        const tier = item.tier || 'starter';
+        if (! map.has(tier)) {
+            map.set(tier, {
+                tier,
+                label: item.tier_label || tier,
+                items: [],
+            });
+        }
+        map.get(tier).items.push(item);
+    }
+
+    return [...map.values()].sort((a, b) => {
+        const ai = TIER_ORDER.indexOf(a.tier);
+        const bi = TIER_ORDER.indexOf(b.tier);
+
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+};
+
+const tierHeaderClass = (tier) => ({
+    starter: 'text-sky-800',
+    builder: 'text-amber-800',
+    champion: 'text-emerald-800',
+}[tier] ?? 'text-slate-700');
+
 const formatDrillDown = (items) => {
     if (!items?.length) {
         return '';
@@ -348,27 +379,36 @@ const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chap
                                     </Link>
                                     <div v-for="bucket in ['practice', 'test', 'written', 'fill_blank', 'formula']" :key="`${chapter.id}-${bucket}`">
                                         <template v-if="chapter.items?.[bucket]?.length">
-                                            <p class="text-[10px] font-bold uppercase tracking-wide text-slate-700">
-                                                {{ bucket.replace('_', ' ') }}
-                                            </p>
-                                            <div class="mt-0.5 flex flex-wrap gap-1">
-                                                <Link
-                                                    v-for="item in chapter.items[bucket]"
-                                                    :key="`${bucket}-${item.worksheet_id}`"
-                                                    :href="item.admin_url"
-                                                    class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm hover:border-indigo-400"
-                                                    @click.stop
+                                            <div
+                                                v-for="tierGroup in groupItemsByTier(chapter.items[bucket])"
+                                                :key="`${chapter.id}-${bucket}-${tierGroup.tier}`"
+                                                class="mb-1"
+                                            >
+                                                <p
+                                                    class="text-[10px] font-bold uppercase tracking-wide"
+                                                    :class="tierHeaderClass(tierGroup.tier)"
                                                 >
-                                                    <span class="font-mono text-[11px] font-bold text-slate-900">
-                                                        {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
-                                                    </span>
-                                                    <span
-                                                        class="rounded px-1 py-px text-[9px] font-bold uppercase"
-                                                        :class="statusClass(item.status)"
+                                                    {{ tierGroup.label }} · {{ bucket.replace('_', ' ') }}
+                                                </p>
+                                                <div class="mt-0.5 flex flex-wrap gap-1">
+                                                    <Link
+                                                        v-for="item in tierGroup.items"
+                                                        :key="`${bucket}-${item.worksheet_id}`"
+                                                        :href="item.admin_url"
+                                                        class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm hover:border-indigo-400"
+                                                        @click.stop
                                                     >
-                                                        {{ item.status_label }}
-                                                    </span>
-                                                </Link>
+                                                        <span class="font-mono text-[11px] font-bold text-slate-900">
+                                                            {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
+                                                        </span>
+                                                        <span
+                                                            class="rounded px-1 py-px text-[9px] font-bold uppercase"
+                                                            :class="statusClass(item.status)"
+                                                        >
+                                                            {{ item.status_label }}
+                                                        </span>
+                                                    </Link>
+                                                </div>
                                             </div>
                                         </template>
                                     </div>

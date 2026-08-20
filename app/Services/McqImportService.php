@@ -6,6 +6,7 @@ use App\Models\Question;
 use App\Models\QuestionOption;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
+use App\Models\TextbookChapter;
 use App\Support\McqGenerationPrompt;
 use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
@@ -417,6 +418,27 @@ REQ,
         $focusBlock = $focus !== ''
             ? "\nFocus / sum types (priority):\n{$focus}"
             : '';
+
+        /** @var TextbookChapter|null $bookChapter */
+        $bookChapter = $options['book_chapter'] ?? null;
+        if ($bookChapter instanceof TextbookChapter) {
+            $bookContext = app(BookBasisPromptService::class)->bookContext($bookChapter, $topic);
+
+            return $this->basePrompt(
+                'Create MCQ questions aligned to the published textbook chapter topics below. Return ONLY valid JSON (no markdown fences). Do not invent topics outside the book topic list.',
+                $bookContext,
+                <<<REQ
+Requirements:
+{$difficultyBlock}
+- Prefer the listed book topics for coverage (especially when they match the focus syllabus topic)
+- Class-appropriate CBSE/ICSE level matching the book
+- 4 options each, exactly one correct answer
+- Include "method_hint": short theory/rules ONLY (e.g. sign rules for integers). NO final numeric answer, NO option letter, NO step-by-step calculation to the answer.
+- Include "explanation": full teacher-only solution (can include working and answer key letter) — students never see this during practice
+- Set "difficulty" on each question to Easy, Medium, or Hard{$focusBlock}
+REQ,
+            );
+        }
 
         return $this->basePrompt(
             'Create MCQ questions for this maths topic. Return ONLY valid JSON (no markdown fences).',

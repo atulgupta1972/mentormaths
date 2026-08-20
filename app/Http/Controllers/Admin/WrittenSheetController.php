@@ -14,6 +14,7 @@ use App\Models\SyllabusVersion;
 use App\Models\Worksheet;
 use App\Models\WrittenSubmission;
 use App\Services\AdminGradeContext;
+use App\Services\BookBasisPromptService;
 use App\Services\FillBlankImportService;
 use App\Services\QuestionZipImportService;
 use App\Services\SetAssignmentService;
@@ -22,6 +23,7 @@ use App\Services\WrittenSheetService;
 use App\Services\WrittenSheetAnswerKeyParser;
 use App\Services\WrittenSubmissionService;
 use App\Support\DiagramQuestionSupport;
+use App\Support\PracticeSetMasterProfile;
 use App\Support\WrittenSubmissionLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -45,6 +47,7 @@ class WrittenSheetController extends Controller
         private QuestionZipImportService $zipImportService,
         private WrittenSheetPdfImportService $pdfImportService,
         private WrittenSubmissionService $submissionService,
+        private BookBasisPromptService $bookBasisPromptService,
     ) {}
 
     public function index(Request $request): Response
@@ -137,13 +140,38 @@ class WrittenSheetController extends Controller
             $selectedQuestionIds = array_values(array_intersect($selectedQuestionIds, $validQuestionIds));
         }
 
-        $promptOptions = [
-            'total' => max(1, min(50, $request->integer('total') ?: 6)),
-            'easy' => max(0, $request->integer('easy') ?: 2),
-            'medium' => max(0, $request->integer('medium') ?: 2),
-            'hard' => max(0, $request->integer('hard') ?: 2),
-            'focus' => $request->string('focus')->toString(),
-        ];
+        $profileKey = $request->string('master_profile')->toString();
+        $profileCounts = PracticeSetMasterProfile::isValid($profileKey)
+            ? PracticeSetMasterProfile::counts($profileKey)
+            : null;
+        $hasExplicitCounts = $request->filled('easy') || $request->filled('medium') || $request->filled('hard') || $request->filled('total');
+
+        if ($profileCounts && ! $hasExplicitCounts) {
+            $promptOptions = [
+                'total' => $profileCounts['total'],
+                'easy' => $profileCounts['easy'],
+                'medium' => $profileCounts['medium'],
+                'hard' => $profileCounts['hard'],
+                'focus' => $request->string('focus')->toString(),
+                'master_profile' => $profileKey,
+            ];
+        } else {
+            $promptOptions = [
+                'total' => max(1, min(50, $request->integer('total') ?: ($profileCounts['total'] ?? 6))),
+                'easy' => max(0, $request->integer('easy') ?: ($profileCounts['easy'] ?? 2)),
+                'medium' => max(0, $request->integer('medium') ?: ($profileCounts['medium'] ?? 2)),
+                'hard' => max(0, $request->integer('hard') ?: ($profileCounts['hard'] ?? 2)),
+                'focus' => $request->string('focus')->toString(),
+                'master_profile' => $profileCounts ? $profileKey : null,
+            ];
+        }
+
+        $textbookChapterId = $request->integer('textbook_chapter_id') ?: null;
+        $bookChapter = $textbookChapterId
+            ? $this->bookBasisPromptService->findPublished($textbookChapterId, $chapterId ?: null)
+            : null;
+        $promptOptions['textbook_chapter_id'] = $bookChapter?->id;
+        $promptOptions['book_chapter'] = $bookChapter;
 
         $cursorPrompt = session('written_sheet_chapter_prompt');
 
@@ -183,6 +211,11 @@ class WrittenSheetController extends Controller
             'selectedQuestionIds' => $selectedQuestionIds,
             'cursorPrompt' => $cursorPrompt,
             'promptOptions' => $promptOptions,
+            'masterProfiles' => PracticeSetMasterProfile::options(),
+            'difficultyMarks' => PracticeSetMasterProfile::marks(),
+            'bookOptions' => $this->bookBasisPromptService->optionsForSyllabusChapter($chapterId ?: null),
+            'selectedTextbookChapterId' => $bookChapter?->id,
+            'selectedMasterProfile' => $promptOptions['master_profile'] ?? null,
             'chapterPlan' => $this->hydrateWrittenSheetChapterPlan(
                 session('written_sheet_chapter_plan', []),
                 $topics,

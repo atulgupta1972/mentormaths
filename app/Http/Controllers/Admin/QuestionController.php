@@ -8,8 +8,8 @@ use App\Models\Question;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
-use App\Support\QuestionBankPurpose;
 use App\Services\AdminGradeContext;
+use App\Services\BookBasisPromptService;
 use App\Services\FillBlankImportService;
 use App\Services\McqImportService;
 use App\Services\PdfPageImageService;
@@ -19,6 +19,8 @@ use App\Services\QuestionDiagramService;
 use App\Services\QuestionMethodHintService;
 use App\Services\QuestionSaveConfirmation;
 use App\Services\QuestionZipImportService;
+use App\Support\PracticeSetMasterProfile;
+use App\Support\QuestionBankPurpose;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -36,6 +38,7 @@ class QuestionController extends Controller
         private QuestionMethodHintService $methodHintService,
         private QuestionSaveConfirmation $saveConfirmation,
         private QuestionZipImportService $zipImportService,
+        private BookBasisPromptService $bookBasisPromptService,
     ) {}
 
     public function topicIndex(Request $request, SyllabusTopic $topic): Response
@@ -574,13 +577,7 @@ class QuestionController extends Controller
             ? SyllabusTopic::with(['chapter.syllabusVersion.board', 'chapter.syllabusVersion.gradeLevel', 'chapter.syllabusVersion.academicYear'])->find($topicId)
             : null;
 
-        $promptOptions = [
-            'total' => max(1, min(50, $request->integer('total') ?: 6)),
-            'easy' => max(0, $request->integer('easy') ?: 2),
-            'medium' => max(0, $request->integer('medium') ?: 2),
-            'hard' => max(0, $request->integer('hard') ?: 2),
-            'focus' => $request->string('focus')->toString(),
-        ];
+        $promptOptions = $this->resolvePromptOptions($request, $chapterId);
 
         $activePrompt = $overrides['cursorPrompt'] ?? null;
         if ($activePrompt === null && $topic) {
@@ -605,6 +602,11 @@ class QuestionController extends Controller
             'selectedGrade' => $grade?->only(['id', 'name']),
             'cursorPrompt' => session('chapter_fill_blank_cursor_prompt') ?? ($scope === 'topic' ? $activePrompt : null),
             'promptOptions' => $promptOptions,
+            'masterProfiles' => PracticeSetMasterProfile::options(),
+            'difficultyMarks' => PracticeSetMasterProfile::marks(),
+            'bookOptions' => $this->bookBasisPromptService->optionsForSyllabusChapter($chapterId ? (int) $chapterId : null),
+            'selectedTextbookChapterId' => $promptOptions['textbook_chapter_id'] ?? null,
+            'selectedMasterProfile' => $promptOptions['master_profile'] ?? null,
             'initialImportRows' => $overrides['importRows'] ?? null,
             'pageError' => $overrides['error'] ?? null,
         ]);
@@ -625,13 +627,7 @@ class QuestionController extends Controller
             ? SyllabusTopic::with(['chapter.syllabusVersion.board', 'chapter.syllabusVersion.gradeLevel', 'chapter.syllabusVersion.academicYear'])->find($topicId)
             : null;
 
-        $promptOptions = [
-            'total' => max(1, min(50, $request->integer('total') ?: 6)),
-            'easy' => max(0, $request->integer('easy') ?: 2),
-            'medium' => max(0, $request->integer('medium') ?: 2),
-            'hard' => max(0, $request->integer('hard') ?: 2),
-            'focus' => $request->string('focus')->toString(),
-        ];
+        $promptOptions = $this->resolvePromptOptions($request, $chapterId);
 
         $importMode = $overrides['importMode'] ?? $request->string('mode')->toString();
         if (! in_array($importMode, ['custom', 'pdf_sums', 'pdf_mcq', 'pdf_worksheet'], true)) {
@@ -657,6 +653,11 @@ class QuestionController extends Controller
             'selectedTopicId' => $topicId,
             'scope' => $scope,
             'chapterPlan' => session('chapter_plan', []),
+            'masterProfiles' => PracticeSetMasterProfile::options(),
+            'difficultyMarks' => PracticeSetMasterProfile::marks(),
+            'bookOptions' => $this->bookBasisPromptService->optionsForSyllabusChapter($chapterId ? (int) $chapterId : null),
+            'selectedTextbookChapterId' => $promptOptions['textbook_chapter_id'] ?? null,
+            'selectedMasterProfile' => $promptOptions['master_profile'] ?? null,
             'topic' => $topic,
             'selectedGrade' => $grade?->only(['id', 'name']),
             'cursorPrompt' => session('chapter_cursor_prompt') ?? $activePrompt,
@@ -673,6 +674,53 @@ class QuestionController extends Controller
             'pdfPageCount' => $overrides['pdfPageCount'] ?? null,
             'pdfImportWarning' => $overrides['pdfImportWarning'] ?? null,
         ]);
+    }
+
+    private function resolvePromptOptions(Request $request, int|string|null $chapterId): array
+    {
+        $profileKey = $request->string('master_profile')->toString();
+        $profileCounts = PracticeSetMasterProfile::isValid($profileKey)
+            ? PracticeSetMasterProfile::counts($profileKey)
+            : null;
+
+        $hasExplicitCounts = $request->filled('easy') || $request->filled('medium') || $request->filled('hard') || $request->filled('total');
+
+        if ($profileCounts && ! $hasExplicitCounts) {
+            $total = $profileCounts['total'];
+            $easy = $profileCounts['easy'];
+            $medium = $profileCounts['medium'];
+            $hard = $profileCounts['hard'];
+        } elseif ($profileCounts && $hasExplicitCounts) {
+            // Profile selected but counts overridden in UI — trust request counts.
+            $total = max(1, min(50, $request->integer('total') ?: $profileCounts['total']));
+            $easy = max(0, $request->integer('easy') ?: 0);
+            $medium = max(0, $request->integer('medium') ?: 0);
+            $hard = max(0, $request->integer('hard') ?: 0);
+        } else {
+            $total = max(1, min(50, $request->integer('total') ?: 6));
+            $easy = max(0, $request->integer('easy') ?: 2);
+            $medium = max(0, $request->integer('medium') ?: 2);
+            $hard = max(0, $request->integer('hard') ?: 2);
+        }
+
+        $textbookChapterId = $request->integer('textbook_chapter_id') ?: null;
+        $bookChapter = $textbookChapterId
+            ? $this->bookBasisPromptService->findPublished(
+                $textbookChapterId,
+                $chapterId ? (int) $chapterId : null,
+            )
+            : null;
+
+        return [
+            'total' => $total,
+            'easy' => $easy,
+            'medium' => $medium,
+            'hard' => $hard,
+            'focus' => $request->string('focus')->toString(),
+            'master_profile' => $profileCounts ? $profileKey : null,
+            'textbook_chapter_id' => $bookChapter?->id,
+            'book_chapter' => $bookChapter,
+        ];
     }
 
     private function isPdfUpload(?UploadedFile $file): bool

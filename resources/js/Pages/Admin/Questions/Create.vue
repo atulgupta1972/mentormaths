@@ -7,6 +7,7 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import ChapterQuestionPlan from '@/Components/ChapterQuestionPlan.vue';
+import PracticeSetMasterProfileSelect from '@/Components/PracticeSetMasterProfileSelect.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
@@ -34,6 +35,11 @@ const props = defineProps({
     pdfImportWarning: { type: String, default: null },
     scope: { type: String, default: 'topic' },
     chapterPlan: { type: Array, default: () => [] },
+    masterProfiles: { type: Array, default: () => [] },
+    difficultyMarks: { type: Object, default: () => ({ easy: 1, medium: 2, hard: 3 }) },
+    bookOptions: { type: Array, default: () => [] },
+    selectedTextbookChapterId: { type: [Number, String, null], default: null },
+    selectedMasterProfile: { type: String, default: null },
 });
 
 const page = usePage();
@@ -138,6 +144,58 @@ const promptSettings = ref({
     medium: props.promptOptions?.medium ?? 2,
     hard: props.promptOptions?.hard ?? 2,
     focus: props.promptOptions?.focus ?? '',
+});
+
+const selectedMasterProfile = ref(props.selectedMasterProfile || '');
+const selectedTextbookChapterId = ref(props.selectedTextbookChapterId || '');
+
+const applyMasterProfile = (profile) => {
+    if (!profile) {
+        return;
+    }
+
+    promptSettings.value.total = profile.total;
+    promptSettings.value.easy = profile.easy;
+    promptSettings.value.medium = profile.medium;
+    promptSettings.value.hard = profile.hard;
+
+    if (isChapterScope.value && chapterPlanRows.value.length) {
+        const rows = profile.value
+            ? distributeProfile(profile)
+            : null;
+        if (rows) {
+            chapterPlanRows.value = chapterPlanRows.value.map((row, index) => ({
+                ...row,
+                easy: rows[index]?.easy ?? 0,
+                medium: rows[index]?.medium ?? 0,
+                hard: rows[index]?.hard ?? 0,
+            }));
+        }
+    }
+};
+
+const distributeProfile = (profile) => {
+    const topicCount = Math.max(1, chapterPlanRows.value.length);
+    const fields = ['easy', 'medium', 'hard'];
+    const rows = Array.from({ length: topicCount }, () => ({ easy: 0, medium: 0, hard: 0 }));
+
+    for (const field of fields) {
+        const remaining = Number(profile[field] || 0);
+        const base = Math.floor(remaining / topicCount);
+        const extra = remaining % topicCount;
+        for (let i = 0; i < topicCount; i += 1) {
+            rows[i][field] = base + (i < extra ? 1 : 0);
+        }
+    }
+
+    return rows;
+};
+
+watch(selectedMasterProfile, (value) => {
+    const profile = props.masterProfiles.find((item) => item.value === value);
+    if (profile) {
+        applyMasterProfile(profile);
+    }
 });
 
 const pdfForm = useForm({
@@ -389,6 +447,12 @@ function buildQueryParams(overrides = {}) {
         if (promptSettings.value.focus) {
             params.focus = promptSettings.value.focus;
         }
+        if (selectedMasterProfile.value) {
+            params.master_profile = selectedMasterProfile.value;
+        }
+        if (selectedTextbookChapterId.value) {
+            params.textbook_chapter_id = selectedTextbookChapterId.value;
+        }
     }
 
     return params;
@@ -408,6 +472,12 @@ const refreshCustomPrompt = () => {
 
     router.get(route('admin.questions.create', buildQueryParams()), {}, { preserveState: false });
 };
+
+watch(selectedTextbookChapterId, () => {
+    if (importMode.value === 'custom' && selectedTopic.value) {
+        refreshCustomPrompt();
+    }
+});
 
 const onPdfSelected = (event) => {
     const file = event.target.files?.[0] ?? null;
@@ -1004,7 +1074,18 @@ watch(() => props.initialImportRows, (importRows) => {
 
                 <div v-if="topic && importMode === 'custom'" class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
                     <h3 class="font-medium text-gray-900">Question settings</h3>
-                    <p class="mt-1 text-sm text-gray-600">Control how many sums Cursor generates and what to focus on.</p>
+                    <p class="mt-1 text-sm text-gray-600">Pick Learner / Achiever / Expert — easy / medium / hard fill in automatically.</p>
+
+                    <div class="mt-4">
+                        <PracticeSetMasterProfileSelect
+                            v-model="selectedMasterProfile"
+                            v-model:textbook-chapter-id="selectedTextbookChapterId"
+                            :master-profiles="masterProfiles"
+                            :difficulty-marks="difficultyMarks"
+                            :book-options="bookOptions"
+                            @apply="applyMasterProfile"
+                        />
+                    </div>
 
                     <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <div>

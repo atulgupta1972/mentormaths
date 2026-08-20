@@ -91,48 +91,11 @@ class ClassCoverageService
 
     /**
      * @param  array<string, mixed>  $items
-     * @return list<array{key: string, label: string, items: list<array<string, mixed>>}>
+     * @return list<array{key: string, label: string, tier?: string|null, color?: string|null, items: list<array<string, mixed>>}>
      */
     private function formatDetailItems(array $items): array
     {
-        $groups = [];
-
-        foreach ([
-            'practice' => 'Practice',
-            'practice_correction' => 'Practice · Correction',
-            'test' => 'Test',
-            'written' => 'Written',
-            'fill_blank' => 'Fill in blank',
-        ] as $key => $label) {
-            $rows = collect($items[$key] ?? [])
-                ->map(fn (array $item) => $this->detailItemPayload($item))
-                ->values()
-                ->all();
-
-            if ($rows !== []) {
-                $groups[] = [
-                    'key' => $key,
-                    'label' => $label,
-                    'items' => $rows,
-                ];
-            }
-        }
-
-        $bookItems = collect($items['books'] ?? [])
-            ->flatten(1)
-            ->map(fn (array $item) => $this->detailItemPayload($item))
-            ->values()
-            ->all();
-
-        if ($bookItems !== []) {
-            $groups[] = [
-                'key' => 'books',
-                'label' => 'Books',
-                'items' => $bookItems,
-            ];
-        }
-
-        return $groups;
+        return app(SetCoverageGrouping::class)->formatDetailGroups($items, fn (array $item) => $this->detailItemPayload($item));
     }
 
     /**

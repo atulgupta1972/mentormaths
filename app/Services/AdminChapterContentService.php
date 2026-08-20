@@ -403,6 +403,8 @@ class AdminChapterContentService
             'set_code' => $worksheet->set_code,
             'set_number' => $setNumber,
             'short_label' => $shortLabel,
+            'tier' => $worksheet->tier,
+            'tier_label' => $worksheet->tier_label,
             'question_count' => (int) ($worksheet->questions_count ?? 0),
             'delivery_mode' => $worksheet->delivery_mode ?? WorksheetDeliveryMode::ONLINE,
             'status' => $published ? 'published' : 'draft',

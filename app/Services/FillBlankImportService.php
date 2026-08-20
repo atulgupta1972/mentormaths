@@ -34,20 +34,29 @@ class FillBlankImportService
             $hard = $total - $easy - $medium;
         }
 
-        $chapter = $topic->chapter;
-        $version = $chapter?->syllabusVersion;
+        /** @var \App\Models\TextbookChapter|null $bookChapter */
+        $bookChapter = $options['book_chapter'] ?? null;
+        if ($bookChapter instanceof \App\Models\TextbookChapter) {
+            $context = app(BookBasisPromptService::class)->bookContext($bookChapter, $topic);
+        } else {
+            $chapter = $topic->chapter;
+            $version = $chapter?->syllabusVersion;
 
-        $context = collect([
-            $version ? "Board: {$version->board->code}" : null,
-            $version ? "Class: {$version->gradeLevel->name}" : null,
-            $version ? "Typical student age: {$version->gradeLevel->typicalAge()} years" : null,
-            $version ? "Academic year: {$version->academicYear->name}" : null,
-            $chapter ? "Chapter: {$chapter->chapter_number} — {$chapter->name}" : null,
-            "Topic: {$topic->name}",
-            $topic->learning_outcomes ? "Key concepts: {$topic->learning_outcomes}" : null,
-        ])->filter()->implode("\n");
+            $context = collect([
+                $version ? "Board: {$version->board->code}" : null,
+                $version ? "Class: {$version->gradeLevel->name}" : null,
+                $version ? "Typical student age: {$version->gradeLevel->typicalAge()} years" : null,
+                $version ? "Academic year: {$version->academicYear->name}" : null,
+                $chapter ? "Chapter: {$chapter->chapter_number} — {$chapter->name}" : null,
+                "Topic: {$topic->name}",
+                $topic->learning_outcomes ? "Key concepts: {$topic->learning_outcomes}" : null,
+            ])->filter()->implode("\n");
+        }
 
         $focusLine = $focus !== '' ? "\n- Focus: {$focus}" : '';
+        $bookLine = $bookChapter instanceof \App\Models\TextbookChapter
+            ? "\n- Align coverage with the listed book topics (do not invent topics outside that list)"
+            : '';
 
         return <<<PROMPT
 Create fill-in-the-blank maths questions for guided practice. Return ONLY valid JSON (no markdown fences).
@@ -64,7 +73,7 @@ Requirements:
 - For decimals, include "decimal_places" when needed (e.g. 2 for money-style answers)
 - Include "method_hint": theory/rules ONLY — no final numeric answer
 - Include "explanation": full teacher-only working with the final answer
-- Class-appropriate CBSE/ICSE level{$focusLine}
+- Class-appropriate CBSE/ICSE level{$focusLine}{$bookLine}
 - Do NOT include MCQ options
 
 JSON format:

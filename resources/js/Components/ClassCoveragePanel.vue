@@ -261,6 +261,12 @@ const statusClass = (status) => ({
     correction_pending: 'bg-orange-100 text-orange-900',
 }[status] ?? 'bg-slate-100 text-slate-700');
 
+const groupHeaderClass = (group) => ({
+    sky: 'text-sky-800',
+    amber: 'text-amber-800',
+    emerald: 'text-emerald-800',
+}[group?.color] ?? 'text-slate-700');
+
 const itemHref = (item) => {
     if (! isStudentView.value || ! item.can_open) {
         return null;
@@ -443,7 +449,10 @@ const startCorrection = (item) => {
                                         v-for="group in chapter.items"
                                         :key="`${chapter.id}-${group.key}`"
                                     >
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-slate-700">
+                                        <p
+                                            class="text-[10px] font-bold uppercase tracking-wide"
+                                            :class="groupHeaderClass(group)"
+                                        >
                                             {{ group.label }}
                                         </p>
                                         <div class="mt-0.5 flex flex-wrap gap-1.5">

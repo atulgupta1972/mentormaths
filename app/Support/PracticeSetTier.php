@@ -47,9 +47,9 @@ class PracticeSetTier
     public static function label(string $tier): string
     {
         return match ($tier) {
-            self::STARTER => 'Starter',
-            self::BUILDER => 'Builder',
-            self::CHAMPION => 'Champion',
+            self::STARTER => 'Learner',
+            self::BUILDER => 'Achiever',
+            self::CHAMPION => 'Expert',
             self::CHAPTER_TEST => 'Chapter test',
             default => ucfirst($tier),
         };
@@ -58,9 +58,9 @@ class PracticeSetTier
     public static function tagline(string $tier): string
     {
         return match ($tier) {
-            self::STARTER => 'Getting comfortable',
-            self::BUILDER => 'Building confidence',
-            self::CHAMPION => 'Exam-ready challenge',
+            self::STARTER => 'Mostly easy — build confidence',
+            self::BUILDER => 'Mostly medium — stretch with a few hard',
+            self::CHAMPION => 'All hard — exam-ready challenge',
             self::CHAPTER_TEST => 'Mixed topics from the whole chapter',
             default => '',
         };
