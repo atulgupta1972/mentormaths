@@ -18,6 +18,8 @@ const agreeForm = useForm({});
 const submitForm = useForm({});
 const drafts = reactive({});
 const attempts = reactive({});
+/** After Check (pass or fail), show stored answer so checker can verify / edit. */
+const keyRevealed = reactive({});
 
 const seedDrafts = () => {
     props.rows.forEach((row) => {
@@ -26,10 +28,13 @@ const seedDrafts = () => {
             fill_blank_correct_answer: row.fill_blank_correct_answer,
             fill_blank_answer_format: row.fill_blank_answer_format,
             fill_blank_decimal_places: row.fill_blank_decimal_places,
-            include_in_written: row.include_in_written,
+            include_in_written: row.include_in_written !== false,
         };
         if (attempts[row.index] === undefined) {
             attempts[row.index] = '';
+        }
+        if (row.checked) {
+            keyRevealed[row.index] = true;
         }
     });
 };
@@ -46,9 +51,12 @@ const lastCheck = computed(() => page.props.flash?.conversion_check ?? null);
 
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
 
+const answerRevealed = (row) => Boolean(keyRevealed[row.index] || row.checked || lastCheck.value?.index === row.index);
+
 const payload = (row) => ({
     index: row.index,
     ...drafts[row.index],
+    include_in_written: drafts[row.index].include_in_written !== false,
 });
 
 const saveRow = (row) => {
@@ -68,7 +76,7 @@ const checkRow = (row) => {
         preserveState: true,
         only: ['rows', 'progress', 'flash', 'task'],
         onSuccess: () => {
-            attempts[row.index] = '';
+            keyRevealed[row.index] = true;
         },
     });
 };
@@ -117,7 +125,8 @@ const skipRow = (row, skipped) => {
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
                     Skip number-names and long English answers (they stay MCQ). For the rest, edit the blank, then
-                    <strong>Check as a student</strong> with the key hidden — same matcher students use.
+                    <strong>Check as a student</strong> with the key hidden. After Check, the stored answer is shown so you can confirm —
+                    if the MCQ key looks wrong, edit the fill-in-blank answer and Check again.
                     Admin publishes fill-in-blank and written after you submit.
                 </div>
 
@@ -210,10 +219,12 @@ const skipRow = (row, skipped) => {
                                 >
                             </div>
                             <div>
-                                <label class="text-xs font-semibold text-slate-600">Canonical answer (edit here — hidden during Check)</label>
+                                <label class="text-xs font-semibold text-slate-600">
+                                    {{ answerRevealed(row) ? 'Stored fill-in-blank answer (edit if MCQ key is wrong)' : 'Canonical answer (hidden until you Check)' }}
+                                </label>
                                 <input
                                     v-model="drafts[row.index].fill_blank_correct_answer"
-                                    type="password"
+                                    :type="answerRevealed(row) ? 'text' : 'password'"
                                     autocomplete="off"
                                     class="mt-1 w-full rounded-md border-gray-300 text-sm"
                                     :disabled="!canEdit"
@@ -230,8 +241,8 @@ const skipRow = (row, skipped) => {
                             v-if="canEdit"
                             class="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/60 p-3"
                         >
-                            <p class="text-xs font-semibold text-indigo-950">Check as a student (answer key hidden)</p>
-                            <p class="mt-1 text-xs text-indigo-900">Type what a student would enter. This uses the same marking rules as live fill-in-blank.</p>
+                            <p class="text-xs font-semibold text-indigo-950">Check as a student (answer key hidden until you Check)</p>
+                            <p class="mt-1 text-xs text-indigo-900">Type what a student would enter. Same marking rules as live fill-in-blank.</p>
                             <div class="mt-2 flex flex-wrap items-end gap-2">
                                 <input
                                     v-model="attempts[row.index]"
@@ -244,13 +255,28 @@ const skipRow = (row, skipped) => {
                                     Check
                                 </PrimaryButton>
                             </div>
-                            <p
-                                v-if="lastCheck?.index === row.index"
-                                class="mt-2 text-xs"
-                                :class="lastCheck.correct ? 'text-emerald-800' : 'text-rose-800'"
+                            <div
+                                v-if="lastCheck?.index === row.index || (row.checked && answerRevealed(row))"
+                                class="mt-3 rounded-md border px-3 py-2 text-xs"
+                                :class="(lastCheck?.index === row.index ? lastCheck.correct : row.checked)
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                                    : 'border-amber-200 bg-amber-50 text-amber-950'"
                             >
-                                {{ lastCheck.message }}
-                            </p>
+                                <p v-if="lastCheck?.index === row.index">{{ lastCheck.message }}</p>
+                                <p v-else-if="row.checked">Checked — your attempt matched the stored answer.</p>
+                                <p class="mt-1 font-medium">
+                                    Stored answer:
+                                    <span class="font-mono">{{ drafts[row.index].fill_blank_correct_answer || lastCheck?.expected_answer || '—' }}</span>
+                                </p>
+                                <p
+                                    v-if="lastCheck?.index === row.index && !lastCheck.correct"
+                                    class="mt-1"
+                                >
+                                    Your attempt was
+                                    <span class="font-mono">{{ lastCheck.attempt || attempts[row.index] || '—' }}</span>.
+                                    Verify the stored answer. If the MCQ key is wrong, edit it above and Check again.
+                                </p>
+                            </div>
                         </div>
                     </template>
                 </div>

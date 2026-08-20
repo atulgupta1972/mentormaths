@@ -169,16 +169,19 @@ class FillBlankConversionService
             ? $this->checkHash($stem, $format, $answer, $places)
             : null;
         $items[$index]['include_in_fill_blank'] = $correct;
-        $items[$index]['include_in_written'] = $correct && ($item['include_in_written'] ?? true);
+        // Keep writer's preference; default on. Only checked blanks are published.
+        $items[$index]['include_in_written'] = (bool) ($item['include_in_written'] ?? true);
 
         $chapter->update(['extraction_items' => array_values($items)]);
 
         return [
             'correct' => $correct,
             'checked' => $correct,
+            'expected_answer' => $answer,
+            'attempt' => $attempt,
             'message' => $correct
-                ? 'Checked — this blank matches student marking rules.'
-                : 'That attempt does not match. Edit the stem, format, or answer, then Check again.',
+                ? 'Checked — your attempt matches the stored answer.'
+                : 'Your attempt did not match. Check the stored answer below — if the MCQ key is wrong, edit the fill-in-blank answer and Check again.',
         ];
     }
 
