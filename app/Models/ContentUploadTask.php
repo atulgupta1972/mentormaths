@@ -241,7 +241,7 @@ class ContentUploadTask extends Model
     public function workTypeLabel(): string
     {
         return $this->isFillBlankConversion()
-            ? 'Fill-in-blank conversion'
+            ? 'Fill-in-blank + written'
             : 'MCQ upload';
     }
 

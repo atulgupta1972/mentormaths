@@ -503,6 +503,7 @@ watch(
                                     <th class="px-3 py-2">Ch No.</th>
                                     <th class="px-3 py-2">Chapter head</th>
                                     <th class="px-3 py-2">Chapter name</th>
+                                    <th class="px-3 py-2">Type</th>
                                     <th class="px-3 py-2">Status</th>
                                     <th class="px-3 py-2">Questions</th>
                                     <th class="px-3 py-2">Rate</th>
@@ -512,7 +513,7 @@ watch(
                             <tbody class="divide-y divide-slate-100">
                                 <template v-for="group in groupedDrillChapters" :key="group.book">
                                     <tr class="bg-slate-100">
-                                        <td colspan="8" class="px-3 py-1.5 text-xs font-semibold text-slate-800">
+                                        <td colspan="9" class="px-3 py-1.5 text-xs font-semibold text-slate-800">
                                             {{ group.book }}
                                         </td>
                                     </tr>
@@ -532,6 +533,7 @@ watch(
                                         </td>
                                         <td class="px-3 py-2 text-slate-600">{{ row.chapter?.chapter_head_name || '—' }}</td>
                                         <td class="px-3 py-2 font-medium text-slate-900">{{ row.chapter?.title || '—' }}</td>
+                                        <td class="px-3 py-2 text-slate-700">{{ row.work_type_label || '—' }}</td>
                                         <td class="px-3 py-2">
                                             <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1" :class="statusTone(row.status_group)">
                                                 {{ row.status_label }}
@@ -558,7 +560,7 @@ watch(
                                     </tr>
                                 </template>
                                 <tr v-if="!filteredDrillChapters.length">
-                                    <td colspan="8" class="px-3 py-6 text-center text-slate-500">
+                                    <td colspan="9" class="px-3 py-6 text-center text-slate-500">
                                         No chapters in this bucket.
                                     </td>
                                 </tr>
@@ -577,6 +579,7 @@ watch(
                                 <th class="px-4 py-3">Chapter</th>
                                 <th class="px-4 py-3">Uploader</th>
                                 <th class="px-4 py-3">Rate</th>
+                                <th class="px-4 py-3">Type</th>
                                 <th class="px-4 py-3">Status</th>
                                 <th class="px-4 py-3"></th>
                             </tr>
@@ -594,6 +597,7 @@ watch(
                                 </td>
                                 <td class="px-4 py-3">{{ task.assignee?.name }}</td>
                                 <td class="px-4 py-3">{{ task.rate_description || formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</td>
+                                <td class="px-4 py-3">{{ task.work_type_label || '—' }}</td>
                                 <td class="px-4 py-3">{{ task.status_label }}</td>
                                 <td class="px-4 py-3 text-right">
                                     <Link :href="route('admin.content-tasks.show', task.id)" class="text-indigo-600 hover:underline">View</Link>
@@ -607,7 +611,7 @@ watch(
                                 </td>
                             </tr>
                             <tr v-if="!tasks.data.length">
-                                <td colspan="5" class="px-4 py-8 text-center text-gray-500">No tasks yet.</td>
+                                <td colspan="6" class="px-4 py-8 text-center text-gray-500">No tasks yet.</td>
                             </tr>
                         </tbody>
                     </table>

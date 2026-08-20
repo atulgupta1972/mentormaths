@@ -273,6 +273,8 @@ class ContentAllocationMatrixService
         return [
             'id' => $task->id,
             'status' => $task->status,
+            'work_type' => $task->work_type ?: ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
+            'work_type_label' => $task->workTypeLabel(),
             'status_label' => $this->shortStatusLabel($task->status, $questionCount),
             'status_group' => $this->statusGroup($task->status),
             'breakup_bucket' => $breakupBucket,
