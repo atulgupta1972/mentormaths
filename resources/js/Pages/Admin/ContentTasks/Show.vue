@@ -5,7 +5,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { safeRoute } from '@/utils/routes';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     task: { type: Object, required: true },
@@ -30,6 +30,8 @@ const changeBookForm = useForm({
     book_code: '',
 });
 const selectedConversionIndexes = ref([]);
+const showSkippedConversions = ref(false);
+const conversionDeleteBusy = ref(false);
 
 const looksLikeWordAnswer = (answer) => {
     const value = String(answer || '').trim();
@@ -48,43 +50,133 @@ const looksLikeWordAnswer = (answer) => {
     return /[a-zA-Z]/.test(value);
 };
 
-const toggleConversionRow = (index) => {
-    if (selectedConversionIndexes.value.includes(index)) {
-        selectedConversionIndexes.value = selectedConversionIndexes.value.filter((row) => row !== index);
+const skippedConversionCount = computed(() =>
+    (props.conversionRows || []).filter((row) => row.skipped).length,
+);
+
+const visibleConversionRows = computed(() => {
+    const rows = props.conversionRows || [];
+    if (showSkippedConversions.value) {
+        return rows;
+    }
+
+    return rows.filter((row) => !row.skipped);
+});
+
+const selectedVisibleCount = computed(() =>
+    selectedConversionIndexes.value.filter((index) =>
+        visibleConversionRows.value.some((row) => Number(row.index) === Number(index)),
+    ).length,
+);
+
+const isConversionSelected = (index) =>
+    selectedConversionIndexes.value.some((row) => Number(row) === Number(index));
+
+const toggleConversionRow = (index, checked) => {
+    const id = Number(index);
+    const selected = selectedConversionIndexes.value.map(Number);
+
+    if (checked) {
+        if (!selected.includes(id)) {
+            selectedConversionIndexes.value = [...selected, id];
+        }
         return;
     }
 
-    selectedConversionIndexes.value = [...selectedConversionIndexes.value, index];
+    selectedConversionIndexes.value = selected.filter((row) => row !== id);
 };
 
-const clearSelectedConversions = () => {
-    if (!selectedConversionIndexes.value.length) {
+const selectAllVisibleConversions = (checked) => {
+    const visibleIds = visibleConversionRows.value.map((row) => Number(row.index));
+    if (!checked) {
+        selectedConversionIndexes.value = selectedConversionIndexes.value
+            .map(Number)
+            .filter((id) => !visibleIds.includes(id));
         return;
     }
 
-    if (!window.confirm(`Remove fill-in-blank for ${selectedConversionIndexes.value.length} selected question(s)? MCQs stay.`)) {
+    selectedConversionIndexes.value = [...new Set([
+        ...selectedConversionIndexes.value.map(Number),
+        ...visibleIds,
+    ])];
+};
+
+const allVisibleSelected = computed(() => {
+    const rows = visibleConversionRows.value;
+    return rows.length > 0 && rows.every((row) => isConversionSelected(row.index));
+});
+
+const conversionClearRowsUrl = () => safeRoute(
+    'admin.content-tasks.conversion-clear-rows',
+    props.task.id,
+    `/admin/content-tasks/${props.task.id}/conversion-clear-rows`,
+);
+
+const conversionClearAllUrl = () => safeRoute(
+    'admin.content-tasks.conversion-clear-all',
+    props.task.id,
+    `/admin/content-tasks/${props.task.id}/conversion-clear-all`,
+);
+
+const postClearConversion = (payload, confirmMessage) => {
+    if (conversionDeleteBusy.value) {
         return;
     }
 
-    router.post(route('admin.content-tasks.conversion-clear-rows', props.task.id), {
-        indexes: selectedConversionIndexes.value,
-    }, {
+    if (confirmMessage && !window.confirm(confirmMessage)) {
+        return;
+    }
+
+    conversionDeleteBusy.value = true;
+    router.post(conversionClearRowsUrl(), payload, {
         preserveScroll: true,
+        onFinish: () => {
+            conversionDeleteBusy.value = false;
+        },
         onSuccess: () => {
             selectedConversionIndexes.value = [];
+            showSkippedConversions.value = false;
         },
     });
 };
 
-const clearAllConversions = () => {
-    if (!window.confirm('Clear ALL fill-in-blank conversion drafts on this chapter? MCQs stay. Uploader can convert again.')) {
+const clearSelectedConversions = () => {
+    const indexes = selectedConversionIndexes.value.map(Number);
+    if (!indexes.length) {
         return;
     }
 
-    router.post(route('admin.content-tasks.conversion-clear-all', props.task.id), {}, {
+    postClearConversion(
+        { indexes },
+        `Remove fill-in-blank for ${indexes.length} selected question(s)? They leave this list (MCQs stay).`,
+    );
+};
+
+const clearOneConversion = (index) => {
+    postClearConversion(
+        { indexes: [Number(index)] },
+        'Remove this fill-in-blank from the list? The MCQ stays.',
+    );
+};
+
+const clearAllConversions = () => {
+    if (conversionDeleteBusy.value) {
+        return;
+    }
+
+    if (!window.confirm('Clear ALL fill-in-blank conversion drafts on this chapter? They leave this list. MCQs stay.')) {
+        return;
+    }
+
+    conversionDeleteBusy.value = true;
+    router.post(conversionClearAllUrl(), {}, {
         preserveScroll: true,
+        onFinish: () => {
+            conversionDeleteBusy.value = false;
+        },
         onSuccess: () => {
             selectedConversionIndexes.value = [];
+            showSkippedConversions.value = false;
         },
     });
 };
@@ -418,21 +510,32 @@ const formatDuration = (seconds) => {
                             <p class="text-sm font-semibold text-emerald-950">Fill-in-blank conversion</p>
                             <p class="mt-1 text-sm text-emerald-900">
                                 Review checked blanks. Answers must be numbers or fractions (e.g. 3/4), not words.
-                                Delete bad rows (partial) or clear all — MCQs stay. Publish creates F and W parts.
+                                Delete removes rows from this list (MCQs stay). Publish creates F and W parts.
+                            </p>
+                            <p v-if="skippedConversionCount" class="mt-1 text-xs text-slate-600">
+                                {{ skippedConversionCount }} skipped / removed
+                                <button
+                                    type="button"
+                                    class="ml-1 font-medium text-indigo-700 hover:underline"
+                                    @click="showSkippedConversions = !showSkippedConversions"
+                                >
+                                    {{ showSkippedConversions ? 'Hide them' : 'Show them' }}
+                                </button>
                             </p>
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <button
                                 type="button"
                                 class="rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-900 hover:bg-rose-100 disabled:opacity-50"
-                                :disabled="!selectedConversionIndexes.length"
+                                :disabled="conversionDeleteBusy || !selectedVisibleCount"
                                 @click="clearSelectedConversions"
                             >
-                                Delete selected ({{ selectedConversionIndexes.length }})
+                                Delete selected ({{ selectedVisibleCount }})
                             </button>
                             <button
                                 type="button"
-                                class="rounded-md border border-rose-400 bg-white px-3 py-1.5 text-xs font-medium text-rose-800 hover:bg-rose-50"
+                                class="rounded-md border border-rose-400 bg-white px-3 py-1.5 text-xs font-medium text-rose-800 hover:bg-rose-50 disabled:opacity-50"
+                                :disabled="conversionDeleteBusy || !conversionRows.length"
                                 @click="clearAllConversions"
                             >
                                 Clear all fill-in-blanks
@@ -443,7 +546,15 @@ const formatDuration = (seconds) => {
                         <table class="min-w-full divide-y divide-slate-100 text-sm">
                             <thead class="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
                                 <tr>
-                                    <th class="w-8 px-2 py-1.5"></th>
+                                    <th class="w-8 px-2 py-1.5">
+                                        <input
+                                            type="checkbox"
+                                            class="rounded border-gray-300 text-rose-600"
+                                            :checked="allVisibleSelected"
+                                            :disabled="!visibleConversionRows.length"
+                                            @change="selectAllVisibleConversions($event.target.checked)"
+                                        >
+                                    </th>
                                     <th class="px-2 py-1.5">Q</th>
                                     <th class="px-2 py-1.5">Stem</th>
                                     <th class="px-2 py-1.5">Answer</th>
@@ -453,7 +564,7 @@ const formatDuration = (seconds) => {
                             </thead>
                             <tbody class="divide-y divide-slate-100">
                                 <tr
-                                    v-for="row in conversionRows"
+                                    v-for="row in visibleConversionRows"
                                     :key="row.index"
                                     :class="looksLikeWordAnswer(row.fill_blank_correct_answer) && !row.skipped ? 'bg-amber-50' : ''"
                                 >
@@ -461,8 +572,8 @@ const formatDuration = (seconds) => {
                                         <input
                                             type="checkbox"
                                             class="rounded border-gray-300 text-rose-600"
-                                            :checked="selectedConversionIndexes.includes(row.index)"
-                                            @change="toggleConversionRow(row.index)"
+                                            :checked="isConversionSelected(row.index)"
+                                            @change="toggleConversionRow(row.index, $event.target.checked)"
                                         >
                                     </td>
                                     <td class="whitespace-nowrap px-2 py-1.5">{{ row.index + 1 }}</td>
@@ -482,11 +593,25 @@ const formatDuration = (seconds) => {
                                     <td class="px-2 py-1.5 text-right">
                                         <button
                                             type="button"
-                                            class="text-xs font-medium text-rose-700 hover:underline"
-                                            @click="router.post(route('admin.content-tasks.conversion-clear-rows', task.id), { indexes: [row.index] }, { preserveScroll: true })"
+                                            class="text-xs font-medium text-rose-700 hover:underline disabled:opacity-50"
+                                            :disabled="conversionDeleteBusy"
+                                            @click="clearOneConversion(row.index)"
                                         >
                                             Delete
                                         </button>
+                                    </td>
+                                </tr>
+                                <tr v-if="!visibleConversionRows.length">
+                                    <td colspan="6" class="px-3 py-6 text-center text-sm text-slate-500">
+                                        <template v-if="skippedConversionCount">
+                                            No active fill-in-blanks left — {{ skippedConversionCount }} skipped/removed.
+                                            <button type="button" class="font-medium text-indigo-700 hover:underline" @click="showSkippedConversions = true">
+                                                Show skipped
+                                            </button>
+                                        </template>
+                                        <template v-else>
+                                            No conversion rows yet.
+                                        </template>
                                     </td>
                                 </tr>
                             </tbody>
