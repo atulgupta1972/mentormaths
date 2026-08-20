@@ -159,18 +159,14 @@ const applyMasterProfile = (profile) => {
     promptSettings.value.medium = profile.medium;
     promptSettings.value.hard = profile.hard;
 
-    if (isChapterScope.value && chapterPlanRows.value.length) {
-        const rows = profile.value
-            ? distributeProfile(profile)
-            : null;
-        if (rows) {
-            chapterPlanRows.value = chapterPlanRows.value.map((row, index) => ({
-                ...row,
-                easy: rows[index]?.easy ?? 0,
-                medium: rows[index]?.medium ?? 0,
-                hard: rows[index]?.hard ?? 0,
-            }));
-        }
+    if (chapterPlanRows.value.length) {
+        const rows = distributeProfile(profile);
+        chapterPlanRows.value = chapterPlanRows.value.map((row, index) => ({
+            ...row,
+            easy: rows[index]?.easy ?? 0,
+            medium: rows[index]?.medium ?? 0,
+            hard: rows[index]?.hard ?? 0,
+        }));
     }
 };
 
@@ -903,8 +899,11 @@ watch(() => props.initialImportRows, (importRows) => {
                 <ChapterQuestionPlan
                     v-if="isChapterScope && chapterTopics.length"
                     v-model="chapterPlanRows"
+                    v-model:selected-profile="selectedMasterProfile"
                     :topics="chapterTopics"
                     :generating="generatingChapterPrompt"
+                    :master-profiles="masterProfiles"
+                    @apply-profile="applyMasterProfile"
                     @generate-prompt="generateChapterPrompt"
                 />
 

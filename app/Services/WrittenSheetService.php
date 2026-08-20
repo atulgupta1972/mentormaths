@@ -13,6 +13,7 @@ use App\Services\FillBlankImportService;
 use App\Services\PracticeSetService;
 use App\Services\WrittenSheetPdfService;
 use App\Support\PracticeSetScope;
+use App\Support\PracticeSetMasterProfile;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetDeliveryMode;
@@ -66,8 +67,10 @@ class WrittenSheetService
         array $questionIds,
         User $creator,
         ?string $notes = null,
+        string $tier = PracticeSetTier::STARTER,
     ): Worksheet {
         $topic->load('chapter.syllabusVersion.gradeLevel');
+        $tier = PracticeSetMasterProfile::isValid($tier) ? $tier : PracticeSetTier::STARTER;
 
         $questions = Question::query()
             ->whereIn('id', $questionIds)
@@ -80,7 +83,7 @@ class WrittenSheetService
 
         $meta = $this->practiceSetService->prepareForCreate(
             $topic,
-            PracticeSetTier::STARTER,
+            $tier,
             $questions->count(),
         );
 
@@ -88,7 +91,7 @@ class WrittenSheetService
             'title' => $meta['title'].' — Written',
             'set_number' => $meta['set_number'],
             'set_code' => $this->allocateWrittenSetCode($meta['set_code']),
-            'tier' => PracticeSetTier::STARTER,
+            'tier' => $tier,
             'scope' => PracticeSetScope::TOPIC,
             'syllabus_topic_id' => $topic->id,
             'notes' => $notes,
@@ -113,6 +116,7 @@ class WrittenSheetService
         array $questionIds,
         User $creator,
         ?string $notes = null,
+        string $tier = PracticeSetTier::STARTER,
     ): Worksheet {
         $questions = Question::query()
             ->whereIn('id', $questionIds)
@@ -123,7 +127,7 @@ class WrittenSheetService
             throw new \InvalidArgumentException('Select valid questions from this chapter only.');
         }
 
-        $meta = $this->practiceSetService->prepareChapterTestCreate($chapter, $questions->count());
+        $meta = $this->practiceSetService->prepareChapterTestCreate($chapter, $questions->count(), $tier);
 
         $worksheet = Worksheet::create([
             'title' => $meta['title'].' — Written',
@@ -158,6 +162,7 @@ class WrittenSheetService
         array $rows,
         User $creator,
         ?string $notes = null,
+        string $tier = PracticeSetTier::STARTER,
     ): Worksheet {
         $rows = array_values(array_filter($rows, fn (array $row) => trim((string) ($row['question_text'] ?? '')) !== ''));
 
@@ -183,7 +188,7 @@ class WrittenSheetService
                 throw new \InvalidArgumentException('Add at least one valid question.');
             }
 
-            return $this->createChapterTest($chapter, $questionIds, $creator, $notes);
+            return $this->createChapterTest($chapter, $questionIds, $creator, $notes, $tier);
         }
 
         if (! $topic) {
@@ -199,7 +204,11 @@ class WrittenSheetService
         );
         $questionIds = collect($saved)->pluck('id')->all();
 
-        return $this->createFromTopic($topic, $questionIds, $creator, $notes);
+        if ($questionIds === []) {
+            throw new \InvalidArgumentException('Add at least one valid question.');
+        }
+
+        return $this->createFromTopic($topic, $questionIds, $creator, $notes, $tier);
     }
 
     /**

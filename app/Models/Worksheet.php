@@ -72,7 +72,14 @@ class Worksheet extends Model
 
     public function isChapterTest(): bool
     {
-        return $this->isChapterScope() && $this->tier === PracticeSetTier::CHAPTER_TEST;
+        if ($this->isChapterScope() && $this->tier === PracticeSetTier::CHAPTER_TEST) {
+            return true;
+        }
+
+        // Chapter tests keep T… set codes even when tier is Learner/Achiever/Expert.
+        $code = strtoupper((string) $this->set_code);
+
+        return $this->isChapterScope() && preg_match('/^T\d/', $code) === 1;
     }
 
     public function isChapterPractice(): bool

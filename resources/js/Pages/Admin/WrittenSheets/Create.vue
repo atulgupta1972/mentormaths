@@ -129,9 +129,18 @@ const form = useForm({
     pdf_import_token: '',
     chapter_plan: [],
     notes: '',
+    master_profile: props.selectedMasterProfile || '',
 });
 
 const filtersInitialized = ref(false);
+
+watch(selectedMasterProfile, (value) => {
+    form.master_profile = value || '';
+    const profile = props.masterProfiles.find((item) => item.value === value);
+    if (profile) {
+        applyMasterProfile(profile);
+    }
+});
 
 const selectedTopicName = computed(() =>
     props.topics.find((topic) => String(topic.id) === String(form.topic_id))?.name || '',

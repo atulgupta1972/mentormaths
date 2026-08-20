@@ -195,17 +195,28 @@ class ChapterPracticeSetController extends Controller
 
     public function storeFromChapterBank(Request $request, SyllabusChapter $chapter): RedirectResponse
     {
+        $validated = $request->validate([
+            'tier' => ['nullable', 'in:'.implode(',', \App\Support\PracticeSetMasterProfile::keys())],
+            'master_profile' => ['nullable', 'in:'.implode(',', \App\Support\PracticeSetMasterProfile::keys())],
+        ]);
+
         $questionIds = $this->mixedQuestionService->unpackagedQuestionIds($chapter);
 
         if ($questionIds === []) {
             return back()->with('error', 'No unpackaged questions in this chapter.');
         }
 
+        $tier = $validated['master_profile']
+            ?? $validated['tier']
+            ?? PracticeSetTier::STARTER;
+
         $practiceSet = $this->practiceSetService->createChapterTest(
             $chapter,
             $questionIds,
             $request->user()->id,
             Worksheet::STATUS_PUBLISHED,
+            null,
+            $tier,
         );
 
         return redirect()
@@ -215,6 +226,12 @@ class ChapterPracticeSetController extends Controller
 
     public function storeFromChapterPracticeBank(Request $request, SyllabusChapter $chapter): RedirectResponse
     {
+        $validated = $request->validate([
+            'fill_in_blank' => ['sometimes', 'boolean'],
+            'tier' => ['nullable', 'in:'.implode(',', \App\Support\PracticeSetMasterProfile::keys())],
+            'master_profile' => ['nullable', 'in:'.implode(',', \App\Support\PracticeSetMasterProfile::keys())],
+        ]);
+
         if ($request->has('fill_in_blank')) {
             $questionIds = $this->mixedQuestionService->unpackagedPracticeSetQuestionIdsByType(
                 $chapter,
@@ -228,11 +245,15 @@ class ChapterPracticeSetController extends Controller
             return back()->with('error', 'No practice-set questions in this chapter to package.');
         }
 
+        $tier = $validated['master_profile']
+            ?? $validated['tier']
+            ?? PracticeSetTier::STARTER;
+
         $practiceSet = $this->practiceSetService->createChapterPracticeSet(
             $chapter,
             $questionIds,
             $request->user()->id,
-            PracticeSetTier::STARTER,
+            $tier,
             Worksheet::STATUS_PUBLISHED,
             Question::idsAreAllFillInBlank($questionIds),
         );

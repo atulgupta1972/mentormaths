@@ -24,6 +24,7 @@ use App\Services\WrittenSheetAnswerKeyParser;
 use App\Services\WrittenSubmissionService;
 use App\Support\DiagramQuestionSupport;
 use App\Support\PracticeSetMasterProfile;
+use App\Support\PracticeSetTier;
 use App\Support\WrittenSubmissionLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -332,6 +333,8 @@ class WrittenSheetController extends Controller
             'chapter_plan.*.medium' => ['nullable', 'integer', 'min:0'],
             'chapter_plan.*.hard' => ['nullable', 'integer', 'min:0'],
             'notes' => ['nullable', 'string'],
+            'master_profile' => ['nullable', 'in:'.implode(',', PracticeSetMasterProfile::keys())],
+            'tier' => ['nullable', 'in:'.implode(',', PracticeSetMasterProfile::keys())],
         ]);
 
         if ($validator->fails()) {
@@ -343,6 +346,9 @@ class WrittenSheetController extends Controller
         }
 
         $validated = $validator->validated();
+        $tier = $validated['master_profile']
+            ?? $validated['tier']
+            ?? PracticeSetTier::STARTER;
 
         if (! empty($validated['chapter_plan'])) {
             $request->session()->put('written_sheet_chapter_plan', $validated['chapter_plan']);
@@ -401,6 +407,7 @@ class WrittenSheetController extends Controller
                     $validated['manual_questions'],
                     $request->user(),
                     $validated['notes'] ?? null,
+                    $tier,
                 );
             } elseif ($useChapterScope) {
                 $worksheet = $this->writtenSheetService->createChapterTest(
@@ -408,6 +415,7 @@ class WrittenSheetController extends Controller
                     $validated['question_ids'],
                     $request->user(),
                     $validated['notes'] ?? null,
+                    $tier,
                 );
             } else {
                 if (! $topic) {
@@ -424,6 +432,7 @@ class WrittenSheetController extends Controller
                     $validated['question_ids'],
                     $request->user(),
                     $validated['notes'] ?? null,
+                    $tier,
                 );
             }
 
@@ -596,6 +605,7 @@ class WrittenSheetController extends Controller
             'topic_id' => ['nullable', 'exists:syllabus_topics,id'],
             'topic_scope' => ['nullable', 'in:one,multiple'],
             'notes' => ['nullable', 'string'],
+            'master_profile' => ['nullable', 'in:'.implode(',', PracticeSetMasterProfile::keys())],
         ], [
             'pack.required' => 'Choose a .zip file containing questions.json and diagram images.',
             'pack.mimes' => 'Upload a .zip file (questions.json + JPG/PNG images).',
@@ -638,6 +648,7 @@ class WrittenSheetController extends Controller
                     $questionIds,
                     $request->user(),
                     $validated['notes'] ?? null,
+                    $validated['master_profile'] ?? PracticeSetTier::STARTER,
                 );
             } else {
                 $worksheet = $this->writtenSheetService->createFromTopic(
@@ -645,6 +656,7 @@ class WrittenSheetController extends Controller
                     $questionIds,
                     $request->user(),
                     $validated['notes'] ?? null,
+                    $validated['master_profile'] ?? PracticeSetTier::STARTER,
                 );
             }
 

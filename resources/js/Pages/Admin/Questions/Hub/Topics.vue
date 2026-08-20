@@ -19,6 +19,7 @@ const props = defineProps({
     contentUploaders: { type: Array, default: () => [] },
     stats: Object,
     board: Object,
+    masterProfiles: { type: Array, default: () => [] },
 });
 
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
@@ -27,6 +28,7 @@ const formulaBankHref = computed(() => route('admin.formula-bank.chapters.show',
 const page = usePage();
 const showSaveModal = ref(Boolean(page.props.flash?.save_confirmation));
 const saveConfirmation = computed(() => page.props.flash?.save_confirmation ?? null);
+const packageTier = ref(props.masterProfiles?.[0]?.value || 'starter');
 
 watch(
     () => page.props.flash?.save_confirmation,
@@ -72,11 +74,21 @@ const cardHref = (card) => {
 const packageChapterPracticeBank = (card) => {
     router.post(route('admin.practice-sets.chapters.from-practice-bank', props.chapter.id), {
         fill_in_blank: card?.fill_in_blank ?? false,
+        master_profile: packageTier.value,
     });
 };
 
 const packageChapterBank = () => {
-    router.post(route('admin.practice-sets.chapters.from-bank', props.chapter.id));
+    router.post(route('admin.practice-sets.chapters.from-bank', props.chapter.id), {
+        master_profile: packageTier.value,
+    });
+};
+
+const packageAsSet = (card) => {
+    router.post(route('admin.practice-sets.from-topic', card.topic_id), {
+        tier: packageTier.value || card.tier,
+        fill_in_blank: card.fill_in_blank ?? false,
+    });
 };
 
 const clearChapterPracticeBank = () => {
@@ -85,13 +97,6 @@ const clearChapterPracticeBank = () => {
     }
 
     router.delete(route('admin.questions.chapters.clear-practice-bank', props.chapter.id));
-};
-
-const packageAsSet = (card) => {
-    router.post(route('admin.practice-sets.from-topic', card.topic_id), {
-        tier: card.tier,
-        fill_in_blank: card.fill_in_blank ?? false,
-    });
 };
 
 const conversionForms = reactive({});
@@ -241,6 +246,27 @@ const clearBank = (card) => {
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.sets_count }}</p>
                         <p class="text-xs text-gray-500">Packaged sets</p>
                     </div>
+                </div>
+
+                <div v-if="isAdmin && masterProfiles.length" class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
+                    <label class="text-xs font-bold uppercase tracking-wide text-indigo-900">
+                        Package as category
+                        <select
+                            v-model="packageTier"
+                            class="mt-1 block w-full max-w-md rounded-md border-indigo-300 text-sm font-semibold text-slate-900"
+                        >
+                            <option
+                                v-for="profile in masterProfiles"
+                                :key="profile.value"
+                                :value="profile.value"
+                            >
+                                {{ profile.label }} — {{ profile.easy }}E / {{ profile.medium }}M / {{ profile.hard }}H
+                            </option>
+                        </select>
+                    </label>
+                    <p class="mt-1 text-[11px] text-indigo-800">
+                        Used when you package practice banks or chapter tests below.
+                    </p>
                 </div>
 
                 <div v-if="formulaSets?.length" class="space-y-3">

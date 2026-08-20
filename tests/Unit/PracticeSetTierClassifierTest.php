@@ -48,10 +48,10 @@ class PracticeSetTierClassifierTest extends TestCase
         $this->assertSame(PracticeSetTier::CHAMPION, $worksheet->fresh()->tier);
     }
 
-    public function test_skips_chapter_test(): void
+    public function test_classifies_legacy_chapter_test_into_profile_tier(): void
     {
         [$worksheet] = $this->seedWorksheetWithDifficulties(
-            ['Hard' => 1],
+            ['Hard' => 4],
             setCode: 'T901',
             tier: PracticeSetTier::CHAPTER_TEST,
             scope: PracticeSetScope::CHAPTER,
@@ -59,8 +59,10 @@ class PracticeSetTierClassifierTest extends TestCase
 
         $stats = app(PracticeSetTierClassifier::class)->classifyAll(dryRun: false);
 
-        $this->assertSame(0, $stats['updated']);
-        $this->assertSame(PracticeSetTier::CHAPTER_TEST, $worksheet->fresh()->tier);
+        $this->assertSame(1, $stats['updated']);
+        $worksheet->refresh();
+        $this->assertSame(PracticeSetTier::CHAMPION, $worksheet->tier);
+        $this->assertTrue($worksheet->isChapterTest());
     }
 
     /**

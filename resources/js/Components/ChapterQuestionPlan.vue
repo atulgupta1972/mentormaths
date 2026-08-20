@@ -20,13 +20,26 @@ const props = defineProps({
         type: String,
         default: 'MCQs',
     },
+    masterProfiles: {
+        type: Array,
+        default: () => [],
+    },
+    selectedProfile: {
+        type: String,
+        default: '',
+    },
 });
 
-const emit = defineEmits(['update:modelValue', 'generate-prompt']);
+const emit = defineEmits(['update:modelValue', 'update:selectedProfile', 'generate-prompt', 'apply-profile']);
 
 const plan = computed({
     get: () => props.modelValue,
     set: (value) => emit('update:modelValue', value),
+});
+
+const profile = computed({
+    get: () => props.selectedProfile || '',
+    set: (value) => emit('update:selectedProfile', value),
 });
 
 const updateCell = (index, field, raw) => {
@@ -54,6 +67,10 @@ const columnTotals = computed(() => ({
 
 const canGenerate = computed(() => columnTotals.value.total > 0);
 
+const activeProfile = computed(() =>
+    props.masterProfiles.find((item) => item.value === profile.value) ?? null,
+);
+
 const topicLabel = (row) => {
     if (row.topic_name) {
         return row.topic_name;
@@ -61,14 +78,41 @@ const topicLabel = (row) => {
 
     return props.topics.find((topic) => String(topic.id) === String(row.topic_id))?.name ?? '';
 };
+
+const onProfileChange = () => {
+    if (activeProfile.value) {
+        emit('apply-profile', activeProfile.value);
+    }
+};
 </script>
 
 <template>
     <div class="rounded-lg border border-indigo-200 bg-white p-6 shadow-sm">
         <h3 class="font-medium text-gray-900">Chapter question plan</h3>
         <p class="mt-1 text-sm text-gray-600">
-            Set how many {{ questionLabel }} you want per topic and difficulty. Questions will be saved into each topic bank.
+            Select Learner / Achiever / Expert to auto-fill counts (spread across topics). Then generate the Cursor prompt.
         </p>
+
+        <div v-if="masterProfiles.length" class="mt-4 max-w-xl">
+            <InputLabel value="Save as category" />
+            <select
+                v-model="profile"
+                class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                @change="onProfileChange"
+            >
+                <option value="">Select Learner / Achiever / Expert…</option>
+                <option
+                    v-for="item in masterProfiles"
+                    :key="item.value"
+                    :value="item.value"
+                >
+                    {{ item.label }} — {{ item.easy }}E / {{ item.medium }}M / {{ item.hard }}H (total {{ item.total }})
+                </option>
+            </select>
+            <p v-if="activeProfile" class="mt-1 text-xs font-medium text-indigo-800">
+                {{ activeProfile.tagline }} · set will be saved as {{ activeProfile.label }}
+            </p>
+        </div>
 
         <div class="mt-4 overflow-x-auto">
             <table class="min-w-full border-collapse text-sm">
@@ -136,7 +180,7 @@ const topicLabel = (row) => {
             >
                 {{ generating ? 'Building prompt…' : 'Generate Cursor prompt for chapter' }}
             </PrimaryButton>
-            <p v-if="!canGenerate" class="text-xs text-amber-700">Enter at least one question count above.</p>
+            <p v-if="!canGenerate" class="text-xs text-amber-700">Select a category or enter at least one question count above.</p>
         </div>
     </div>
 </template>

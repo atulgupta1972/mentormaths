@@ -9,7 +9,93 @@ use Closure;
 class SetCoverageGrouping
 {
     /**
-     * Group chapter set items under Learner / Achiever / Expert, with type rows (mcq, fill blank, written, book).
+     * Dashboard layout: Learner / Achiever / Expert columns with MCQ · Fill blank · Written · Test rows,
+     * plus Formula block and Book content (not split by tier yet).
+     *
+     * @param  array<string, mixed>  $items
+     * @param  Closure(array<string, mixed>): array<string, mixed>|null  $mapItem
+     * @return array{
+     *     layout: string,
+     *     blocks: list<array<string, mixed>>,
+     *     formula: array{key: string, label: string, items: list<array<string, mixed>>},
+     *     practice_correction: array{key: string, label: string, items: list<array<string, mixed>>},
+     *     books: array{key: string, label: string, items: list<array<string, mixed>>}
+     * }
+     */
+    public function formatDashboard(array $items, ?Closure $mapItem = null): array
+    {
+        $mapItem ??= fn (array $item) => $item;
+
+        $rowDefs = [
+            'practice' => 'MCQ',
+            'fill_blank' => 'Fill in blank',
+            'written' => 'Written',
+            'test' => 'Test',
+        ];
+
+        $blocks = [];
+
+        foreach (PracticeSetMasterProfile::keys() as $tier) {
+            $profile = PracticeSetMasterProfile::profile($tier) ?? [];
+            $rows = [];
+
+            foreach ($rowDefs as $key => $label) {
+                $rowItems = collect($items[$key] ?? [])
+                    ->filter(fn (array $item) => $this->displayTier($item) === $tier)
+                    ->map(fn (array $item) => $mapItem($item))
+                    ->values()
+                    ->all();
+
+                $rows[] = [
+                    'key' => $key,
+                    'label' => $label,
+                    'items' => $rowItems,
+                ];
+            }
+
+            $blocks[] = [
+                'tier' => $tier,
+                'label' => PracticeSetTier::label($tier),
+                'tagline' => PracticeSetTier::tagline($tier),
+                'color' => $profile['color'] ?? 'slate',
+                'rows' => $rows,
+                'item_count' => collect($rows)->sum(fn (array $row) => count($row['items'])),
+            ];
+        }
+
+        return [
+            'layout' => 'tier_blocks',
+            'blocks' => $blocks,
+            'formula' => [
+                'key' => 'formula',
+                'label' => 'Formula',
+                'items' => collect($items['formula'] ?? [])
+                    ->map(fn (array $item) => $mapItem($item))
+                    ->values()
+                    ->all(),
+            ],
+            'practice_correction' => [
+                'key' => 'practice_correction',
+                'label' => 'Practice · Correction',
+                'items' => collect($items['practice_correction'] ?? [])
+                    ->map(fn (array $item) => $mapItem($item))
+                    ->values()
+                    ->all(),
+            ],
+            'books' => [
+                'key' => 'books',
+                'label' => 'Book content',
+                'items' => collect($items['books'] ?? [])
+                    ->flatten(1)
+                    ->map(fn (array $item) => $mapItem($item))
+                    ->values()
+                    ->all(),
+            ],
+        ];
+    }
+
+    /**
+     * Flat groups (legacy / tests). Prefer formatDashboard for UI.
      *
      * @param  array<string, mixed>  $items
      * @param  Closure(array<string, mixed>): array<string, mixed>|null  $mapItem
@@ -17,100 +103,39 @@ class SetCoverageGrouping
      */
     public function formatDetailGroups(array $items, ?Closure $mapItem = null): array
     {
-        $mapItem ??= fn (array $item) => $item;
+        $dashboard = $this->formatDashboard($items, $mapItem);
         $groups = [];
 
-        $typeBuckets = [
-            'practice' => 'MCQ',
-            'fill_blank' => 'Fill in blank',
-            'written' => 'Written',
-            'test' => 'Test',
-            'formula' => 'Formula',
-            'practice_correction' => 'Practice · Correction',
-        ];
-
-        foreach (PracticeSetMasterProfile::keys() as $tier) {
-            $profile = PracticeSetMasterProfile::profile($tier);
-            $label = PracticeSetTier::label($tier);
-            $color = $profile['color'] ?? 'slate';
-
-            foreach ($typeBuckets as $key => $typeLabel) {
-                $rows = collect($items[$key] ?? [])
-                    ->filter(fn (array $item) => $this->itemTier($item) === $tier)
-                    ->map(fn (array $item) => $mapItem($item))
-                    ->values()
-                    ->all();
-
-                if ($rows === []) {
+        foreach ($dashboard['blocks'] as $block) {
+            foreach ($block['rows'] as $row) {
+                if ($row['items'] === []) {
                     continue;
                 }
 
                 $groups[] = [
-                    'key' => "{$tier}:{$key}",
-                    'label' => "{$label} · {$typeLabel}",
-                    'tier' => $tier,
-                    'color' => $color,
-                    'kind' => $key,
-                    'items' => $rows,
-                ];
-            }
-
-            $bookRows = collect($items['books'] ?? [])
-                ->flatten(1)
-                ->filter(fn (array $item) => $this->itemTier($item) === $tier)
-                ->map(fn (array $item) => $mapItem($item))
-                ->values()
-                ->all();
-
-            if ($bookRows !== []) {
-                $groups[] = [
-                    'key' => "{$tier}:books",
-                    'label' => "{$label} · Book",
-                    'tier' => $tier,
-                    'color' => $color,
-                    'kind' => 'books',
-                    'items' => $bookRows,
+                    'key' => "{$block['tier']}:{$row['key']}",
+                    'label' => "{$block['label']} · {$row['label']}",
+                    'tier' => $block['tier'],
+                    'color' => $block['color'],
+                    'kind' => $row['key'],
+                    'items' => $row['items'],
                 ];
             }
         }
 
-        // Chapter tests / uncategorised leftovers (no master profile tier).
-        foreach ($typeBuckets as $key => $typeLabel) {
-            $rows = collect($items[$key] ?? [])
-                ->filter(fn (array $item) => ! PracticeSetMasterProfile::isValid($this->itemTier($item)))
-                ->map(fn (array $item) => $mapItem($item))
-                ->values()
-                ->all();
-
-            if ($rows === []) {
+        foreach (['formula', 'practice_correction', 'books'] as $sectionKey) {
+            $section = $dashboard[$sectionKey];
+            if ($section['items'] === []) {
                 continue;
             }
 
             $groups[] = [
-                'key' => "other:{$key}",
-                'label' => $typeLabel,
+                'key' => $section['key'],
+                'label' => $section['label'],
                 'tier' => null,
                 'color' => null,
-                'kind' => $key,
-                'items' => $rows,
-            ];
-        }
-
-        $otherBooks = collect($items['books'] ?? [])
-            ->flatten(1)
-            ->filter(fn (array $item) => ! PracticeSetMasterProfile::isValid($this->itemTier($item)))
-            ->map(fn (array $item) => $mapItem($item))
-            ->values()
-            ->all();
-
-        if ($otherBooks !== []) {
-            $groups[] = [
-                'key' => 'other:books',
-                'label' => 'Books',
-                'tier' => null,
-                'color' => null,
-                'kind' => 'books',
-                'items' => $otherBooks,
+                'kind' => $section['key'],
+                'items' => $section['items'],
             ];
         }
 
@@ -118,10 +143,18 @@ class SetCoverageGrouping
     }
 
     /**
+     * Map worksheet tier to a display profile. Legacy chapter_test → Learner until reclassified.
+     *
      * @param  array<string, mixed>  $item
      */
-    private function itemTier(array $item): string
+    private function displayTier(array $item): string
     {
-        return (string) ($item['tier'] ?? PracticeSetTier::STARTER);
+        $tier = (string) ($item['tier'] ?? PracticeSetTier::STARTER);
+
+        if (PracticeSetMasterProfile::isValid($tier)) {
+            return $tier;
+        }
+
+        return PracticeSetTier::STARTER;
     }
 }

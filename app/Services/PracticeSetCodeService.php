@@ -42,7 +42,10 @@ class PracticeSetCodeService
         $seq = Worksheet::query()
             ->where('scope', PracticeSetScope::CHAPTER)
             ->where('syllabus_chapter_id', $chapter->id)
-            ->where('tier', $tier)
+            ->where(function ($query) use ($tier) {
+                $query->where('tier', $tier)
+                    ->orWhere('set_code', 'like', 'T%');
+            })
             ->count() + 1;
 
         return $this->ensureUniqueCode($chapter, $tier, $seq, false);

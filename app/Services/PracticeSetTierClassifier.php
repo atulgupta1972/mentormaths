@@ -95,10 +95,6 @@ class PracticeSetTierClassifier
 
     private function shouldSkip(Worksheet $worksheet): bool
     {
-        if ($worksheet->tier === PracticeSetTier::CHAPTER_TEST) {
-            return true;
-        }
-
         if ($worksheet->purpose === WorksheetPurpose::FORMULA
             || $worksheet->purpose === WorksheetPurpose::CATCH_UP) {
             return true;

@@ -70,6 +70,28 @@ const applyMasterProfile = (profile) => {
     promptSettings.value.easy = profile.easy;
     promptSettings.value.medium = profile.medium;
     promptSettings.value.hard = profile.hard;
+
+    if (chapterPlanRows.value?.length) {
+        const topicCount = Math.max(1, chapterPlanRows.value.length);
+        const fields = ['easy', 'medium', 'hard'];
+        const rows = Array.from({ length: topicCount }, () => ({ easy: 0, medium: 0, hard: 0 }));
+
+        for (const field of fields) {
+            const remaining = Number(profile[field] || 0);
+            const base = Math.floor(remaining / topicCount);
+            const extra = remaining % topicCount;
+            for (let i = 0; i < topicCount; i += 1) {
+                rows[i][field] = base + (i < extra ? 1 : 0);
+            }
+        }
+
+        chapterPlanRows.value = chapterPlanRows.value.map((row, index) => ({
+            ...row,
+            easy: rows[index]?.easy ?? 0,
+            medium: rows[index]?.medium ?? 0,
+            hard: rows[index]?.hard ?? 0,
+        }));
+    }
 };
 
 const buildDefaultChapterPlan = () => (props.chapterTopics || []).map((topic, index) => ({
@@ -558,9 +580,12 @@ onMounted(() => {
                 <ChapterQuestionPlan
                     v-if="isChapterScope && chapterTopics.length"
                     v-model="chapterPlanRows"
+                    v-model:selected-profile="selectedMasterProfile"
                     :topics="chapterTopics"
                     :generating="generatingChapterPrompt"
+                    :master-profiles="masterProfiles"
                     question-label="fill-in-the-blank questions"
+                    @apply-profile="applyMasterProfile"
                     @generate-prompt="generateChapterPrompt"
                 />
 

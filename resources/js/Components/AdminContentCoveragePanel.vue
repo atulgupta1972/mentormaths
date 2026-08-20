@@ -108,36 +108,42 @@ const questionSuffix = (item) => {
     return count > 0 ? ` (${count})` : '';
 };
 
-const TIER_ORDER = ['starter', 'builder', 'champion', 'chapter_test'];
+const TIER_BLOCKS = [
+    { tier: 'starter', label: 'Learner', color: 'sky' },
+    { tier: 'builder', label: 'Achiever', color: 'amber' },
+    { tier: 'champion', label: 'Expert', color: 'emerald' },
+];
 
-const groupItemsByTier = (items) => {
-    const map = new Map();
+const TYPE_ROWS = [
+    { key: 'practice', label: 'MCQ' },
+    { key: 'fill_blank', label: 'Fill in blank' },
+    { key: 'written', label: 'Written' },
+    { key: 'test', label: 'Test' },
+];
 
-    for (const item of items ?? []) {
-        const tier = item.tier || 'starter';
-        if (! map.has(tier)) {
-            map.set(tier, {
-                tier,
-                label: item.tier_label || tier,
-                items: [],
-            });
-        }
-        map.get(tier).items.push(item);
-    }
+const displayTier = (item) => {
+    const tier = item?.tier || 'starter';
 
-    return [...map.values()].sort((a, b) => {
-        const ai = TIER_ORDER.indexOf(a.tier);
-        const bi = TIER_ORDER.indexOf(b.tier);
-
-        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    });
+    return ['starter', 'builder', 'champion'].includes(tier) ? tier : 'starter';
 };
 
-const tierHeaderClass = (tier) => ({
-    starter: 'text-sky-800',
-    builder: 'text-amber-800',
-    champion: 'text-emerald-800',
-}[tier] ?? 'text-slate-700');
+const itemsForBlockRow = (chapter, tier, key) =>
+    (chapter.items?.[key] || []).filter((item) => displayTier(item) === tier);
+
+const blockItemCount = (chapter, tier) =>
+    TYPE_ROWS.reduce((sum, row) => sum + itemsForBlockRow(chapter, tier, row.key).length, 0);
+
+const blockShellClass = (color) => ({
+    sky: 'border-sky-300 bg-sky-50/70',
+    amber: 'border-amber-300 bg-amber-50/70',
+    emerald: 'border-emerald-300 bg-emerald-50/70',
+}[color] ?? 'border-slate-300 bg-white');
+
+const blockTitleClass = (color) => ({
+    sky: 'bg-sky-600 text-white',
+    amber: 'bg-amber-600 text-white',
+    emerald: 'bg-emerald-700 text-white',
+}[color] ?? 'bg-slate-700 text-white');
 
 const formatDrillDown = (items) => {
     if (!items?.length) {
@@ -369,7 +375,7 @@ const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chap
                         >
                             <td :class="gridCell" />
                             <td :colspan="6" :class="[gridCell, 'py-1.5']">
-                                <div class="space-y-1.5">
+                                <div class="space-y-2">
                                     <Link
                                         :href="chapterHubUrl(chapter.id)"
                                         class="inline-block text-[10px] font-bold uppercase tracking-wide text-indigo-700 hover:underline"
@@ -377,40 +383,69 @@ const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chap
                                     >
                                         Open chapter hub →
                                     </Link>
-                                    <div v-for="bucket in ['practice', 'test', 'written', 'fill_blank', 'formula']" :key="`${chapter.id}-${bucket}`">
-                                        <template v-if="chapter.items?.[bucket]?.length">
+
+                                    <div class="grid gap-2 lg:grid-cols-3">
+                                        <div
+                                            v-for="block in TIER_BLOCKS"
+                                            :key="`${chapter.id}-${block.tier}`"
+                                            class="overflow-hidden rounded-lg border"
+                                            :class="blockShellClass(block.color)"
+                                        >
                                             <div
-                                                v-for="tierGroup in groupItemsByTier(chapter.items[bucket])"
-                                                :key="`${chapter.id}-${bucket}-${tierGroup.tier}`"
-                                                class="mb-1"
+                                                class="px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wide"
+                                                :class="blockTitleClass(block.color)"
                                             >
-                                                <p
-                                                    class="text-[10px] font-bold uppercase tracking-wide"
-                                                    :class="tierHeaderClass(tierGroup.tier)"
+                                                {{ block.label }} ({{ blockItemCount(chapter, block.tier) }})
+                                            </div>
+                                            <div class="space-y-1.5 p-2">
+                                                <div
+                                                    v-for="row in TYPE_ROWS"
+                                                    :key="`${block.tier}-${row.key}`"
                                                 >
-                                                    {{ tierGroup.label }} · {{ bucket.replace('_', ' ') }}
-                                                </p>
-                                                <div class="mt-0.5 flex flex-wrap gap-1">
-                                                    <Link
-                                                        v-for="item in tierGroup.items"
-                                                        :key="`${bucket}-${item.worksheet_id}`"
-                                                        :href="item.admin_url"
-                                                        class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm hover:border-indigo-400"
-                                                        @click.stop
+                                                    <p class="text-[9px] font-bold uppercase tracking-wide text-slate-500">{{ row.label }}</p>
+                                                    <div
+                                                        v-if="itemsForBlockRow(chapter, block.tier, row.key).length"
+                                                        class="mt-0.5 flex flex-wrap gap-1"
                                                     >
-                                                        <span class="font-mono text-[11px] font-bold text-slate-900">
-                                                            {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
-                                                        </span>
-                                                        <span
-                                                            class="rounded px-1 py-px text-[9px] font-bold uppercase"
-                                                            :class="statusClass(item.status)"
+                                                        <Link
+                                                            v-for="item in itemsForBlockRow(chapter, block.tier, row.key)"
+                                                            :key="`${row.key}-${item.worksheet_id}`"
+                                                            :href="item.admin_url"
+                                                            class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm hover:border-indigo-400"
+                                                            @click.stop
                                                         >
-                                                            {{ item.status_label }}
-                                                        </span>
-                                                    </Link>
+                                                            <span class="font-mono text-[11px] font-bold text-slate-900">
+                                                                {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
+                                                            </span>
+                                                            <span
+                                                                class="rounded px-1 py-px text-[9px] font-bold uppercase"
+                                                                :class="statusClass(item.status)"
+                                                            >
+                                                                {{ item.status_label }}
+                                                            </span>
+                                                        </Link>
+                                                    </div>
+                                                    <p v-else class="mt-0.5 text-[10px] text-slate-400">—</p>
                                                 </div>
                                             </div>
-                                        </template>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="chapter.items?.formula?.length" class="rounded-lg border border-violet-300 bg-violet-50/70 p-2">
+                                        <p class="text-[10px] font-bold uppercase tracking-wide text-violet-900">Formula</p>
+                                        <div class="mt-0.5 flex flex-wrap gap-1">
+                                            <Link
+                                                v-for="item in chapter.items.formula"
+                                                :key="`formula-${item.worksheet_id}`"
+                                                :href="item.admin_url"
+                                                class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm hover:border-indigo-400"
+                                                @click.stop
+                                            >
+                                                <span class="font-mono text-[11px] font-bold text-slate-900">
+                                                    {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
+                                                </span>
+                                            </Link>
+                                        </div>
                                     </div>
                                 </div>
                             </td>

@@ -6,6 +6,7 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
 use App\Models\Worksheet;
 use App\Support\PracticeSetScope;
+use App\Support\PracticeSetMasterProfile;
 use App\Support\PracticeSetTier;
 
 class PracticeSetService
@@ -51,17 +52,18 @@ class PracticeSetService
         ];
     }
 
-    public function prepareChapterTestCreate(SyllabusChapter $chapter, int $questionCount): array
+    public function prepareChapterTestCreate(SyllabusChapter $chapter, int $questionCount, string $tier = PracticeSetTier::STARTER): array
     {
         $setNumber = $this->nextChapterSetNumber($chapter->id);
         $setCode = $this->codeService->generateChapterTest($chapter);
-        $tier = PracticeSetTier::CHAPTER_TEST;
+        $profileTier = PracticeSetMasterProfile::isValid($tier) ? $tier : PracticeSetTier::STARTER;
+        $label = PracticeSetTier::label($profileTier);
 
         return [
             'set_number' => $setNumber,
             'set_code' => $setCode,
-            'title' => "{$setCode} — Chapter test {$setNumber} ({$questionCount} sums)",
-            'tier' => $tier,
+            'title' => "{$setCode} — {$label} chapter test {$setNumber} ({$questionCount} sums)",
+            'tier' => $profileTier,
         ];
     }
 
@@ -71,8 +73,9 @@ class PracticeSetService
         int $userId,
         string $status = Worksheet::STATUS_DRAFT,
         ?string $notes = null,
+        string $tier = PracticeSetTier::STARTER,
     ): Worksheet {
-        $meta = $this->prepareChapterTestCreate($chapter, count($questionIds));
+        $meta = $this->prepareChapterTestCreate($chapter, count($questionIds), $tier);
 
         $practiceSet = Worksheet::create([
             'title' => $meta['title'],

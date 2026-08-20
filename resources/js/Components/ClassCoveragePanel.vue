@@ -1,5 +1,6 @@
 <script setup>
 import { formatDate } from '@/utils/dates';
+import CoverageSetItemCard from '@/Components/CoverageSetItemCard.vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -267,6 +268,35 @@ const groupHeaderClass = (group) => ({
     emerald: 'text-emerald-800',
 }[group?.color] ?? 'text-slate-700');
 
+const isTierDashboard = (chapter) => chapter?.items?.layout === 'tier_blocks';
+
+const chapterDashboard = (chapter) => (isTierDashboard(chapter) ? chapter.items : null);
+
+const blockShellClass = (color) => ({
+    sky: 'border-sky-300 bg-gradient-to-b from-sky-50 to-white',
+    amber: 'border-amber-300 bg-gradient-to-b from-amber-50 to-white',
+    emerald: 'border-emerald-300 bg-gradient-to-b from-emerald-50 to-white',
+}[color] ?? 'border-slate-300 bg-white');
+
+const blockTitleClass = (color) => ({
+    sky: 'bg-sky-600 text-white',
+    amber: 'bg-amber-600 text-white',
+    emerald: 'bg-emerald-700 text-white',
+}[color] ?? 'bg-slate-700 text-white');
+
+const hasDashboardContent = (dashboard) => {
+    if (! dashboard) {
+        return false;
+    }
+
+    const blockItems = (dashboard.blocks || []).some((block) => (block.item_count || 0) > 0);
+    const extras = ['formula', 'practice_correction', 'books'].some(
+        (key) => (dashboard[key]?.items?.length || 0) > 0,
+    );
+
+    return blockItems || extras;
+};
+
 const itemHref = (item) => {
     if (! isStudentView.value || ! item.can_open) {
         return null;
@@ -440,10 +470,144 @@ const startCorrection = (item) => {
                             v-if="isExpanded(chapter.id)"
                             :class="index % 2 === 0 ? 'bg-sky-50/80' : 'bg-sky-50'"
                         >
-                            <td :colspan="columnCount" class="px-3 py-2">
-                                <div v-if="!(chapter.items?.length)" class="text-[11px] text-slate-500">
+                            <td :colspan="columnCount" class="px-3 py-3">
+                                <div
+                                    v-if="isTierDashboard(chapter) && !hasDashboardContent(chapterDashboard(chapter))"
+                                    class="text-[11px] text-slate-500"
+                                >
                                     No practice / test content listed for this chapter yet.
                                 </div>
+                                <div
+                                    v-else-if="!isTierDashboard(chapter) && !(chapter.items?.length)"
+                                    class="text-[11px] text-slate-500"
+                                >
+                                    No practice / test content listed for this chapter yet.
+                                </div>
+
+                                <div v-else-if="isTierDashboard(chapter)" class="space-y-3">
+                                    <div class="grid gap-3 lg:grid-cols-3">
+                                        <div
+                                            v-for="block in chapterDashboard(chapter).blocks"
+                                            :key="`${chapter.id}-${block.tier}`"
+                                            class="overflow-hidden rounded-xl border shadow-sm"
+                                            :class="blockShellClass(block.color)"
+                                        >
+                                            <div
+                                                class="px-3 py-2 text-center text-[11px] font-bold uppercase tracking-wide"
+                                                :class="blockTitleClass(block.color)"
+                                            >
+                                                {{ block.label }}
+                                                <span class="ml-1 font-semibold opacity-90">({{ block.item_count || 0 }})</span>
+                                            </div>
+                                            <div class="space-y-2 p-2.5">
+                                                <div
+                                                    v-for="row in block.rows"
+                                                    :key="`${block.tier}-${row.key}`"
+                                                    class="min-h-[2.25rem]"
+                                                >
+                                                    <p class="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                                        {{ row.label }}
+                                                    </p>
+                                                    <div v-if="row.items?.length" class="mt-0.5 flex flex-wrap gap-1.5">
+                                                        <CoverageSetItemCard
+                                                            v-for="item in row.items"
+                                                            :key="`${row.key}-${item.worksheet_id}`"
+                                                            :item="item"
+                                                            :group-key="`${block.tier}:${row.key}`"
+                                                            :is-student-view="isStudentView"
+                                                            :can-staff-assign="canStaffAssign"
+                                                            :assigning-worksheet-id="assigningWorksheetId"
+                                                            :pending-assign-key="pendingAssignKey"
+                                                            :staff-assign-form="staffAssignForm"
+                                                            @self-assign="selfAssign"
+                                                            @start-correction="startCorrection"
+                                                            @open-staff-assign="openStaffAssign"
+                                                            @confirm-staff-assign="confirmStaffAssign"
+                                                            @cancel-staff-assign="pendingAssignKey = null"
+                                                        />
+                                                    </div>
+                                                    <p v-else class="mt-0.5 text-[10px] text-slate-400">—</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        v-if="chapterDashboard(chapter).formula?.items?.length"
+                                        class="rounded-xl border border-violet-300 bg-violet-50/70 p-2.5 shadow-sm"
+                                    >
+                                        <p class="text-[10px] font-bold uppercase tracking-wide text-violet-900">Formula</p>
+                                        <div class="mt-1 flex flex-wrap gap-1.5">
+                                            <CoverageSetItemCard
+                                                v-for="item in chapterDashboard(chapter).formula.items"
+                                                :key="`formula-${item.worksheet_id}`"
+                                                :item="item"
+                                                group-key="formula"
+                                                :is-student-view="isStudentView"
+                                                :can-staff-assign="canStaffAssign"
+                                                :assigning-worksheet-id="assigningWorksheetId"
+                                                :pending-assign-key="pendingAssignKey"
+                                                :staff-assign-form="staffAssignForm"
+                                                @self-assign="selfAssign"
+                                                @start-correction="startCorrection"
+                                                @open-staff-assign="openStaffAssign"
+                                                @confirm-staff-assign="confirmStaffAssign"
+                                                @cancel-staff-assign="pendingAssignKey = null"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        v-if="chapterDashboard(chapter).practice_correction?.items?.length"
+                                        class="rounded-xl border border-orange-300 bg-orange-50/70 p-2.5 shadow-sm"
+                                    >
+                                        <p class="text-[10px] font-bold uppercase tracking-wide text-orange-900">Practice · Correction</p>
+                                        <div class="mt-1 flex flex-wrap gap-1.5">
+                                            <CoverageSetItemCard
+                                                v-for="item in chapterDashboard(chapter).practice_correction.items"
+                                                :key="`corr-${item.worksheet_id}`"
+                                                :item="item"
+                                                group-key="practice_correction"
+                                                :is-student-view="isStudentView"
+                                                :can-staff-assign="canStaffAssign"
+                                                :assigning-worksheet-id="assigningWorksheetId"
+                                                :pending-assign-key="pendingAssignKey"
+                                                :staff-assign-form="staffAssignForm"
+                                                @self-assign="selfAssign"
+                                                @start-correction="startCorrection"
+                                                @open-staff-assign="openStaffAssign"
+                                                @confirm-staff-assign="confirmStaffAssign"
+                                                @cancel-staff-assign="pendingAssignKey = null"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        v-if="chapterDashboard(chapter).books?.items?.length"
+                                        class="rounded-xl border border-slate-300 bg-white p-2.5 shadow-sm"
+                                    >
+                                        <p class="text-[10px] font-bold uppercase tracking-wide text-slate-800">Book content</p>
+                                        <div class="mt-1 flex flex-wrap gap-1.5">
+                                            <CoverageSetItemCard
+                                                v-for="item in chapterDashboard(chapter).books.items"
+                                                :key="`book-${item.worksheet_id}`"
+                                                :item="item"
+                                                group-key="books"
+                                                :is-student-view="isStudentView"
+                                                :can-staff-assign="canStaffAssign"
+                                                :assigning-worksheet-id="assigningWorksheetId"
+                                                :pending-assign-key="pendingAssignKey"
+                                                :staff-assign-form="staffAssignForm"
+                                                @self-assign="selfAssign"
+                                                @start-correction="startCorrection"
+                                                @open-staff-assign="openStaffAssign"
+                                                @confirm-staff-assign="confirmStaffAssign"
+                                                @cancel-staff-assign="pendingAssignKey = null"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div v-else class="space-y-2">
                                     <div
                                         v-for="group in chapter.items"
@@ -456,97 +620,22 @@ const startCorrection = (item) => {
                                             {{ group.label }}
                                         </p>
                                         <div class="mt-0.5 flex flex-wrap gap-1.5">
-                                            <div
+                                            <CoverageSetItemCard
                                                 v-for="item in group.items"
                                                 :key="`${group.key}-${item.worksheet_id}`"
-                                                class="inline-flex flex-wrap items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 shadow-sm"
-                                            >
-                                                <span class="font-mono text-[11px] font-bold text-slate-900">
-                                                    {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
-                                                </span>
-                                                <span
-                                                    class="rounded px-1.5 py-px text-[10px] font-bold uppercase"
-                                                    :class="statusClass(item.status)"
-                                                >
-                                                    {{ item.status_label }}
-                                                </span>
-                                                <span
-                                                    v-if="item.target_date"
-                                                    class="text-[10px] font-semibold text-slate-600"
-                                                >
-                                                    due {{ formatDate(item.target_date) }}
-                                                </span>
-                                                <span
-                                                    v-if="item.correction_count > 0 && !item.is_correction"
-                                                    class="rounded bg-orange-100 px-1.5 py-px text-[10px] font-bold uppercase text-orange-900"
-                                                >
-                                                    {{ item.correction_count }} wrong
-                                                </span>
-                                                <template v-if="isStudentView">
-                                                    <button
-                                                        v-if="item.can_redo_wrong"
-                                                        type="button"
-                                                        class="rounded bg-orange-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-orange-800 disabled:opacity-50"
-                                                        :disabled="assigningWorksheetId === item.worksheet_id"
-                                                        @click.stop="startCorrection(item)"
-                                                    >
-                                                        Redo wrong
-                                                    </button>
-                                                    <button
-                                                        v-if="item.can_assign"
-                                                        type="button"
-                                                        class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800 disabled:opacity-50"
-                                                        :disabled="assigningWorksheetId === item.worksheet_id"
-                                                        @click.stop="selfAssign(item)"
-                                                    >
-                                                        {{ item.status === 'done' ? 'Redo' : 'Assign me' }}
-                                                    </button>
-                                                    <Link
-                                                        v-else-if="itemHref(item)"
-                                                        :href="itemHref(item)"
-                                                        class="rounded bg-emerald-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-emerald-800"
-                                                        @click.stop
-                                                    >
-                                                        Open
-                                                    </Link>
-                                                </template>
-                                                <template v-else-if="canAssignItem(item)">
-                                                    <button
-                                                        v-if="pendingAssignKey !== itemKey(group.key, item)"
-                                                        type="button"
-                                                        class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800"
-                                                        @click.stop="openStaffAssign(item, group.key)"
-                                                    >
-                                                        {{ item.status === 'not_assigned' ? 'Assign' : 'Reassign' }}
-                                                    </button>
-                                                    <form
-                                                        v-else
-                                                        class="inline-flex items-center gap-1"
-                                                        @submit.prevent="confirmStaffAssign(item)"
-                                                    >
-                                                        <input
-                                                            v-model="staffAssignForm.target_date"
-                                                            type="date"
-                                                            class="rounded border-slate-300 px-1 py-0.5 text-[11px]"
-                                                            required
-                                                        >
-                                                        <button
-                                                            type="submit"
-                                                            class="rounded bg-emerald-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
-                                                            :disabled="staffAssignForm.processing"
-                                                        >
-                                                            {{ staffAssignForm.processing ? 'Saving…' : 'Save' }}
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            class="text-[10px] text-slate-500 hover:underline"
-                                                            @click.stop="pendingAssignKey = null"
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                    </form>
-                                                </template>
-                                            </div>
+                                                :item="item"
+                                                :group-key="group.key"
+                                                :is-student-view="isStudentView"
+                                                :can-staff-assign="canStaffAssign"
+                                                :assigning-worksheet-id="assigningWorksheetId"
+                                                :pending-assign-key="pendingAssignKey"
+                                                :staff-assign-form="staffAssignForm"
+                                                @self-assign="selfAssign"
+                                                @start-correction="startCorrection"
+                                                @open-staff-assign="openStaffAssign"
+                                                @confirm-staff-assign="confirmStaffAssign"
+                                                @cancel-staff-assign="pendingAssignKey = null"
+                                            />
                                         </div>
                                     </div>
                                 </div>

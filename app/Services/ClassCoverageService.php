@@ -91,11 +91,11 @@ class ClassCoverageService
 
     /**
      * @param  array<string, mixed>  $items
-     * @return list<array{key: string, label: string, tier?: string|null, color?: string|null, items: list<array<string, mixed>>}>
+     * @return array<string, mixed>
      */
     private function formatDetailItems(array $items): array
     {
-        return app(SetCoverageGrouping::class)->formatDetailGroups($items, fn (array $item) => $this->detailItemPayload($item));
+        return app(SetCoverageGrouping::class)->formatDashboard($items, fn (array $item) => $this->detailItemPayload($item));
     }
 
     /**

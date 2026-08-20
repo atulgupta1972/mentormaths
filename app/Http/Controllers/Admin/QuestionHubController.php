@@ -461,6 +461,7 @@ class QuestionHubController extends Controller
                 'formulas_count' => $formulasCount,
                 'formula_sets_count' => count($formulaSets),
             ],
+            'masterProfiles' => \App\Support\PracticeSetMasterProfile::options(),
         ]);
     }
 
