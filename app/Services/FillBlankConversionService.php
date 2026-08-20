@@ -275,6 +275,112 @@ class FillBlankConversionService
         return $task->fresh();
     }
 
+    /**
+     * Clear fill-blank conversion fields for one MCQ row (keeps the MCQ).
+     */
+    public function clearRow(ContentUploadTask $task, int $index): void
+    {
+        $this->assertConversionTask($task);
+        $chapter = $task->textbookChapter;
+        $items = $chapter->extraction_items ?? [];
+
+        if (! isset($items[$index])) {
+            throw new InvalidArgumentException('That question is missing.');
+        }
+
+        $items[$index] = $this->strippedFillBlankFields($items[$index]);
+        $chapter->update(['extraction_items' => array_values($items)]);
+    }
+
+    /**
+     * Clear fill-blank conversion for every row on the chapter (MCQs stay).
+     */
+    public function clearAll(ContentUploadTask $task): int
+    {
+        $this->assertConversionTask($task);
+        $chapter = $task->textbookChapter;
+        $items = $chapter->extraction_items ?? [];
+        $cleared = 0;
+
+        foreach ($items as $index => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            if ($this->hasFillBlankDraft($item)) {
+                $cleared++;
+            }
+
+            $items[$index] = $this->strippedFillBlankFields($item);
+        }
+
+        $chapter->update(['extraction_items' => array_values($items)]);
+
+        return $cleared;
+    }
+
+    /**
+     * @param  list<int>  $indexes
+     */
+    public function clearRows(ContentUploadTask $task, array $indexes): int
+    {
+        $this->assertConversionTask($task);
+        $chapter = $task->textbookChapter;
+        $items = $chapter->extraction_items ?? [];
+        $cleared = 0;
+
+        foreach (array_unique(array_map('intval', $indexes)) as $index) {
+            if (! isset($items[$index]) || ! is_array($items[$index])) {
+                continue;
+            }
+
+            if ($this->hasFillBlankDraft($items[$index])) {
+                $cleared++;
+            }
+
+            $items[$index] = $this->strippedFillBlankFields($items[$index]);
+        }
+
+        $chapter->update(['extraction_items' => array_values($items)]);
+
+        return $cleared;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>
+     */
+    private function strippedFillBlankFields(array $item): array
+    {
+        unset(
+            $item['fill_blank_question_text'],
+            $item['fill_blank_correct_answer'],
+            $item['fill_blank_answer_format'],
+            $item['fill_blank_decimal_places'],
+            $item['fill_blank_explanation'],
+            $item['fill_blank_method_hint'],
+            $item['fill_blank_checked_at'],
+            $item['fill_blank_checked_hash'],
+        );
+
+        $item['fill_blank_skipped'] = true;
+        $item['include_in_fill_blank'] = false;
+        $item['include_in_written'] = false;
+
+        return $item;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function hasFillBlankDraft(array $item): bool
+    {
+        return filled($item['fill_blank_question_text'] ?? null)
+            || filled($item['fill_blank_correct_answer'] ?? null)
+            || filled($item['fill_blank_checked_at'] ?? null)
+            || ! empty($item['fill_blank_skipped']);
+    }
+
     private function writeDraft(TextbookChapter $chapter, int $index, array $draft, bool $clearCheck): void
     {
         $items = $chapter->extraction_items ?? [];

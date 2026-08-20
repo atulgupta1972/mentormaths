@@ -26,7 +26,9 @@ const seedDrafts = () => {
         drafts[row.index] = {
             fill_blank_question_text: row.fill_blank_question_text,
             fill_blank_correct_answer: row.fill_blank_correct_answer,
-            fill_blank_answer_format: row.fill_blank_answer_format,
+            fill_blank_answer_format: ['integer', 'decimal', 'fraction'].includes(row.fill_blank_answer_format)
+                ? row.fill_blank_answer_format
+                : 'integer',
             fill_blank_decimal_places: row.fill_blank_decimal_places,
             include_in_written: row.include_in_written !== false,
         };
@@ -124,7 +126,8 @@ const skipRow = (row, skipped) => {
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                    Skip number-names and long English answers (they stay MCQ). For the rest, edit the blank, then
+                    Blank answers must be <strong>numbers or fractions</strong> only (e.g. 42, 3.5, 3/4) — not English words.
+                    Skip rows you cannot rewrite numerically. For the rest, edit the blank, then
                     <strong>Check as a student</strong> with the key hidden. After Check, the stored answer is shown so you can confirm —
                     if the MCQ key looks wrong, edit the fill-in-blank answer and Check again.
                     Admin publishes fill-in-blank and written after you submit.

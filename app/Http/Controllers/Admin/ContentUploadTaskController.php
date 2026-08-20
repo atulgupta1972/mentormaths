@@ -761,6 +761,41 @@ class ContentUploadTaskController extends Controller
             : 'Task marked published.');
     }
 
+    public function clearConversionRows(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        abort_unless($contentTask->isFillBlankConversion(), 404);
+
+        $validated = $request->validate([
+            'indexes' => ['required', 'array', 'min:1'],
+            'indexes.*' => ['integer', 'min:0'],
+        ]);
+
+        try {
+            $cleared = $this->fillBlankConversion->clearRows($contentTask, $validated['indexes']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', $cleared === 1
+            ? 'Removed fill-in-blank for 1 question (MCQ kept).'
+            : "Removed fill-in-blank for {$cleared} questions (MCQs kept).");
+    }
+
+    public function clearAllConversionRows(ContentUploadTask $contentTask): RedirectResponse
+    {
+        abort_unless($contentTask->isFillBlankConversion(), 404);
+
+        try {
+            $cleared = $this->fillBlankConversion->clearAll($contentTask);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', $cleared > 0
+            ? "Cleared all fill-in-blank conversion drafts ({$cleared} rows). MCQs unchanged."
+            : 'No fill-in-blank drafts to clear.');
+    }
+
     public function assignFillBlankConversion(Request $request): RedirectResponse
     {
         $validated = $request->validate([

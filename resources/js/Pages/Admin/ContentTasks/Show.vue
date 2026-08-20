@@ -4,7 +4,7 @@ import ContentVerificationPanel from '@/Components/ContentVerificationPanel.vue'
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { safeRoute } from '@/utils/routes';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
 const props = defineProps({
@@ -29,6 +29,65 @@ const changeBookForm = useForm({
     book_name: '',
     book_code: '',
 });
+const selectedConversionIndexes = ref([]);
+
+const looksLikeWordAnswer = (answer) => {
+    const value = String(answer || '').trim();
+    if (!value) {
+        return false;
+    }
+
+    if (/^-?\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)?$/.test(value.replace(/,/g, ''))) {
+        return false;
+    }
+
+    if (/^-?\d+\s+\d+\s*\/\s*\d+$/.test(value)) {
+        return false;
+    }
+
+    return /[a-zA-Z]/.test(value);
+};
+
+const toggleConversionRow = (index) => {
+    if (selectedConversionIndexes.value.includes(index)) {
+        selectedConversionIndexes.value = selectedConversionIndexes.value.filter((row) => row !== index);
+        return;
+    }
+
+    selectedConversionIndexes.value = [...selectedConversionIndexes.value, index];
+};
+
+const clearSelectedConversions = () => {
+    if (!selectedConversionIndexes.value.length) {
+        return;
+    }
+
+    if (!window.confirm(`Remove fill-in-blank for ${selectedConversionIndexes.value.length} selected question(s)? MCQs stay.`)) {
+        return;
+    }
+
+    router.post(route('admin.content-tasks.conversion-clear-rows', props.task.id), {
+        indexes: selectedConversionIndexes.value,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            selectedConversionIndexes.value = [];
+        },
+    });
+};
+
+const clearAllConversions = () => {
+    if (!window.confirm('Clear ALL fill-in-blank conversion drafts on this chapter? MCQs stay. Uploader can convert again.')) {
+        return;
+    }
+
+    router.post(route('admin.content-tasks.conversion-clear-all', props.task.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+            selectedConversionIndexes.value = [];
+        },
+    });
+};
 
 const approveDelete = (id) => {
     approveDeleteForm.post(route('admin.content-tasks.delete-requests.approve', [props.task.id, id]), {
@@ -354,29 +413,80 @@ const formatDuration = (seconds) => {
                 />
 
                 <div v-if="task.is_fill_blank_conversion" class="rounded-lg border border-emerald-200 bg-white p-4 shadow-sm">
-                    <p class="text-sm font-semibold text-emerald-950">Fill-in-blank conversion</p>
-                    <p class="mt-1 text-sm text-emerald-900">
-                        Review checked blanks. Skipped rows stay MCQ. Publish creates F and W parts.
-                    </p>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-semibold text-emerald-950">Fill-in-blank conversion</p>
+                            <p class="mt-1 text-sm text-emerald-900">
+                                Review checked blanks. Answers must be numbers or fractions (e.g. 3/4), not words.
+                                Delete bad rows (partial) or clear all — MCQs stay. Publish creates F and W parts.
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                class="rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-900 hover:bg-rose-100 disabled:opacity-50"
+                                :disabled="!selectedConversionIndexes.length"
+                                @click="clearSelectedConversions"
+                            >
+                                Delete selected ({{ selectedConversionIndexes.length }})
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md border border-rose-400 bg-white px-3 py-1.5 text-xs font-medium text-rose-800 hover:bg-rose-50"
+                                @click="clearAllConversions"
+                            >
+                                Clear all fill-in-blanks
+                            </button>
+                        </div>
+                    </div>
                     <div class="mt-3 overflow-x-auto">
                         <table class="min-w-full divide-y divide-slate-100 text-sm">
                             <thead class="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
                                 <tr>
+                                    <th class="w-8 px-2 py-1.5"></th>
                                     <th class="px-2 py-1.5">Q</th>
                                     <th class="px-2 py-1.5">Stem</th>
                                     <th class="px-2 py-1.5">Answer</th>
                                     <th class="px-2 py-1.5">Status</th>
+                                    <th class="px-2 py-1.5"></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
-                                <tr v-for="row in conversionRows" :key="row.index">
+                                <tr
+                                    v-for="row in conversionRows"
+                                    :key="row.index"
+                                    :class="looksLikeWordAnswer(row.fill_blank_correct_answer) && !row.skipped ? 'bg-amber-50' : ''"
+                                >
+                                    <td class="px-2 py-1.5">
+                                        <input
+                                            type="checkbox"
+                                            class="rounded border-gray-300 text-rose-600"
+                                            :checked="selectedConversionIndexes.includes(row.index)"
+                                            @change="toggleConversionRow(row.index)"
+                                        >
+                                    </td>
                                     <td class="whitespace-nowrap px-2 py-1.5">{{ row.index + 1 }}</td>
                                     <td class="px-2 py-1.5 text-slate-800">{{ row.skipped ? '—' : row.fill_blank_question_text }}</td>
-                                    <td class="px-2 py-1.5 font-mono text-xs">{{ row.skipped ? '—' : row.fill_blank_correct_answer }}</td>
+                                    <td class="px-2 py-1.5 font-mono text-xs">
+                                        {{ row.skipped ? '—' : row.fill_blank_correct_answer }}
+                                        <span
+                                            v-if="!row.skipped && looksLikeWordAnswer(row.fill_blank_correct_answer)"
+                                            class="ml-1 rounded bg-amber-200 px-1 text-[10px] font-semibold uppercase text-amber-950"
+                                        >words</span>
+                                    </td>
                                     <td class="px-2 py-1.5">
                                         <span v-if="row.skipped">Skipped (MCQ)</span>
                                         <span v-else-if="row.checked" class="text-emerald-800">Checked</span>
                                         <span v-else class="text-amber-800">Not checked</span>
+                                    </td>
+                                    <td class="px-2 py-1.5 text-right">
+                                        <button
+                                            type="button"
+                                            class="text-xs font-medium text-rose-700 hover:underline"
+                                            @click="router.post(route('admin.content-tasks.conversion-clear-rows', task.id), { indexes: [row.index] }, { preserveScroll: true })"
+                                        >
+                                            Delete
+                                        </button>
                                     </td>
                                 </tr>
                             </tbody>

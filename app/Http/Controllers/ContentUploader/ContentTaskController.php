@@ -330,7 +330,11 @@ class ContentTaskController extends Controller
                 'checked' => $checked,
                 'skipped' => collect($rows)->where('skipped', true)->count(),
             ],
-            'formats' => collect(QuestionBlankAnswer::formats())->map(fn (string $format) => [
+            'formats' => collect([
+                QuestionBlankAnswer::FORMAT_INTEGER,
+                QuestionBlankAnswer::FORMAT_DECIMAL,
+                QuestionBlankAnswer::FORMAT_FRACTION,
+            ])->map(fn (string $format) => [
                 'value' => $format,
                 'label' => app(\App\Support\AnswerValidationService::class)->formatLabel($format),
             ])->values()->all(),
@@ -407,7 +411,11 @@ class ContentTaskController extends Controller
             'index' => ['required', 'integer', 'min:0'],
             'fill_blank_question_text' => ['required', 'string', 'max:5000'],
             'fill_blank_correct_answer' => ['required', 'string', 'max:500'],
-            'fill_blank_answer_format' => ['required', 'string', Rule::in(QuestionBlankAnswer::formats())],
+            'fill_blank_answer_format' => ['required', 'string', Rule::in([
+                QuestionBlankAnswer::FORMAT_INTEGER,
+                QuestionBlankAnswer::FORMAT_DECIMAL,
+                QuestionBlankAnswer::FORMAT_FRACTION,
+            ])],
             'fill_blank_decimal_places' => ['nullable', 'integer', 'min:1', 'max:8'],
             'include_in_written' => ['sometimes', 'boolean'],
         ]);

@@ -42,18 +42,24 @@ Input:
 - Attach or paste mcq_reference.json ({$count} MCQ items with correct answers).
 - Keep source_index matching the MCQ row (1..{$count}). You may SKIP a row (omit it) when it must stay MCQ-only.
 
+Answer rule (strict):
+- "correct_answer" MUST be a number or a fraction only.
+  Allowed examples: "42", "-7", "3.5", "13579", "3/4", "2/3", "1 1/2"
+- NEVER use English words as the blank answer (no "thirteen", "odd", "even", "true", "false", "greater than", option letters, or sentences).
+- Allowed answer_format values ONLY: "integer", "decimal", "fraction" (never "text").
+
 Conversion rules:
 1. One blank per question, shown as "____" in the question text.
-2. Prefer numeric / maths blanks:
-   - whole number → answer_format "integer" (commas in 13,579 are fine; store 13579)
+2. Formats:
+   - whole number → "integer" (store 13579 not "thirteen thousand five hundred seventy-nine"; commas in input are fine)
    - decimal with a required form → "decimal" plus decimal_places (e.g. 2 for 2.50)
-   - fraction → "fraction" and store like 2/3 (equivalent 4/6 is accepted when students answer)
-   - short algebra token (coefficient, 4xy, x^2) → "text"
-3. SKIP (do not convert) long English / spelling answers: number names ("thirteen thousand…"), "which of the following is true", and other option-shaped items. Those stay MCQ only.
-4. Algebra expansions: do not ask for the full expansion in one blank. Split into separate questions (coefficient of x², of xy, of y²) using extra source_index copies of the same MCQ is NOT allowed — pick one numeric/token blank, or skip.
-5. Preserve topic names, tables, and diagram needs from the source MCQ.
-6. Explanation must end with the same value as correct_answer.
-7. Do NOT include options arrays.
+   - fraction → "fraction" and store like 3/4 (equivalent 6/8 is accepted when students answer)
+3. If the MCQ answer is words / a statement / an option letter, you MUST rewrite the question completely so the blank has a numeric or fraction answer that still tests the same idea. Example: instead of "The number is ____." → "odd", write "Is 15 odd or even? Write 1 for odd and 0 for even. The answer is ____." with correct_answer "1" — or invent a better equivalent sum. Prefer a real calculation when possible.
+4. SKIP (omit the row) only when you cannot create a sensible numeric/fraction blank for that MCQ (e.g. pure "which statement is true" with no numeric rewrite). Those stay MCQ only.
+5. Algebra: do not ask for a full expansion in one blank. Pick one numeric blank (e.g. a coefficient) by rewriting, or skip.
+6. Preserve topic names, tables, and diagram needs from the source MCQ when still relevant after rewrite.
+7. Explanation must end with the same value as correct_answer.
+8. Do NOT include options arrays.
 
 After publish, book content is three matching parts: MCQ {$codes['mcq']} / {$codes['mcq']}2…, fill-blank {$codes['fill_blank']}1 / {$codes['fill_blank']}2…, written {$codes['written']}1 / {$codes['written']}2….
 
