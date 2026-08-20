@@ -273,16 +273,16 @@ const isTierDashboard = (chapter) => chapter?.items?.layout === 'tier_blocks';
 const chapterDashboard = (chapter) => (isTierDashboard(chapter) ? chapter.items : null);
 
 const blockShellClass = (color) => ({
-    sky: 'border-sky-300 bg-gradient-to-b from-sky-50 to-white',
-    amber: 'border-amber-300 bg-gradient-to-b from-amber-50 to-white',
-    emerald: 'border-emerald-300 bg-gradient-to-b from-emerald-50 to-white',
-}[color] ?? 'border-slate-300 bg-white');
+    sky: 'border-2 border-sky-500 bg-white shadow-md ring-1 ring-sky-200',
+    amber: 'border-2 border-amber-500 bg-white shadow-md ring-1 ring-amber-200',
+    emerald: 'border-2 border-emerald-600 bg-white shadow-md ring-1 ring-emerald-200',
+}[color] ?? 'border-2 border-slate-400 bg-white shadow-md');
 
 const blockTitleClass = (color) => ({
-    sky: 'bg-sky-600 text-white',
+    sky: 'bg-sky-700 text-white',
     amber: 'bg-amber-600 text-white',
     emerald: 'bg-emerald-700 text-white',
-}[color] ?? 'bg-slate-700 text-white');
+}[color] ?? 'bg-slate-800 text-white');
 
 const hasDashboardContent = (dashboard) => {
     if (! dashboard) {
@@ -295,6 +295,85 @@ const hasDashboardContent = (dashboard) => {
     );
 
     return blockItems || extras;
+};
+
+/** Hide empty Fill / Written / Test rows; keep only tiers that have at least one set. */
+const visibleBlocks = (dashboard) =>
+    (dashboard?.blocks ?? [])
+        .map((block) => ({
+            ...block,
+            rows: (block.rows ?? []).filter((row) => (row.items?.length || 0) > 0),
+        }))
+        .filter((block) => block.rows.length > 0);
+
+const collectDashboardItems = (dashboard) => {
+    if (! dashboard) {
+        return [];
+    }
+
+    const items = [];
+
+    for (const block of dashboard.blocks ?? []) {
+        for (const row of block.rows ?? []) {
+            items.push(...(row.items ?? []));
+        }
+    }
+
+    for (const key of ['formula', 'practice_correction', 'books']) {
+        items.push(...(dashboard[key]?.items ?? []));
+    }
+
+    return items;
+};
+
+const chapterPerformance = (dashboard) => {
+    const items = collectDashboardItems(dashboard);
+    const main = items.filter((item) => ! item.is_correction);
+    const corrections = items.filter((item) => item.is_correction);
+
+    const total = main.length;
+    const done = main.filter((item) => item.status === 'done').length;
+    const completionPct = total > 0 ? Math.round((done / total) * 100) : null;
+
+    const scored = main.filter((item) => item.score_percent != null && item.score_percent !== '');
+    const scorePct = scored.length
+        ? Math.round(scored.reduce((sum, item) => sum + Number(item.score_percent), 0) / scored.length)
+        : null;
+
+    const correctionDone = corrections.filter((item) => item.status === 'done').length;
+    const correctionPending = corrections.filter((item) => item.status !== 'done').length;
+    const openWrongs = main
+        .filter((item) => ! item.is_correction && Number(item.correction_count || 0) > 0 && item.can_redo_wrong)
+        .reduce((sum, item) => sum + Number(item.correction_count || 0), 0);
+
+    if (completionPct === null && scorePct === null && correctionDone === 0 && correctionPending === 0 && openWrongs === 0) {
+        return null;
+    }
+
+    return {
+        total,
+        done,
+        completionPct,
+        scorePct,
+        scoredCount: scored.length,
+        correctionDone,
+        correctionPending,
+        openWrongs,
+    };
+};
+
+const performanceBarClass = (pct) => {
+    if (pct == null) {
+        return 'bg-slate-300';
+    }
+    if (pct >= 80) {
+        return 'bg-emerald-500';
+    }
+    if (pct >= 50) {
+        return 'bg-amber-500';
+    }
+
+    return 'bg-rose-500';
 };
 
 const itemHref = (item) => {
@@ -366,7 +445,7 @@ const startCorrection = (item) => {
             No syllabus chapters for your class / board yet.
         </div>
 
-        <div v-else class="overflow-x-auto rounded border border-slate-300">
+        <div v-else class="overflow-x-auto rounded-lg border-2 border-slate-400 shadow-sm">
             <table class="w-full min-w-[52rem] border-collapse text-xs leading-snug">
                 <thead>
                     <tr class="bg-[#0b2a5b] text-white">
@@ -468,9 +547,9 @@ const startCorrection = (item) => {
 
                         <tr
                             v-if="isExpanded(chapter.id)"
-                            :class="index % 2 === 0 ? 'bg-sky-50/80' : 'bg-sky-50'"
+                            class="bg-slate-100"
                         >
-                            <td :colspan="columnCount" class="px-3 py-3">
+                            <td :colspan="columnCount" class="border-t-2 border-slate-300 px-3 py-3">
                                 <div
                                     v-if="isTierDashboard(chapter) && !hasDashboardContent(chapterDashboard(chapter))"
                                     class="text-[11px] text-slate-500"
@@ -485,30 +564,36 @@ const startCorrection = (item) => {
                                 </div>
 
                                 <div v-else-if="isTierDashboard(chapter)" class="space-y-3">
-                                    <div class="grid gap-3 lg:grid-cols-3">
+                                    <div
+                                        class="grid gap-3"
+                                        :class="visibleBlocks(chapterDashboard(chapter)).length >= 3
+                                            ? 'lg:grid-cols-3'
+                                            : visibleBlocks(chapterDashboard(chapter)).length === 2
+                                                ? 'lg:grid-cols-2'
+                                                : 'lg:grid-cols-1'"
+                                    >
                                         <div
-                                            v-for="block in chapterDashboard(chapter).blocks"
+                                            v-for="block in visibleBlocks(chapterDashboard(chapter))"
                                             :key="`${chapter.id}-${block.tier}`"
-                                            class="overflow-hidden rounded-xl border shadow-sm"
+                                            class="overflow-hidden rounded-xl"
                                             :class="blockShellClass(block.color)"
                                         >
                                             <div
-                                                class="px-3 py-2 text-center text-[11px] font-bold uppercase tracking-wide"
+                                                class="px-3 py-2.5 text-center text-xs font-extrabold uppercase tracking-wider"
                                                 :class="blockTitleClass(block.color)"
                                             >
                                                 {{ block.label }}
-                                                <span class="ml-1 font-semibold opacity-90">({{ block.item_count || 0 }})</span>
+                                                <span class="ml-1 font-bold opacity-95">({{ block.item_count || 0 }})</span>
                                             </div>
-                                            <div class="space-y-2 p-2.5">
+                                            <div class="space-y-2.5 bg-white p-3">
                                                 <div
                                                     v-for="row in block.rows"
                                                     :key="`${block.tier}-${row.key}`"
-                                                    class="min-h-[2.25rem]"
                                                 >
-                                                    <p class="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                                    <p class="text-[10px] font-extrabold uppercase tracking-wide text-slate-800">
                                                         {{ row.label }}
                                                     </p>
-                                                    <div v-if="row.items?.length" class="mt-0.5 flex flex-wrap gap-1.5">
+                                                    <div class="mt-1 flex flex-wrap gap-1.5">
                                                         <CoverageSetItemCard
                                                             v-for="item in row.items"
                                                             :key="`${row.key}-${item.worksheet_id}`"
@@ -526,7 +611,6 @@ const startCorrection = (item) => {
                                                             @cancel-staff-assign="pendingAssignKey = null"
                                                         />
                                                     </div>
-                                                    <p v-else class="mt-0.5 text-[10px] text-slate-400">—</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -534,10 +618,10 @@ const startCorrection = (item) => {
 
                                     <div
                                         v-if="chapterDashboard(chapter).formula?.items?.length"
-                                        class="rounded-xl border border-violet-300 bg-violet-50/70 p-2.5 shadow-sm"
+                                        class="rounded-xl border-2 border-violet-500 bg-white p-3 shadow-md ring-1 ring-violet-200"
                                     >
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-violet-900">Formula</p>
-                                        <div class="mt-1 flex flex-wrap gap-1.5">
+                                        <p class="text-[11px] font-extrabold uppercase tracking-wide text-violet-950">Formula</p>
+                                        <div class="mt-1.5 flex flex-wrap gap-1.5">
                                             <CoverageSetItemCard
                                                 v-for="item in chapterDashboard(chapter).formula.items"
                                                 :key="`formula-${item.worksheet_id}`"
@@ -559,10 +643,10 @@ const startCorrection = (item) => {
 
                                     <div
                                         v-if="chapterDashboard(chapter).practice_correction?.items?.length"
-                                        class="rounded-xl border border-orange-300 bg-orange-50/70 p-2.5 shadow-sm"
+                                        class="rounded-xl border-2 border-orange-500 bg-white p-3 shadow-md ring-1 ring-orange-200"
                                     >
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-orange-900">Practice · Correction</p>
-                                        <div class="mt-1 flex flex-wrap gap-1.5">
+                                        <p class="text-[11px] font-extrabold uppercase tracking-wide text-orange-950">Practice · Correction</p>
+                                        <div class="mt-1.5 flex flex-wrap gap-1.5">
                                             <CoverageSetItemCard
                                                 v-for="item in chapterDashboard(chapter).practice_correction.items"
                                                 :key="`corr-${item.worksheet_id}`"
@@ -584,10 +668,10 @@ const startCorrection = (item) => {
 
                                     <div
                                         v-if="chapterDashboard(chapter).books?.items?.length"
-                                        class="rounded-xl border border-slate-300 bg-white p-2.5 shadow-sm"
+                                        class="rounded-xl border-2 border-slate-500 bg-white p-3 shadow-md ring-1 ring-slate-200"
                                     >
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-slate-800">Book content</p>
-                                        <div class="mt-1 flex flex-wrap gap-1.5">
+                                        <p class="text-[11px] font-extrabold uppercase tracking-wide text-slate-900">Book content</p>
+                                        <div class="mt-1.5 flex flex-wrap gap-1.5">
                                             <CoverageSetItemCard
                                                 v-for="item in chapterDashboard(chapter).books.items"
                                                 :key="`book-${item.worksheet_id}`"
@@ -606,6 +690,80 @@ const startCorrection = (item) => {
                                             />
                                         </div>
                                     </div>
+
+                                    <template
+                                        v-for="perf in [chapterPerformance(chapterDashboard(chapter))]"
+                                        :key="`perf-${chapter.id}`"
+                                    >
+                                        <div
+                                            v-if="perf"
+                                            class="rounded-xl border-2 border-indigo-600 bg-gradient-to-r from-indigo-50 via-white to-slate-50 p-3 shadow-md ring-1 ring-indigo-200"
+                                        >
+                                            <p class="text-[11px] font-extrabold uppercase tracking-wide text-indigo-950">
+                                                Chapter performance
+                                            </p>
+                                            <div class="mt-2 grid gap-2 sm:grid-cols-3">
+                                                <div class="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm">
+                                                    <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Completion</p>
+                                                    <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
+                                                        <template v-if="perf.completionPct != null">{{ perf.completionPct }}%</template>
+                                                        <template v-else>—</template>
+                                                    </p>
+                                                    <p class="text-[10px] font-semibold text-slate-500">
+                                                        {{ perf.done }}/{{ perf.total }} sets done
+                                                    </p>
+                                                    <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                                        <div
+                                                            class="h-full rounded-full transition-all"
+                                                            :class="performanceBarClass(perf.completionPct)"
+                                                            :style="{ width: `${perf.completionPct ?? 0}%` }"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div class="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm">
+                                                    <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Score</p>
+                                                    <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
+                                                        <template v-if="perf.scorePct != null">{{ perf.scorePct }}%</template>
+                                                        <template v-else>—</template>
+                                                    </p>
+                                                    <p class="text-[10px] font-semibold text-slate-500">
+                                                        <template v-if="perf.scoredCount">Avg of {{ perf.scoredCount }} scored set(s)</template>
+                                                        <template v-else>No scores yet</template>
+                                                    </p>
+                                                    <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                                        <div
+                                                            class="h-full rounded-full transition-all"
+                                                            :class="performanceBarClass(perf.scorePct)"
+                                                            :style="{ width: `${perf.scorePct ?? 0}%` }"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div class="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm">
+                                                    <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Revised · Correction</p>
+                                                    <div class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                                                        <p class="text-sm font-extrabold text-emerald-800">
+                                                            Done {{ perf.correctionDone }}
+                                                        </p>
+                                                        <p class="text-sm font-extrabold text-amber-800">
+                                                            Pending {{ perf.correctionPending }}
+                                                        </p>
+                                                    </div>
+                                                    <p
+                                                        v-if="perf.openWrongs > 0"
+                                                        class="mt-1 text-[10px] font-bold text-orange-800"
+                                                    >
+                                                        {{ perf.openWrongs }} wrong still to redo
+                                                    </p>
+                                                    <p
+                                                        v-else-if="!perf.correctionDone && !perf.correctionPending"
+                                                        class="mt-1 text-[10px] font-semibold text-slate-500"
+                                                    >
+                                                        No corrections yet
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
                                 </div>
 
                                 <div v-else class="space-y-2">

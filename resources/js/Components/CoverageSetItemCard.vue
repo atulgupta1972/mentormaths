@@ -28,16 +28,16 @@ const questionSuffix = computed(() => {
 });
 
 const statusClass = computed(() => ({
-    done: 'bg-emerald-100 text-emerald-900',
-    checking: 'bg-amber-100 text-amber-900',
-    overdue: 'bg-rose-100 text-rose-900',
-    in_progress: 'bg-sky-100 text-sky-900',
-    pending: 'bg-slate-100 text-slate-700',
-    not_assigned: 'bg-slate-100 text-slate-600',
-    correction_pending: 'bg-orange-100 text-orange-900',
-    published: 'bg-emerald-100 text-emerald-900',
-    draft: 'bg-amber-100 text-amber-900',
-}[props.item.status] ?? 'bg-slate-100 text-slate-700'));
+    done: 'bg-emerald-200 text-emerald-950',
+    checking: 'bg-amber-200 text-amber-950',
+    overdue: 'bg-rose-200 text-rose-950',
+    in_progress: 'bg-sky-200 text-sky-950',
+    pending: 'bg-slate-200 text-slate-800',
+    not_assigned: 'bg-slate-100 text-slate-700',
+    correction_pending: 'bg-orange-200 text-orange-950',
+    published: 'bg-emerald-200 text-emerald-950',
+    draft: 'bg-amber-200 text-amber-950',
+}[props.item.status] ?? 'bg-slate-200 text-slate-800'));
 
 const itemKey = computed(() => `${props.groupKey}-${props.item.worksheet_id}`);
 
@@ -65,25 +65,25 @@ const itemHref = computed(() => {
 </script>
 
 <template>
-    <div class="inline-flex flex-wrap items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 shadow-sm">
-        <span class="font-mono text-[11px] font-bold text-slate-900">
-            {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix }}</span>
+    <div class="inline-flex flex-wrap items-center gap-1.5 rounded-md border-2 border-slate-400 bg-white px-2 py-1 shadow-sm">
+        <span class="font-mono text-[11px] font-extrabold text-slate-950">
+            {{ item.short_label }}<span class="font-bold text-slate-600">{{ questionSuffix }}</span>
         </span>
         <span
-            class="rounded px-1.5 py-px text-[10px] font-bold uppercase"
+            class="rounded px-1.5 py-px text-[10px] font-extrabold uppercase"
             :class="statusClass"
         >
             {{ item.status_label }}
         </span>
         <span
             v-if="item.target_date"
-            class="text-[10px] font-semibold text-slate-600"
+            class="text-[10px] font-bold text-slate-700"
         >
             due {{ formatDate(item.target_date) }}
         </span>
         <span
             v-if="item.correction_count > 0 && !item.is_correction"
-            class="rounded bg-orange-100 px-1.5 py-px text-[10px] font-bold uppercase text-orange-900"
+            class="rounded bg-orange-200 px-1.5 py-px text-[10px] font-extrabold uppercase text-orange-950"
         >
             {{ item.correction_count }} wrong
         </span>
