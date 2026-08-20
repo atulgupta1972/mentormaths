@@ -422,7 +422,6 @@ const clearBank = (card) => {
                                 Assign fill-in-blank conversion
                             </button>
                         </form>
-                        </div>
                         <div v-if="book.parts?.length" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             <div
                                 v-for="part in book.parts"
