@@ -245,6 +245,38 @@ const submitMap = (classId) => {
     });
 };
 
+const mappingBusyId = ref(null);
+
+const changeStudentTeacher = (classId, student, teacherId) => {
+    if (!teacherId || Number(teacherId) === Number(student.coaching_class_teacher_id)) {
+        return;
+    }
+
+    mappingBusyId.value = student.id;
+    router.patch(route('admin.coaching-classes.students.update', [classId, student.id]), {
+        coaching_class_teacher_id: teacherId,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            mappingBusyId.value = null;
+        },
+    });
+};
+
+const unmapStudent = (classId, student) => {
+    if (!confirm(`Unmap ${student.name} from this coaching class? They will become Individual (parent mentor).`)) {
+        return;
+    }
+
+    mappingBusyId.value = student.id;
+    router.delete(route('admin.coaching-classes.students.unmap', [classId, student.id]), {
+        preserveScroll: true,
+        onFinish: () => {
+            mappingBusyId.value = null;
+        },
+    });
+};
+
 const activeTeachers = (row) => (row.teachers || []).filter((t) => t.is_active);
 </script>
 
@@ -447,14 +479,44 @@ const activeTeachers = (row) => (row.teachers || []).filter((t) => t.is_active);
                                     <td colspan="8" class="bg-emerald-50/50 px-4 py-4">
                                         <div class="space-y-3">
                                             <div v-if="row.students?.length" class="rounded-lg border border-emerald-200 bg-white p-3">
-                                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-900">Already mapped ({{ row.students.length }})</p>
+                                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-900">
+                                                    Already mapped ({{ row.students.length }}) — change mentor or unmap
+                                                </p>
                                                 <ul class="mt-2 divide-y divide-slate-100 text-sm">
-                                                    <li v-for="student in row.students" :key="student.id" class="flex flex-wrap justify-between gap-2 py-1.5">
-                                                        <span class="font-medium text-slate-900">{{ student.name }}</span>
-                                                        <span class="text-slate-600">
-                                                            Mentor: {{ student.coaching_class_teacher?.name || '—' }}
-                                                            <span v-if="student.user?.email" class="ml-2 font-mono text-xs">{{ student.user.email }}</span>
-                                                        </span>
+                                                    <li
+                                                        v-for="student in row.students"
+                                                        :key="student.id"
+                                                        class="flex flex-wrap items-center justify-between gap-3 py-2"
+                                                    >
+                                                        <div class="min-w-[10rem]">
+                                                            <p class="font-medium text-slate-900">{{ student.name }}</p>
+                                                            <p v-if="student.user?.email" class="font-mono text-xs text-slate-600">{{ student.user.email }}</p>
+                                                        </div>
+                                                        <div class="flex flex-wrap items-center gap-2">
+                                                            <select
+                                                                class="rounded-md border-gray-300 text-sm"
+                                                                :value="student.coaching_class_teacher_id || ''"
+                                                                :disabled="mappingBusyId === student.id || !activeTeachers(row).length"
+                                                                @change="changeStudentTeacher(row.id, student, $event.target.value)"
+                                                            >
+                                                                <option value="" disabled>Select mentor</option>
+                                                                <option
+                                                                    v-for="teacher in activeTeachers(row)"
+                                                                    :key="teacher.id"
+                                                                    :value="teacher.id"
+                                                                >
+                                                                    {{ teacher.name }} · {{ teacher.mobile }}
+                                                                </option>
+                                                            </select>
+                                                            <button
+                                                                type="button"
+                                                                class="text-xs font-semibold text-rose-700 hover:underline"
+                                                                :disabled="mappingBusyId === student.id"
+                                                                @click="unmapStudent(row.id, student)"
+                                                            >
+                                                                Unmap
+                                                            </button>
+                                                        </div>
                                                     </li>
                                                 </ul>
                                             </div>

@@ -150,6 +150,56 @@ class CoachingClassController extends Controller
         return back()->with('success', "Mapped {$mapped} student(s) to {$coachingClass->name}.");
     }
 
+    public function updateStudentMapping(Request $request, CoachingClass $coachingClass, Student $student): RedirectResponse
+    {
+        abort_unless((int) $student->coaching_class_id === (int) $coachingClass->id, 404);
+
+        $validated = $request->validate([
+            'coaching_class_teacher_id' => [
+                'required',
+                'integer',
+                Rule::exists('coaching_class_teachers', 'id')->where(
+                    fn ($q) => $q->where('coaching_class_id', $coachingClass->id)->where('is_active', true),
+                ),
+            ],
+        ]);
+
+        $this->mentorService->map($student, [
+            'enrollment_source' => EnrollmentSource::COACHING,
+            'coaching_class_id' => $coachingClass->id,
+            'coaching_class_teacher_id' => $validated['coaching_class_teacher_id'],
+        ]);
+
+        $enrollment = $student->currentEnrollment();
+        if ($enrollment) {
+            $enrollment->update([
+                'enrollment_source' => EnrollmentSource::COACHING,
+                'coaching_class_id' => $coachingClass->id,
+            ]);
+        }
+
+        return back()->with('success', "Updated mentor mapping for {$student->name}.");
+    }
+
+    public function unmapStudent(CoachingClass $coachingClass, Student $student): RedirectResponse
+    {
+        abort_unless((int) $student->coaching_class_id === (int) $coachingClass->id, 404);
+
+        $this->mentorService->map($student, [
+            'enrollment_source' => EnrollmentSource::INDIVIDUAL,
+        ]);
+
+        $enrollment = $student->currentEnrollment();
+        if ($enrollment) {
+            $enrollment->update([
+                'enrollment_source' => EnrollmentSource::INDIVIDUAL,
+                'coaching_class_id' => null,
+            ]);
+        }
+
+        return back()->with('success', "{$student->name} unmapped from coaching (set to Individual).");
+    }
+
     public function storeTeacher(Request $request, CoachingClass $coachingClass): RedirectResponse
     {
         $validated = $request->validate([

@@ -174,6 +174,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('coaching-classes.toggle-active');
     Route::post('/coaching-classes/{coachingClass}/map-students', [CoachingClassController::class, 'mapStudents'])
         ->name('coaching-classes.map-students');
+    Route::patch('/coaching-classes/{coachingClass}/students/{student}', [CoachingClassController::class, 'updateStudentMapping'])
+        ->name('coaching-classes.students.update');
+    Route::delete('/coaching-classes/{coachingClass}/students/{student}', [CoachingClassController::class, 'unmapStudent'])
+        ->name('coaching-classes.students.unmap');
     Route::post('/coaching-classes/{coachingClass}/teachers', [CoachingClassController::class, 'storeTeacher'])
         ->name('coaching-classes.teachers.store');
     Route::patch('/coaching-class-teachers/{teacher}', [CoachingClassController::class, 'updateTeacher'])
