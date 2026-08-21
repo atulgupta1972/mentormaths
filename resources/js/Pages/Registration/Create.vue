@@ -5,12 +5,14 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 
 const props = defineProps({
     academicYear: Object,
     boards: Array,
     gradeLevels: Array,
+    enrollmentOptions: { type: Array, default: () => [] },
+    coachingClasses: { type: Array, default: () => [] },
 });
 
 const form = useForm({
@@ -22,6 +24,9 @@ const form = useForm({
     parent2_name: '',
     parent2_mobile: '',
     school_name: '',
+    enrollment_source: 'individual',
+    coaching_class_id: '',
+    coaching_class_teacher_id: '',
     board_id: '',
     grade_level_id: '',
     email: '',
@@ -34,6 +39,12 @@ const form = useForm({
 });
 
 const hasMobile = (value) => String(value || '').replace(/\D/g, '').length >= 10;
+
+const teachersForClass = computed(() => {
+    const row = props.coachingClasses.find((c) => Number(c.id) === Number(form.coaching_class_id));
+
+    return row?.teachers || [];
+});
 
 const notifyOptions = computed(() => [
     {
@@ -66,6 +77,17 @@ const toggleNotify = (field, checked, mobile) => {
 
     form[field] = checked;
 };
+
+watch(() => form.coaching_class_id, () => {
+    form.coaching_class_teacher_id = '';
+});
+
+watch(() => form.enrollment_source, (source) => {
+    if (source !== 'coaching') {
+        form.coaching_class_id = '';
+        form.coaching_class_teacher_id = '';
+    }
+});
 
 const submit = () => {
     form.post(route('registration.store'));
@@ -154,6 +176,78 @@ const submit = () => {
                                 <InputLabel for="parent2_mobile" value="Parent 2 mobile" />
                                 <TextInput id="parent2_mobile" v-model="form.parent2_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" />
                                 <InputError class="mt-1" :message="form.errors.parent2_mobile" />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Enrollment source -->
+                <section class="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-violet-100">
+                    <div class="border-b border-violet-100 bg-gradient-to-r from-violet-600 to-indigo-500 px-6 py-3">
+                        <h2 class="font-semibold text-white">Enrolled by</h2>
+                    </div>
+                    <div class="space-y-4 p-6">
+                        <p class="text-sm text-slate-600">
+                            Default is <strong>Individual</strong> — parent with Notify tick is the mentor.
+                            Choose Coaching if you join through a tuition / coaching class.
+                        </p>
+                        <div class="flex flex-wrap gap-3">
+                            <label
+                                v-for="opt in enrollmentOptions"
+                                :key="opt.value"
+                                class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+                                :class="[
+                                    form.enrollment_source === opt.value
+                                        ? 'border-violet-500 bg-violet-50 text-violet-950'
+                                        : 'border-gray-200 bg-white text-gray-700',
+                                    opt.enabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
+                                ]"
+                            >
+                                <input
+                                    v-model="form.enrollment_source"
+                                    type="radio"
+                                    class="text-violet-600"
+                                    :value="opt.value"
+                                    :disabled="!opt.enabled"
+                                >
+                                {{ opt.label }}
+                            </label>
+                        </div>
+                        <InputError :message="form.errors.enrollment_source" />
+
+                        <div v-if="form.enrollment_source === 'coaching'" class="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <InputLabel value="Coaching class *" />
+                                <select
+                                    v-model="form.coaching_class_id"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                                    required
+                                >
+                                    <option value="" disabled>Select coaching class</option>
+                                    <option v-for="row in coachingClasses" :key="row.id" :value="row.id">
+                                        {{ row.name }}{{ row.city ? ` (${row.city})` : '' }}
+                                    </option>
+                                </select>
+                                <InputError class="mt-1" :message="form.errors.coaching_class_id" />
+                            </div>
+                            <div>
+                                <InputLabel value="Teacher / mentor *" />
+                                <select
+                                    v-model="form.coaching_class_teacher_id"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                                    required
+                                    :disabled="!form.coaching_class_id"
+                                >
+                                    <option value="" disabled>Select teacher</option>
+                                    <option
+                                        v-for="teacher in teachersForClass"
+                                        :key="teacher.id"
+                                        :value="teacher.id"
+                                    >
+                                        {{ teacher.name }} · {{ teacher.mobile }}
+                                    </option>
+                                </select>
+                                <InputError class="mt-1" :message="form.errors.coaching_class_teacher_id" />
                             </div>
                         </div>
                     </div>

@@ -20,6 +20,11 @@ class Student extends Model
         'parent2_mobile',
         'parent2_email',
         'school_name',
+        'enrollment_source',
+        'coaching_class_id',
+        'coaching_class_teacher_id',
+        'mentor_type',
+        'mentor_user_id',
         'email',
         'notify_contact_email',
         'notify_login_email',
@@ -47,6 +52,26 @@ class Student extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function coachingClass(): BelongsTo
+    {
+        return $this->belongsTo(CoachingClass::class);
+    }
+
+    public function coachingClassTeacher(): BelongsTo
+    {
+        return $this->belongsTo(CoachingClassTeacher::class);
+    }
+
+    public function mentorUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'mentor_user_id');
+    }
+
+    public function mentorAssignments(): HasMany
+    {
+        return $this->hasMany(StudentMentorAssignment::class);
     }
 
     public function enrollments(): HasMany

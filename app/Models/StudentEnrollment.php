@@ -20,6 +20,8 @@ class StudentEnrollment extends Model
         'board_id',
         'grade_level_id',
         'school_name',
+        'enrollment_source',
+        'coaching_class_id',
         'status',
     ];
 
@@ -41,6 +43,11 @@ class StudentEnrollment extends Model
     public function gradeLevel(): BelongsTo
     {
         return $this->belongsTo(GradeLevel::class);
+    }
+
+    public function coachingClass(): BelongsTo
+    {
+        return $this->belongsTo(CoachingClass::class);
     }
 
     public function setAssignments(): HasMany

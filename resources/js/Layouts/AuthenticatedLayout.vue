@@ -205,12 +205,23 @@ const contentGroup = computed(() => ({
 
 const setupGroup = computed(() => ({
     label: 'Setup',
-    active: route().current('admin.academic-years.*') || route().current('admin.notifications.*'),
+    active: route().current('admin.academic-years.*')
+        || route().current('admin.notifications.*')
+        || route().current('admin.coaching-classes.*')
+        || route().current('admin.coaching-class-teachers.*'),
     items: [
         {
             label: 'Academic years',
             href: route('admin.academic-years.index'),
             active: route().current('admin.academic-years.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Coaching classes',
+            href: route().has('admin.coaching-classes.index')
+                ? route('admin.coaching-classes.index')
+                : '/admin/coaching-classes',
+            active: route().current('admin.coaching-classes.*') || route().current('admin.coaching-class-teachers.*'),
             show: isAdmin.value,
         },
         {

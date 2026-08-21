@@ -7,7 +7,9 @@ use App\Models\RegistrationRequest;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Models\User;
+use App\Services\StudentMentorService;
 use App\Services\UserGroupService;
+use App\Support\EnrollmentSource;
 use App\Support\RegistrationMailer;
 use App\Support\StudentIdentity;
 use Illuminate\Http\RedirectResponse;
@@ -21,6 +23,7 @@ class RegistrationRequestController extends Controller
 {
     public function __construct(
         private UserGroupService $userGroupService,
+        private StudentMentorService $mentorService,
     ) {}
 
     public function index(Request $request): Response
@@ -96,6 +99,14 @@ class RegistrationRequestController extends Controller
         $userChosePassword = false;
 
         DB::transaction(function () use ($registrationRequest, $request, $validated, $existingStudent, &$generatedPassword, &$loginEmail, &$userChosePassword) {
+            $source = $registrationRequest->enrollment_source ?: EnrollmentSource::INDIVIDUAL;
+            $coachingClassId = $source === EnrollmentSource::COACHING
+                ? $registrationRequest->coaching_class_id
+                : null;
+            $teacherId = $source === EnrollmentSource::COACHING
+                ? $registrationRequest->coaching_class_teacher_id
+                : null;
+
             if ($existingStudent && StudentIdentity::canReuseStudentProfile($existingStudent)) {
                 $student = $existingStudent;
                 $student->update([
@@ -120,6 +131,8 @@ class RegistrationRequestController extends Controller
                         'board_id' => $registrationRequest->board_id,
                         'grade_level_id' => $registrationRequest->grade_level_id,
                         'school_name' => $registrationRequest->school_name,
+                        'enrollment_source' => $source,
+                        'coaching_class_id' => $coachingClassId,
                         'status' => StudentEnrollment::STATUS_ACTIVE,
                     ]);
                 } else {
@@ -129,6 +142,8 @@ class RegistrationRequestController extends Controller
                         'board_id' => $registrationRequest->board_id,
                         'grade_level_id' => $registrationRequest->grade_level_id,
                         'school_name' => $registrationRequest->school_name,
+                        'enrollment_source' => $source,
+                        'coaching_class_id' => $coachingClassId,
                         'status' => StudentEnrollment::STATUS_ACTIVE,
                     ]);
                 }
@@ -159,9 +174,17 @@ class RegistrationRequestController extends Controller
                     'board_id' => $registrationRequest->board_id,
                     'grade_level_id' => $registrationRequest->grade_level_id,
                     'school_name' => $registrationRequest->school_name,
+                    'enrollment_source' => $source,
+                    'coaching_class_id' => $coachingClassId,
                     'status' => StudentEnrollment::STATUS_ACTIVE,
                 ]);
             }
+
+            $this->mentorService->map($student, [
+                'enrollment_source' => $source,
+                'coaching_class_id' => $coachingClassId,
+                'coaching_class_teacher_id' => $teacherId,
+            ]);
 
             $generatedPassword = Str::password(12);
             $loginEmail = $registrationRequest->email

@@ -25,6 +25,9 @@ class RegistrationRequest extends Model
         'parent2_name',
         'parent2_mobile',
         'school_name',
+        'enrollment_source',
+        'coaching_class_id',
+        'coaching_class_teacher_id',
         'email',
         'password',
         'notes',
@@ -66,6 +69,16 @@ class RegistrationRequest extends Model
     public function gradeLevel(): BelongsTo
     {
         return $this->belongsTo(GradeLevel::class);
+    }
+
+    public function coachingClass(): BelongsTo
+    {
+        return $this->belongsTo(CoachingClass::class);
+    }
+
+    public function coachingClassTeacher(): BelongsTo
+    {
+        return $this->belongsTo(CoachingClassTeacher::class);
     }
 
     public function reviewer(): BelongsTo

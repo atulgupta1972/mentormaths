@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\CoachingClassController;
 use App\Http\Controllers\Admin\AcademicYearController;
 use App\Http\Controllers\Admin\BasicsDrillSettingsController;
 use App\Http\Controllers\Admin\CatchUpSetController;
@@ -158,6 +159,19 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/academic-years/{academicYear}/activate', [AcademicYearController::class, 'activate'])
         ->name('academic-years.activate');
 
+    Route::get('/coaching-classes', [CoachingClassController::class, 'index'])
+        ->name('coaching-classes.index');
+    Route::post('/coaching-classes', [CoachingClassController::class, 'store'])
+        ->name('coaching-classes.store');
+    Route::patch('/coaching-classes/{coachingClass}', [CoachingClassController::class, 'update'])
+        ->name('coaching-classes.update');
+    Route::post('/coaching-classes/{coachingClass}/teachers', [CoachingClassController::class, 'storeTeacher'])
+        ->name('coaching-classes.teachers.store');
+    Route::patch('/coaching-class-teachers/{teacher}', [CoachingClassController::class, 'updateTeacher'])
+        ->name('coaching-class-teachers.update');
+    Route::delete('/coaching-class-teachers/{teacher}', [CoachingClassController::class, 'destroyTeacher'])
+        ->name('coaching-class-teachers.destroy');
+
     Route::get('/students', [StudentController::class, 'index'])
         ->name('students.index');
     Route::get('/students/{student}', [StudentController::class, 'show'])
@@ -180,6 +194,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('students.progress-summary-pdf');
     Route::patch('/students/{student}/emails', [StudentController::class, 'updateEmails'])
         ->name('students.emails.update');
+    Route::patch('/students/{student}/mentor', [StudentController::class, 'mapMentor'])
+        ->name('students.mentor.map');
     Route::post('/students/{student}/promote', [StudentController::class, 'promote'])
         ->name('students.promote');
     Route::post('/students/bulk-promote', [StudentController::class, 'bulkPromote'])

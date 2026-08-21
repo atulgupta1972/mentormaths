@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\Board;
+use App\Models\CoachingClass;
 use App\Models\GradeLevel;
 use App\Models\Student;
 use App\Services\AdminGradeContext;
@@ -13,6 +14,7 @@ use App\Services\QuestionResolutionService;
 use App\Services\StudentAccountService;
 use App\Services\FormulaDrillReportService;
 use App\Services\PendingWorkEmailService;
+use App\Services\StudentMentorService;
 use App\Services\StudentNotificationContactService;
 use App\Services\StudentNotificationEmailService;
 use App\Services\StudentProgressPdfService;
@@ -20,12 +22,14 @@ use App\Services\StudentProgressSummaryService;
 use App\Services\StudentProgressWhatsAppService;
 use App\Services\StudentPromotionService;
 use App\Support\AssignmentMailer;
+use App\Support\EnrollmentSource;
 use App\Support\StudentProgressMailer;
 use App\Support\StudentProgressWhatsAppMailer;
 use App\Support\WhatsApp\WhatsAppSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -44,6 +48,7 @@ class StudentController extends Controller
         private StudentProgressPdfService $progressPdfService,
         private PendingWorkEmailService $pendingWorkEmailService,
         private FormulaDrillReportService $formulaDrillReport,
+        private StudentMentorService $mentorService,
     ) {}
 
     public function index(Request $request): Response
@@ -81,7 +86,12 @@ class StudentController extends Controller
 
     public function show(Student $student): Response
     {
-        $student->load('user:id,name,email');
+        $student->load([
+            'user:id,name,email',
+            'coachingClass:id,name,city',
+            'coachingClassTeacher:id,coaching_class_id,name,mobile,is_active',
+            'mentorUser:id,name,mobile',
+        ]);
 
         $history = $student->enrollmentHistory()->load(['academicYear', 'board', 'gradeLevel']);
         $latest = $this->promotionService->latestEnrollment($student);
@@ -101,6 +111,12 @@ class StudentController extends Controller
             : null;
 
         $resolutionEnrollment = $currentYearEnrollment ?? $latest;
+
+        $coachingClasses = CoachingClass::query()
+            ->where('is_active', true)
+            ->with(['teachers' => fn ($q) => $q->orderBy('sort_order')->orderBy('name')])
+            ->orderBy('name')
+            ->get(['id', 'name', 'city', 'is_active']);
 
         return Inertia::render('Admin/Students/Show', [
             'student' => $student,
@@ -129,7 +145,43 @@ class StudentController extends Controller
             'summaryEmailRecipients' => $this->notificationEmailService->recipientsForStudent($student),
             'whatsappRecipientCount' => count($this->notificationContactService->recipientsForStudent($student)),
             'formulaDrillSummary' => $this->formulaDrillReport->summaryForStudent($student),
+            'enrollmentOptions' => EnrollmentSource::optionsForUi(),
+            'coachingClasses' => $coachingClasses,
+            'mentor' => $this->mentorService->resolve($student),
         ]);
+    }
+
+    public function mapMentor(Request $request, Student $student): RedirectResponse
+    {
+        $validated = $request->validate([
+            'enrollment_source' => ['required', Rule::in(EnrollmentSource::active())],
+            'coaching_class_id' => [
+                Rule::requiredIf(fn () => $request->input('enrollment_source') === EnrollmentSource::COACHING),
+                'nullable',
+                'integer',
+                Rule::exists('coaching_classes', 'id'),
+            ],
+            'coaching_class_teacher_id' => [
+                Rule::requiredIf(fn () => $request->input('enrollment_source') === EnrollmentSource::COACHING),
+                'nullable',
+                'integer',
+                Rule::exists('coaching_class_teachers', 'id'),
+            ],
+        ]);
+
+        $this->mentorService->map($student, $validated);
+
+        $enrollment = $student->currentEnrollment();
+        if ($enrollment) {
+            $enrollment->update([
+                'enrollment_source' => $validated['enrollment_source'],
+                'coaching_class_id' => $validated['enrollment_source'] === EnrollmentSource::COACHING
+                    ? ($validated['coaching_class_id'] ?? null)
+                    : null,
+            ]);
+        }
+
+        return back()->with('success', 'Enrollment and mentor mapping saved.');
     }
 
     public function toggleActive(Student $student): RedirectResponse
@@ -230,6 +282,12 @@ class StudentController extends Controller
 
         if ($student->user && array_key_exists('student_mobile', $validated)) {
             $student->user->update(['mobile' => $validated['student_mobile']]);
+        }
+
+        if (($student->enrollment_source ?: EnrollmentSource::INDIVIDUAL) === EnrollmentSource::INDIVIDUAL) {
+            $this->mentorService->map($student->fresh(), [
+                'enrollment_source' => EnrollmentSource::INDIVIDUAL,
+            ]);
         }
 
         return back()->with('success', 'Contact and notification settings saved.');

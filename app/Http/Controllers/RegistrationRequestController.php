@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
 use App\Models\Board;
+use App\Models\CoachingClass;
 use App\Models\GradeLevel;
 use App\Models\RegistrationRequest;
 use App\Rules\UniqueStudentIdentity;
 use App\Rules\UniqueStudentLoginEmail;
+use App\Support\EnrollmentSource;
 use App\Support\RegistrationMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,10 +29,18 @@ class RegistrationRequestController extends Controller
             return Inertia::render('Registration/Unavailable');
         }
 
+        $coachingClasses = CoachingClass::query()
+            ->where('is_active', true)
+            ->with(['teachers' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')->orderBy('name')])
+            ->orderBy('name')
+            ->get(['id', 'name', 'city']);
+
         return Inertia::render('Registration/Create', [
             'academicYear' => $activeYear->only(['id', 'name']),
             'boards' => Board::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'gradeLevels' => GradeLevel::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name']),
+            'enrollmentOptions' => EnrollmentSource::optionsForUi(),
+            'coachingClasses' => $coachingClasses,
         ]);
     }
 
@@ -52,6 +62,19 @@ class RegistrationRequestController extends Controller
             'parent2_name' => ['nullable', 'string', 'max:255'],
             'parent2_mobile' => ['nullable', 'string', 'max:15'],
             'school_name' => ['required', 'string', 'max:255'],
+            'enrollment_source' => ['required', Rule::in(EnrollmentSource::active())],
+            'coaching_class_id' => [
+                Rule::requiredIf(fn () => $request->input('enrollment_source') === EnrollmentSource::COACHING),
+                'nullable',
+                'integer',
+                Rule::exists('coaching_classes', 'id'),
+            ],
+            'coaching_class_teacher_id' => [
+                Rule::requiredIf(fn () => $request->input('enrollment_source') === EnrollmentSource::COACHING),
+                'nullable',
+                'integer',
+                Rule::exists('coaching_class_teachers', 'id'),
+            ],
             'board_id' => ['required', 'exists:boards,id'],
             'grade_level_id' => ['required', 'exists:grade_levels,id'],
             'email' => [
@@ -74,11 +97,17 @@ class RegistrationRequestController extends Controller
             'student_mobile.required' => 'Student mobile is required so we can identify returning students.',
         ]);
 
+        if (($validated['enrollment_source'] ?? '') !== EnrollmentSource::COACHING) {
+            $validated['coaching_class_id'] = null;
+            $validated['coaching_class_teacher_id'] = null;
+        }
+
         $registrationRequest = RegistrationRequest::create([
             ...collect($validated)->except(['password', 'password_confirmation'])->all(),
             'password' => Hash::make($validated['password']),
             'academic_year_id' => $activeYear->id,
             'status' => RegistrationRequest::STATUS_PENDING,
+            'enrollment_source' => $validated['enrollment_source'] ?? EnrollmentSource::INDIVIDUAL,
         ]);
 
         RegistrationMailer::sendRequestReceived($registrationRequest);

@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ContactNumbersPanel from '@/Components/ContactNumbersPanel.vue';
 import StudentEmailContactsPanel from '@/Components/StudentEmailContactsPanel.vue';
+import StudentEnrollmentMentorPanel from '@/Components/StudentEnrollmentMentorPanel.vue';
 import FormulaDrillStatsPanel from '@/Components/FormulaDrillStatsPanel.vue';
 import HelpRequestUploaderReturn from '@/Components/HelpRequestUploaderReturn.vue';
 import StudentProgressSummaryPanel from '@/Components/StudentProgressSummaryPanel.vue';
@@ -34,6 +35,9 @@ const props = defineProps({
     summaryEmailRecipients: { type: Array, default: () => [] },
     whatsappRecipientCount: { type: Number, default: 0 },
     formulaDrillSummary: { type: Object, default: null },
+    enrollmentOptions: { type: Array, default: () => [] },
+    coachingClasses: { type: Array, default: () => [] },
+    mentor: { type: Object, default: null },
 });
 
 const contactFields = computed(() => [
@@ -167,6 +171,13 @@ const destroyStudent = () => {
                     </Link>
                     <p class="mt-1 text-xs text-gray-500">Chapters already covered / under study in school.</p>
                 </div>
+
+                <StudentEnrollmentMentorPanel
+                    :student="student"
+                    :enrollment-options="enrollmentOptions"
+                    :coaching-classes="coachingClasses"
+                    :mentor="mentor"
+                />
 
                 <ContactNumbersPanel
                     :student-name="student.name"
