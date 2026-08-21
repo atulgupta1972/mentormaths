@@ -35,6 +35,38 @@ class SchoolStudyPlanTest extends TestCase
         $this->withoutMiddleware(PreventRequestForgery::class);
     }
 
+    public function test_study_plan_lists_studied_chapters_before_not_studied(): void
+    {
+        [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->put(route('admin.school-study-plan.update', [$student, $chapters[2]]), [
+                'status' => 'studied',
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->put(route('admin.school-study-plan.update', [$student, $chapters[0]]), [
+                'status' => 'under_study',
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.school-study-plan.index', ['student_id' => $student->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('classCoverage.chapters.0.id', $chapters[2]->id)
+                ->where('classCoverage.chapters.0.studied', true)
+                ->where('classCoverage.chapters.1.id', $chapters[0]->id)
+                ->where('classCoverage.chapters.1.under_study', true)
+                ->where('classCoverage.chapters.2.id', $chapters[1]->id)
+                ->where('classCoverage.chapters.2.studied', false)
+                ->where('classCoverage.chapters.2.under_study', false));
+    }
+
     public function test_admin_can_view_and_update_student_school_study_plan(): void
     {
         [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();

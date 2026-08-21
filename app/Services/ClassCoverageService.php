@@ -88,7 +88,25 @@ class ClassCoverageService
                 'availability' => $availability,
                 'items' => $this->formatDetailItems($summaryChapter['items'] ?? []),
             ];
-        })->all();
+        })->sort(function (array $left, array $right) {
+            $rank = static fn (array $chapter): int => match (true) {
+                (bool) ($chapter['studied'] ?? false) => 0,
+                (bool) ($chapter['under_study'] ?? false) => 1,
+                default => 2,
+            };
+
+            $byStatus = $rank($left) <=> $rank($right);
+            if ($byStatus !== 0) {
+                return $byStatus;
+            }
+
+            $byNumber = ((int) ($left['chapter_number'] ?? 0)) <=> ((int) ($right['chapter_number'] ?? 0));
+            if ($byNumber !== 0) {
+                return $byNumber;
+            }
+
+            return ((int) $left['id']) <=> ((int) $right['id']);
+        })->values()->all();
 
         return [
             'chapters' => $chapters,

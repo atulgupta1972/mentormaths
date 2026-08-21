@@ -43,6 +43,7 @@ class SetCoverageGrouping
                 $rowItems = collect($items[$key] ?? [])
                     ->filter(fn (array $item) => $this->displayTier($item) === $tier)
                     ->map(fn (array $item) => $mapItem($item))
+                    ->sort(fn (array $left, array $right) => $this->studiedFirstCompare($left, $right))
                     ->values()
                     ->all();
 
@@ -71,6 +72,7 @@ class SetCoverageGrouping
                 'label' => 'Formula',
                 'items' => collect($items['formula'] ?? [])
                     ->map(fn (array $item) => $mapItem($item))
+                    ->sort(fn (array $left, array $right) => $this->studiedFirstCompare($left, $right))
                     ->values()
                     ->all(),
             ],
@@ -79,6 +81,7 @@ class SetCoverageGrouping
                 'label' => 'Practice · Correction',
                 'items' => collect($items['practice_correction'] ?? [])
                     ->map(fn (array $item) => $mapItem($item))
+                    ->sort(fn (array $left, array $right) => $this->studiedFirstCompare($left, $right))
                     ->values()
                     ->all(),
             ],
@@ -88,6 +91,7 @@ class SetCoverageGrouping
                 'items' => collect($items['books'] ?? [])
                     ->flatten(1)
                     ->map(fn (array $item) => $mapItem($item))
+                    ->sort(fn (array $left, array $right) => $this->studiedFirstCompare($left, $right))
                     ->values()
                     ->all(),
             ],
@@ -156,5 +160,26 @@ class SetCoverageGrouping
         }
 
         return PracticeSetTier::STARTER;
+    }
+
+    /**
+     * Done / studied sets first, then not done — keeps relative order within each group.
+     *
+     * @param  array<string, mixed>  $left
+     * @param  array<string, mixed>  $right
+     */
+    private function studiedFirstCompare(array $left, array $right): int
+    {
+        $rank = static function (array $item): int {
+            $status = strtolower((string) ($item['status'] ?? ''));
+
+            if ($status === 'done' || ($item['studied'] ?? false)) {
+                return 0;
+            }
+
+            return 1;
+        };
+
+        return $rank($left) <=> $rank($right);
     }
 }
