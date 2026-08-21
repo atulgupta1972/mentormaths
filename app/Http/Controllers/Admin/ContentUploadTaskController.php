@@ -63,10 +63,12 @@ class ContentUploadTaskController extends Controller
             ->with([
                 'assignee:id,name,email',
                 'textbookChapter:id,textbook_id,syllabus_chapter_id,chapter_number,title,status',
-                'textbookChapter.textbook:id,grade_level_id,name',
+                'textbookChapter.textbook:id,grade_level_id,name,code',
                 'textbookChapter.textbook.gradeLevel:id,name',
-                'textbookChapter.syllabusChapter:id,name,chapter_number,chapter_head_id',
+                'textbookChapter.syllabusChapter:id,name,chapter_number,chapter_head_id,syllabus_version_id',
                 'textbookChapter.syllabusChapter.chapterHead:id,name',
+                'textbookChapter.syllabusChapter.syllabusVersion:id,board_id,grade_level_id',
+                'textbookChapter.syllabusChapter.syllabusVersion.board:id,code,name',
             ])
             ->when($status !== '', fn ($q) => $q->where('status', $status))
             ->latest()
@@ -912,6 +914,9 @@ class ContentUploadTaskController extends Controller
                 'status' => $chapter->status,
                 'textbook_name' => $chapter->textbook?->name,
                 'textbook_code' => $chapter->textbook?->code,
+                'book_author_name' => $chapter->textbook?->name,
+                'board_code' => $chapter->syllabusChapter?->syllabusVersion?->board?->code,
+                'board_name' => $chapter->syllabusChapter?->syllabusVersion?->board?->name,
                 'textbook_id' => $chapter->textbook_id,
                 'grade_name' => $chapter->textbook?->gradeLevel?->name,
                 'has_pdf' => $this->bookService->hasStoredPdf($chapter),

@@ -133,10 +133,12 @@ const groupedDrillChapters = computed(() => {
     let current = null;
 
     for (const row of filteredDrillChapters.value) {
-        const book = row.chapter?.textbook_name || 'Book';
+        const board = row.chapter?.board_code || row.chapter?.board_name || 'Board';
+        const book = row.chapter?.book_author_name || row.chapter?.textbook_name || 'Book / author';
+        const key = `${board}||${book}`;
 
-        if (!current || current.book !== book) {
-            current = { book, rows: [] };
+        if (!current || current.key !== key) {
+            current = { key, board, book, rows: [] };
             groups.push(current);
         }
 
@@ -500,6 +502,8 @@ watch(
                                         >
                                         <span class="sr-only">Select all</span>
                                     </th>
+                                    <th class="px-3 py-2">Board</th>
+                                    <th class="px-3 py-2">Book / author</th>
                                     <th class="px-3 py-2">Ch No.</th>
                                     <th class="px-3 py-2">Chapter head</th>
                                     <th class="px-3 py-2">Chapter name</th>
@@ -511,10 +515,12 @@ watch(
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
-                                <template v-for="group in groupedDrillChapters" :key="group.book">
+                                <template v-for="group in groupedDrillChapters" :key="group.key">
                                     <tr class="bg-slate-100">
-                                        <td colspan="9" class="px-3 py-1.5 text-xs font-semibold text-slate-800">
-                                            {{ group.book }}
+                                        <td colspan="11" class="px-3 py-1.5 text-xs font-semibold text-slate-800">
+                                            <span class="rounded bg-indigo-100 px-1.5 py-0.5 font-bold text-indigo-900">{{ group.board }}</span>
+                                            <span class="mx-2 text-slate-400">·</span>
+                                            <span>{{ group.book }}</span>
                                         </td>
                                     </tr>
                                     <tr v-for="row in group.rows" :key="row.id">
@@ -527,6 +533,13 @@ watch(
                                                 :aria-label="`Select chapter ${row.chapter?.chapter_number}`"
                                                 @change="toggleRow(row.id, true)"
                                             >
+                                        </td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-xs font-bold text-indigo-900">
+                                            {{ row.chapter?.board_code || row.chapter?.board_name || '—' }}
+                                        </td>
+                                        <td class="px-3 py-2 text-slate-800">
+                                            <p class="font-medium">{{ row.chapter?.book_author_name || row.chapter?.textbook_name || '—' }}</p>
+                                            <p v-if="row.chapter?.textbook_code" class="font-mono text-[10px] text-slate-500">{{ row.chapter.textbook_code }}</p>
                                         </td>
                                         <td class="whitespace-nowrap px-3 py-2 font-semibold text-slate-900">
                                             {{ row.chapter?.chapter_number || '—' }}
@@ -560,7 +573,7 @@ watch(
                                     </tr>
                                 </template>
                                 <tr v-if="!filteredDrillChapters.length">
-                                    <td colspan="9" class="px-3 py-6 text-center text-slate-500">
+                                    <td colspan="11" class="px-3 py-6 text-center text-slate-500">
                                         No chapters in this bucket.
                                     </td>
                                 </tr>
@@ -588,7 +601,8 @@ watch(
                             <tr v-for="task in tasks.data" :key="task.id">
                                 <td class="px-4 py-3">
                                     <p class="font-medium text-gray-900">
-                                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · {{ task.chapter?.chapter_number }}
+                                        <span v-if="task.chapter?.board_code" class="mr-1 rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-bold text-indigo-900">{{ task.chapter.board_code }}</span>
+                                        {{ task.chapter?.grade_name }} · {{ task.chapter?.book_author_name || task.chapter?.textbook_name || 'Book' }} · {{ task.chapter?.chapter_number }}
                                     </p>
                                     <p class="text-xs text-gray-500">
                                         <span v-if="task.chapter?.chapter_head_name">{{ task.chapter.chapter_head_name }} · </span>

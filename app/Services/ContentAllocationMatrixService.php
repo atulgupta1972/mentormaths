@@ -69,7 +69,7 @@ class ContentAllocationMatrixService
                 'textbookChapter.syllabusChapter:id,name,chapter_number,chapter_head_id,syllabus_version_id',
                 'textbookChapter.syllabusChapter.chapterHead:id,name',
                 'textbookChapter.syllabusChapter.syllabusVersion:id,board_id,grade_level_id',
-                'textbookChapter.syllabusChapter.syllabusVersion.board:id,code',
+                'textbookChapter.syllabusChapter.syllabusVersion.board:id,code,name',
             ])
             ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
             ->latest('id')
@@ -290,8 +290,12 @@ class ContentAllocationMatrixService
                 'chapter_head_name' => $chapter?->displayChapterHeadName(),
                 'textbook_name' => $chapter?->textbook?->name,
                 'textbook_code' => $chapter?->textbook?->code,
+                'book_author_name' => $chapter?->textbook?->name,
+                'board_code' => $chapter?->syllabusChapter?->syllabusVersion?->board?->code,
+                'board_name' => $chapter?->syllabusChapter?->syllabusVersion?->board?->name,
                 'grade_name' => $chapter?->textbook?->gradeLevel?->name,
             ],
+            'rate_description' => $task->rateDescription(),
         ];
     }
 
