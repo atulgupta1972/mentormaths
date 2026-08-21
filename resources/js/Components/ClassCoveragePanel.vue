@@ -134,32 +134,56 @@ const upcomingExamByChapterId = computed(() => {
 
 const upcomingExamForChapter = (chapterId) => upcomingExamByChapterId.value.get(chapterId) ?? null;
 
-const chapterExamRowClass = (chapterId) => {
+const chapterExamUrgency = (chapterId) => {
     const plan = upcomingExamForChapter(chapterId);
     if (!plan) {
-        return '';
+        return null;
     }
 
     const days = daysUntilExam(plan.exam_date);
     if (days !== null && days <= 7) {
-        return 'bg-rose-50 ring-2 ring-inset ring-rose-950';
+        return 'urgent';
     }
 
-    return 'bg-amber-50 ring-2 ring-inset ring-amber-900';
+    return 'upcoming';
+};
+
+/** Soft row tint only — thick rings break across table cells. */
+const chapterExamRowClass = (chapterId) => {
+    const urgency = chapterExamUrgency(chapterId);
+    if (urgency === 'urgent') {
+        return 'bg-rose-50';
+    }
+    if (urgency === 'upcoming') {
+        return 'bg-amber-50';
+    }
+
+    return '';
+};
+
+/** Thin continuous top/bottom line on every cell (full row). */
+const chapterRowLineClass = (chapterId) => {
+    const urgency = chapterExamUrgency(chapterId);
+    if (urgency === 'urgent') {
+        return 'shadow-[inset_0_1px_0_0_#7f1d1d,inset_0_-1px_0_0_#7f1d1d]';
+    }
+    if (urgency === 'upcoming') {
+        return 'shadow-[inset_0_1px_0_0_#78350f,inset_0_-1px_0_0_#78350f]';
+    }
+
+    return 'border-b border-slate-200';
 };
 
 const chapterExamBadgeClass = (chapterId) => {
-    const plan = upcomingExamForChapter(chapterId);
-    if (!plan) {
-        return '';
+    const urgency = chapterExamUrgency(chapterId);
+    if (urgency === 'urgent') {
+        return 'border-rose-900 bg-rose-100 text-rose-950';
+    }
+    if (urgency === 'upcoming') {
+        return 'border-amber-900 bg-amber-100 text-amber-950';
     }
 
-    const days = daysUntilExam(plan.exam_date);
-    if (days !== null && days <= 7) {
-        return 'border-rose-950 bg-rose-100 text-rose-950';
-    }
-
-    return 'border-amber-900 bg-amber-100 text-amber-950';
+    return '';
 };
 
 const examDueLabel = (plan) => {
@@ -592,7 +616,7 @@ const startCorrection = (item) => {
             <span v-if="canStaffAssign"> Click a set to assign it — target date defaults to today.</span>
         </p>
         <p v-if="upcomingExamByChapterId.size" class="mb-2 text-xs leading-snug text-amber-900">
-            Chapters mapped to an upcoming exam are highlighted in amber (or rose if within 7 days).
+            Chapters in an upcoming exam have a thin dark-brown line (rose if within 7 days).
         </p>
         <p v-if="saveError" class="mb-2 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-800">
             {{ saveError }}
@@ -655,7 +679,10 @@ const startCorrection = (item) => {
                                 savingId === chapter.id ? 'opacity-60' : '',
                             ]"
                         >
-                            <td class="px-2 py-1.5 align-middle font-medium text-slate-900 whitespace-nowrap">
+                            <td
+                                class="px-2 py-1.5 align-middle font-medium text-slate-900 whitespace-nowrap"
+                                :class="chapterRowLineClass(chapter.id)"
+                            >
                                 <button
                                     type="button"
                                     class="inline-flex items-center gap-1 text-left hover:text-sky-800"
@@ -675,12 +702,16 @@ const startCorrection = (item) => {
                             </td>
                             <td
                                 class="max-w-[14rem] px-2 py-1.5 align-middle text-[12px] text-slate-600"
+                                :class="chapterRowLineClass(chapter.id)"
                                 :title="chapter.topics_label || ''"
                             >
                                 <span v-if="chapter.topics_label">{{ truncateTopics(chapter.topics_label) }}</span>
                                 <span v-else class="text-slate-400">—</span>
                             </td>
-                            <td class="bg-sky-50/80 px-1.5 py-1.5 text-center align-middle">
+                            <td
+                                class="bg-sky-50/80 px-1.5 py-1.5 text-center align-middle"
+                                :class="chapterRowLineClass(chapter.id)"
+                            >
                                 <div
                                     class="text-base font-extrabold tabular-nums leading-none"
                                     :class="pctToneClass(stats.completionPct)"
@@ -698,7 +729,10 @@ const startCorrection = (item) => {
                                     {{ stats.done }}/{{ stats.total }}
                                 </div>
                             </td>
-                            <td class="bg-violet-50/80 px-1.5 py-1.5 text-center align-middle">
+                            <td
+                                class="bg-violet-50/80 px-1.5 py-1.5 text-center align-middle"
+                                :class="chapterRowLineClass(chapter.id)"
+                            >
                                 <div
                                     class="text-base font-extrabold tabular-nums leading-none"
                                     :class="pctToneClass(stats.scorePct)"
@@ -707,7 +741,10 @@ const startCorrection = (item) => {
                                     <template v-else>—</template>
                                 </div>
                             </td>
-                            <td class="bg-orange-50/80 px-1.5 py-1.5 text-center align-middle">
+                            <td
+                                class="bg-orange-50/80 px-1.5 py-1.5 text-center align-middle"
+                                :class="chapterRowLineClass(chapter.id)"
+                            >
                                 <div class="text-base font-extrabold tabular-nums leading-none text-orange-800">
                                     <span class="text-emerald-700">{{ stats.correctionDone }}</span>
                                     <span class="mx-0.5 text-slate-400">/</span>
@@ -719,7 +756,10 @@ const startCorrection = (item) => {
                                     done / pend
                                 </div>
                             </td>
-                            <td class="px-1.5 py-1 text-center align-middle">
+                            <td
+                                class="px-1.5 py-1 text-center align-middle"
+                                :class="chapterRowLineClass(chapter.id)"
+                            >
                                 <button
                                     type="button"
                                     class="inline-flex h-5 w-5 items-center justify-center rounded border-2 text-[11px] font-bold leading-none"
@@ -734,7 +774,10 @@ const startCorrection = (item) => {
                                     <span v-if="chapter.studied">✓</span>
                                 </button>
                             </td>
-                            <td class="px-1.5 py-1 text-center align-middle">
+                            <td
+                                class="px-1.5 py-1 text-center align-middle"
+                                :class="chapterRowLineClass(chapter.id)"
+                            >
                                 <button
                                     type="button"
                                     class="inline-flex h-5 w-5 items-center justify-center rounded border-2 text-[11px] font-bold leading-none"
@@ -753,6 +796,7 @@ const startCorrection = (item) => {
                                 v-for="column in availabilityColumns"
                                 :key="`${chapter.id}-${column.key}`"
                                 class="px-1 py-1 text-center align-middle"
+                                :class="chapterRowLineClass(chapter.id)"
                             >
                                 <button
                                     type="button"
@@ -772,7 +816,7 @@ const startCorrection = (item) => {
                             v-if="isExpanded(chapter.id)"
                             class="bg-slate-100"
                         >
-                            <td :colspan="columnCount" class="border-t-2 border-slate-300 px-3 py-3">
+                            <td :colspan="columnCount" class="border-b border-slate-200 border-t border-slate-300 px-3 py-3">
                                 <div
                                     v-if="isTierDashboard(chapter) && !hasDashboardContent(chapterDashboard(chapter))"
                                     class="text-[11px] text-slate-500"
