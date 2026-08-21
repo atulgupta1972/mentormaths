@@ -170,6 +170,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('coaching-classes.store');
     Route::patch('/coaching-classes/{coachingClass}', [CoachingClassController::class, 'update'])
         ->name('coaching-classes.update');
+    Route::post('/coaching-classes/{coachingClass}/toggle-active', [CoachingClassController::class, 'toggleActive'])
+        ->name('coaching-classes.toggle-active');
+    Route::post('/coaching-classes/{coachingClass}/map-students', [CoachingClassController::class, 'mapStudents'])
+        ->name('coaching-classes.map-students');
     Route::post('/coaching-classes/{coachingClass}/teachers', [CoachingClassController::class, 'storeTeacher'])
         ->name('coaching-classes.teachers.store');
     Route::patch('/coaching-class-teachers/{teacher}', [CoachingClassController::class, 'updateTeacher'])
