@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ClassCoveragePanel from '@/Components/ClassCoveragePanel.vue';
+import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -26,6 +27,10 @@ const props = defineProps({
         default: () => ({ chapters: [], under_study_chapter_id: null }),
     },
     context: { type: Object, default: null },
+    examPlans: { type: Array, default: () => [] },
+    upcomingExams: { type: Array, default: () => [] },
+    syllabusChapters: { type: Array, default: () => [] },
+    examTypeOptions: { type: Array, default: () => [] },
 });
 
 const reminderForm = useForm({});
@@ -230,17 +235,36 @@ const sendReminders = () => {
                         Choose a student above to view or update their chapter ticks.
                     </div>
 
-                    <div v-else class="space-y-2">
+                    <div v-else class="space-y-4">
                         <p class="text-sm text-slate-700">
                             <span class="font-semibold">{{ selectedStudent.name }}</span>
                             <span v-if="contextLabel" class="text-slate-500"> · {{ contextLabel }}</span>
                         </p>
                         <ClassCoveragePanel
                             :class-coverage="classCoverage"
+                            :upcoming-exams="upcomingExams"
                             update-route-name="admin.school-study-plan.update"
                             :update-route-params="updateRouteParams"
                             :assign-student-id="selectedStudent.id"
                         />
+
+                        <section class="rounded-xl border border-violet-200 bg-violet-50/40 p-4 shadow-sm">
+                            <div class="mb-3">
+                                <h3 class="text-sm font-semibold text-violet-950">Upcoming exam date & syllabus</h3>
+                                <p class="mt-0.5 text-xs text-violet-900/80">
+                                    Add the next school exam date and tick the chapters (and topics) in that paper. Exam chapters highlight in the table above.
+                                </p>
+                            </div>
+                            <ExamPlanPanel
+                                :plans="examPlans"
+                                :syllabus-chapters="syllabusChapters"
+                                :exam-type-options="examTypeOptions"
+                                :student-id="selectedStudent.id"
+                                context="admin"
+                                compact
+                                :auto-open-create="examPlans.length === 0 && syllabusChapters.length > 0"
+                            />
+                        </section>
                     </div>
                 </template>
             </div>

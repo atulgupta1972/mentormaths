@@ -9,6 +9,7 @@ use App\Models\StudentEnrollment;
 use App\Models\SyllabusChapter;
 use App\Services\AdminGradeContext;
 use App\Services\ClassCoverageService;
+use App\Services\ExamPlanService;
 use App\Services\StudyPlanReminderEmailService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,7 @@ class SchoolStudyPlanController extends Controller
         private ClassCoverageService $coverageService,
         private AdminGradeContext $gradeContext,
         private StudyPlanReminderEmailService $reminderEmails,
+        private ExamPlanService $examPlanService,
     ) {}
 
     public function index(Request $request): Response
@@ -49,6 +51,9 @@ class SchoolStudyPlanController extends Controller
         $selectedStudent = null;
         $classCoverage = ['chapters' => [], 'under_study_chapter_id' => null];
         $context = null;
+        $examPlans = [];
+        $upcomingExams = [];
+        $syllabusChapters = [];
 
         if ($studentId) {
             $enrollment = StudentEnrollment::query()
@@ -69,6 +74,11 @@ class SchoolStudyPlanController extends Controller
                     'grade_name' => $enrollment->gradeLevel?->name,
                     'board_name' => $enrollment->board?->name,
                 ];
+
+                $examPlans = $this->examPlanService->plansForEnrollment($enrollment, true)->values()->all();
+                $split = $this->examPlanService->splitPlansByTiming(collect($examPlans));
+                $upcomingExams = $split['upcoming']->values()->all();
+                $syllabusChapters = $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all();
             }
         }
 
@@ -84,6 +94,10 @@ class SchoolStudyPlanController extends Controller
             'selectedStudent' => $selectedStudent,
             'classCoverage' => $classCoverage,
             'context' => $context,
+            'examPlans' => $examPlans,
+            'upcomingExams' => $upcomingExams,
+            'syllabusChapters' => $syllabusChapters,
+            'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ]);
     }
 

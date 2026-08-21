@@ -47,6 +47,9 @@ class SchoolStudyPlanTest extends TestCase
                 ->component('Admin/SchoolStudyPlan/Index')
                 ->where('selectedStudent.id', $student->id)
                 ->has('classCoverage.chapters', 3)
+                ->has('examPlans')
+                ->has('syllabusChapters', 3)
+                ->has('examTypeOptions')
                 ->where('summary.without_plan', 1)
                 ->where('summary.with_plan', 0));
 
@@ -80,6 +83,40 @@ class SchoolStudyPlanTest extends TestCase
             'student_enrollment_id' => $enrollmentId,
             'syllabus_chapter_id' => $chapters[1]->id,
         ]);
+    }
+
+    public function test_admin_can_save_exam_plan_from_school_study_plan_page(): void
+    {
+        [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->from(route('admin.school-study-plan.index', ['student_id' => $student->id]))
+            ->post(route('admin.exam-plans.store'), [
+                'student_id' => $student->id,
+                'exam_date' => now()->addDays(10)->toDateString(),
+                'title' => 'Unit test 1',
+                'exam_type' => 'unit_test',
+                'chapter_selections' => [
+                    ['syllabus_chapter_id' => $chapters[0]->id, 'syllabus_topic_ids' => null],
+                    ['syllabus_chapter_id' => $chapters[1]->id, 'syllabus_topic_ids' => null],
+                ],
+            ])
+            ->assertRedirect(route('admin.school-study-plan.index', ['student_id' => $student->id]));
+
+        $this->assertDatabaseHas('exam_plans', [
+            'title' => 'Unit test 1',
+            'student_enrollment_id' => $student->enrollments()->first()->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.school-study-plan.index', ['student_id' => $student->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('examPlans', 1)
+                ->has('upcomingExams', 1)
+                ->where('upcomingExams.0.title', 'Unit test 1'));
     }
 
     public function test_admin_sees_breakup_of_students_with_and_without_study_plan(): void
