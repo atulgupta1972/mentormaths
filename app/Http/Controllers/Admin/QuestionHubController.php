@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\PracticeSetCodeService;
+use App\Services\PracticeSetSplitService;
 use App\Services\QuestionMethodHintService;
 use App\Services\SetAssignmentService;
 use App\Services\SetCodeLookupService;
@@ -41,6 +42,7 @@ class QuestionHubController extends Controller
         private QuestionMethodHintService $methodHintService,
         private SetCodeLookupService $setCodeLookup,
         private SetAssignmentService $assignmentService,
+        private PracticeSetSplitService $splitService,
     ) {}
 
     public function setCodeReview(Request $request): Response
@@ -567,6 +569,14 @@ class QuestionHubController extends Controller
                 'status' => $worksheet->status,
                 'questions_count' => $worksheet->questions_count,
             ],
+            'canSplitSet' => $isAdmin && $this->splitService->canSplit($worksheet),
+            'splitBatchSize' => PracticeSetSplitService::DEFAULT_BATCH_SIZE,
+            'splitPreview' => $isAdmin
+                ? $this->splitService->buildPlan(
+                    (int) $worksheet->questions_count,
+                    (string) $worksheet->set_code,
+                )
+                : [],
             'topic' => $topic ? [
                 'id' => $topic->id,
                 'name' => $topic->name,

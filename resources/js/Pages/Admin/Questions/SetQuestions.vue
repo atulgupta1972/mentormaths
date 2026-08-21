@@ -18,6 +18,9 @@ const props = defineProps({
     isChapterTest: { type: Boolean, default: false },
     isFillInBlankSet: { type: Boolean, default: false },
     canViewQuestions: { type: Boolean, default: true },
+    canSplitSet: { type: Boolean, default: false },
+    splitBatchSize: { type: Number, default: 20 },
+    splitPreview: { type: Array, default: () => [] },
     hintStats: Object,
     topicHintStats: Object,
     assignmentPanel: { type: Object, default: null },
@@ -27,6 +30,49 @@ const page = usePage();
 const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
 const generating = ref(false);
 const overwrite = ref(false);
+const showSplitPanel = ref(false);
+
+const splitForm = useForm({
+    batch_size: props.splitBatchSize || 20,
+});
+
+const liveSplitPreview = computed(() => {
+    const total = Number(props.practiceSet?.questions_count || 0);
+    const batch = Math.max(5, Math.min(50, Number(splitForm.batch_size) || 20));
+    if (total <= batch) {
+        return [];
+    }
+    const base = String(props.practiceSet?.set_code || 'SET').replace(/\d+$/, '') || 'SET';
+    const parts = Math.ceil(total / batch);
+    const rows = [];
+    let from = 1;
+    for (let part = 1; part <= parts; part += 1) {
+        const count = Math.min(batch, total - (from - 1));
+        rows.push({
+            part,
+            count,
+            set_code: `${base}${part}`,
+            from,
+            to: from + count - 1,
+        });
+        from += count;
+    }
+    return rows;
+});
+
+const submitSplit = () => {
+    const rows = liveSplitPreview.value;
+    if (!rows.length) {
+        return;
+    }
+    const summary = rows.map((r) => `${r.set_code} (Q${r.from}–${r.to})`).join(', ');
+    if (!window.confirm(`Divide this set into ${rows.length} parts?\n\n${summary}\n\nExisting assignments stay on part 1 (fewer questions).`)) {
+        return;
+    }
+    splitForm.post(route('admin.practice-sets.split', props.practiceSet.id), {
+        preserveScroll: true,
+    });
+};
 
 const defaultTargetDate = () => {
     const d = new Date();
@@ -303,6 +349,14 @@ const generateHints = () => {
                     >
                         Chapter sets
                     </Link>
+                    <SecondaryButton
+                        v-if="canSplitSet"
+                        type="button"
+                        class="!py-2 !text-xs"
+                        @click="showSplitPanel = !showSplitPanel"
+                    >
+                        {{ showSplitPanel ? 'Hide divide' : 'Divide into sets' }}
+                    </SecondaryButton>
                     <DangerButton
                         type="button"
                         class="!py-2 !text-xs"
@@ -318,6 +372,45 @@ const generateHints = () => {
         <div class="py-12">
             <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
                 <BrowseModeNotice />
+
+                <div
+                    v-if="showSplitPanel && canSplitSet"
+                    class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-4 text-sm text-indigo-950"
+                >
+                    <p class="font-semibold">Divide large set</p>
+                    <p class="mt-1 text-indigo-900/80">
+                        Split {{ practiceSet.questions_count }} questions into smaller assignable sets
+                        (default {{ splitBatchSize }} per set). Codes become
+                        <span class="font-mono">{{ String(practiceSet.set_code || '').replace(/\d+$/, '') }}1</span>,
+                        <span class="font-mono">{{ String(practiceSet.set_code || '').replace(/\d+$/, '') }}2</span>, …
+                    </p>
+                    <div class="mt-3 flex flex-wrap items-end gap-3">
+                        <div>
+                            <InputLabel for="batch_size" value="Questions per set" />
+                            <input
+                                id="batch_size"
+                                v-model.number="splitForm.batch_size"
+                                type="number"
+                                min="5"
+                                max="50"
+                                class="mt-1 w-28 rounded-md border-gray-300 text-sm shadow-sm"
+                            />
+                        </div>
+                        <PrimaryButton
+                            type="button"
+                            class="!py-2"
+                            :disabled="splitForm.processing || liveSplitPreview.length < 2"
+                            @click="submitSplit"
+                        >
+                            {{ splitForm.processing ? 'Dividing…' : `Create ${liveSplitPreview.length || 0} sets` }}
+                        </PrimaryButton>
+                    </div>
+                    <ul v-if="liveSplitPreview.length" class="mt-3 space-y-1 font-mono text-xs text-indigo-900">
+                        <li v-for="row in liveSplitPreview" :key="row.part">
+                            {{ row.set_code }} · Q{{ row.from }}–{{ row.to }} ({{ row.count }})
+                        </li>
+                    </ul>
+                </div>
 
                 <div
                     v-if="page.props.flash?.success"

@@ -12,12 +12,14 @@ use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\ChapterMixedQuestionService;
 use App\Services\PracticeSetService;
+use App\Services\PracticeSetSplitService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetPurpose;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,6 +29,7 @@ class PracticeSetController extends Controller
         private PracticeSetService $practiceSetService,
         private ChapterMixedQuestionService $mixedQuestionService,
         private AdminGradeContext $gradeContext,
+        private PracticeSetSplitService $splitService,
     ) {}
 
     public function index(Request $request): Response
@@ -309,6 +312,32 @@ class PracticeSetController extends Controller
         return redirect()
             ->route('admin.practice-sets.index')
             ->with('success', 'Practice set deleted.');
+    }
+
+    public function split(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        $validated = $request->validate([
+            'batch_size' => ['nullable', 'integer', 'min:5', 'max:50'],
+        ]);
+
+        $batchSize = (int) ($validated['batch_size'] ?? PracticeSetSplitService::DEFAULT_BATCH_SIZE);
+
+        try {
+            $result = $this->splitService->split($worksheet, $request->user(), $batchSize);
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $codes = collect($result['plan'])->pluck('set_code')->implode(', ');
+        $createdCount = count($result['created']);
+
+        return redirect()
+            ->route('admin.questions.sets.show', $result['kept'])
+            ->with(
+                'success',
+                "Divided into ".count($result['plan'])." sets ({$codes}). "
+                ."This page is part 1; {$createdCount} new set(s) created."
+            );
     }
 
     private function chapterOptions(?int $gradeLevelId)
