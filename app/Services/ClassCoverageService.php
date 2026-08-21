@@ -13,6 +13,7 @@ class ClassCoverageService
     public function __construct(
         private ExamPlanService $examPlanService,
         private StudentChapterSummaryService $chapterSummaryService,
+        private FormulaBankService $formulaBank,
     ) {}
 
     /**
@@ -35,6 +36,13 @@ class ClassCoverageService
         }
 
         $chapterOptions = $this->examPlanService->chapterOptionsForEnrollment($enrollment);
+
+        // Topic-level formula sets show as many "Fm1" cards — merge into one chapter set first.
+        $this->formulaBank->ensureChaptersHaveSingleFormulaSet(
+            $chapterOptions->pluck('id')->all(),
+            auth()->user(),
+        );
+
         $coverages = StudentChapterCoverage::query()
             ->where('student_enrollment_id', $enrollment->id)
             ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))

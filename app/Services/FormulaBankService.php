@@ -607,6 +607,97 @@ class FormulaBankService
         });
     }
 
+    /**
+     * Ensure each chapter shows as one formula set (merge leftover topic sets).
+     *
+     * @param  list<int>  $chapterIds
+     * @return int Number of chapters consolidated
+     */
+    public function ensureChaptersHaveSingleFormulaSet(array $chapterIds, ?User $actor = null): int
+    {
+        $chapterIds = array_values(array_unique(array_filter(array_map('intval', $chapterIds))));
+        if ($chapterIds === []) {
+            return 0;
+        }
+
+        $consolidated = 0;
+
+        foreach ($chapterIds as $chapterId) {
+            $chapter = SyllabusChapter::query()->with('topics:id,syllabus_chapter_id')->find($chapterId);
+            if (! $chapter || $chapter->topics->isEmpty()) {
+                continue;
+            }
+
+            if (! $this->chapterNeedsFormulaConsolidation($chapter)) {
+                continue;
+            }
+
+            $user = $actor
+                ?? $this->actorFromChapterFormulaSets($chapter)
+                ?? User::query()->where('role', User::ROLE_ADMIN)->orderBy('id')->first()
+                ?? User::query()->orderBy('id')->first();
+
+            if (! $user) {
+                continue;
+            }
+
+            try {
+                $this->consolidateChapterIntoOneSet($chapter, $user);
+                $consolidated++;
+            } catch (InvalidArgumentException) {
+                // No formula cards — nothing to merge.
+            }
+        }
+
+        return $consolidated;
+    }
+
+    public function chapterNeedsFormulaConsolidation(SyllabusChapter $chapter): bool
+    {
+        $chapter->loadMissing('topics:id,syllabus_chapter_id');
+        $topicIds = $chapter->topics->pluck('id');
+
+        if ($topicIds->isEmpty()) {
+            return false;
+        }
+
+        $topicSetCount = Worksheet::query()
+            ->where('purpose', WorksheetPurpose::FORMULA)
+            ->where('scope', PracticeSetScope::TOPIC)
+            ->whereIn('syllabus_topic_id', $topicIds)
+            ->count();
+
+        $chapterSetCount = Worksheet::query()
+            ->where('purpose', WorksheetPurpose::FORMULA)
+            ->where('scope', PracticeSetScope::CHAPTER)
+            ->where('syllabus_chapter_id', $chapter->id)
+            ->count();
+
+        return $topicSetCount > 0 || $chapterSetCount > 1;
+    }
+
+    private function actorFromChapterFormulaSets(SyllabusChapter $chapter): ?User
+    {
+        $chapter->loadMissing('topics:id,syllabus_chapter_id');
+        $topicIds = $chapter->topics->pluck('id');
+
+        $createdBy = Worksheet::query()
+            ->where('purpose', WorksheetPurpose::FORMULA)
+            ->where(function ($q) use ($chapter, $topicIds) {
+                $q->where(function ($inner) use ($chapter) {
+                    $inner->where('scope', PracticeSetScope::CHAPTER)
+                        ->where('syllabus_chapter_id', $chapter->id);
+                })->orWhere(function ($inner) use ($topicIds) {
+                    $inner->where('scope', PracticeSetScope::TOPIC)
+                        ->whereIn('syllabus_topic_id', $topicIds);
+                });
+            })
+            ->whereNotNull('created_by')
+            ->value('created_by');
+
+        return $createdBy ? User::query()->find($createdBy) : null;
+    }
+
     private function findOrCreateChapterFormulaSet(SyllabusChapter $chapter, User $user, int &$setsCreated): Worksheet
     {
         $existing = Worksheet::query()

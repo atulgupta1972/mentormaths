@@ -205,6 +205,73 @@ class FormulaBankTest extends TestCase
         $this->assertDatabaseMissing('worksheets', ['id' => $setB->id]);
     }
 
+    public function test_opening_study_plan_auto_merges_topic_formula_sets(): void
+    {
+        [$admin, $topicA] = $this->seedTopic();
+        $chapter = $topicA->chapter;
+        $topicB = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->id,
+            'name' => 'Addition of Integers',
+            'sort_order' => 2,
+        ]);
+        $grade = $chapter->syllabusVersion->gradeLevel;
+        $board = $chapter->syllabusVersion->board;
+        $year = AcademicYear::query()->findOrFail($chapter->syllabusVersion->academic_year_id);
+
+        $service = app(\App\Services\FormulaBankService::class);
+        $setA = $service->createSet($topicA, $admin);
+        $setB = $service->createSet($topicB, $admin);
+        $qA = Question::query()->create([
+            'syllabus_topic_id' => $topicA->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Card A',
+            'bank_purpose' => QuestionBankPurpose::FORMULA,
+            'source' => Question::SOURCE_MANUAL,
+            'created_by' => $admin->id,
+        ]);
+        $qB = Question::query()->create([
+            'syllabus_topic_id' => $topicB->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Card B',
+            'bank_purpose' => QuestionBankPurpose::FORMULA,
+            'source' => Question::SOURCE_MANUAL,
+            'created_by' => $admin->id,
+        ]);
+        $setA->questions()->attach([$qA->id => ['sort_order' => 1]]);
+        $setB->questions()->attach([$qB->id => ['sort_order' => 1]]);
+
+        $studentUser = User::factory()->create(['role' => User::ROLE_STUDENT]);
+        $student = \App\Models\Student::query()->create([
+            'user_id' => $studentUser->id,
+            'name' => 'Formula Student',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543299',
+            'school_name' => 'School',
+        ]);
+        \App\Models\StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $year->id,
+            'board_id' => $board->id,
+            'grade_level_id' => $grade->id,
+            'school_name' => 'School',
+            'status' => \App\Models\StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.school-study-plan.index', ['student_id' => $student->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/SchoolStudyPlan/Index')
+                ->where('selectedStudent.id', $student->id)
+                ->has('classCoverage.chapters'));
+
+        $this->assertSame(1, Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->count());
+        $merged = Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->first();
+        $this->assertSame(PracticeSetScope::CHAPTER, $merged->scope);
+        $this->assertSame(2, $merged->questions()->count());
+    }
+
     public function test_formula_set_avoids_practice_set_number_collision(): void
     {
         [$admin, $topic] = $this->seedTopic();
