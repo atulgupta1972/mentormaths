@@ -151,6 +151,8 @@ const chapterPrepGroups = (plan) => {
 
 const planHasChapterRows = (plan) => (plan.chapters || []).length > 0;
 
+const sortedPlans = computed(() => [...props.plans].sort((a, b) => String(b.exam_date || '').localeCompare(String(a.exam_date || ''))));
+
 const expandedPlan = computed(() => props.plans.find((plan) => plan.id === expandedPlanId.value) ?? null);
 
 const openPlanView = (plan) => {
@@ -674,29 +676,72 @@ onUnmounted(() => {
             No exam plans yet.
         </div>
 
+        <!-- Compact: one slim row (newest first) -->
+        <div
+            v-else-if="plans.length && compact"
+            class="flex flex-wrap items-center gap-1.5"
+        >
+            <div
+                v-for="plan in sortedPlans"
+                :id="`exam-plan-${plan.id}`"
+                :key="plan.id"
+                class="inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded border border-violet-200 bg-white px-2 py-1 text-[11px] leading-tight shadow-sm transition hover:border-violet-400 hover:bg-violet-50/60"
+                :class="highlightPlanId === plan.id ? 'ring-2 ring-emerald-400' : ''"
+                @click="openPlanView(plan)"
+            >
+                <span class="whitespace-nowrap font-semibold text-indigo-700">{{ formatDate(plan.exam_date) }}</span>
+                <span class="max-w-[7rem] truncate font-medium text-slate-900" :title="plan.title">{{ plan.title }}</span>
+                <span class="hidden whitespace-nowrap text-slate-400 sm:inline">{{ plan.exam_type_label }}</span>
+                <span
+                    v-if="plan.has_marks"
+                    class="whitespace-nowrap font-semibold text-emerald-700"
+                >{{ marksScoreLabel(plan) }}</span>
+                <span
+                    v-else-if="plan.prep_summary"
+                    class="whitespace-nowrap text-slate-500"
+                >{{ plan.prep_summary.completed }}/{{ plan.prep_summary.total }}</span>
+                <span
+                    v-else-if="planHasChapterRows(plan)"
+                    class="whitespace-nowrap text-slate-400"
+                >{{ plan.chapter_names.length }} ch</span>
+                <span v-if="canManage" class="ml-0.5 inline-flex items-center gap-1 border-l border-violet-100 pl-1.5" @click.stop>
+                    <button type="button" class="font-medium text-indigo-600 hover:underline" @click="openEdit(plan)">Edit</button>
+                    <button
+                        v-if="isAdminContext"
+                        type="button"
+                        class="font-medium text-indigo-600 hover:underline"
+                        @click="toggleAssign(plan)"
+                    >
+                        {{ assigningPlanId === plan.id ? 'Close' : 'Assign' }}
+                    </button>
+                    <button
+                        v-else
+                        type="button"
+                        class="font-medium text-rose-600 hover:underline"
+                        @click="removePlan(plan)"
+                    >
+                        Del
+                    </button>
+                </span>
+            </div>
+        </div>
+
         <div v-else-if="plans.length" class="space-y-3">
             <div
-                v-for="plan in plans"
+                v-for="plan in sortedPlans"
                 :id="`exam-plan-${plan.id}`"
                 :key="plan.id"
                 class="scroll-mt-4 overflow-hidden rounded-lg border border-gray-200 bg-white"
-                :class="[
-                    highlightPlanId === plan.id ? 'ring-2 ring-emerald-400' : '',
-                    compact ? 'cursor-pointer transition hover:border-indigo-300 hover:shadow-sm' : '',
-                ]"
-                @click="compact ? openPlanView(plan) : undefined"
+                :class="highlightPlanId === plan.id ? 'ring-2 ring-emerald-400' : ''"
             >
-                <div
-                    class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 bg-gray-50"
-                    :class="compact ? 'px-3 py-2.5' : 'px-4 py-3'"
-                >
+                <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-3">
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                            <span class="font-semibold text-indigo-700" :class="compact ? 'text-xs' : 'text-sm'">{{ formatDate(plan.exam_date) }}</span>
-                            <span class="font-semibold text-gray-900" :class="compact ? 'text-sm' : 'text-base'">{{ plan.title }}</span>
+                            <span class="text-sm font-semibold text-indigo-700">{{ formatDate(plan.exam_date) }}</span>
+                            <span class="text-base font-semibold text-gray-900">{{ plan.title }}</span>
                             <span class="text-xs text-gray-500">{{ plan.exam_type_label }}</span>
                         </div>
-                        <p v-if="plan.has_marks" class="mt-1 font-semibold text-emerald-700" :class="compact ? 'text-xs' : 'text-sm'">
+                        <p v-if="plan.has_marks" class="mt-1 text-sm font-semibold text-emerald-700">
                             Result: {{ marksScoreLabel(plan) }}
                         </p>
                         <p v-else-if="planHasChapterRows(plan)" class="mt-1 text-xs text-gray-500">
@@ -704,9 +749,6 @@ onUnmounted(() => {
                             <span v-if="plan.prep_summary"> · {{ plan.prep_summary.completed }}/{{ plan.prep_summary.total }} done</span>
                         </p>
                         <p v-else class="mt-1 text-sm text-gray-400">No chapters selected</p>
-                        <p v-if="compact && planHasChapterRows(plan)" class="mt-1 text-[11px] font-medium text-indigo-600">
-                            Click to open full chapter table
-                        </p>
                     </div>
                     <div v-if="canManage" class="flex shrink-0 flex-wrap justify-end gap-x-3 gap-y-1 text-sm" @click.stop>
                         <button type="button" class="text-indigo-600 hover:underline" @click="openEdit(plan)">

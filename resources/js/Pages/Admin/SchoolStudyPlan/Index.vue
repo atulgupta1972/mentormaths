@@ -248,12 +248,14 @@ const sendReminders = () => {
                             :assign-student-id="selectedStudent.id"
                         />
 
-                        <section class="rounded-xl border border-violet-200 bg-violet-50/40 p-4 shadow-sm">
-                            <div class="mb-3">
-                                <h3 class="text-sm font-semibold text-violet-950">Upcoming exam date & syllabus</h3>
-                                <p class="mt-0.5 text-xs text-violet-900/80">
-                                    Add the next school exam date and tick the chapters (and topics) in that paper. Exam chapters highlight in the table above.
-                                </p>
+                        <section class="rounded-xl border border-violet-200 bg-violet-50/40 p-3 shadow-sm">
+                            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 class="text-sm font-semibold text-violet-950">Upcoming exam date & syllabus</h3>
+                                    <p class="text-[11px] text-violet-900/80">
+                                        Newest first · click a date for chapters · Add exam to create
+                                    </p>
+                                </div>
                             </div>
                             <ExamPlanPanel
                                 :plans="examPlans"

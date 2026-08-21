@@ -508,7 +508,7 @@ class ExamPlanService
     {
         return $enrollment->examPlans()
             ->with('chapters:id,chapter_number,name,sort_order')
-            ->orderBy('exam_date')
+            ->orderByDesc('exam_date')
             ->get()
             ->map(fn (ExamPlan $plan) => $this->formatPlan($plan, true, $includeAssignables));
     }
