@@ -10,6 +10,7 @@ use App\Models\TextbookChapter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class SyllabusImportService
@@ -335,19 +336,64 @@ class SyllabusImportService
 
     public function flattenToRows(SyllabusVersion $version): Collection
     {
-        $version->load([
-            'chapters.topics' => fn ($q) => $q->withCount('questions'),
-            'chapters.chapterHead',
-            'chapters.textbookChapters.textbook',
-        ]);
+        $chapterColumns = [
+            'id',
+            'syllabus_version_id',
+            'chapter_head_id',
+            'chapter_number',
+            'name',
+            'sort_order',
+            'created_at',
+            'updated_at',
+        ];
+
+        if (Schema::hasColumn('syllabus_chapters', 'ncert_verified')) {
+            $chapterColumns[] = 'ncert_verified';
+        }
+
+        $loadTextbookChapters = Schema::hasTable('textbook_chapters');
+
+        try {
+            $relations = [
+                'chapters' => fn ($q) => $q->select($chapterColumns),
+                'chapters.topics' => fn ($q) => $q->withCount('questions'),
+                'chapters.chapterHead',
+            ];
+
+            if ($loadTextbookChapters) {
+                $relations[] = 'chapters.textbookChapters.textbook';
+            }
+
+            // Mixed string/closure relation lists: load in two steps for clarity.
+            $version->load([
+                'chapters' => fn ($q) => $q->select($chapterColumns),
+                'chapters.topics' => fn ($q) => $q->withCount('questions'),
+                'chapters.chapterHead',
+            ]);
+
+            if ($loadTextbookChapters) {
+                $version->load('chapters.textbookChapters.textbook');
+            }
+        } catch (\Throwable $e) {
+            report($e);
+            $version->unsetRelation('chapters');
+            $version->load([
+                'chapters' => fn ($q) => $q->select($chapterColumns),
+                'chapters.topics' => fn ($q) => $q->withCount('questions'),
+                'chapters.chapterHead',
+            ]);
+        }
 
         return $version->chapters->flatMap(function (SyllabusChapter $chapter) {
-            $books = $chapter->textbookChapters
-                ->map(fn (TextbookChapter $bookChapter) => $bookChapter->textbook?->name)
-                ->filter()
-                ->unique()
-                ->values()
-                ->all();
+            $books = [];
+            if ($chapter->relationLoaded('textbookChapters')) {
+                $books = $chapter->textbookChapters
+                    ->map(fn (TextbookChapter $bookChapter) => $bookChapter->textbook?->name)
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
             $hasQuestions = $chapter->topics->contains(fn (SyllabusTopic $topic) => ($topic->questions_count ?? 0) > 0);
 
             return $chapter->topics->map(fn (SyllabusTopic $topic) => [
@@ -357,7 +403,7 @@ class SyllabusImportService
                 'chapter_name' => $chapter->name,
                 'chapter_head_id' => $chapter->chapter_head_id,
                 'chapter_head_name' => $chapter->chapterHead?->name ?? '',
-                'ncert_verified' => (bool) $chapter->ncert_verified,
+                'ncert_verified' => (bool) ($chapter->getAttributes()['ncert_verified'] ?? false),
                 'has_uploaded_content' => $books !== [] || $hasQuestions,
                 'content_books' => $books,
                 'topic_name' => $topic->name,

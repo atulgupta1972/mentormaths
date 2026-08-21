@@ -69,20 +69,37 @@ class SyllabusVersionController extends Controller
                 ->with('error', "That syllabus (id {$syllabusVersion}) was not found. Open one from the list below.");
         }
 
-        $version->load([
-            'board',
-            'gradeLevel',
-            'subject',
-            'academicYear',
-        ]);
+        try {
+            $version->load([
+                'board',
+                'gradeLevel',
+                'subject',
+                'academicYear',
+            ]);
 
-        return Inertia::render('Admin/Syllabus/Show', [
-            'version' => $version,
-            'rows' => $this->importService->flattenToRows($version),
-            'academicYears' => AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'name']),
-            'chapterHeads' => ChapterHead::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
-            'contentMoveTargets' => $this->bookService->contentMoveTargets($version),
-        ]);
+            return Inertia::render('Admin/Syllabus/Show', [
+                'version' => $version,
+                'rows' => $this->importService->flattenToRows($version),
+                'academicYears' => AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'name']),
+                'chapterHeads' => ChapterHead::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
+                'contentMoveTargets' => $this->bookService->contentMoveTargets($version),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            $message = $e->getMessage();
+            $hint = 'On the server run: git pull && php artisan migrate --force && npm ci && npm run build && php artisan optimize:clear';
+
+            if (str_contains($message, 'Unknown column') || str_contains($message, 'Base table or view not found')) {
+                $hint = 'Database schema is behind the code. On the server run: php artisan migrate --force';
+            } elseif (str_contains($message, 'Vite') || str_contains($message, 'manifest')) {
+                $hint = 'Frontend build is stale. On the server run: npm ci && npm run build';
+            }
+
+            return redirect()
+                ->route('admin.syllabus.index')
+                ->with('error', 'Could not open this syllabus. '.$hint);
+        }
     }
 
     public function store(Request $request): RedirectResponse
