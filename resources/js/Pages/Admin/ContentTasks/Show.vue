@@ -236,7 +236,8 @@ const formatDuration = (seconds) => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">
-                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
+                        <span v-if="task.chapter?.board_code" class="mr-1 rounded bg-indigo-100 px-1.5 py-0.5 text-sm font-bold text-indigo-900">{{ task.chapter.board_code }}</span>
+                        {{ task.chapter?.grade_name }} · {{ task.chapter?.book_author_name || task.chapter?.textbook_name || 'Book' }} · {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
                     </h2>
                     <p class="text-sm text-gray-500">{{ task.work_type_label }} · {{ task.status_label }}</p>
                 </div>
@@ -253,14 +254,19 @@ const formatDuration = (seconds) => {
                     {{ page.props.flash.error }}
                 </div>
 
-                <div class="grid gap-3 sm:grid-cols-4">
+                <div class="grid gap-3 sm:grid-cols-5">
+                    <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
+                        <p class="text-xs uppercase text-gray-500">Board</p>
+                        <p class="font-semibold">{{ task.chapter?.board_code || '—' }}</p>
+                        <p v-if="task.chapter?.board_name" class="text-xs text-gray-500">{{ task.chapter.board_name }}</p>
+                    </div>
                     <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                         <p class="text-xs uppercase text-gray-500">Uploader</p>
                         <p class="font-semibold">{{ task.assignee?.name }}</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
-                        <p class="text-xs uppercase text-gray-500">Book</p>
-                        <p class="font-semibold">{{ task.chapter?.textbook_name || '—' }}</p>
+                        <p class="text-xs uppercase text-gray-500">Book / author</p>
+                        <p class="font-semibold">{{ task.chapter?.book_author_name || task.chapter?.textbook_name || '—' }}</p>
                         <p class="text-xs text-gray-500">{{ task.chapter?.textbook_code }}</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">

@@ -472,6 +472,7 @@ class ContentUploadTaskController extends Controller
             'assigner:id,name',
             'textbookChapter.textbook.gradeLevel',
             'textbookChapter.syllabusChapter.chapterHead',
+            'textbookChapter.syllabusChapter.syllabusVersion.board',
         ]);
 
         $verification = $this->verificationPayload($contentTask, $request->user());
@@ -480,8 +481,8 @@ class ContentUploadTaskController extends Controller
             'assigner:id,name',
             'textbookChapter.textbook.gradeLevel',
             'textbookChapter.syllabusChapter.chapterHead',
+            'textbookChapter.syllabusChapter.syllabusVersion.board',
         ]);
-
         return Inertia::render('Admin/ContentTasks/Show', [
             'task' => $this->serializeTask($contentTask, detailed: true),
             'verification' => $contentTask->isFillBlankConversion() ? null : $verification,
