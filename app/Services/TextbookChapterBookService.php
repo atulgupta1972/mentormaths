@@ -388,8 +388,12 @@ class TextbookChapterBookService
 
     public function hasStoredPdf(TextbookChapter $chapter): bool
     {
-        return filled($chapter->pdf_path)
-            && Storage::disk('public')->exists($chapter->pdf_path);
+        try {
+            return filled($chapter->pdf_path)
+                && Storage::disk('public')->exists($chapter->pdf_path);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     private function assertUploaderCanEditChapter(TextbookChapter $chapter, User $user): void

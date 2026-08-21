@@ -13,19 +13,21 @@ class TextbookChapterConversionPromptService
     /**
      * @return array{prompt: string, sample_json: string, mcq_reference_json: string, question_count: int, fill_blank_set_code: string, written_set_code: string}
      */
-    public function payload(TextbookChapter $chapter): array
+    public function payload(TextbookChapter $chapter, bool $includeMcqReferenceJson = false): array
     {
         $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter']);
-        $items = $chapter->extraction_items ?? [];
+        $items = array_values(array_filter(
+            is_array($chapter->extraction_items) ? $chapter->extraction_items : [],
+            fn ($item) => is_array($item),
+        ));
 
         if ($items === []) {
             throw new \InvalidArgumentException('Import MCQs first before generating a fill-blank conversion prompt.');
         }
 
         $reference = $this->mcqReference($chapter, $items);
-        $referenceJson = json_encode($reference, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        $codes = $this->setCodes->codes($chapter);
         $count = count($reference['questions']);
+        $codes = $this->setCodes->codes($chapter);
         $fillPlan = $this->setCodes->fillBlankPartPlan($chapter, $count);
         $writtenPlan = $this->setCodes->writtenPartPlan($chapter, $count);
 
@@ -98,8 +100,10 @@ PROMPT;
 
         return [
             'prompt' => $prompt,
-            'sample_json' => json_encode($sample, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
-            'mcq_reference_json' => $referenceJson,
+            'sample_json' => json_encode($sample, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) ?: '{}',
+            'mcq_reference_json' => $includeMcqReferenceJson
+                ? (json_encode($reference, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) ?: '{}')
+                : '',
             'question_count' => $count,
             'fill_blank_set_code' => $fillPlan[0]['set_code'] ?? $codes['fill_blank'].'1',
             'fill_blank_set_codes' => array_column($fillPlan, 'set_code'),

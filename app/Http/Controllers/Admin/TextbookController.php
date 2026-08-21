@@ -191,7 +191,28 @@ class TextbookController extends Controller
             ->with('success', 'Chapter PDF uploaded. Copy the AI prompt, generate MCQ JSON in Claude/Cursor/Gemini, then paste it below.');
     }
 
-    public function show(Request $request, TextbookChapter $textbookChapter): Response
+    public function show(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
+    {
+        try {
+            return $this->renderChapterShow($request, $textbookChapter);
+        } catch (\Throwable $e) {
+            report($e);
+
+            $message = 'Could not open this chapter ('.$e->getMessage().'). Try again or ask admin to check the server log.';
+
+            if ($this->isContentUploaderContext($request)) {
+                return redirect()
+                    ->route('content.tasks.index')
+                    ->with('error', $message);
+            }
+
+            return redirect()
+                ->route('admin.textbooks.index')
+                ->with('error', $message);
+        }
+    }
+
+    private function renderChapterShow(Request $request, TextbookChapter $textbookChapter): Response
     {
         $textbookChapter->load([
             'textbook.gradeLevel',
@@ -208,15 +229,33 @@ class TextbookController extends Controller
 
         $uploaderMode = $this->isContentUploaderContext($request);
         $activeYear = AcademicYear::active();
-        $aiPrompt = $this->mcqPromptService->payload($textbookChapter);
+
+        try {
+            $aiPrompt = $this->mcqPromptService->payload($textbookChapter);
+        } catch (\Throwable $e) {
+            report($e);
+            $aiPrompt = [
+                'prompt' => '',
+                'sample_json' => '{}',
+                'mcq_set_code' => '',
+                'written_set_code' => '',
+            ];
+        }
+
         $rawItems = is_array($textbookChapter->extraction_items) ? $textbookChapter->extraction_items : [];
-        $items = $this->mcqImportService->itemsWithDiagramPreviewUrls($rawItems);
+        try {
+            $items = $this->mcqImportService->itemsWithDiagramPreviewUrls($rawItems);
+        } catch (\Throwable $e) {
+            report($e);
+            $items = array_values(array_filter($rawItems, fn ($item) => is_array($item)));
+        }
         $itemCount = count($items);
 
         $fillBlankConversion = null;
         if ($itemCount > 0) {
             try {
-                $fillBlankConversion = $this->conversionPromptService->payload($textbookChapter);
+                // Skip embedding full mcq_reference_json (large chapters can OOM / 500).
+                $fillBlankConversion = $this->conversionPromptService->payload($textbookChapter, false);
             } catch (\Throwable $e) {
                 report($e);
             }
@@ -261,6 +300,12 @@ class TextbookController extends Controller
         }
 
         $task = $taskQuery->latest()->first();
+        $hasPdf = false;
+        try {
+            $hasPdf = $this->bookService->hasStoredPdf($textbookChapter);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         if ($task) {
             if ($uploaderMode) {
@@ -271,7 +316,7 @@ class TextbookController extends Controller
                     'bucket' => $task->uploaderBucket(),
                     'can_start_review' => $task->uploaderBucket() === 'review_pending',
                     'can_change_book' => $this->bookService->uploaderCanChangeBook($textbookChapter, $request->user()),
-                    'has_pdf' => $this->bookService->hasStoredPdf($textbookChapter),
+                    'has_pdf' => $hasPdf,
                 ];
             } else {
                 $contentUploadTask = [
@@ -287,12 +332,18 @@ class TextbookController extends Controller
                         ContentUploadTask::STATUS_PUBLISHED,
                     ], true) && $textbookChapter->mcqWorksheetIds() !== [],
                     'can_change_book' => true,
-                    'has_pdf' => $this->bookService->hasStoredPdf($textbookChapter),
+                    'has_pdf' => $hasPdf,
                 ];
             }
         }
 
         $gradeLevelId = (int) ($textbookChapter->textbook?->grade_level_id ?? 0);
+        $pdfUrl = null;
+        try {
+            $pdfUrl = $textbookChapter->pdfUrl();
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return Inertia::render('Admin/Textbooks/Show', [
             'chapter' => [
@@ -301,8 +352,8 @@ class TextbookController extends Controller
                 'status_label' => $textbookChapter->statusLabel(),
                 'chapter_number' => $textbookChapter->chapter_number,
                 'title' => $textbookChapter->title,
-                'pdf_url' => $textbookChapter->pdfUrl(),
-                'has_pdf' => $this->bookService->hasStoredPdf($textbookChapter),
+                'pdf_url' => $pdfUrl,
+                'has_pdf' => $hasPdf,
                 'extraction_error' => $textbookChapter->extraction_error,
                 'extracted_at' => $textbookChapter->extracted_at?->toDateTimeString(),
                 'published_at' => $textbookChapter->published_at?->toDateTimeString(),
@@ -322,9 +373,9 @@ class TextbookController extends Controller
                 'mcq_worksheet_ids' => $textbookChapter->mcqWorksheetIds(),
                 'written_worksheet_id' => $textbookChapter->written_worksheet_id,
                 'fill_blank_worksheet_id' => $textbookChapter->fill_blank_worksheet_id,
-                'mcq_set_code' => $textbookChapter->mcqWorksheet?->set_code ?? $aiPrompt['mcq_set_code'],
+                'mcq_set_code' => $textbookChapter->mcqWorksheet?->set_code ?? ($aiPrompt['mcq_set_code'] ?? null),
                 'mcq_set_codes' => $this->publishedMcqSetCodes($textbookChapter),
-                'written_set_code' => $textbookChapter->writtenWorksheet?->set_code ?? $aiPrompt['written_set_code'],
+                'written_set_code' => $textbookChapter->writtenWorksheet?->set_code ?? ($aiPrompt['written_set_code'] ?? null),
                 'fill_blank_set_code' => $textbookChapter->fillBlankWorksheet?->set_code
                     ?? ($fillBlankConversion['fill_blank_set_code'] ?? null),
                 'fill_blank_ready_count' => $fillBlankReadyCount,
@@ -354,7 +405,6 @@ class TextbookController extends Controller
                 : $this->bookService->syllabusChaptersForRelink($textbookChapter),
         ]);
     }
-
     public function uploadPdf(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
         $uploadedPdf = $request->file('pdf');
@@ -665,7 +715,10 @@ class TextbookController extends Controller
 
         $reference = $this->conversionPromptService->mcqReference(
             $textbookChapter,
-            $textbookChapter->extraction_items ?? [],
+            array_values(array_filter(
+                is_array($textbookChapter->extraction_items) ? $textbookChapter->extraction_items : [],
+                fn ($item) => is_array($item),
+            )),
         );
 
         $filename = sprintf(
