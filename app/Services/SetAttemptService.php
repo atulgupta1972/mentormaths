@@ -8,6 +8,7 @@ use App\Models\SetAttemptAnswer;
 use App\Models\StudentEnrollment;
 use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
+use App\Support\AttemptIntegrity;
 use App\Support\AttemptResultSummary;
 use App\Support\AttemptTiming;
 use App\Support\AnswerValidationService;
@@ -77,11 +78,25 @@ class SetAttemptService
         return $attempt->fresh();
     }
 
+    public function assertNotIntegrityLocked(SetAttempt $attempt): void
+    {
+        $attempt->loadMissing('assignment.enrollment.gradeLevel', 'assignment.practiceSet');
+
+        if (AttemptIntegrity::isLocked($attempt)) {
+            throw new \InvalidArgumentException(
+                'This attempt is locked after '.AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT
+                .' tab switches. Ask your teacher to unlock or reassign.'
+            );
+        }
+    }
+
     public function submit(SetAttempt $attempt, array $answers): SetAttempt
     {
         if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {
             throw new \InvalidArgumentException('This attempt has already been submitted.');
         }
+
+        $this->assertNotIntegrityLocked($attempt);
 
         $assignment = $attempt->assignment()->with('practiceSet.questions.options')->first();
         $questions = $assignment->practiceSet->questions->keyBy('id');

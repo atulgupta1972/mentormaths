@@ -6,6 +6,7 @@ import McqOptionLine from '@/Components/McqOptionLine.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AttemptFullscreenGate from '@/Components/AttemptFullscreenGate.vue';
 import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
+import AttemptLockedOverlay from '@/Components/AttemptLockedOverlay.vue';
 import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
 import AttemptProtectionBadge from '@/Components/AttemptProtectionBadge.vue';
 import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
@@ -34,11 +35,13 @@ const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
 
 const protectionMode = computed(() => props.integrity?.mode ?? 'off');
 
-const { contentHidden, enabled: protectionEnabled, tabLeaveCount } = useAttemptContentProtection({
+const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked, lockLimit } = useAttemptContentProtection({
     mode: protectionMode.value,
     attemptId: props.attempt?.id,
     trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
     initialTabLeaveCount: props.integrity?.tab_leave_count ?? 0,
+    lockLimit: props.integrity?.tab_leave_lock_limit ?? 2,
+    initiallyLocked: props.integrity?.locked ?? false,
 });
 
 const isTest = computed(() => props.practiceSet?.kind_label === 'Test');
@@ -71,7 +74,12 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
             v-if="needsFullscreenGate && !fullscreenReady"
             @ready="fullscreenReady = true"
         />
-        <AttemptHiddenOverlay v-if="protectionEnabled && contentHidden && canShowAttempt" />
+        <AttemptLockedOverlay
+            v-if="protectionEnabled && attemptLocked && canShowAttempt"
+            :tab-leave-count="tabLeaveCount"
+            :lock-limit="lockLimit"
+        />
+        <AttemptHiddenOverlay v-else-if="protectionEnabled && contentHidden && canShowAttempt" />
 
         <template #header>
             <div class="flex items-center justify-between gap-3">
@@ -83,6 +91,8 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
                         class="mt-1"
                         :mode="protectionMode"
                         :tab-leave-count="tabLeaveCount"
+                        :locked="attemptLocked"
+                        :lock-limit="lockLimit"
                     />
                 </div>
                 <span class="shrink-0 rounded-full bg-gray-100 px-3 py-1 font-mono text-sm">{{ formatTime(elapsed) }}</span>
@@ -91,7 +101,7 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
 
         <div v-if="canShowAttempt" :class="protectionEnabled ? 'attempt-protected py-12' : 'py-12'">
             <div class="mx-auto max-w-4xl space-y-6 sm:px-6 lg:px-8">
-                <AttemptIntegrityNotice :is-test="isTest" :mode="protectionMode" />
+                <AttemptIntegrityNotice :is-test="isTest" :mode="protectionMode" :lock-limit="lockLimit" />
 
                 <div class="rounded-lg bg-white p-4 shadow-sm">
                     <p class="text-sm text-gray-600">
@@ -148,9 +158,14 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
 
                 <div class="sticky bottom-4 rounded-lg bg-white p-4 shadow-lg">
                     <p class="mb-3 text-sm text-gray-600">
-                        {{ Object.keys(answers).length }} / {{ questions.length }} answered
+                        <template v-if="attemptLocked">
+                            Attempt locked after {{ lockLimit }} tab switches — submit is disabled.
+                        </template>
+                        <template v-else>
+                            {{ Object.keys(answers).length }} / {{ questions.length }} answered
+                        </template>
                     </p>
-                    <PrimaryButton :disabled="form.processing || !allAnswered()" @click="submit">
+                    <PrimaryButton :disabled="attemptLocked || form.processing || !allAnswered()" @click="submit">
                         Submit {{ practiceSet.kind_label === 'Test' ? 'test' : 'practice set' }}
                     </PrimaryButton>
                 </div>

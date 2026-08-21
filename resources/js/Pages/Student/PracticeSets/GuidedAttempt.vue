@@ -7,6 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Modal from '@/Components/Modal.vue';
 import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
+import AttemptLockedOverlay from '@/Components/AttemptLockedOverlay.vue';
 import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
 import AttemptProtectionBadge from '@/Components/AttemptProtectionBadge.vue';
 import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
@@ -41,11 +42,13 @@ const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
 
 const protectionMode = computed(() => props.integrity?.mode ?? 'off');
 
-const { contentHidden, enabled: protectionEnabled, tabLeaveCount } = useAttemptContentProtection({
+const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked, lockLimit } = useAttemptContentProtection({
     mode: protectionMode.value,
     attemptId: props.attempt?.id,
     trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
     initialTabLeaveCount: props.integrity?.tab_leave_count ?? 0,
+    lockLimit: props.integrity?.tab_leave_lock_limit ?? 2,
+    initiallyLocked: props.integrity?.locked ?? false,
 });
 
 const answerForm = useForm({ option_id: null, answer_text: '' });
@@ -189,7 +192,12 @@ watch(
     <Head :title="setLabel()" />
 
     <AuthenticatedLayout>
-        <AttemptHiddenOverlay v-if="protectionEnabled && contentHidden" />
+        <AttemptLockedOverlay
+            v-if="protectionEnabled && attemptLocked"
+            :tab-leave-count="tabLeaveCount"
+            :lock-limit="lockLimit"
+        />
+        <AttemptHiddenOverlay v-else-if="protectionEnabled && contentHidden" />
 
         <template #header>
             <div class="flex items-center justify-between gap-3">
@@ -201,6 +209,8 @@ watch(
                         class="mt-1"
                         :mode="protectionMode"
                         :tab-leave-count="tabLeaveCount"
+                        :locked="attemptLocked"
+                        :lock-limit="lockLimit"
                     />
                 </div>
                 <span v-if="attempt" class="shrink-0 rounded-full bg-gray-100 px-3 py-1 font-mono text-sm">{{ formatTime(elapsed) }}</span>
@@ -209,7 +219,7 @@ watch(
 
         <div :class="protectionEnabled ? 'attempt-protected py-10' : 'py-10'">
             <div class="mx-auto max-w-4xl space-y-5 sm:px-6 lg:px-8">
-                <AttemptIntegrityNotice :mode="protectionMode" />
+                <AttemptIntegrityNotice :mode="protectionMode" :lock-limit="lockLimit" />
 
                 <div v-if="page.props.flash?.success" class="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">
                     {{ page.props.flash.success }}

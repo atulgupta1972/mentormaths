@@ -27,7 +27,7 @@ const submit = () => {
         <h3 class="text-sm font-semibold text-gray-900">Attempt protection</h3>
         <p class="mt-1 text-xs text-gray-600">
             Control anti-copy and tab-leave tracking for this class.
-            Practice blocks copy/paste and records tab switches.
+            Leaving the page twice locks the attempt (student must ask teacher).
         </p>
 
         <form class="mt-4 space-y-3" @submit.prevent="submit">
@@ -37,7 +37,7 @@ const submit = () => {
                     @update:checked="form.protect_test_attempts = $event"
                 />
                 <span>
-                    <strong>Chapter tests</strong> — strict protection, tab leaves recorded
+                    <strong>Chapter tests</strong> — copy blocked; tab leave counted; lock after 2
                 </span>
             </label>
 
@@ -47,7 +47,7 @@ const submit = () => {
                     @update:checked="form.protect_practice_attempts = $event"
                 />
                 <span>
-                    <strong>Guided practice</strong> — copy blocked, tab switches recorded
+                    <strong>Guided practice</strong> — copy blocked; tab leave counted; lock after 2
                 </span>
             </label>
 

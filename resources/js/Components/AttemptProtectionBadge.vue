@@ -8,6 +8,14 @@ defineProps({
         type: Number,
         default: 0,
     },
+    locked: {
+        type: Boolean,
+        default: false,
+    },
+    lockLimit: {
+        type: Number,
+        default: 2,
+    },
 });
 </script>
 
@@ -22,8 +30,12 @@ defineProps({
         >
             {{ mode === 'strict' ? 'Test protected' : 'Practice protected' }}
         </span>
-        <span class="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-700">
-            Tab switches: {{ tabLeaveCount }}
+        <span
+            class="rounded-full px-2 py-0.5 font-medium"
+            :class="locked ? 'bg-rose-100 text-rose-900' : 'bg-gray-100 text-gray-700'"
+        >
+            <template v-if="locked">Locked ({{ tabLeaveCount }}/{{ lockLimit }} tabs)</template>
+            <template v-else>Tab switches: {{ tabLeaveCount }}/{{ lockLimit }}</template>
         </span>
     </div>
 </template>

@@ -216,6 +216,8 @@ class PracticeSetController extends Controller
 
         return response()->json([
             'tab_leave_count' => $attempt->tab_leave_count ?? 0,
+            'locked' => AttemptIntegrity::isLocked($attempt),
+            'tab_leave_lock_limit' => AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT,
         ]);
     }
 

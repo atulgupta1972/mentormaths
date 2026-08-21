@@ -11,6 +11,7 @@ use App\Models\Worksheet;
 use App\Support\AnswerValidationService;
 use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
+use App\Support\AttemptIntegrity;
 use App\Support\AttemptTiming;
 use App\Support\QuestionMethodHint;
 use Illuminate\Support\Facades\DB;
@@ -214,6 +215,8 @@ class GuidedPracticeService
             throw new \InvalidArgumentException('This guided practice session is not active.');
         }
 
+        $this->assertNotIntegrityLocked($attempt);
+
         $attempt->loadMissing([
             'guidedQuestions.question.options',
             'guidedQuestions.question.blankAnswer',
@@ -292,6 +295,8 @@ class GuidedPracticeService
             throw new \InvalidArgumentException('This guided practice session is not active.');
         }
 
+        $this->assertNotIntegrityLocked($attempt);
+
         $attempt->loadMissing(['guidedQuestions', 'assignment']);
         $current = $attempt->guidedQuestions->firstWhere('sort_order', $attempt->current_question_index);
 
@@ -330,6 +335,8 @@ class GuidedPracticeService
         if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS || ! $attempt->isGuided()) {
             throw new \InvalidArgumentException('This guided practice session is not active.');
         }
+
+        $this->assertNotIntegrityLocked($attempt);
 
         $attempt->loadMissing(['guidedQuestions', 'assignment']);
         $current = $attempt->guidedQuestions->firstWhere('sort_order', $attempt->current_question_index);
@@ -605,5 +612,17 @@ class GuidedPracticeService
             'given_up' => $attempt->given_up_count ?? 0,
             'time_seconds' => $attempt->time_seconds,
         ];
+    }
+
+    private function assertNotIntegrityLocked(SetAttempt $attempt): void
+    {
+        $attempt->loadMissing('assignment.enrollment.gradeLevel', 'assignment.practiceSet');
+
+        if (AttemptIntegrity::isLocked($attempt)) {
+            throw new \InvalidArgumentException(
+                'This attempt is locked after '.AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT
+                .' tab switches. Ask your teacher to unlock or reassign.'
+            );
+        }
     }
 }

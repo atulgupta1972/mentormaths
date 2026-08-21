@@ -66,18 +66,28 @@ function recordTabLeave(attemptId) {
  *   mode?: 'strict'|'light'|'off',
  *   attemptId?: number|null,
  *   trackTabLeaves?: boolean,
+ *   initialTabLeaveCount?: number,
+ *   lockLimit?: number,
+ *   initiallyLocked?: boolean,
  * }} options
  */
 export function useAttemptContentProtection(options = {}) {
     const mode = options.mode ?? 'off';
     const attemptId = options.attemptId ?? null;
     const trackTabLeaves = options.trackTabLeaves ?? mode !== 'off';
+    const lockLimit = Math.max(1, options.lockLimit ?? 2);
     const strict = mode === 'strict';
     const enabled = mode !== 'off';
     const blockContent = enabled;
 
     const contentHidden = ref(false);
     const tabLeaveCount = ref(options.initialTabLeaveCount ?? 0);
+    const attemptLocked = ref(
+        options.initiallyLocked
+            ?? (trackTabLeaves && (options.initialTabLeaveCount ?? 0) >= lockLimit),
+    );
+
+    let lastLeaveAt = 0;
 
     const preventDefault = (event) => {
         event.preventDefault();
@@ -105,15 +115,34 @@ export function useAttemptContentProtection(options = {}) {
         }
     };
 
-    const onVisibilityChange = () => {
-        if (document.hidden) {
+    const noteLeave = () => {
+        if (!trackTabLeaves || attemptLocked.value) {
             contentHidden.value = true;
 
-            if (trackTabLeaves) {
-                tabLeaveCount.value += 1;
-                recordTabLeave(attemptId);
-            }
-        } else {
+            return;
+        }
+
+        const now = Date.now();
+        if (now - lastLeaveAt < 800) {
+            contentHidden.value = true;
+
+            return;
+        }
+        lastLeaveAt = now;
+
+        tabLeaveCount.value += 1;
+        recordTabLeave(attemptId);
+        contentHidden.value = true;
+
+        if (tabLeaveCount.value >= lockLimit) {
+            attemptLocked.value = true;
+        }
+    };
+
+    const onVisibilityChange = () => {
+        if (document.hidden) {
+            noteLeave();
+        } else if (!attemptLocked.value) {
             contentHidden.value = false;
         }
     };
@@ -158,6 +187,8 @@ export function useAttemptContentProtection(options = {}) {
     return {
         contentHidden,
         tabLeaveCount,
+        attemptLocked,
+        lockLimit,
         enabled,
         strict,
     };

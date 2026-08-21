@@ -173,8 +173,15 @@ const needsReview = (question) => question.outcome !== 'correct';
                                 <td class="px-4 py-3">{{ formatTime(att.time_seconds) }}</td>
                                 <td class="px-4 py-3">{{ att.completed_at ? formatDateTime(att.completed_at) : '—' }}</td>
                                 <td class="px-4 py-3">
-                                    <span :class="att.tab_leave_count > 0 ? 'font-medium text-amber-700' : 'text-gray-500'">
+                                    <span
+                                        :class="(att.tab_leave_count ?? 0) >= 2
+                                            ? 'font-semibold text-rose-700'
+                                            : att.tab_leave_count > 0
+                                                ? 'font-medium text-amber-700'
+                                                : 'text-gray-500'"
+                                    >
                                         {{ att.tab_leave_count ?? 0 }}
+                                        <span v-if="(att.tab_leave_count ?? 0) >= 2" class="ml-1 text-xs uppercase">locked</span>
                                     </span>
                                 </td>
                                 <td class="px-4 py-3">

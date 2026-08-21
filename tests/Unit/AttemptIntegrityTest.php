@@ -73,6 +73,48 @@ class AttemptIntegrityTest extends TestCase
         $this->assertSame(2, $attempt->fresh()->tab_leave_count);
     }
 
+    public function test_attempt_locks_after_two_tab_leaves(): void
+    {
+        [$enrollment, $assignment] = $this->seedEnrollmentWithAssignment();
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+            'tab_leave_count' => 2,
+        ]);
+
+        $this->assertTrue(AttemptIntegrity::isLocked($attempt->fresh()));
+
+        $service = app(SetAttemptService::class);
+        $this->expectException(\InvalidArgumentException::class);
+        $service->assertNotIntegrityLocked($attempt->fresh());
+    }
+
+    public function test_payload_marks_locked_at_limit(): void
+    {
+        [$enrollment, $assignment] = $this->seedEnrollmentWithAssignment();
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+            'tab_leave_count' => 1,
+        ]);
+
+        $payload = AttemptIntegrity::payloadForAttempt($attempt, true);
+        $this->assertFalse($payload['locked']);
+        $this->assertSame(2, $payload['tab_leave_lock_limit']);
+
+        $attempt->update(['tab_leave_count' => 2]);
+        $payload = AttemptIntegrity::payloadForAttempt($attempt->fresh(), true);
+        $this->assertTrue($payload['locked']);
+    }
+
     /**
      * @return array{0: StudentEnrollment}
      */

@@ -8,6 +8,10 @@ defineProps({
         type: String,
         default: 'strict',
     },
+    lockLimit: {
+        type: Number,
+        default: 2,
+    },
 });
 </script>
 
@@ -22,7 +26,8 @@ defineProps({
         </p>
         <p class="mt-1 text-xs leading-relaxed opacity-90">
             Copy, paste, right-click, and text selection are disabled on questions.
-            If you switch tabs or apps, questions are hidden until you return — each switch is counted.
+            Leaving this tab or opening another app hides the questions.
+            After {{ lockLimit }} leaves, the attempt locks and you must ask your teacher.
         </p>
     </div>
 </template>
