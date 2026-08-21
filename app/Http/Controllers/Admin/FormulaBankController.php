@@ -107,7 +107,20 @@ class FormulaBankController extends Controller
             'board' => $board->only(['id', 'code', 'name']),
             'topics' => $topics,
             'formulas_count' => collect($topics)->sum('formulas_count'),
-            'sets_count' => collect($topics)->sum('sets_count'),
+            'sets_count' => Worksheet::query()
+                ->where('purpose', WorksheetPurpose::FORMULA)
+                ->where(function ($q) use ($chapter, $topics) {
+                    $topicIds = collect($topics)->pluck('id');
+                    $q->where(function ($inner) use ($chapter) {
+                        $inner->where('scope', PracticeSetScope::CHAPTER)
+                            ->where('syllabus_chapter_id', $chapter->id);
+                    })->orWhere(function ($inner) use ($topicIds) {
+                        $inner->where('scope', PracticeSetScope::TOPIC)
+                            ->whereIn('syllabus_topic_id', $topicIds);
+                    });
+                })
+                ->count(),
+            'topic_sets_count' => collect($topics)->sum('sets_count'),
             'cards' => $this->formulaBank->chapterCards($chapter),
             'cursorPrompt' => session('formula_bank_chapter_prompt'),
             'promptDefaults' => [
@@ -247,8 +260,28 @@ class FormulaBankController extends Controller
         }
 
         $message = "Imported {$result['created']} formula / concept cards";
-        if ($result['sets_created'] > 0) {
-            $message .= " into {$result['sets_created']} new set".($result['sets_created'] === 1 ? '' : 's');
+        if ($result['sets_created'] > 0 && $result['set']) {
+            $message .= " into one chapter set ({$result['set']->set_code})";
+        } elseif (($result['set'] ?? null) && $result['created'] > 0) {
+            $message .= " into {$result['set']->set_code}";
+        }
+        $message .= '.';
+
+        return back()->with('success', $message);
+    }
+
+    public function consolidateChapter(Request $request, SyllabusChapter $chapter): RedirectResponse
+    {
+        try {
+            $result = $this->formulaBank->consolidateChapterIntoOneSet($chapter, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $removed = $result['sets_removed'];
+        $message = "Packed {$result['question_count']} formula cards into {$result['set']->set_code}";
+        if ($removed > 0) {
+            $message .= " (removed {$removed} smaller set".($removed === 1 ? '' : 's').')';
         }
         $message .= '.';
 

@@ -15,6 +15,7 @@ const props = defineProps({
     topics: { type: Array, default: () => [] },
     formulas_count: { type: Number, default: 0 },
     sets_count: { type: Number, default: 0 },
+    topic_sets_count: { type: Number, default: 0 },
     cards: { type: Array, default: () => [] },
     cursorPrompt: { type: String, default: null },
     promptDefaults: { type: Object, default: () => ({}) },
@@ -26,9 +27,11 @@ const promptBox = ref(null);
 const previewRows = ref([]);
 const previewError = ref('');
 const deleteForm = useForm({});
+const consolidateForm = useForm({});
 
 const cursorPromptText = computed(() => props.cursorPrompt || page.props.flash?.formula_bank_chapter_prompt || '');
 const unmatchedCount = computed(() => previewRows.value.filter((row) => row.topic && !row.topic_matched).length);
+const canConsolidate = computed(() => props.formulas_count > 0 && props.topic_sets_count > 0);
 
 const promptForm = useForm({
     total: props.promptDefaults?.total || 12,
@@ -139,6 +142,16 @@ const deleteCard = (card) => {
         preserveScroll: true,
     });
 };
+
+const consolidateChapter = () => {
+    if (!confirm('Combine all formula cards in this chapter into one assignable set? Separate topic sets will be removed (existing student assignments are moved to the chapter set).')) {
+        return;
+    }
+
+    consolidateForm.post(route('admin.formula-bank.chapters.consolidate', props.chapter.id), {
+        preserveScroll: true,
+    });
+};
 </script>
 
 <template>
@@ -157,6 +170,15 @@ const deleteCard = (card) => {
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-3 text-sm">
+                    <button
+                        v-if="canConsolidate"
+                        type="button"
+                        class="rounded-md bg-violet-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50"
+                        :disabled="consolidateForm.processing"
+                        @click="consolidateChapter"
+                    >
+                        {{ consolidateForm.processing ? 'Merging…' : 'Merge into one chapter set' }}
+                    </button>
                     <Link
                         :href="route('admin.formula-bank.index', { board_id: board.id, grade_id: grade.id })"
                         class="font-medium text-amber-800 hover:underline"
@@ -361,7 +383,7 @@ const deleteCard = (card) => {
                     </p>
                     <label class="mt-3 flex items-center gap-2 text-sm text-gray-800">
                         <input v-model="importForm.create_sets" type="checkbox" class="rounded border-gray-300">
-                        Create a new formula set per topic when saving
+                        Create one formula set for the whole chapter when saving
                     </label>
                     <textarea
                         v-model="importForm.json"

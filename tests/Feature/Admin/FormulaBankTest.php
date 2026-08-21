@@ -12,6 +12,7 @@ use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
+use App\Support\PracticeSetScope;
 use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetPurpose;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -113,7 +114,95 @@ class FormulaBankTest extends TestCase
         $this->assertSame(1, Question::query()->where('bank_purpose', QuestionBankPurpose::FORMULA)->count());
         $this->assertSame(1, Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->count());
         $set = Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->first();
+        $this->assertSame(PracticeSetScope::CHAPTER, $set->scope);
+        $this->assertSame($chapter->id, $set->syllabus_chapter_id);
         $this->assertSame(1, $set->questions()->count());
+    }
+
+    public function test_chapter_import_puts_all_topics_into_one_set(): void
+    {
+        [$admin, $topicA] = $this->seedTopic();
+        $chapter = $topicA->chapter;
+        $topicB = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->id,
+            'name' => 'Addition of Integers',
+            'sort_order' => 2,
+        ]);
+
+        $json = json_encode([
+            'questions' => [
+                [
+                    'topic' => $topicA->name,
+                    'question' => 'Zero is?',
+                    'options' => ['Positive', 'Neither', 'Negative', 'Even only'],
+                    'correct_index' => 1,
+                ],
+                [
+                    'topic' => $topicB->name,
+                    'question' => '(-2)+3 = ?',
+                    'options' => ['-5', '1', '5', '-1'],
+                    'correct_index' => 1,
+                ],
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.formula-bank.chapters.import', $chapter), [
+                'json' => $json,
+                'create_sets' => true,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(1, Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->count());
+        $set = Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->first();
+        $this->assertSame(PracticeSetScope::CHAPTER, $set->scope);
+        $this->assertSame(2, $set->questions()->count());
+    }
+
+    public function test_admin_can_merge_topic_formula_sets_into_one_chapter_set(): void
+    {
+        [$admin, $topicA] = $this->seedTopic();
+        $chapter = $topicA->chapter;
+        $topicB = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->id,
+            'name' => 'Addition of Integers',
+            'sort_order' => 2,
+        ]);
+
+        $service = app(\App\Services\FormulaBankService::class);
+        $setA = $service->createSet($topicA, $admin);
+        $setB = $service->createSet($topicB, $admin);
+
+        $qA = Question::query()->create([
+            'syllabus_topic_id' => $topicA->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Card A',
+            'bank_purpose' => QuestionBankPurpose::FORMULA,
+            'source' => Question::SOURCE_MANUAL,
+            'created_by' => $admin->id,
+        ]);
+        $qB = Question::query()->create([
+            'syllabus_topic_id' => $topicB->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Card B',
+            'bank_purpose' => QuestionBankPurpose::FORMULA,
+            'source' => Question::SOURCE_MANUAL,
+            'created_by' => $admin->id,
+        ]);
+        $setA->questions()->attach([$qA->id => ['sort_order' => 1]]);
+        $setB->questions()->attach([$qB->id => ['sort_order' => 1]]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.formula-bank.chapters.consolidate', $chapter))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->count());
+        $set = Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->first();
+        $this->assertSame(PracticeSetScope::CHAPTER, $set->scope);
+        $this->assertSame(2, $set->questions()->count());
+        $this->assertDatabaseMissing('worksheets', ['id' => $setA->id]);
+        $this->assertDatabaseMissing('worksheets', ['id' => $setB->id]);
     }
 
     public function test_formula_set_avoids_practice_set_number_collision(): void

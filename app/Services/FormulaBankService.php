@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Question;
+use App\Models\SetAssignment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
@@ -379,6 +380,54 @@ class FormulaBankService
     }
 
     /**
+     * One assignable formula set for the whole chapter (all topics' cards).
+     */
+    public function createChapterSet(SyllabusChapter $chapter, User $user, ?string $title = null): Worksheet
+    {
+        $chapter->loadMissing('syllabusVersion.gradeLevel');
+
+        $nextNumber = 1;
+        while (
+            Worksheet::query()
+                ->where('purpose', WorksheetPurpose::FORMULA)
+                ->where('scope', PracticeSetScope::CHAPTER)
+                ->where('syllabus_chapter_id', $chapter->id)
+                ->where('set_number', $nextNumber)
+                ->exists()
+        ) {
+            $nextNumber++;
+        }
+
+        $gradeSort = $chapter->syllabusVersion?->gradeLevel?->sort_order ?? 0;
+        $chapterNumber = $chapter->chapter_number ?? $chapter->sort_order ?? 0;
+        $codeSeq = $nextNumber;
+        $setCode = sprintf('F%d%d%d', $gradeSort, $chapterNumber, $codeSeq);
+
+        while (Worksheet::query()->where('set_code', $setCode)->exists()) {
+            $codeSeq++;
+            $setCode = sprintf('F%d%d%d', $gradeSort, $chapterNumber, $codeSeq);
+        }
+
+        $label = trim((string) ($chapter->chapter_number ? "Ch {$chapter->chapter_number} — {$chapter->name}" : $chapter->name));
+
+        return Worksheet::query()->create([
+            'title' => $title !== null && trim($title) !== ''
+                ? trim($title)
+                : 'Formula — '.$label,
+            'set_number' => $nextNumber,
+            'set_code' => $setCode,
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_topic_id' => null,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'purpose' => WorksheetPurpose::FORMULA,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+            'created_by' => $user->id,
+        ]);
+    }
+
+    /**
      * Import formula/concept MCQs into a topic (optionally attach to a set).
      *
      * @return array{created: int, set: Worksheet|null}
@@ -445,9 +494,9 @@ class FormulaBankService
     }
 
     /**
-     * Import chapter formula JSON (each item has topic name) into topics; optionally package into sets.
+     * Import chapter formula JSON (each item has topic name) into topics; optionally package into one chapter set.
      *
-     * @return array{created: int, by_topic: array<int, int>, sets_created: int}
+     * @return array{created: int, by_topic: array<int, int>, sets_created: int, set: Worksheet|null}
      */
     public function importChapterJson(SyllabusChapter $chapter, string $json, User $user, bool $createSets = true): array
     {
@@ -469,32 +518,137 @@ class FormulaBankService
                 $byTopic[$topicId] = ($byTopic[$topicId] ?? 0) + 1;
             }
 
+            $set = null;
             $setsCreated = 0;
             if ($createSets && $questions !== []) {
-                $grouped = collect($questions)->groupBy('syllabus_topic_id');
-                foreach ($grouped as $topicId => $topicQuestions) {
-                    $topic = $chapter->topics->firstWhere('id', (int) $topicId)
-                        ?? SyllabusTopic::query()->find((int) $topicId);
-                    if (! $topic) {
-                        continue;
-                    }
-
-                    $set = $this->createSet($topic, $user);
-                    $attach = [];
-                    foreach ($topicQuestions->values() as $index => $question) {
-                        $attach[$question->id] = ['sort_order' => $index + 1];
-                    }
-                    $set->questions()->attach($attach);
-                    $setsCreated++;
+                $set = $this->findOrCreateChapterFormulaSet($chapter, $user, $setsCreated);
+                $start = (int) $set->questions()->max('worksheet_question.sort_order');
+                $attach = [];
+                foreach (array_values($questions) as $index => $question) {
+                    $attach[$question->id] = ['sort_order' => $start + $index + 1];
                 }
+                $set->questions()->attach($attach);
             }
 
             return [
                 'created' => count($questions),
                 'by_topic' => $byTopic,
                 'sets_created' => $setsCreated,
+                'set' => $set?->fresh(),
             ];
         });
+    }
+
+    /**
+     * Merge every formula card in the chapter into a single chapter-level set.
+     * Topic-level formula sets are emptied and removed (assignments remapped).
+     *
+     * @return array{set: Worksheet, question_count: int, sets_removed: int}
+     */
+    public function consolidateChapterIntoOneSet(SyllabusChapter $chapter, User $user): array
+    {
+        $chapter->loadMissing('topics');
+        $topicIds = $chapter->topics->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if ($topicIds === []) {
+            throw new InvalidArgumentException('This chapter has no topics.');
+        }
+
+        return DB::transaction(function () use ($chapter, $user, $topicIds) {
+            $questionIds = Question::query()
+                ->whereIn('syllabus_topic_id', $topicIds)
+                ->where('bank_purpose', QuestionBankPurpose::FORMULA)
+                ->orderBy('syllabus_topic_id')
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            if ($questionIds === []) {
+                throw new InvalidArgumentException('No formula cards in this chapter to package.');
+            }
+
+            $setsCreated = 0;
+            $target = $this->findOrCreateChapterFormulaSet($chapter, $user, $setsCreated);
+
+            $attach = [];
+            foreach ($questionIds as $index => $id) {
+                $attach[$id] = ['sort_order' => $index + 1];
+            }
+            $target->questions()->sync($attach);
+
+            $otherSets = Worksheet::query()
+                ->where('purpose', WorksheetPurpose::FORMULA)
+                ->where(function ($q) use ($chapter, $topicIds, $target) {
+                    $q->where(function ($inner) use ($chapter, $target) {
+                        $inner->where('scope', PracticeSetScope::CHAPTER)
+                            ->where('syllabus_chapter_id', $chapter->id)
+                            ->where('id', '!=', $target->id);
+                    })->orWhere(function ($inner) use ($topicIds) {
+                        $inner->where('scope', PracticeSetScope::TOPIC)
+                            ->whereIn('syllabus_topic_id', $topicIds);
+                    });
+                })
+                ->get();
+
+            $removed = 0;
+            foreach ($otherSets as $old) {
+                $this->remapAssignmentsToWorksheet($old, $target);
+                $old->questions()->detach();
+                $old->delete();
+                $removed++;
+            }
+
+            return [
+                'set' => $target->fresh()->loadCount('questions'),
+                'question_count' => count($questionIds),
+                'sets_removed' => $removed,
+            ];
+        });
+    }
+
+    private function findOrCreateChapterFormulaSet(SyllabusChapter $chapter, User $user, int &$setsCreated): Worksheet
+    {
+        $existing = Worksheet::query()
+            ->where('purpose', WorksheetPurpose::FORMULA)
+            ->where('scope', PracticeSetScope::CHAPTER)
+            ->where('syllabus_chapter_id', $chapter->id)
+            ->orderBy('set_number')
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $setsCreated++;
+
+        return $this->createChapterSet($chapter, $user);
+    }
+
+    private function remapAssignmentsToWorksheet(Worksheet $from, Worksheet $to): void
+    {
+        if ($from->id === $to->id) {
+            return;
+        }
+
+        $assignments = SetAssignment::query()
+            ->where('worksheet_id', $from->id)
+            ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
+            ->get();
+
+        foreach ($assignments as $assignment) {
+            $already = SetAssignment::query()
+                ->where('worksheet_id', $to->id)
+                ->where('student_enrollment_id', $assignment->student_enrollment_id)
+                ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
+                ->exists();
+
+            if ($already) {
+                $assignment->update(['status' => SetAssignment::STATUS_CANCELLED]);
+            } else {
+                $assignment->update(['worksheet_id' => $to->id]);
+            }
+        }
     }
 
     /**
