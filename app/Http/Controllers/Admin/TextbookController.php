@@ -206,20 +206,29 @@ class TextbookController extends Controller
             $this->gradeContext->persist($request, $gradeLevel->id);
         }
 
+        $uploaderMode = $this->isContentUploaderContext($request);
         $activeYear = AcademicYear::active();
         $aiPrompt = $this->mcqPromptService->payload($textbookChapter);
-        $itemCount = count($textbookChapter->extraction_items ?? []);
-        $fillBlankConversion = $itemCount > 0
-            ? $this->conversionPromptService->payload($textbookChapter)
-            : null;
-        $fillBlankReadyCount = $this->fillBlankImportService->fillBlankReadyCount(
-            $textbookChapter->extraction_items ?? [],
-        );
-        $mcqSetPlan = $textbookChapter->mcq_set_plan
+        $rawItems = is_array($textbookChapter->extraction_items) ? $textbookChapter->extraction_items : [];
+        $items = $this->mcqImportService->itemsWithDiagramPreviewUrls($rawItems);
+        $itemCount = count($items);
+
+        $fillBlankConversion = null;
+        if ($itemCount > 0) {
+            try {
+                $fillBlankConversion = $this->conversionPromptService->payload($textbookChapter);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        $fillBlankReadyCount = $this->fillBlankImportService->fillBlankReadyCount($items);
+        $storedPlan = is_array($textbookChapter->mcq_set_plan) ? $textbookChapter->mcq_set_plan : null;
+        $mcqSetPlan = $storedPlan
             ?? ($itemCount > 0 ? $this->setPlanService->defaultPlan($textbookChapter, $itemCount) : []);
 
         $publishedSets = [];
-        if ($textbookChapter->status === TextbookChapter::STATUS_PUBLISHED) {
+        if (! $uploaderMode && $textbookChapter->status === TextbookChapter::STATUS_PUBLISHED) {
             $publishedSets = Worksheet::query()
                 ->whereIn('id', $textbookChapter->mcqWorksheetIds())
                 ->withCount('questions')
@@ -245,7 +254,7 @@ class TextbookController extends Controller
             ->where('textbook_chapter_id', $textbookChapter->id)
             ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED);
 
-        if ($this->isContentUploaderContext($request)) {
+        if ($uploaderMode) {
             $taskQuery->where('assigned_to_user_id', $request->user()->id);
         } else {
             $taskQuery->with('assignee:id,name');
@@ -254,7 +263,7 @@ class TextbookController extends Controller
         $task = $taskQuery->latest()->first();
 
         if ($task) {
-            if ($this->isContentUploaderContext($request)) {
+            if ($uploaderMode) {
                 $contentUploadTask = [
                     'id' => $task->id,
                     'status' => $task->status,
@@ -306,9 +315,9 @@ class TextbookController extends Controller
                 'syllabus_chapter_label' => $textbookChapter->syllabusChapter
                     ? self::chapterLabel($textbookChapter->syllabusChapter)
                     : null,
-                'items' => $this->mcqImportService->itemsWithDiagramPreviewUrls($textbookChapter->extraction_items ?? []),
+                'items' => $items,
                 'mcq_set_plan' => $mcqSetPlan,
-                'mcq_set_plan_summary' => $this->setPlanService->summary($mcqSetPlan),
+                'mcq_set_plan_summary' => $this->setPlanService->summary(is_array($mcqSetPlan) ? $mcqSetPlan : []),
                 'mcq_worksheet_id' => $textbookChapter->mcq_worksheet_id,
                 'mcq_worksheet_ids' => $textbookChapter->mcqWorksheetIds(),
                 'written_worksheet_id' => $textbookChapter->written_worksheet_id,
@@ -323,10 +332,12 @@ class TextbookController extends Controller
             'mcqImport' => $aiPrompt,
             'fillBlankConversion' => $fillBlankConversion,
             'publishedSets' => $publishedSets,
-            'students' => $this->assignmentService
-                ->activeStudentsForAssignment($activeYear?->id)
-                ->values()
-                ->all(),
+            'students' => $uploaderMode
+                ? []
+                : $this->assignmentService
+                    ->activeStudentsForAssignment($activeYear?->id)
+                    ->values()
+                    ->all(),
             'gradeLevels' => GradeLevel::query()
                 ->where('is_active', true)
                 ->orderBy('sort_order')
@@ -334,11 +345,11 @@ class TextbookController extends Controller
                 ->all(),
             'defaultGradeLevelId' => $gradeLevel?->id,
             'activeYear' => $activeYear?->only(['id', 'name']),
-            'routeNamespace' => $this->isContentUploaderContext($request) ? 'content' : 'admin',
-            'uploaderMode' => $this->isContentUploaderContext($request),
+            'routeNamespace' => $uploaderMode ? 'content' : 'admin',
+            'uploaderMode' => $uploaderMode,
             'contentUploadTask' => $contentUploadTask,
             'textbooks' => $gradeLevelId > 0 ? $this->bookService->textbooksForGrade($gradeLevelId) : [],
-            'syllabusChaptersForRelink' => $this->isContentUploaderContext($request)
+            'syllabusChaptersForRelink' => $uploaderMode
                 ? []
                 : $this->bookService->syllabusChaptersForRelink($textbookChapter),
         ]);

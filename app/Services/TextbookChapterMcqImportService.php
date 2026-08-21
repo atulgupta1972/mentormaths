@@ -375,6 +375,7 @@ class TextbookChapterMcqImportService
     public function itemsWithDiagramPreviewUrls(array $items): array
     {
         return collect($items)
+            ->filter(fn ($item) => is_array($item))
             ->map(function (array $item) {
                 $path = trim((string) ($item['diagram_staging_path'] ?? ''));
                 if ($path !== '' && Storage::disk('public')->exists($path)) {

@@ -62,6 +62,41 @@ class ContentTextbookImportTest extends TestCase
                 ->has('chapter.items', 1));
     }
 
+    public function test_content_uploader_chapter_show_survives_malformed_extraction_items(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter] = $this->seedUploaderWithChapter();
+
+        $chapter->update([
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'extraction_items' => [
+                null,
+                'broken',
+                [
+                    'topic' => 'Addition',
+                    'question_text' => 'What is 2 + 2?',
+                    'correct_answer' => '4',
+                    'mcq_options' => ['3', ['text' => '4'], null],
+                    'approved' => true,
+                    'include_in_mcq' => true,
+                ],
+            ],
+            'mcq_set_plan' => [
+                ['set_code' => 'C7-GP-CH01-M'],
+            ],
+            'extracted_at' => now(),
+        ]);
+
+        $this->actingAs($uploader)
+            ->get(route('content.textbooks.show', $chapter))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Textbooks/Show')
+                ->where('uploaderMode', true)
+                ->has('chapter.items', 1));
+    }
+
     public function test_content_uploader_can_mark_upload_complete_and_open_verification(): void
     {
         $this->withoutVite();

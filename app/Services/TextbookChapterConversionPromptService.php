@@ -119,8 +119,18 @@ PROMPT;
         $questions = [];
 
         foreach ($items as $index => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
             $options = collect($item['mcq_options'] ?? [])
-                ->pluck('text')
+                ->map(function ($option) {
+                    if (is_array($option)) {
+                        return $option['text'] ?? null;
+                    }
+
+                    return is_string($option) ? $option : null;
+                })
                 ->filter()
                 ->values()
                 ->all();

@@ -92,21 +92,44 @@ class TextbookMcqSetPlanService
      */
     public function summary(array $plan): string
     {
-        if ($plan === []) {
+        $rows = [];
+
+        foreach ($plan as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $setCode = trim((string) ($row['set_code'] ?? ''));
+            $qFrom = (int) ($row['q_from'] ?? 0);
+            $qTo = (int) ($row['q_to'] ?? 0);
+
+            if ($setCode === '' || $qFrom < 1 || $qTo < $qFrom) {
+                continue;
+            }
+
+            $rows[] = [
+                'set_code' => $setCode,
+                'q_from' => $qFrom,
+                'q_to' => $qTo,
+                'description' => trim((string) ($row['description'] ?? '')),
+            ];
+        }
+
+        if ($rows === []) {
             return '';
         }
 
-        if (count($plan) === 1) {
-            $row = $plan[0];
-            $label = trim($row['description']) !== '' ? " ({$row['description']})" : '';
+        if (count($rows) === 1) {
+            $row = $rows[0];
+            $label = $row['description'] !== '' ? " ({$row['description']})" : '';
 
             return "{$row['set_code']}{$label} · Q{$row['q_from']}–{$row['q_to']}";
         }
 
-        $counts = implode('+', array_map(fn (array $row) => $row['q_to'] - $row['q_from'] + 1, $plan));
-        $codes = implode(', ', array_column($plan, 'set_code'));
+        $counts = implode('+', array_map(fn (array $row) => $row['q_to'] - $row['q_from'] + 1, $rows));
+        $codes = implode(', ', array_column($rows, 'set_code'));
 
-        return count($plan)." sets ({$counts}): {$codes}";
+        return count($rows)." sets ({$counts}): {$codes}";
     }
 
     /**

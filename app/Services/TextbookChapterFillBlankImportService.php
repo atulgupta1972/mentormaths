@@ -77,7 +77,8 @@ class TextbookChapterFillBlankImportService
     public function fillBlankReadyCount(array $items): int
     {
         return collect($items)
-            ->filter(fn (array $item) => filled($item['fill_blank_question_text'] ?? null)
+            ->filter(fn ($item) => is_array($item)
+                && filled($item['fill_blank_question_text'] ?? null)
                 && filled($item['fill_blank_correct_answer'] ?? null))
             ->count();
     }
