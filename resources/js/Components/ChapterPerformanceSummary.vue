@@ -30,17 +30,17 @@ const performanceBarClass = (pct) => {
 </script>
 
 <template>
-    <div class="rounded-xl border-2 border-indigo-600 bg-gradient-to-r from-indigo-50 via-white to-slate-50 p-3 shadow-md ring-1 ring-indigo-200">
+    <div class="rounded-xl border-2 border-indigo-700 bg-gradient-to-br from-indigo-200 via-slate-200 to-indigo-100 p-3 shadow-md ring-1 ring-indigo-300">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
             <p class="text-[11px] font-extrabold uppercase tracking-wide text-indigo-950">
                 {{ title }}
             </p>
-            <p v-if="subtitle" class="text-[11px] font-semibold text-indigo-800">
+            <p v-if="subtitle" class="text-[11px] font-semibold text-indigo-900">
                 {{ subtitle }}
             </p>
         </div>
         <div class="mt-2 grid gap-2 sm:grid-cols-3">
-            <div class="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm">
+            <div class="rounded-lg border border-indigo-300 bg-white px-3 py-2 shadow-md">
                 <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Completion</p>
                 <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
                     <template v-if="perf.completionPct != null">{{ perf.completionPct }}%</template>
@@ -57,7 +57,7 @@ const performanceBarClass = (pct) => {
                     />
                 </div>
             </div>
-            <div class="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm">
+            <div class="rounded-lg border border-indigo-300 bg-white px-3 py-2 shadow-md">
                 <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Score</p>
                 <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
                     <template v-if="perf.scorePct != null">{{ perf.scorePct }}%</template>
@@ -75,7 +75,7 @@ const performanceBarClass = (pct) => {
                     />
                 </div>
             </div>
-            <div class="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm">
+            <div class="rounded-lg border border-indigo-300 bg-white px-3 py-2 shadow-md">
                 <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Revised · Correction</p>
                 <div class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                     <p class="text-sm font-extrabold text-emerald-800">
@@ -101,7 +101,7 @@ const performanceBarClass = (pct) => {
         </div>
         <p
             v-if="perf.chapterCount != null"
-            class="mt-2 text-[10px] font-semibold text-indigo-900/80"
+            class="mt-2 text-[10px] font-semibold text-indigo-950"
         >
             Based on {{ perf.chapterCount }} chapter{{ perf.chapterCount === 1 ? '' : 's' }} marked studied / under study
             <template v-if="perf.chapterLabels?.length">
