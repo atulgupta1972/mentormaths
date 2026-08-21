@@ -1,11 +1,12 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { reactive, ref } from 'vue';
+import { reactive, ref, watch } from 'vue';
 
 defineProps({
     classes: Array,
@@ -14,15 +15,65 @@ defineProps({
 const createForm = useForm({
     name: '',
     address: '',
+    pin_code: '',
+    state: '',
     city: '',
     phone: '',
     notes: '',
     is_active: true,
 });
 
+const pinLookupStatus = ref('');
+const pinLookupBusy = ref(false);
+let pinLookupTimer = null;
+
+const lookupPin = async (pin) => {
+    const digits = String(pin || '').replace(/\D/g, '');
+    if (digits.length !== 6) {
+        pinLookupStatus.value = digits.length ? 'Enter 6 digits to auto-fill state & city.' : '';
+        return;
+    }
+
+    pinLookupBusy.value = true;
+    pinLookupStatus.value = 'Looking up PIN…';
+
+    try {
+        const response = await fetch(route('admin.coaching-classes.pincode', digits), {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        const data = await response.json();
+
+        if (data.ok) {
+            createForm.state = data.state || '';
+            createForm.city = data.city || '';
+            pinLookupStatus.value = data.area
+                ? `Filled from ${data.area} (${data.city}, ${data.state})`
+                : `Filled: ${data.city}, ${data.state}`;
+        } else {
+            pinLookupStatus.value = data.message || 'Could not look up PIN. Enter state & city manually.';
+        }
+    } catch {
+        pinLookupStatus.value = 'PIN lookup failed. Enter state & city manually.';
+    } finally {
+        pinLookupBusy.value = false;
+    }
+};
+
+watch(() => createForm.pin_code, (value) => {
+    createForm.pin_code = String(value || '').replace(/\D/g, '').slice(0, 6);
+    if (pinLookupTimer) {
+        clearTimeout(pinLookupTimer);
+    }
+    pinLookupTimer = setTimeout(() => lookupPin(createForm.pin_code), 350);
+});
+
 const createClass = () => {
     createForm.post(route('admin.coaching-classes.store'), {
-        onSuccess: () => createForm.reset('name', 'address', 'city', 'phone', 'notes'),
+        onSuccess: () => {
+            createForm.reset('name', 'address', 'pin_code', 'state', 'city', 'phone', 'notes');
+            pinLookupStatus.value = '';
+        },
     });
 };
 
@@ -87,7 +138,9 @@ const toggleClassActive = (row) => {
     router.patch(route('admin.coaching-classes.update', row.id), {
         name: row.name,
         address: row.address || '',
-        city: row.city || '',
+        pin_code: row.pin_code || '000000',
+        state: row.state || 'Unknown',
+        city: row.city || 'Unknown',
         phone: row.phone || '',
         notes: row.notes || '',
         is_active: !row.is_active,
@@ -108,27 +161,50 @@ const toggleClassActive = (row) => {
                 <div class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">
                     <h3 class="font-medium text-gray-900">Add coaching class</h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Master list for enrollment. Add teachers with mobile numbers — mentors map from these teachers.
+                        Enter PIN code first — state and city fill automatically from India Post data. You can still edit them.
                     </p>
                     <form class="mt-4 grid gap-4 sm:grid-cols-2" @submit.prevent="createClass">
                         <div class="sm:col-span-2">
                             <InputLabel for="name" value="Name *" />
                             <TextInput id="name" v-model="createForm.name" class="mt-1 block w-full" required />
+                            <InputError class="mt-1" :message="createForm.errors.name" />
                         </div>
                         <div>
-                            <InputLabel for="city" value="City" />
-                            <TextInput id="city" v-model="createForm.city" class="mt-1 block w-full" />
+                            <InputLabel for="pin_code" value="PIN code *" />
+                            <TextInput
+                                id="pin_code"
+                                v-model="createForm.pin_code"
+                                class="mt-1 block w-full font-mono"
+                                inputmode="numeric"
+                                maxlength="6"
+                                placeholder="6 digits"
+                                required
+                            />
+                            <p v-if="pinLookupStatus" class="mt-1 text-xs" :class="pinLookupBusy ? 'text-slate-500' : 'text-indigo-700'">
+                                {{ pinLookupStatus }}
+                            </p>
+                            <InputError class="mt-1" :message="createForm.errors.pin_code" />
                         </div>
                         <div>
                             <InputLabel for="phone" value="Phone" />
                             <TextInput id="phone" v-model="createForm.phone" class="mt-1 block w-full" />
+                        </div>
+                        <div>
+                            <InputLabel for="state" value="State *" />
+                            <TextInput id="state" v-model="createForm.state" class="mt-1 block w-full" required />
+                            <InputError class="mt-1" :message="createForm.errors.state" />
+                        </div>
+                        <div>
+                            <InputLabel for="city" value="City / District *" />
+                            <TextInput id="city" v-model="createForm.city" class="mt-1 block w-full" required />
+                            <InputError class="mt-1" :message="createForm.errors.city" />
                         </div>
                         <div class="sm:col-span-2">
                             <InputLabel for="address" value="Address" />
                             <TextInput id="address" v-model="createForm.address" class="mt-1 block w-full" />
                         </div>
                         <div class="sm:col-span-2">
-                            <PrimaryButton :disabled="createForm.processing">Create</PrimaryButton>
+                            <PrimaryButton :disabled="createForm.processing || pinLookupBusy">Create</PrimaryButton>
                         </div>
                     </form>
                 </div>
@@ -138,7 +214,9 @@ const toggleClassActive = (row) => {
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Class</th>
+                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">PIN</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">City</th>
+                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">State</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Teachers</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Students</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Status</th>
@@ -149,7 +227,9 @@ const toggleClassActive = (row) => {
                             <template v-for="row in classes" :key="row.id">
                                 <tr :class="row.is_active ? '' : 'bg-slate-50 opacity-70'">
                                     <td class="px-4 py-3 font-medium text-gray-900">{{ row.name }}</td>
+                                    <td class="px-4 py-3 font-mono text-sm text-gray-700">{{ row.pin_code || '—' }}</td>
                                     <td class="px-4 py-3 text-sm text-gray-600">{{ row.city || '—' }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">{{ row.state || '—' }}</td>
                                     <td class="px-4 py-3 text-sm">{{ row.teachers_count }}</td>
                                     <td class="px-4 py-3 text-sm">{{ row.students_count }}</td>
                                     <td class="px-4 py-3 text-sm capitalize">
@@ -173,7 +253,7 @@ const toggleClassActive = (row) => {
                                     </td>
                                 </tr>
                                 <tr v-if="expandedId === row.id">
-                                    <td colspan="6" class="bg-slate-50 px-4 py-4">
+                                    <td colspan="8" class="bg-slate-50 px-4 py-4">
                                         <div class="space-y-3">
                                             <ul v-if="row.teachers?.length" class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
                                                 <li
@@ -234,7 +314,7 @@ const toggleClassActive = (row) => {
                                 </tr>
                             </template>
                             <tr v-if="!classes.length">
-                                <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">
+                                <td colspan="8" class="px-4 py-6 text-center text-sm text-gray-500">
                                     No coaching classes yet.
                                 </td>
                             </tr>

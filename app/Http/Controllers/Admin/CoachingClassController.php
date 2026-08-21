@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\CoachingClass;
 use App\Models\CoachingClassTeacher;
+use App\Services\IndiaPincodeLookup;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,6 +15,10 @@ use Inertia\Response;
 
 class CoachingClassController extends Controller
 {
+    public function __construct(
+        private IndiaPincodeLookup $pincodeLookup,
+    ) {}
+
     public function index(): Response
     {
         $classes = CoachingClass::query()
@@ -26,15 +32,24 @@ class CoachingClassController extends Controller
         ]);
     }
 
+    public function lookupPincode(string $pinCode): JsonResponse
+    {
+        return response()->json($this->pincodeLookup->lookup($pinCode));
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:150'],
             'address' => ['nullable', 'string', 'max:255'],
-            'city' => ['nullable', 'string', 'max:100'],
+            'pin_code' => ['required', 'string', 'regex:/^\d{6}$/'],
+            'state' => ['required', 'string', 'max:100'],
+            'city' => ['required', 'string', 'max:100'],
             'phone' => ['nullable', 'string', 'max:20'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'is_active' => ['boolean'],
+        ], [
+            'pin_code.regex' => 'PIN code must be exactly 6 digits.',
         ]);
 
         CoachingClass::create([
@@ -50,10 +65,14 @@ class CoachingClassController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:150'],
             'address' => ['nullable', 'string', 'max:255'],
-            'city' => ['nullable', 'string', 'max:100'],
+            'pin_code' => ['required', 'string', 'regex:/^\d{6}$/'],
+            'state' => ['required', 'string', 'max:100'],
+            'city' => ['required', 'string', 'max:100'],
             'phone' => ['nullable', 'string', 'max:20'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'is_active' => ['boolean'],
+        ], [
+            'pin_code.regex' => 'PIN code must be exactly 6 digits.',
         ]);
 
         $coachingClass->update([

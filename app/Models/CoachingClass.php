@@ -12,6 +12,8 @@ class CoachingClass extends Model
         'address',
         'city',
         'phone',
+        'pin_code',
+        'state',
         'is_active',
         'notes',
     ];

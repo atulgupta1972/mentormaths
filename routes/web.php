@@ -163,6 +163,9 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/coaching-classes', [CoachingClassController::class, 'index'])
         ->name('coaching-classes.index');
+    Route::get('/coaching-classes/pincode/{pinCode}', [CoachingClassController::class, 'lookupPincode'])
+        ->where('pinCode', '[0-9]{6}')
+        ->name('coaching-classes.pincode');
     Route::post('/coaching-classes', [CoachingClassController::class, 'store'])
         ->name('coaching-classes.store');
     Route::patch('/coaching-classes/{coachingClass}', [CoachingClassController::class, 'update'])
