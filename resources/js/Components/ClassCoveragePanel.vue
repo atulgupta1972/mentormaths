@@ -1,5 +1,6 @@
 <script setup>
 import { formatDate } from '@/utils/dates';
+import ChapterPerformanceSummary from '@/Components/ChapterPerformanceSummary.vue';
 import CoverageSetItemCard from '@/Components/CoverageSetItemCard.vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -362,19 +363,82 @@ const chapterPerformance = (dashboard) => {
     };
 };
 
-const performanceBarClass = (pct) => {
-    if (pct == null) {
-        return 'bg-slate-300';
+const formatDisplayDate = (isoDate) => {
+    try {
+        return new Date(`${isoDate}T00:00:00`).toLocaleDateString(undefined, {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+        });
+    } catch {
+        return isoDate;
     }
-    if (pct >= 80) {
-        return 'bg-emerald-500';
-    }
-    if (pct >= 50) {
-        return 'bg-amber-500';
+};
+
+const trackedStudyChapters = computed(() =>
+    chapters.value.filter((chapter) => chapter.studied || chapter.under_study),
+);
+
+/** Aggregate performance for chapters ticked Studied / Under study — as on today. */
+const studyPlanPerformance = computed(() => {
+    const tracked = trackedStudyChapters.value;
+
+    if (! tracked.length) {
+        return null;
     }
 
-    return 'bg-rose-500';
-};
+    const items = [];
+    const labels = [];
+
+    for (const chapter of tracked) {
+        if (isTierDashboard(chapter)) {
+            items.push(...collectDashboardItems(chapterDashboard(chapter)));
+        } else {
+            for (const group of chapter.items ?? []) {
+                items.push(...(group.items ?? []));
+            }
+        }
+
+        const number = String(chapter.chapter_number ?? '').trim();
+        const short = number
+            ? (number.toLowerCase().startsWith('ch') ? number : `Ch ${number}`)
+            : (chapter.name || 'Chapter');
+        labels.push(short);
+    }
+
+    const main = items.filter((item) => ! item.is_correction);
+    const corrections = items.filter((item) => item.is_correction);
+
+    const total = main.length;
+    const done = main.filter((item) => item.status === 'done').length;
+    const completionPct = total > 0 ? Math.round((done / total) * 100) : null;
+
+    const scored = main.filter((item) => item.score_percent != null && item.score_percent !== '');
+    const scorePct = scored.length
+        ? Math.round(scored.reduce((sum, item) => sum + Number(item.score_percent), 0) / scored.length)
+        : null;
+
+    const correctionDone = corrections.filter((item) => item.status === 'done').length;
+    const correctionPending = corrections.filter((item) => item.status !== 'done').length;
+    const openWrongs = main
+        .filter((item) => Number(item.correction_count || 0) > 0 && item.can_redo_wrong)
+        .reduce((sum, item) => sum + Number(item.correction_count || 0), 0);
+
+    return {
+        total,
+        done,
+        completionPct,
+        scorePct,
+        scoredCount: scored.length,
+        correctionDone,
+        correctionPending,
+        openWrongs,
+        chapterCount: tracked.length,
+        chapterLabels: labels.slice(0, 6),
+    };
+});
+
+const studyPlanAsOnLabel = computed(() => `As on ${formatDisplayDate(todayDate())}`);
 
 const itemHref = (item) => {
     if (! isStudentView.value || ! item.can_open) {
@@ -440,6 +504,21 @@ const startCorrection = (item) => {
         <p v-if="saveError" class="mb-2 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-800">
             {{ saveError }}
         </p>
+
+        <ChapterPerformanceSummary
+            v-if="studyPlanPerformance"
+            class="mb-3"
+            :perf="studyPlanPerformance"
+            title="Study plan performance"
+            :subtitle="studyPlanAsOnLabel"
+        />
+        <div
+            v-else-if="chapters.length"
+            class="mb-3 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 px-3 py-2.5 text-[11px] font-semibold text-indigo-950"
+        >
+            Mark chapters as <span class="font-extrabold">Studied</span> or <span class="font-extrabold">Under study</span>
+            to see completion, score, and correction performance here (as on today).
+        </div>
 
         <div v-if="!chapters.length" class="rounded border border-dashed border-slate-300 px-3 py-3 text-xs text-slate-600">
             No syllabus chapters for your class / board yet.
@@ -695,74 +774,11 @@ const startCorrection = (item) => {
                                         v-for="perf in [chapterPerformance(chapterDashboard(chapter))]"
                                         :key="`perf-${chapter.id}`"
                                     >
-                                        <div
+                                        <ChapterPerformanceSummary
                                             v-if="perf"
-                                            class="rounded-xl border-2 border-indigo-600 bg-gradient-to-r from-indigo-50 via-white to-slate-50 p-3 shadow-md ring-1 ring-indigo-200"
-                                        >
-                                            <p class="text-[11px] font-extrabold uppercase tracking-wide text-indigo-950">
-                                                Chapter performance
-                                            </p>
-                                            <div class="mt-2 grid gap-2 sm:grid-cols-3">
-                                                <div class="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm">
-                                                    <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Completion</p>
-                                                    <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
-                                                        <template v-if="perf.completionPct != null">{{ perf.completionPct }}%</template>
-                                                        <template v-else>—</template>
-                                                    </p>
-                                                    <p class="text-[10px] font-semibold text-slate-500">
-                                                        {{ perf.done }}/{{ perf.total }} sets done
-                                                    </p>
-                                                    <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
-                                                        <div
-                                                            class="h-full rounded-full transition-all"
-                                                            :class="performanceBarClass(perf.completionPct)"
-                                                            :style="{ width: `${perf.completionPct ?? 0}%` }"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div class="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm">
-                                                    <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Score</p>
-                                                    <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
-                                                        <template v-if="perf.scorePct != null">{{ perf.scorePct }}%</template>
-                                                        <template v-else>—</template>
-                                                    </p>
-                                                    <p class="text-[10px] font-semibold text-slate-500">
-                                                        <template v-if="perf.scoredCount">Avg of {{ perf.scoredCount }} scored set(s)</template>
-                                                        <template v-else>No scores yet</template>
-                                                    </p>
-                                                    <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
-                                                        <div
-                                                            class="h-full rounded-full transition-all"
-                                                            :class="performanceBarClass(perf.scorePct)"
-                                                            :style="{ width: `${perf.scorePct ?? 0}%` }"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div class="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm">
-                                                    <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Revised · Correction</p>
-                                                    <div class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                                                        <p class="text-sm font-extrabold text-emerald-800">
-                                                            Done {{ perf.correctionDone }}
-                                                        </p>
-                                                        <p class="text-sm font-extrabold text-amber-800">
-                                                            Pending {{ perf.correctionPending }}
-                                                        </p>
-                                                    </div>
-                                                    <p
-                                                        v-if="perf.openWrongs > 0"
-                                                        class="mt-1 text-[10px] font-bold text-orange-800"
-                                                    >
-                                                        {{ perf.openWrongs }} wrong still to redo
-                                                    </p>
-                                                    <p
-                                                        v-else-if="!perf.correctionDone && !perf.correctionPending"
-                                                        class="mt-1 text-[10px] font-semibold text-slate-500"
-                                                    >
-                                                        No corrections yet
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                            :perf="perf"
+                                            title="Chapter performance"
+                                        />
                                     </template>
                                 </div>
 
