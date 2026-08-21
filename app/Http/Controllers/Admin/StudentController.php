@@ -55,10 +55,13 @@ class StudentController extends Controller
     {
         $activeYear = AcademicYear::active();
         $grade = $this->gradeContext->resolve($request);
+        $mentorFilter = $request->string('mentor')->toString(); // mapped|unmapped|''
 
-        $students = Student::query()
+        $baseQuery = Student::query()
             ->with([
-                'user:id,name,email',
+                'user:id,name,email,is_active',
+                'coachingClass:id,name',
+                'coachingClassTeacher:id,name,mobile',
                 'enrollments' => fn ($query) => $query
                     ->when($activeYear, fn ($q) => $q->where('academic_year_id', $activeYear->id))
                     ->when($grade, fn ($q) => $q->where('grade_level_id', $grade->id))
@@ -68,9 +71,35 @@ class StudentController extends Controller
                 $q->whereHas('enrollments', fn ($eq) => $eq
                     ->where('academic_year_id', $activeYear->id)
                     ->where('grade_level_id', $grade->id));
-            })
+            });
+
+        $allForCounts = (clone $baseQuery)->orderBy('name')->get();
+        $mappedCount = $allForCounts->filter(fn (Student $s) => $this->mentorService->isMapped($s))->count();
+        $unmappedCount = $allForCounts->count() - $mappedCount;
+
+        if (in_array($mentorFilter, ['mapped', 'unmapped'], true)) {
+            $wantMapped = $mentorFilter === 'mapped';
+            $ids = $allForCounts
+                ->filter(fn (Student $s) => $this->mentorService->isMapped($s) === $wantMapped)
+                ->pluck('id');
+            $baseQuery->whereIn('id', $ids->all() ?: [0]);
+        }
+
+        $students = $baseQuery
             ->orderBy('name')
-            ->paginate(20);
+            ->paginate(30)
+            ->withQueryString()
+            ->through(function (Student $student) {
+                $student->setAttribute('mentor_summary', $this->mentorService->summaryForList($student));
+
+                return $student;
+            });
+
+        $coachingClasses = CoachingClass::query()
+            ->where('is_active', true)
+            ->with(['teachers' => fn ($q) => $q->orderBy('sort_order')->orderBy('name')])
+            ->orderBy('name')
+            ->get(['id', 'name', 'city', 'is_active']);
 
         return Inertia::render('Admin/Students/Index', [
             'students' => $students,
@@ -81,6 +110,14 @@ class StudentController extends Controller
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->get(['id', 'name']),
+            'mentorFilter' => $mentorFilter,
+            'mentorCounts' => [
+                'total' => $allForCounts->count(),
+                'mapped' => $mappedCount,
+                'unmapped' => $unmappedCount,
+            ],
+            'enrollmentOptions' => EnrollmentSource::optionsForUi(),
+            'coachingClasses' => $coachingClasses,
         ]);
     }
 
@@ -169,7 +206,19 @@ class StudentController extends Controller
             ],
         ]);
 
+        $check = $this->mentorService->validateMappingPayload($validated, $student);
+        if (! $check['ok']) {
+            return back()->withErrors(['enrollment_source' => $check['message']]);
+        }
+
         $this->mentorService->map($student, $validated);
+
+        $student->refresh();
+        if (! $this->mentorService->isMapped($student)) {
+            return back()->withErrors([
+                'enrollment_source' => 'Mentor still not linked. For Individual, tick Notify on a parent mobile first.',
+            ]);
+        }
 
         $enrollment = $student->currentEnrollment();
         if ($enrollment) {

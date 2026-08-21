@@ -16,6 +16,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -92,6 +93,20 @@ class RegistrationRequestController extends Controller
 
         if ($existingStudent && ! StudentIdentity::canReuseStudentProfile($existingStudent)) {
             return back()->with('error', 'A student with this name and mobile number is already registered. Remove the duplicate profile before approving this request.');
+        }
+
+        $precheck = $this->mentorService->validateMappingPayload([
+            'enrollment_source' => $registrationRequest->enrollment_source ?: EnrollmentSource::INDIVIDUAL,
+            'coaching_class_id' => $registrationRequest->coaching_class_id,
+            'coaching_class_teacher_id' => $registrationRequest->coaching_class_teacher_id,
+            'notify_parent1_mobile' => $registrationRequest->notify_parent1_mobile,
+            'notify_parent2_mobile' => $registrationRequest->notify_parent2_mobile,
+            'parent1_mobile' => $registrationRequest->parent1_mobile,
+            'parent2_mobile' => $registrationRequest->parent2_mobile,
+        ]);
+
+        if (! $precheck['ok']) {
+            return back()->with('error', $precheck['message']);
         }
 
         $generatedPassword = null;
@@ -185,6 +200,12 @@ class RegistrationRequestController extends Controller
                 'coaching_class_id' => $coachingClassId,
                 'coaching_class_teacher_id' => $teacherId,
             ]);
+
+            if (! $this->mentorService->isMapped($student->fresh(['coachingClassTeacher']))) {
+                throw ValidationException::withMessages([
+                    'admin_notes' => 'Cannot approve: mentor not linked. For Individual tick Notify on a parent mobile; for Coaching select class + teacher on the request.',
+                ]);
+            }
 
             $generatedPassword = Str::password(12);
             $loginEmail = $registrationRequest->email

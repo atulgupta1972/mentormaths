@@ -102,6 +102,11 @@ class RegistrationRequestController extends Controller
             $validated['coaching_class_teacher_id'] = null;
         }
 
+        $mentorCheck = app(\App\Services\StudentMentorService::class)->validateMappingPayload($validated);
+        if (! $mentorCheck['ok']) {
+            return back()->withErrors(['enrollment_source' => $mentorCheck['message']])->withInput();
+        }
+
         $registrationRequest = RegistrationRequest::create([
             ...collect($validated)->except(['password', 'password_confirmation'])->all(),
             'password' => Hash::make($validated['password']),

@@ -11,7 +11,7 @@ use Tests\TestCase;
 class StudentMentorServiceTest extends TestCase
 {
     #[Test]
-    public function individual_mentor_prefers_parent_with_notify_tick(): void
+    public function individual_mentor_requires_notify_tick(): void
     {
         $service = new StudentMentorService;
         $student = new Student([
@@ -24,11 +24,25 @@ class StudentMentorServiceTest extends TestCase
             'notify_parent2_mobile' => true,
         ]);
 
+        $this->assertTrue($service->isMapped($student));
         $resolved = $service->resolve($student);
-
         $this->assertSame(EnrollmentSource::MENTOR_PARENT2, $resolved['type']);
         $this->assertSame('Mom', $resolved['name']);
-        $this->assertSame('9000000002', $resolved['mobile']);
+    }
+
+    #[Test]
+    public function individual_without_notify_is_unmapped(): void
+    {
+        $service = new StudentMentorService;
+        $student = new Student([
+            'enrollment_source' => EnrollmentSource::INDIVIDUAL,
+            'parent1_name' => 'Dad',
+            'parent1_mobile' => '9000000001',
+            'notify_parent1_mobile' => false,
+            'notify_parent2_mobile' => false,
+        ]);
+
+        $this->assertFalse($service->isMapped($student));
     }
 
     #[Test]
