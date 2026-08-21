@@ -59,9 +59,17 @@ class SyllabusVersionController extends Controller
         ]);
     }
 
-    public function show(SyllabusVersion $syllabusVersion): Response
+    public function show(int $syllabusVersion): Response|RedirectResponse
     {
-        $syllabusVersion->load([
+        $version = SyllabusVersion::query()->find($syllabusVersion);
+
+        if (! $version) {
+            return redirect()
+                ->route('admin.syllabus.index')
+                ->with('error', "That syllabus (id {$syllabusVersion}) was not found. Open one from the list below.");
+        }
+
+        $version->load([
             'board',
             'gradeLevel',
             'subject',
@@ -69,11 +77,11 @@ class SyllabusVersionController extends Controller
         ]);
 
         return Inertia::render('Admin/Syllabus/Show', [
-            'version' => $syllabusVersion,
-            'rows' => $this->importService->flattenToRows($syllabusVersion),
+            'version' => $version,
+            'rows' => $this->importService->flattenToRows($version),
             'academicYears' => AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'name']),
             'chapterHeads' => ChapterHead::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
-            'contentMoveTargets' => $this->bookService->contentMoveTargets($syllabusVersion),
+            'contentMoveTargets' => $this->bookService->contentMoveTargets($version),
         ]);
     }
 

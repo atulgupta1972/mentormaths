@@ -95,7 +95,9 @@ Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(
     Route::get('/classes/{gradeLevel}/assign', [ClassAssignmentController::class, 'show'])->name('classes.assign');
     Route::post('/classes/{gradeLevel}/assign', [ClassAssignmentController::class, 'store'])->name('classes.assign.store');
 
-    Route::get('/syllabus/{syllabusVersion}', [SyllabusVersionController::class, 'show'])->name('syllabus.show');
+    Route::get('/syllabus/{syllabusVersion}', [SyllabusVersionController::class, 'show'])
+        ->whereNumber('syllabusVersion')
+        ->name('syllabus.show');
 
     Route::get('/questions', [QuestionHubController::class, 'classes'])->name('questions.index');
     Route::get('/questions/classes/{gradeLevel}', [QuestionHubController::class, 'chapters'])->name('questions.classes.show');
