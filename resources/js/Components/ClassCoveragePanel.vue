@@ -38,10 +38,17 @@ const assigningWorksheetId = ref(null);
 const expandedChapterIds = ref(new Set());
 
 const chapters = computed(() => props.classCoverage?.chapters ?? []);
-const availabilityColumns = computed(() => props.classCoverage?.availability_columns ?? []);
+const availabilityColumns = computed(() => {
+    const columns = props.classCoverage?.availability_columns ?? [];
+
+    return columns.filter((column) =>
+        chapters.value.some((chapter) => Number(chapter.availability?.[column.key] ?? 0) > 0),
+    );
+});
 const isStudentView = computed(() => String(props.updateRouteName).startsWith('student.'));
 const canStaffAssign = computed(() => ! isStudentView.value && Boolean(props.assignStudentId) && route().has('admin.practice-sets.assign'));
-const columnCount = computed(() => 4 + availabilityColumns.value.length);
+/** Chapter + Topics + Comp + Score + Corr + Studied + Under study + availability */
+const columnCount = computed(() => 7 + availabilityColumns.value.length);
 
 const todayDate = () => {
     const date = new Date();
@@ -363,6 +370,92 @@ const chapterPerformance = (dashboard) => {
     };
 };
 
+/** Always returns glance stats for the coverage table (— when no data). */
+const chapterRowStats = (chapter) => {
+    let items = [];
+
+    if (isTierDashboard(chapter)) {
+        items = collectDashboardItems(chapterDashboard(chapter));
+    } else {
+        for (const group of chapter.items ?? []) {
+            items.push(...(group.items ?? []));
+        }
+    }
+
+    const main = items.filter((item) => ! item.is_correction);
+    const corrections = items.filter((item) => item.is_correction);
+
+    const total = main.length;
+    const done = main.filter((item) => item.status === 'done').length;
+    const completionPct = total > 0 ? Math.round((done / total) * 100) : null;
+
+    const scored = main.filter((item) => item.score_percent != null && item.score_percent !== '');
+    const scorePct = scored.length
+        ? Math.round(scored.reduce((sum, item) => sum + Number(item.score_percent), 0) / scored.length)
+        : null;
+
+    const correctionDone = corrections.filter((item) => item.status === 'done').length;
+    const correctionPending = corrections.filter((item) => item.status !== 'done').length;
+    const openWrongs = main
+        .filter((item) => Number(item.correction_count || 0) > 0 && item.can_redo_wrong)
+        .reduce((sum, item) => sum + Number(item.correction_count || 0), 0);
+    const revisionPending = correctionPending + openWrongs;
+
+    return {
+        total,
+        done,
+        completionPct,
+        scorePct,
+        correctionDone,
+        revisionPending,
+    };
+};
+
+const chapterStatsById = computed(() => {
+    const map = {};
+
+    for (const chapter of chapters.value) {
+        map[chapter.id] = chapterRowStats(chapter);
+    }
+
+    return map;
+});
+
+const chaptersWithStats = computed(() =>
+    chapters.value.map((chapter) => ({
+        chapter,
+        stats: chapterStatsById.value[chapter.id],
+    })),
+);
+
+const truncateTopics = (label, max = 75) => {
+    const text = String(label ?? '').trim();
+
+    if (! text) {
+        return '';
+    }
+
+    if (text.length <= max) {
+        return text;
+    }
+
+    return `${text.slice(0, max).trimEnd()}…`;
+};
+
+const pctToneClass = (pct) => {
+    if (pct == null) {
+        return 'text-slate-400';
+    }
+    if (pct >= 80) {
+        return 'text-emerald-700';
+    }
+    if (pct >= 50) {
+        return 'text-amber-700';
+    }
+
+    return 'text-rose-700';
+};
+
 const formatDisplayDate = (isoDate) => {
     try {
         return new Date(`${isoDate}T00:00:00`).toLocaleDateString(undefined, {
@@ -525,11 +618,20 @@ const startCorrection = (item) => {
         </div>
 
         <div v-else class="overflow-x-auto rounded-lg border-2 border-slate-400 shadow-sm">
-            <table class="w-full min-w-[52rem] border-collapse text-xs leading-snug">
+            <table class="w-full min-w-[48rem] border-collapse text-xs leading-snug">
                 <thead>
                     <tr class="bg-[#0b2a5b] text-white">
                         <th class="px-2 py-1.5 text-left font-semibold whitespace-nowrap">Chapter</th>
-                        <th class="px-2 py-1.5 text-left font-semibold">Topics</th>
+                        <th class="max-w-[14rem] px-2 py-1.5 text-left font-semibold">Topics</th>
+                        <th class="bg-sky-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Sets done / available">
+                            Comp %
+                        </th>
+                        <th class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Average score on scored sets">
+                            Score %
+                        </th>
+                        <th class="bg-orange-700 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Corrections done · pending / wrongs to redo">
+                            Revise
+                        </th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Studied</th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Under study</th>
                         <th
@@ -543,7 +645,7 @@ const startCorrection = (item) => {
                     </tr>
                 </thead>
                 <tbody>
-                    <template v-for="(chapter, index) in chapters" :key="chapter.id">
+                    <template v-for="({ chapter, stats }, index) in chaptersWithStats" :key="chapter.id">
                         <tr
                             :class="[
                                 upcomingExamForChapter(chapter.id)
@@ -553,7 +655,7 @@ const startCorrection = (item) => {
                                 savingId === chapter.id ? 'opacity-60' : '',
                             ]"
                         >
-                            <td class="px-2 py-1 align-middle font-medium text-slate-900 whitespace-nowrap">
+                            <td class="px-2 py-1.5 align-middle font-medium text-slate-900 whitespace-nowrap">
                                 <button
                                     type="button"
                                     class="inline-flex items-center gap-1 text-left hover:text-sky-800"
@@ -571,9 +673,51 @@ const startCorrection = (item) => {
                                     {{ examDueLabel(upcomingExamForChapter(chapter.id)) }}
                                 </span>
                             </td>
-                            <td class="px-2 py-1 align-middle text-[13px] text-slate-700">
-                                <span v-if="chapter.topics_label">{{ chapter.topics_label }}</span>
+                            <td
+                                class="max-w-[14rem] px-2 py-1.5 align-middle text-[12px] text-slate-600"
+                                :title="chapter.topics_label || ''"
+                            >
+                                <span v-if="chapter.topics_label">{{ truncateTopics(chapter.topics_label) }}</span>
                                 <span v-else class="text-slate-400">—</span>
+                            </td>
+                            <td class="bg-sky-50/80 px-1.5 py-1.5 text-center align-middle">
+                                <div
+                                    class="text-base font-extrabold tabular-nums leading-none"
+                                    :class="pctToneClass(stats.completionPct)"
+                                    :title="stats.total
+                                        ? `${stats.done}/${stats.total} sets done`
+                                        : 'No sets yet'"
+                                >
+                                    <template v-if="stats.completionPct != null">{{ stats.completionPct }}%</template>
+                                    <template v-else>—</template>
+                                </div>
+                                <div
+                                    v-if="stats.total"
+                                    class="mt-0.5 text-[9px] font-semibold tabular-nums text-slate-500"
+                                >
+                                    {{ stats.done }}/{{ stats.total }}
+                                </div>
+                            </td>
+                            <td class="bg-violet-50/80 px-1.5 py-1.5 text-center align-middle">
+                                <div
+                                    class="text-base font-extrabold tabular-nums leading-none"
+                                    :class="pctToneClass(stats.scorePct)"
+                                >
+                                    <template v-if="stats.scorePct != null">{{ stats.scorePct }}%</template>
+                                    <template v-else>—</template>
+                                </div>
+                            </td>
+                            <td class="bg-orange-50/80 px-1.5 py-1.5 text-center align-middle">
+                                <div class="text-base font-extrabold tabular-nums leading-none text-orange-800">
+                                    <span class="text-emerald-700">{{ stats.correctionDone }}</span>
+                                    <span class="mx-0.5 text-slate-400">/</span>
+                                    <span :class="stats.revisionPending > 0 ? 'text-rose-700' : 'text-slate-500'">
+                                        {{ stats.revisionPending }}
+                                    </span>
+                                </div>
+                                <div class="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-orange-900/70">
+                                    done / pend
+                                </div>
                             </td>
                             <td class="px-1.5 py-1 text-center align-middle">
                                 <button
