@@ -46,6 +46,91 @@ class StudentProgressWhatsAppService
     }
 
     /**
+     * @return list<array{mobile: string, label: string, message: string, student_id: int, dashboard_url: ?string}>
+     */
+    public function notificationsForStudyPlanStatus(Student $student, array $summary): array
+    {
+        $message = $this->buildStudyPlanMessage($summary);
+        $recipients = $this->contactService->recipientsForStudent($student);
+
+        return array_map(fn (array $recipient) => [
+            'mobile' => $recipient['mobile'],
+            'label' => $recipient['label'],
+            'message' => $message,
+            'student_id' => $student->id,
+            'dashboard_url' => $summary['dashboard_url'] ?? null,
+        ], $recipients);
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     */
+    public function buildStudyPlanMessage(array $summary): string
+    {
+        $perf = $summary['study_plan'] ?? [];
+        $lines = [
+            'Hello, this is Mentor Maths.',
+            '',
+            "Study plan status for {$summary['student_name']}",
+            'As of: '.($summary['as_of_label'] ?? ''),
+        ];
+
+        if ($summary['class_name'] ?? null) {
+            $lines[] = 'Class: '.$summary['class_name'];
+        }
+
+        $lines[] = '';
+        $lines[] = 'Chapters in study plan: '.(int) ($perf['chapter_count'] ?? 0);
+
+        if (($perf['chapter_labels'] ?? []) !== []) {
+            $labels = implode(', ', $perf['chapter_labels']);
+            if ((int) ($perf['chapter_count'] ?? 0) > count($perf['chapter_labels'])) {
+                $labels .= '…';
+            }
+            $lines[] = 'Tracking: '.$labels;
+        }
+
+        $done = (int) ($perf['done'] ?? 0);
+        $total = (int) ($perf['total'] ?? 0);
+        $completion = $perf['completion_pct'] ?? null;
+        $lines[] = 'Completion: '.$done.'/'.$total
+            .($completion !== null ? " ({$completion}%)" : '');
+
+        if (($perf['score_pct'] ?? null) !== null) {
+            $lines[] = 'Average score: '.$perf['score_pct'].'%';
+        } else {
+            $lines[] = 'Average score: no scores yet';
+        }
+
+        $lines[] = 'Corrections: '.(int) ($perf['correction_done'] ?? 0).' done, '
+            .(int) ($perf['correction_pending'] ?? 0).' pending';
+
+        if ((int) ($perf['open_wrongs'] ?? 0) > 0) {
+            $lines[] = 'Open wrong sums to revise: '.$perf['open_wrongs'];
+        }
+
+        if (($summary['pending_count'] ?? 0) > 0 || ($summary['overdue_count'] ?? 0) > 0) {
+            $lines[] = '';
+            $parts = [];
+            if ((int) ($summary['overdue_count'] ?? 0) > 0) {
+                $parts[] = $summary['overdue_count'].' overdue';
+            }
+            if ((int) ($summary['pending_count'] ?? 0) > 0) {
+                $parts[] = $summary['pending_count'].' pending';
+            }
+            $lines[] = 'Also on dashboard: '.implode(', ', $parts).'.';
+        }
+
+        $lines[] = '';
+        $lines[] = 'View details:';
+        $lines[] = $summary['dashboard_url'] ?? '';
+        $lines[] = '';
+        $lines[] = 'Thank you.';
+
+        return implode("\n", $lines);
+    }
+
+    /**
      * @param  array<string, mixed>  $summary
      */
     public function buildBalanceMessage(array $summary): string

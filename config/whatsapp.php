@@ -16,6 +16,7 @@ return [
         'daily_balance' => env('WHATSAPP_DAILY_BALANCE', true),
         'assignment_assigned' => env('WHATSAPP_ASSIGNMENT_ASSIGNED', true),
         'pending_work' => env('WHATSAPP_PENDING_WORK', true),
+        'study_plan_status' => env('WHATSAPP_STUDY_PLAN_STATUS', true),
     ],
 
     'schedule' => [
@@ -24,6 +25,9 @@ return [
         'weekly_summary_time' => env('WHATSAPP_WEEKLY_SUMMARY_TIME', '08:00'),
         'daily_balance_enabled' => env('WHATSAPP_DAILY_BALANCE_ENABLED', true),
         'daily_balance_time' => env('WHATSAPP_DAILY_BALANCE_TIME', env('DAILY_BALANCE_EMAIL_TIME', '14:00')),
+        'study_plan_status_enabled' => env('WHATSAPP_STUDY_PLAN_STATUS_ENABLED', true),
+        'study_plan_status_day' => (int) env('WHATSAPP_STUDY_PLAN_STATUS_DAY', 6),
+        'study_plan_status_time' => env('WHATSAPP_STUDY_PLAN_STATUS_TIME', '08:30'),
     ],
 
     'templates' => [
@@ -36,6 +40,7 @@ return [
             'daily_balance' => env('WHATSAPP_TEMPLATE_DAILY_BALANCE', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
             'assignment_assigned' => env('WHATSAPP_TEMPLATE_ASSIGNMENT', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
             'pending_work' => env('WHATSAPP_TEMPLATE_PENDING_WORK', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
+            'study_plan_status' => env('WHATSAPP_TEMPLATE_STUDY_PLAN_STATUS', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
         ],
     ],
 

@@ -41,6 +41,10 @@ class WhatsAppConfigStatus
                 'weekly_summary_time' => (string) ($schedule['weekly_summary_time'] ?? '08:00'),
                 'daily_balance_enabled' => (bool) ($schedule['daily_balance_enabled'] ?? true),
                 'daily_balance_time' => (string) ($schedule['daily_balance_time'] ?? '14:00'),
+                'study_plan_status_enabled' => (bool) ($schedule['study_plan_status_enabled'] ?? true),
+                'study_plan_status_day' => (int) ($schedule['study_plan_status_day'] ?? 6),
+                'study_plan_status_day_label' => self::dayLabel((int) ($schedule['study_plan_status_day'] ?? 6)),
+                'study_plan_status_time' => (string) ($schedule['study_plan_status_time'] ?? '08:30'),
             ],
             'templates' => [
                 'enabled' => (bool) config('whatsapp.templates.enabled', true),
@@ -81,6 +85,12 @@ class WhatsAppConfigStatus
                 'label' => 'Pending work reminder',
                 'enabled' => WhatsAppSender::channelEnabled('pending_work'),
                 'trigger' => 'When you send pending-work emails (bulk or per student)',
+            ],
+            [
+                'key' => 'study_plan_status',
+                'label' => 'Study plan overall status',
+                'enabled' => WhatsAppSender::channelEnabled('study_plan_status'),
+                'trigger' => 'Scheduled weekly — dashboard completion, score, corrections for studied chapters',
             ],
         ];
     }

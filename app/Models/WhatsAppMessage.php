@@ -38,6 +38,7 @@ class WhatsAppMessage extends Model
             'daily_balance' => 'Daily balance',
             'assignment_assigned' => 'Assignment',
             'pending_work' => 'Pending work',
+            'study_plan_status' => 'Study plan status',
             default => str_replace('_', ' ', $this->channel),
         };
     }

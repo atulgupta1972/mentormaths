@@ -116,6 +116,159 @@ class ClassCoverageService
     }
 
     /**
+     * Overall study-plan status for chapters marked Studied / Under study (matches dashboard card).
+     *
+     * @return array{
+     *     total: int,
+     *     done: int,
+     *     completion_pct: int|null,
+     *     score_pct: int|null,
+     *     scored_count: int,
+     *     correction_done: int,
+     *     correction_pending: int,
+     *     open_wrongs: int,
+     *     chapter_count: int,
+     *     chapter_labels: list<string>
+     * }|null
+     */
+    public function studyPlanPerformance(?StudentEnrollment $enrollment): ?array
+    {
+        if (! $enrollment) {
+            return null;
+        }
+
+        return $this->studyPlanPerformanceFromCoverage($this->forEnrollment($enrollment));
+    }
+
+    /**
+     * @param  array{chapters?: list<array<string, mixed>>}  $coverage
+     * @return array{
+     *     total: int,
+     *     done: int,
+     *     completion_pct: int|null,
+     *     score_pct: int|null,
+     *     scored_count: int,
+     *     correction_done: int,
+     *     correction_pending: int,
+     *     open_wrongs: int,
+     *     chapter_count: int,
+     *     chapter_labels: list<string>
+     * }|null
+     */
+    public function studyPlanPerformanceFromCoverage(array $coverage): ?array
+    {
+        $tracked = collect($coverage['chapters'] ?? [])
+            ->filter(fn (array $chapter) => ($chapter['studied'] ?? false) || ($chapter['under_study'] ?? false))
+            ->values();
+
+        if ($tracked->isEmpty()) {
+            return null;
+        }
+
+        $items = [];
+        $labels = [];
+
+        foreach ($tracked as $chapter) {
+            $items = array_merge($items, $this->collectChapterItems($chapter));
+
+            $number = trim((string) ($chapter['chapter_number'] ?? ''));
+            if ($number !== '') {
+                $labels[] = str_starts_with(strtolower($number), 'ch')
+                    ? $number
+                    : 'Ch '.$number;
+            } else {
+                $labels[] = (string) ($chapter['name'] ?? 'Chapter');
+            }
+        }
+
+        $main = array_values(array_filter($items, fn (array $item) => ! ($item['is_correction'] ?? false)));
+        $corrections = array_values(array_filter($items, fn (array $item) => (bool) ($item['is_correction'] ?? false)));
+
+        $total = count($main);
+        $done = count(array_filter($main, fn (array $item) => ($item['status'] ?? '') === 'done'));
+        $completionPct = $total > 0 ? (int) round(($done / $total) * 100) : null;
+
+        $scored = array_values(array_filter(
+            $main,
+            fn (array $item) => isset($item['score_percent']) && $item['score_percent'] !== null && $item['score_percent'] !== '',
+        ));
+        $scorePct = $scored !== []
+            ? (int) round(array_sum(array_map(fn (array $item) => (float) $item['score_percent'], $scored)) / count($scored))
+            : null;
+
+        $correctionDone = count(array_filter($corrections, fn (array $item) => ($item['status'] ?? '') === 'done'));
+        $correctionPending = count(array_filter($corrections, fn (array $item) => ($item['status'] ?? '') !== 'done'));
+        $openWrongs = (int) array_sum(array_map(
+            fn (array $item) => (int) ($item['correction_count'] ?? 0),
+            array_filter(
+                $main,
+                fn (array $item) => (int) ($item['correction_count'] ?? 0) > 0 && ($item['can_redo_wrong'] ?? false),
+            ),
+        ));
+
+        return [
+            'total' => $total,
+            'done' => $done,
+            'completion_pct' => $completionPct,
+            'score_pct' => $scorePct,
+            'scored_count' => count($scored),
+            'correction_done' => $correctionDone,
+            'correction_pending' => $correctionPending,
+            'open_wrongs' => $openWrongs,
+            'chapter_count' => $tracked->count(),
+            'chapter_labels' => array_slice($labels, 0, 6),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $chapter
+     * @return list<array<string, mixed>>
+     */
+    private function collectChapterItems(array $chapter): array
+    {
+        $itemsPayload = $chapter['items'] ?? [];
+
+        if (($itemsPayload['layout'] ?? null) === 'tier_blocks') {
+            $collected = [];
+
+            foreach ($itemsPayload['blocks'] ?? [] as $block) {
+                foreach ($block['rows'] ?? [] as $row) {
+                    foreach ($row['items'] ?? [] as $item) {
+                        $collected[] = $item;
+                    }
+                }
+            }
+
+            foreach (['formula', 'practice_correction', 'books'] as $key) {
+                foreach ($itemsPayload[$key]['items'] ?? [] as $item) {
+                    $collected[] = $item;
+                }
+            }
+
+            return $collected;
+        }
+
+        if (! is_array($itemsPayload)) {
+            return [];
+        }
+
+        // Legacy flat groups: [{ items: [...] }, ...]
+        $collected = [];
+        foreach ($itemsPayload as $group) {
+            if (! is_array($group)) {
+                continue;
+            }
+            foreach ($group['items'] ?? [] as $item) {
+                if (is_array($item)) {
+                    $collected[] = $item;
+                }
+            }
+        }
+
+        return $collected;
+    }
+
+    /**
      * @param  array<string, mixed>  $items
      * @return array<string, mixed>
      */

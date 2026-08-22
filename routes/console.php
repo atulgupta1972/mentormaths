@@ -32,6 +32,15 @@ Schedule::command('whatsapp:send-daily-balance-reminders')
     ->when(fn () => config('whatsapp.enabled', false)
         && config('whatsapp.schedule.daily_balance_enabled', true));
 
+Schedule::command('whatsapp:send-study-plan-status')
+    ->weeklyOn(
+        (int) config('whatsapp.schedule.study_plan_status_day', 6),
+        (string) config('whatsapp.schedule.study_plan_status_time', '08:30'),
+    )
+    ->timezone('Asia/Kolkata')
+    ->when(fn () => config('whatsapp.enabled', false)
+        && config('whatsapp.schedule.study_plan_status_enabled', true));
+
 Schedule::command('written-submissions:grade-pending')
     ->everyMinute()
     ->withoutOverlapping();

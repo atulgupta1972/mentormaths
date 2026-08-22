@@ -97,10 +97,14 @@ const whatsappEnvHints = computed(() => [
     'WHATSAPP_WEEKLY_SUMMARY_TIME=08:00',
     'WHATSAPP_DAILY_BALANCE_ENABLED=true',
     'WHATSAPP_DAILY_BALANCE_TIME=14:00',
+    'WHATSAPP_STUDY_PLAN_STATUS_ENABLED=true',
+    'WHATSAPP_STUDY_PLAN_STATUS_DAY=6',
+    'WHATSAPP_STUDY_PLAN_STATUS_TIME=08:30',
     '',
     '# Enable/disable message types',
     'WHATSAPP_PROGRESS_SUMMARY=true',
     'WHATSAPP_DAILY_BALANCE=true',
+    'WHATSAPP_STUDY_PLAN_STATUS=true',
     'WHATSAPP_ASSIGNMENT_ASSIGNED=true',
     'WHATSAPP_PENDING_WORK=true',
     '',
@@ -125,6 +129,16 @@ const dailyScheduleLabel = computed(() => {
     }
 
     return `Daily at ${schedule.daily_balance_time} IST`;
+});
+
+const studyPlanScheduleLabel = computed(() => {
+    const schedule = props.whatsappSettings.schedule ?? {};
+
+    if (! schedule.study_plan_status_enabled) {
+        return 'Disabled';
+    }
+
+    return `${schedule.study_plan_status_day_label} at ${schedule.study_plan_status_time} IST`;
 });
 
 function statusClass(status) {
@@ -252,6 +266,10 @@ function statusClass(status) {
                         <div class="rounded-lg border border-gray-200 p-3">
                             <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Daily balance schedule</dt>
                             <dd class="mt-1 text-gray-900">{{ dailyScheduleLabel }}</dd>
+                        </div>
+                        <div class="rounded-lg border border-gray-200 p-3">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Study plan status schedule</dt>
+                            <dd class="mt-1 text-gray-900">{{ studyPlanScheduleLabel }}</dd>
                         </div>
                     </dl>
 
