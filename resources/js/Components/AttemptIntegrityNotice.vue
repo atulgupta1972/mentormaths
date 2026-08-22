@@ -8,26 +8,21 @@ defineProps({
         type: String,
         default: 'strict',
     },
-    lockLimit: {
-        type: Number,
-        default: 4,
-    },
 });
 </script>
 
 <template>
     <div
         v-if="mode !== 'off'"
-        class="rounded-lg border px-4 py-3 text-sm"
-        :class="isTest ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-sky-200 bg-sky-50 text-sky-950'"
+        class="rounded-xl border-2 px-5 py-4 text-center"
+        :class="isTest ? 'border-rose-400 bg-rose-50 text-rose-950' : 'border-amber-400 bg-amber-50 text-amber-950'"
     >
-        <p class="font-medium">
-            {{ isTest ? 'Test mode — do not switch tabs' : 'Practice mode — do not switch tabs' }}
+        <p class="text-lg font-extrabold leading-snug sm:text-xl">
+            Do not switch tabs or apps
         </p>
-        <p class="mt-1 text-xs leading-relaxed opacity-90">
-            Complete this set without leaving Mentor Maths. Fullscreen stays on; copy/paste is blocked.
-            Do not open other tabs, apps, or AI side panels (Gemini).
-            After {{ lockLimit }} leaves, the attempt locks — your teacher must unlock it.
+        <p class="mt-2 text-sm font-bold leading-relaxed sm:text-base">
+            Stay on this screen in fullscreen until you finish.
+            Each time you leave or switch tabs, your teacher is informed.
         </p>
     </div>
 </template>

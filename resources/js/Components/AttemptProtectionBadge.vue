@@ -34,8 +34,8 @@ defineProps({
             class="rounded-full px-2 py-0.5 font-medium"
             :class="locked ? 'bg-rose-100 text-rose-900' : 'bg-gray-100 text-gray-700'"
         >
-            <template v-if="locked">Locked ({{ tabLeaveCount }}/{{ lockLimit }} tabs)</template>
-            <template v-else>Tab switches: {{ tabLeaveCount }}/{{ lockLimit }}</template>
+            <template v-if="locked">Locked — ask your teacher</template>
+            <template v-else>Teacher is notified of tab changes</template>
         </span>
     </div>
 </template>

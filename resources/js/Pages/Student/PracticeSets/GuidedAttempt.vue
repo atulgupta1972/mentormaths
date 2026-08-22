@@ -234,7 +234,7 @@ watch(
 
         <div v-if="canShowAttempt" :class="protectionEnabled ? 'attempt-protected py-10' : 'py-10'">
             <div class="mx-auto max-w-4xl space-y-5 sm:px-6 lg:px-8">
-                <AttemptIntegrityNotice :mode="protectionMode" :lock-limit="lockLimit" />
+                <AttemptIntegrityNotice :mode="protectionMode" />
 
                 <div v-if="page.props.flash?.success" class="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">
                     {{ page.props.flash.success }}

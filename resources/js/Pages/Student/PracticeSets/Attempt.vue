@@ -103,7 +103,7 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
 
         <div v-if="canShowAttempt" :class="protectionEnabled ? 'attempt-protected py-12' : 'py-12'">
             <div class="mx-auto max-w-4xl space-y-6 sm:px-6 lg:px-8">
-                <AttemptIntegrityNotice :is-test="isTest" :mode="protectionMode" :lock-limit="lockLimit" />
+                <AttemptIntegrityNotice :is-test="isTest" :mode="protectionMode" />
 
                 <div class="rounded-lg bg-white p-4 shadow-sm">
                     <p class="text-sm text-gray-600">
@@ -161,7 +161,7 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
                 <div class="sticky bottom-4 rounded-lg bg-white p-4 shadow-lg">
                     <p class="mb-3 text-sm text-gray-600">
                         <template v-if="attemptLocked">
-                            Attempt locked after {{ lockLimit }} tab switches — submit is disabled.
+                            Attempt locked — ask your teacher to unlock. Submit is disabled.
                         </template>
                         <template v-else>
                             {{ Object.keys(answers).length }} / {{ questions.length }} answered

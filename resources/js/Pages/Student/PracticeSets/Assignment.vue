@@ -141,13 +141,14 @@ const startLabel = () => {
 
                     <div
                         v-if="assignment.integrity?.track_tab_leaves || assignment.integrity?.require_fullscreen"
-                        class="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                        class="mt-5 rounded-xl border-2 border-rose-400 bg-rose-50 px-5 py-5 text-center shadow-sm"
                     >
-                        <p class="font-semibold">Do not switch tabs or apps</p>
-                        <p class="mt-1 text-xs leading-relaxed text-amber-900/90">
-                            Complete this {{ kindLabel().toLowerCase() }} without leaving Mentor Maths.
-                            Stay in fullscreen. Do not open Gemini, ChatGPT, or other tabs.
-                            After {{ assignment.integrity?.tab_leave_lock_limit || 4 }} leaves, the attempt locks and your teacher must unlock it.
+                        <p class="text-xl font-extrabold leading-snug text-rose-900 sm:text-2xl">
+                            Do not switch tabs or apps
+                        </p>
+                        <p class="mt-3 text-base font-bold leading-relaxed text-rose-950 sm:text-lg">
+                            Stay on this screen in fullscreen until you finish.
+                            Each time you leave or switch tabs, your teacher is informed.
                         </p>
                     </div>
                     <p v-if="assignment.notes" class="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">
