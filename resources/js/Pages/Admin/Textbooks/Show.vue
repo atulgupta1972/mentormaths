@@ -307,11 +307,42 @@ const resetImport = () => {
 
 const saveDraft = () => {
     syncForms();
+    if (items.value.length > 80) {
+        // Avoid PHP max_input_vars truncation on large chapters.
+        draftForm
+            .transform(() => ({
+                items_json: JSON.stringify(items.value),
+                mcq_set_plan: setPlan.value,
+            }))
+            .post(chapterRoute('draft'), {
+                preserveScroll: true,
+                onFinish: () => {
+                    draftForm.transform((data) => data);
+                },
+            });
+        return;
+    }
+
     draftForm.post(chapterRoute('draft'), { preserveScroll: true });
 };
 
 const publish = () => {
     syncForms();
+    // Large chapters: send set plan only — questions stay in the database from import/draft.
+    // Posting 200+ items as form fields hits PHP max_input_vars and returns a blank 500.
+    if (items.value.length > 80) {
+        publishForm
+            .transform(() => ({
+                mcq_set_plan: setPlan.value,
+            }))
+            .post(chapterRoute('publish'), {
+                onFinish: () => {
+                    publishForm.transform((data) => data);
+                },
+            });
+        return;
+    }
+
     publishForm.post(chapterRoute('publish'));
 };
 

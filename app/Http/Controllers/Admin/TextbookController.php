@@ -612,25 +612,34 @@ class TextbookController extends Controller
             TextbookChapter::STATUS_FAILED,
         ], true), 422);
 
-        $validated = $request->validate([
-            'items' => ['required', 'array', 'min:1'],
-            'mcq_set_plan' => ['nullable', 'array'],
-        ]);
-
-        $itemCount = count($validated['items']);
-
         try {
+            if ($request->filled('items_json')) {
+                $decoded = json_decode((string) $request->input('items_json'), true);
+                if (! is_array($decoded) || $decoded === []) {
+                    throw new \InvalidArgumentException('Invalid draft payload.');
+                }
+                $items = array_values(array_filter($decoded, fn ($item) => is_array($item)));
+                $setPlanInput = $request->input('mcq_set_plan', $textbookChapter->mcq_set_plan ?? []);
+            } else {
+                $validated = $request->validate([
+                    'items' => ['required', 'array', 'min:1'],
+                    'mcq_set_plan' => ['nullable', 'array'],
+                ]);
+                $items = $validated['items'];
+                $setPlanInput = $validated['mcq_set_plan'] ?? $textbookChapter->mcq_set_plan ?? [];
+            }
+
             $setPlan = $this->setPlanService->normalizePlanRows(
-                $validated['mcq_set_plan'] ?? $textbookChapter->mcq_set_plan ?? [],
+                is_array($setPlanInput) ? $setPlanInput : [],
                 $textbookChapter,
-                $itemCount,
+                count($items),
             );
         } catch (\InvalidArgumentException $exception) {
             return back()->with('error', $exception->getMessage());
         }
 
         $textbookChapter->update([
-            'extraction_items' => $validated['items'],
+            'extraction_items' => $items,
             'mcq_set_plan' => $setPlan,
             'status' => TextbookChapter::STATUS_REVIEW,
         ]);
@@ -648,22 +657,19 @@ class TextbookController extends Controller
             return back()->with('error', 'Upload the chapter PDF before saving MCQ sets.');
         }
 
-        $items = $textbookChapter->extraction_items ?? [];
-        $setPlan = $textbookChapter->mcq_set_plan;
-
-        if ($request->has('items')) {
-            $validated = $request->validate([
-                'items' => ['required', 'array', 'min:1'],
-                'mcq_set_plan' => ['nullable', 'array'],
-            ]);
-            $items = $validated['items'];
-            $setPlan = $validated['mcq_set_plan'] ?? $setPlan;
-        }
-
         try {
+            [$items, $setPlan] = $this->resolvePublishPayload($request, $textbookChapter);
             $this->publishService->publish($textbookChapter, $items, $request->user(), $setPlan);
         } catch (\InvalidArgumentException $exception) {
             return back()->with('error', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'Could not save MCQ sets ('.$exception->getMessage().'). '
+                .'If the chapter is large, click Save draft once, then try Save MCQ sets again. Ask admin to check the server log if it keeps failing.',
+            );
         }
 
         $textbookChapter->refresh();
@@ -675,6 +681,51 @@ class TextbookController extends Controller
 
         return $this->redirectToChapterShow($textbookChapter)
             ->with('success', $message);
+    }
+
+    /**
+     * Large chapters cannot POST every item field (PHP max_input_vars truncates → 500).
+     * Prefer items already stored on the chapter; accept set plan (and optional items_json).
+     *
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>|null}
+     */
+    private function resolvePublishPayload(Request $request, TextbookChapter $textbookChapter): array
+    {
+        $storedItems = array_values(array_filter(
+            is_array($textbookChapter->extraction_items) ? $textbookChapter->extraction_items : [],
+            fn ($item) => is_array($item),
+        ));
+
+        $items = $storedItems;
+        $setPlan = $textbookChapter->mcq_set_plan;
+
+        if ($request->filled('items_json')) {
+            $decoded = json_decode((string) $request->input('items_json'), true);
+            if (! is_array($decoded)) {
+                throw new \InvalidArgumentException('Invalid items_json payload.');
+            }
+            $items = array_values(array_filter($decoded, fn ($item) => is_array($item)));
+        } elseif ($request->has('items') && is_array($request->input('items'))) {
+            $posted = array_values(array_filter($request->input('items'), fn ($item) => is_array($item)));
+            // Small chapters can still post items; large posts are usually truncated — keep DB copy.
+            if ($posted !== [] && count($posted) <= 80) {
+                $items = $posted;
+            } elseif ($posted !== [] && count($posted) === count($storedItems)) {
+                $items = $posted;
+            } elseif ($storedItems === []) {
+                $items = $posted;
+            }
+        }
+
+        if ($items === []) {
+            throw new \InvalidArgumentException('Import and approve MCQs before saving sets.');
+        }
+
+        if ($request->has('mcq_set_plan')) {
+            $setPlan = $request->input('mcq_set_plan');
+        }
+
+        return [$items, is_array($setPlan) ? $setPlan : null];
     }
 
     public function importFillBlank(Request $request, TextbookChapter $textbookChapter): RedirectResponse

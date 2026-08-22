@@ -367,11 +367,22 @@ class TextbookChapterPublishService
 
             $description = trim((string) ($row['description'] ?? ''));
             $titleSuffix = $description !== '' ? " — {$description}" : (count($setPlan) > 1 ? ' — Part '.($index + 1) : '');
+            $setCode = trim((string) $row['set_code']);
+
+            if ($setCode === '') {
+                throw new InvalidArgumentException('Each MCQ set needs a set code.');
+            }
+
+            if (Worksheet::query()->where('set_code', $setCode)->exists()) {
+                throw new InvalidArgumentException(
+                    "Set code {$setCode} already exists. Change the set plan codes or delete the old set first."
+                );
+            }
 
             $worksheet = Worksheet::create([
                 'title' => "{$chapter->title} — Textbook MCQ{$titleSuffix}",
                 'set_number' => $index + 1,
-                'set_code' => $row['set_code'],
+                'set_code' => $setCode,
                 'tier' => PracticeSetTier::STARTER,
                 'scope' => PracticeSetScope::CHAPTER,
                 'syllabus_chapter_id' => $syllabusChapter->id,
@@ -509,7 +520,11 @@ class TextbookChapterPublishService
             $writtenWorksheet->questions()->attach($question->id, ['sort_order' => $index + 1]);
         }
 
-        $this->writtenSheetService->generatePdf($writtenWorksheet->fresh(['questions.blankAnswer', 'questions.options']));
+        // Large auto-written packs (hundreds of MCQs) OOM/timeout PDF generation during MCQ save.
+        // Written PDFs are produced later via fill-blank + written publish for book chapters.
+        if (count($writtenQuestions) <= 60) {
+            $this->writtenSheetService->generatePdf($writtenWorksheet->fresh(['questions.blankAnswer', 'questions.options']));
+        }
 
         return $writtenWorksheet;
     }

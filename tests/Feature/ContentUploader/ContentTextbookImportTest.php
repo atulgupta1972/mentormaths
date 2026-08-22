@@ -178,6 +178,64 @@ class ContentTextbookImportTest extends TestCase
         ]);
     }
 
+    public function test_content_uploader_can_publish_large_chapter_with_set_plan_only(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter] = $this->seedUploaderWithChapter();
+
+        $items = [];
+        for ($i = 1; $i <= 90; $i++) {
+            $items[] = [
+                'id' => 'mcq-'.$i,
+                'kind' => 'textbook_mcq',
+                'label' => 'Q'.$i,
+                'topic' => 'Topic',
+                'question_text' => "Question {$i}?",
+                'correct_answer' => '2',
+                'answer_format' => 'text',
+                'explanation' => '',
+                'method_hint' => '',
+                'difficulty' => 'Easy',
+                'include_in_mcq' => true,
+                'include_in_written' => false,
+                'approved' => true,
+                'mcq_options' => [
+                    ['text' => '1', 'is_correct' => false],
+                    ['text' => '2', 'is_correct' => true],
+                    ['text' => '3', 'is_correct' => false],
+                    ['text' => '4', 'is_correct' => false],
+                ],
+            ];
+        }
+
+        $chapter->update([
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'extraction_items' => $items,
+            'mcq_set_plan' => [
+                ['set_code' => 'C6-GP-CH01-M', 'q_from' => 1, 'q_to' => 45, 'description' => 'Part 1'],
+                ['set_code' => 'C6-GP-CH01-M2', 'q_from' => 46, 'q_to' => 90, 'description' => 'Part 2'],
+            ],
+        ]);
+
+        // Mimic browser: large chapters POST only the set plan (not 90 nested item fields).
+        $this->actingAs($uploader)
+            ->post(route('content.textbooks.publish', $chapter), [
+                'mcq_set_plan' => [
+                    ['set_code' => 'C6-GP-CH01-M', 'q_from' => 1, 'q_to' => 45, 'description' => 'Part 1'],
+                    ['set_code' => 'C6-GP-CH01-M2', 'q_from' => 46, 'q_to' => 90, 'description' => 'Part 2'],
+                ],
+            ])
+            ->assertRedirect(route('content.textbooks.show', $chapter))
+            ->assertSessionHas('success');
+
+        $chapter->refresh();
+        $this->assertSame(TextbookChapter::STATUS_PUBLISHED, $chapter->status);
+        $this->assertCount(2, $chapter->mcqWorksheetIds());
+        $this->assertSame(45, \App\Models\Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->count());
+        $this->assertSame(45, \App\Models\Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[1])->questions()->count());
+    }
+
     public function test_content_uploader_without_student_profile_is_sent_to_tasks_from_dashboard(): void
     {
         $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
