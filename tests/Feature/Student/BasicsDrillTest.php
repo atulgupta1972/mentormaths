@@ -267,6 +267,42 @@ class BasicsDrillTest extends TestCase
         $this->actingAs($user)->get(route('dashboard'))->assertOk();
     }
 
+    public function test_stuck_final_correction_with_all_items_correct_completes_on_reload(): void
+    {
+        ['student' => $student, 'user' => $user] = $this->seedStudentWithFormulaComplete();
+
+        $session = BasicsDrillSession::query()->create([
+            'student_id' => $student->id,
+            'student_enrollment_id' => $student->currentEnrollment()?->id,
+            'drill_date' => app(BasicsDrillSessionService::class)->todayDate(),
+            'status' => BasicsDrillSession::STATUS_IN_PROGRESS,
+            'phase' => BasicsDrillSession::PHASE_FINAL_CORRECTION,
+            'table_number' => 2,
+        ]);
+
+        BasicsDrillItem::query()->create([
+            'basics_drill_session_id' => $session->id,
+            'fact_type' => BasicsDrillItem::TYPE_TABLE,
+            'fact_key' => 't2x3',
+            'operand_a' => 2,
+            'operand_b' => 3,
+            'correct_answer' => 6,
+            'sort_order' => 1,
+            'round' => BasicsDrillItem::ROUND_CORRECTION,
+            'status' => BasicsDrillItem::STATUS_CORRECT,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('student.basics-drill.show'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('session.is_complete', true)
+                ->where('session.phase', BasicsDrillSession::PHASE_COMPLETED)
+                ->where('session.current_item', null));
+
+        $this->assertTrue($session->fresh()->isComplete());
+    }
+
     public function test_admin_can_open_basics_drill_settings(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);

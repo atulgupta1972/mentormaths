@@ -142,6 +142,10 @@ class BasicsDrillSessionService
         }
 
         try {
+            if ($session->phase === BasicsDrillSession::PHASE_FINAL_CORRECTION) {
+                return $this->recoverStuckFinalCorrection($session);
+            }
+
             $settings = $this->settingsService->forStudent($session->student);
             $guard = 0;
 
@@ -162,6 +166,48 @@ class BasicsDrillSessionService
         } catch (\Throwable) {
             return $session->fresh(['items']) ?? $session;
         }
+
+        return $session->fresh(['items', 'student']) ?? $session;
+    }
+
+    /**
+     * Correction round finished in the DB (or emptied) but the session never closed —
+     * common after a dropped answer response. Close it or restore the next pending item.
+     */
+    private function recoverStuckFinalCorrection(BasicsDrillSession $session): BasicsDrillSession
+    {
+        $session->loadMissing(['items', 'student']);
+
+        if ($this->nextPendingCorrectionItem($session)) {
+            return $session;
+        }
+
+        $correctionItems = $session->items->where('round', BasicsDrillItem::ROUND_CORRECTION);
+
+        foreach ($correctionItems->where('status', '!=', BasicsDrillItem::STATUS_CORRECT) as $item) {
+            $item->update(['status' => BasicsDrillItem::STATUS_PENDING]);
+        }
+
+        $session = $session->fresh(['items', 'student']);
+
+        if ($this->nextPendingCorrectionItem($session)) {
+            return $session;
+        }
+
+        if ($session->student && $correctionItems->isEmpty()
+            && $this->correctionService->hasUncorrectedFailures($session->student)) {
+            $this->correctionService->ensureCorrectionItems($session);
+
+            return $session->fresh(['items', 'student']) ?? $session;
+        }
+
+        foreach ($session->items->where('round', BasicsDrillItem::ROUND_CORRECTION) as $item) {
+            if ($item->status === BasicsDrillItem::STATUS_CORRECT) {
+                $this->correctionService->markSourcesCorrected($item);
+            }
+        }
+
+        $this->completeSession($session);
 
         return $session->fresh(['items', 'student']) ?? $session;
     }

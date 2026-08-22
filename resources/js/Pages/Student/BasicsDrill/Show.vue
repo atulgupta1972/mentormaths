@@ -6,7 +6,7 @@ import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import axios from 'axios';
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
     session: { type: Object, required: true },
@@ -281,8 +281,33 @@ const acknowledgeReveal = async () => {
 };
 
 const continueAfterBlank = () => {
-    router.visit(route('student.basics-drill.show'), { replace: true });
+    router.visit(route('student.basics-drill.show'), {
+        replace: true,
+        preserveScroll: false,
+        onSuccess: (page) => {
+            const next = page.props.session;
+            if (next) {
+                applySession(next);
+            }
+        },
+    });
 };
+
+onMounted(() => {
+    const blank =
+        !showCorrectionIntro.value
+        && !completionSummary.value
+        && !isShowPhase.value
+        && !currentItem.value
+        && !reveal.value
+        && !sessionState.value.is_complete;
+
+    // One auto-retry so students stuck on the amber screen (e.g. correction already done) recover without a second tap.
+    if (blank && typeof window !== 'undefined' && !window.__basicsDrillBlankRetried) {
+        window.__basicsDrillBlankRetried = true;
+        continueAfterBlank();
+    }
+});
 
 const timerPercent = computed(() => {
     if (!secondsPerBlank.value) {
@@ -515,10 +540,19 @@ const mcqOptionClass = (optionId) => {
                     class="rounded-xl bg-amber-50 p-6 text-center text-amber-950 ring-1 ring-amber-200"
                 >
                     <p class="font-semibold">This step finished — tap Continue.</p>
-                    <p class="mt-1 text-sm text-amber-800">If the screen was blank, we can move you to the next part.</p>
+                    <p class="mt-1 text-sm text-amber-800">
+                        Moving you to the next part (or finishing today’s drill if corrections are done).
+                    </p>
                     <PrimaryButton class="mt-4" @click="continueAfterBlank">
                         Continue
                     </PrimaryButton>
+                    <button
+                        type="button"
+                        class="mt-3 block w-full text-sm font-medium text-indigo-700 hover:underline"
+                        @click="goDashboard"
+                    >
+                        Go to dashboard
+                    </button>
                 </div>
             </div>
         </div>
