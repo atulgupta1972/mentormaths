@@ -27,29 +27,41 @@ class NotificationSettingsController extends Controller
         $activeYear = AcademicYear::active();
         $grade = $this->gradeContext->resolve($request);
 
+        $recentWhatsAppMessages = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('whatsapp_messages')) {
+                $recentWhatsAppMessages = WhatsAppMessage::query()
+                    ->with('student:id,name')
+                    ->latest()
+                    ->limit(50)
+                    ->get()
+                    ->map(fn (WhatsAppMessage $message) => [
+                        'id' => $message->id,
+                        'channel' => $message->channel,
+                        'channel_label' => $message->channelLabel(),
+                        'to_mobile' => $message->to_mobile,
+                        'recipient_label' => $message->recipient_label,
+                        'student_name' => $message->student?->name,
+                        'message_preview' => str($message->message_body)->limit(120)->toString(),
+                        'template_name' => $message->template_name,
+                        'meta_message_id' => $message->meta_message_id,
+                        'status' => $message->status,
+                        'error' => $message->error,
+                        'driver' => $message->driver,
+                        'sent_at' => $message->created_at?->timezone('Asia/Kolkata')->format('d M Y, h:i A'),
+                    ])
+                    ->all();
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to load WhatsApp message log.', [
+                'message' => $e->getMessage(),
+            ]);
+        }
+
         return Inertia::render('Admin/Notifications/Index', [
             'mailSettings' => MailConfigStatus::forAdmin(),
             'whatsappSettings' => WhatsAppConfigStatus::forAdmin(),
-            'recentWhatsAppMessages' => WhatsAppMessage::query()
-                ->with('student:id,name')
-                ->latest()
-                ->limit(50)
-                ->get()
-                ->map(fn (WhatsAppMessage $message) => [
-                    'id' => $message->id,
-                    'channel' => $message->channel,
-                    'channel_label' => $message->channelLabel(),
-                    'to_mobile' => $message->to_mobile,
-                    'recipient_label' => $message->recipient_label,
-                    'student_name' => $message->student?->name,
-                    'message_preview' => str($message->message_body)->limit(120)->toString(),
-                    'template_name' => $message->template_name,
-                    'meta_message_id' => $message->meta_message_id,
-                    'status' => $message->status,
-                    'error' => $message->error,
-                    'driver' => $message->driver,
-                    'sent_at' => $message->created_at?->timezone('Asia/Kolkata')->format('d M Y, h:i A'),
-                ]),
+            'recentWhatsAppMessages' => $recentWhatsAppMessages,
             'activeYear' => $activeYear?->only(['id', 'name']),
             'selectedGrade' => $grade?->only(['id', 'name']),
             'gradeLevels' => GradeLevel::query()

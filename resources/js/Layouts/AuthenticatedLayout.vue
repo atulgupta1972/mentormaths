@@ -226,9 +226,9 @@ const setupGroup = computed(() => ({
         },
         {
             label: 'Email & notifications',
-            href: route('admin.notifications.index'),
+            href: safeRoute('admin.notifications.index', undefined, '/admin/notifications'),
             active: route().current('admin.notifications.*'),
-            show: isAdmin.value && route().has('admin.notifications.index'),
+            show: isAdmin.value,
         },
     ],
 }));

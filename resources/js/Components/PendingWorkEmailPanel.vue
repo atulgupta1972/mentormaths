@@ -1,5 +1,6 @@
 <script setup>
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { hasRoute, safeRoute } from '@/utils/routes';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -38,6 +39,8 @@ const form = useForm({
 
 const flashSuccess = computed(() => page.props.flash?.success);
 const flashWarning = computed(() => page.props.flash?.warning);
+const notificationsHref = computed(() => safeRoute('admin.notifications.index', undefined, '/admin/notifications'));
+const canSendPendingWork = computed(() => hasRoute('admin.notifications.send-pending-work'));
 
 const sendLabel = computed(() => {
     if (form.processing) {
@@ -60,11 +63,15 @@ const confirmMessage = computed(() => {
 });
 
 const sendPendingWork = () => {
+    if (!canSendPendingWork.value) {
+        return;
+    }
+
     if (!confirm(confirmMessage.value)) {
         return;
     }
 
-    form.post(route('admin.notifications.send-pending-work'), {
+    form.post(safeRoute('admin.notifications.send-pending-work', undefined, '/admin/notifications/send-pending-work'), {
         preserveScroll: true,
     });
 };
@@ -92,7 +99,7 @@ const sendPendingWork = () => {
             </div>
             <Link
                 v-if="showSettingsLink"
-                :href="route('admin.notifications.index')"
+                :href="notificationsHref"
                 class="shrink-0 text-sm font-medium text-indigo-700 hover:text-indigo-900"
             >
                 Email settings →
@@ -137,7 +144,7 @@ const sendPendingWork = () => {
 
             <Link
                 v-if="showSettingsLink"
-                :href="route('admin.notifications.index')"
+                :href="notificationsHref"
                 class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 shadow-sm transition hover:bg-gray-50"
             >
                 Configure mail

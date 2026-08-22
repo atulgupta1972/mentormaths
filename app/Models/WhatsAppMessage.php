@@ -13,6 +13,9 @@ class WhatsAppMessage extends Model
 
     public const STATUS_SKIPPED = 'skipped';
 
+    /** Matches migration `whatsapp_messages` (Laravel would otherwise guess `whats_app_messages`). */
+    protected $table = 'whatsapp_messages';
+
     protected $fillable = [
         'channel',
         'to_mobile',

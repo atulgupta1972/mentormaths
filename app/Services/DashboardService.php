@@ -128,7 +128,7 @@ class DashboardService
         $questionIssueCounts = collect();
         $questionIssueReports = [];
         try {
-            if ($studentIds !== []) {
+            if ($studentIds !== [] && \Illuminate\Support\Facades\Schema::hasTable('question_issue_reports')) {
                 $questionIssueCounts = $this->issueReports->pendingCountForStudentIds($studentIds);
                 $questionIssueReports = $this->issueReports->pendingForAdmin($studentIds);
             }

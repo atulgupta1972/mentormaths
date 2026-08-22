@@ -20,7 +20,7 @@ class WhatsAppMessageLogger
             return;
         }
 
-        if (! \Illuminate\Support\Facades\Schema::hasTable('whats_app_messages')) {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('whatsapp_messages')) {
             return;
         }
 
