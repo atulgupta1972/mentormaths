@@ -191,6 +191,23 @@ class GuidedPracticeServiceTest extends TestCase
         ]);
     }
 
+    public function test_admin_payload_includes_check_and_uploader_fields(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt();
+        $guided = app(GuidedPracticeService::class);
+        app(\App\Services\QuestionIssueReportService::class)
+            ->reportFromGuided($attempt->fresh(['guidedQuestions', 'assignment.enrollment.student']), $guided);
+
+        $studentId = $attempt->assignment->enrollment->student_id;
+        $payload = app(\App\Services\QuestionIssueReportService::class)->pendingForStudent($studentId);
+
+        $this->assertCount(1, $payload);
+        $this->assertArrayHasKey('check_url', $payload[0]);
+        $this->assertArrayHasKey('edit_url', $payload[0]);
+        $this->assertArrayHasKey('can_return_to_uploader', $payload[0]);
+        $this->assertNotEmpty($payload[0]['question_text']);
+    }
+
     public function test_fill_in_blank_wrong_twice_hides_method_until_hint_requested(): void
     {
         [$attempt] = $this->seedFillBlankGuidedAttempt();

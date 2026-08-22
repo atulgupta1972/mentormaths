@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ContentQuestionCorrection;
 use App\Models\FormulaDrillItem;
 use App\Models\GuidedAttemptQuestion;
 use App\Models\PracticeCorrectionItem;
@@ -17,6 +18,7 @@ class QuestionIssueReportService
 {
     public function __construct(
         private PracticeCorrectionQueueService $correctionQueue,
+        private ContentUploadTaskService $contentUploadTasks,
     ) {}
 
     /**
@@ -214,6 +216,49 @@ class QuestionIssueReportService
         ]);
     }
 
+    /**
+     * Send only this sum to the content uploader. Report stays open until admin marks fixed.
+     */
+    public function returnToUploader(
+        QuestionIssueReport $report,
+        User $admin,
+        string $issue,
+        ?string $remark = null,
+    ): void {
+        if (! $report->isPendingAdmin()) {
+            throw new \InvalidArgumentException('This report is no longer waiting for a fix.');
+        }
+
+        $report->loadMissing('question');
+
+        if (! $report->question) {
+            throw new \InvalidArgumentException('This question is no longer available.');
+        }
+
+        $this->contentUploadTasks->returnHelpRequestQuestion(
+            $report->question,
+            $admin,
+            $issue,
+            $remark,
+            'Student reported misprint/incomplete. Fix only this sum.',
+            ContentQuestionCorrection::SOURCE_ADMIN_RETURN,
+        );
+
+        $label = match ($issue) {
+            'wrong_answer' => 'wrong answer',
+            'incomplete' => 'incomplete sum',
+            default => 'content issue',
+        };
+
+        $extra = trim((string) $remark);
+        $note = 'Sent to uploader ('.$label.')'
+            .($extra !== '' ? ': '.$extra : '');
+
+        $report->update([
+            'admin_note' => $note,
+        ]);
+    }
+
     public function clearAwaitingForStudentQuestion(int $studentId, int $questionId): void
     {
         QuestionIssueReport::query()
@@ -235,7 +280,9 @@ class QuestionIssueReportService
             ->with([
                 'student:id,name',
                 'enrollment.gradeLevel:id,name',
-                'question:id,question_text,type',
+                'question:id,question_text,type,diagram_path',
+                'question.options',
+                'question.blankAnswer',
                 'question.worksheets:id,set_code,set_number',
                 'assignment.practiceSet:id,set_code,set_number',
             ])
@@ -252,9 +299,20 @@ class QuestionIssueReportService
         return $query->limit($limit)
             ->get()
             ->filter(fn (QuestionIssueReport $report) => $report->question !== null)
-            ->map(fn (QuestionIssueReport $report) => $this->formatAdminItem($report))
             ->values()
-            ->all();
+            ->pipe(function (Collection $reports) {
+                $uploaderByQuestion = $this->contentUploadTasks->tasksKeyedByQuestionId(
+                    $reports->pluck('question_id')->all(),
+                );
+
+                return $reports
+                    ->map(fn (QuestionIssueReport $report) => $this->formatAdminItem(
+                        $report,
+                        $uploaderByQuestion->get((int) $report->question_id),
+                    ))
+                    ->values()
+                    ->all();
+            });
     }
 
     /**
@@ -262,9 +320,11 @@ class QuestionIssueReportService
      */
     public function pendingForStudent(int $studentId): array
     {
-        return QuestionIssueReport::query()
+        $reports = QuestionIssueReport::query()
             ->with([
-                'question:id,question_text,type',
+                'question:id,question_text,type,diagram_path',
+                'question.options',
+                'question.blankAnswer',
                 'question.worksheets:id,set_code,set_number',
                 'assignment.practiceSet:id,set_code,set_number',
             ])
@@ -273,7 +333,17 @@ class QuestionIssueReportService
             ->orderByDesc('reported_at')
             ->get()
             ->filter(fn (QuestionIssueReport $report) => $report->question !== null)
-            ->map(fn (QuestionIssueReport $report) => $this->formatAdminItem($report))
+            ->values();
+
+        $uploaderByQuestion = $this->contentUploadTasks->tasksKeyedByQuestionId(
+            $reports->pluck('question_id')->all(),
+        );
+
+        return $reports
+            ->map(fn (QuestionIssueReport $report) => $this->formatAdminItem(
+                $report,
+                $uploaderByQuestion->get((int) $report->question_id),
+            ))
             ->values()
             ->all();
     }
@@ -354,7 +424,7 @@ class QuestionIssueReportService
     /**
      * @return array<string, mixed>
      */
-    private function formatAdminItem(QuestionIssueReport $report): array
+    private function formatAdminItem(QuestionIssueReport $report, ?\App\Models\ContentUploadTask $uploadTask = null): array
     {
         $worksheet = $report->assignment?->practiceSet
             ?? $report->question?->worksheets->first();
@@ -371,11 +441,37 @@ class QuestionIssueReportService
             $setUrl = route('admin.questions.set-code', ['code' => $setCode]);
         }
 
+        $checkUrl = null;
+        if ($question && filled($setCode) && $setUrl) {
+            $checkUrl = $setUrl.'#question-'.$question->id;
+        } elseif ($question) {
+            $checkUrl = route('admin.questions.edit', $question);
+        }
+
         $editUrl = null;
         if ($question) {
             $editUrl = $question->isFillInBlank() && filled($setCode)
                 ? route('admin.questions.set-code', ['code' => $setCode]).'#question-'.$question->id
                 : route('admin.questions.edit', $question);
+        }
+
+        $options = [];
+        $correctAnswer = null;
+        if ($question?->isMcq()) {
+            $question->loadMissing('options');
+            $options = $question->options->values()->map(function ($option, $index) {
+                return [
+                    'id' => $option->id,
+                    'letter' => chr(65 + $index),
+                    'option_text' => $option->option_text,
+                    'is_correct' => (bool) $option->is_correct,
+                ];
+            })->all();
+            $correctOption = collect($options)->firstWhere('is_correct');
+            $correctAnswer = $correctOption['letter'] ?? null;
+        } elseif ($question?->isFillInBlank()) {
+            $question->loadMissing('blankAnswer');
+            $correctAnswer = $question->blankAnswer?->correct_answer;
         }
 
         return [
@@ -386,6 +482,10 @@ class QuestionIssueReportService
             'question_id' => $questionId,
             'question_type' => $question?->type,
             'question_text' => mb_convert_encoding((string) ($question?->question_text ?? ''), 'UTF-8', 'UTF-8'),
+            'diagram_url' => $question?->diagram_url,
+            'options' => $options,
+            'correct_answer' => $correctAnswer,
+            'admin_note' => $report->admin_note,
             'context' => $report->context,
             'context_label' => match ($report->context) {
                 QuestionIssueReport::CONTEXT_BATCH => 'Chapter test',
@@ -396,8 +496,10 @@ class QuestionIssueReportService
             'set_number' => $worksheet?->set_number,
             'worksheet_id' => $worksheetId,
             'set_url' => $setUrl,
+            'check_url' => $checkUrl,
             'edit_url' => $editUrl,
             'reported_at' => $report->reported_at?->toDateTimeString(),
+            ...$this->contentUploadTasks->uploaderReturnPayload($uploadTask),
         ];
     }
 }

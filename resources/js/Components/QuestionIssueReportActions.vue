@@ -1,13 +1,32 @@
 <script setup>
-import { useForm } from '@inertiajs/vue3';
+import Modal from '@/Components/Modal.vue';
+import QuestionBody from '@/Components/QuestionBody.vue';
+import McqOptionLine from '@/Components/McqOptionLine.vue';
+import { Link, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { hasRoute } from '@/utils/routes';
 
 const props = defineProps({
     item: { type: Object, required: true },
     compact: { type: Boolean, default: false },
 });
 
+const showCheck = ref(false);
 const fixForm = useForm({});
 const dismissForm = useForm({});
+const uploaderForm = useForm({
+    issue: 'incomplete',
+    remark: '',
+});
+
+const canReturnToUploader = computed(() =>
+    hasRoute('admin.question-issue-reports.return-to-uploader')
+    && props.item.can_return_to_uploader === true,
+);
+
+const busy = computed(() =>
+    fixForm.processing || dismissForm.processing || uploaderForm.processing,
+);
 
 const markFixed = () => {
     if (!confirm('Mark this sum as fixed and put it back on the student\'s correction list to attempt again?')) {
@@ -26,25 +45,198 @@ const dismiss = () => {
         preserveScroll: true,
     });
 };
+
+const sendToUploader = () => {
+    const who = props.item.uploader_name || 'the uploader';
+    const chapter = props.item.chapter_label ? ` (${props.item.chapter_label})` : '';
+    const issueLabel = uploaderForm.issue === 'wrong_answer'
+        ? 'wrong answer'
+        : uploaderForm.issue === 'incomplete'
+            ? 'incomplete / missing diagram'
+            : 'a content issue';
+
+    if (!window.confirm(`Send only this sum to ${who}${chapter} to fix (${issueLabel})?\n\nReport stays open until you mark Fixed after they correct it.`)) {
+        return;
+    }
+
+    uploaderForm.post(route('admin.question-issue-reports.return-to-uploader', props.item.id), {
+        preserveScroll: true,
+    });
+};
 </script>
 
 <template>
-    <div :class="compact ? 'flex flex-col items-end gap-1' : 'mt-2 flex flex-wrap gap-2'">
-        <button
-            type="button"
-            class="text-xs font-semibold text-emerald-700 hover:underline disabled:opacity-50"
-            :disabled="fixForm.processing || dismissForm.processing"
-            @click="markFixed"
+    <div :class="compact ? 'flex w-full max-w-sm flex-col items-stretch gap-2' : 'mt-3 space-y-3'">
+        <div class="flex flex-wrap gap-2" :class="compact ? 'justify-end' : ''">
+            <button
+                type="button"
+                class="text-xs font-semibold text-sky-700 hover:underline"
+                @click="showCheck = true"
+            >
+                Open to check
+            </button>
+            <Link
+                v-if="item.check_url || item.set_url"
+                :href="item.check_url || item.set_url"
+                class="text-xs font-semibold text-indigo-700 hover:underline"
+            >
+                Open in set
+            </Link>
+            <Link
+                v-if="item.edit_url"
+                :href="item.edit_url"
+                class="text-xs font-semibold text-indigo-700 hover:underline"
+            >
+                Edit yourself
+            </Link>
+        </div>
+
+        <div
+            v-if="canReturnToUploader"
+            class="rounded-md border border-amber-200 bg-amber-50/80 p-2"
+            :class="compact ? 'text-right' : ''"
         >
-            {{ fixForm.processing ? 'Saving…' : 'Fixed — return to student' }}
-        </button>
-        <button
-            type="button"
-            class="text-xs font-semibold text-gray-500 hover:underline disabled:opacity-50"
-            :disabled="fixForm.processing || dismissForm.processing"
-            @click="dismiss"
+            <p v-if="!compact" class="mb-1.5 text-xs text-amber-950">
+                If you prefer not to fix it yourself, send
+                <span class="font-semibold">only this sum</span>
+                to {{ item.uploader_name || 'the uploader' }}.
+            </p>
+            <div class="flex flex-wrap items-end gap-1.5" :class="compact ? 'justify-end' : ''">
+                <select
+                    v-model="uploaderForm.issue"
+                    class="rounded border-gray-300 text-xs py-0.5"
+                >
+                    <option value="incomplete">Incomplete / missing diagram</option>
+                    <option value="wrong_answer">Wrong answer</option>
+                    <option value="other">Other issue</option>
+                </select>
+                <input
+                    v-if="uploaderForm.issue === 'other' || !compact"
+                    v-model="uploaderForm.remark"
+                    type="text"
+                    maxlength="500"
+                    :placeholder="uploaderForm.issue === 'other' ? 'What should they fix?' : 'Optional note'"
+                    class="min-w-[8rem] flex-1 rounded border-gray-300 text-xs py-0.5"
+                >
+                <button
+                    type="button"
+                    class="rounded bg-amber-700 px-2 py-1 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                    :disabled="busy"
+                    @click="sendToUploader"
+                >
+                    {{ uploaderForm.processing ? 'Sending…' : 'Send to uploader' }}
+                </button>
+            </div>
+            <p v-if="uploaderForm.errors.issue || uploaderForm.errors.remark" class="mt-1 text-xs text-rose-700">
+                {{ uploaderForm.errors.issue || uploaderForm.errors.remark }}
+            </p>
+        </div>
+        <p
+            v-else-if="item.content_task_id === null && item.can_return_to_uploader === false && !compact"
+            class="text-xs text-gray-500"
         >
-            {{ dismissForm.processing ? '…' : 'Dismiss' }}
-        </button>
+            No content uploader is assigned — use Edit yourself to fix it.
+        </p>
+
+        <p v-if="item.admin_note" class="text-xs text-amber-900">
+            Note: {{ item.admin_note }}
+        </p>
+
+        <div class="flex flex-wrap gap-3" :class="compact ? 'justify-end' : ''">
+            <button
+                type="button"
+                class="text-xs font-semibold text-emerald-700 hover:underline disabled:opacity-50"
+                :disabled="busy"
+                @click="markFixed"
+            >
+                {{ fixForm.processing ? 'Saving…' : 'Fixed — return to student' }}
+            </button>
+            <button
+                type="button"
+                class="text-xs font-semibold text-gray-500 hover:underline disabled:opacity-50"
+                :disabled="busy"
+                @click="dismiss"
+            >
+                {{ dismissForm.processing ? '…' : 'Dismiss' }}
+            </button>
+        </div>
     </div>
+
+    <Modal :show="showCheck" max-width="2xl" @close="showCheck = false">
+        <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">Check this sum</h3>
+                    <p class="mt-0.5 text-xs text-gray-500">
+                        {{ item.context_label }}
+                        <span v-if="item.set_code"> · {{ item.set_code }}</span>
+                        <span v-if="item.student_name"> · {{ item.student_name }}</span>
+                    </p>
+                </div>
+                <button type="button" class="text-sm text-gray-500 hover:text-gray-800" @click="showCheck = false">
+                    Close
+                </button>
+            </div>
+
+            <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <QuestionBody
+                    :question-text="item.question_text"
+                    :diagram-url="item.diagram_url"
+                    enlarge-diagram
+                />
+
+                <ul v-if="item.options?.length" class="mt-4 space-y-2">
+                    <li
+                        v-for="(opt, index) in item.options"
+                        :key="opt.id"
+                        class="rounded-md border px-3 py-2 text-sm"
+                        :class="opt.is_correct
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-950'
+                            : 'border-gray-200 bg-white text-gray-800'"
+                    >
+                        <McqOptionLine :index="index" :text="opt.option_text" />
+                        <span v-if="opt.is_correct" class="ml-1 text-xs font-semibold text-emerald-700">(stored key)</span>
+                    </li>
+                </ul>
+                <p v-else-if="item.correct_answer" class="mt-4 text-sm text-gray-800">
+                    Stored answer:
+                    <span class="font-semibold">{{ item.correct_answer }}</span>
+                </p>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+                <Link
+                    v-if="item.edit_url"
+                    :href="item.edit_url"
+                    class="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                >
+                    Edit yourself
+                </Link>
+                <Link
+                    v-if="item.check_url || item.set_url"
+                    :href="item.check_url || item.set_url"
+                    class="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50"
+                >
+                    Open in set
+                </Link>
+                <button
+                    v-if="canReturnToUploader"
+                    type="button"
+                    class="rounded bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                    :disabled="busy"
+                    @click="sendToUploader"
+                >
+                    {{ uploaderForm.processing ? 'Sending…' : 'Send to uploader' }}
+                </button>
+                <button
+                    type="button"
+                    class="rounded border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                    :disabled="busy"
+                    @click="markFixed"
+                >
+                    Fixed — return to student
+                </button>
+            </div>
+        </div>
+    </Modal>
 </template>

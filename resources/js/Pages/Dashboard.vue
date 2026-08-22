@@ -894,7 +894,7 @@ const adminSetStatusClass = (set) => {
                             Misprint / incomplete sums · {{ questionIssueReports.length }}
                         </h3>
                         <p class="mt-1 text-xs text-amber-900">
-                            Students flagged these sums. Fix the question, then tap Fixed — return to student so it comes back on their correction list (no marks were lost).
+                            Open to check the sum. Edit it yourself, or send only that sum to the uploader. When fixed, tap Fixed — return to student (no marks were lost).
                         </p>
                         <div class="mt-3 space-y-2">
                             <div
@@ -926,13 +926,6 @@ const adminSetStatusClass = (set) => {
                                 </div>
                                 <div class="flex shrink-0 flex-col items-end gap-1">
                                     <p class="text-xs text-gray-500">{{ formatIssueDate(item.reported_at) }}</p>
-                                    <Link
-                                        v-if="item.edit_url"
-                                        :href="item.edit_url"
-                                        class="text-xs font-semibold text-indigo-700 hover:underline"
-                                    >
-                                        Edit question
-                                    </Link>
                                     <QuestionIssueReportActions :item="item" compact />
                                 </div>
                             </div>

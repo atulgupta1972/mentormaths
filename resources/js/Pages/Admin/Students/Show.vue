@@ -239,7 +239,7 @@ const destroyStudent = () => {
                         </span>
                     </h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Student flagged these sums. Edit and fix the question, then mark Fixed — return to student so it goes back on their correction list. No marks were deducted.
+                        Open to check. Edit yourself or send only that sum to the uploader. When fixed, mark Fixed — return to student so it goes back on their correction list. No marks were deducted.
                     </p>
                     <ul v-if="questionIssueReports.length" class="mt-4 divide-y divide-gray-100">
                         <li v-for="item in questionIssueReports" :key="item.id" class="py-3">
@@ -255,13 +255,6 @@ const destroyStudent = () => {
                                             class="font-mono text-sm font-semibold text-indigo-600 hover:underline"
                                         >
                                             {{ item.set_code }}
-                                        </Link>
-                                        <Link
-                                            v-if="item.edit_url"
-                                            :href="item.edit_url"
-                                            class="text-sm font-semibold text-indigo-700 hover:underline"
-                                        >
-                                            Edit question
                                         </Link>
                                     </div>
                                     <p class="mt-1 text-sm text-gray-800">{{ item.question_text }}</p>

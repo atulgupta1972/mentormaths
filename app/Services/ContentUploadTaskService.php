@@ -553,6 +553,8 @@ class ContentUploadTaskService
         User $admin,
         string $issue,
         ?string $remark = null,
+        string $adminContext = 'Student asked for teacher help. Admin found a content issue — fix only this sum.',
+        string $source = ContentQuestionCorrection::SOURCE_HELP_REQUEST,
     ): ContentUploadTask {
         $task = $this->taskForQuestion($question);
 
@@ -570,7 +572,7 @@ class ContentUploadTaskService
         return $this->returnForReverification(
             $task,
             $admin,
-            'Student asked for teacher help. Admin found a content issue — fix only this sum.',
+            $adminContext,
             [[
                 'question_id' => (int) $question->id,
                 'number' => $sortOrder ? (int) $sortOrder : null,
@@ -578,7 +580,7 @@ class ContentUploadTaskService
                 'remark' => $this->remarkForHelpIssue($issue, $remark),
             ]],
             notifyNow: false,
-            source: ContentQuestionCorrection::SOURCE_HELP_REQUEST,
+            source: $source,
         );
     }
 
