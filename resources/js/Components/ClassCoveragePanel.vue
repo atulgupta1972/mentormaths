@@ -40,8 +40,8 @@ const expandedChapterIds = ref(new Set());
 const chapters = computed(() => props.classCoverage?.chapters ?? []);
 const isStudentView = computed(() => String(props.updateRouteName).startsWith('student.'));
 const canStaffAssign = computed(() => ! isStudentView.value && Boolean(props.assignStudentId) && route().has('admin.practice-sets.assign'));
-/** Chapter + Topics + Comp + Score + Revise + Studied + Under study */
-const columnCount = computed(() => 7);
+/** Ch No + Chapter + Topics + Comp + Score + Revise + Studied + Under study */
+const columnCount = computed(() => 8);
 
 const todayDate = () => {
     const date = new Date();
@@ -256,17 +256,27 @@ const toggleChapter = (chapterId) => {
 
 const isExpanded = (chapterId) => expandedChapterIds.value.has(chapterId);
 
-const chapterTitle = (chapter) => {
+const chapterNumberLabel = (chapter) => {
     const number = String(chapter.chapter_number ?? '').trim();
-    const name = chapter.name || '';
 
     if (! number) {
-        return name || chapter.label || 'Chapter';
+        return '—';
     }
 
-    const prefix = number.toLowerCase().startsWith('ch') ? number : `Ch ${number}`;
+    return number.toLowerCase().startsWith('ch') ? number : `Ch ${number}`;
+};
 
-    return name ? `${prefix} — ${name}` : prefix;
+const chapterNameLabel = (chapter) => chapter.name || chapter.label || 'Chapter';
+
+const chapterTitle = (chapter) => {
+    const number = chapterNumberLabel(chapter);
+    const name = chapterNameLabel(chapter);
+
+    if (number === '—') {
+        return name;
+    }
+
+    return `${number} — ${name}`;
 };
 
 const availabilityCount = (chapter, key) => Number(chapter.availability?.[key] ?? 0);
@@ -602,13 +612,13 @@ const startCorrection = (item) => {
 </script>
 
 <template>
-    <section class="w-full max-w-6xl">
-        <h3 class="mb-1 text-sm font-semibold text-slate-800">Class coverage & available content</h3>
-        <p class="mb-2 text-xs leading-snug text-slate-500">
+    <section class="w-full max-w-7xl">
+        <h3 class="mb-1 text-base font-semibold text-slate-800">Class coverage & available content</h3>
+        <p class="mb-2 text-sm leading-snug text-slate-500">
             Click a chapter to see set details and scores. Tick each chapter independently — click the same box again to clear it.
             <span v-if="canStaffAssign"> Click a set to assign it — target date defaults to today.</span>
         </p>
-        <p v-if="upcomingExamByChapterId.size" class="mb-2 text-xs leading-snug text-amber-900">
+        <p v-if="upcomingExamByChapterId.size" class="mb-2 text-sm leading-snug text-amber-900">
             Chapters in an upcoming exam have a thin dark-brown line (rose if within 7 days).
         </p>
         <p v-if="saveError" class="mb-2 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-800">
@@ -635,22 +645,23 @@ const startCorrection = (item) => {
         </div>
 
         <div v-else class="overflow-x-auto rounded-lg border-2 border-slate-400 shadow-sm">
-            <table class="w-full min-w-[40rem] border-collapse text-[11px] leading-none">
+            <table class="w-full min-w-[44rem] border-collapse text-[13px] leading-snug">
                 <thead>
                     <tr class="bg-[#0b2a5b] text-white">
-                        <th class="px-1.5 py-1 text-left font-semibold whitespace-nowrap">Chapter</th>
-                        <th class="min-w-[14rem] px-1.5 py-1 text-left font-semibold">Topics</th>
-                        <th class="bg-sky-800 px-1.5 py-1 text-center font-bold whitespace-nowrap" title="Sets done / available">
+                        <th class="w-16 px-2 py-1.5 text-left font-semibold whitespace-nowrap">Ch No</th>
+                        <th class="min-w-[9rem] max-w-[14rem] px-2 py-1.5 text-left font-semibold">Chapter</th>
+                        <th class="min-w-[8rem] max-w-[12rem] px-2 py-1.5 text-left font-semibold">Topics</th>
+                        <th class="bg-sky-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Sets done / available">
                             Comp %
                         </th>
-                        <th class="bg-violet-800 px-1.5 py-1 text-center font-bold whitespace-nowrap" title="Average score on scored sets">
+                        <th class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Average score on scored sets">
                             Score %
                         </th>
-                        <th class="bg-orange-700 px-1.5 py-1 text-center font-bold whitespace-nowrap" title="Corrections done / pending">
+                        <th class="bg-orange-700 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Corrections done / pending">
                             Revise
                         </th>
-                        <th class="px-1 py-1 text-center font-semibold whitespace-nowrap">Studied</th>
-                        <th class="px-1 py-1 text-center font-semibold whitespace-nowrap">Under study</th>
+                        <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Studied</th>
+                        <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Under study</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -665,22 +676,31 @@ const startCorrection = (item) => {
                             ]"
                         >
                             <td
-                                class="max-w-[13rem] px-1.5 py-0.5 align-middle font-medium text-slate-900"
+                                class="w-16 whitespace-nowrap px-2 py-1 align-middle font-semibold text-slate-900"
                                 :class="chapterRowLineClass(chapter.id)"
                             >
-                                <div class="flex min-w-0 items-center gap-1">
-                                    <button
-                                        type="button"
-                                        class="inline-flex min-w-0 max-w-full items-center gap-0.5 text-left text-[11px] leading-none hover:text-sky-800"
-                                        :title="chapterTitle(chapter)"
-                                        @click="toggleChapter(chapter.id)"
-                                    >
-                                        <span class="shrink-0 text-[9px] text-sky-700">{{ isExpanded(chapter.id) ? '▼' : '▶' }}</span>
-                                        <span class="truncate">{{ chapterTitle(chapter) }}</span>
-                                    </button>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 text-left hover:text-sky-800"
+                                    :title="chapterTitle(chapter)"
+                                    @click="toggleChapter(chapter.id)"
+                                >
+                                    <span class="shrink-0 text-[10px] text-sky-700">{{ isExpanded(chapter.id) ? '▼' : '▶' }}</span>
+                                    <span class="tabular-nums">{{ chapterNumberLabel(chapter) }}</span>
+                                </button>
+                            </td>
+                            <td
+                                class="min-w-[9rem] max-w-[14rem] px-2 py-1 align-middle font-medium text-slate-900"
+                                :class="chapterRowLineClass(chapter.id)"
+                            >
+                                <div class="flex min-w-0 items-center gap-1.5">
+                                    <span
+                                        class="truncate"
+                                        :title="chapterNameLabel(chapter)"
+                                    >{{ chapterNameLabel(chapter) }}</span>
                                     <span
                                         v-if="upcomingExamForChapter(chapter.id)"
-                                        class="shrink-0 rounded border px-1 py-px text-[9px] font-bold leading-none"
+                                        class="shrink-0 rounded border px-1 py-px text-[10px] font-bold leading-none"
                                         :class="chapterExamBadgeClass(chapter.id)"
                                         :title="upcomingExamForChapter(chapter.id).title"
                                     >
@@ -689,7 +709,7 @@ const startCorrection = (item) => {
                                 </div>
                             </td>
                             <td
-                                class="min-w-[14rem] max-w-[20rem] px-1.5 py-0.5 align-middle text-[11px] text-slate-600"
+                                class="min-w-[8rem] max-w-[12rem] px-2 py-1 align-middle text-[12px] text-slate-600"
                                 :class="chapterRowLineClass(chapter.id)"
                                 :title="chapter.topics_label || ''"
                             >
@@ -697,18 +717,18 @@ const startCorrection = (item) => {
                                     v-if="chapter.topics_label"
                                     class="block max-w-full cursor-help truncate whitespace-nowrap"
                                     :title="chapter.topics_label"
-                                >{{ truncateTopics(chapter.topics_label, 75) }}</span>
+                                >{{ truncateTopics(chapter.topics_label, 42) }}</span>
                                 <span v-else class="text-slate-400">—</span>
                             </td>
                             <td
-                                class="bg-sky-50/80 px-1 py-0.5 text-center align-middle"
+                                class="bg-sky-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                                 :title="stats.total
                                     ? `${stats.done}/${stats.total} sets done`
                                     : 'No sets yet'"
                             >
                                 <span
-                                    class="text-[12px] font-extrabold tabular-nums leading-none"
+                                    class="text-[14px] font-extrabold tabular-nums leading-none"
                                     :class="pctToneClass(stats.completionPct)"
                                 >
                                     <template v-if="stats.completionPct != null">{{ stats.completionPct }}%</template>
@@ -716,15 +736,15 @@ const startCorrection = (item) => {
                                 </span>
                                 <span
                                     v-if="stats.total"
-                                    class="ml-0.5 text-[9px] font-semibold tabular-nums text-slate-500"
+                                    class="ml-0.5 text-[10px] font-semibold tabular-nums text-slate-500"
                                 >{{ stats.done }}/{{ stats.total }}</span>
                             </td>
                             <td
-                                class="bg-violet-50/80 px-1 py-0.5 text-center align-middle"
+                                class="bg-violet-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                             >
                                 <span
-                                    class="text-[12px] font-extrabold tabular-nums leading-none"
+                                    class="text-[14px] font-extrabold tabular-nums leading-none"
                                     :class="pctToneClass(stats.scorePct)"
                                 >
                                     <template v-if="stats.scorePct != null">{{ stats.scorePct }}%</template>
@@ -732,11 +752,11 @@ const startCorrection = (item) => {
                                 </span>
                             </td>
                             <td
-                                class="bg-orange-50/80 px-1 py-0.5 text-center align-middle"
+                                class="bg-orange-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                                 title="Corrections done / pending"
                             >
-                                <span class="text-[12px] font-extrabold tabular-nums leading-none text-orange-800">
+                                <span class="text-[14px] font-extrabold tabular-nums leading-none text-orange-800">
                                     <span class="text-emerald-700">{{ stats.correctionDone }}</span>
                                     <span class="mx-px text-slate-400">/</span>
                                     <span :class="stats.revisionPending > 0 ? 'text-rose-700' : 'text-slate-500'">
@@ -745,12 +765,12 @@ const startCorrection = (item) => {
                                 </span>
                             </td>
                             <td
-                                class="px-1 py-0.5 text-center align-middle"
+                                class="px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                             >
                                 <button
                                     type="button"
-                                    class="inline-flex h-4 w-4 items-center justify-center rounded border-2 text-[10px] font-bold leading-none"
+                                    class="inline-flex h-5 w-5 items-center justify-center rounded border-2 text-[11px] font-bold leading-none"
                                     :class="chapter.studied
                                         ? 'border-emerald-700 bg-emerald-600 text-white'
                                         : 'border-slate-400 bg-white hover:border-emerald-500'"
@@ -763,12 +783,12 @@ const startCorrection = (item) => {
                                 </button>
                             </td>
                             <td
-                                class="px-1 py-0.5 text-center align-middle"
+                                class="px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                             >
                                 <button
                                     type="button"
-                                    class="inline-flex h-4 w-4 items-center justify-center rounded border-2 text-[10px] font-bold leading-none"
+                                    class="inline-flex h-5 w-5 items-center justify-center rounded border-2 text-[11px] font-bold leading-none"
                                     :class="chapter.under_study
                                         ? 'border-amber-600 bg-amber-500 text-white'
                                         : 'border-slate-400 bg-white hover:border-amber-500'"
