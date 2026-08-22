@@ -17,6 +17,21 @@ Schedule::command('students:send-daily-balance-reminders')
     ->timezone('Asia/Kolkata')
     ->when(fn () => config('progress_summary.daily_balance_enabled', true));
 
+Schedule::command('whatsapp:send-weekly-summaries')
+    ->weeklyOn(
+        (int) config('whatsapp.schedule.weekly_summary_day', 6),
+        (string) config('whatsapp.schedule.weekly_summary_time', '08:00'),
+    )
+    ->timezone('Asia/Kolkata')
+    ->when(fn () => config('whatsapp.enabled', false)
+        && config('whatsapp.schedule.weekly_summary_enabled', true));
+
+Schedule::command('whatsapp:send-daily-balance-reminders')
+    ->dailyAt((string) config('whatsapp.schedule.daily_balance_time', '14:00'))
+    ->timezone('Asia/Kolkata')
+    ->when(fn () => config('whatsapp.enabled', false)
+        && config('whatsapp.schedule.daily_balance_enabled', true));
+
 Schedule::command('written-submissions:grade-pending')
     ->everyMinute()
     ->withoutOverlapping();

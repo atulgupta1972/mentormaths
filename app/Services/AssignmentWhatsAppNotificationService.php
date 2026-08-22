@@ -31,6 +31,8 @@ class AssignmentWhatsAppNotificationService
             $worksheet->loadCount('questions');
         }
 
+        $dashboard = route('dashboard');
+
         $message = $this->buildMessage($student, $worksheet, $dueDate, $notes);
         $recipients = $this->contactService->recipientsForStudent($student);
 
@@ -38,6 +40,8 @@ class AssignmentWhatsAppNotificationService
             'mobile' => $recipient['mobile'],
             'label' => $recipient['label'],
             'message' => $message,
+            'student_id' => $student->id,
+            'dashboard_url' => $dashboard,
         ], $recipients);
     }
 
@@ -153,11 +157,14 @@ class AssignmentWhatsAppNotificationService
 
         $message = $this->buildMultiAssignmentMessage($student, $worksheets, $dueDate, $notes);
         $recipients = $this->contactService->recipientsForStudent($student);
+        $dashboard = route('dashboard');
 
         return array_map(fn (array $recipient) => [
             'mobile' => $recipient['mobile'],
             'label' => $recipient['label'],
             'message' => $message,
+            'student_id' => $student->id,
+            'dashboard_url' => $dashboard,
         ], $recipients);
     }
 

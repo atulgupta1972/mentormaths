@@ -12,7 +12,7 @@ class StudentDailyBalanceWhatsAppMailer
      * @param  array<string, mixed>  $summary
      * @return array{sent_count: int, failed_count: int, skipped_count: int, results: list<array<string, mixed>>, error: ?string}
      */
-    public static function send(Student $student, array $summary): array
+    public static function send(Student $student, array $summary, string $channel = 'daily_balance'): array
     {
         $notifications = app(StudentProgressWhatsAppService::class)
             ->notificationsForBalanceReminder($student, $summary);
@@ -27,7 +27,7 @@ class StudentDailyBalanceWhatsAppMailer
             ];
         }
 
-        $result = WhatsAppSender::sendNotifications('daily_balance', $notifications);
+        $result = WhatsAppSender::sendNotifications($channel, $notifications);
         $result['error'] = null;
 
         return $result;

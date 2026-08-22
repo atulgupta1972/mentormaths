@@ -10,6 +10,39 @@ class MetaCloudDriver implements WhatsAppDriver
 {
     public function sendText(string $to, string $message): array
     {
+        return $this->postMessage($to, [
+            'type' => 'text',
+            'text' => [
+                'preview_url' => true,
+                'body' => $message,
+            ],
+        ]);
+    }
+
+    public function sendTemplate(string $to, array $template): array
+    {
+        return $this->postMessage($to, [
+            'type' => 'template',
+            'template' => [
+                'name' => $template['name'],
+                'language' => ['code' => $template['language']],
+                'components' => $template['components'],
+            ],
+        ]);
+    }
+
+    public function isConfigured(): bool
+    {
+        return filled(config('whatsapp.meta.phone_number_id'))
+            && filled(config('whatsapp.meta.access_token'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{sent: bool, message_id: ?string, error: ?string}
+     */
+    private function postMessage(string $to, array $payload): array
+    {
         $phoneNumberId = config('whatsapp.meta.phone_number_id');
         $accessToken = config('whatsapp.meta.access_token');
         $apiVersion = config('whatsapp.meta.api_version', 'v21.0');
@@ -27,15 +60,10 @@ class MetaCloudDriver implements WhatsAppDriver
         try {
             $response = Http::withToken($accessToken)
                 ->acceptJson()
-                ->post($url, [
+                ->post($url, array_merge([
                     'messaging_product' => 'whatsapp',
                     'to' => $to,
-                    'type' => 'text',
-                    'text' => [
-                        'preview_url' => true,
-                        'body' => $message,
-                    ],
-                ]);
+                ], $payload));
 
             if ($response->successful()) {
                 $messageId = $response->json('messages.0.id');
@@ -72,11 +100,5 @@ class MetaCloudDriver implements WhatsAppDriver
                 'error' => 'send_failed',
             ];
         }
-    }
-
-    public function isConfigured(): bool
-    {
-        return filled(config('whatsapp.meta.phone_number_id'))
-            && filled(config('whatsapp.meta.access_token'));
     }
 }

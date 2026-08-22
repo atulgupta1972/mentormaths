@@ -21,6 +21,21 @@ class LogDriver implements WhatsAppDriver
         ];
     }
 
+    public function sendTemplate(string $to, array $template): array
+    {
+        Log::info('WhatsApp template (log driver)', [
+            'to' => $to,
+            'template' => $template['name'] ?? null,
+            'components' => $template['components'] ?? [],
+        ]);
+
+        return [
+            'sent' => true,
+            'message_id' => 'log-template-'.now()->timestamp,
+            'error' => null,
+        ];
+    }
+
     public function isConfigured(): bool
     {
         return true;

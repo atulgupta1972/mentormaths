@@ -35,7 +35,9 @@ class WhatsAppTestSend extends Command
             return self::FAILURE;
         }
 
-        $result = WhatsAppSender::sendText('progress_summary', $mobile, $message);
+        $result = WhatsAppSender::sendText('progress_summary', $mobile, $message, [
+            'dashboard_url' => route('dashboard'),
+        ]);
 
         if ($result['sent']) {
             $this->info('Sent successfully.'.($result['message_id'] ? " ID: {$result['message_id']}" : ''));

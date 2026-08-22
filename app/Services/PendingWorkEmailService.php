@@ -48,7 +48,7 @@ class PendingWorkEmailService
         $mailResult = StudentDailyBalanceMailer::send($student, $summary, $recipients);
 
         if (WhatsAppSender::canAutoSend() && WhatsAppSender::channelEnabled('pending_work')) {
-            StudentDailyBalanceWhatsAppMailer::send($student, $summary);
+            StudentDailyBalanceWhatsAppMailer::send($student, $summary, 'pending_work');
         }
 
         return $this->result(

@@ -23,6 +23,8 @@ class StudentProgressWhatsAppService
             'mobile' => $recipient['mobile'],
             'label' => $recipient['label'],
             'message' => $message,
+            'student_id' => $student->id,
+            'dashboard_url' => $summary['dashboard_url'] ?? null,
         ], $recipients);
     }
 
@@ -38,6 +40,8 @@ class StudentProgressWhatsAppService
             'mobile' => $recipient['mobile'],
             'label' => $recipient['label'],
             'message' => $message,
+            'student_id' => $student->id,
+            'dashboard_url' => $summary['dashboard_url'] ?? null,
         ], $recipients);
     }
 

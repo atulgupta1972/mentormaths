@@ -18,6 +18,27 @@ return [
         'pending_work' => env('WHATSAPP_PENDING_WORK', true),
     ],
 
+    'schedule' => [
+        'weekly_summary_enabled' => env('WHATSAPP_WEEKLY_SUMMARY_ENABLED', true),
+        'weekly_summary_day' => (int) env('WHATSAPP_WEEKLY_SUMMARY_DAY', 6),
+        'weekly_summary_time' => env('WHATSAPP_WEEKLY_SUMMARY_TIME', '08:00'),
+        'daily_balance_enabled' => env('WHATSAPP_DAILY_BALANCE_ENABLED', true),
+        'daily_balance_time' => env('WHATSAPP_DAILY_BALANCE_TIME', env('DAILY_BALANCE_EMAIL_TIME', '14:00')),
+    ],
+
+    'templates' => [
+        'enabled' => env('WHATSAPP_TEMPLATES_ENABLED', true),
+        'default_name' => env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update'),
+        'language' => env('WHATSAPP_TEMPLATE_LANGUAGE', 'en'),
+        'body_max_length' => 900,
+        'names' => [
+            'progress_summary' => env('WHATSAPP_TEMPLATE_PROGRESS_SUMMARY', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
+            'daily_balance' => env('WHATSAPP_TEMPLATE_DAILY_BALANCE', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
+            'assignment_assigned' => env('WHATSAPP_TEMPLATE_ASSIGNMENT', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
+            'pending_work' => env('WHATSAPP_TEMPLATE_PENDING_WORK', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
+        ],
+    ],
+
     'meta' => [
         'api_version' => env('WHATSAPP_META_API_VERSION', 'v21.0'),
         'phone_number_id' => env('WHATSAPP_META_PHONE_NUMBER_ID'),
@@ -26,6 +47,8 @@ return [
     ],
 
     'log_messages' => env('WHATSAPP_LOG_MESSAGES', true),
+
+    'log_to_database' => env('WHATSAPP_LOG_TO_DATABASE', true),
 
     'max_message_length' => 4000,
 ];

@@ -42,18 +42,25 @@ class WhatsAppSender
     }
 
     /**
-     * @return array{sent: bool, to: ?string, message_id: ?string, error: ?string}
+     * @param  array<string, mixed>  $context
+     * @return array{sent: bool, to: ?string, message_id: ?string, error: ?string, used_template: bool}
      */
-    public static function sendText(string $channel, ?string $mobile, string $message): array
+    public static function sendText(string $channel, ?string $mobile, string $message, array $context = []): array
     {
         if (! self::channelEnabled($channel)) {
-            return ['sent' => false, 'to' => null, 'message_id' => null, 'error' => 'channel_disabled'];
+            $result = ['sent' => false, 'to' => null, 'message_id' => null, 'error' => 'channel_disabled', 'used_template' => false];
+            WhatsAppMessageLogger::log($channel, null, $message, $result, $context);
+
+            return $result;
         }
 
         $to = WhatsAppPhone::normalize($mobile);
 
         if (! $to || ! WhatsAppPhone::isValid($to)) {
-            return ['sent' => false, 'to' => $to, 'message_id' => null, 'error' => 'invalid_mobile'];
+            $result = ['sent' => false, 'to' => $to, 'message_id' => null, 'error' => 'invalid_mobile', 'used_template' => false];
+            WhatsAppMessageLogger::log($channel, $to, $message, $result, $context);
+
+            return $result;
         }
 
         $maxLen = (int) config('whatsapp.max_message_length', 4000);
@@ -70,21 +77,45 @@ class WhatsAppSender
         }
 
         if (! self::canAutoSend()) {
-            return ['sent' => false, 'to' => $to, 'message_id' => null, 'error' => 'manual'];
+            $result = ['sent' => false, 'to' => $to, 'message_id' => null, 'error' => 'manual', 'used_template' => false];
+            WhatsAppMessageLogger::log($channel, $to, $message, $result, $context);
+
+            return $result;
         }
 
-        $result = self::driver()->sendText($to, $message);
+        $usedTemplate = false;
+        $templateName = null;
 
-        return [
-            'sent' => $result['sent'],
+        if (WhatsAppTemplateBuilder::shouldUseTemplate()) {
+            $template = WhatsAppTemplateBuilder::forChannel(
+                $channel,
+                $message,
+                is_string($context['dashboard_url'] ?? null) ? $context['dashboard_url'] : null,
+            );
+            $templateName = $template['name'];
+            $sendResult = self::driver()->sendTemplate($to, $template);
+            $usedTemplate = true;
+        } else {
+            $sendResult = self::driver()->sendText($to, $message);
+        }
+
+        $result = [
+            'sent' => $sendResult['sent'],
             'to' => $to,
-            'message_id' => $result['message_id'] ?? null,
-            'error' => $result['error'] ?? null,
+            'message_id' => $sendResult['message_id'] ?? null,
+            'error' => $sendResult['error'] ?? null,
+            'used_template' => $usedTemplate,
         ];
+
+        WhatsAppMessageLogger::log($channel, $to, $message, $result, array_merge($context, [
+            'template_name' => $templateName,
+        ]));
+
+        return $result;
     }
 
     /**
-     * @param  list<array{mobile: string, label?: string, message: string}>  $notifications
+     * @param  list<array{mobile: string, label?: string, message: string, student_id?: int, dashboard_url?: string}>  $notifications
      * @return array{sent_count: int, failed_count: int, skipped_count: int, results: list<array<string, mixed>>}
      */
     public static function sendNotifications(string $channel, array $notifications): array
@@ -99,6 +130,11 @@ class WhatsAppSender
                 $channel,
                 $notification['mobile'],
                 $notification['message'],
+                [
+                    'recipient_label' => $notification['label'] ?? null,
+                    'student_id' => $notification['student_id'] ?? null,
+                    'dashboard_url' => $notification['dashboard_url'] ?? null,
+                ],
             );
 
             $row = array_merge($notification, $result);
