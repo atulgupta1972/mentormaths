@@ -23,6 +23,8 @@ class QuestionIssueReport extends Model
 
     public const REASON_MISPRINT_INCOMPLETE = 'misprint_incomplete';
 
+    public const REASON_QUESTION_CORRECT = 'question_correct';
+
     protected $fillable = [
         'student_id',
         'student_enrollment_id',
@@ -38,6 +40,7 @@ class QuestionIssueReport extends Model
         'resolved_by',
         'resolved_at',
         'admin_note',
+        'score_forfeited',
     ];
 
     protected function casts(): array
@@ -45,6 +48,7 @@ class QuestionIssueReport extends Model
         return [
             'reported_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'score_forfeited' => 'boolean',
         ];
     }
 

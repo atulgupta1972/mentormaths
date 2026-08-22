@@ -24,9 +24,25 @@ const canReturnToUploader = computed(() =>
     && props.item.can_return_to_uploader === true,
 );
 
+const canPostAction = computed(() => hasRoute('admin.question-issue-reports.return-to-uploader'));
+
+const isQuestionCorrect = computed(() => uploaderForm.issue === 'question_correct');
+
+const showActionPanel = computed(() => canReturnToUploader.value || canPostAction.value);
+
 const busy = computed(() =>
     fixForm.processing || dismissForm.processing || uploaderForm.processing,
 );
+
+const actionButtonLabel = computed(() => {
+    if (uploaderForm.processing) {
+        return isQuestionCorrect.value ? 'Confirming…' : 'Sending…';
+    }
+
+    return isQuestionCorrect.value
+        ? 'Confirm — 0 marks & email'
+        : 'Send to uploader';
+});
 
 const markFixed = () => {
     if (!confirm('Mark this sum as fixed and put it back on the student\'s correction list to attempt again?')) {
@@ -46,7 +62,30 @@ const dismiss = () => {
     });
 };
 
-const sendToUploader = () => {
+const submitAction = () => {
+    if (isQuestionCorrect.value) {
+        if (!window.confirm(
+            'Confirm the question is correct?\n\n'
+            + '• Student must re-attempt from their revise list\n'
+            + '• Original score for this sum stays 0 (even if they get it right later)\n'
+            + '• Student is notified by email',
+        )) {
+            return;
+        }
+
+        uploaderForm.post(route('admin.question-issue-reports.return-to-uploader', props.item.id), {
+            preserveScroll: true,
+        });
+
+        return;
+    }
+
+    if (!canReturnToUploader.value) {
+        window.alert('No content uploader is assigned for this chapter. Choose “Question is correct — please re-attempt”, or use Edit yourself.');
+
+        return;
+    }
+
     const who = props.item.uploader_name || 'the uploader';
     const chapter = props.item.chapter_label ? ` (${props.item.chapter_label})` : '';
     const issueLabel = uploaderForm.issue === 'wrong_answer'
@@ -92,14 +131,23 @@ const sendToUploader = () => {
         </div>
 
         <div
-            v-if="canReturnToUploader"
-            class="rounded-md border border-amber-200 bg-amber-50/80 p-2"
-            :class="compact ? 'text-right' : ''"
+            v-if="showActionPanel"
+            class="rounded-md border p-2"
+            :class="[
+                compact ? 'text-right' : '',
+                isQuestionCorrect ? 'border-sky-200 bg-sky-50/80' : 'border-amber-200 bg-amber-50/80',
+            ]"
         >
-            <p v-if="!compact" class="mb-1.5 text-xs text-amber-950">
-                If you prefer not to fix it yourself, send
-                <span class="font-semibold">only this sum</span>
-                to {{ item.uploader_name || 'the uploader' }}.
+            <p v-if="!compact" class="mb-1.5 text-xs" :class="isQuestionCorrect ? 'text-sky-950' : 'text-amber-950'">
+                <template v-if="isQuestionCorrect">
+                    Question and answer look fine — student must re-attempt.
+                    <span class="font-semibold">Score stays 0</span> even if they get it right later. Email notifies them.
+                </template>
+                <template v-else>
+                    If you prefer not to fix it yourself, send
+                    <span class="font-semibold">only this sum</span>
+                    to {{ item.uploader_name || 'the uploader' }}.
+                </template>
             </p>
             <div class="flex flex-wrap items-end gap-1.5" :class="compact ? 'justify-end' : ''">
                 <select
@@ -109,22 +157,28 @@ const sendToUploader = () => {
                     <option value="incomplete">Incomplete / missing diagram</option>
                     <option value="wrong_answer">Wrong answer</option>
                     <option value="other">Other issue</option>
+                    <option value="question_correct">Question is correct — please re-attempt</option>
                 </select>
                 <input
-                    v-if="uploaderForm.issue === 'other' || !compact"
+                    v-if="uploaderForm.issue === 'other' || uploaderForm.issue === 'question_correct' || !compact"
                     v-model="uploaderForm.remark"
                     type="text"
                     maxlength="500"
-                    :placeholder="uploaderForm.issue === 'other' ? 'What should they fix?' : 'Optional note'"
+                    :placeholder="uploaderForm.issue === 'other'
+                        ? 'What should they fix?'
+                        : uploaderForm.issue === 'question_correct'
+                            ? 'Optional note to student'
+                            : 'Optional note'"
                     class="min-w-[8rem] flex-1 rounded border-gray-300 text-xs py-0.5"
                 >
                 <button
                     type="button"
-                    class="rounded bg-amber-700 px-2 py-1 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
-                    :disabled="busy"
-                    @click="sendToUploader"
+                    class="rounded px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                    :class="isQuestionCorrect ? 'bg-sky-700 hover:bg-sky-800' : 'bg-amber-700 hover:bg-amber-800'"
+                    :disabled="busy || (!isQuestionCorrect && !canReturnToUploader)"
+                    @click="submitAction"
                 >
-                    {{ uploaderForm.processing ? 'Sending…' : 'Send to uploader' }}
+                    {{ actionButtonLabel }}
                 </button>
             </div>
             <p v-if="uploaderForm.errors.issue || uploaderForm.errors.remark" class="mt-1 text-xs text-rose-700">
@@ -135,7 +189,7 @@ const sendToUploader = () => {
             v-else-if="item.content_task_id === null && item.can_return_to_uploader === false && !compact"
             class="text-xs text-gray-500"
         >
-            No content uploader is assigned — use Edit yourself to fix it.
+            No content uploader is assigned — use Edit yourself to fix it, or dismiss if not needed.
         </p>
 
         <p v-if="item.admin_note" class="text-xs text-amber-900">
@@ -219,15 +273,6 @@ const sendToUploader = () => {
                 >
                     Open in set
                 </Link>
-                <button
-                    v-if="canReturnToUploader"
-                    type="button"
-                    class="rounded bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
-                    :disabled="busy"
-                    @click="sendToUploader"
-                >
-                    {{ uploaderForm.processing ? 'Sending…' : 'Send to uploader' }}
-                </button>
                 <button
                     type="button"
                     class="rounded border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"

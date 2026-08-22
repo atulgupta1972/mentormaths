@@ -691,7 +691,9 @@ const adminSetStatusClass = (set) => {
                             Misprint / incomplete sums · {{ questionIssueReports.length }}
                         </h3>
                         <p class="mt-1 text-xs text-amber-900">
-                            Open to check the sum. Edit it yourself, or send only that sum to the uploader. When fixed, tap Fixed — return to student (no marks were lost).
+                            Open to check the sum. Edit it yourself, or send only that sum to the uploader.
+                            If the question is fine, choose <span class="font-semibold">Question is correct — please re-attempt</span>
+                            (score stays 0; student is emailed). When content is fixed, tap Fixed — return to student.
                         </p>
                         <div class="mt-3 space-y-2">
                             <div

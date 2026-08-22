@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mail\QuestionCorrectReattempt;
 use App\Models\ContentQuestionCorrection;
 use App\Models\FormulaDrillItem;
 use App\Models\GuidedAttemptQuestion;
@@ -9,10 +10,16 @@ use App\Models\PracticeCorrectionItem;
 use App\Models\Question;
 use App\Models\QuestionIssueReport;
 use App\Models\SetAttempt;
+use App\Models\SetAttemptAnswer;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\AssignmentMailer;
+use App\Support\RegistrationMailer;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class QuestionIssueReportService
 {
@@ -128,6 +135,7 @@ class QuestionIssueReportService
     {
         return QuestionIssueReport::query()
             ->where('set_attempt_id', $attempt->id)
+            ->where('score_forfeited', false)
             ->whereIn('status', [
                 QuestionIssueReport::STATUS_PENDING_ADMIN,
                 QuestionIssueReport::STATUS_AWAITING_REATTEMPT,
@@ -214,6 +222,57 @@ class QuestionIssueReportService
             'resolved_at' => now(),
             'admin_note' => $note,
         ]);
+    }
+
+    /**
+     * Question and key are fine — student must re-attempt; original marks stay 0.
+     */
+    public function confirmQuestionCorrectRequireReattempt(
+        QuestionIssueReport $report,
+        User $admin,
+        ?string $note = null,
+    ): array {
+        if (! $report->isPendingAdmin()) {
+            throw new \InvalidArgumentException('This report is no longer waiting for a fix.');
+        }
+
+        $report->loadMissing([
+            'question.topic',
+            'question.worksheets:id,set_code,set_number',
+            'student.user',
+            'assignment.practiceSet:id,set_code,set_number',
+            'attempt.guidedQuestions',
+            'attempt.answers',
+            'attempt.assignment.practiceSet.questions',
+        ]);
+
+        if (! $report->question) {
+            throw new \InvalidArgumentException('This question is no longer available.');
+        }
+
+        DB::transaction(function () use ($report, $admin, $note) {
+            $this->forfeitOriginalScore($report);
+            $this->enqueueReattempt($report, PracticeCorrectionItem::REASON_QUESTION_CORRECT);
+
+            $extra = trim((string) $note);
+            $adminNote = 'Question is correct — please re-attempt (0 marks)'
+                .($extra !== '' ? ': '.$extra : '');
+
+            $report->update([
+                'status' => QuestionIssueReport::STATUS_AWAITING_REATTEMPT,
+                'reason' => QuestionIssueReport::REASON_QUESTION_CORRECT,
+                'score_forfeited' => true,
+                'resolved_by' => $admin->id,
+                'resolved_at' => now(),
+                'admin_note' => $adminNote,
+            ]);
+        });
+
+        return $this->notifyStudentQuestionCorrect($report->fresh([
+            'student.user',
+            'question',
+            'assignment.practiceSet:id,set_code',
+        ]));
     }
 
     /**
@@ -392,7 +451,7 @@ class QuestionIssueReportService
         return QuestionIssueReport::query()->create($payload);
     }
 
-    private function enqueueReattempt(QuestionIssueReport $report): void
+    private function enqueueReattempt(QuestionIssueReport $report, ?string $failureReason = null): void
     {
         $question = $report->question;
         $worksheetId = $report->assignment?->worksheet_id
@@ -416,9 +475,181 @@ class QuestionIssueReportService
             'set_attempt_id' => $report->set_attempt_id,
             'guided_attempt_question_id' => $report->guided_attempt_question_id,
             'source_type' => $source,
-            'failure_reason' => PracticeCorrectionItem::REASON_CONTENT_FIXED,
+            'failure_reason' => $failureReason ?? PracticeCorrectionItem::REASON_CONTENT_FIXED,
             'first_failure_at' => $report->reported_at ?? now(),
         ]);
+    }
+
+    /**
+     * Convert a “no marks lost” report into a scored wrong (0) on the original attempt.
+     */
+    private function forfeitOriginalScore(QuestionIssueReport $report): void
+    {
+        if ($report->context === QuestionIssueReport::CONTEXT_GUIDED) {
+            $this->forfeitGuidedScore($report);
+
+            return;
+        }
+
+        if ($report->context === QuestionIssueReport::CONTEXT_BATCH) {
+            $this->forfeitBatchScore($report);
+        }
+    }
+
+    private function forfeitGuidedScore(QuestionIssueReport $report): void
+    {
+        $guided = $report->guided_attempt_question_id
+            ? GuidedAttemptQuestion::query()->find($report->guided_attempt_question_id)
+            : null;
+
+        if (! $guided) {
+            return;
+        }
+
+        $guided->update([
+            'reported_issue' => false,
+            'final_is_correct' => false,
+            'first_try_correct' => false,
+            'phase' => GuidedAttemptQuestion::PHASE_DONE,
+        ]);
+
+        $attempt = $report->attempt ?? SetAttempt::query()->find($report->set_attempt_id);
+
+        if (! $attempt) {
+            return;
+        }
+
+        SetAttemptAnswer::updateOrCreate(
+            [
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $report->question_id,
+            ],
+            [
+                'question_option_id' => $guided->final_option_id,
+                'answer_text' => $guided->final_answer_text,
+                'is_correct' => false,
+            ],
+        );
+
+        if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {
+            $this->recalculateGuidedAttemptTotals($attempt->fresh('guidedQuestions'));
+        }
+    }
+
+    private function recalculateGuidedAttemptTotals(SetAttempt $attempt): void
+    {
+        $rows = $attempt->guidedQuestions;
+        $scorable = $rows->filter(fn (GuidedAttemptQuestion $row) => ! $row->reported_issue
+            && $row->phase !== GuidedAttemptQuestion::PHASE_REPORTED_ISSUE);
+        $firstTryCorrect = $scorable->where('first_try_correct', true)->count();
+        $correctedAfterHelp = $scorable->where('corrected_after_help', true)->count();
+        $givenUp = $scorable->where('gave_up', true)->count();
+
+        $attempt->update([
+            'score' => $firstTryCorrect,
+            'max_score' => $scorable->count(),
+            'first_try_correct_count' => $firstTryCorrect,
+            'corrected_after_help_count' => $correctedAfterHelp,
+            'given_up_count' => $givenUp,
+        ]);
+    }
+
+    private function forfeitBatchScore(QuestionIssueReport $report): void
+    {
+        $attempt = $report->attempt ?? SetAttempt::query()->find($report->set_attempt_id);
+
+        if (! $attempt) {
+            return;
+        }
+
+        SetAttemptAnswer::updateOrCreate(
+            [
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $report->question_id,
+            ],
+            [
+                'question_option_id' => null,
+                'answer_text' => null,
+                'is_correct' => false,
+            ],
+        );
+
+        if ($attempt->status !== SetAttempt::STATUS_SUBMITTED) {
+            return;
+        }
+
+        $attempt->loadMissing(['assignment.practiceSet.questions', 'answers']);
+        $questions = $attempt->assignment?->practiceSet?->questions ?? collect();
+        $reportedSkipIds = $this->reportedQuestionIdsForAttempt($attempt);
+        // Current report is still pending_admin until after this method; treat it as forfeited for recalc.
+        $reportedSkipIds = array_values(array_filter(
+            $reportedSkipIds,
+            fn (int $id) => $id !== (int) $report->question_id,
+        ));
+
+        $score = 0;
+        $maxScore = 0;
+
+        foreach ($questions as $question) {
+            if (in_array((int) $question->id, $reportedSkipIds, true)) {
+                continue;
+            }
+
+            $maxScore++;
+            $answer = $attempt->answers->firstWhere('question_id', $question->id);
+            if ($answer?->is_correct) {
+                $score++;
+            }
+        }
+
+        $attempt->update([
+            'score' => $score,
+            'max_score' => $maxScore,
+        ]);
+    }
+
+    /**
+     * @return array{sent: bool, email: ?string, error: ?string}
+     */
+    private function notifyStudentQuestionCorrect(QuestionIssueReport $report): array
+    {
+        $student = $report->student;
+
+        if (! $student) {
+            return ['sent' => false, 'email' => null, 'error' => 'no_student'];
+        }
+
+        $email = AssignmentMailer::resolveStudentEmail($student);
+
+        if (! $email) {
+            return ['sent' => false, 'email' => null, 'error' => 'no_email'];
+        }
+
+        $preview = Str::limit(trim(strip_tags((string) ($report->question?->question_text ?? ''))), 220);
+        $setCode = $report->assignment?->practiceSet?->set_code
+            ?? $report->question?->worksheets?->first()?->set_code;
+
+        try {
+            $pending = Mail::to($email);
+            $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
+
+            if ($adminEmail && strcasecmp($adminEmail, $email) !== 0) {
+                $pending->cc($adminEmail);
+            }
+
+            $pending->send(new QuestionCorrectReattempt($student, $report, $preview, $setCode));
+
+            return ['sent' => true, 'email' => $email, 'error' => null];
+        } catch (\Throwable $e) {
+            Log::error('Failed to send question-correct reattempt email.', [
+                'report_id' => $report->id,
+                'student_id' => $student->id,
+                'email' => $email,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['sent' => false, 'email' => $email, 'error' => 'send_failed'];
+        }
     }
 
     /**

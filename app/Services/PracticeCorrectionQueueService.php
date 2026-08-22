@@ -265,7 +265,7 @@ class PracticeCorrectionQueueService
     public function recordContentFixedPending(array $data): PracticeCorrectionItem
     {
         $data['source_type'] = $data['source_type'] ?? PracticeCorrectionItem::SOURCE_CONTENT_FIXED;
-        $data['failure_reason'] = PracticeCorrectionItem::REASON_CONTENT_FIXED;
+        $data['failure_reason'] = $data['failure_reason'] ?? PracticeCorrectionItem::REASON_CONTENT_FIXED;
 
         return $this->recordPending($data);
     }

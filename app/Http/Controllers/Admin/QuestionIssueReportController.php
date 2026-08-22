@@ -61,9 +61,32 @@ class QuestionIssueReportController extends Controller
         abort_unless($report->isPendingAdmin(), 404);
 
         $validated = $request->validate([
-            'issue' => ['required', 'in:wrong_answer,incomplete,other'],
+            'issue' => ['required', 'in:wrong_answer,incomplete,other,question_correct'],
             'remark' => ['nullable', 'string', 'max:500'],
         ]);
+
+        if ($validated['issue'] === 'question_correct') {
+            try {
+                $mail = $this->issueReports->confirmQuestionCorrectRequireReattempt(
+                    $report,
+                    $request->user(),
+                    $validated['remark'] ?? null,
+                );
+            } catch (\InvalidArgumentException $e) {
+                return back()->with('error', $e->getMessage());
+            }
+
+            $message = 'Question confirmed correct. Student must re-attempt — original score stays 0.';
+            if ($mail['sent'] ?? false) {
+                $message .= ' Email sent to '.$mail['email'].'.';
+            } elseif (($mail['error'] ?? null) === 'no_email') {
+                $message .= ' No student email on file — tell them on the dashboard.';
+            } else {
+                $message .= ' Email could not be sent — tell them on the dashboard.';
+            }
+
+            return back()->with('success', $message);
+        }
 
         if ($validated['issue'] === 'other' && ! filled(trim((string) ($validated['remark'] ?? '')))) {
             return back()->with('error', 'Add a short note so the uploader knows what to fix.');

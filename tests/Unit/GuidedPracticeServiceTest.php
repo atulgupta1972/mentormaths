@@ -191,6 +191,47 @@ class GuidedPracticeServiceTest extends TestCase
         ]);
     }
 
+    public function test_admin_confirm_question_correct_forfeits_score_and_queues_reattempt(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt();
+        $studentId = $attempt->assignment->enrollment->student_id;
+        $guided = app(GuidedPracticeService::class);
+        app(\App\Services\QuestionIssueReportService::class)
+            ->reportFromGuided($attempt->fresh(['guidedQuestions', 'assignment.enrollment.student']), $guided);
+
+        $report = \App\Models\QuestionIssueReport::query()->firstOrFail();
+        $admin = \App\Models\User::factory()->create(['role' => \App\Models\User::ROLE_ADMIN]);
+        $student = \App\Models\Student::query()->findOrFail($studentId);
+        $student->update(['email' => 'student-reattempt@example.com']);
+
+        \Illuminate\Support\Facades\Mail::fake();
+
+        app(\App\Services\QuestionIssueReportService::class)
+            ->confirmQuestionCorrectRequireReattempt($report, $admin);
+
+        $report = $report->fresh();
+        $this->assertSame('awaiting_reattempt', $report->status);
+        $this->assertTrue((bool) $report->score_forfeited);
+        $this->assertSame('question_correct', $report->reason);
+
+        $row = $attempt->fresh()->guidedQuestions->first();
+        $this->assertFalse((bool) $row->reported_issue);
+        $this->assertFalse((bool) $row->final_is_correct);
+
+        $attempt = $attempt->fresh();
+        $this->assertSame(0, (int) $attempt->score);
+        $this->assertSame(1, (int) $attempt->max_score);
+
+        $this->assertDatabaseHas('practice_correction_items', [
+            'student_id' => $studentId,
+            'question_id' => $report->question_id,
+            'status' => 'pending',
+            'failure_reason' => 'question_correct',
+        ]);
+
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\QuestionCorrectReattempt::class);
+    }
+
     public function test_admin_payload_includes_check_and_uploader_fields(): void
     {
         [$attempt] = $this->seedGuidedAttempt();
