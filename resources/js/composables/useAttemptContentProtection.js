@@ -1,4 +1,5 @@
 import { onMounted, onUnmounted, ref } from 'vue';
+import { isAttemptFullscreenActive } from '@/utils/attemptFullscreen';
 
 const COPY_KEYS = new Set(['c', 'x', 'v', 'a']);
 const BLOCKED_KEYS = new Set(['p', 's', 'u']);
@@ -69,12 +70,14 @@ function recordTabLeave(attemptId) {
  *   initialTabLeaveCount?: number,
  *   lockLimit?: number,
  *   initiallyLocked?: boolean,
+ *   requireFullscreen?: boolean,
  * }} options
  */
 export function useAttemptContentProtection(options = {}) {
     const mode = options.mode ?? 'off';
     const attemptId = options.attemptId ?? null;
     const trackTabLeaves = options.trackTabLeaves ?? mode !== 'off';
+    const requireFullscreen = options.requireFullscreen ?? false;
     const lockLimit = Math.max(1, options.lockLimit ?? 2);
     const strict = mode === 'strict';
     const enabled = mode !== 'off';
@@ -88,6 +91,7 @@ export function useAttemptContentProtection(options = {}) {
     );
 
     let lastLeaveAt = 0;
+    let wasFullscreen = isAttemptFullscreenActive();
 
     const preventDefault = (event) => {
         event.preventDefault();
@@ -116,23 +120,20 @@ export function useAttemptContentProtection(options = {}) {
     };
 
     const noteLeave = () => {
-        if (!trackTabLeaves || attemptLocked.value) {
-            contentHidden.value = true;
+        contentHidden.value = true;
 
+        if (!trackTabLeaves || attemptLocked.value) {
             return;
         }
 
         const now = Date.now();
-        if (now - lastLeaveAt < 800) {
-            contentHidden.value = true;
-
+        if (now - lastLeaveAt < 1000) {
             return;
         }
         lastLeaveAt = now;
 
         tabLeaveCount.value += 1;
         recordTabLeave(attemptId);
-        contentHidden.value = true;
 
         if (tabLeaveCount.value >= lockLimit) {
             attemptLocked.value = true;
@@ -142,7 +143,36 @@ export function useAttemptContentProtection(options = {}) {
     const onVisibilityChange = () => {
         if (document.hidden) {
             noteLeave();
-        } else if (!attemptLocked.value) {
+        } else if (!attemptLocked.value && (!requireFullscreen || isAttemptFullscreenActive())) {
+            contentHidden.value = false;
+        }
+    };
+
+    /** Side panels (Gemini) / other windows on the same screen. */
+    const onWindowBlur = () => {
+        if (document.hidden) {
+            return;
+        }
+
+        noteLeave();
+    };
+
+    const onWindowFocus = () => {
+        if (!attemptLocked.value && !document.hidden && (!requireFullscreen || isAttemptFullscreenActive())) {
+            contentHidden.value = false;
+        }
+    };
+
+    const onFullscreenChange = () => {
+        const active = isAttemptFullscreenActive();
+
+        if (requireFullscreen && wasFullscreen && !active) {
+            noteLeave();
+        }
+
+        wasFullscreen = active;
+
+        if (active && !attemptLocked.value && !document.hidden) {
             contentHidden.value = false;
         }
     };
@@ -161,6 +191,10 @@ export function useAttemptContentProtection(options = {}) {
         }
 
         document.addEventListener('visibilitychange', onVisibilityChange);
+        window.addEventListener('blur', onWindowBlur);
+        window.addEventListener('focus', onWindowFocus);
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
         if (blockContent) {
             document.addEventListener('copy', onCopy, true);
@@ -175,6 +209,10 @@ export function useAttemptContentProtection(options = {}) {
 
     onUnmounted(() => {
         document.removeEventListener('visibilitychange', onVisibilityChange);
+        window.removeEventListener('blur', onWindowBlur);
+        window.removeEventListener('focus', onWindowFocus);
+        document.removeEventListener('fullscreenchange', onFullscreenChange);
+        document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
         document.removeEventListener('copy', onCopy, true);
         document.removeEventListener('cut', onCopy, true);
         document.removeEventListener('paste', onPaste, true);

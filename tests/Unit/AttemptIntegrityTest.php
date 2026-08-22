@@ -30,7 +30,7 @@ class AttemptIntegrityTest extends TestCase
 
         $this->assertTrue($config['enabled']);
         $this->assertSame('strict', $config['mode']);
-        $this->assertFalse($config['require_fullscreen']);
+        $this->assertTrue($config['require_fullscreen']);
         $this->assertTrue($config['track_tab_leaves']);
     }
 
@@ -42,7 +42,7 @@ class AttemptIntegrityTest extends TestCase
 
         $this->assertTrue($config['enabled']);
         $this->assertSame('light', $config['mode']);
-        $this->assertFalse($config['require_fullscreen']);
+        $this->assertTrue($config['require_fullscreen']);
         $this->assertTrue($config['track_tab_leaves']);
     }
 

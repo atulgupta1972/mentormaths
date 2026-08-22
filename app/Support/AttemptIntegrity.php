@@ -31,7 +31,7 @@ class AttemptIntegrity
             return [
                 'enabled' => true,
                 'mode' => 'strict',
-                'require_fullscreen' => false,
+                'require_fullscreen' => true,
                 'track_tab_leaves' => true,
                 'tab_leave_lock_limit' => self::TAB_LEAVE_LOCK_LIMIT,
             ];
@@ -44,7 +44,7 @@ class AttemptIntegrity
         return [
             'enabled' => true,
             'mode' => 'light',
-            'require_fullscreen' => false,
+            'require_fullscreen' => true,
             'track_tab_leaves' => true,
             'tab_leave_lock_limit' => self::TAB_LEAVE_LOCK_LIMIT,
         ];

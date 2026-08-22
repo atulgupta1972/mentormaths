@@ -34,6 +34,7 @@ const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
 });
 
 const protectionMode = computed(() => props.integrity?.mode ?? 'off');
+const needsFullscreenGate = computed(() => props.integrity?.require_fullscreen ?? false);
 
 const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked, lockLimit } = useAttemptContentProtection({
     mode: protectionMode.value,
@@ -42,10 +43,10 @@ const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked,
     initialTabLeaveCount: props.integrity?.tab_leave_count ?? 0,
     lockLimit: props.integrity?.tab_leave_lock_limit ?? 2,
     initiallyLocked: props.integrity?.locked ?? false,
+    requireFullscreen: needsFullscreenGate.value,
 });
 
 const isTest = computed(() => props.practiceSet?.kind_label === 'Test');
-const needsFullscreenGate = computed(() => props.integrity?.require_fullscreen ?? false);
 const canShowAttempt = computed(() => !needsFullscreenGate.value || fullscreenReady.value);
 
 const form = useForm({
@@ -71,8 +72,9 @@ const allAnswered = () => props.questions.every((q) => answers.value[q.id]);
 
     <AuthenticatedLayout>
         <AttemptFullscreenGate
-            v-if="needsFullscreenGate && !fullscreenReady"
+            v-if="needsFullscreenGate"
             @ready="fullscreenReady = true"
+            @lost="fullscreenReady = false"
         />
         <AttemptLockedOverlay
             v-if="protectionEnabled && attemptLocked && canShowAttempt"

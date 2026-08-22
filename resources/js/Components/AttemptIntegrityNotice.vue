@@ -25,9 +25,10 @@ defineProps({
             {{ isTest ? 'Test mode — work on your own' : 'Practice mode — work on your own' }}
         </p>
         <p class="mt-1 text-xs leading-relaxed opacity-90">
-            Copy, paste, right-click, and text selection are disabled on questions.
-            Leaving this tab or opening another app hides the questions.
-            After {{ lockLimit }} leaves, the attempt locks and you must ask your teacher.
+            Fullscreen is required so only Mentor Maths stays on screen.
+            Copy, paste, right-click, and text selection are disabled.
+            Leaving fullscreen, switching tabs/apps, or opening side panels (Gemini) hides questions and counts as a leave.
+            After {{ lockLimit }} leaves, the attempt locks — ask your teacher.
         </p>
     </div>
 </template>

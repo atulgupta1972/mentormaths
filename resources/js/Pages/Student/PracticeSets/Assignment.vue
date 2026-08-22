@@ -32,7 +32,7 @@ const startOrContinue = async () => {
         const ok = await requestAttemptFullscreen();
 
         if (!ok) {
-            startError.value = 'Please allow fullscreen in your browser to start the test.';
+            startError.value = 'Please allow fullscreen in your browser to start. Close Gemini / other side panels first.';
 
             return;
         }
@@ -107,7 +107,7 @@ const startLabel = () => {
                         </template>
                         <template v-else>
                             Answer all questions and submit when finished.
-                            <span v-if="assignment.integrity?.require_fullscreen"> Tests open in fullscreen.</span>
+                            <span v-if="assignment.integrity?.require_fullscreen"> Opens in fullscreen — stay on this screen only.</span>
                         </template>
                     </p>
                     <p v-if="assignment.notes" class="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">

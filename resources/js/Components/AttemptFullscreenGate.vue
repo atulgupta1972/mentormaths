@@ -3,27 +3,31 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { isAttemptFullscreenActive, requestAttemptFullscreen } from '@/utils/attemptFullscreen';
 import { onMounted, onUnmounted, ref } from 'vue';
 
-const props = defineProps({
+defineProps({
     title: {
         type: String,
         default: 'Enter fullscreen to continue',
     },
     message: {
         type: String,
-        default: 'Chapter tests run in fullscreen. This helps you focus and reduces copying questions elsewhere.',
+        default: 'Stay in fullscreen so only Mentor Maths is on screen. Leaving fullscreen, other tabs, or side panels (like Gemini) counts as a leave.',
     },
 });
 
-const emit = defineEmits(['ready']);
+const emit = defineEmits(['ready', 'lost']);
 
 const needsFullscreen = ref(false);
 const errorMessage = ref('');
 
 const syncState = () => {
-    needsFullscreen.value = !isAttemptFullscreenActive();
+    const active = isAttemptFullscreenActive();
+    needsFullscreen.value = !active;
 
-    if (!needsFullscreen.value) {
+    if (active) {
+        errorMessage.value = '';
         emit('ready');
+    } else {
+        emit('lost');
     }
 };
 
@@ -32,7 +36,8 @@ const enterFullscreen = async () => {
     const ok = await requestAttemptFullscreen();
 
     if (!ok) {
-        errorMessage.value = 'Fullscreen was blocked. Allow it in your browser, or use a larger screen.';
+        errorMessage.value = 'Fullscreen was blocked. Allow it in your browser, then try again. Close side panels (Gemini / Copilot) first.';
+        syncState();
         return;
     }
 
@@ -42,17 +47,19 @@ const enterFullscreen = async () => {
 onMounted(() => {
     syncState();
     document.addEventListener('fullscreenchange', syncState);
+    document.addEventListener('webkitfullscreenchange', syncState);
 });
 
 onUnmounted(() => {
     document.removeEventListener('fullscreenchange', syncState);
+    document.removeEventListener('webkitfullscreenchange', syncState);
 });
 </script>
 
 <template>
     <div
         v-if="needsFullscreen"
-        class="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/95 p-6 text-center text-white"
+        class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/95 p-6 text-center text-white"
     >
         <div class="max-w-md space-y-4">
             <p class="text-lg font-semibold">{{ title }}</p>

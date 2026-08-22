@@ -1,5 +1,10 @@
 export function isAttemptFullscreenActive() {
-    return Boolean(document.fullscreenElement);
+    return Boolean(
+        document.fullscreenElement
+        || document.webkitFullscreenElement
+        || document.mozFullScreenElement
+        || document.msFullscreenElement,
+    );
 }
 
 export async function requestAttemptFullscreen() {
@@ -11,12 +16,20 @@ export async function requestAttemptFullscreen() {
 
     try {
         if (element.requestFullscreen) {
-            await element.requestFullscreen();
+            try {
+                await element.requestFullscreen({ navigationUI: 'hide' });
+            } catch {
+                await element.requestFullscreen();
+            }
         } else if (element.webkitRequestFullscreen) {
-            await element.webkitRequestFullscreen();
+            element.webkitRequestFullscreen();
+        } else if (element.msRequestFullscreen) {
+            element.msRequestFullscreen();
         } else {
             return false;
         }
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         return isAttemptFullscreenActive();
     } catch {
@@ -33,5 +46,7 @@ export function exitAttemptFullscreen() {
         document.exitFullscreen().catch(() => {});
     } else if (document.webkitExitFullscreen) {
         document.webkitExitFullscreen();
+    } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
     }
 }

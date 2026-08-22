@@ -6,6 +6,7 @@ import TextInput from '@/Components/TextInput.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Modal from '@/Components/Modal.vue';
+import AttemptFullscreenGate from '@/Components/AttemptFullscreenGate.vue';
 import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
 import AttemptLockedOverlay from '@/Components/AttemptLockedOverlay.vue';
 import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
@@ -41,6 +42,10 @@ const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
 });
 
 const protectionMode = computed(() => props.integrity?.mode ?? 'off');
+const needsFullscreenGate = computed(() =>
+    (props.integrity?.require_fullscreen ?? false) && !props.finished,
+);
+const fullscreenReady = ref(!needsFullscreenGate.value);
 
 const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked, lockLimit } = useAttemptContentProtection({
     mode: protectionMode.value,
@@ -49,7 +54,10 @@ const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked,
     initialTabLeaveCount: props.integrity?.tab_leave_count ?? 0,
     lockLimit: props.integrity?.tab_leave_lock_limit ?? 2,
     initiallyLocked: props.integrity?.locked ?? false,
+    requireFullscreen: needsFullscreenGate.value,
 });
+
+const canShowAttempt = computed(() => !needsFullscreenGate.value || fullscreenReady.value);
 
 const answerForm = useForm({ option_id: null, answer_text: '' });
 const giveUpForm = useForm({});
@@ -192,12 +200,19 @@ watch(
     <Head :title="setLabel()" />
 
     <AuthenticatedLayout>
+        <AttemptFullscreenGate
+            v-if="needsFullscreenGate"
+            title="Enter fullscreen for guided practice"
+            message="Stay in fullscreen so only Mentor Maths is on screen. Leaving fullscreen, other tabs, or side panels (like Gemini) counts toward the 2-leave lock."
+            @ready="fullscreenReady = true"
+            @lost="fullscreenReady = false"
+        />
         <AttemptLockedOverlay
-            v-if="protectionEnabled && attemptLocked"
+            v-if="protectionEnabled && attemptLocked && canShowAttempt"
             :tab-leave-count="tabLeaveCount"
             :lock-limit="lockLimit"
         />
-        <AttemptHiddenOverlay v-else-if="protectionEnabled && contentHidden" />
+        <AttemptHiddenOverlay v-else-if="protectionEnabled && contentHidden && canShowAttempt" />
 
         <template #header>
             <div class="flex items-center justify-between gap-3">
@@ -217,7 +232,7 @@ watch(
             </div>
         </template>
 
-        <div :class="protectionEnabled ? 'attempt-protected py-10' : 'py-10'">
+        <div v-if="canShowAttempt" :class="protectionEnabled ? 'attempt-protected py-10' : 'py-10'">
             <div class="mx-auto max-w-4xl space-y-5 sm:px-6 lg:px-8">
                 <AttemptIntegrityNotice :mode="protectionMode" :lock-limit="lockLimit" />
 
