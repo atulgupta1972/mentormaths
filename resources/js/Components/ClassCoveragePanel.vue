@@ -680,7 +680,7 @@ const startCorrection = (item) => {
                             ]"
                         >
                             <td
-                                class="px-2 py-1.5 align-middle font-medium text-slate-900 whitespace-nowrap"
+                                class="px-2 py-1 align-middle font-medium text-slate-900 whitespace-nowrap"
                                 :class="chapterRowLineClass(chapter.id)"
                             >
                                 <button
@@ -701,11 +701,15 @@ const startCorrection = (item) => {
                                 </span>
                             </td>
                             <td
-                                class="max-w-[14rem] px-2 py-1.5 align-middle text-[12px] text-slate-600"
+                                class="max-w-[12rem] px-2 py-1 align-middle text-[11px] leading-tight text-slate-600"
                                 :class="chapterRowLineClass(chapter.id)"
                                 :title="chapter.topics_label || ''"
                             >
-                                <span v-if="chapter.topics_label">{{ truncateTopics(chapter.topics_label) }}</span>
+                                <span
+                                    v-if="chapter.topics_label"
+                                    class="block max-w-full cursor-help truncate whitespace-nowrap"
+                                    :title="chapter.topics_label"
+                                >{{ truncateTopics(chapter.topics_label, 75) }}</span>
                                 <span v-else class="text-slate-400">—</span>
                             </td>
                             <td
