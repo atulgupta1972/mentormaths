@@ -3,13 +3,18 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import { formatDate, formatDateTime, formatTime } from '@/utils/dates';
 import { formatScoreLabel } from '@/utils/scores';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
-defineProps({
+const props = defineProps({
     assignment: Object,
     attempts: Array,
     latestResult: { type: Object, default: null },
+    tabLeaveLockLimit: { type: Number, default: 4 },
 });
+
+const page = usePage();
+const unlockForm = useForm({});
 
 const timingLabel = (t) => (t === 'late' ? 'Delayed submission' : t === 'on_time' ? 'On time' : '—');
 
@@ -30,6 +35,18 @@ const outcomeClass = (outcome) => {
 };
 
 const needsReview = (question) => question.outcome !== 'correct';
+
+const lockLimit = computed(() => props.tabLeaveLockLimit || 4);
+
+const unlockAttempt = (attempt) => {
+    if (!window.confirm(`Unlock attempt #${attempt.attempt_number}? Tab leaves will reset to 0 so the student can continue.`)) {
+        return;
+    }
+
+    unlockForm.post(route('admin.set-attempts.unlock', attempt.id), {
+        preserveScroll: true,
+    });
+};
 </script>
 
 <template>
@@ -48,6 +65,19 @@ const needsReview = (question) => question.outcome !== 'correct';
 
         <div class="py-12">
             <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
+                <div
+                    v-if="page.props.flash?.success"
+                    class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+                >
+                    {{ page.props.flash.success }}
+                </div>
+                <div
+                    v-if="page.props.flash?.error"
+                    class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+                >
+                    {{ page.props.flash.error }}
+                </div>
+
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div class="rounded-lg bg-white p-4 shadow-sm">
                         <p class="text-xs text-gray-500">Chapter</p>
@@ -152,6 +182,12 @@ const needsReview = (question) => question.outcome !== 'correct';
                 </div>
 
                 <div class="overflow-hidden rounded-lg bg-white shadow-sm">
+                    <div class="border-b border-gray-100 px-4 py-3">
+                        <h3 class="text-sm font-semibold text-gray-900">Attempts</h3>
+                        <p class="mt-0.5 text-xs text-gray-500">
+                            Locked after {{ lockLimit }} tab/app leaves. Click Unlock to reset leaves so the student can continue.
+                        </p>
+                    </div>
                     <table class="min-w-full text-sm">
                         <thead class="bg-gray-50">
                             <tr>
@@ -161,6 +197,7 @@ const needsReview = (question) => question.outcome !== 'correct';
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Submitted</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Tab leaves</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Timing</th>
+                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
@@ -174,14 +211,14 @@ const needsReview = (question) => question.outcome !== 'correct';
                                 <td class="px-4 py-3">{{ att.completed_at ? formatDateTime(att.completed_at) : '—' }}</td>
                                 <td class="px-4 py-3">
                                     <span
-                                        :class="(att.tab_leave_count ?? 0) >= 2
+                                        :class="att.locked
                                             ? 'font-semibold text-rose-700'
                                             : att.tab_leave_count > 0
                                                 ? 'font-medium text-amber-700'
                                                 : 'text-gray-500'"
                                     >
-                                        {{ att.tab_leave_count ?? 0 }}
-                                        <span v-if="(att.tab_leave_count ?? 0) >= 2" class="ml-1 text-xs uppercase">locked</span>
+                                        {{ att.tab_leave_count ?? 0 }}/{{ att.tab_leave_lock_limit || lockLimit }}
+                                        <span v-if="att.locked" class="ml-1 text-xs uppercase">locked</span>
                                     </span>
                                 </td>
                                 <td class="px-4 py-3">
@@ -189,9 +226,21 @@ const needsReview = (question) => question.outcome !== 'correct';
                                         {{ timingLabel(att.submission_timing) }}
                                     </span>
                                 </td>
+                                <td class="px-4 py-3">
+                                    <button
+                                        v-if="att.can_unlock"
+                                        type="button"
+                                        class="rounded-md bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                                        :disabled="unlockForm.processing"
+                                        @click="unlockAttempt(att)"
+                                    >
+                                        Unlock
+                                    </button>
+                                    <span v-else class="text-gray-400">—</span>
+                                </td>
                             </tr>
                             <tr v-if="attempts.length === 0">
-                                <td colspan="6" class="px-4 py-6 text-center text-gray-500">No attempts yet.</td>
+                                <td colspan="7" class="px-4 py-6 text-center text-gray-500">No attempts yet.</td>
                             </tr>
                         </tbody>
                     </table>

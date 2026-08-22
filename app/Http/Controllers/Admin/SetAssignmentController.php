@@ -8,8 +8,10 @@ use App\Models\SetAttempt;
 use App\Models\Student;
 use App\Models\Worksheet;
 use App\Services\SetAssignmentService;
+use App\Services\SetAttemptService;
 use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
+use App\Support\AttemptIntegrity;
 use App\Support\AttemptResultSummary;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +20,10 @@ use Inertia\Response;
 
 class SetAssignmentController extends Controller
 {
-    public function __construct(private SetAssignmentService $assignmentService) {}
+    public function __construct(
+        private SetAssignmentService $assignmentService,
+        private SetAttemptService $attemptService,
+    ) {}
 
     public function show(SetAssignment $assignment): Response|RedirectResponse
     {
@@ -50,20 +55,44 @@ class SetAssignmentController extends Controller
                 'student_name' => $assignment->enrollment->student->name,
                 'assigned_by' => $assignment->assigner?->name,
             ],
-            'attempts' => $assignment->attempts->map(fn ($a) => [
-                'id' => $a->id,
-                'attempt_number' => $a->attempt_number,
-                'status' => $a->status,
-                'score' => $a->score,
-                'max_score' => $a->max_score,
-                'time_seconds' => $a->time_seconds,
-                'submission_timing' => $a->submission_timing,
-                'tab_leave_count' => $a->tab_leave_count ?? 0,
-                'started_at' => $a->started_at?->toDateTimeString(),
-                'completed_at' => $a->completed_at?->toDateTimeString(),
-            ]),
+            'attempts' => $assignment->attempts->map(function ($a) {
+                $locked = AttemptIntegrity::isLocked($a);
+
+                return [
+                    'id' => $a->id,
+                    'attempt_number' => $a->attempt_number,
+                    'status' => $a->status,
+                    'score' => $a->score,
+                    'max_score' => $a->max_score,
+                    'time_seconds' => $a->time_seconds,
+                    'submission_timing' => $a->submission_timing,
+                    'tab_leave_count' => $a->tab_leave_count ?? 0,
+                    'tab_leave_lock_limit' => AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT,
+                    'locked' => $locked,
+                    'can_unlock' => $locked && $a->status === SetAttempt::STATUS_IN_PROGRESS,
+                    'started_at' => $a->started_at?->toDateTimeString(),
+                    'completed_at' => $a->completed_at?->toDateTimeString(),
+                ];
+            }),
             'latestResult' => $latestSummary,
+            'tabLeaveLockLimit' => AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT,
         ]);
+    }
+
+    public function unlockAttempt(SetAttempt $attempt): RedirectResponse
+    {
+        $assignment = $attempt->assignment;
+        abort_unless($assignment, 404);
+
+        if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS) {
+            return back()->with('error', 'Only an in-progress attempt can be unlocked.');
+        }
+
+        $this->attemptService->unlockIntegrityLock($attempt);
+
+        return redirect()
+            ->route('admin.set-assignments.show', $assignment)
+            ->with('success', "Attempt #{$attempt->attempt_number} unlocked. Tab leaves reset to 0 — student can continue.");
     }
 
     public function store(Request $request, Worksheet $worksheet): RedirectResponse

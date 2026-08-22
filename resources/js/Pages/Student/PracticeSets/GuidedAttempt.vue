@@ -52,7 +52,7 @@ const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked,
     attemptId: props.attempt?.id,
     trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
     initialTabLeaveCount: props.integrity?.tab_leave_count ?? 0,
-    lockLimit: props.integrity?.tab_leave_lock_limit ?? 2,
+    lockLimit: props.integrity?.tab_leave_lock_limit ?? 4,
     initiallyLocked: props.integrity?.locked ?? false,
     requireFullscreen: needsFullscreenGate.value,
 });

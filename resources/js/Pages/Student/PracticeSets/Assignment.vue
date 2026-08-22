@@ -137,10 +137,19 @@ const startLabel = () => {
                         <template v-else>
                             Answer all questions and submit when finished.
                         </template>
-                        <span v-if="assignment.integrity?.require_fullscreen">
-                            Starts in fullscreen automatically — stay on this screen only.
-                        </span>
                     </p>
+
+                    <div
+                        v-if="assignment.integrity?.track_tab_leaves || assignment.integrity?.require_fullscreen"
+                        class="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                    >
+                        <p class="font-semibold">Do not switch tabs or apps</p>
+                        <p class="mt-1 text-xs leading-relaxed text-amber-900/90">
+                            Complete this {{ kindLabel().toLowerCase() }} without leaving Mentor Maths.
+                            Stay in fullscreen. Do not open Gemini, ChatGPT, or other tabs.
+                            After {{ assignment.integrity?.tab_leave_lock_limit || 4 }} leaves, the attempt locks and your teacher must unlock it.
+                        </p>
+                    </div>
                     <p v-if="assignment.notes" class="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">
                         Teacher note: {{ assignment.notes }}
                     </p>

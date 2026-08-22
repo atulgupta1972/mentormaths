@@ -6,7 +6,7 @@ defineProps({
     },
     lockLimit: {
         type: Number,
-        default: 2,
+        default: 4,
     },
 });
 </script>
@@ -21,10 +21,10 @@ defineProps({
             <p class="text-lg font-semibold">Attempt locked</p>
             <p class="text-sm text-white/90">
                 You left this page {{ tabLeaveCount }} time{{ tabLeaveCount === 1 ? '' : 's' }}
-                (limit {{ lockLimit }}). Questions stay locked so AI or other tabs cannot be used during the attempt.
+                (limit {{ lockLimit }}). Ask your teacher to unlock this attempt so you can continue.
             </p>
             <p class="text-xs text-white/70">
-                Ask your teacher to unlock or reassign this set.
+                Teacher path: open this assignment → Attempts → Unlock.
             </p>
         </div>
     </div>

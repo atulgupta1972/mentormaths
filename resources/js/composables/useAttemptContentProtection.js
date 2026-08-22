@@ -78,7 +78,7 @@ export function useAttemptContentProtection(options = {}) {
     const attemptId = options.attemptId ?? null;
     const trackTabLeaves = options.trackTabLeaves ?? mode !== 'off';
     const requireFullscreen = options.requireFullscreen ?? false;
-    const lockLimit = Math.max(1, options.lockLimit ?? 2);
+    const lockLimit = Math.max(1, options.lockLimit ?? 4);
     const strict = mode === 'strict';
     const enabled = mode !== 'off';
     const blockContent = enabled;

@@ -8,7 +8,7 @@ use App\Models\StudentEnrollment;
 class AttemptIntegrity
 {
     /** After this many tab/app switches, the attempt is locked. */
-    public const TAB_LEAVE_LOCK_LIMIT = 2;
+    public const TAB_LEAVE_LOCK_LIMIT = 4;
 
     /**
      * @return array{

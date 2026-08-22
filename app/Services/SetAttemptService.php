@@ -78,6 +78,13 @@ class SetAttemptService
         return $attempt->fresh();
     }
 
+    public function unlockIntegrityLock(SetAttempt $attempt): SetAttempt
+    {
+        $attempt->update(['tab_leave_count' => 0]);
+
+        return $attempt->fresh();
+    }
+
     public function assertNotIntegrityLocked(SetAttempt $attempt): void
     {
         $attempt->loadMissing('assignment.enrollment.gradeLevel', 'assignment.practiceSet');
@@ -85,7 +92,7 @@ class SetAttemptService
         if (AttemptIntegrity::isLocked($attempt)) {
             throw new \InvalidArgumentException(
                 'This attempt is locked after '.AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT
-                .' tab switches. Ask your teacher to unlock or reassign.'
+                .' tab switches. Ask your teacher to unlock it from the assignment page.'
             );
         }
     }
