@@ -67,6 +67,7 @@ function recordTabLeave(attemptId) {
  *   mode?: 'strict'|'light'|'off',
  *   attemptId?: number|null,
  *   trackTabLeaves?: boolean,
+ *   locksOnTabLeaves?: boolean,
  *   initialTabLeaveCount?: number,
  *   lockLimit?: number,
  *   initiallyLocked?: boolean,
@@ -77,6 +78,7 @@ export function useAttemptContentProtection(options = {}) {
     const mode = options.mode ?? 'off';
     const attemptId = options.attemptId ?? null;
     const trackTabLeaves = options.trackTabLeaves ?? mode !== 'off';
+    const locksOnTabLeaves = options.locksOnTabLeaves ?? mode === 'strict';
     const requireFullscreen = options.requireFullscreen ?? false;
     const lockLimit = Math.max(1, options.lockLimit ?? 4);
     const strict = mode === 'strict';
@@ -87,10 +89,11 @@ export function useAttemptContentProtection(options = {}) {
     const tabLeaveCount = ref(options.initialTabLeaveCount ?? 0);
     const attemptLocked = ref(
         options.initiallyLocked
-            ?? (trackTabLeaves && (options.initialTabLeaveCount ?? 0) >= lockLimit),
+            ?? (locksOnTabLeaves && trackTabLeaves && (options.initialTabLeaveCount ?? 0) >= lockLimit),
     );
 
     let lastLeaveAt = 0;
+    let leaveTrackingSuspended = false;
     let wasFullscreen = isAttemptFullscreenActive();
 
     const preventDefault = (event) => {
@@ -122,12 +125,12 @@ export function useAttemptContentProtection(options = {}) {
     const noteLeave = () => {
         contentHidden.value = true;
 
-        if (!trackTabLeaves || attemptLocked.value) {
+        if (!trackTabLeaves || attemptLocked.value || leaveTrackingSuspended) {
             return;
         }
 
         const now = Date.now();
-        if (now - lastLeaveAt < 1000) {
+        if (now - lastLeaveAt < 1500) {
             return;
         }
         lastLeaveAt = now;
@@ -135,8 +138,33 @@ export function useAttemptContentProtection(options = {}) {
         tabLeaveCount.value += 1;
         recordTabLeave(attemptId);
 
-        if (tabLeaveCount.value >= lockLimit) {
+        if (locksOnTabLeaves && tabLeaveCount.value >= lockLimit) {
             attemptLocked.value = true;
+        }
+    };
+
+    const suspendLeaveTracking = () => {
+        leaveTrackingSuspended = true;
+    };
+
+    const resumeLeaveTracking = () => {
+        // Ignore blur/focus churn from native confirm() closing.
+        leaveTrackingSuspended = true;
+        window.setTimeout(() => {
+            leaveTrackingSuspended = false;
+            lastLeaveAt = Date.now();
+        }, 800);
+    };
+
+    /**
+     * Run a native confirm without counting the dialog blur as a tab leave.
+     */
+    const confirmWithoutLeave = (message) => {
+        suspendLeaveTracking();
+        try {
+            return window.confirm(message);
+        } finally {
+            resumeLeaveTracking();
         }
     };
 
@@ -150,7 +178,7 @@ export function useAttemptContentProtection(options = {}) {
 
     /** Side panels (Gemini) / other windows on the same screen. */
     const onWindowBlur = () => {
-        if (document.hidden) {
+        if (document.hidden || leaveTrackingSuspended) {
             return;
         }
 
@@ -229,5 +257,8 @@ export function useAttemptContentProtection(options = {}) {
         lockLimit,
         enabled,
         strict,
+        confirmWithoutLeave,
+        suspendLeaveTracking,
+        resumeLeaveTracking,
     };
 }

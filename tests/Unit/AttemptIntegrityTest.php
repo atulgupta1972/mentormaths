@@ -32,6 +32,7 @@ class AttemptIntegrityTest extends TestCase
         $this->assertSame('strict', $config['mode']);
         $this->assertTrue($config['require_fullscreen']);
         $this->assertTrue($config['track_tab_leaves']);
+        $this->assertTrue($config['locks_on_tab_leaves']);
     }
 
     public function test_practice_attempts_use_light_mode_when_class_protection_enabled(): void
@@ -44,6 +45,23 @@ class AttemptIntegrityTest extends TestCase
         $this->assertSame('light', $config['mode']);
         $this->assertTrue($config['require_fullscreen']);
         $this->assertTrue($config['track_tab_leaves']);
+        $this->assertFalse($config['locks_on_tab_leaves']);
+    }
+
+    public function test_practice_attempts_do_not_lock_on_tab_leaves(): void
+    {
+        [$enrollment, $assignment] = $this->seedEnrollmentWithAssignment(isTest: false);
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_GUIDED,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+            'tab_leave_count' => 8,
+        ]);
+
+        $this->assertFalse(AttemptIntegrity::isLocked($attempt->fresh()));
     }
 
     public function test_class_can_disable_protection_per_mode(): void
@@ -184,14 +202,14 @@ class AttemptIntegrityTest extends TestCase
     /**
      * @return array{0: StudentEnrollment, 1: SetAssignment}
      */
-    private function seedEnrollmentWithAssignment(): array
+    private function seedEnrollmentWithAssignment(bool $isTest = true): array
     {
         [$enrollment] = $this->seedEnrollment(true, true);
 
         $worksheet = Worksheet::query()->create([
-            'title' => 'Test set',
+            'title' => $isTest ? 'Test set' : 'Practice set',
             'set_number' => 1,
-            'set_code' => 'T701',
+            'set_code' => $isTest ? 'T701' : 'M701',
             'tier' => PracticeSetTier::STARTER,
             'scope' => PracticeSetScope::CHAPTER,
             'status' => Worksheet::STATUS_PUBLISHED,

@@ -47,10 +47,11 @@ const needsFullscreenGate = computed(() =>
 );
 const fullscreenReady = ref(!needsFullscreenGate.value);
 
-const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked, lockLimit } = useAttemptContentProtection({
+const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked, lockLimit, confirmWithoutLeave } = useAttemptContentProtection({
     mode: protectionMode.value,
     attemptId: props.attempt?.id,
     trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
+    locksOnTabLeaves: props.integrity?.locks_on_tab_leaves ?? (protectionMode.value === 'strict'),
     initialTabLeaveCount: props.integrity?.tab_leave_count ?? 0,
     lockLimit: props.integrity?.tab_leave_lock_limit ?? 4,
     initiallyLocked: props.integrity?.locked ?? false,
@@ -150,7 +151,7 @@ const submitBlankAnswer = () => {
 };
 
 const requestHelp = () => {
-    if (!confirm('Ask your teacher for help on this sum? It goes on your help list and you move to the next question.')) {
+    if (!confirmWithoutLeave('Ask your teacher for help on this sum? It goes on your help list and you move to the next question.')) {
         return;
     }
 
@@ -160,7 +161,7 @@ const requestHelp = () => {
 };
 
 const requestHint = () => {
-    if (!confirm(
+    if (!confirmWithoutLeave(
         'Show the method hint?\n\nYou can still answer this sum, but it will NOT count toward your first-try score.\n\nTap Cancel to keep trying on your own.',
     )) {
         return;
@@ -203,7 +204,7 @@ watch(
         <AttemptFullscreenGate
             v-if="needsFullscreenGate"
             title="Enter fullscreen for guided practice"
-            message="Stay in fullscreen so only Mentor Maths is on screen. Leaving fullscreen, other tabs, or side panels (like Gemini) counts toward the 2-leave lock."
+            message="Stay in fullscreen so only Mentor Maths is on screen. Do not switch tabs or open other apps — your teacher is informed of each leave."
             @ready="fullscreenReady = true"
             @lost="fullscreenReady = false"
         />

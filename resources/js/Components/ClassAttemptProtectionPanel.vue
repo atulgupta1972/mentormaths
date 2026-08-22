@@ -27,8 +27,9 @@ const submit = () => {
         <h3 class="text-sm font-semibold text-gray-900">Attempt protection</h3>
         <p class="mt-1 text-xs text-gray-600">
             Control anti-copy, fullscreen, and tab-leave tracking for this class.
-            Students must stay in fullscreen; leaving 4 times locks the attempt.
+            Students must stay in fullscreen. Tests lock after too many leaves.
             Unlock from Dashboard → Locked students (or the assignment page).
+            Practice tracks leaves for the teacher but does not lock (so “I need help” always works).
         </p>
 
         <form class="mt-4 space-y-3" @submit.prevent="submit">
@@ -38,7 +39,7 @@ const submit = () => {
                     @update:checked="form.protect_test_attempts = $event"
                 />
                 <span>
-                    <strong>Chapter tests</strong> — fullscreen + copy blocked; lock after 4 leaves
+                    <strong>Chapter tests</strong> — fullscreen + copy blocked; lock after too many leaves
                 </span>
             </label>
 
@@ -48,7 +49,7 @@ const submit = () => {
                     @update:checked="form.protect_practice_attempts = $event"
                 />
                 <span>
-                    <strong>Guided practice</strong> — fullscreen + copy blocked; lock after 4 leaves
+                    <strong>Guided practice</strong> — fullscreen + copy blocked; leaves tracked (no lock)
                 </span>
             </label>
 

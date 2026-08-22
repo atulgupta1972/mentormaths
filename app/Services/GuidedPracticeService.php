@@ -295,8 +295,6 @@ class GuidedPracticeService
             throw new \InvalidArgumentException('This guided practice session is not active.');
         }
 
-        $this->assertNotIntegrityLocked($attempt);
-
         $attempt->loadMissing(['guidedQuestions', 'assignment']);
         $current = $attempt->guidedQuestions->firstWhere('sort_order', $attempt->current_question_index);
 
@@ -336,8 +334,7 @@ class GuidedPracticeService
             throw new \InvalidArgumentException('This guided practice session is not active.');
         }
 
-        $this->assertNotIntegrityLocked($attempt);
-
+        // Asking for teacher help must always work — even if a test attempt was locked.
         $attempt->loadMissing(['guidedQuestions', 'assignment']);
         $current = $attempt->guidedQuestions->firstWhere('sort_order', $attempt->current_question_index);
 

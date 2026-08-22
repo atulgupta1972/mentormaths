@@ -16,6 +16,7 @@ class AttemptIntegrity
      *     mode: 'strict'|'light'|'off',
      *     require_fullscreen: bool,
      *     track_tab_leaves: bool,
+     *     locks_on_tab_leaves: bool,
      *     tab_leave_lock_limit: int
      * }
      */
@@ -33,6 +34,8 @@ class AttemptIntegrity
                 'mode' => 'strict',
                 'require_fullscreen' => true,
                 'track_tab_leaves' => true,
+                // Tests lock after too many leaves; practice only tracks for the teacher.
+                'locks_on_tab_leaves' => true,
                 'tab_leave_lock_limit' => self::TAB_LEAVE_LOCK_LIMIT,
             ];
         }
@@ -46,6 +49,7 @@ class AttemptIntegrity
             'mode' => 'light',
             'require_fullscreen' => true,
             'track_tab_leaves' => true,
+            'locks_on_tab_leaves' => false,
             'tab_leave_lock_limit' => self::TAB_LEAVE_LOCK_LIMIT,
         ];
     }
@@ -56,6 +60,10 @@ class AttemptIntegrity
             $attempt->loadMissing('assignment.enrollment.gradeLevel', 'assignment.practiceSet');
             $isTest = (bool) $attempt->assignment?->practiceSet?->isChapterTest();
             $config = self::configFor($attempt->assignment?->enrollment, $isTest);
+        }
+
+        if (! ($config['locks_on_tab_leaves'] ?? false)) {
+            return false;
         }
 
         if (! ($config['track_tab_leaves'] ?? false)) {
@@ -73,6 +81,7 @@ class AttemptIntegrity
      *     mode: 'strict'|'light'|'off',
      *     require_fullscreen: bool,
      *     track_tab_leaves: bool,
+     *     locks_on_tab_leaves: bool,
      *     tab_leave_lock_limit: int,
      *     tab_leave_count: int,
      *     locked: bool
@@ -88,13 +97,12 @@ class AttemptIntegrity
         return [
             ...$config,
             'tab_leave_count' => $count,
-            'locked' => ($config['track_tab_leaves'] ?? false)
-                && $count >= (int) ($config['tab_leave_lock_limit'] ?? self::TAB_LEAVE_LOCK_LIMIT),
+            'locked' => self::isLocked($attempt, $config),
         ];
     }
 
     /**
-     * @return array{enabled: bool, mode: 'off', require_fullscreen: bool, track_tab_leaves: bool, tab_leave_lock_limit: int}
+     * @return array{enabled: bool, mode: 'off', require_fullscreen: bool, track_tab_leaves: bool, locks_on_tab_leaves: bool, tab_leave_lock_limit: int}
      */
     private static function disabled(): array
     {
@@ -103,6 +111,7 @@ class AttemptIntegrity
             'mode' => 'off',
             'require_fullscreen' => false,
             'track_tab_leaves' => false,
+            'locks_on_tab_leaves' => false,
             'tab_leave_lock_limit' => self::TAB_LEAVE_LOCK_LIMIT,
         ];
     }
