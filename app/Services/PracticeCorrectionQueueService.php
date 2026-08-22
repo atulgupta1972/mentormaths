@@ -6,6 +6,7 @@ use App\Models\ExamPlan;
 use App\Models\GuidedAttemptQuestion;
 use App\Models\PracticeCorrectionItem;
 use App\Models\Question;
+use App\Models\QuestionIssueReport;
 use App\Models\SetAttempt;
 use App\Models\Student;
 use App\Models\WrittenSubmission;
@@ -113,6 +114,10 @@ class PracticeCorrectionQueueService
             return;
         }
 
+        if ($guided->reported_issue || $guided->phase === GuidedAttemptQuestion::PHASE_REPORTED_ISSUE) {
+            return;
+        }
+
         $context = $this->attemptContext($attempt);
 
         if ($context === null) {
@@ -183,6 +188,19 @@ class PracticeCorrectionQueueService
                 continue;
             }
 
+            if (QuestionIssueReport::query()
+                ->where('set_attempt_id', $attempt->id)
+                ->where('question_id', $answer->question_id)
+                ->whereIn('status', [
+                    QuestionIssueReport::STATUS_PENDING_ADMIN,
+                    QuestionIssueReport::STATUS_AWAITING_REATTEMPT,
+                    QuestionIssueReport::STATUS_CLEARED,
+                    QuestionIssueReport::STATUS_DISMISSED,
+                ])
+                ->exists()) {
+                continue;
+            }
+
             $this->recordPending([
                 'student_id' => $context['student_id'],
                 'question_id' => $answer->question_id,
@@ -234,6 +252,22 @@ class PracticeCorrectionQueueService
                 'corrected_at' => now(),
                 'corrected_in' => $correctedIn,
             ]);
+
+        app(QuestionIssueReportService::class)
+            ->clearAwaitingForStudentQuestion($studentId, $questionId);
+    }
+
+    /**
+     * Queue a sum after admin fixed a misprint so the student must attempt it again.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function recordContentFixedPending(array $data): PracticeCorrectionItem
+    {
+        $data['source_type'] = $data['source_type'] ?? PracticeCorrectionItem::SOURCE_CONTENT_FIXED;
+        $data['failure_reason'] = PracticeCorrectionItem::REASON_CONTENT_FIXED;
+
+        return $this->recordPending($data);
     }
 
     /**

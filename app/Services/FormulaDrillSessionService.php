@@ -460,6 +460,42 @@ class FormulaDrillSessionService
     }
 
     /**
+     * Skip a drill item flagged as misprint/incomplete — does not count as a wrong.
+     *
+     * @return array{issue_reported: bool, session_complete: bool, session: array<string, mixed>}
+     */
+    public function skipItemAsContentIssue(FormulaDrillSession $session, FormulaDrillItem $item): array
+    {
+        if ($item->formula_drill_session_id !== $session->id || $item->isDone()) {
+            throw new \InvalidArgumentException('This question is already completed.');
+        }
+
+        $item->update([
+            'status' => FormulaDrillItem::STATUS_REPORTED_ISSUE,
+            'completed_at' => now(),
+        ]);
+
+        $session->increment('questions_completed');
+        $session->refresh()->load(['items.question.options', 'items.question.blankAnswer']);
+
+        $sessionComplete = $session->questions_completed >= $session->questions_total;
+
+        if ($sessionComplete) {
+            $session->update([
+                'status' => FormulaDrillSession::STATUS_COMPLETED,
+                'completed_at' => now(),
+            ]);
+        }
+
+        return [
+            'issue_reported' => true,
+            'session_complete' => $sessionComplete,
+            'session' => $this->sessionPayload($session),
+            'message' => 'Thanks — this sum was sent to your teacher. No marks were lost. You will try it again after it is fixed.',
+        ];
+    }
+
+    /**
      * @return array{correct: bool, exhausted: bool, attempts_left: int, correct_option_id: ?int, correct_answer: ?string, session_complete: bool}
      */
     private function advanceSession(

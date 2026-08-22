@@ -107,12 +107,18 @@ class SetAttemptService
 
         $assignment = $attempt->assignment()->with('practiceSet.questions.options')->first();
         $questions = $assignment->practiceSet->questions->keyBy('id');
+        $reportedIds = app(QuestionIssueReportService::class)->reportedQuestionIdsForAttempt($attempt);
 
-        return DB::transaction(function () use ($attempt, $answers, $assignment, $questions) {
+        return DB::transaction(function () use ($attempt, $answers, $assignment, $questions, $reportedIds) {
             $score = 0;
-            $maxScore = $questions->count();
+            $maxScore = 0;
 
             foreach ($questions as $question) {
+                if (in_array((int) $question->id, $reportedIds, true)) {
+                    continue;
+                }
+
+                $maxScore++;
                 $selectedOptionId = $answers[$question->id] ?? null;
                 $isCorrect = false;
 

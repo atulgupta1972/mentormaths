@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\ClassHubController;
 use App\Http\Controllers\Admin\ContentCoverageController;
 use App\Http\Controllers\Admin\ContentFinanceController;
 use App\Http\Controllers\Admin\ContentRateCardController;
+use App\Http\Controllers\Admin\QuestionIssueReportController;
 use App\Http\Controllers\Admin\ContentUploadTaskController;
 use App\Http\Controllers\Admin\ExamPlanController as AdminExamPlanController;
 use App\Http\Controllers\Admin\FormulaBankController;
@@ -388,6 +389,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
     Route::post('/content-tasks/{contentTask}/return-for-reverification', [ContentUploadTaskController::class, 'returnForReverification'])->name('content-tasks.return-for-reverification');
     Route::post('/help-requests/{item}/return-to-uploader', [ContentUploadTaskController::class, 'returnHelpRequestQuestion'])->name('help-requests.return-to-uploader');
+    Route::post('/question-issue-reports/{report}/mark-fixed', [QuestionIssueReportController::class, 'markFixed'])->name('question-issue-reports.mark-fixed');
+    Route::post('/question-issue-reports/{report}/dismiss', [QuestionIssueReportController::class, 'dismiss'])->name('question-issue-reports.dismiss');
     Route::post('/content-tasks/{contentTask}/publish', [ContentUploadTaskController::class, 'publish'])->name('content-tasks.publish');
     Route::post('/content-tasks/{contentTask}/conversion-clear-rows', [ContentUploadTaskController::class, 'clearConversionRows'])->name('content-tasks.conversion-clear-rows');
     Route::post('/content-tasks/{contentTask}/conversion-clear-all', [ContentUploadTaskController::class, 'clearAllConversionRows'])->name('content-tasks.conversion-clear-all');
@@ -421,6 +424,7 @@ Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->nam
     Route::get('/formula-drill', [FormulaDrillController::class, 'show'])->name('formula-drill.show');
     Route::post('/formula-drill/items/{item}/answer', [FormulaDrillController::class, 'submitAnswer'])->name('formula-drill.answer');
     Route::post('/formula-drill/items/{item}/request-help', [FormulaDrillController::class, 'requestTeacherHelp'])->name('formula-drill.request-help');
+    Route::post('/formula-drill/items/{item}/report-issue', [FormulaDrillController::class, 'reportIssue'])->name('formula-drill.report-issue');
     Route::get('/basics-drill', [BasicsDrillController::class, 'show'])->name('basics-drill.show');
     Route::post('/basics-drill/sessions/{session}/start', [BasicsDrillController::class, 'start'])->name('basics-drill.start');
     Route::post('/basics-drill/items/{item}/answer', [BasicsDrillController::class, 'submitAnswer'])->name('basics-drill.answer');
@@ -450,6 +454,8 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
     Route::post('/attempts/{attempt}/guided/answer', [StudentPracticeSetController::class, 'guidedAnswer'])->name('attempts.guided.answer');
     Route::post('/attempts/{attempt}/guided/request-hint', [StudentPracticeSetController::class, 'guidedRequestHint'])->name('attempts.guided.request-hint');
     Route::post('/attempts/{attempt}/guided/give-up', [StudentPracticeSetController::class, 'guidedGiveUp'])->name('attempts.guided.give-up');
+    Route::post('/attempts/{attempt}/guided/report-issue', [StudentPracticeSetController::class, 'guidedReportIssue'])->name('attempts.guided.report-issue');
+    Route::post('/attempts/{attempt}/report-issue', [StudentPracticeSetController::class, 'reportBatchIssue'])->name('attempts.report-issue');
     Route::post('/attempts/{attempt}/timing/pause', [StudentPracticeSetController::class, 'pauseAttemptTiming'])->name('attempts.timing.pause');
     Route::post('/attempts/{attempt}/timing/resume', [StudentPracticeSetController::class, 'resumeAttemptTiming'])->name('attempts.timing.resume');
     Route::post('/attempts/{attempt}/timing/heartbeat', [StudentPracticeSetController::class, 'heartbeatAttemptTiming'])->name('attempts.timing.heartbeat');

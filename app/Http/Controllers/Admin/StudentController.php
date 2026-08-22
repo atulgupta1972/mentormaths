@@ -10,6 +10,7 @@ use App\Models\GradeLevel;
 use App\Models\Student;
 use App\Services\AdminGradeContext;
 use App\Services\ExamPlanService;
+use App\Services\QuestionIssueReportService;
 use App\Services\QuestionResolutionService;
 use App\Services\StudentAccountService;
 use App\Services\FormulaDrillReportService;
@@ -41,6 +42,7 @@ class StudentController extends Controller
         private AdminGradeContext $gradeContext,
         private ExamPlanService $examPlanService,
         private QuestionResolutionService $resolutionService,
+        private QuestionIssueReportService $issueReports,
         private StudentProgressSummaryService $progressSummaryService,
         private StudentProgressWhatsAppService $progressWhatsAppService,
         private StudentNotificationContactService $notificationContactService,
@@ -178,6 +180,7 @@ class StudentController extends Controller
             'helpRequestsCount' => $resolutionEnrollment
                 ? $this->resolutionService->pendingCountForEnrollment($resolutionEnrollment->id)
                 : 0,
+            'questionIssueReports' => $this->issueReports->pendingForStudent($student->id),
             'defaultSummaryEmail' => AssignmentMailer::resolveStudentEmail($student),
             'summaryEmailRecipients' => $this->notificationEmailService->recipientsForStudent($student),
             'whatsappRecipientCount' => count($this->notificationContactService->recipientsForStudent($student)),

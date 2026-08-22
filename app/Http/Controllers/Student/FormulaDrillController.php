@@ -82,4 +82,27 @@ class FormulaDrillController extends Controller
 
         return response()->json($result);
     }
+
+    public function reportIssue(Request $request, FormulaDrillItem $item): JsonResponse
+    {
+        $student = $request->user()->student;
+
+        abort_unless($student, 403);
+
+        $session = $this->sessionService->todaysSession($student);
+
+        abort_unless($session && ! $session->isComplete(), 422, 'Today\'s formula drill is already complete.');
+
+        abort_unless($item->formula_drill_session_id === $session->id, 403);
+        abort_unless($session->student_id === $student->id, 403);
+
+        try {
+            $result = app(\App\Services\QuestionIssueReportService::class)
+                ->reportFromFormulaDrill($student, $item, $this->sessionService);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($result);
+    }
 }

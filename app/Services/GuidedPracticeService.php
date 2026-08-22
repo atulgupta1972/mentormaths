@@ -187,6 +187,11 @@ class GuidedPracticeService
                 GuidedAttemptQuestion::PHASE_RETRY,
                 GuidedAttemptQuestion::PHASE_EXPLAINED,
             ], true),
+            'can_report_issue' => in_array($current->phase, [
+                GuidedAttemptQuestion::PHASE_ANSWERING,
+                GuidedAttemptQuestion::PHASE_RETRY,
+                GuidedAttemptQuestion::PHASE_EXPLAINED,
+            ], true),
             'can_show_hint' => in_array($current->phase, [
                 GuidedAttemptQuestion::PHASE_ANSWERING,
                 GuidedAttemptQuestion::PHASE_RETRY,
@@ -369,6 +374,14 @@ class GuidedPracticeService
     }
 
     /**
+     * Advance after a student reports a misprint (called from QuestionIssueReportService).
+     */
+    public function advanceAfterIssueReport(SetAttempt $attempt): void
+    {
+        $this->advanceOrFinalize($attempt);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function handleFirstTry(GuidedAttemptQuestion $current, ?int $optionId, ?string $answerText, bool $isCorrect): array
@@ -480,12 +493,18 @@ class GuidedPracticeService
         $attempt->loadMissing(['guidedQuestions', 'assignment']);
 
         $rows = $attempt->guidedQuestions;
-        $firstTryCorrect = $rows->where('first_try_correct', true)->count();
-        $correctedAfterHelp = $rows->where('corrected_after_help', true)->count();
-        $givenUp = $rows->where('gave_up', true)->count();
-        $maxScore = $rows->count();
+        $scorable = $rows->filter(fn (GuidedAttemptQuestion $row) => ! $row->reported_issue
+            && $row->phase !== GuidedAttemptQuestion::PHASE_REPORTED_ISSUE);
+        $firstTryCorrect = $scorable->where('first_try_correct', true)->count();
+        $correctedAfterHelp = $scorable->where('corrected_after_help', true)->count();
+        $givenUp = $scorable->where('gave_up', true)->count();
+        $maxScore = $scorable->count();
 
         foreach ($rows as $row) {
+            if ($row->reported_issue || $row->phase === GuidedAttemptQuestion::PHASE_REPORTED_ISSUE) {
+                continue;
+            }
+
             SetAttemptAnswer::updateOrCreate(
                 [
                     'set_attempt_id' => $attempt->id,

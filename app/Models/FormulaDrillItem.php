@@ -17,6 +17,8 @@ class FormulaDrillItem extends Model
 
     public const STATUS_HELP_REQUESTED = 'help_requested';
 
+    public const STATUS_REPORTED_ISSUE = 'reported_issue';
+
     public const ROUND_MAIN = 'main';
 
     public const ROUND_CORRECTION = 'correction';
@@ -57,7 +59,10 @@ class FormulaDrillItem extends Model
 
     public function needsEndCorrection(): bool
     {
-        if ($this->status === self::STATUS_HELP_REQUESTED) {
+        if (in_array($this->status, [
+            self::STATUS_HELP_REQUESTED,
+            self::STATUS_REPORTED_ISSUE,
+        ], true)) {
             return false;
         }
 
@@ -71,6 +76,7 @@ class FormulaDrillItem extends Model
             self::STATUS_FAILED,
             self::STATUS_EXHAUSTED,
             self::STATUS_HELP_REQUESTED,
+            self::STATUS_REPORTED_ISSUE,
         ], true);
     }
 

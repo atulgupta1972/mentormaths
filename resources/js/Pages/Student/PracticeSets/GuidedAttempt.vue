@@ -6,6 +6,7 @@ import TextInput from '@/Components/TextInput.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Modal from '@/Components/Modal.vue';
+import ReportQuestionIssueButton from '@/Components/ReportQuestionIssueButton.vue';
 import AttemptFullscreenGate from '@/Components/AttemptFullscreenGate.vue';
 import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
 import AttemptLockedOverlay from '@/Components/AttemptLockedOverlay.vue';
@@ -24,6 +25,7 @@ const props = defineProps({
     show_explanation: { type: Boolean, default: false },
     can_show_hint: { type: Boolean, default: false },
     can_give_up: { type: Boolean, default: false },
+    can_report_issue: { type: Boolean, default: false },
     question: { type: Object, default: null },
     practice_set: { type: Object, default: null },
     attempt: { type: Object, default: null },
@@ -338,6 +340,11 @@ watch(
                             >
                                 {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
                             </SecondaryButton>
+                            <ReportQuestionIssueButton
+                                v-if="can_report_issue"
+                                :action="route('student.attempts.guided.report-issue', attempt.id)"
+                                :disabled="giveUpForm.processing || hintForm.processing || answerForm.processing"
+                            />
                         </div>
                     </div>
 
@@ -400,7 +407,7 @@ watch(
                         </button>
                     </div>
 
-                    <div v-if="hintAvailable || helpAvailable" class="mt-4 flex flex-wrap gap-3 border-t pt-4">
+                    <div v-if="hintAvailable || helpAvailable || can_report_issue" class="mt-4 flex flex-wrap gap-3 border-t pt-4">
                         <SecondaryButton
                             v-if="hintAvailable"
                             type="button"
@@ -418,6 +425,11 @@ watch(
                         >
                             {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
                         </SecondaryButton>
+                        <ReportQuestionIssueButton
+                            v-if="can_report_issue"
+                            :action="route('student.attempts.guided.report-issue', attempt.id)"
+                            :disabled="giveUpForm.processing || hintForm.processing || answerForm.processing"
+                        />
                     </div>
                 </div>
 

@@ -5,6 +5,7 @@ import StudentEmailContactsPanel from '@/Components/StudentEmailContactsPanel.vu
 import StudentEnrollmentMentorPanel from '@/Components/StudentEnrollmentMentorPanel.vue';
 import FormulaDrillStatsPanel from '@/Components/FormulaDrillStatsPanel.vue';
 import HelpRequestUploaderReturn from '@/Components/HelpRequestUploaderReturn.vue';
+import QuestionIssueReportActions from '@/Components/QuestionIssueReportActions.vue';
 import StudentProgressSummaryPanel from '@/Components/StudentProgressSummaryPanel.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
@@ -31,6 +32,7 @@ const props = defineProps({
     examTypeOptions: { type: Array, default: () => [] },
     resolutionItems: { type: Array, default: () => [] },
     helpRequestsCount: { type: Number, default: 0 },
+    questionIssueReports: { type: Array, default: () => [] },
     defaultSummaryEmail: { type: String, default: '' },
     summaryEmailRecipients: { type: Array, default: () => [] },
     whatsappRecipientCount: { type: Number, default: 0 },
@@ -227,6 +229,53 @@ const destroyStudent = () => {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <div class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">
+                    <h3 class="font-medium text-amber-950">
+                        Misprint / incomplete reports
+                        <span v-if="questionIssueReports.length" class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-bold text-amber-900">
+                            {{ questionIssueReports.length }}
+                        </span>
+                    </h3>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Student flagged these sums. Edit and fix the question, then mark Fixed — return to student so it goes back on their correction list. No marks were deducted.
+                    </p>
+                    <ul v-if="questionIssueReports.length" class="mt-4 divide-y divide-gray-100">
+                        <li v-for="item in questionIssueReports" :key="item.id" class="py-3">
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-900">
+                                            {{ item.context_label }}
+                                        </span>
+                                        <Link
+                                            v-if="item.set_code && item.set_url"
+                                            :href="item.set_url"
+                                            class="font-mono text-sm font-semibold text-indigo-600 hover:underline"
+                                        >
+                                            {{ item.set_code }}
+                                        </Link>
+                                        <Link
+                                            v-if="item.edit_url"
+                                            :href="item.edit_url"
+                                            class="text-sm font-semibold text-indigo-700 hover:underline"
+                                        >
+                                            Edit question
+                                        </Link>
+                                    </div>
+                                    <p class="mt-1 text-sm text-gray-800">{{ item.question_text }}</p>
+                                    <QuestionIssueReportActions :item="item" />
+                                </div>
+                                <p class="text-xs text-gray-500">
+                                    Reported {{ item.reported_at ? new Date(item.reported_at).toLocaleDateString('en-IN') : '—' }}
+                                </p>
+                            </div>
+                        </li>
+                    </ul>
+                    <p v-else class="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                        No pending misprint reports for this student.
+                    </p>
                 </div>
 
                 <div class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">

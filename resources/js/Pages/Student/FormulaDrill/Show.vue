@@ -1,5 +1,6 @@
 <script setup>
 import McqOptionLine from '@/Components/McqOptionLine.vue';
+import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
@@ -61,6 +62,8 @@ const selectedOptionId = ref(null);
 const blankAnswer = ref('');
 const submitting = ref(false);
 const requestingHelp = ref(false);
+const reportingIssue = ref(false);
+const showReportConfirm = ref(false);
 const feedback = ref(null);
 const disabledOptions = ref([]);
 
@@ -210,6 +213,52 @@ const requestTeacherHelp = async () => {
     }
 };
 
+const openReportIssue = () => {
+    if (!currentItem.value || submitting.value || requestingHelp.value || reportingIssue.value) {
+        return;
+    }
+    showReportConfirm.value = true;
+};
+
+const reportIssue = async () => {
+    if (!currentItem.value || reportingIssue.value) {
+        return;
+    }
+
+    reportingIssue.value = true;
+
+    try {
+        const { data: payload } = await axios.post(
+            route('student.formula-drill.report-issue', currentItem.value.id),
+        );
+
+        showReportConfirm.value = false;
+        sessionState.value = payload.session.session;
+        progressLabel.value = payload.session.progress_label;
+
+        if (payload.session_complete) {
+            setTimeout(() => {
+                router.visit(route('dashboard'));
+            }, 1200);
+
+            return;
+        }
+
+        currentItem.value = payload.session.current;
+        resetQuestionState();
+        feedback.value = {
+            correct: false,
+            message: payload.message || 'Issue reported — no marks lost.',
+        };
+    } catch (error) {
+        feedback.value = {
+            error: error.response?.data?.message || 'Could not report this sum. Try again.',
+        };
+    } finally {
+        reportingIssue.value = false;
+    }
+};
+
 const optionClass = (optionId) => {
     if (feedback.value?.correct && optionId === selectedOptionId.value) {
         return 'border-green-500 bg-green-50 ring-2 ring-green-300';
@@ -339,17 +388,25 @@ const optionClass = (optionId) => {
                         </p>
                         <div class="flex flex-wrap gap-2">
                             <SecondaryButton
+                                type="button"
+                                class="!border-amber-300 !text-amber-900 hover:!bg-amber-50"
+                                :disabled="submitting || requestingHelp || reportingIssue || feedback?.correct || feedback?.exhausted"
+                                @click="openReportIssue"
+                            >
+                                {{ reportingIssue ? 'Sending…' : 'Question seems misprint / incomplete' }}
+                            </SecondaryButton>
+                            <SecondaryButton
                                 v-if="canRequestTeacherHelp"
                                 type="button"
                                 class="!border-rose-200 !text-rose-800 hover:!bg-rose-50"
-                                :disabled="submitting || requestingHelp || feedback?.correct || feedback?.exhausted"
+                                :disabled="submitting || requestingHelp || reportingIssue || feedback?.correct || feedback?.exhausted"
                                 @click="requestTeacherHelp"
                             >
                                 {{ requestingHelp ? 'Sending…' : 'I need teacher help' }}
                             </SecondaryButton>
                             <PrimaryButton
                                 type="button"
-                                :disabled="(isFillInBlank ? !blankAnswer.trim() : !selectedOptionId) || submitting || requestingHelp || feedback?.correct || feedback?.exhausted"
+                                :disabled="(isFillInBlank ? !blankAnswer.trim() : !selectedOptionId) || submitting || requestingHelp || reportingIssue || feedback?.correct || feedback?.exhausted"
                                 @click="submitAnswer"
                             >
                                 {{ submitting ? 'Checking…' : 'Submit answer' }}
@@ -363,5 +420,27 @@ const optionClass = (optionId) => {
                 </div>
             </div>
         </div>
+
+        <Modal :show="showReportConfirm" max-width="md" @close="showReportConfirm = false">
+            <div class="p-5">
+                <h3 class="text-lg font-semibold text-gray-900">Report misprint or incomplete sum?</h3>
+                <p class="mt-2 text-sm text-gray-700">
+                    This goes to your teacher to fix. No marks will be lost. After it is corrected, it comes back for you to attempt again.
+                </p>
+                <div class="mt-5 flex flex-wrap justify-end gap-2">
+                    <SecondaryButton type="button" :disabled="reportingIssue" @click="showReportConfirm = false">
+                        Cancel
+                    </SecondaryButton>
+                    <SecondaryButton
+                        type="button"
+                        class="!border-amber-400 !bg-amber-100 !text-amber-950"
+                        :disabled="reportingIssue"
+                        @click="reportIssue"
+                    >
+                        {{ reportingIssue ? 'Sending…' : 'Yes, report this sum' }}
+                    </SecondaryButton>
+                </div>
+            </div>
+        </Modal>
     </AuthenticatedLayout>
 </template>

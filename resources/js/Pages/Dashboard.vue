@@ -7,6 +7,7 @@ import ClassCoveragePanel from '@/Components/ClassCoveragePanel.vue';
 import ContentUploadGuidePanel from '@/Components/ContentUploadGuidePanel.vue';
 import ContentUploaderTasksPanel from '@/Components/ContentUploaderTasksPanel.vue';
 import HelpRequestUploaderReturn from '@/Components/HelpRequestUploaderReturn.vue';
+import QuestionIssueReportActions from '@/Components/QuestionIssueReportActions.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { formatDate, formatDateTime, formatTime as formatDuration } from '@/utils/dates';
@@ -44,6 +45,7 @@ const props = defineProps({
     },
     students: { type: Array, default: () => [] },
     helpRequests: { type: Array, default: () => [] },
+    questionIssueReports: { type: Array, default: () => [] },
     contentPublishQueue: { type: Array, default: () => [] },
     contentRecheckQueue: { type: Array, default: () => [] },
     lockedAttempts: { type: Array, default: () => [] },
@@ -58,6 +60,7 @@ const props = defineProps({
 
 const showManageExams = ref(false);
 const showHelpRequests = ref(false);
+const showQuestionIssues = ref(true);
 const unlockingAttemptId = ref(null);
 const unlockForm = useForm({});
 const expandedStudentId = ref(null);
@@ -442,6 +445,27 @@ const toggleHelpRequests = () => {
     showHelpRequests.value = !showHelpRequests.value;
 };
 
+const toggleQuestionIssues = () => {
+    if (!props.questionIssueReports.length) {
+        return;
+    }
+
+    showQuestionIssues.value = !showQuestionIssues.value;
+};
+
+const formatIssueDate = (value) => {
+    if (!value) {
+        return '—';
+    }
+
+    return new Date(value).toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+};
+
 const studentsByClass = computed(() => {
     const groups = {};
 
@@ -676,6 +700,22 @@ const adminSetStatusClass = (set) => {
                         <button
                             type="button"
                             class="rounded-lg border px-2 py-2.5 text-center shadow-sm transition"
+                            :class="showQuestionIssues && questionIssueReports.length
+                                ? 'border-amber-500 bg-amber-100 ring-2 ring-amber-400'
+                                : 'border-amber-200 bg-amber-50 hover:border-amber-400'"
+                            :disabled="!questionIssueReports.length"
+                            :title="questionIssueReports.length ? 'Click to show or hide misprint reports' : 'No misprint reports'"
+                            @click="toggleQuestionIssues"
+                        >
+                            <p class="text-2xl font-extrabold leading-none text-amber-800">{{ stats.question_issue_reports_count || questionIssueReports.length || 0 }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                                Misprints
+                                <span v-if="questionIssueReports.length" class="ml-0.5">{{ showQuestionIssues ? '▲' : '▼' }}</span>
+                            </p>
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-lg border px-2 py-2.5 text-center shadow-sm transition"
                             :class="showHelpRequests
                                 ? 'border-rose-500 bg-rose-100 ring-2 ring-rose-400'
                                 : 'border-rose-200 bg-rose-50 hover:border-rose-400'"
@@ -844,6 +884,59 @@ const adminSetStatusClass = (set) => {
                                 </div>
                             </li>
                         </ul>
+                    </section>
+
+                    <section
+                        v-if="showQuestionIssues && questionIssueReports.length"
+                        class="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 p-4 shadow-sm"
+                    >
+                        <h3 class="text-sm font-bold uppercase tracking-wide text-amber-950">
+                            Misprint / incomplete sums · {{ questionIssueReports.length }}
+                        </h3>
+                        <p class="mt-1 text-xs text-amber-900">
+                            Students flagged these sums. Fix the question, then tap Fixed — return to student so it comes back on their correction list (no marks were lost).
+                        </p>
+                        <div class="mt-3 space-y-2">
+                            <div
+                                v-for="item in questionIssueReports"
+                                :key="item.id"
+                                class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200 bg-white p-3 shadow-sm"
+                            >
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <Link
+                                            :href="route('admin.students.show', item.student_id)"
+                                            class="text-sm font-bold text-indigo-700 hover:underline"
+                                        >
+                                            {{ item.student_name }}
+                                        </Link>
+                                        <span v-if="item.class_name" class="text-xs text-gray-500">{{ item.class_name }}</span>
+                                        <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-900">
+                                            {{ item.context_label }}
+                                        </span>
+                                        <Link
+                                            v-if="item.set_code && item.set_url"
+                                            :href="item.set_url"
+                                            class="font-mono text-xs font-semibold text-indigo-600 hover:underline"
+                                        >
+                                            {{ item.set_code }}
+                                        </Link>
+                                    </div>
+                                    <p class="mt-1 line-clamp-2 text-sm text-gray-800">{{ item.question_text }}</p>
+                                </div>
+                                <div class="flex shrink-0 flex-col items-end gap-1">
+                                    <p class="text-xs text-gray-500">{{ formatIssueDate(item.reported_at) }}</p>
+                                    <Link
+                                        v-if="item.edit_url"
+                                        :href="item.edit_url"
+                                        class="text-xs font-semibold text-indigo-700 hover:underline"
+                                    >
+                                        Edit question
+                                    </Link>
+                                    <QuestionIssueReportActions :item="item" compact />
+                                </div>
+                            </div>
+                        </div>
                     </section>
 
                     <section

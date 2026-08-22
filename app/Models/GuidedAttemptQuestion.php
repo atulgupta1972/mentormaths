@@ -19,6 +19,8 @@ class GuidedAttemptQuestion extends Model
 
     public const PHASE_GIVEN_UP = 'given_up';
 
+    public const PHASE_REPORTED_ISSUE = 'reported_issue';
+
     protected $fillable = [
         'set_attempt_id',
         'question_id',
@@ -33,6 +35,7 @@ class GuidedAttemptQuestion extends Model
         'first_try_correct',
         'corrected_after_help',
         'gave_up',
+        'reported_issue',
         'final_option_id',
         'final_answer_text',
         'final_is_correct',
@@ -45,6 +48,7 @@ class GuidedAttemptQuestion extends Model
             'first_try_correct' => 'boolean',
             'corrected_after_help' => 'boolean',
             'gave_up' => 'boolean',
+            'reported_issue' => 'boolean',
             'final_is_correct' => 'boolean',
         ];
     }
@@ -61,6 +65,10 @@ class GuidedAttemptQuestion extends Model
 
     public function isFinished(): bool
     {
-        return in_array($this->phase, [self::PHASE_DONE, self::PHASE_GIVEN_UP], true);
+        return in_array($this->phase, [
+            self::PHASE_DONE,
+            self::PHASE_GIVEN_UP,
+            self::PHASE_REPORTED_ISSUE,
+        ], true);
     }
 }

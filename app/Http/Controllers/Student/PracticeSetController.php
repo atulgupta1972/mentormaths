@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
+use App\Models\Question;
 use App\Models\QuestionResolutionItem;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Services\GuidedPracticeService;
+use App\Services\QuestionIssueReportService;
 use App\Services\QuestionResolutionService;
 use App\Services\SetAttemptService;
 use App\Support\AttemptIntegrity;
@@ -24,6 +26,7 @@ class PracticeSetController extends Controller
         private SetAttemptService $attemptService,
         private GuidedPracticeService $guidedPractice,
         private QuestionResolutionService $resolutionService,
+        private QuestionIssueReportService $issueReports,
     ) {}
 
     public function showAssignment(Request $request, SetAssignment $assignment): Response|RedirectResponse
@@ -162,6 +165,7 @@ class PracticeSetController extends Controller
             ],
             'referencePdfUrl' => $this->referencePdfUrlFor($assignment),
             'questions' => $questions,
+            'reportedQuestionIds' => $this->issueReports->reportedQuestionIdsForAttempt($attempt),
         ]);
     }
 
@@ -278,6 +282,51 @@ class PracticeSetController extends Controller
         }
 
         return $this->guidedAttemptRedirect($attempt, null, 'Help requested — your teacher will explain this sum. It is on your dashboard help list.');
+    }
+
+    public function guidedReportIssue(Request $request, SetAttempt $attempt): RedirectResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        try {
+            $payload = $this->issueReports->reportFromGuided($attempt, $this->guidedPractice);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($attempt->fresh()->status === SetAttempt::STATUS_SUBMITTED) {
+            return redirect()
+                ->route('student.attempts.result', $attempt)
+                ->with('success', $payload['guided_feedback']['message'] ?? 'Issue reported — no marks lost.');
+        }
+
+        return $this->guidedAttemptRedirect(
+            $attempt,
+            $payload['guided_feedback'] ?? null,
+            $payload['guided_feedback']['message'] ?? 'Issue reported — no marks lost. Your teacher will fix this sum.',
+        );
+    }
+
+    public function reportBatchIssue(Request $request, SetAttempt $attempt): RedirectResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        $validated = $request->validate([
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+        ]);
+
+        try {
+            $this->issueReports->reportFromBatch(
+                $attempt,
+                Question::query()->findOrFail((int) $validated['question_id']),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Issue reported — this sum will not count in your score. Your teacher will fix it and you will try it again.');
     }
 
     public function guidedRequestHint(Request $request, SetAttempt $attempt): RedirectResponse

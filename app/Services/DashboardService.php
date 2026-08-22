@@ -21,6 +21,7 @@ class DashboardService
         private SetAttemptService $attemptService,
         private AdminGradeContext $gradeContext,
         private QuestionResolutionService $resolutionService,
+        private QuestionIssueReportService $issueReports,
     ) {}
 
     /**
@@ -124,8 +125,20 @@ class DashboardService
             Log::error('Admin dashboard failed to count exams/assignments.', ['message' => $e->getMessage()]);
         }
 
+        $questionIssueCounts = collect();
+        $questionIssueReports = [];
+        try {
+            if ($studentIds !== []) {
+                $questionIssueCounts = $this->issueReports->pendingCountForStudentIds($studentIds);
+                $questionIssueReports = $this->issueReports->pendingForAdmin($studentIds);
+            }
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard failed to load question issue reports.', ['message' => $e->getMessage()]);
+        }
+
         $students = $enrollments->map(function (StudentEnrollment $enrollment) use (
             $helpCounts,
+            $questionIssueCounts,
             $examCounts,
             $assignmentCounts,
         ) {
@@ -135,6 +148,7 @@ class DashboardService
             $completed = (int) $byStatus->firstWhere('status', SetAssignment::STATUS_COMPLETED)?->c;
             $total = (int) $byStatus->sum('c');
             $helpCount = (int) ($helpCounts->get($enrollment->student_id) ?? $helpCounts->get((string) $enrollment->student_id) ?? 0);
+            $issueCount = (int) ($questionIssueCounts->get($enrollment->student_id) ?? $questionIssueCounts->get((string) $enrollment->student_id) ?? 0);
             $examCount = (int) ($examCounts->get($enrollment->id) ?? $examCounts->get((string) $enrollment->id) ?? 0);
 
             return [
@@ -155,6 +169,7 @@ class DashboardService
                 'assignments_completed_count' => $completed,
                 'help_requests' => [],
                 'help_requests_count' => $helpCount,
+                'question_issue_reports_count' => $issueCount,
             ];
         })->values()->all();
 
@@ -214,12 +229,14 @@ class DashboardService
                 'under_review_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_under_review_count'] ?? 0)),
                 'completed_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_completed_count'] ?? 0)),
                 'help_requests_count' => $helpRequestsCount,
+                'question_issue_reports_count' => count($questionIssueReports),
                 'locked_attempts_count' => count($lockedAttempts),
                 'content_publish_queue_count' => count($contentPublishQueue),
                 'content_recheck_queue_count' => count($contentRecheckQueue),
             ],
             'students' => $students,
             'helpRequests' => [],
+            'questionIssueReports' => $questionIssueReports,
             'lockedAttempts' => $lockedAttempts,
             'contentPublishQueue' => $contentPublishQueue,
             'contentRecheckQueue' => $contentRecheckQueue,
@@ -244,12 +261,14 @@ class DashboardService
                 'under_review_sets_count' => 0,
                 'completed_sets_count' => 0,
                 'help_requests_count' => 0,
+                'question_issue_reports_count' => 0,
                 'locked_attempts_count' => 0,
                 'content_publish_queue_count' => 0,
                 'content_recheck_queue_count' => 0,
             ],
             'students' => [],
             'helpRequests' => [],
+            'questionIssueReports' => [],
             'lockedAttempts' => [],
             'contentPublishQueue' => [],
             'contentRecheckQueue' => [],

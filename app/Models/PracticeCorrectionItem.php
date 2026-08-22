@@ -27,6 +27,10 @@ class PracticeCorrectionItem extends Model
 
     public const REASON_TEACHER_HELP = 'teacher_help';
 
+    public const REASON_CONTENT_FIXED = 'content_fixed';
+
+    public const SOURCE_CONTENT_FIXED = 'content_fixed';
+
     protected $fillable = [
         'student_id',
         'question_id',

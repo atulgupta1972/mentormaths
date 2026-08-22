@@ -137,6 +137,60 @@ class GuidedPracticeServiceTest extends TestCase
         ]);
     }
 
+    public function test_report_issue_skips_marks_and_queues_admin_report(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt();
+        $questionId = $attempt->guidedQuestions->first()->question_id;
+
+        $guided = app(GuidedPracticeService::class);
+        $payload = app(\App\Services\QuestionIssueReportService::class)
+            ->reportFromGuided($attempt->fresh(['guidedQuestions', 'assignment.enrollment.student']), $guided);
+
+        $this->assertTrue($payload['issue_reported']);
+        $this->assertDatabaseHas('question_issue_reports', [
+            'question_id' => $questionId,
+            'status' => 'pending_admin',
+            'context' => 'guided',
+        ]);
+
+        $row = $attempt->fresh()->guidedQuestions->first();
+        $this->assertTrue($row->reported_issue);
+        $this->assertSame(GuidedAttemptQuestion::PHASE_REPORTED_ISSUE, $row->phase);
+
+        $this->assertDatabaseMissing('practice_correction_items', [
+            'question_id' => $questionId,
+            'status' => 'pending',
+        ]);
+
+        $attempt = $attempt->fresh();
+        $this->assertSame(\App\Models\SetAttempt::STATUS_SUBMITTED, $attempt->status);
+        $this->assertSame(0, (int) $attempt->max_score);
+        $this->assertSame(0, (int) $attempt->score);
+    }
+
+    public function test_admin_mark_fixed_returns_sum_to_correction_queue(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt();
+        $studentId = $attempt->assignment->enrollment->student_id;
+        $guided = app(GuidedPracticeService::class);
+        app(\App\Services\QuestionIssueReportService::class)
+            ->reportFromGuided($attempt->fresh(['guidedQuestions', 'assignment.enrollment.student']), $guided);
+
+        $report = \App\Models\QuestionIssueReport::query()->firstOrFail();
+        $admin = \App\Models\User::factory()->create(['role' => \App\Models\User::ROLE_ADMIN]);
+
+        app(\App\Services\QuestionIssueReportService::class)
+            ->markFixedAndReturnToStudent($report, $admin);
+
+        $this->assertSame('awaiting_reattempt', $report->fresh()->status);
+        $this->assertDatabaseHas('practice_correction_items', [
+            'student_id' => $studentId,
+            'question_id' => $report->question_id,
+            'status' => 'pending',
+            'failure_reason' => 'content_fixed',
+        ]);
+    }
+
     public function test_fill_in_blank_wrong_twice_hides_method_until_hint_requested(): void
     {
         [$attempt] = $this->seedFillBlankGuidedAttempt();
