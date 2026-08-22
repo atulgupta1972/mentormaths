@@ -95,6 +95,77 @@ class ContentUploadTaskTest extends TestCase
         $this->assertNotNull($task->agreed_at);
     }
 
+    public function test_same_book_code_can_be_assigned_separately_for_cbse_and_icse(): void
+    {
+        Mail::fake();
+
+        [$grade, $cbseChapter, $admin] = $this->seedGradeAndAdmin();
+        $year = AcademicYear::active();
+        $subject = Subject::query()->where('code', 'MATHS')->firstOrFail();
+        $icse = Board::query()->create(['code' => 'ICSE', 'name' => 'ICSE', 'is_active' => true]);
+
+        $icseSyllabus = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $icse->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        $icseChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $icseSyllabus->id,
+            'name' => 'Fractions',
+            'chapter_number' => 'Ch 2',
+            'sort_order' => 2,
+        ]);
+
+        ContentRateCard::create([
+            'grade_level_id' => $grade->id,
+            'content_type' => ContentRateCard::TYPE_TEXTBOOK_CHAPTER_MCQ,
+            'default_amount_inr' => 2,
+            'rate_basis' => ContentRateCard::BASIS_PER_QUESTION,
+        ]);
+
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->post(route('admin.content-tasks.store'), [
+                'assigned_to_user_id' => $uploader->id,
+                'board_id' => $cbseChapter->syllabusVersion->board_id,
+                'book_name' => 'Ganita Prakash',
+                'book_code' => 'GP',
+                'syllabus_chapter_ids' => [$cbseChapter->id],
+                'rate_basis' => ContentRateCard::BASIS_PER_QUESTION,
+                'offered_amount_inr' => 2,
+            ])
+            ->assertRedirect(route('admin.content-tasks.index'));
+
+        // Mark CBSE chapter as published so a shared book would wrongly block ICSE.
+        $cbseBookChapter = TextbookChapter::query()->where('syllabus_chapter_id', $cbseChapter->id)->firstOrFail();
+        $cbseBookChapter->update(['status' => TextbookChapter::STATUS_PUBLISHED]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->post(route('admin.content-tasks.store'), [
+                'assigned_to_user_id' => $uploader->id,
+                'board_id' => $icse->id,
+                'book_name' => 'Greya Lakshmi',
+                'book_code' => 'GP',
+                'syllabus_chapter_ids' => [$icseChapter->id],
+                'rate_basis' => ContentRateCard::BASIS_PER_QUESTION,
+                'offered_amount_inr' => 2,
+            ])
+            ->assertRedirect(route('admin.content-tasks.index'))
+            ->assertSessionMissing('error');
+
+        $books = Textbook::query()->where('grade_level_id', $grade->id)->where('code', 'gp')->get();
+        $this->assertCount(2, $books);
+        $this->assertTrue($books->contains(fn (Textbook $book) => (int) $book->board_id === (int) $cbseChapter->syllabusVersion->board_id));
+        $this->assertTrue($books->contains(fn (Textbook $book) => (int) $book->board_id === (int) $icse->id));
+        $this->assertSame(2, ContentUploadTask::query()->count());
+    }
+
     public function test_admin_content_tasks_index_shows_allocation_matrix_and_drill_down(): void
     {
         Mail::fake();

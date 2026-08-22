@@ -10,6 +10,7 @@ class Textbook extends Model
 {
     protected $fillable = [
         'grade_level_id',
+        'board_id',
         'name',
         'code',
         'is_active',
@@ -26,6 +27,11 @@ class Textbook extends Model
     public function gradeLevel(): BelongsTo
     {
         return $this->belongsTo(GradeLevel::class);
+    }
+
+    public function board(): BelongsTo
+    {
+        return $this->belongsTo(Board::class);
     }
 
     public function chapters(): HasMany

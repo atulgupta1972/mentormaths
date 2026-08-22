@@ -22,20 +22,100 @@ class TextbookChapterBookService
     /**
      * @return list<array{id: int, name: string, code: string, label: string}>
      */
-    public function textbooksForGrade(int $gradeLevelId): array
+    public function textbooksForGrade(int $gradeLevelId, ?int $boardId = null): array
     {
         return Textbook::query()
             ->where('grade_level_id', $gradeLevelId)
+            ->when(
+                $boardId,
+                fn ($q) => $q->where(function ($inner) use ($boardId) {
+                    $inner->where('board_id', $boardId)->orWhereNull('board_id');
+                }),
+            )
             ->orderBy('name')
-            ->get(['id', 'name', 'code'])
+            ->get(['id', 'name', 'code', 'board_id'])
             ->map(fn (Textbook $book) => [
                 'id' => $book->id,
                 'name' => $book->name,
                 'code' => $book->code,
+                'board_id' => $book->board_id,
                 'label' => "{$book->name} ({$book->code})",
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Resolve (or create) a textbook master for this class + board.
+     * CBSE and ICSE can share the same book code without colliding.
+     */
+    public function resolveTextbookForBoard(
+        int $gradeLevelId,
+        int $boardId,
+        string $bookName,
+        string $bookCode,
+        int $createdBy,
+    ): Textbook {
+        $name = trim($bookName);
+        $code = strtolower(trim($bookCode));
+
+        if ($name === '' || $code === '') {
+            throw new \InvalidArgumentException('Enter book name and code.');
+        }
+
+        $exact = Textbook::query()
+            ->where('grade_level_id', $gradeLevelId)
+            ->where('board_id', $boardId)
+            ->where('code', $code)
+            ->first();
+
+        if ($exact) {
+            if ($exact->name !== $name) {
+                $exact->update(['name' => $name]);
+            }
+
+            return $exact->fresh();
+        }
+
+        $legacy = Textbook::query()
+            ->where('grade_level_id', $gradeLevelId)
+            ->whereNull('board_id')
+            ->where('code', $code)
+            ->with(['chapters.syllabusChapter.syllabusVersion'])
+            ->first();
+
+        if ($legacy && $this->textbookCompatibleWithBoard($legacy, $boardId)) {
+            $legacy->update([
+                'board_id' => $boardId,
+                'name' => $name,
+            ]);
+
+            return $legacy->fresh();
+        }
+
+        return Textbook::query()->create([
+            'grade_level_id' => $gradeLevelId,
+            'board_id' => $boardId,
+            'name' => $name,
+            'code' => $code,
+            'is_active' => true,
+            'created_by' => $createdBy,
+        ]);
+    }
+
+    public function textbookCompatibleWithBoard(Textbook $textbook, int $boardId): bool
+    {
+        $textbook->loadMissing('chapters.syllabusChapter.syllabusVersion');
+
+        if ($textbook->chapters->isEmpty()) {
+            return true;
+        }
+
+        return $textbook->chapters->every(function (TextbookChapter $chapter) use ($boardId) {
+            $chapterBoardId = (int) ($chapter->syllabusChapter?->syllabusVersion?->board_id ?? 0);
+
+            return $chapterBoardId === 0 || $chapterBoardId === $boardId;
+        });
     }
 
     public function uploadPdf(TextbookChapter $chapter, UploadedFile $file, User $user, bool $uploaderContext = false): TextbookChapter
@@ -96,20 +176,20 @@ class TextbookChapterBookService
                 throw new \InvalidArgumentException('Enter book name and code, or pick an existing book.');
             }
 
-            $textbook = Textbook::query()->firstOrCreate(
-                [
-                    'grade_level_id' => $gradeLevelId,
-                    'code' => $code,
-                ],
-                [
-                    'name' => $name,
-                    'created_by' => $user->id,
-                ],
-            );
+            $chapter->loadMissing('syllabusChapter.syllabusVersion');
+            $boardId = (int) ($chapter->syllabusChapter?->syllabusVersion?->board_id ?? 0);
 
-            if ($textbook->name !== $name) {
-                $textbook->update(['name' => $name]);
+            if ($boardId <= 0) {
+                throw new \InvalidArgumentException('This chapter has no board on its syllabus. Fix the syllabus link first.');
             }
+
+            $textbook = $this->resolveTextbookForBoard(
+                $gradeLevelId,
+                $boardId,
+                $name,
+                $code,
+                $user->id,
+            );
         }
 
         if ((int) $textbook->id === (int) $chapter->textbook_id) {
@@ -429,6 +509,7 @@ class TextbookChapterBookService
         $moved = Textbook::query()->firstOrCreate(
             [
                 'grade_level_id' => $gradeLevelId,
+                'board_id' => $textbook->board_id,
                 'code' => $textbook->code,
             ],
             [

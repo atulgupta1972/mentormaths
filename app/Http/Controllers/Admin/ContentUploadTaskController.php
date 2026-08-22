@@ -137,6 +137,12 @@ class ContentUploadTaskController extends Controller
 
             $textbooks = Textbook::query()
                 ->where('grade_level_id', $gradeLevel->id)
+                ->when(
+                    $selectedBoardId,
+                    fn ($q) => $q->where(function ($inner) use ($selectedBoardId) {
+                        $inner->where('board_id', $selectedBoardId)->orWhereNull('board_id');
+                    }),
+                )
                 ->orderBy('name')
                 ->when($syllabusChapterIds->isNotEmpty(), function ($query) use ($syllabusChapterIds) {
                     $query->where(function ($inner) use ($syllabusChapterIds) {
@@ -144,11 +150,12 @@ class ContentUploadTaskController extends Controller
                             ->orWhereHas('chapters', fn ($chapters) => $chapters->whereIn('syllabus_chapter_id', $syllabusChapterIds));
                     });
                 })
-                ->get(['id', 'name', 'code'])
+                ->get(['id', 'name', 'code', 'board_id'])
                 ->map(fn (Textbook $book) => [
                     'id' => $book->id,
                     'name' => $book->name,
                     'code' => $book->code,
+                    'board_id' => $book->board_id,
                     'label' => "{$book->name} ({$book->code})",
                 ])
                 ->values()
@@ -308,8 +315,26 @@ class ContentUploadTaskController extends Controller
             ? (int) $validated['board_id']
             : $this->gradeContext->resolveBoardId($request);
 
+        if (! $boardId) {
+            $firstChapterId = (int) ($validated['syllabus_chapter_ids'][0] ?? 0);
+            if ($firstChapterId > 0) {
+                $boardId = SyllabusChapter::query()
+                    ->with('syllabusVersion:id,board_id')
+                    ->find($firstChapterId)
+                    ?->syllabusVersion
+                    ?->board_id;
+                $boardId = $boardId ? (int) $boardId : null;
+            }
+        }
+
         if ($boardId) {
             $this->gradeContext->persistBoard($request, $boardId);
+        }
+
+        if (! $boardId) {
+            return back()
+                ->withInput()
+                ->withErrors(['board_id' => 'Select a board before assigning chapters.']);
         }
 
         $syllabus = $this->classAssignment->syllabusForGrade($gradeLevel, $boardId);
@@ -383,20 +408,23 @@ class ContentUploadTaskController extends Controller
             if ($textbook->grade_level_id !== $gradeLevel->id) {
                 return back()->with('error', 'Selected textbook does not belong to the current class.');
             }
+            if ($textbook->board_id && (int) $textbook->board_id !== $boardId) {
+                return back()->with('error', 'Selected textbook belongs to a different board. Pick or create a book for this board.');
+            }
+            if (! $textbook->board_id) {
+                $textbook->update(['board_id' => $boardId]);
+            }
         } else {
-            $textbook = Textbook::query()->firstOrCreate(
-                [
-                    'grade_level_id' => $gradeLevel->id,
-                    'code' => strtolower($validated['book_code']),
-                ],
-                [
-                    'name' => $validated['book_name'],
-                    'created_by' => $request->user()->id,
-                ],
-            );
-
-            if ($textbook->name !== $validated['book_name']) {
-                $textbook->update(['name' => $validated['book_name']]);
+            try {
+                $textbook = $this->bookService->resolveTextbookForBoard(
+                    $gradeLevel->id,
+                    $boardId,
+                    (string) $validated['book_name'],
+                    (string) $validated['book_code'],
+                    $request->user()->id,
+                );
+            } catch (\InvalidArgumentException $e) {
+                return back()->withInput()->with('error', $e->getMessage());
             }
         }
 
