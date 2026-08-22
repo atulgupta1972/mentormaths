@@ -46,6 +46,7 @@ const props = defineProps({
     helpRequests: { type: Array, default: () => [] },
     contentPublishQueue: { type: Array, default: () => [] },
     contentRecheckQueue: { type: Array, default: () => [] },
+    lockedAttempts: { type: Array, default: () => [] },
     resolutionItems: { type: Array, default: () => [] },
     resolutionCount: { type: Number, default: 0 },
     weeklyReportEmails: { type: String, default: '' },
@@ -57,6 +58,8 @@ const props = defineProps({
 
 const showManageExams = ref(false);
 const showHelpRequests = ref(false);
+const unlockingAttemptId = ref(null);
+const unlockForm = useForm({});
 const expandedStudentId = ref(null);
 const highlightedExamPlanId = ref(null);
 const studentRows = ref([]);
@@ -78,6 +81,20 @@ const sendBackForRecheck = (item) => {
         preserveScroll: true,
         onFinish: () => {
             returningTaskId.value = null;
+        },
+    });
+};
+
+const unlockLockedAttempt = (row) => {
+    if (!window.confirm(`Unlock ${row.student_name}? They can continue ${row.set_code || 'this set'}.`)) {
+        return;
+    }
+
+    unlockingAttemptId.value = row.attempt_id;
+    unlockForm.post(route('admin.set-attempts.unlock', row.attempt_id), {
+        preserveScroll: true,
+        onFinish: () => {
+            unlockingAttemptId.value = null;
         },
     });
 };
@@ -647,7 +664,7 @@ const adminSetStatusClass = (set) => {
                         :grade-levels="gradeLevels"
                     />
 
-                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
                         <div class="rounded-lg border border-violet-200 bg-violet-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-violet-700">{{ stats.students_count || 0 }}</p>
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Students</p>
@@ -672,6 +689,15 @@ const adminSetStatusClass = (set) => {
                                 <span v-if="helpRequests.length" class="ml-0.5">{{ showHelpRequests ? '▲' : '▼' }}</span>
                             </p>
                         </button>
+                        <div
+                            class="rounded-lg border px-2 py-2.5 text-center shadow-sm"
+                            :class="(stats.locked_attempts_count || lockedAttempts.length)
+                                ? 'border-orange-400 bg-orange-50'
+                                : 'border-orange-200 bg-orange-50/60'"
+                        >
+                            <p class="text-2xl font-extrabold leading-none text-orange-700">{{ stats.locked_attempts_count ?? lockedAttempts.length ?? 0 }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-orange-700">Locked</p>
+                        </div>
                         <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-2.5 text-center shadow-sm">
                             <p class="text-2xl font-extrabold leading-none text-amber-700">{{ stats.pending_sets_count || 0 }}</p>
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">To do</p>
@@ -685,6 +711,57 @@ const adminSetStatusClass = (set) => {
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Done</p>
                         </div>
                     </div>
+
+                    <section
+                        v-if="lockedAttempts.length"
+                        class="rounded-xl border border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50 p-4 shadow-sm"
+                    >
+                        <p class="text-sm font-semibold text-orange-950">
+                            Locked students · {{ lockedAttempts.length }}
+                        </p>
+                        <p class="mt-0.5 text-xs text-orange-900/80">
+                            These attempts locked after too many tab/app switches. Unlock so the student can continue.
+                        </p>
+                        <ul class="mt-3 space-y-2">
+                            <li
+                                v-for="row in lockedAttempts"
+                                :key="row.attempt_id"
+                                class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/90 px-3 py-2.5 text-sm shadow-sm"
+                            >
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="font-semibold text-gray-900">{{ row.student_name }}</span>
+                                        <span v-if="row.class_name" class="text-xs text-gray-500">{{ row.class_name }}</span>
+                                        <span class="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-800">
+                                            {{ row.kind_label }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-0.5 text-xs text-gray-600">
+                                        <span class="font-mono font-semibold text-indigo-700">{{ row.set_code }}</span>
+                                        · attempt #{{ row.attempt_number }}
+                                        · leaves {{ row.tab_leave_count }}/{{ row.tab_leave_lock_limit }}
+                                    </p>
+                                </div>
+                                <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                    <Link
+                                        v-if="row.assignment_id"
+                                        :href="route('admin.set-assignments.show', row.assignment_id)"
+                                        class="text-xs font-medium text-indigo-600 hover:underline"
+                                    >
+                                        Open
+                                    </Link>
+                                    <button
+                                        type="button"
+                                        class="rounded-md bg-orange-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-800 disabled:opacity-50"
+                                        :disabled="unlockingAttemptId === row.attempt_id || unlockForm.processing"
+                                        @click="unlockLockedAttempt(row)"
+                                    >
+                                        {{ unlockingAttemptId === row.attempt_id ? 'Unlocking…' : 'Unlock' }}
+                                    </button>
+                                </div>
+                            </li>
+                        </ul>
+                    </section>
 
                     <section
                         v-if="contentPublishQueue.length"

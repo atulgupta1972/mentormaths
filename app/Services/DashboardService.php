@@ -7,7 +7,9 @@ use App\Models\ContentUploadTask;
 use App\Models\ExamPlan;
 use App\Models\QuestionResolutionItem;
 use App\Models\SetAssignment;
+use App\Models\SetAttempt;
 use App\Models\StudentEnrollment;
+use App\Support\AttemptIntegrity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -195,6 +197,13 @@ class DashboardService
             Log::error('Admin dashboard failed to load the content queues.', ['message' => $e->getMessage()]);
         }
 
+        $lockedAttempts = [];
+        try {
+            $lockedAttempts = $this->lockedAttemptsForEnrollments($enrollmentIds);
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard failed to load locked attempts.', ['message' => $e->getMessage()]);
+        }
+
         return [
             'activeYear' => $activeYear->only(['id', 'name']),
             'selectedGrade' => $grade?->only(['id', 'name']),
@@ -205,11 +214,13 @@ class DashboardService
                 'under_review_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_under_review_count'] ?? 0)),
                 'completed_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_completed_count'] ?? 0)),
                 'help_requests_count' => $helpRequestsCount,
+                'locked_attempts_count' => count($lockedAttempts),
                 'content_publish_queue_count' => count($contentPublishQueue),
                 'content_recheck_queue_count' => count($contentRecheckQueue),
             ],
             'students' => $students,
             'helpRequests' => [],
+            'lockedAttempts' => $lockedAttempts,
             'contentPublishQueue' => $contentPublishQueue,
             'contentRecheckQueue' => $contentRecheckQueue,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
@@ -233,15 +244,73 @@ class DashboardService
                 'under_review_sets_count' => 0,
                 'completed_sets_count' => 0,
                 'help_requests_count' => 0,
+                'locked_attempts_count' => 0,
                 'content_publish_queue_count' => 0,
                 'content_recheck_queue_count' => 0,
             ],
             'students' => [],
             'helpRequests' => [],
+            'lockedAttempts' => [],
             'contentPublishQueue' => [],
             'contentRecheckQueue' => [],
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ];
+    }
+
+    /**
+     * In-progress attempts locked after too many tab/app leaves (current grade filter).
+     *
+     * @param  list<int>  $enrollmentIds
+     * @return list<array<string, mixed>>
+     */
+    private function lockedAttemptsForEnrollments(array $enrollmentIds): array
+    {
+        if ($enrollmentIds === []) {
+            return [];
+        }
+
+        $candidates = SetAttempt::query()
+            ->where('status', SetAttempt::STATUS_IN_PROGRESS)
+            ->where('tab_leave_count', '>=', AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT)
+            ->whereHas(
+                'assignment',
+                fn ($q) => $q
+                    ->whereIn('student_enrollment_id', $enrollmentIds)
+                    ->where('status', '!=', SetAssignment::STATUS_CANCELLED),
+            )
+            ->with([
+                'assignment.enrollment.student:id,name',
+                'assignment.enrollment.gradeLevel:id,name,protect_test_attempts,protect_practice_attempts',
+                'assignment.practiceSet:id,set_code,title,scope,tier',
+            ])
+            ->latest('updated_at')
+            ->limit(50)
+            ->get();
+
+        return $candidates
+            ->filter(fn (SetAttempt $attempt) => AttemptIntegrity::isLocked($attempt))
+            ->map(function (SetAttempt $attempt) {
+                $assignment = $attempt->assignment;
+                $enrollment = $assignment?->enrollment;
+                $set = $assignment?->practiceSet;
+                $isTest = (bool) $set?->isChapterTest();
+
+                return [
+                    'attempt_id' => $attempt->id,
+                    'assignment_id' => $assignment?->id,
+                    'attempt_number' => $attempt->attempt_number,
+                    'student_id' => $enrollment?->student_id,
+                    'student_name' => $enrollment?->student?->name,
+                    'class_name' => $enrollment?->gradeLevel?->name,
+                    'set_code' => $set?->set_code,
+                    'kind_label' => $isTest ? 'Test' : 'Practice',
+                    'tab_leave_count' => (int) ($attempt->tab_leave_count ?? 0),
+                    'tab_leave_lock_limit' => AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT,
+                    'updated_at' => $attempt->updated_at?->toDateTimeString(),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**

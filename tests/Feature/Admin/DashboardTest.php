@@ -136,6 +136,58 @@ class DashboardTest extends TestCase
                 ->where('contentRecheckQueue.0.chapter_title', 'Polynomials'));
     }
 
+    public function test_admin_dashboard_lists_locked_attempts_for_unlock(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $enrollment] = $this->seedAdminDashboard();
+
+        $worksheet = \App\Models\Worksheet::query()->create([
+            'title' => 'Chapter test',
+            'set_number' => 1,
+            'set_code' => 'T701',
+            'tier' => \App\Support\PracticeSetTier::STARTER,
+            'scope' => \App\Support\PracticeSetScope::CHAPTER,
+            'status' => \App\Models\Worksheet::STATUS_PUBLISHED,
+        ]);
+
+        $assignment = \App\Models\SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek(),
+            'status' => \App\Models\SetAssignment::STATUS_IN_PROGRESS,
+        ]);
+
+        $attempt = \App\Models\SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => \App\Models\SetAttempt::MODE_BATCH,
+            'started_at' => now(),
+            'status' => \App\Models\SetAttempt::STATUS_IN_PROGRESS,
+            'tab_leave_count' => 4,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $enrollment->grade_level_id])
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Dashboard')
+                ->where('stats.locked_attempts_count', 1)
+                ->has('lockedAttempts', 1)
+                ->where('lockedAttempts.0.attempt_id', $attempt->id)
+                ->where('lockedAttempts.0.student_name', 'Dashboard Student')
+                ->where('lockedAttempts.0.set_code', 'T701'));
+
+        $this->actingAs($admin)
+            ->from(route('dashboard'))
+            ->post(route('admin.set-attempts.unlock', $attempt))
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertSame(0, $attempt->fresh()->tab_leave_count);
+    }
+
     /**
      * @return array{0: User, 1: StudentEnrollment}
      */
@@ -148,7 +200,13 @@ class DashboardTest extends TestCase
             'is_active' => true,
         ]);
         $board = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
-        $grade = GradeLevel::query()->create(['name' => 'Class 7', 'sort_order' => 7, 'is_active' => true]);
+        $grade = GradeLevel::query()->create([
+            'name' => 'Class 7',
+            'sort_order' => 7,
+            'is_active' => true,
+            'protect_test_attempts' => true,
+            'protect_practice_attempts' => true,
+        ]);
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
         $user = User::factory()->create(['role' => User::ROLE_STUDENT]);

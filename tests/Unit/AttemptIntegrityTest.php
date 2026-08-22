@@ -108,6 +108,7 @@ class AttemptIntegrityTest extends TestCase
         ]);
 
         $this->actingAs($admin)
+            ->from(route('admin.set-assignments.show', $assignment))
             ->post(route('admin.set-attempts.unlock', $attempt))
             ->assertRedirect(route('admin.set-assignments.show', $assignment));
 

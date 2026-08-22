@@ -621,7 +621,7 @@ class GuidedPracticeService
         if (AttemptIntegrity::isLocked($attempt)) {
             throw new \InvalidArgumentException(
                 'This attempt is locked after '.AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT
-                .' tab switches. Ask your teacher to unlock it from the assignment page.'
+                .' tab switches. Ask your teacher to unlock it from the Dashboard (Locked students).'
             );
         }
     }

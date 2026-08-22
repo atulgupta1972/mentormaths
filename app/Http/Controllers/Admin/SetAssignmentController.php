@@ -90,9 +90,15 @@ class SetAssignmentController extends Controller
 
         $this->attemptService->unlockIntegrityLock($attempt);
 
+        $assignment->loadMissing('enrollment.student');
+        $studentName = $assignment->enrollment?->student?->name;
+        $label = $studentName
+            ? "{$studentName} — attempt #{$attempt->attempt_number}"
+            : "Attempt #{$attempt->attempt_number}";
+
         return redirect()
-            ->route('admin.set-assignments.show', $assignment)
-            ->with('success', "Attempt #{$attempt->attempt_number} unlocked. Tab leaves reset to 0 — student can continue.");
+            ->back(fallback: route('admin.set-assignments.show', $assignment))
+            ->with('success', "{$label} unlocked. Tab leaves reset to 0 — student can continue.");
     }
 
     public function store(Request $request, Worksheet $worksheet): RedirectResponse
