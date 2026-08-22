@@ -41,7 +41,7 @@ const performanceBarClass = (pct) => {
         </div>
         <div class="mt-2 grid gap-2 sm:grid-cols-3">
             <div class="rounded-lg border border-indigo-300 bg-white px-3 py-2 shadow-md">
-                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Completion</p>
+                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Completion %</p>
                 <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
                     <template v-if="perf.completionPct != null">{{ perf.completionPct }}%</template>
                     <template v-else>—</template>
@@ -58,7 +58,7 @@ const performanceBarClass = (pct) => {
                 </div>
             </div>
             <div class="rounded-lg border border-indigo-300 bg-white px-3 py-2 shadow-md">
-                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Score</p>
+                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Score %</p>
                 <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
                     <template v-if="perf.scorePct != null">{{ perf.scorePct }}%</template>
                     <template v-else>—</template>
@@ -76,7 +76,7 @@ const performanceBarClass = (pct) => {
                 </div>
             </div>
             <div class="rounded-lg border border-indigo-300 bg-white px-3 py-2 shadow-md">
-                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Revised · Correction</p>
+                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Revision status</p>
                 <div class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                     <p class="text-sm font-extrabold text-emerald-800">
                         Done {{ perf.correctionDone }}
@@ -95,7 +95,7 @@ const performanceBarClass = (pct) => {
                     v-else-if="!perf.correctionDone && !perf.correctionPending"
                     class="mt-1 text-[10px] font-semibold text-slate-500"
                 >
-                    No corrections yet
+                    No revisions pending
                 </p>
             </div>
         </div>

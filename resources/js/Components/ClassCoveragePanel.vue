@@ -40,7 +40,7 @@ const expandedChapterIds = ref(new Set());
 const chapters = computed(() => props.classCoverage?.chapters ?? []);
 const isStudentView = computed(() => String(props.updateRouteName).startsWith('student.'));
 const canStaffAssign = computed(() => ! isStudentView.value && Boolean(props.assignStudentId) && route().has('admin.practice-sets.assign'));
-/** Ch No + Chapter + Topics + Comp + Score + Revise + Studied + Under study */
+/** Ch No + Chapter + Topics + Completion % + Score % + Revision status + Studied + Under study */
 const columnCount = computed(() => 8);
 
 const todayDate = () => {
@@ -652,13 +652,13 @@ const startCorrection = (item) => {
                         <th class="min-w-[9rem] max-w-[14rem] px-2 py-1.5 text-left font-semibold">Chapter</th>
                         <th class="min-w-[8rem] max-w-[12rem] px-2 py-1.5 text-left font-semibold">Topics</th>
                         <th class="bg-sky-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Sets done / available">
-                            Comp %
+                            Completion %
                         </th>
                         <th class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Average score on scored sets">
                             Score %
                         </th>
-                        <th class="bg-orange-700 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Corrections done / pending">
-                            Revise
+                        <th class="bg-orange-700 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Revision status — corrections done / pending">
+                            Revision status
                         </th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Studied</th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Under study</th>
@@ -754,7 +754,7 @@ const startCorrection = (item) => {
                             <td
                                 class="bg-orange-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
-                                title="Corrections done / pending"
+                                title="Revision status — corrections done / pending"
                             >
                                 <span class="text-[14px] font-extrabold tabular-nums leading-none text-orange-800">
                                     <span class="text-emerald-700">{{ stats.correctionDone }}</span>

@@ -6,38 +6,38 @@ const classes = ['Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9
 
 const metrics = [
     {
-        code: 'Comp %',
-        title: 'Completion',
-        text: 'How much of the planned chapter work is actually done — not guessed from notebooks.',
+        code: 'Completion %',
+        title: 'How much is done',
+        text: 'Share of planned chapter work completed — visible for one student, a school class, or a coaching batch.',
     },
     {
         code: 'Score %',
-        title: 'Score level',
-        text: 'Average accuracy on scored sets. Students and teachers see strength chapter by chapter.',
+        title: 'How well it is done',
+        text: 'Average accuracy on scored sets. Same score language for individual, school class, and coaching class views.',
     },
     {
-        code: 'Revise',
+        code: 'Revision status',
         title: 'Weakness queue',
-        text: 'Wrong sums waiting to be redone. Revision is measured, not left as “do corrections sometime”.',
+        text: 'Done vs pending corrections. Wrong sums stay visible until revised — at student, class, or batch level.',
     },
 ];
 
 const audiences = [
     {
-        title: 'Schools',
-        text: 'Teachers manage a whole class professionally — one study plan per student, same syllabus language, clear who is behind on Comp %, score, or revise.',
+        title: 'Individual',
+        text: 'One student sees their own study-plan scorecard: Completion %, Score %, Revision status — chapter by chapter.',
+    },
+    {
+        title: 'School class',
+        text: 'Teachers manage the whole class professionally — same scorecard per student, clear who needs help on completion, score, or revision.',
     },
     {
         title: 'Coaching class',
-        text: 'Run batches with the same chapter map. See studied / under study marks, due work for today, and where scores are slipping — without chasing papers.',
+        text: 'Run batches with one syllabus map. Completion %, Score %, and Revision status stay comparable across the coaching class.',
     },
     {
-        title: 'Tuition / small group',
-        text: 'When a chapter is marked Under study, work becomes due that day. Every next session has a measured next step.',
-    },
-    {
-        title: 'Individual learner',
-        text: 'Follow school chapters, drill regularly, and watch your own Comp %, Score %, and revise counts move — the maths of how you are studying maths.',
+        title: 'Tuition / home',
+        text: 'Small groups or home learners use the same measured study plan — mark Under study and work becomes due that day.',
     },
 ];
 
@@ -52,7 +52,7 @@ const pillars = [
     },
     {
         title: 'Perform',
-        text: 'Completion · score level · revise of weaknesses — numbers that tell whether study is working before the school test.',
+        text: 'Completion % · Score % · Revision status — numbers that tell whether study is working before the school test.',
     },
 ];
 
@@ -71,7 +71,7 @@ const mockChapters = [
         <link href="https://fonts.bunny.net/css?family=fraunces:600,700&family=source-sans-3:400,500,600,700&display=swap" rel="stylesheet" />
         <meta
             name="description"
-            content="Mentor Maths — professional CBSE & ICSE maths for schools, coaching, tuition, and individuals. Study-plan scorecards: Comp %, Score %, Revise. Soft launch."
+            content="Mentor Maths — professional CBSE & ICSE maths for individual, school class, and coaching class. Study-plan scorecard: Completion %, Score %, Revision status. Soft launch."
         />
     </Head>
 
@@ -149,14 +149,15 @@ const mockChapters = [
                 </h1>
 
                 <p class="mm-rise-delay mt-4 max-w-2xl text-xl font-medium leading-snug text-slate-800 sm:text-2xl">
-                    The maths of studying maths — a professional scorecard for every chapter.
+                    Study plan scorecard — Completion %, Score %, Revision status.
                 </p>
 
                 <p class="mm-rise-late mt-4 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-                    Students see <span class="font-semibold text-slate-800">% completion</span>,
-                    <span class="font-semibold text-slate-800">score level</span>, and
-                    <span class="font-semibold text-slate-800">revisions of weakness</span> on one study plan.
-                    Teachers manage a whole class the same way — planned, measured, and clear.
+                    The maths of studying maths, visible the same way for
+                    <span class="font-semibold text-slate-800">individual</span>,
+                    <span class="font-semibold text-slate-800">school class</span>, and
+                    <span class="font-semibold text-slate-800">coaching class</span> —
+                    so teachers manage professionally and students see their own numbers.
                 </p>
 
                 <div class="mm-rise-late mt-7 flex flex-wrap gap-3">
@@ -201,14 +202,13 @@ const mockChapters = [
                 <div class="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
                     <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
                         <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-teal-200/90">Key theme · measured learning</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-teal-200/90">Study plan scorecard</p>
                             <h2 class="mt-1 font-['Fraunces',Georgia,serif] text-2xl font-semibold text-white sm:text-3xl">
-                                Comp % · Score % · Revise
+                                Completion % · Score % · Revision status
                             </h2>
                         </div>
                         <p class="max-w-md text-sm leading-relaxed text-teal-100/90">
-                            Same numbers for the student on the home page and the teacher managing the class —
-                            the professional approach to maths practice.
+                            Individual · School class · Coaching class — one professional language for measured maths practice.
                         </p>
                     </div>
 
@@ -224,21 +224,21 @@ const mockChapters = [
                             <div class="border-b border-slate-200 p-3 sm:p-4 lg:border-b-0 lg:border-r">
                                 <div class="mb-3 grid grid-cols-3 gap-2">
                                     <div class="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-sky-800">Completion</p>
+                                        <p class="text-[10px] font-bold uppercase tracking-wide text-sky-800">Completion %</p>
                                         <p class="text-2xl font-extrabold tabular-nums text-sky-950">26%</p>
                                         <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-sky-200">
                                             <div class="mm-bar h-full rounded-full bg-sky-600" style="--mm-w: 26%"></div>
                                         </div>
                                     </div>
                                     <div class="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2">
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Score</p>
+                                        <p class="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Score %</p>
                                         <p class="text-2xl font-extrabold tabular-nums text-emerald-950">78%</p>
                                         <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-emerald-200">
                                             <div class="mm-bar h-full rounded-full bg-emerald-600" style="--mm-w: 78%"></div>
                                         </div>
                                     </div>
                                     <div class="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-2">
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-orange-900">Revise</p>
+                                        <p class="text-[10px] font-bold uppercase tracking-wide text-orange-900">Revision status</p>
                                         <p class="text-lg font-extrabold leading-tight text-orange-950">
                                             <span class="text-emerald-700">0</span>
                                             <span class="text-slate-400"> · </span>
@@ -253,9 +253,9 @@ const mockChapters = [
                                         <tr class="bg-[#0b2a5b] text-white">
                                             <th class="px-2 py-1.5 font-semibold">Ch No</th>
                                             <th class="px-2 py-1.5 font-semibold">Chapter</th>
-                                            <th class="bg-sky-800 px-2 py-1.5 text-center font-bold">Comp %</th>
+                                            <th class="bg-sky-800 px-2 py-1.5 text-center font-bold">Completion %</th>
                                             <th class="bg-violet-800 px-2 py-1.5 text-center font-bold">Score %</th>
-                                            <th class="bg-orange-700 px-2 py-1.5 text-center font-bold">Revise</th>
+                                            <th class="bg-orange-700 px-2 py-1.5 text-center font-bold">Revision status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -298,7 +298,7 @@ const mockChapters = [
                                     <p class="mt-1 text-sm font-semibold text-slate-900">Manage professionally</p>
                                     <ul class="mt-2 space-y-1.5 text-xs text-slate-700">
                                         <li class="flex justify-between gap-2"><span>Class study plans</span><span class="font-bold text-emerald-700">one view</span></li>
-                                        <li class="flex justify-between gap-2"><span>Comp % / Score % / Revise</span><span class="font-bold text-sky-800">per student</span></li>
+                                        <li class="flex justify-between gap-2"><span>Completion % / Score % / Revision</span><span class="font-bold text-sky-800">per student</span></li>
                                         <li class="flex justify-between gap-2"><span>Weak sums to redo</span><span class="font-bold text-rose-700">queued</span></li>
                                     </ul>
                                 </div>
@@ -315,7 +315,7 @@ const mockChapters = [
                 </h2>
                 <p class="mt-2 max-w-2xl text-base text-slate-600">
                     Studying is treated like a measurable process — not hope, not “I finished the chapter in school”.
-                    Students and teachers read the same three signals.
+                    Individual, school class, and coaching class all read the same three signals.
                 </p>
                 <div class="mt-8 grid gap-6 md:grid-cols-3">
                     <article
@@ -356,10 +356,11 @@ const mockChapters = [
             <!-- Who can use it -->
             <section class="mx-auto max-w-6xl px-5 py-14 sm:px-8">
                 <h2 class="font-['Fraunces',Georgia,serif] text-3xl font-semibold text-[#0f4c5c]">
-                    Schools · Coaching · Tuition · Individual
+                    Individual · School class · Coaching class
                 </h2>
                 <p class="mt-2 max-w-2xl text-base text-slate-600">
-                    Built so a teacher can run a full class professionally — and so one student at home still sees the same honest numbers.
+                    Same study-plan scorecard at every scale — so a teacher can run a full class professionally,
+                    and one student still sees honest Completion %, Score %, and Revision status.
                 </p>
                 <div class="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
                     <article
@@ -383,19 +384,19 @@ const mockChapters = [
                             <p class="mt-4 text-base leading-relaxed text-slate-700">
                                 When a student marks a chapter <span class="font-semibold">Studied</span> or
                                 <span class="font-semibold">Under study</span>, work becomes due that day.
-                                <span class="font-semibold">Comp %</span>, <span class="font-semibold">Score %</span>, and
-                                <span class="font-semibold">Revise</span> update on the scorecard.
-                                Class teachers and students share the same picture.
+                                <span class="font-semibold">Completion %</span>, <span class="font-semibold">Score %</span>, and
+                                <span class="font-semibold">Revision status</span> update on the scorecard —
+                                for the individual student and for the teacher viewing school or coaching class.
                             </p>
                             <p class="mt-4 text-base leading-relaxed text-slate-700">
                                 <span class="font-semibold text-[#0f4c5c]">If work is done regularly — logged in, with drills and sets — learning is not left to chance.</span>
                                 Skip days and the numbers stall. Show up and the scorecard moves.
                             </p>
                             <ul class="mt-6 space-y-2 text-sm text-slate-700">
-                                <li class="flex gap-2"><span class="font-bold text-teal-800">→</span> % completion of planned chapter work</li>
-                                <li class="flex gap-2"><span class="font-bold text-teal-800">→</span> Score level on practised sets</li>
-                                <li class="flex gap-2"><span class="font-bold text-teal-800">→</span> Revisions queued for weak / wrong sums</li>
-                                <li class="flex gap-2"><span class="font-bold text-teal-800">→</span> Whole-class view for school and coaching teachers</li>
+                                <li class="flex gap-2"><span class="font-bold text-teal-800">→</span> Completion % of planned chapter work</li>
+                                <li class="flex gap-2"><span class="font-bold text-teal-800">→</span> Score % on practised sets</li>
+                                <li class="flex gap-2"><span class="font-bold text-teal-800">→</span> Revision status for weak / wrong sums</li>
+                                <li class="flex gap-2"><span class="font-bold text-teal-800">→</span> Individual, school class, and coaching class views</li>
                             </ul>
                         </div>
                         <aside class="rounded-xl border border-slate-200 bg-[#0f4c5c] px-6 py-7 text-teal-50 sm:px-8">
@@ -421,8 +422,8 @@ const mockChapters = [
                         Bring measured maths to your class
                     </h2>
                     <p class="mx-auto mt-4 max-w-xl text-base leading-relaxed text-slate-600">
-                        Soft launch for schools, coaching, tuition, and individual learners.
-                        Request access and start on the study-plan scorecard — Comp %, Score %, Revise.
+                        Soft launch for individual learners, school classes, and coaching classes.
+                        Request access and start on the study-plan scorecard — Completion %, Score %, Revision status.
                     </p>
                     <div class="mt-8 flex flex-wrap justify-center gap-3">
                         <Link
