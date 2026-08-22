@@ -134,9 +134,16 @@ class SchoolStudyPlanTest extends TestCase
         $this->assertDatabaseHas('set_assignments', [
             'student_enrollment_id' => $enrollmentId,
             'worksheet_id' => $worksheet->id,
-            'due_date' => now()->toDateString(),
             'status' => SetAssignment::STATUS_ASSIGNED,
         ]);
+
+        $assignment = SetAssignment::query()
+            ->where('student_enrollment_id', $enrollmentId)
+            ->where('worksheet_id', $worksheet->id)
+            ->first();
+
+        $this->assertNotNull($assignment);
+        $this->assertSame(now()->toDateString(), $assignment->due_date?->toDateString());
     }
 
     public function test_admin_can_save_exam_plan_from_school_study_plan_page(): void
