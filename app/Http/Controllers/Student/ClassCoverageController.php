@@ -60,6 +60,11 @@ class ClassCoverageController extends Controller
             'none' => $this->coverageService->clearCoverage($enrollment, $syllabusChapter),
         };
 
-        return back()->with('success', 'School study plan updated.');
+        $message = match ($validated['status']) {
+            'under_study', 'studied' => 'Study plan updated. Chapter sets are due today — open them from To do or drill down.',
+            default => 'School study plan updated.',
+        };
+
+        return back()->with('success', $message);
     }
 }

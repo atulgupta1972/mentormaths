@@ -2,10 +2,17 @@
 
 namespace App\Services;
 
+use App\Models\SetAssignment;
 use App\Models\StudentChapterCoverage;
 use App\Models\StudentEnrollment;
 use App\Models\SyllabusChapter;
+use App\Models\TextbookChapter;
+use App\Models\User;
+use App\Models\Worksheet;
+use App\Support\PracticeSetScope;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class ClassCoverageService
@@ -14,6 +21,7 @@ class ClassCoverageService
         private ExamPlanService $examPlanService,
         private StudentChapterSummaryService $chapterSummaryService,
         private FormulaBankService $formulaBank,
+        private SetAssignmentService $assignmentService,
     ) {}
 
     /**
@@ -378,6 +386,8 @@ class ClassCoverageService
                 ],
             );
         });
+
+        $this->assignChapterContentDueToday($enrollment, $chapter);
     }
 
     public function clearCoverage(StudentEnrollment $enrollment, SyllabusChapter $chapter): void
@@ -409,6 +419,154 @@ class ClassCoverageService
                 ],
             );
         });
+
+        $this->assignChapterContentDueToday($enrollment, $chapter);
+    }
+
+    /**
+     * Assign (or refresh due date to today) all publishable chapter sets for this student.
+     * Skips completed work and formula-only cards (daily drill covers those).
+     */
+    public function assignChapterContentDueToday(
+        StudentEnrollment $enrollment,
+        SyllabusChapter $chapter,
+        ?User $assigner = null,
+    ): int {
+        $assigner = $assigner
+            ?? auth()->user()
+            ?? $enrollment->student?->user;
+
+        if (! $assigner) {
+            return 0;
+        }
+
+        $dueDate = now()->toDateString();
+        $assigned = 0;
+
+        foreach ($this->publishableWorksheetsForChapter($chapter) as $worksheet) {
+            $existing = SetAssignment::query()
+                ->where('student_enrollment_id', $enrollment->id)
+                ->where('worksheet_id', $worksheet->id)
+                ->whereNot('status', SetAssignment::STATUS_CANCELLED)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($existing?->status === SetAssignment::STATUS_COMPLETED) {
+                continue;
+            }
+
+            try {
+                $this->assignmentService->assign(
+                    $worksheet,
+                    $enrollment,
+                    $assigner,
+                    $dueDate,
+                    'Auto-assigned when chapter marked Studied / Under study',
+                );
+                $assigned++;
+            } catch (\InvalidArgumentException $e) {
+                Log::info('Study-plan auto-assign skipped a set.', [
+                    'worksheet_id' => $worksheet->id,
+                    'enrollment_id' => $enrollment->id,
+                    'message' => $e->getMessage(),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Study-plan auto-assign failed for a set.', [
+                    'worksheet_id' => $worksheet->id,
+                    'enrollment_id' => $enrollment->id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $assigned;
+    }
+
+    /**
+     * Backfill: for every Studied / Under study mark, set chapter content due today.
+     *
+     * @return array{enrollments: int, chapters: int, assignments: int}
+     */
+    public function syncDueTodayForAllMarkedChapters(?int $enrollmentId = null): array
+    {
+        $query = StudentChapterCoverage::query()
+            ->with(['enrollment.student.user', 'chapter.topics:id,syllabus_chapter_id'])
+            ->whereIn('status', [
+                StudentChapterCoverage::STATUS_STUDIED,
+                StudentChapterCoverage::STATUS_UNDER_STUDY,
+            ]);
+
+        if ($enrollmentId !== null) {
+            $query->where('student_enrollment_id', $enrollmentId);
+        }
+
+        $stats = ['enrollments' => 0, 'chapters' => 0, 'assignments' => 0];
+        $seenEnrollments = [];
+
+        foreach ($query->cursor() as $coverage) {
+            $enrollment = $coverage->enrollment;
+            $chapter = $coverage->chapter;
+
+            if (! $enrollment || ! $chapter) {
+                continue;
+            }
+
+            if (! isset($seenEnrollments[$enrollment->id])) {
+                $seenEnrollments[$enrollment->id] = true;
+                $stats['enrollments']++;
+            }
+
+            $stats['chapters']++;
+            $stats['assignments'] += $this->assignChapterContentDueToday($enrollment, $chapter);
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @return Collection<int, Worksheet>
+     */
+    private function publishableWorksheetsForChapter(SyllabusChapter $chapter): Collection
+    {
+        $chapter->loadMissing('topics:id,syllabus_chapter_id');
+        $topicIds = $chapter->topics->pluck('id')->all();
+
+        $worksheets = Worksheet::query()
+            ->where('status', Worksheet::STATUS_PUBLISHED)
+            ->where(function ($query) use ($topicIds, $chapter) {
+                $query->where(function ($inner) use ($topicIds) {
+                    $inner->where('scope', PracticeSetScope::TOPIC)
+                        ->whereIn('syllabus_topic_id', $topicIds ?: [-1]);
+                })->orWhere(function ($inner) use ($chapter) {
+                    $inner->where('scope', PracticeSetScope::CHAPTER)
+                        ->where('syllabus_chapter_id', $chapter->id);
+                });
+            })
+            ->get();
+
+        $textbookWorksheetIds = TextbookChapter::query()
+            ->where('syllabus_chapter_id', $chapter->id)
+            ->get()
+            ->flatMap(fn (TextbookChapter $row) => array_merge(
+                $row->mcqWorksheetIds(),
+                $row->fill_blank_worksheet_id ? [(int) $row->fill_blank_worksheet_id] : [],
+                $row->written_worksheet_id ? [(int) $row->written_worksheet_id] : [],
+            ))
+            ->unique()
+            ->values();
+
+        if ($textbookWorksheetIds->isNotEmpty()) {
+            $worksheets = $worksheets->merge(
+                Worksheet::query()
+                    ->where('status', Worksheet::STATUS_PUBLISHED)
+                    ->whereIn('id', $textbookWorksheetIds)
+                    ->get(),
+            )->unique('id');
+        }
+
+        return $worksheets
+            ->filter(fn (Worksheet $worksheet) => ! $worksheet->isFormula() && ! $worksheet->isCatchUp())
+            ->values();
     }
 
     private function assertChapterBelongsToEnrollment(StudentEnrollment $enrollment, SyllabusChapter $chapter): void

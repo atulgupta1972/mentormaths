@@ -104,9 +104,6 @@ const performanceBarClass = (pct) => {
             class="mt-2 text-[10px] font-semibold text-indigo-950"
         >
             Based on {{ perf.chapterCount }} chapter{{ perf.chapterCount === 1 ? '' : 's' }} marked studied / under study
-            <template v-if="perf.chapterLabels?.length">
-                · {{ perf.chapterLabels.join(', ') }}
-            </template>
         </p>
     </div>
 </template>

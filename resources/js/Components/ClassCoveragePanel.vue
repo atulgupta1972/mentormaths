@@ -38,17 +38,10 @@ const assigningWorksheetId = ref(null);
 const expandedChapterIds = ref(new Set());
 
 const chapters = computed(() => props.classCoverage?.chapters ?? []);
-const availabilityColumns = computed(() => {
-    const columns = props.classCoverage?.availability_columns ?? [];
-
-    return columns.filter((column) =>
-        chapters.value.some((chapter) => Number(chapter.availability?.[column.key] ?? 0) > 0),
-    );
-});
 const isStudentView = computed(() => String(props.updateRouteName).startsWith('student.'));
 const canStaffAssign = computed(() => ! isStudentView.value && Boolean(props.assignStudentId) && route().has('admin.practice-sets.assign'));
-/** Chapter + Topics + Comp + Score + Corr + Studied + Under study + availability */
-const columnCount = computed(() => 7 + availabilityColumns.value.length);
+/** Chapter + Topics + Comp + Score + Revise + Studied + Under study */
+const columnCount = computed(() => 7);
 
 const todayDate = () => {
     const date = new Date();
@@ -642,7 +635,7 @@ const startCorrection = (item) => {
         </div>
 
         <div v-else class="overflow-x-auto rounded-lg border-2 border-slate-400 shadow-sm">
-            <table class="w-full min-w-[52rem] border-collapse text-[11px] leading-none">
+            <table class="w-full min-w-[40rem] border-collapse text-[11px] leading-none">
                 <thead>
                     <tr class="bg-[#0b2a5b] text-white">
                         <th class="px-1.5 py-1 text-left font-semibold whitespace-nowrap">Chapter</th>
@@ -658,14 +651,6 @@ const startCorrection = (item) => {
                         </th>
                         <th class="px-1 py-1 text-center font-semibold whitespace-nowrap">Studied</th>
                         <th class="px-1 py-1 text-center font-semibold whitespace-nowrap">Under study</th>
-                        <th
-                            v-for="column in availabilityColumns"
-                            :key="column.key"
-                            class="px-0.5 py-1 text-center font-semibold whitespace-nowrap"
-                            :title="column.label"
-                        >
-                            {{ column.short }}
-                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -793,24 +778,6 @@ const startCorrection = (item) => {
                                     @click.stop="mark(chapter, 'under_study')"
                                 >
                                     <span v-if="chapter.under_study">✓</span>
-                                </button>
-                            </td>
-                            <td
-                                v-for="column in availabilityColumns"
-                                :key="`${chapter.id}-${column.key}`"
-                                class="px-0.5 py-0.5 text-center align-middle"
-                                :class="chapterRowLineClass(chapter.id)"
-                            >
-                                <button
-                                    type="button"
-                                    class="inline-flex h-5 w-5 items-center justify-center rounded border text-[10px] font-semibold tabular-nums leading-none"
-                                    :class="availabilityCount(chapter, column.key) > 0
-                                        ? 'border-sky-600 bg-sky-500 text-white'
-                                        : 'border-slate-300 bg-white text-slate-300'"
-                                    :title="`${column.label}: ${availabilityCount(chapter, column.key) || 'none'}`"
-                                    @click="toggleChapter(chapter.id)"
-                                >
-                                    {{ availabilityCount(chapter, column.key) > 0 ? availabilityCount(chapter, column.key) : '' }}
                                 </button>
                             </td>
                         </tr>

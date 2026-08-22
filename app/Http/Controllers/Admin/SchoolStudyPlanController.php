@@ -160,8 +160,13 @@ class SchoolStudyPlanController extends Controller
             'none' => $this->coverageService->clearCoverage($enrollment, $syllabusChapter),
         };
 
+        $message = match ($validated['status']) {
+            'under_study', 'studied' => 'Study plan updated. Chapter sets are due today.',
+            default => 'School study plan updated.',
+        };
+
         return redirect()
             ->route('admin.school-study-plan.index', ['student_id' => $student->id])
-            ->with('success', 'School study plan updated.');
+            ->with('success', $message);
     }
 }

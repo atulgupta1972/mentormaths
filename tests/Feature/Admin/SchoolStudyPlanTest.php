@@ -117,6 +117,28 @@ class SchoolStudyPlanTest extends TestCase
         ]);
     }
 
+    public function test_marking_under_study_assigns_chapter_sets_due_today(): void
+    {
+        [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
+        $worksheet = $this->seedChapterWorksheet($chapters[1], $admin);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->put(route('admin.school-study-plan.update', [$student, $chapters[1]]), [
+                'status' => 'under_study',
+            ])
+            ->assertRedirect();
+
+        $enrollmentId = $student->enrollments()->first()->id;
+
+        $this->assertDatabaseHas('set_assignments', [
+            'student_enrollment_id' => $enrollmentId,
+            'worksheet_id' => $worksheet->id,
+            'due_date' => now()->toDateString(),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+    }
+
     public function test_admin_can_save_exam_plan_from_school_study_plan_page(): void
     {
         [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
