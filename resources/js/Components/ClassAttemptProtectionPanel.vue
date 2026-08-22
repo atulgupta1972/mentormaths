@@ -28,7 +28,7 @@ const submit = () => {
         <p class="mt-1 text-xs text-gray-600">
             Control anti-copy, fullscreen, and tab-leave tracking for this class.
             Students must stay in fullscreen; leaving 4 times locks the attempt.
-            Unlock from the student’s assignment page (Attempts → Unlock).
+            Unlock from Dashboard → Locked students (or the assignment page).
         </p>
 
         <form class="mt-4 space-y-3" @submit.prevent="submit">
