@@ -10,7 +10,7 @@ import HelpRequestUploaderReturn from '@/Components/HelpRequestUploaderReturn.vu
 import QuestionIssueReportActions from '@/Components/QuestionIssueReportActions.vue';
 import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmailsPanel.vue';
 import { formatScoreLabel } from '@/utils/scores';
-import { formatDate, formatDateTime, formatTime as formatDuration } from '@/utils/dates';
+import { formatDate, formatDateTime } from '@/utils/dates';
 import { hasRoute, safeRoute } from '@/utils/routes';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
@@ -169,17 +169,6 @@ const checkingAssignments = computed(() =>
     ),
 );
 
-const pendingAssignments = computed(() =>
-    sortByDateKey(
-        props.assignments.filter((a) =>
-            a.status !== 'green'
-            && a.status !== 'green-late'
-            && a.status !== 'checking'
-            && !a.is_catch_up),
-        'target_date',
-    ),
-);
-
 const pendingCatchUpAssignments = computed(() =>
     sortByDateKey(
         props.assignments.filter((a) =>
@@ -187,13 +176,6 @@ const pendingCatchUpAssignments = computed(() =>
             && a.status !== 'green-late'
             && a.is_catch_up),
         'target_date',
-    ),
-);
-
-const completedAssignments = computed(() =>
-    sortByDateKey(
-        props.assignments.filter((a) => a.status === 'green' || a.status === 'green-late'),
-        'submitted_at',
     ),
 );
 
@@ -239,42 +221,8 @@ const groupAssignmentsByChapter = (rows) => {
     );
 };
 
-const pendingByChapter = computed(() => groupAssignmentsByChapter(pendingAssignments.value));
 const pendingCatchUpByChapter = computed(() => groupAssignmentsByChapter(pendingCatchUpAssignments.value));
 const checkingByChapter = computed(() => groupAssignmentsByChapter(checkingAssignments.value));
-const completedByChapter = computed(() => groupAssignmentsByChapter(completedAssignments.value));
-
-const topicLabel = (set) => {
-    if (set.topic_name) {
-        return set.topic_name;
-    }
-
-    if (set.scope === 'chapter') {
-        return set.kind_label?.includes('Test') ? 'Chapter test' : 'Chapter practice';
-    }
-
-    return '—';
-};
-
-const formatTime = (seconds) => formatDuration(seconds) === '—' ? '' : formatDuration(seconds);
-
-const completedAssignmentHref = (set) => {
-    if (set.delivery_mode === 'written') {
-        return route('student.written-assignments.show', set.assignment_id);
-    }
-
-    return set.latest_attempt_id
-        ? route('student.attempts.result', set.latest_attempt_id)
-        : route('student.assignments.show', set.assignment_id);
-};
-
-const completedLinkLabel = (set) => {
-    if (set.delivery_mode === 'written' && set.written_submission_status === 'graded') {
-        return 'View / re-upload';
-    }
-
-    return 'Open';
-};
 
 const assignmentHref = (set) => (
     set.delivery_mode === 'written'
@@ -337,79 +285,6 @@ const prepProgressPercent = (plan) => {
 
     return Math.round((plan.prep_summary.completed / plan.prep_summary.total) * 100);
 };
-
-const prepAssignmentsByChapter = (plan) => {
-    const assignments = plan.prep_assignments || [];
-
-    if (!assignments.length) {
-        return [];
-    }
-
-    const grouped = assignments.reduce((acc, prep) => {
-        const key = prep.chapter_label || 'Other';
-
-        if (!acc[key]) {
-            acc[key] = [];
-        }
-
-        acc[key].push(prep);
-
-        return acc;
-    }, {});
-
-    const planChapterOrder = (plan.chapters || []).map(
-        (chapter) => chapter.label || `Ch ${chapter.chapter_number} — ${chapter.name}`,
-    );
-
-    return Object.entries(grouped)
-        .map(([chapter_label, sets]) => ({
-            chapter_label,
-            sets: sets.slice().sort((left, right) => (left.set_number || 0) - (right.set_number || 0)),
-            pending_count: sets.filter((set) => set.assignment_status !== 'completed').length,
-        }))
-        .sort((left, right) => {
-            const leftIndex = planChapterOrder.indexOf(left.chapter_label);
-            const rightIndex = planChapterOrder.indexOf(right.chapter_label);
-
-            if (leftIndex === -1 && rightIndex === -1) {
-                return left.chapter_label.localeCompare(right.chapter_label);
-            }
-
-            if (leftIndex === -1) {
-                return 1;
-            }
-
-            if (rightIndex === -1) {
-                return -1;
-            }
-
-            return leftIndex - rightIndex;
-        });
-};
-
-const prepStatusClass = (prep) => {
-    if (prep.assignment_status === 'completed') {
-        return prep.submission_timing === 'late'
-            ? 'bg-amber-100 text-amber-900'
-            : 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (prep.is_overdue) {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (prep.assignment_status === 'in_progress') {
-        return 'bg-amber-100 text-amber-900';
-    }
-
-    return 'bg-sky-100 text-sky-800';
-};
-
-const prepAssignmentHref = (prep) => (
-    prep.delivery_mode === 'written'
-        ? route('student.written-assignments.show', prep.assignment_id)
-        : route('student.assignments.show', prep.assignment_id)
-);
 
 const toggleStudent = async (studentId) => {
     if (expandedStudentId.value === studentId) {
@@ -514,74 +389,6 @@ const formatHelpDate = (value) => {
         month: 'short',
         year: 'numeric',
     });
-};
-
-const pendingBorderClass = (set) => {
-    if (set.is_overdue) {
-        return 'border-rose-300 bg-gradient-to-br from-rose-50 to-white ring-1 ring-rose-200';
-    }
-    if (set.status === 'yellow') {
-        return 'border-amber-300 bg-gradient-to-br from-amber-50 to-white ring-1 ring-amber-200';
-    }
-
-    return 'border-sky-300 bg-gradient-to-br from-sky-50 to-white ring-1 ring-sky-200 hover:border-sky-400';
-};
-
-const pendingBadgeClass = (set) => {
-    if (set.is_overdue) {
-        return 'bg-rose-500 text-white';
-    }
-    if (set.status === 'yellow') {
-        return 'bg-amber-500 text-white';
-    }
-
-    return 'bg-sky-500 text-white';
-};
-
-const pendingStatusLabel = (set) => {
-    if (set.is_overdue) {
-        return 'Overdue';
-    }
-    if (set.status === 'yellow') {
-        return 'In progress';
-    }
-
-    return 'To do';
-};
-
-const pendingButtonClass = (set) => {
-    if (set.is_overdue) {
-        return 'bg-rose-600 hover:bg-rose-700';
-    }
-
-    return 'bg-indigo-600 hover:bg-indigo-700';
-};
-
-const pendingButtonLabel = (set) => {
-    if (set.delivery_mode === 'written') {
-        if (set.written_submission_status === 'processing') {
-            return 'Checking…';
-        }
-
-        if (set.written_submission_status === 'uploaded') {
-            return 'Uploaded';
-        }
-
-        if (set.written_submission_status === 'failed') {
-            return 'View / upload';
-        }
-
-        return set.written_submission_status === 'graded' ? 'View / re-upload' : 'Upload work';
-    }
-
-    if (set.status === 'yellow') {
-        return 'Continue';
-    }
-    if (set.is_overdue) {
-        return 'Complete now';
-    }
-
-    return 'Start';
 };
 
 const adminAssignmentHref = (set, studentId) => {
@@ -1185,18 +992,12 @@ const adminSetStatusClass = (set) => {
                         </div>
                     </section>
 
-                    <div class="border-t border-slate-200 pt-2">
-                        <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Practice, exams & assignments
-                        </h3>
-                    </div>
-
                     <!-- Welcome — single compact row -->
                     <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-4 py-3 text-white shadow">
                         <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                             <p class="text-base font-semibold whitespace-nowrap">Welcome, {{ $page.props.auth.user.name }}</p>
                             <span class="hidden text-emerald-100/70 sm:inline">·</span>
-                            <p class="hidden text-xs text-emerald-100 sm:inline">Plan your exams · Practice your sets · Perform on test day</p>
+                            <p class="hidden text-xs text-emerald-100 sm:inline">Use your study plan above for practice and exams</p>
                         </div>
                         <div class="flex flex-wrap items-center gap-2 text-xs">
                             <span class="rounded-full bg-white/20 px-2.5 py-0.5">{{ stats.upcoming_exams || 0 }} exams</span>
@@ -1223,9 +1024,8 @@ const adminSetStatusClass = (set) => {
                         {{ page.props.flash.success }}
                     </div>
 
-                    <!-- Main row: exams (LHS) · to do (RHS) -->
                     <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
-                        <!-- Upcoming exams — violet zone -->
+                        <!-- Upcoming exams — summary + planner (set lists live in study plan) -->
                         <section class="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 p-4 shadow-sm">
                             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                                 <h3 class="text-xs font-semibold uppercase tracking-wide text-violet-900">
@@ -1277,14 +1077,6 @@ const adminSetStatusClass = (set) => {
                                                 :style="{ width: `${prepProgressPercent(plan)}%` }"
                                             />
                                         </div>
-                                    </div>
-                                    <div v-if="prepAssignmentsByChapter(plan).length" class="mt-3 space-y-2">
-                                        <StudentAssignmentGroupTable
-                                            :groups="prepAssignmentsByChapter(plan)"
-                                            variant="prep"
-                                            chapter-field="chapter_label"
-                                            count-suffix="prep sets"
-                                        />
                                     </div>
                                     <p
                                         v-if="plan.has_marks"
@@ -1389,28 +1181,6 @@ const adminSetStatusClass = (set) => {
                                 />
                             </div>
                         </section>
-
-                        <!-- Practice sets — amber/orange zone -->
-                        <section class="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 p-4 shadow-sm">
-                            <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-amber-900">
-                                Practice & tests · Pending · {{ pendingAssignments.length }}
-                            </h3>
-
-                            <StudentAssignmentGroupTable
-                                v-if="pendingAssignments.length"
-                                :groups="pendingByChapter"
-                                variant="pending"
-                                count-suffix="pending"
-                            />
-
-                            <div v-else-if="completedAssignments.length" class="rounded-lg border border-dashed border-amber-300 bg-white/70 p-4 text-center text-xs text-amber-900">
-                                All caught up — no pending sets right now.
-                            </div>
-
-                            <div v-else class="rounded-lg border border-dashed border-amber-300 bg-white/70 p-4 text-center text-xs text-amber-900">
-                                No sets assigned yet. Your teacher will assign practice when you're ready.
-                            </div>
-                        </section>
                     </div>
 
                     <!-- Submitted — under review (AI / teacher) -->
@@ -1472,18 +1242,6 @@ const adminSetStatusClass = (set) => {
                                 <p class="mt-1 truncate text-[10px] text-gray-500">{{ chapterList(plan) }}</p>
                             </div>
                         </div>
-                    </section>
-
-                    <!-- Completed sets — green zone -->
-                    <section v-if="completedAssignments.length" class="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 p-4 shadow-sm">
-                        <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-emerald-800">
-                            Completed · {{ completedAssignments.length }}
-                        </h3>
-                        <StudentAssignmentGroupTable
-                            :groups="completedByChapter"
-                            variant="completed"
-                            count-suffix="done"
-                        />
                     </section>
 
                 </template>
