@@ -684,50 +684,6 @@ const adminSetStatusClass = (set) => {
                     </section>
 
                     <section
-                        v-if="contentRecheckQueue.length"
-                        class="rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 to-indigo-50 p-4 shadow-sm"
-                    >
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                                <p class="text-sm font-semibold text-sky-950">
-                                    Published content · {{ contentRecheckQueue.length }}
-                                </p>
-                                <p class="mt-0.5 text-xs text-sky-800">
-                                    Send a chapter back for another check. Questions stay live — the uploader cannot delete them.
-                                </p>
-                            </div>
-                            <Link :href="route('admin.content-tasks.index')" class="text-xs font-medium text-indigo-600 hover:underline">
-                                All content tasks →
-                            </Link>
-                        </div>
-                        <ul class="mt-3 space-y-2">
-                            <li
-                                v-for="item in contentRecheckQueue"
-                                :key="item.id"
-                                class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/80 px-3 py-2 text-sm"
-                            >
-                                <span>
-                                    {{ item.grade_name }} · Ch {{ item.chapter_number }} — {{ item.chapter_title }}
-                                    <span class="text-gray-500">· {{ item.assignee_name }}</span>
-                                </span>
-                                <div class="flex flex-wrap items-center gap-3">
-                                    <button
-                                        type="button"
-                                        class="rounded-md bg-sky-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-800 disabled:opacity-50"
-                                        :disabled="returningTaskId === item.id"
-                                        @click="sendBackForRecheck(item)"
-                                    >
-                                        {{ returningTaskId === item.id ? 'Sending…' : 'Send back to check' }}
-                                    </button>
-                                    <Link :href="route('admin.content-tasks.show', item.id)" class="text-indigo-600 hover:underline">
-                                        Open →
-                                    </Link>
-                                </div>
-                            </li>
-                        </ul>
-                    </section>
-
-                    <section
                         v-if="showQuestionIssues && questionIssueReports.length"
                         class="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 p-4 shadow-sm"
                     >
