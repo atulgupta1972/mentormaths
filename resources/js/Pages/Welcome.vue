@@ -67,17 +67,17 @@ const mockChapters = [
             .mm-rise-delay { animation: mm-rise 0.75s ease-out 0.12s both; }
             .mm-rise-late { animation: mm-rise 0.8s ease-out 0.22s both; }
             .mm-bar { animation: mm-bar 1.1s ease-out 0.4s both; }
+            .mm-pattern {
+                background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%230f766e' fill-opacity='0.04' d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/svg%3E");
+            }
         </style>
 
         <!-- Soft atmosphere (not a flat wash) -->
         <div class="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
-            <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#dce8e2_0%,_#f3f6f4_55%,_#eef2f7_100%)]" />
-            <div class="absolute -left-20 top-24 h-72 w-72 rounded-full bg-teal-400/15 blur-3xl" />
-            <div class="absolute right-0 top-0 h-[28rem] w-[28rem] rounded-full bg-sky-400/10 blur-3xl" />
-            <div
-                class="absolute inset-0 opacity-[0.35]"
-                style="background-image: url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%230f766e' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\");"
-            />
+            <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#dce8e2_0%,_#f3f6f4_55%,_#eef2f7_100%)]"></div>
+            <div class="absolute -left-20 top-24 h-72 w-72 rounded-full bg-teal-400/15 blur-3xl"></div>
+            <div class="absolute right-0 top-0 h-[28rem] w-[28rem] rounded-full bg-sky-400/10 blur-3xl"></div>
+            <div class="mm-pattern absolute inset-0 opacity-[0.35]"></div>
         </div>
 
         <header class="relative z-20 mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-8">
