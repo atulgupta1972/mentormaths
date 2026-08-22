@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { requestAttemptFullscreen } from '@/utils/attemptFullscreen';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
 const props = defineProps({
@@ -12,6 +12,7 @@ const props = defineProps({
 
 const startForm = useForm({});
 const startError = ref('');
+const starting = ref(false);
 
 const setLabel = () =>
     props.assignment.practice_set.set_code
@@ -19,26 +20,48 @@ const setLabel = () =>
 
 const kindLabel = () => props.assignment.practice_set.kind_label || 'Practice';
 
-const startOrContinue = async () => {
-    startError.value = '';
-
-    if (props.assignment.in_progress_attempt_id) {
-        window.location.href = route('student.attempts.show', props.assignment.in_progress_attempt_id);
-
-        return;
+const ensureFullscreen = async () => {
+    if (! props.assignment.integrity?.require_fullscreen) {
+        return true;
     }
 
-    if (props.assignment.integrity?.require_fullscreen) {
-        const ok = await requestAttemptFullscreen();
+    const ok = await requestAttemptFullscreen();
 
-        if (!ok) {
-            startError.value = 'Please allow fullscreen in your browser to start. Close Gemini / other side panels first.';
+    if (! ok) {
+        startError.value = 'Allow fullscreen to start. Close Gemini / other side panels, then try again.';
+
+        return false;
+    }
+
+    return true;
+};
+
+const startOrContinue = async () => {
+    startError.value = '';
+    starting.value = true;
+
+    try {
+        if (! await ensureFullscreen()) {
+            return;
+        }
+
+        if (props.assignment.in_progress_attempt_id) {
+            // Inertia visit keeps fullscreen better than a full page reload.
+            router.visit(route('student.attempts.show', props.assignment.in_progress_attempt_id));
 
             return;
         }
-    }
 
-    startForm.post(route('student.assignments.start', props.assignment.id));
+        startForm.post(route('student.assignments.start', props.assignment.id), {
+            onFinish: () => {
+                starting.value = false;
+            },
+        });
+    } finally {
+        if (! startForm.processing) {
+            starting.value = false;
+        }
+    }
 };
 
 const formatTime = (seconds) => {
@@ -62,14 +85,20 @@ const formatDate = (d) => {
 
 const startLabel = () => {
     if (props.assignment.in_progress_attempt_id) {
-        return 'Continue';
+        return props.assignment.integrity?.require_fullscreen
+            ? 'Continue in fullscreen'
+            : 'Continue';
     }
 
     if (props.assignment.is_overdue) {
         return `Submit delayed ${kindLabel().toLowerCase()}`;
     }
 
-    return kindLabel() === 'Test' ? 'Start test' : 'Start practice';
+    if (kindLabel() === 'Test') {
+        return props.assignment.integrity?.require_fullscreen ? 'Start test (fullscreen)' : 'Start test';
+    }
+
+    return props.assignment.integrity?.require_fullscreen ? 'Start practice (fullscreen)' : 'Start practice';
 };
 </script>
 
@@ -107,8 +136,10 @@ const startLabel = () => {
                         </template>
                         <template v-else>
                             Answer all questions and submit when finished.
-                            <span v-if="assignment.integrity?.require_fullscreen"> Opens in fullscreen — stay on this screen only.</span>
                         </template>
+                        <span v-if="assignment.integrity?.require_fullscreen">
+                            Starts in fullscreen automatically — stay on this screen only.
+                        </span>
                     </p>
                     <p v-if="assignment.notes" class="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">
                         Teacher note: {{ assignment.notes }}
@@ -142,10 +173,10 @@ const startLabel = () => {
                     <PrimaryButton
                         v-else-if="assignment.status !== 'completed' || assignment.in_progress_attempt_id"
                         class="mt-6"
-                        :disabled="startForm.processing"
+                        :disabled="startForm.processing || starting"
                         @click="startOrContinue"
                     >
-                        {{ startLabel() }}
+                        {{ startForm.processing || starting ? 'Starting…' : startLabel() }}
                     </PrimaryButton>
                     <p v-else class="mt-6 text-sm text-gray-600">
                         Completed. Ask your teacher to re-assign for another attempt.
