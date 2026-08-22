@@ -47,7 +47,7 @@ const needsFullscreenGate = computed(() =>
 );
 const fullscreenReady = ref(!needsFullscreenGate.value);
 
-const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked, lockLimit, confirmWithoutLeave } = useAttemptContentProtection({
+const { contentHidden, enabled: protectionEnabled, tabLeaveCount, attemptLocked, lockLimit } = useAttemptContentProtection({
     mode: protectionMode.value,
     attemptId: props.attempt?.id,
     trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
@@ -64,8 +64,11 @@ const answerForm = useForm({ option_id: null, answer_text: '' });
 const giveUpForm = useForm({});
 const hintForm = useForm({});
 const pendingMcqOption = ref(null);
+/** In-page confirm only — native confirm() exits fullscreen and falsely counts a leave. */
+const pendingActionConfirm = ref(null);
 
 const showMcqConfirm = computed(() => pendingMcqOption.value !== null);
+const showActionConfirm = computed(() => pendingActionConfirm.value !== null);
 
 const feedback = computed(() => page.props.flash?.guided_feedback ?? null);
 const isFillInBlank = computed(() => props.question?.type === 'fill_in_blank');
@@ -151,26 +154,71 @@ const submitBlankAnswer = () => {
 };
 
 const requestHelp = () => {
-    if (!confirmWithoutLeave('Ask your teacher for help on this sum? It goes on your help list and you move to the next question.')) {
-        return;
-    }
-
-    giveUpForm.post(route('student.attempts.guided.give-up', props.attempt.id), {
-        preserveScroll: true,
-    });
+    pendingActionConfirm.value = 'help';
 };
 
 const requestHint = () => {
-    if (!confirmWithoutLeave(
-        'Show the method hint?\n\nYou can still answer this sum, but it will NOT count toward your first-try score.\n\nTap Cancel to keep trying on your own.',
-    )) {
+    pendingActionConfirm.value = 'hint';
+};
+
+const cancelActionConfirm = () => {
+    pendingActionConfirm.value = null;
+};
+
+const confirmAction = () => {
+    const action = pendingActionConfirm.value;
+    pendingActionConfirm.value = null;
+
+    if (action === 'help') {
+        giveUpForm.post(route('student.attempts.guided.give-up', props.attempt.id), {
+            preserveScroll: true,
+        });
+
         return;
     }
 
-    hintForm.post(route('student.attempts.guided.request-hint', props.attempt.id), {
-        preserveScroll: true,
-    });
+    if (action === 'hint') {
+        hintForm.post(route('student.attempts.guided.request-hint', props.attempt.id), {
+            preserveScroll: true,
+        });
+    }
 };
+
+const actionConfirmTitle = computed(() => {
+    if (pendingActionConfirm.value === 'help') {
+        return 'Ask your teacher for help?';
+    }
+
+    if (pendingActionConfirm.value === 'hint') {
+        return 'Show the method hint?';
+    }
+
+    return '';
+});
+
+const actionConfirmBody = computed(() => {
+    if (pendingActionConfirm.value === 'help') {
+        return 'This sum goes on your help list and you move to the next question.';
+    }
+
+    if (pendingActionConfirm.value === 'hint') {
+        return 'You can still answer this sum, but it will NOT count toward your first-try score.';
+    }
+
+    return '';
+});
+
+const actionConfirmButton = computed(() => {
+    if (pendingActionConfirm.value === 'help') {
+        return giveUpForm.processing ? 'Sending…' : 'Yes, I need help';
+    }
+
+    if (pendingActionConfirm.value === 'hint') {
+        return hintForm.processing ? 'Loading…' : 'Show hint';
+    }
+
+    return 'Continue';
+});
 
 const canAnswer = computed(() => ['answering', 'retry', 'explained'].includes(props.phase));
 
@@ -404,6 +452,29 @@ watch(
                     </SecondaryButton>
                     <PrimaryButton type="button" :disabled="answerForm.processing" @click="confirmMcqAnswer">
                         {{ answerForm.processing ? 'Submitting…' : 'Submit answer' }}
+                    </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
+
+        <Modal :show="showActionConfirm" max-width="md" @close="cancelActionConfirm">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-900">{{ actionConfirmTitle }}</h3>
+                <p class="mt-2 text-sm text-gray-600">{{ actionConfirmBody }}</p>
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
+                    <SecondaryButton
+                        type="button"
+                        :disabled="giveUpForm.processing || hintForm.processing"
+                        @click="cancelActionConfirm"
+                    >
+                        Cancel
+                    </SecondaryButton>
+                    <PrimaryButton
+                        type="button"
+                        :disabled="giveUpForm.processing || hintForm.processing"
+                        @click="confirmAction"
+                    >
+                        {{ actionConfirmButton }}
                     </PrimaryButton>
                 </div>
             </div>

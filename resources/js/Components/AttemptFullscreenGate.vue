@@ -10,7 +10,7 @@ const props = defineProps({
     },
     message: {
         type: String,
-        default: 'Stay in fullscreen so only Mentor Maths is on screen. Leaving fullscreen, other tabs, or side panels (like Gemini) counts as a leave.',
+        default: 'Stay in fullscreen so only Mentor Maths is on screen. Do not switch tabs or open other apps — your teacher is informed of each leave.',
     },
     /** Try to enter fullscreen as soon as this gate mounts (works when Start already began a gesture). */
     autoEnter: {
