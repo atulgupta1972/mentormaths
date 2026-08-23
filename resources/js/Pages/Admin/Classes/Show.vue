@@ -13,13 +13,10 @@ const props = defineProps({
     gradeLevel: Object,
     activeYear: Object,
     syllabusVersion: Object,
-    view: { type: String, default: 'topic' },
+    view: { type: String, default: 'sets' },
     selectedChapterId: [Number, String, null],
-    selectedTopicId: [Number, String, null],
     chapters: Array,
-    chapterTopics: Array,
     chapterRows: Array,
-    topics: Array,
     stats: Object,
     examFilter: { type: String, default: 'upcoming' },
     examPlanRows: { type: Array, default: () => [] },
@@ -36,10 +33,9 @@ const props = defineProps({
     selectedBoard: { type: Object, default: null },
 });
 
-const viewMode = ref(props.view || 'sets');
+const viewMode = ref(props.view === 'chapter' ? 'chapter' : 'sets');
 const boardFilter = ref(props.selectedBoardId ? String(props.selectedBoardId) : '');
 const chapterFilter = ref(props.selectedChapterId || '');
-const topicFilter = ref(props.selectedTopicId || '');
 const examFilter = ref(props.examFilter || 'upcoming');
 const editingStudentId = ref(null);
 const autoOpenCreate = ref(false);
@@ -66,10 +62,6 @@ const reload = () => {
         exam_filter: examFilter.value,
     };
 
-    if (!isChapterView.value && !isSetsView.value) {
-        params.syllabus_topic_id = topicFilter.value || undefined;
-    }
-
     router.get(route('admin.classes.show', props.gradeLevel.id), params, { preserveState: false });
 };
 
@@ -78,7 +70,6 @@ const reloadExamFilter = () => {
         view: viewMode.value,
         board_id: boardFilter.value || undefined,
         syllabus_chapter_id: chapterFilter.value || undefined,
-        syllabus_topic_id: topicFilter.value || undefined,
         exam_filter: examFilter.value,
     }, { preserveState: true, preserveScroll: true });
 };
@@ -95,16 +86,29 @@ const formatDate = (d) => {
     });
 };
 
-const chapterSummary = (plan) => {
-    if (!plan) {
+const pctLabel = (value) => (value == null ? '—' : `${value}%`);
+
+const revisionLabel = (progress) => {
+    if (!progress) {
         return '—';
     }
 
-    if (plan.chapter_names?.length) {
-        return plan.chapter_names.join(', ');
+    const pending = Number(progress.revision_pending || 0);
+    const openWrongs = Number(progress.open_wrongs || 0);
+
+    if (pending <= 0 && openWrongs <= 0) {
+        return 'Clear';
     }
 
-    return plan.chapters?.map((ch) => ch.label || ch.name).join(', ') || '—';
+    const parts = [];
+    if (pending > 0) {
+        parts.push(`${pending} pending`);
+    }
+    if (openWrongs > 0) {
+        parts.push(`${openWrongs} wrong`);
+    }
+
+    return parts.join(' · ');
 };
 
 const openStudentPlans = (studentId, startCreate = false) => {
@@ -118,9 +122,6 @@ const closeStudentPlans = () => {
 };
 
 watch(viewMode, () => {
-    if (isChapterView.value || isSetsView.value) {
-        topicFilter.value = '';
-    }
     reload();
 });
 
@@ -128,15 +129,9 @@ watch(chapterFilter, (id, oldId) => {
     if (id === oldId) {
         return;
     }
-    topicFilter.value = '';
-    reload();
-});
-
-watch(topicFilter, (id, oldId) => {
-    if (isChapterView.value || isSetsView.value || id === oldId) {
-        return;
+    if (isChapterView.value) {
+        reload();
     }
-    reload();
 });
 
 watch(examFilter, (value, oldValue) => {
@@ -228,9 +223,10 @@ watch(boardFilter, (value, oldValue) => {
                     <div class="border-b px-6 py-4">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                                <h3 class="font-medium text-gray-900">Exam plans</h3>
+                                <h3 class="font-medium text-gray-900">Class status &amp; exam plans</h3>
                                 <p class="mt-1 text-sm text-gray-500">
-                                    You or the student can add dates. Use <strong>Add exam date</strong> to enter a plan for any student.
+                                    Completion %, score %, revision, login days, and time spent for each student.
+                                    Use <strong>Add exam date</strong> when you need an exam plan.
                                 </p>
                             </div>
                             <div class="flex items-center gap-2">
@@ -250,102 +246,115 @@ watch(boardFilter, (value, oldValue) => {
                         </div>
                     </div>
 
-                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Student</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Plan</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Exam date</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Chapters</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Prep</th>
-                                <th class="px-4 py-3 text-right text-xs uppercase text-gray-500">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200">
-                            <template v-for="row in examPlanRows" :key="row.enrollment_id">
-                                <tr :class="!row.has_upcoming && examFilter === 'upcoming' ? 'bg-amber-50/60' : ''">
-                                    <td class="px-4 py-3">
-                                        <Link
-                                            :href="route('admin.students.show', row.student_id)"
-                                            class="font-medium text-indigo-600 hover:underline"
-                                        >
-                                            {{ row.student_name }}
-                                        </Link>
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <template v-if="row.display_plan">
-                                            <p class="font-medium text-gray-900">{{ row.display_plan.title }}</p>
-                                            <p class="text-xs text-gray-500">{{ row.display_plan.exam_type_label }}</p>
-                                        </template>
-                                        <span v-else class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                                            No plan
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 whitespace-nowrap">
-                                        {{ formatDate(row.display_plan?.exam_date) }}
-                                    </td>
-                                    <td class="px-4 py-3 text-gray-700">
-                                        {{ chapterSummary(row.display_plan) }}
-                                    </td>
-                                    <td class="px-4 py-3 text-gray-700">
-                                        <template v-if="row.display_plan?.prep_assignments?.length">
-                                            <span class="text-xs text-gray-500">
-                                                {{ row.display_plan.prep_summary?.completed }}/{{ row.display_plan.prep_summary?.total }} done
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Student</th>
+                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Plan</th>
+                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Exam date</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Study plan completion">Completion %</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on scored sets">Score %</th>
+                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Revision</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Login days this academic year">Days logged</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Approx time on practice this year">Hours spent</th>
+                                    <th class="px-3 py-3 text-right text-xs uppercase text-gray-500">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <template v-for="row in examPlanRows" :key="row.enrollment_id">
+                                    <tr :class="!row.has_upcoming && examFilter === 'upcoming' ? 'bg-amber-50/60' : ''">
+                                        <td class="px-3 py-3">
+                                            <Link
+                                                :href="route('admin.students.show', row.student_id)"
+                                                class="font-medium text-indigo-600 hover:underline"
+                                            >
+                                                {{ row.student_name }}
+                                            </Link>
+                                        </td>
+                                        <td class="px-3 py-3">
+                                            <template v-if="row.display_plan">
+                                                <p class="font-medium text-gray-900">{{ row.display_plan.title }}</p>
+                                                <p class="text-xs text-gray-500">{{ row.display_plan.exam_type_label }}</p>
+                                            </template>
+                                            <span v-else class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                                No plan
                                             </span>
-                                            <p class="mt-1 text-xs">
-                                                {{ row.display_plan.prep_assignments.map((p) => p.set_code).join(', ') }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-3 py-3">
+                                            {{ formatDate(row.display_plan?.exam_date) }}
+                                        </td>
+                                        <td class="px-3 py-3 text-center">
+                                            <span class="font-semibold tabular-nums text-sky-800">{{ pctLabel(row.progress?.completion_pct) }}</span>
+                                            <p
+                                                v-if="row.progress?.sets_total"
+                                                class="text-[10px] text-gray-500"
+                                            >
+                                                {{ row.progress.sets_done }}/{{ row.progress.sets_total }} sets
                                             </p>
-                                        </template>
-                                        <span v-else class="text-xs text-gray-400">—</span>
-                                    </td>
-                                    <td class="px-4 py-3 text-right space-x-3">
-                                        <button
-                                            v-if="!row.has_upcoming"
-                                            type="button"
-                                            class="text-sm font-medium text-indigo-600 hover:underline"
-                                            @click="openStudentPlans(row.student_id, true)"
-                                        >
-                                            Add exam date
-                                        </button>
-                                        <button
-                                            v-else
-                                            type="button"
-                                            class="text-sm text-indigo-600 hover:underline"
-                                            @click="openStudentPlans(row.student_id, false)"
-                                        >
-                                            Edit plans
-                                        </button>
-                                        <button
-                                            v-if="editingStudentId === row.student_id"
-                                            type="button"
-                                            class="text-sm text-gray-500 hover:underline"
-                                            @click="closeStudentPlans"
-                                        >
-                                            Close
-                                        </button>
+                                        </td>
+                                        <td class="px-3 py-3 text-center font-semibold tabular-nums text-emerald-800">
+                                            {{ pctLabel(row.progress?.score_pct) }}
+                                        </td>
+                                        <td class="px-3 py-3 text-xs" :class="(row.progress?.revision_pending || row.progress?.open_wrongs) ? 'font-semibold text-orange-800' : 'text-emerald-700'">
+                                            {{ revisionLabel(row.progress) }}
+                                        </td>
+                                        <td class="px-3 py-3 text-center font-semibold tabular-nums text-slate-800">
+                                            {{ row.progress?.days_logged ?? 0 }}
+                                        </td>
+                                        <td class="px-3 py-3 text-center">
+                                            <span class="font-semibold tabular-nums text-slate-800">{{ row.progress?.time_spent_hours ?? 0 }}h</span>
+                                            <p class="text-[10px] text-gray-500">{{ row.progress?.time_spent_label || '—' }}</p>
+                                        </td>
+                                        <td class="space-x-3 px-3 py-3 text-right">
+                                            <button
+                                                v-if="!row.has_upcoming"
+                                                type="button"
+                                                class="text-sm font-medium text-indigo-600 hover:underline"
+                                                @click="openStudentPlans(row.student_id, true)"
+                                            >
+                                                Add exam date
+                                            </button>
+                                            <button
+                                                v-else
+                                                type="button"
+                                                class="text-sm text-indigo-600 hover:underline"
+                                                @click="openStudentPlans(row.student_id, false)"
+                                            >
+                                                Edit plans
+                                            </button>
+                                            <button
+                                                v-if="editingStudentId === row.student_id"
+                                                type="button"
+                                                class="text-sm text-gray-500 hover:underline"
+                                                @click="closeStudentPlans"
+                                            >
+                                                Close
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="editingStudentId === row.student_id">
+                                        <td colspan="9" class="bg-indigo-50/40 px-4 py-4">
+                                            <ExamPlanPanel
+                                                :plans="row.all_plans"
+                                                :syllabus-chapters="syllabusChapterOptions"
+                                                :exam-type-options="examTypeOptions"
+                                                :student-id="row.student_id"
+                                                :auto-open-create="autoOpenCreate"
+                                                context="admin"
+                                                compact
+                                            />
+                                        </td>
+                                    </tr>
+                                </template>
+                                <tr v-if="examPlanRows.length === 0">
+                                    <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                                        No active students in this class for the current year.
                                     </td>
                                 </tr>
-                                <tr v-if="editingStudentId === row.student_id">
-                                    <td colspan="6" class="bg-indigo-50/40 px-4 py-4">
-                                        <ExamPlanPanel
-                                            :plans="row.all_plans"
-                                            :syllabus-chapters="syllabusChapterOptions"
-                                            :exam-type-options="examTypeOptions"
-                                            :student-id="row.student_id"
-                                            :auto-open-create="autoOpenCreate"
-                                            context="admin"
-                                            compact
-                                        />
-                                    </td>
-                                </tr>
-                            </template>
-                            <tr v-if="examPlanRows.length === 0">
-                                <td colspan="6" class="px-4 py-8 text-center text-gray-500">
-                                    No active students in this class for the current year.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <div v-if="!syllabusVersion" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -368,7 +377,7 @@ watch(boardFilter, (value, oldValue) => {
 
                     <div>
                         <InputLabel value="View" />
-                        <div class="mt-2 grid gap-2 sm:grid-cols-3">
+                        <div class="mt-2 grid gap-2 sm:grid-cols-2">
                             <button
                                 type="button"
                                 class="rounded-lg border p-3 text-left text-sm transition"
@@ -379,17 +388,6 @@ watch(boardFilter, (value, oldValue) => {
                             >
                                 <p class="font-medium text-gray-900">Practice & tests</p>
                                 <p class="mt-0.5 text-xs text-gray-500">Chapter-wise sheets, student scores, assign here</p>
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded-lg border p-3 text-left text-sm transition"
-                                :class="viewMode === 'topic'
-                                    ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500'
-                                    : 'border-gray-200 hover:border-gray-300'"
-                                @click="viewMode = 'topic'"
-                            >
-                                <p class="font-medium text-gray-900">Topic wise</p>
-                                <p class="mt-0.5 text-xs text-gray-500">List topics — filter by chapter and topic</p>
                             </button>
                             <button
                                 type="button"
@@ -405,27 +403,13 @@ watch(boardFilter, (value, oldValue) => {
                         </div>
                     </div>
 
-                    <div v-if="!isSetsView" class="grid gap-4 sm:grid-cols-2">
+                    <div v-if="isChapterView" class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <InputLabel value="Chapter" />
                             <select v-model="chapterFilter" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
                                 <option value="">All chapters</option>
                                 <option v-for="ch in chapters" :key="ch.id" :value="ch.id">{{ ch.label }}</option>
                             </select>
-                        </div>
-                        <div v-if="viewMode === 'topic'">
-                            <InputLabel value="Topic (optional)" />
-                            <select
-                                v-model="topicFilter"
-                                class="mt-1 block w-full rounded-md border-gray-300 text-sm"
-                                :disabled="!chapterFilter"
-                            >
-                                <option value="">All topics{{ chapterFilter ? ' in chapter' : '' }}</option>
-                                <option v-for="t in chapterTopics" :key="t.id" :value="t.id">
-                                    {{ t.name }} ({{ t.questions_count }} Q)
-                                </option>
-                            </select>
-                            <p v-if="!chapterFilter" class="mt-1 text-xs text-gray-500">Select a chapter first to filter by topic.</p>
                         </div>
                     </div>
                 </div>
@@ -491,60 +475,6 @@ watch(boardFilter, (value, oldValue) => {
                     </table>
                 </div>
 
-                <!-- Topic wise table -->
-                <div v-if="!isChapterView && syllabusVersion" class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
-                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Chapter</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Topic</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Questions</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Sets</th>
-                                <th class="px-4 py-3 text-right text-xs uppercase text-gray-500">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200">
-                            <tr v-for="topic in topics" :key="topic.id">
-                                <td class="px-4 py-3 text-gray-600">
-                                    {{ topic.chapter_number }} {{ topic.chapter_name }}
-                                </td>
-                                <td class="px-4 py-3 font-medium text-gray-900">{{ topic.name }}</td>
-                                <td class="px-4 py-3">{{ topic.questions_count }}</td>
-                                <td class="px-4 py-3">{{ topic.practice_sets_count }}</td>
-                                <td class="px-4 py-3 text-right space-x-3">
-                                    <Link
-                                        :href="route('admin.questions.topics.show', topic.id)"
-                                        class="text-indigo-600 hover:underline"
-                                    >
-                                        View bank
-                                    </Link>
-                                    <template v-if="isAdmin">
-                                        <Link
-                                            :href="route('admin.questions.create', {
-                                                syllabus_chapter_id: topic.chapter_id,
-                                                syllabus_topic_id: topic.id,
-                                            })"
-                                            class="text-indigo-600 hover:underline"
-                                        >
-                                            Add MCQs
-                                        </Link>
-                                        <Link
-                                            :href="route('admin.practice-sets.topics.show', topic.id)"
-                                            class="text-indigo-600 hover:underline"
-                                        >
-                                            Sets & assign
-                                        </Link>
-                                    </template>
-                                </td>
-                            </tr>
-                            <tr v-if="topics.length === 0">
-                                <td colspan="5" class="px-4 py-8 text-center text-gray-500">
-                                    No topics match this filter.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
             </div>
         </div>
     </AuthenticatedLayout>

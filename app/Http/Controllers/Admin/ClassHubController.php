@@ -14,8 +14,11 @@ use App\Models\SyllabusVersion;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\ClassAssignmentService;
+use App\Services\ClassCoverageService;
 use App\Services\ExamPlanService;
 use App\Services\SetAssignmentService;
+use App\Support\StudentEngagementMetrics;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -28,6 +31,7 @@ class ClassHubController extends Controller
         private ExamPlanService $examPlanService,
         private ClassAssignmentService $classAssignmentService,
         private SetAssignmentService $setAssignmentService,
+        private ClassCoverageService $classCoverage,
     ) {}
 
     public function index(Request $request): Response
@@ -148,61 +152,16 @@ class ClassHubController extends Controller
         }
 
         $view = $request->string('view')->toString();
-        if (! in_array($view, ['topic', 'chapter', 'sets'], true)) {
+        if (! in_array($view, ['chapter', 'sets'], true)) {
             $view = 'sets';
         }
 
         $chapterId = $request->integer('syllabus_chapter_id') ?: null;
-        $topicId = $request->integer('syllabus_topic_id') ?: null;
-
-        if ($topicId && ! $chapterId) {
-            $chapterId = SyllabusTopic::query()->whereKey($topicId)->value('syllabus_chapter_id');
-        }
 
         $chapterFilterOptions = $chapters->map(fn ($ch) => [
             'id' => $ch['id'],
             'label' => "Ch {$ch['chapter_number']} — {$ch['name']}",
         ]);
-
-        $chapterTopics = $chapterId
-            ? SyllabusTopic::query()
-                ->where('syllabus_chapter_id', $chapterId)
-                ->withCount(['questions', 'practiceSets'])
-                ->orderBy('sort_order')
-                ->get(['id', 'name'])
-                ->map(fn ($topic) => [
-                    'id' => $topic->id,
-                    'name' => $topic->name,
-                    'questions_count' => $topic->questions_count,
-                    'practice_sets_count' => $topic->practice_sets_count,
-                ])
-            : collect();
-
-        $topicsQuery = SyllabusTopic::query()
-            ->with(['chapter:id,syllabus_version_id,chapter_number,name,sort_order'])
-            ->when($syllabusVersion, fn ($q) => $q->whereHas(
-                'chapter',
-                fn ($cq) => $cq->where('syllabus_version_id', $syllabusVersion->id),
-            ))
-            ->when($chapterId, fn ($q) => $q->where('syllabus_chapter_id', $chapterId))
-            ->when($topicId, fn ($q) => $q->whereKey($topicId))
-            ->withCount(['questions', 'practiceSets']);
-
-        $topics = $topicsQuery->get()
-            ->sortBy(fn (SyllabusTopic $topic) => [
-                $topic->chapter?->sort_order ?? 0,
-                $topic->sort_order ?? 0,
-            ])
-            ->values()
-            ->map(fn ($topic) => [
-                'id' => $topic->id,
-                'name' => $topic->name,
-                'chapter_id' => $topic->syllabus_chapter_id,
-                'chapter_number' => $topic->chapter->chapter_number,
-                'chapter_name' => $topic->chapter->name,
-                'questions_count' => $topic->questions_count,
-                'practice_sets_count' => $topic->practice_sets_count,
-            ]);
 
         $filteredChapters = $chapters->when($chapterId, fn ($c) => $c->where('id', $chapterId))->values();
 
@@ -225,7 +184,9 @@ class ClassHubController extends Controller
 
         if ($activeYear) {
             $enrollments = $this->examPlanService->activeEnrollmentForYear($activeYear->id, $gradeLevel->id, $boardId);
+            $enrollments->loadMissing(['student.user', 'academicYear']);
             $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, true);
+            $examPlanRows = $this->attachClassProgressSummaries($enrollments, $examPlanRows);
             $examPlanStats = [
                 'with_upcoming' => collect($examPlanRows)->where('has_upcoming', true)->count(),
                 'without_plan' => collect($examPlanRows)->where('has_plan', false)->count(),
@@ -268,18 +229,13 @@ class ClassHubController extends Controller
             ] : null,
             'view' => $view,
             'selectedChapterId' => $chapterId,
-            'selectedTopicId' => $topicId,
             'chapters' => $chapterFilterOptions,
-            'chapterTopics' => $chapterTopics,
             'chapterRows' => $filteredChapters,
-            'topics' => $topics,
             'stats' => [
                 'chapters_count' => $chapters->count(),
-                'topics_count' => $view === 'chapter' ? $filteredChapters->sum('topics_count') : $topics->count(),
-                'questions_count' => $view === 'chapter' ? $filteredChapters->sum('questions_count') : $topics->sum('questions_count'),
-                'practice_sets_count' => $view === 'chapter'
-                    ? $filteredChapters->sum('topic_sets_count') + $filteredChapters->sum('chapter_tests_count')
-                    : $topics->sum('practice_sets_count'),
+                'topics_count' => $filteredChapters->sum('topics_count'),
+                'questions_count' => $filteredChapters->sum('questions_count'),
+                'practice_sets_count' => $filteredChapters->sum('topic_sets_count') + $filteredChapters->sum('chapter_tests_count'),
                 'students_count' => $studentsCount,
             ],
             'examFilter' => $examFilter,
@@ -306,5 +262,70 @@ class ClassHubController extends Controller
         $gradeLevel->update($validated);
 
         return back()->with('success', 'Attempt protection settings saved for '.$gradeLevel->name.'.');
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, StudentEnrollment>  $enrollments
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function attachClassProgressSummaries($enrollments, array $rows): array
+    {
+        $byEnrollmentId = $enrollments->keyBy('id');
+
+        return array_map(function (array $row) use ($byEnrollmentId) {
+            $enrollment = $byEnrollmentId->get($row['enrollment_id'] ?? null);
+
+            if (! $enrollment) {
+                $row['progress'] = $this->emptyProgressSummary();
+
+                return $row;
+            }
+
+            $from = $enrollment->academicYear?->starts_on
+                ? Carbon::parse($enrollment->academicYear->starts_on)->startOfDay()
+                : now()->subMonths(6)->startOfDay();
+            $to = now()->endOfDay();
+
+            $engagement = StudentEngagementMetrics::forEnrollment($enrollment, $from, $to);
+            $performance = $this->classCoverage->studyPlanPerformance($enrollment) ?? [];
+
+            $seconds = (int) ($engagement['time_spent_seconds'] ?? 0);
+            $hours = $seconds > 0 ? round($seconds / 3600, 1) : 0.0;
+
+            $row['progress'] = [
+                'completion_pct' => $performance['completion_pct'] ?? null,
+                'score_pct' => $performance['score_pct'] ?? null,
+                'revision_done' => $performance['correction_done'] ?? 0,
+                'revision_pending' => $performance['correction_pending'] ?? 0,
+                'open_wrongs' => $performance['open_wrongs'] ?? 0,
+                'sets_done' => $performance['done'] ?? 0,
+                'sets_total' => $performance['total'] ?? 0,
+                'days_logged' => (int) ($engagement['days_logged_in'] ?? 0),
+                'time_spent_label' => $engagement['time_spent_label'] ?? '0 sec',
+                'time_spent_hours' => $hours,
+            ];
+
+            return $row;
+        }, $rows);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyProgressSummary(): array
+    {
+        return [
+            'completion_pct' => null,
+            'score_pct' => null,
+            'revision_done' => 0,
+            'revision_pending' => 0,
+            'open_wrongs' => 0,
+            'sets_done' => 0,
+            'sets_total' => 0,
+            'days_logged' => 0,
+            'time_spent_label' => '0 sec',
+            'time_spent_hours' => 0,
+        ];
     }
 }
