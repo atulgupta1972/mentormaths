@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { safeRoute } from '@/utils/routes';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
@@ -40,7 +41,7 @@ const lookupSet = () => {
                         Create practice set
                     </Link>
                     <Link
-                        :href="route('admin.practice-sets.oversized')"
+                        :href="safeRoute('admin.practice-sets.oversized', undefined, '/admin/practice-sets/oversized')"
                         class="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
                     >
                         Large sets to split

@@ -8,7 +8,7 @@ import ResponsiveNavGroup from '@/Components/ResponsiveNavGroup.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import AssignmentWhatsAppPrompt from '@/Components/AssignmentWhatsAppPrompt.vue';
-import { assignToClassPath, safeRoute } from '@/utils/routes';
+import { assignToClassPath, hasRoute, safeRoute } from '@/utils/routes';
 
 const showingNavigationDropdown = ref(false);
 const page = usePage();
@@ -95,9 +95,9 @@ const teachingGroup = computed(() => ({
         },
         {
             label: 'Large sets',
-            href: route('admin.practice-sets.oversized'),
+            href: safeRoute('admin.practice-sets.oversized', undefined, '/admin/practice-sets/oversized'),
             active: route().current('admin.practice-sets.oversized'),
-            show: isAdmin.value && route().has('admin.practice-sets.oversized'),
+            show: isAdmin.value && hasRoute('admin.practice-sets.oversized'),
         },
         {
             label: 'Catch-up sets',
