@@ -13,6 +13,10 @@ class PracticeSetSplitService
 {
     public const DEFAULT_BATCH_SIZE = TextbookSetCodeService::MCQ_BATCH_SIZE;
 
+    public function __construct(
+        private ClassCoverageService $coverageService,
+    ) {}
+
     /**
      * @return list<array{part: int, count: int, set_code: string, from: int, to: int}>
      */
@@ -136,7 +140,7 @@ class PracticeSetSplitService
             );
         }
 
-        return DB::transaction(function () use ($worksheet, $actor, $ordered, $plan) {
+        $result = DB::transaction(function () use ($worksheet, $actor, $ordered, $plan) {
             $baseTitle = (string) $worksheet->title;
             $chunks = [];
             $offset = 0;
@@ -201,6 +205,10 @@ class PracticeSetSplitService
                 'plan' => $plan,
             ];
         });
+
+        $this->coverageService->assignNewWorksheetsDueToday($result['created'], $actor);
+
+        return $result;
     }
 
     private function titledPart(string $title, int $part, int $totalParts): string

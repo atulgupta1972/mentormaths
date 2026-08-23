@@ -28,6 +28,7 @@ class TextbookChapterPublishService
         private TextbookSetCodeService $setCodeService,
         private TextbookMcqSetPlanService $setPlanService,
         private QuestionDiagramService $diagramService,
+        private ClassCoverageService $coverageService,
     ) {}
 
     /**
@@ -125,7 +126,15 @@ class TextbookChapterPublishService
                 'extraction_error' => null,
             ]);
 
-            return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet', 'fillBlankWorksheet']);
+            $fresh = $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet', 'fillBlankWorksheet']);
+
+            $autoAssignIds = $mcqWorksheetIds;
+            if ($writtenWorksheet) {
+                $autoAssignIds[] = $writtenWorksheet->id;
+            }
+            $this->coverageService->assignNewWorksheetsDueToday($autoAssignIds, $publisher);
+
+            return $fresh;
         });
     }
 
@@ -313,7 +322,13 @@ class TextbookChapterPublishService
                 'written_worksheet_ids' => $writtenIds === [] ? null : $writtenIds,
             ]);
 
-            return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet', 'fillBlankWorksheet']);
+            $fresh = $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet', 'fillBlankWorksheet']);
+            $this->coverageService->assignNewWorksheetsDueToday(
+                array_merge($fillBlankIds, $writtenIds),
+                $publisher,
+            );
+
+            return $fresh;
         });
     }
 

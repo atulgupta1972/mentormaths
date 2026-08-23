@@ -483,6 +483,153 @@ class ClassCoverageService
     }
 
     /**
+     * When a new published set appears, assign it (due today) to every student who already
+     * marked that chapter Studied or Under study. Admin/mentor can still amend due dates later.
+     */
+    public function assignNewWorksheetDueToday(Worksheet $worksheet, ?User $assigner = null): int
+    {
+        if ($worksheet->status !== Worksheet::STATUS_PUBLISHED) {
+            return 0;
+        }
+
+        if ($worksheet->isFormula() || $worksheet->isCatchUp()) {
+            return 0;
+        }
+
+        $chapterId = $this->syllabusChapterIdForWorksheet($worksheet);
+        if (! $chapterId) {
+            return 0;
+        }
+
+        $assigner = $assigner
+            ?? auth()->user()
+            ?? $worksheet->creator;
+
+        if (! $assigner) {
+            return 0;
+        }
+
+        $dueDate = now()->toDateString();
+        $assigned = 0;
+
+        $coverages = StudentChapterCoverage::query()
+            ->with(['enrollment.student.user'])
+            ->where('syllabus_chapter_id', $chapterId)
+            ->whereIn('status', [
+                StudentChapterCoverage::STATUS_STUDIED,
+                StudentChapterCoverage::STATUS_UNDER_STUDY,
+            ])
+            ->get();
+
+        foreach ($coverages as $coverage) {
+            $enrollment = $coverage->enrollment;
+            if (! $enrollment || $enrollment->status !== StudentEnrollment::STATUS_ACTIVE) {
+                continue;
+            }
+
+            $existing = SetAssignment::query()
+                ->where('student_enrollment_id', $enrollment->id)
+                ->where('worksheet_id', $worksheet->id)
+                ->whereNot('status', SetAssignment::STATUS_CANCELLED)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($existing?->status === SetAssignment::STATUS_COMPLETED) {
+                continue;
+            }
+
+            try {
+                $this->assignmentService->assign(
+                    $worksheet,
+                    $enrollment,
+                    $assigner,
+                    $dueDate,
+                    'Auto-assigned — new set for studied chapter',
+                );
+                $assigned++;
+            } catch (\InvalidArgumentException $e) {
+                Log::info('New-set study-plan auto-assign skipped.', [
+                    'worksheet_id' => $worksheet->id,
+                    'enrollment_id' => $enrollment->id,
+                    'message' => $e->getMessage(),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('New-set study-plan auto-assign failed.', [
+                    'worksheet_id' => $worksheet->id,
+                    'enrollment_id' => $enrollment->id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $assigned;
+    }
+
+    /**
+     * @param  iterable<int|Worksheet>  $worksheets
+     */
+    public function assignNewWorksheetsDueToday(iterable $worksheets, ?User $assigner = null): int
+    {
+        $total = 0;
+
+        foreach ($worksheets as $worksheet) {
+            $model = $worksheet instanceof Worksheet
+                ? $worksheet
+                : Worksheet::query()->find((int) $worksheet);
+
+            if (! $model) {
+                continue;
+            }
+
+            $total += $this->assignNewWorksheetDueToday($model, $assigner);
+        }
+
+        return $total;
+    }
+
+    private function syllabusChapterIdForWorksheet(Worksheet $worksheet): ?int
+    {
+        if ($worksheet->syllabus_chapter_id) {
+            return (int) $worksheet->syllabus_chapter_id;
+        }
+
+        if ($worksheet->syllabus_topic_id) {
+            $worksheet->loadMissing('topic:id,syllabus_chapter_id');
+
+            return $worksheet->topic?->syllabus_chapter_id
+                ? (int) $worksheet->topic->syllabus_chapter_id
+                : null;
+        }
+
+        $fromTextbook = TextbookChapter::query()
+            ->where(function ($q) use ($worksheet) {
+                $q->where('mcq_worksheet_id', $worksheet->id)
+                    ->orWhere('fill_blank_worksheet_id', $worksheet->id)
+                    ->orWhere('written_worksheet_id', $worksheet->id);
+            })
+            ->value('syllabus_chapter_id');
+
+        if ($fromTextbook) {
+            return (int) $fromTextbook;
+        }
+
+        $linked = TextbookChapter::query()
+            ->where(function ($q) {
+                $q->whereNotNull('mcq_worksheet_ids')
+                    ->orWhereNotNull('fill_blank_worksheet_ids')
+                    ->orWhereNotNull('written_worksheet_ids');
+            })
+            ->get(['id', 'syllabus_chapter_id', 'mcq_worksheet_ids', 'fill_blank_worksheet_ids', 'written_worksheet_ids'])
+            ->first(function (TextbookChapter $chapter) use ($worksheet) {
+                return in_array($worksheet->id, $chapter->mcqWorksheetIds(), true)
+                    || in_array($worksheet->id, $chapter->fillBlankWorksheetIds(), true)
+                    || in_array($worksheet->id, $chapter->writtenWorksheetIds(), true);
+            });
+
+        return $linked?->syllabus_chapter_id ? (int) $linked->syllabus_chapter_id : null;
+    }
+
+    /**
      * Backfill: for every Studied / Under study mark, set chapter content due today.
      *
      * @return array{enrollments: int, chapters: int, assignments: int}

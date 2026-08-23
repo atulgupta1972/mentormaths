@@ -11,6 +11,7 @@ use App\Models\SyllabusTopic;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\ChapterMixedQuestionService;
+use App\Services\ClassCoverageService;
 use App\Services\PracticeSetService;
 use App\Services\PracticeSetSplitService;
 use App\Support\PracticeSetScope;
@@ -182,6 +183,10 @@ class PracticeSetController extends Controller
             $practiceSet->questions()->attach($questionId, ['sort_order' => $index + 1]);
         }
 
+        if ($validated['status'] === Worksheet::STATUS_PUBLISHED) {
+            app(ClassCoverageService::class)->assignNewWorksheetDueToday($practiceSet, $request->user());
+        }
+
         return redirect()
             ->route('admin.practice-sets.topics.show', $validated['syllabus_topic_id'])
             ->with('success', "{$meta['set_code']} created.");
@@ -284,6 +289,8 @@ class PracticeSetController extends Controller
         foreach ($questionIds as $index => $questionId) {
             $practiceSet->questions()->attach($questionId, ['sort_order' => $index + 1]);
         }
+
+        app(ClassCoverageService::class)->assignNewWorksheetDueToday($practiceSet, $request->user());
 
         return redirect()
             ->route('admin.questions.sets.show', $practiceSet)

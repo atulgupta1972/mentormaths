@@ -11,7 +11,10 @@ use App\Support\PracticeSetTier;
 
 class PracticeSetService
 {
-    public function __construct(private PracticeSetCodeService $codeService) {}
+    public function __construct(
+        private PracticeSetCodeService $codeService,
+        private ClassCoverageService $coverageService,
+    ) {}
 
     public function nextSetNumber(int $topicId): int
     {
@@ -94,7 +97,12 @@ class PracticeSetService
             $practiceSet->questions()->attach($questionId, ['sort_order' => $index + 1]);
         }
 
-        return $practiceSet->loadCount('questions');
+        $practiceSet = $practiceSet->loadCount('questions');
+        if ($status === Worksheet::STATUS_PUBLISHED) {
+            $this->coverageService->assignNewWorksheetDueToday($practiceSet);
+        }
+
+        return $practiceSet;
     }
 
     /**
@@ -128,6 +136,11 @@ class PracticeSetService
             $practiceSet->questions()->attach($questionId, ['sort_order' => $index + 1]);
         }
 
-        return $practiceSet->loadCount('questions');
+        $practiceSet = $practiceSet->loadCount('questions');
+        if ($status === Worksheet::STATUS_PUBLISHED) {
+            $this->coverageService->assignNewWorksheetDueToday($practiceSet);
+        }
+
+        return $practiceSet;
     }
 }

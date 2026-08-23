@@ -272,6 +272,103 @@ class SchoolStudyPlanTest extends TestCase
             ->assertSessionHas('success');
     }
 
+    public function test_new_published_set_auto_assigns_when_chapter_is_studied(): void
+    {
+        [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
+        $enrollment = $student->enrollments()->first();
+        $chapter = $chapters[1];
+
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => StudentChapterCoverage::STATUS_STUDIED,
+            'studied_at' => now(),
+        ]);
+
+        $topic = \App\Models\SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->id,
+            'topic_number' => 1,
+            'name' => 'Topic 1',
+            'sort_order' => 1,
+        ]);
+
+        $question = \App\Models\Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'question_text' => 'What is 2+2?',
+            'type' => \App\Models\Question::TYPE_MCQ,
+            'difficulty' => 'easy',
+            'bank_purpose' => \App\Support\QuestionBankPurpose::PRACTICE_SET,
+            'created_by' => $admin->id,
+        ]);
+        \App\Models\QuestionOption::query()->create([
+            'question_id' => $question->id,
+            'option_text' => '4',
+            'is_correct' => true,
+            'sort_order' => 1,
+        ]);
+
+        $this->actingAs($admin);
+
+        $worksheet = app(\App\Services\PracticeSetService::class)->createChapterPracticeSet(
+            $chapter,
+            [$question->id],
+            $admin->id,
+            PracticeSetTier::STARTER,
+            Worksheet::STATUS_PUBLISHED,
+        );
+
+        $assignment = SetAssignment::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->where('worksheet_id', $worksheet->id)
+            ->first();
+
+        $this->assertNotNull($assignment);
+        $this->assertSame(SetAssignment::STATUS_ASSIGNED, $assignment->status);
+        $this->assertSame(now()->toDateString(), $assignment->due_date->toDateString());
+    }
+
+    public function test_new_set_not_auto_assigned_when_chapter_not_studied(): void
+    {
+        [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
+        $enrollment = $student->enrollments()->first();
+        $chapter = $chapters[1];
+
+        $topic = \App\Models\SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->id,
+            'topic_number' => 1,
+            'name' => 'Topic 1',
+            'sort_order' => 1,
+        ]);
+
+        $question = \App\Models\Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'question_text' => 'What is 3+3?',
+            'type' => \App\Models\Question::TYPE_MCQ,
+            'difficulty' => 'easy',
+            'bank_purpose' => \App\Support\QuestionBankPurpose::PRACTICE_SET,
+            'created_by' => $admin->id,
+        ]);
+        \App\Models\QuestionOption::query()->create([
+            'question_id' => $question->id,
+            'option_text' => '6',
+            'is_correct' => true,
+            'sort_order' => 1,
+        ]);
+
+        $this->actingAs($admin);
+
+        $worksheet = app(\App\Services\PracticeSetService::class)->createChapterPracticeSet(
+            $chapter,
+            [$question->id],
+            $admin->id,
+        );
+
+        $this->assertDatabaseMissing('set_assignments', [
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+        ]);
+    }
+
     /**
      * @return array{0: User, 1: Student, 2: GradeLevel, 3: list<SyllabusChapter>}
      */
