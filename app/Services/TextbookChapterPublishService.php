@@ -373,10 +373,19 @@ class TextbookChapterPublishService
                 throw new InvalidArgumentException('Each MCQ set needs a set code.');
             }
 
-            if (Worksheet::query()->where('set_code', $setCode)->exists()) {
-                throw new InvalidArgumentException(
-                    "Set code {$setCode} already exists. Change the set plan codes or delete the old set first."
-                );
+            $ownedIds = $chapter->mcqWorksheetIds();
+            $existing = Worksheet::query()->where('set_code', $setCode)->first();
+
+            if ($existing) {
+                // Own worksheet left behind after a partial delete — remove and recreate.
+                if (in_array((int) $existing->id, $ownedIds, true)) {
+                    $existing->questions()->detach();
+                    $existing->delete();
+                } else {
+                    throw new InvalidArgumentException(
+                        "Set code {$setCode} already exists. Change the set plan codes or delete the old set first."
+                    );
+                }
             }
 
             $worksheet = Worksheet::create([

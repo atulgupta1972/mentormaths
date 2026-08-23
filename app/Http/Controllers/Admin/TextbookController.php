@@ -641,10 +641,16 @@ class TextbookController extends Controller
         $textbookChapter->update([
             'extraction_items' => $items,
             'mcq_set_plan' => $setPlan,
-            'status' => TextbookChapter::STATUS_REVIEW,
+            // Keep published chapters published so Save draft can update the split plan
+            // without hiding assign/re-publish actions.
+            'status' => $textbookChapter->status === TextbookChapter::STATUS_PUBLISHED
+                ? TextbookChapter::STATUS_PUBLISHED
+                : TextbookChapter::STATUS_REVIEW,
         ]);
 
-        return back()->with('success', 'Draft saved.');
+        return back()->with('success', $textbookChapter->status === TextbookChapter::STATUS_PUBLISHED
+            ? 'Draft saved. Click Re-publish MCQ sets to apply the set plan split.'
+            : 'Draft saved.');
     }
 
     public function publish(Request $request, TextbookChapter $textbookChapter): RedirectResponse
@@ -708,7 +714,7 @@ class TextbookController extends Controller
         } elseif ($request->has('items') && is_array($request->input('items'))) {
             $posted = array_values(array_filter($request->input('items'), fn ($item) => is_array($item)));
             // Small chapters can still post items; large posts are usually truncated — keep DB copy.
-            if ($posted !== [] && count($posted) <= 80) {
+            if ($posted !== [] && count($posted) <= 25) {
                 $items = $posted;
             } elseif ($posted !== [] && count($posted) === count($storedItems)) {
                 $items = $posted;

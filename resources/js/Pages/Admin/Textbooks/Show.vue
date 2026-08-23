@@ -186,7 +186,8 @@ const addSetPlanRow = () => {
         const coversAll = Number(row.q_from) === 1 && Number(row.q_to) >= total;
 
         if (coversAll && total > 1) {
-            const firstEnd = Math.min(15, total - 1);
+            // Split near the middle so AP/GP-style chapters can edit q_from/q_to easily.
+            const firstEnd = Math.max(1, Math.min(Math.floor(total / 2), total - 1));
 
             setPlan.value = [
                 {
@@ -221,6 +222,9 @@ const addSetPlanRow = () => {
     });
     syncForms();
 };
+
+/** Avoid PHP max_input_vars truncation (common around 1000 fields ≈ ~40–60 MCQs). */
+const useLeanMcqPayload = () => items.value.length > 25;
 
 const removeSetPlanRow = (index) => {
     setPlan.value.splice(index, 1);
@@ -307,8 +311,8 @@ const resetImport = () => {
 
 const saveDraft = () => {
     syncForms();
-    if (items.value.length > 80) {
-        // Avoid PHP max_input_vars truncation on large chapters.
+    if (useLeanMcqPayload()) {
+        // Avoid PHP max_input_vars truncation on mid/large chapters (e.g. 74 MCQs).
         draftForm
             .transform(() => ({
                 items_json: JSON.stringify(items.value),
@@ -328,9 +332,9 @@ const saveDraft = () => {
 
 const publish = () => {
     syncForms();
-    // Large chapters: send set plan only — questions stay in the database from import/draft.
-    // Posting 200+ items as form fields hits PHP max_input_vars and returns a blank 500.
-    if (items.value.length > 80) {
+    // Mid/large chapters: send set plan only — questions stay in DB from import/draft.
+    // Posting every MCQ as form fields hits PHP max_input_vars and drops the split plan.
+    if (useLeanMcqPayload()) {
         publishForm
             .transform(() => ({
                 mcq_set_plan: setPlan.value,
@@ -737,8 +741,8 @@ const canChangeBook = computed(() =>
                         {{ approvedCount }} of {{ items.length }} approved · {{ uploaderMode ? 'save as' : 'publish as' }} {{ mcqPublishSummary }}.
                     </p>
                     <div class="flex flex-wrap gap-2">
-                        <SecondaryButton :disabled="draftForm.processing" @click="saveDraft">Save draft</SecondaryButton>
-                        <PrimaryButton :disabled="publishForm.processing || approvedCount === 0" @click="publish">
+                        <SecondaryButton type="button" :disabled="draftForm.processing" @click="saveDraft">Save draft</SecondaryButton>
+                        <PrimaryButton type="button" :disabled="publishForm.processing || approvedCount === 0" @click="publish">
                             {{ chapter.status === 'published'
                                 ? (uploaderMode ? 'Re-save MCQ sets' : 'Re-publish MCQ sets')
                                 : (uploaderMode ? 'Save MCQ sets (ready to verify)' : 'Publish MCQ sets') }}
@@ -762,7 +766,8 @@ const canChangeBook = computed(() =>
                             <div>
                                 <h3 class="font-semibold text-gray-900">MCQ set plan</h3>
                                 <p class="text-xs text-gray-500">
-                                    You decide how questions split into assignable sets. Default after import: one set for all {{ items.length }} questions.
+                                    Split into 2+ assignable sets with <strong>Add row / split</strong>, edit Q from / Q to, then click
+                                    <strong>{{ chapter.status === 'published' ? 'Re-publish MCQ sets' : 'Publish MCQ sets' }}</strong> above to apply.
                                 </p>
                             </div>
                             <div class="flex flex-wrap gap-2">
@@ -772,8 +777,20 @@ const canChangeBook = computed(() =>
                                 <SecondaryButton type="button" class="!py-1 !text-xs" @click="addSetPlanRow">
                                     Add row / split
                                 </SecondaryButton>
+                                <PrimaryButton
+                                    type="button"
+                                    class="!py-1 !text-xs"
+                                    :disabled="publishForm.processing || approvedCount === 0"
+                                    @click="publish"
+                                >
+                                    {{ chapter.status === 'published' ? 'Apply split (re-publish)' : 'Publish sets' }}
+                                </PrimaryButton>
                             </div>
                         </div>
+                        <p v-if="setPlan.length > 1" class="mt-2 text-xs text-indigo-700">
+                            Plan has {{ setPlan.length }} sets — click <strong>Apply split (re-publish)</strong> to create them.
+                            Adjust set codes / Q ranges first if needed (e.g. AP vs GP).
+                        </p>
                     </div>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-gray-50">
