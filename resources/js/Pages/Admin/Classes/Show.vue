@@ -2,7 +2,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import ClassAttemptProtectionPanel from '@/Components/ClassAttemptProtectionPanel.vue';
-import ClassSetStatusPanel from '@/Components/ClassSetStatusPanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -13,7 +12,6 @@ const props = defineProps({
     gradeLevel: Object,
     activeYear: Object,
     syllabusVersion: Object,
-    view: { type: String, default: 'sets' },
     selectedChapterId: [Number, String, null],
     chapters: Array,
     chapterRows: Array,
@@ -23,51 +21,29 @@ const props = defineProps({
     examPlanStats: { type: Object, default: () => ({}) },
     syllabusChapterOptions: { type: Array, default: () => [] },
     examTypeOptions: { type: Array, default: () => [] },
-    setStatusBoard: {
-        type: Object,
-        default: () => ({ students: [], chapters: [] }),
-    },
-    classStudents: { type: Array, default: () => [] },
     boardOptions: { type: Array, default: () => [] },
     selectedBoardId: [Number, String, null],
     selectedBoard: { type: Object, default: null },
 });
 
-const viewMode = ref(props.view === 'chapter' ? 'chapter' : 'sets');
 const boardFilter = ref(props.selectedBoardId ? String(props.selectedBoardId) : '');
 const chapterFilter = ref(props.selectedChapterId || '');
 const examFilter = ref(props.examFilter || 'upcoming');
 const editingStudentId = ref(null);
 const autoOpenCreate = ref(false);
 
-const isChapterView = computed(() => viewMode.value === 'chapter');
-const isSetsView = computed(() => viewMode.value === 'sets');
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
 
-const classMatrixLabel = computed(() => {
-    const parts = [props.gradeLevel?.name];
-
-    if (props.selectedBoard?.code) {
-        parts.push(props.selectedBoard.code);
-    }
-
-    return parts.join(' · ');
-});
-
 const reload = () => {
-    const params = {
-        view: viewMode.value,
+    router.get(route('admin.classes.show', props.gradeLevel.id), {
         board_id: boardFilter.value || undefined,
         syllabus_chapter_id: chapterFilter.value || undefined,
         exam_filter: examFilter.value,
-    };
-
-    router.get(route('admin.classes.show', props.gradeLevel.id), params, { preserveState: false });
+    }, { preserveState: false });
 };
 
 const reloadExamFilter = () => {
     router.get(route('admin.classes.show', props.gradeLevel.id), {
-        view: viewMode.value,
         board_id: boardFilter.value || undefined,
         syllabus_chapter_id: chapterFilter.value || undefined,
         exam_filter: examFilter.value,
@@ -121,17 +97,11 @@ const closeStudentPlans = () => {
     autoOpenCreate.value = false;
 };
 
-watch(viewMode, () => {
-    reload();
-});
-
 watch(chapterFilter, (id, oldId) => {
     if (id === oldId) {
         return;
     }
-    if (isChapterView.value) {
-        reload();
-    }
+    reload();
 });
 
 watch(examFilter, (value, oldValue) => {
@@ -207,7 +177,7 @@ watch(boardFilter, (value, oldValue) => {
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.topics_count }}</p>
-                        <p class="text-xs text-gray-500">{{ isChapterView ? 'Topics (in view)' : 'Topics' }}</p>
+                        <p class="text-xs text-gray-500">Topics</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-indigo-600">{{ stats.questions_count }}</p>
@@ -362,117 +332,74 @@ watch(boardFilter, (value, oldValue) => {
                     <Link :href="route('admin.syllabus.index')" class="font-medium text-indigo-600">Import syllabus</Link>
                 </div>
 
-                <div v-else class="rounded-lg bg-white p-4 shadow-sm space-y-4">
-                    <div v-if="boardOptions.length" class="flex flex-wrap items-end gap-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
-                        <div class="min-w-[200px]">
-                            <InputLabel value="Board" />
-                            <select v-model="boardFilter" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
-                                <option v-for="board in boardOptions" :key="board.id" :value="String(board.id)">
-                                    {{ board.name }} · {{ board.students_count }} student{{ board.students_count === 1 ? '' : 's' }}
-                                </option>
-                            </select>
-                            <p class="mt-1 text-xs text-gray-500">Syllabus and students are filtered by board — CBSE and ICSE are separate.</p>
+                <div v-else class="space-y-4">
+                    <div class="rounded-lg bg-white p-4 shadow-sm space-y-4">
+                        <div class="flex flex-wrap items-end gap-4">
+                            <div v-if="boardOptions.length" class="min-w-[200px]">
+                                <InputLabel value="Board" />
+                                <select v-model="boardFilter" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                                    <option v-for="board in boardOptions" :key="board.id" :value="String(board.id)">
+                                        {{ board.name }} · {{ board.students_count }} student{{ board.students_count === 1 ? '' : 's' }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="min-w-[220px]">
+                                <InputLabel value="Chapter" />
+                                <select v-model="chapterFilter" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                                    <option value="">All chapters</option>
+                                    <option v-for="ch in chapters" :key="ch.id" :value="ch.id">{{ ch.label }}</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
-                    <div>
-                        <InputLabel value="View" />
-                        <div class="mt-2 grid gap-2 sm:grid-cols-2">
-                            <button
-                                type="button"
-                                class="rounded-lg border p-3 text-left text-sm transition"
-                                :class="viewMode === 'sets'
-                                    ? 'border-violet-500 bg-violet-50 ring-1 ring-violet-500'
-                                    : 'border-gray-200 hover:border-gray-300'"
-                                @click="viewMode = 'sets'"
-                            >
-                                <p class="font-medium text-gray-900">Practice & tests</p>
-                                <p class="mt-0.5 text-xs text-gray-500">Chapter-wise sheets, student scores, assign here</p>
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded-lg border p-3 text-left text-sm transition"
-                                :class="isChapterView
-                                    ? 'border-sky-500 bg-sky-50 ring-1 ring-sky-500'
-                                    : 'border-gray-200 hover:border-gray-300'"
-                                @click="viewMode = 'chapter'"
-                            >
-                                <p class="font-medium text-gray-900">Chapter summary</p>
-                                <p class="mt-0.5 text-xs text-gray-500">Counts per chapter — links to question bank</p>
-                            </button>
+                    <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
+                        <div class="border-b px-4 py-3">
+                            <h3 class="font-medium text-gray-900">Chapter summary</h3>
+                            <p class="mt-0.5 text-sm text-gray-500">Counts per chapter — open question bank or chapter tests when needed.</p>
                         </div>
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Chapter</th>
+                                    <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Topics</th>
+                                    <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Questions</th>
+                                    <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Topic sets</th>
+                                    <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Chapter tests</th>
+                                    <th class="px-4 py-3 text-right text-xs uppercase text-gray-500">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <tr v-for="chapter in chapterRows" :key="chapter.id">
+                                    <td class="px-4 py-3 font-medium text-gray-900">
+                                        Ch {{ chapter.chapter_number }} — {{ chapter.name }}
+                                    </td>
+                                    <td class="px-4 py-3">{{ chapter.topics_count }}</td>
+                                    <td class="px-4 py-3">{{ chapter.questions_count }}</td>
+                                    <td class="px-4 py-3">{{ chapter.topic_sets_count }}</td>
+                                    <td class="px-4 py-3">{{ chapter.chapter_tests_count }}</td>
+                                    <td class="space-x-3 px-4 py-3 text-right">
+                                        <Link
+                                            :href="route('admin.questions.chapters.show', chapter.id)"
+                                            class="text-indigo-600 hover:underline"
+                                        >
+                                            Question bank
+                                        </Link>
+                                        <Link
+                                            v-if="isAdmin"
+                                            :href="route('admin.practice-sets.chapters.show', chapter.id)"
+                                            class="text-indigo-600 hover:underline"
+                                        >
+                                            Chapter tests
+                                        </Link>
+                                    </td>
+                                </tr>
+                                <tr v-if="chapterRows.length === 0">
+                                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">No chapters match this filter.</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-
-                    <div v-if="isChapterView" class="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <InputLabel value="Chapter" />
-                            <select v-model="chapterFilter" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
-                                <option value="">All chapters</option>
-                                <option v-for="ch in chapters" :key="ch.id" :value="ch.id">{{ ch.label }}</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Practice & tests — assign + student status -->
-                <ClassSetStatusPanel
-                    v-if="isSetsView && syllabusVersion"
-                    :chapters="setStatusBoard.chapters"
-                    :students="classStudents"
-                    :grade-level-id="gradeLevel.id"
-                    :grade-level-name="classMatrixLabel"
-                    :board-id="selectedBoardId"
-                    :can-assign="isAdmin"
-                />
-
-                <div v-else-if="isSetsView && !syllabusVersion && boardOptions.length" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    No syllabus imported for {{ gradeLevel.name }} · {{ selectedBoard?.name || 'this board' }} yet.
-                    <Link :href="route('admin.syllabus.index')" class="font-medium text-indigo-600">Import syllabus</Link>
-                </div>
-
-                <!-- Chapter wise table -->
-                <div v-if="isChapterView && syllabusVersion" class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
-                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Chapter</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Topics</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Questions</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Topic sets</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase text-gray-500">Chapter tests</th>
-                                <th class="px-4 py-3 text-right text-xs uppercase text-gray-500">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200">
-                            <tr v-for="chapter in chapterRows" :key="chapter.id">
-                                <td class="px-4 py-3 font-medium text-gray-900">
-                                    Ch {{ chapter.chapter_number }} — {{ chapter.name }}
-                                </td>
-                                <td class="px-4 py-3">{{ chapter.topics_count }}</td>
-                                <td class="px-4 py-3">{{ chapter.questions_count }}</td>
-                                <td class="px-4 py-3">{{ chapter.topic_sets_count }}</td>
-                                <td class="px-4 py-3">{{ chapter.chapter_tests_count }}</td>
-                                <td class="px-4 py-3 text-right space-x-3">
-                                    <Link
-                                        :href="route('admin.questions.chapters.show', chapter.id)"
-                                        class="text-indigo-600 hover:underline"
-                                    >
-                                        Question bank
-                                    </Link>
-                                    <Link
-                                        v-if="isAdmin"
-                                        :href="route('admin.practice-sets.chapters.show', chapter.id)"
-                                        class="text-indigo-600 hover:underline"
-                                    >
-                                        Chapter tests
-                                    </Link>
-                                </td>
-                            </tr>
-                            <tr v-if="chapterRows.length === 0">
-                                <td colspan="6" class="px-4 py-8 text-center text-gray-500">No chapters match this filter.</td>
-                            </tr>
-                        </tbody>
-                    </table>
                 </div>
 
             </div>

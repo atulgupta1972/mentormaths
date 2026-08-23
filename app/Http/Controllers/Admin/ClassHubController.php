@@ -16,7 +16,6 @@ use App\Services\AdminGradeContext;
 use App\Services\ClassAssignmentService;
 use App\Services\ClassCoverageService;
 use App\Services\ExamPlanService;
-use App\Services\SetAssignmentService;
 use App\Support\StudentEngagementMetrics;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -30,7 +29,6 @@ class ClassHubController extends Controller
         private AdminGradeContext $gradeContext,
         private ExamPlanService $examPlanService,
         private ClassAssignmentService $classAssignmentService,
-        private SetAssignmentService $setAssignmentService,
         private ClassCoverageService $classCoverage,
     ) {}
 
@@ -151,11 +149,6 @@ class ClassHubController extends Controller
             }
         }
 
-        $view = $request->string('view')->toString();
-        if (! in_array($view, ['chapter', 'sets'], true)) {
-            $view = 'sets';
-        }
-
         $chapterId = $request->integer('syllabus_chapter_id') ?: null;
 
         $chapterFilterOptions = $chapters->map(fn ($ch) => [
@@ -199,17 +192,6 @@ class ClassHubController extends Controller
             'label' => "Ch {$ch['chapter_number']} — {$ch['name']}",
         ])->values()->all();
 
-        $setStatusBoard = ['students' => [], 'chapters' => []];
-        $classStudents = [];
-
-        if ($view === 'sets' && $syllabusVersion) {
-            $setStatusBoard = $this->classAssignmentService->classSetStatusBoard($gradeLevel, null, $boardId);
-            $classStudents = $this->setAssignmentService
-                ->activeStudentsForAssignment($activeYear?->id, $gradeLevel->id, $boardId)
-                ->values()
-                ->all();
-        }
-
         return Inertia::render('Admin/Classes/Show', [
             'gradeLevel' => $gradeLevel->only([
                 'id',
@@ -227,7 +209,6 @@ class ClassHubController extends Controller
                 'label' => $syllabusVersion->label(),
                 'board' => $syllabusVersion->board,
             ] : null,
-            'view' => $view,
             'selectedChapterId' => $chapterId,
             'chapters' => $chapterFilterOptions,
             'chapterRows' => $filteredChapters,
@@ -243,8 +224,6 @@ class ClassHubController extends Controller
             'examPlanStats' => $examPlanStats,
             'syllabusChapterOptions' => $syllabusChapterOptions,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
-            'setStatusBoard' => $setStatusBoard,
-            'classStudents' => $classStudents,
         ]);
     }
 
