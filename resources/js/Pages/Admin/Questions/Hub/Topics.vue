@@ -29,6 +29,27 @@ const page = usePage();
 const showSaveModal = ref(Boolean(page.props.flash?.save_confirmation));
 const saveConfirmation = computed(() => page.props.flash?.save_confirmation ?? null);
 const packageTier = ref(props.masterProfiles?.[0]?.value || 'starter');
+const bankPackageTier = reactive({});
+
+const bankTierKey = (card) => (card?.fill_in_blank ? 'fill' : 'mcq');
+
+const selectedBankTier = (card) => bankPackageTier[bankTierKey(card)]
+    ?? packageTier.value
+    ?? card?.tier
+    ?? 'starter';
+
+const selectedBankOption = (card) => {
+    const tier = selectedBankTier(card);
+    return (card?.package_options || []).find((option) => option.value === tier)
+        ?? card?.package_options?.[0]
+        ?? null;
+};
+
+const selectedBankSetCode = (card) => selectedBankOption(card)?.set_code || card?.set_code || '—';
+
+const selectedBankLabel = (card) => selectedBankOption(card)?.label
+    || (props.masterProfiles || []).find((profile) => profile.value === selectedBankTier(card))?.label
+    || 'Learner';
 
 watch(
     () => page.props.flash?.save_confirmation,
@@ -72,9 +93,17 @@ const cardHref = (card) => {
 };
 
 const packageChapterPracticeBank = (card) => {
+    const tier = selectedBankTier(card);
+    const setCode = selectedBankSetCode(card);
+    const label = selectedBankLabel(card);
+
+    if (!window.confirm(`Package this bank as ${label} practice set ${setCode}?`)) {
+        return;
+    }
+
     router.post(route('admin.practice-sets.chapters.from-practice-bank', props.chapter.id), {
         fill_in_blank: card?.fill_in_blank ?? false,
-        master_profile: packageTier.value,
+        master_profile: tier,
     });
 };
 
@@ -322,12 +351,11 @@ const clearBank = (card) => {
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <div
                             v-for="card in chapterPracticeBankCards"
-                            :key="`cpb-${card.set_code}`"
+                            :key="`cpb-${card.set_code}-${card.fill_in_blank ? 'f' : 'm'}`"
                             class="rounded-xl border border-emerald-300 bg-emerald-50 p-5 shadow-sm transition hover:border-emerald-500"
                         >
                             <div class="block">
-                                <p class="font-mono text-3xl font-bold tracking-wide" :class="isFillBlankCode(card.set_code) ? 'text-emerald-900' : 'text-emerald-900'">{{ card.set_code }}</p>
-                                <p class="mt-2 text-sm font-semibold text-gray-800">
+                                <p class="text-sm font-semibold text-gray-800">
                                     {{ isFillBlankCode(card.set_code) ? 'Fill-in-blank practice bank' : 'MCQ practice bank' }}
                                 </p>
                                 <p class="mt-1 text-xs text-gray-600">
@@ -336,24 +364,45 @@ const clearBank = (card) => {
                                 <p class="mt-2 text-sm text-gray-700">{{ card.questions_count }} questions in bank</p>
                             </div>
 
-                            <p v-if="isAdmin" class="mt-3 border-t border-emerald-200 pt-3 text-xs text-emerald-900">
-                                Package all questions as one practice set.
-                                <button
-                                    type="button"
-                                    class="ml-1 font-medium text-indigo-600 hover:underline"
-                                    @click="packageChapterPracticeBank(card)"
-                                >
-                                    Package as {{ card.set_code }}
-                                </button>
-                                <span class="mx-1 text-emerald-600">·</span>
-                                <button
-                                    type="button"
-                                    class="font-medium text-rose-700 hover:underline"
-                                    @click="clearChapterPracticeBank"
-                                >
-                                    Delete all
-                                </button>
-                            </p>
+                            <div v-if="isAdmin" class="mt-3 space-y-2 border-t border-emerald-200 pt-3">
+                                <label class="block text-xs font-semibold text-emerald-950">
+                                    Package as
+                                    <select
+                                        class="mt-1 block w-full rounded-md border-emerald-300 bg-white text-sm font-semibold text-slate-900"
+                                        :value="selectedBankTier(card)"
+                                        @change="bankPackageTier[bankTierKey(card)] = $event.target.value"
+                                    >
+                                        <option
+                                            v-for="option in (card.package_options?.length ? card.package_options : masterProfiles)"
+                                            :key="option.value"
+                                            :value="option.value"
+                                        >
+                                            {{ option.label }} → {{ option.set_code || selectedBankSetCode(card) }}
+                                        </option>
+                                    </select>
+                                </label>
+                                <p class="text-[11px] text-emerald-900">
+                                    Will save as
+                                    <span class="font-mono font-bold">{{ selectedBankSetCode(card) }}</span>
+                                    ({{ selectedBankLabel(card) }}). Change if the sums fit Learner / Achiever / Expert better than the prompt.
+                                </p>
+                                <div class="flex flex-wrap items-center gap-2 text-xs">
+                                    <button
+                                        type="button"
+                                        class="rounded-md bg-indigo-600 px-3 py-1.5 font-semibold text-white hover:bg-indigo-700"
+                                        @click="packageChapterPracticeBank(card)"
+                                    >
+                                        Package as {{ selectedBankLabel(card) }} · {{ selectedBankSetCode(card) }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="font-medium text-rose-700 hover:underline"
+                                        @click="clearChapterPracticeBank"
+                                    >
+                                        Delete all
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

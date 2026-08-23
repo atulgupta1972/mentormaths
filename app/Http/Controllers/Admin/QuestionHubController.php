@@ -386,6 +386,14 @@ class QuestionHubController extends Controller
                     'tier_label' => PracticeSetTier::label(PracticeSetTier::STARTER),
                     'status' => 'bank',
                     'fill_in_blank' => $fillInBlank,
+                    'package_options' => collect(PracticeSetTier::topicTiers())->map(fn (string $tier) => [
+                        'value' => $tier,
+                        'label' => PracticeSetTier::label($tier),
+                        'tagline' => PracticeSetTier::tagline($tier),
+                        'set_code' => $this->safeSetCode(
+                            fn () => $codeService->generateChapterPractice($chapter, $tier, $fillInBlank),
+                        ),
+                    ])->values()->all(),
                 ]);
             }
         }
