@@ -577,6 +577,9 @@ class QuestionHubController extends Controller
                     (string) $worksheet->set_code,
                 )
                 : [],
+            'splitRelatedSets' => $isAdmin
+                ? $this->splitService->relatedSetsForSplitUi($worksheet)
+                : [],
             'topic' => $topic ? [
                 'id' => $topic->id,
                 'name' => $topic->name,

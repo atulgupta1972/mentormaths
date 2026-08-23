@@ -64,6 +64,42 @@ class PracticeSetSplitService
     }
 
     /**
+     * Worksheets that already use codes this set would need when divided
+     * (any batch size from 5–50), so the UI can rename/delete them in place.
+     *
+     * @return list<array{id: int, set_code: string, title: string, questions_count: int}>
+     */
+    public function relatedSetsForSplitUi(Worksheet $worksheet): array
+    {
+        $questionCount = (int) ($worksheet->questions_count ?? $worksheet->questions()->count());
+        if ($questionCount <= 5) {
+            return [];
+        }
+
+        $base = $this->baseCode((string) $worksheet->set_code);
+        $maxParts = (int) ceil($questionCount / 5);
+        $codes = [];
+        for ($part = 1; $part <= $maxParts; $part++) {
+            $codes[] = $base.$part;
+        }
+
+        return Worksheet::query()
+            ->whereIn('set_code', $codes)
+            ->where('id', '!=', $worksheet->id)
+            ->withCount('questions')
+            ->orderBy('set_code')
+            ->get(['id', 'set_code', 'title'])
+            ->map(fn (Worksheet $row) => [
+                'id' => $row->id,
+                'set_code' => (string) $row->set_code,
+                'title' => (string) $row->title,
+                'questions_count' => (int) $row->questions_count,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * Split a large practice set into ordered parts of up to $batchSize questions each.
      * The original worksheet keeps part 1; additional worksheets are created for the rest.
      *

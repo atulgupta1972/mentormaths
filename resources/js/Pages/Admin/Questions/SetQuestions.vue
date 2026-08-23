@@ -7,7 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { questionHubChapterUrl, questionHubClassUrl } from '@/utils/questionHub';
 import { formatScoreLabel } from '@/utils/scores';
 
@@ -21,6 +21,7 @@ const props = defineProps({
     canSplitSet: { type: Boolean, default: false },
     splitBatchSize: { type: Number, default: 20 },
     splitPreview: { type: Array, default: () => [] },
+    splitRelatedSets: { type: Array, default: () => [] },
     hintStats: Object,
     topicHintStats: Object,
     assignmentPanel: { type: Object, default: null },
@@ -31,9 +32,26 @@ const isAdmin = computed(() => page.props.auth?.isAdmin ?? false);
 const generating = ref(false);
 const overwrite = ref(false);
 const showSplitPanel = ref(false);
+const renamingSetId = ref(null);
+const renameDrafts = ref({});
+const deletingConflictId = ref(null);
 
 const splitForm = useForm({
     batch_size: props.splitBatchSize || 20,
+});
+
+const renameForm = useForm({
+    set_code: '',
+    stay: true,
+});
+
+const deleteSetForm = useForm({});
+
+onMounted(() => {
+    const err = page.props.flash?.error;
+    if (props.canSplitSet && err && String(err).includes('Cannot divide')) {
+        showSplitPanel.value = true;
+    }
 });
 
 const liveSplitPreview = computed(() => {
@@ -60,9 +78,62 @@ const liveSplitPreview = computed(() => {
     return rows;
 });
 
+const splitConflicts = computed(() => {
+    const needed = new Set(liveSplitPreview.value.map((row) => row.set_code));
+    return (props.splitRelatedSets || []).filter((row) => needed.has(row.set_code));
+});
+
+const draftCode = (set) => {
+    if (renameDrafts.value[set.id] === undefined) {
+        renameDrafts.value[set.id] = set.set_code;
+    }
+    return renameDrafts.value[set.id];
+};
+
+const setDraftCode = (setId, value) => {
+    renameDrafts.value = { ...renameDrafts.value, [setId]: value };
+};
+
+const saveConflictCode = (set) => {
+    const next = String(draftCode(set) || '').trim();
+    if (!next || next === set.set_code) {
+        return;
+    }
+    renamingSetId.value = set.id;
+    renameForm.set_code = next;
+    renameForm.stay = true;
+    renameForm.patch(route('admin.practice-sets.update-set-code', set.id), {
+        preserveScroll: true,
+        onFinish: () => {
+            renamingSetId.value = null;
+        },
+    });
+};
+
+const deleteConflictSet = (set) => {
+    const message = `Delete ${set.set_code}? Assignments for that set are removed. Questions stay in the bank.`;
+    if (!window.confirm(message)) {
+        return;
+    }
+    deletingConflictId.value = set.id;
+    deleteSetForm.transform(() => ({ stay: true })).delete(route('admin.practice-sets.destroy', set.id), {
+        preserveScroll: true,
+        onFinish: () => {
+            deletingConflictId.value = null;
+            deleteSetForm.transform((data) => data);
+        },
+    });
+};
+
 const submitSplit = () => {
     const rows = liveSplitPreview.value;
     if (!rows.length) {
+        return;
+    }
+    if (splitConflicts.value.length) {
+        window.alert(
+            `Rename or delete these existing codes first: ${splitConflicts.value.map((s) => s.set_code).join(', ')}`,
+        );
         return;
     }
     const summary = rows.map((r) => `${r.set_code} (Q${r.from}–${r.to})`).join(', ');
@@ -90,8 +161,6 @@ const assignForm = useForm({
     target_date: '',
     notes: '',
 });
-
-const deleteSetForm = useForm({});
 
 const destroySet = () => {
     const code = props.practiceSet?.set_code || 'this set';
@@ -399,7 +468,7 @@ const generateHints = () => {
                         <PrimaryButton
                             type="button"
                             class="!py-2"
-                            :disabled="splitForm.processing || liveSplitPreview.length < 2"
+                            :disabled="splitForm.processing || liveSplitPreview.length < 2 || splitConflicts.length > 0"
                             @click="submitSplit"
                         >
                             {{ splitForm.processing ? 'Dividing…' : `Create ${liveSplitPreview.length || 0} sets` }}
@@ -410,6 +479,66 @@ const generateHints = () => {
                             {{ row.set_code }} · Q{{ row.from }}–{{ row.to }} ({{ row.count }})
                         </li>
                     </ul>
+
+                    <div
+                        v-if="splitConflicts.length"
+                        class="mt-4 rounded-md border border-rose-300 bg-rose-50 px-3 py-3 text-rose-950"
+                    >
+                        <p class="text-sm font-semibold">
+                            These codes already exist — rename or delete them here, then divide again.
+                        </p>
+                        <ul class="mt-3 space-y-3">
+                            <li
+                                v-for="set in splitConflicts"
+                                :key="set.id"
+                                class="rounded-md border border-rose-200 bg-white px-3 py-2"
+                            >
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <p class="font-mono text-sm font-bold text-rose-800">{{ set.set_code }}</p>
+                                        <p class="text-xs text-gray-600">
+                                            {{ set.questions_count }} question{{ set.questions_count === 1 ? '' : 's' }}
+                                            <span v-if="set.title"> · {{ set.title }}</span>
+                                        </p>
+                                    </div>
+                                    <Link
+                                        :href="route('admin.questions.sets.show', set.id)"
+                                        class="text-xs font-semibold text-indigo-700 hover:underline"
+                                    >
+                                        Open
+                                    </Link>
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-end gap-2">
+                                    <div class="min-w-[12rem] flex-1">
+                                        <InputLabel :for="`rename-${set.id}`" value="New set code" class="!text-xs" />
+                                        <input
+                                            :id="`rename-${set.id}`"
+                                            :value="draftCode(set)"
+                                            type="text"
+                                            class="mt-1 w-full rounded-md border-gray-300 font-mono text-sm shadow-sm"
+                                            @input="setDraftCode(set.id, $event.target.value)"
+                                        >
+                                    </div>
+                                    <PrimaryButton
+                                        type="button"
+                                        class="!py-1.5 !text-xs"
+                                        :disabled="renamingSetId === set.id || renameForm.processing"
+                                        @click="saveConflictCode(set)"
+                                    >
+                                        {{ renamingSetId === set.id ? 'Saving…' : 'Save code' }}
+                                    </PrimaryButton>
+                                    <DangerButton
+                                        type="button"
+                                        class="!py-1.5 !text-xs"
+                                        :disabled="deletingConflictId === set.id || deleteSetForm.processing"
+                                        @click="deleteConflictSet(set)"
+                                    >
+                                        {{ deletingConflictId === set.id ? 'Deleting…' : 'Delete set' }}
+                                    </DangerButton>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
 
                 <div

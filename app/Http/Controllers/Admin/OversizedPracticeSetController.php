@@ -109,6 +109,7 @@ class OversizedPracticeSetController extends Controller
                         ? 'Chapter test'
                         : ($worksheet->isChapterScope() ? 'Chapter set' : 'Topic set'),
                     'suggested_half' => $half,
+                    'related_sets' => $this->splitService->relatedSetsForSplitUi($worksheet),
                 ];
             })
             ->values();

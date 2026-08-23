@@ -290,12 +290,17 @@ class PracticeSetController extends Controller
             ->with('success', "{$meta['set_code']} created from question bank.");
     }
 
-    public function destroy(Worksheet $worksheet): RedirectResponse
+    public function destroy(Request $request, Worksheet $worksheet): RedirectResponse
     {
         $topicId = $worksheet->syllabus_topic_id;
         $chapterId = $worksheet->syllabus_chapter_id;
         $isChapter = $worksheet->isChapterScope();
+        $code = $worksheet->set_code ?: 'Practice set';
         $worksheet->delete();
+
+        if ($request->boolean('stay')) {
+            return back()->with('success', "{$code} deleted. You can divide again.");
+        }
 
         if ($isChapter && $chapterId) {
             return redirect()
@@ -312,6 +317,19 @@ class PracticeSetController extends Controller
         return redirect()
             ->route('admin.practice-sets.index')
             ->with('success', 'Practice set deleted.');
+    }
+
+    public function updateSetCode(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        $validated = $request->validate([
+            'set_code' => ['required', 'string', 'max:20', 'unique:worksheets,set_code,'.$worksheet->id],
+            'stay' => ['nullable', 'boolean'],
+        ]);
+
+        $old = $worksheet->set_code;
+        $worksheet->update(['set_code' => trim($validated['set_code'])]);
+
+        return back()->with('success', "Renamed {$old} → {$worksheet->set_code}.");
     }
 
     public function split(Request $request, Worksheet $worksheet): RedirectResponse

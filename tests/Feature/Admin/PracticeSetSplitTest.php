@@ -116,6 +116,55 @@ class PracticeSetSplitTest extends TestCase
         $this->assertSame(20, Worksheet::query()->where('set_code', 'C9-HALF-CH01-M2')->first()?->questions()->count());
     }
 
+    public function test_admin_can_rename_set_code_in_place(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        [$worksheet] = $this->seedChapterSetWithQuestions(5, 'C8-GP-CH02-M1');
+
+        $this->actingAs($admin)
+            ->patch(route('admin.practice-sets.update-set-code', $worksheet), [
+                'set_code' => 'C8-GP-CH02-M1-OLD',
+                'stay' => true,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame('C8-GP-CH02-M1-OLD', $worksheet->fresh()->set_code);
+    }
+
+    public function test_split_blocked_when_target_codes_exist_and_related_sets_are_exposed(): void
+    {
+        $this->withoutVite();
+
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        [$large] = $this->seedChapterSetWithQuestions(40, 'C8-GP-CH02-M');
+
+        $conflict = Worksheet::query()->create([
+            'title' => 'Existing part',
+            'set_number' => 2,
+            'set_code' => 'C8-GP-CH02-M1',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $large->syllabus_chapter_id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'purpose' => WorksheetPurpose::STANDARD,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+            'created_by' => $large->created_by,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.practice-sets.split', $large), ['batch_size' => 20])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->actingAs($admin)
+            ->get(route('admin.questions.sets.show', $large))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Questions/SetQuestions')
+                ->where('splitRelatedSets.0.id', $conflict->id)
+                ->where('splitRelatedSets.0.set_code', 'C8-GP-CH02-M1'));
+    }
+
     /**
      * @return array{0: Worksheet, 1: ?TextbookChapter}
      */

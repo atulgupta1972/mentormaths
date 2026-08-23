@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import DangerButton from '@/Components/DangerButton.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, reactive, ref, watch } from 'vue';
@@ -64,7 +65,76 @@ const previewLabel = (set) => {
     return `${Math.ceil(count / batch)} part(s) · up to ${batch} sums each`;
 };
 
+const renamingSetId = ref(null);
+const deletingConflictId = ref(null);
+const renameDrafts = reactive({});
+const renameForm = useForm({ set_code: '', stay: true });
+const deleteConflictForm = useForm({ stay: true });
+
+const plannedCodes = (set) => {
+    const mode = rowModes[set.id] || 'half';
+    const count = Number(set.questions_count || 0);
+    let batch = mode === 'half' ? Math.ceil(count / 2) : Number(mode);
+    batch = Math.max(5, batch);
+    if (batch >= count) {
+        return [];
+    }
+    const base = String(set.set_code || 'SET').replace(/\d+$/, '') || 'SET';
+    const parts = Math.ceil(count / batch);
+
+    return Array.from({ length: parts }, (_, i) => `${base}${i + 1}`);
+};
+
+const conflictsFor = (set) => {
+    const needed = new Set(plannedCodes(set));
+
+    return (set.related_sets || []).filter((row) => needed.has(row.set_code));
+};
+
+const draftCode = (set) => {
+    if (renameDrafts[set.id] === undefined) {
+        renameDrafts[set.id] = set.set_code;
+    }
+
+    return renameDrafts[set.id];
+};
+
+const saveConflictCode = (set) => {
+    const next = String(draftCode(set) || '').trim();
+    if (!next || next === set.set_code) {
+        return;
+    }
+    renamingSetId.value = set.id;
+    renameForm.set_code = next;
+    renameForm.stay = true;
+    renameForm.patch(route('admin.practice-sets.update-set-code', set.id), {
+        preserveScroll: true,
+        onFinish: () => {
+            renamingSetId.value = null;
+        },
+    });
+};
+
+const deleteConflictSet = (set) => {
+    if (!confirm(`Delete ${set.set_code}? Assignments for that set are removed.`)) {
+        return;
+    }
+    deletingConflictId.value = set.id;
+    deleteConflictForm.transform(() => ({ stay: true })).delete(route('admin.practice-sets.destroy', set.id), {
+        preserveScroll: true,
+        onFinish: () => {
+            deletingConflictId.value = null;
+            deleteConflictForm.transform((data) => data);
+        },
+    });
+};
+
 const splitSet = (set) => {
+    const conflicts = conflictsFor(set);
+    if (conflicts.length) {
+        alert(`Rename or delete these codes first: ${conflicts.map((c) => c.set_code).join(', ')}`);
+        return;
+    }
     if (!confirm(`Split ${set.set_code || set.title}?\n${previewLabel(set)}`)) {
         return;
     }
@@ -204,7 +274,7 @@ const flashError = computed(() => page.props.flash?.error);
                                     <PrimaryButton
                                         type="button"
                                         class="!px-3 !py-1 !text-xs"
-                                        :disabled="splittingId === set.id"
+                                        :disabled="splittingId === set.id || conflictsFor(set).length > 0"
                                         @click="splitSet(set)"
                                     >
                                         {{ splittingId === set.id ? 'Splitting…' : 'Split now' }}
@@ -216,6 +286,54 @@ const flashError = computed(() => page.props.flash?.error);
                                         >
                                             Open questions
                                         </Link>
+                                    </div>
+                                    <div
+                                        v-if="conflictsFor(set).length"
+                                        class="mt-2 rounded border border-rose-200 bg-rose-50 p-2 text-left text-xs text-rose-950"
+                                    >
+                                        <p class="font-semibold">Codes already exist — rename or delete:</p>
+                                        <div
+                                            v-for="conflict in conflictsFor(set)"
+                                            :key="conflict.id"
+                                            class="mt-2 space-y-1 border-t border-rose-100 pt-2"
+                                        >
+                                            <p class="font-mono font-bold">
+                                                {{ conflict.set_code }}
+                                                <span class="font-sans font-normal text-gray-600">
+                                                    ({{ conflict.questions_count }} q)
+                                                </span>
+                                            </p>
+                                            <input
+                                                :value="draftCode(conflict)"
+                                                type="text"
+                                                class="w-full rounded border-gray-300 font-mono text-xs"
+                                                @input="renameDrafts[conflict.id] = $event.target.value"
+                                            >
+                                            <div class="flex flex-wrap gap-1">
+                                                <PrimaryButton
+                                                    type="button"
+                                                    class="!px-2 !py-0.5 !text-[10px]"
+                                                    :disabled="renamingSetId === conflict.id"
+                                                    @click="saveConflictCode(conflict)"
+                                                >
+                                                    Save code
+                                                </PrimaryButton>
+                                                <DangerButton
+                                                    type="button"
+                                                    class="!px-2 !py-0.5 !text-[10px]"
+                                                    :disabled="deletingConflictId === conflict.id"
+                                                    @click="deleteConflictSet(conflict)"
+                                                >
+                                                    Delete
+                                                </DangerButton>
+                                                <Link
+                                                    :href="route('admin.questions.sets.show', conflict.id)"
+                                                    class="px-1 text-[10px] text-indigo-700 hover:underline"
+                                                >
+                                                    Open
+                                                </Link>
+                                            </div>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>

@@ -308,6 +308,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/practice-sets/topics/{topic}', [PracticeSetTopicController::class, 'show'])->name('practice-sets.topics.show');
     Route::get('/practice-sets/{worksheet}', [PracticeSetController::class, 'show'])->name('practice-sets.show');
     Route::post('/practice-sets/{worksheet}/split', [PracticeSetController::class, 'split'])->name('practice-sets.split');
+    Route::patch('/practice-sets/{worksheet}/set-code', [PracticeSetController::class, 'updateSetCode'])->name('practice-sets.update-set-code');
     Route::delete('/practice-sets/{worksheet}', [PracticeSetController::class, 'destroy'])->name('practice-sets.destroy');
 
     Route::get('/catch-up', [CatchUpSetController::class, 'index'])->name('catch-up.index');
