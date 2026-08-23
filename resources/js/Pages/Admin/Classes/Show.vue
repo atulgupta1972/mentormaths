@@ -196,7 +196,7 @@ watch(boardFilter, (value, oldValue) => {
                                 <h3 class="font-medium text-gray-900">Class status &amp; exam plans</h3>
                                 <p class="mt-1 text-sm text-gray-500">
                                     Completion %, score %, revision, login days, and time spent for each student.
-                                    Use <strong>Add exam date</strong> when you need an exam plan.
+                                    Click a student name to open their study plan. Use <strong>Add exam date</strong> when you need an exam plan.
                                 </p>
                             </div>
                             <div class="flex items-center gap-2">
@@ -236,8 +236,9 @@ watch(boardFilter, (value, oldValue) => {
                                     <tr :class="!row.has_upcoming && examFilter === 'upcoming' ? 'bg-amber-50/60' : ''">
                                         <td class="px-3 py-3">
                                             <Link
-                                                :href="route('admin.students.show', row.student_id)"
+                                                :href="route('admin.school-study-plan.index', { student_id: row.student_id })"
                                                 class="font-medium text-indigo-600 hover:underline"
+                                                title="Open school study plan"
                                             >
                                                 {{ row.student_name }}
                                             </Link>

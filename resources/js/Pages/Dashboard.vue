@@ -13,8 +13,7 @@ import { formatScoreLabel } from '@/utils/scores';
 import { formatDate, formatDateTime } from '@/utils/dates';
 import { hasRoute, safeRoute } from '@/utils/routes';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import axios from 'axios';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 const page = usePage();
 
@@ -63,10 +62,7 @@ const showHelpRequests = ref(false);
 const showQuestionIssues = ref(true);
 const unlockingAttemptId = ref(null);
 const unlockForm = useForm({});
-const expandedStudentId = ref(null);
 const highlightedExamPlanId = ref(null);
-const studentRows = ref([]);
-const loadingStudentId = ref(null);
 const returningTaskId = ref(null);
 const returnForm = useForm({
     reason: 'Please re-check every question. Do not delete any. Correct a sum only if it is wrong.',
@@ -101,20 +97,6 @@ const unlockLockedAttempt = (row) => {
         },
     });
 };
-
-watch(() => props.students, (rows) => {
-    const previous = new Map(studentRows.value.map((row) => [row.student_id, row]));
-
-    studentRows.value = (rows || []).map((row) => {
-        const existing = previous.get(row.student_id);
-
-        if (existing?.detail_loaded) {
-            return { ...row, ...existing, detail_loaded: true };
-        }
-
-        return { ...row };
-    });
-}, { immediate: true });
 
 const studyPlanSubtitle = computed(() => {
     const parts = [props.studyPlanContext?.grade_name, props.studyPlanContext?.board_name].filter(Boolean);
@@ -320,32 +302,6 @@ const prepProgressPercent = (plan) => {
     return Math.round((plan.prep_summary.completed / plan.prep_summary.total) * 100);
 };
 
-const toggleStudent = async (studentId) => {
-    if (expandedStudentId.value === studentId) {
-        expandedStudentId.value = null;
-        return;
-    }
-
-    expandedStudentId.value = studentId;
-
-    const student = studentRows.value.find((row) => row.student_id === studentId);
-
-    if (!student || student.detail_loaded || loadingStudentId.value === studentId) {
-        return;
-    }
-
-    loadingStudentId.value = studentId;
-
-    try {
-        const { data } = await axios.get(route('admin.dashboard.student', studentId));
-        Object.assign(student, data, { detail_loaded: true });
-    } catch (error) {
-        console.error(error);
-    } finally {
-        loadingStudentId.value = null;
-    }
-};
-
 const toggleHelpRequests = () => {
     if (!props.helpRequests.length) {
         return;
@@ -375,44 +331,6 @@ const formatIssueDate = (value) => {
     });
 };
 
-const studentsByClass = computed(() => {
-    const groups = {};
-
-    for (const student of studentRows.value) {
-        const key = student.class_name || 'Other';
-        if (!groups[key]) {
-            groups[key] = [];
-        }
-        groups[key].push(student);
-    }
-
-    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
-});
-
-const studentSummary = (student) => {
-    const underReview = student.assignments_under_review_count
-        ?? (student.assignments_under_review?.length || 0);
-    const exams = student.upcoming_exams_count ?? (student.upcoming_exams?.length || 0);
-    const todo = student.assignments_pending_count ?? (student.assignments_pending?.length || 0);
-    const done = student.assignments_completed_count ?? (student.assignments_completed?.length || 0);
-    const parts = [
-        `${exams} exam${exams === 1 ? '' : 's'}`,
-        `${todo} todo`,
-    ];
-
-    if (underReview > 0) {
-        parts.push(`${underReview} under review`);
-    }
-
-    parts.push(`${done} done`);
-
-    if (student.help_requests_count > 0) {
-        parts.push(`${student.help_requests_count} need help`);
-    }
-
-    return parts.join(' · ');
-};
-
 const formatHelpDate = (value) => {
     if (!value) {
         return '';
@@ -425,34 +343,6 @@ const formatHelpDate = (value) => {
     });
 };
 
-const adminAssignmentHref = (set, studentId) => {
-    if (set.delivery_mode === 'written' && set.practice_set_id) {
-        return route('admin.written-sheets.show', {
-            worksheet: set.practice_set_id,
-            student_id: studentId,
-            assignment_id: set.assignment_id,
-        });
-    }
-
-    return route('admin.set-assignments.show', set.assignment_id);
-};
-
-const adminSetStatusClass = (set) => {
-    if (set.status === 'green' || set.status === 'green-late') {
-        return 'border-emerald-200 bg-emerald-50 text-emerald-900';
-    }
-    if (set.status === 'checking') {
-        return 'border-violet-200 bg-violet-50 text-violet-900';
-    }
-    if (set.is_overdue) {
-        return 'border-rose-200 bg-rose-50 text-rose-900';
-    }
-    if (set.status === 'yellow') {
-        return 'border-amber-200 bg-amber-50 text-amber-900';
-    }
-
-    return 'border-sky-200 bg-sky-50 text-sky-900';
-};
 </script>
 
 <template>
@@ -782,152 +672,28 @@ const adminSetStatusClass = (set) => {
                         </div>
                     </section>
 
-                    <div v-if="studentRows.length === 0" class="rounded-xl bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
-                        No active students{{ selectedGrade ? ` in ${selectedGrade.name}` : '' }} for this year.
-                    </div>
+                    <section class="space-y-3">
+                        <div>
+                            <h3 class="text-sm font-bold uppercase tracking-wide text-gray-800">Classes</h3>
+                            <p class="mt-1 text-sm text-gray-600">
+                                Open a class to see student progress, then click a student to go to their study plan.
+                            </p>
+                        </div>
 
-                    <section v-else class="space-y-3">
-                        <h3 class="text-sm font-bold uppercase tracking-wide text-gray-800">All students · by class</h3>
+                        <div v-if="gradeLevels.length === 0" class="rounded-xl bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
+                            No active classes yet.
+                        </div>
 
-                        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                            <div
-                                v-for="[className, classStudents] in studentsByClass"
-                                :key="className"
-                                class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
+                        <div v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            <Link
+                                v-for="grade in gradeLevels"
+                                :key="grade.id"
+                                :href="route('admin.classes.show', grade.id)"
+                                class="rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
                             >
-                                <p class="mb-2 border-b border-gray-100 pb-1.5 text-xs font-extrabold uppercase tracking-wide text-indigo-800">
-                                    {{ className }}
-                                    <span class="font-bold normal-case text-gray-600">({{ classStudents.length }})</span>
-                                </p>
-
-                                <div class="space-y-2">
-                                    <div
-                                        v-for="student in classStudents"
-                                        :key="student.student_id"
-                                        class="overflow-hidden rounded-lg border border-gray-200 bg-slate-50"
-                                    >
-                                        <button
-                                            type="button"
-                                            class="flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-100"
-                                            @click="toggleStudent(student.student_id)"
-                                        >
-                                            <div class="min-w-0">
-                                                <Link
-                                                    :href="route('admin.students.show', student.student_id)"
-                                                    class="block truncate text-base font-bold leading-tight text-indigo-700 hover:underline"
-                                                    @click.stop
-                                                >
-                                                    {{ student.student_name }}
-                                                </Link>
-                                                <p class="mt-1 text-xs font-semibold leading-snug text-gray-700">
-                                                    {{ studentSummary(student) }}
-                                                </p>
-                                                <p
-                                                    v-if="student.help_requests_count > 0"
-                                                    class="mt-1 text-xs font-bold text-rose-700"
-                                                >
-                                                    {{ student.help_requests_count }} sum{{ student.help_requests_count === 1 ? '' : 's' }} need teacher help
-                                                </p>
-                                            </div>
-                                            <span class="shrink-0 pt-1 text-xs font-bold text-gray-500">
-                                                {{ expandedStudentId === student.student_id ? '▲' : '▼' }}
-                                            </span>
-                                        </button>
-
-                                        <div v-if="expandedStudentId === student.student_id" class="space-y-3 border-t border-gray-100 bg-white px-2.5 py-2.5">
-                                <p v-if="loadingStudentId === student.student_id" class="text-[11px] font-medium text-gray-500">
-                                    Loading exam plan…
-                                </p>
-                                <ExamPlanPanel
-                                    :plans="student.exam_plans || []"
-                                    :syllabus-chapters="student.syllabus_chapters || []"
-                                    :exam-type-options="examTypeOptions"
-                                    :student-id="student.student_id"
-                                    context="admin"
-                                    compact
-                                />
-
-                                <div v-if="student.help_requests?.length">
-                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-rose-700">Asked for help</h4>
-                                    <ul class="mt-1 space-y-1">
-                                        <li
-                                            v-for="item in student.help_requests"
-                                            :key="item.id"
-                                            class="rounded border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] text-gray-800"
-                                        >
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <Link
-                                                    v-if="item.set_code && item.set_url"
-                                                    :href="item.set_url"
-                                                    class="font-mono font-semibold text-indigo-700 hover:underline"
-                                                >
-                                                    {{ item.set_code }}
-                                                </Link>
-                                                <span v-else-if="item.set_code" class="font-mono font-semibold text-indigo-700">{{ item.set_code }}</span>
-                                                <Link
-                                                    v-if="item.edit_url"
-                                                    :href="item.edit_url"
-                                                    class="font-sans font-semibold text-indigo-700 hover:underline"
-                                                >
-                                                    Edit
-                                                </Link>
-                                            </div>
-                                            <span class="block line-clamp-2">{{ item.question_text }}</span>
-                                            <HelpRequestUploaderReturn :item="item" compact />
-                                        </li>
-                                    </ul>
-                                </div>
-
-                                <div>
-                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Sets to do</h4>
-                                    <div v-if="student.assignments_pending.length" class="mt-1 flex flex-wrap gap-1">
-                                        <Link
-                                            v-for="set in student.assignments_pending"
-                                            :key="set.assignment_id"
-                                            :href="adminAssignmentHref(set, student.student_id)"
-                                            class="rounded border px-2 py-1 text-[11px] font-mono font-semibold"
-                                            :class="adminSetStatusClass(set)"
-                                        >
-                                            {{ setLabel(set) }}
-                                        </Link>
-                                    </div>
-                                    <p v-else class="mt-1 text-[11px] text-gray-500">All caught up.</p>
-                                </div>
-
-                                <div v-if="student.assignments_under_review?.length">
-                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-violet-700">Under review</h4>
-                                    <div class="mt-1 flex flex-wrap gap-1">
-                                        <Link
-                                            v-for="set in student.assignments_under_review"
-                                            :key="`review-${set.assignment_id}`"
-                                            :href="adminAssignmentHref(set, student.student_id)"
-                                            class="rounded border px-2 py-1 text-[11px] font-mono font-semibold"
-                                            :class="adminSetStatusClass(set)"
-                                        >
-                                            {{ setLabel(set) }}
-                                            <span class="font-sans font-medium"> · review</span>
-                                        </Link>
-                                    </div>
-                                </div>
-
-                                <div v-if="student.assignments_completed.length">
-                                    <h4 class="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Sets done</h4>
-                                    <div class="mt-1 flex flex-wrap gap-1">
-                                        <Link
-                                            v-for="set in student.assignments_completed"
-                                            :key="`done-${set.assignment_id}`"
-                                            :href="adminAssignmentHref(set, student.student_id)"
-                                            class="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-mono font-semibold text-emerald-900"
-                                        >
-                                            {{ setLabel(set) }}
-                                            <span class="font-sans">{{ set.latest_score_label || formatScoreLabel(set.latest_score, set.latest_max_score) }}</span>
-                                        </Link>
-                                    </div>
-                                </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                                <p class="text-lg font-bold text-gray-900">{{ grade.name }}</p>
+                                <p class="mt-1 text-xs font-medium text-indigo-700">View students →</p>
+                            </Link>
                         </div>
                     </section>
                 </template>

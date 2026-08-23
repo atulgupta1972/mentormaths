@@ -36,7 +36,7 @@ class DashboardTest extends TestCase
                 ->component('Dashboard')
                 ->where('isAdmin', true)
                 ->where('stats.students_count', 1)
-                ->where('students.0.syllabus_chapters', []));
+                ->has('gradeLevels'));
     }
 
     public function test_admin_can_load_one_student_dashboard_detail(): void

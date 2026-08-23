@@ -29,7 +29,7 @@ const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
                 <BrowseModeNotice class="mb-6" />
                 <p class="mb-6 text-sm text-gray-600">
                     <template v-if="isAdmin">
-                        Select a class to manage syllabus topics, question bank, practice sets, and student assignments.
+                        Select a class to see student progress. Click a student to open their study plan.
                     </template>
                     <template v-else>
                         Browse all classes — see syllabus coverage, topics, questions, and practice sets available on the platform.
