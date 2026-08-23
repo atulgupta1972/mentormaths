@@ -77,26 +77,73 @@ class PracticeSetSplitTest extends TestCase
         $this->assertSame(7, $plan[4]['count']);
     }
 
+    public function test_oversized_index_lists_sets_above_threshold_descending(): void
+    {
+        $this->withoutVite();
+
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        [$large] = $this->seedChapterSetWithQuestions(40, 'C9-BIG-CH01-M');
+
+        $this->actingAs($admin)
+            ->get(route('admin.practice-sets.oversized', ['min_questions' => 30]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/PracticeSets/Oversized')
+                ->has('sets', 1)
+                ->where('sets.0.id', $large->id)
+                ->where('sets.0.questions_count', 40)
+                ->where('filters.min_questions', 30));
+    }
+
+    public function test_oversized_page_can_split_set_in_half(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        [$worksheet] = $this->seedChapterSetWithQuestions(40, 'C9-HALF-CH01-M');
+
+        $this->actingAs($admin)
+            ->post(route('admin.practice-sets.oversized.split', $worksheet), [
+                'mode' => 'half',
+                'min_questions' => 30,
+            ])
+            ->assertRedirect(route('admin.practice-sets.oversized', [
+                'min_questions' => 30,
+                'kind' => 'all',
+            ]));
+
+        $worksheet->refresh();
+        $this->assertSame(20, $worksheet->questions()->count());
+        $this->assertSame('C9-HALF-CH01-M1', $worksheet->set_code);
+        $this->assertSame(20, Worksheet::query()->where('set_code', 'C9-HALF-CH01-M2')->first()?->questions()->count());
+    }
+
     /**
      * @return array{0: Worksheet, 1: ?TextbookChapter}
      */
     private function seedChapterSetWithQuestions(int $count, string $setCode, bool $withTextbook = false): array
     {
-        $year = AcademicYear::query()->create([
-            'name' => '2026-27',
-            'starts_on' => '2026-04-01',
-            'ends_on' => '2027-03-31',
-            'is_active' => true,
-        ]);
-        $board = Board::query()->create(['name' => 'CBSE', 'code' => 'CBSE', 'is_active' => true]);
-        $grade = GradeLevel::query()->create([
-            'name' => 'Class 9',
-            'slug' => 'class-9',
-            'typical_age' => 14,
-            'sort_order' => 9,
-            'is_active' => true,
-        ]);
-        $subject = Subject::query()->create(['name' => 'Mathematics', 'code' => 'MATHS', 'is_active' => true]);
+        $year = AcademicYear::query()->firstOrCreate(
+            ['name' => '2026-27'],
+            [
+                'starts_on' => '2026-04-01',
+                'ends_on' => '2027-03-31',
+                'is_active' => true,
+            ],
+        );
+        $board = Board::query()->firstOrCreate(
+            ['code' => 'CBSE'],
+            ['name' => 'CBSE', 'is_active' => true],
+        );
+        $grade = GradeLevel::query()->firstOrCreate(
+            ['name' => 'Class 9'],
+            [
+                'sort_order' => 9,
+                'is_active' => true,
+            ],
+        );
+        $subject = Subject::query()->firstOrCreate(
+            ['code' => 'MATHS'],
+            ['name' => 'Mathematics', 'is_active' => true],
+        );
         $version = SyllabusVersion::query()->create([
             'academic_year_id' => $year->id,
             'board_id' => $board->id,

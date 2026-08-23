@@ -40,6 +40,12 @@ const lookupSet = () => {
                         Create practice set
                     </Link>
                     <Link
+                        :href="route('admin.practice-sets.oversized')"
+                        class="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
+                    >
+                        Large sets to split
+                    </Link>
+                    <Link
                         :href="route('admin.catch-up.index')"
                         class="rounded-md border border-indigo-300 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
                     >

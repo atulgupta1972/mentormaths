@@ -90,8 +90,14 @@ const teachingGroup = computed(() => ({
         {
             label: 'Practice sets',
             href: route('admin.practice-sets.index'),
-            active: route().current('admin.practice-sets.*'),
+            active: route().current('admin.practice-sets.*') && !route().current('admin.practice-sets.oversized'),
             show: isAdmin.value,
+        },
+        {
+            label: 'Large sets',
+            href: route('admin.practice-sets.oversized'),
+            active: route().current('admin.practice-sets.oversized'),
+            show: isAdmin.value && route().has('admin.practice-sets.oversized'),
         },
         {
             label: 'Catch-up sets',

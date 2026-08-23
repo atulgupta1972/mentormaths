@@ -19,6 +19,7 @@ use App\Http\Controllers\Admin\GradeContextController;
 use App\Http\Controllers\Admin\GroupController;
 use App\Http\Controllers\Admin\NotificationSettingsController;
 use App\Http\Controllers\Admin\PracticeSetController;
+use App\Http\Controllers\Admin\OversizedPracticeSetController;
 use App\Http\Controllers\Admin\PracticeSetTopicController;
 use App\Http\Controllers\Admin\QuestionAuditController;
 use App\Http\Controllers\Admin\QuestionController;
@@ -300,6 +301,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/practice-sets/chapters/{chapter}/from-practice-bank', [ChapterPracticeSetController::class, 'storeFromChapterPracticeBank'])->name('practice-sets.chapters.from-practice-bank');
     Route::delete('/questions/chapters/{chapter}/practice-bank', [QuestionController::class, 'clearChapterPracticeBank'])->name('questions.chapters.clear-practice-bank');
     Route::get('/practice-sets', [PracticeSetController::class, 'index'])->name('practice-sets.index');
+    Route::get('/practice-sets/oversized', [OversizedPracticeSetController::class, 'index'])->name('practice-sets.oversized');
+    Route::post('/practice-sets/oversized/{worksheet}/split', [OversizedPracticeSetController::class, 'split'])->name('practice-sets.oversized.split');
     Route::get('/practice-sets/create', [PracticeSetController::class, 'create'])->name('practice-sets.create');
     Route::post('/practice-sets', [PracticeSetController::class, 'store'])->name('practice-sets.store');
     Route::get('/practice-sets/topics/{topic}', [PracticeSetTopicController::class, 'show'])->name('practice-sets.topics.show');
