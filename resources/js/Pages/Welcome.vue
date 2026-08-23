@@ -138,169 +138,165 @@ const mockChapters = [
         </header>
 
         <main class="relative z-10">
-            <!-- Hero: brand + one idea + CTA + dominant product visual -->
-            <section class="relative mx-auto max-w-6xl px-5 pb-6 pt-4 sm:px-8 sm:pt-8">
-                <p class="mm-rise inline-flex items-center gap-2 rounded-full border border-teal-700/20 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-teal-900 backdrop-blur">
-                    Soft launch · Schools · Coaching · Tuition · Home
-                </p>
-
-                <h1 class="mm-rise-delay mt-5 font-['Fraunces',Georgia,serif] text-4xl font-bold tracking-tight text-[#0f4c5c] sm:text-6xl sm:leading-[1.05]">
-                    Mentor Maths
-                </h1>
-
-                <p class="mm-rise-delay mt-4 max-w-2xl text-xl font-medium leading-snug text-slate-800 sm:text-2xl">
-                    Study plan scorecard — Completion %, Score %, Revision status.
-                </p>
-
-                <p class="mm-rise-late mt-4 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-                    The maths of studying maths, visible the same way for
-                    <span class="font-semibold text-slate-800">individual</span>,
-                    <span class="font-semibold text-slate-800">school class</span>, and
-                    <span class="font-semibold text-slate-800">coaching class</span> —
-                    so teachers manage professionally and students see their own numbers.
-                </p>
-
-                <div class="mm-rise-late mt-7 flex flex-wrap gap-3">
-                    <Link
-                        v-if="!$page.props.auth?.user"
-                        :href="route('registration.create')"
-                        class="rounded-lg bg-[#0f4c5c] px-7 py-3 text-base font-bold text-white transition hover:bg-[#0a3642]"
-                    >
-                        Request early access
-                    </Link>
-                    <Link
-                        :href="route('login')"
-                        class="rounded-lg border border-slate-300 bg-white/90 px-7 py-3 text-base font-semibold text-slate-800 transition hover:bg-white"
-                    >
-                        Log in
-                    </Link>
-                    <Link
-                        v-if="!$page.props.auth?.user"
-                        :href="route('teacher-registration.create')"
-                        class="rounded-lg border border-teal-800/30 bg-teal-50/80 px-7 py-3 text-base font-semibold text-teal-950 transition hover:bg-teal-100"
-                    >
-                        Mentors — join
-                    </Link>
-                </div>
-
-                <div class="mt-8 flex flex-wrap gap-2">
-                    <span
-                        v-for="klass in classes"
-                        :key="klass"
-                        class="rounded-md border border-slate-200 bg-white/80 px-3 py-1 text-xs font-semibold text-slate-700"
-                    >
-                        {{ klass }}
-                    </span>
-                    <span class="rounded-md border border-teal-200 bg-teal-50/90 px-3 py-1 text-xs font-semibold text-teal-900">
-                        CBSE · ICSE
-                    </span>
-                </div>
-            </section>
-
-            <!-- Dominant product plane: study-plan scorecard preview -->
-            <section class="mm-rise-late relative border-y border-slate-300/60 bg-[#0f4c5c]">
-                <div class="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
-                    <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-teal-200/90">Study plan scorecard</p>
-                            <h2 class="mt-1 font-['Fraunces',Georgia,serif] text-2xl font-semibold text-white sm:text-3xl">
-                                Completion % · Score % · Revision status
-                            </h2>
-                        </div>
-                        <p class="max-w-md text-sm leading-relaxed text-teal-100/90">
-                            Individual · School class · Coaching class — one professional language for measured maths practice.
+            <!-- Hero: compact copy (left) + scorecard preview (right) -->
+            <section class="relative mx-auto max-w-7xl px-5 pb-10 pt-4 sm:px-8 sm:pt-8">
+                <div class="grid items-start gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+                    <div class="mm-rise max-w-md lg:max-w-none">
+                        <p class="inline-flex items-center gap-2 rounded-full border border-teal-700/20 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-teal-900 backdrop-blur">
+                            Soft launch · Schools · Coaching · Home
                         </p>
+
+                        <h1 class="mm-rise-delay mt-4 font-['Fraunces',Georgia,serif] text-3xl font-bold tracking-tight text-[#0f4c5c] sm:text-4xl sm:leading-[1.08]">
+                            Mentor Maths
+                        </h1>
+
+                        <p class="mm-rise-delay mt-3 text-base font-semibold leading-snug text-slate-800 sm:text-lg">
+                            Study plan scorecard — Completion %, Score %, Revision status.
+                        </p>
+
+                        <p class="mm-rise-late mt-3 text-sm leading-relaxed text-slate-600">
+                            The maths of studying maths for
+                            <span class="font-semibold text-slate-800">individual</span>,
+                            <span class="font-semibold text-slate-800">school class</span>, and
+                            <span class="font-semibold text-slate-800">coaching class</span>.
+                        </p>
+
+                        <div class="mm-rise-late mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                            <Link
+                                v-if="!$page.props.auth?.user"
+                                :href="route('registration.create')"
+                                class="rounded-lg bg-[#0f4c5c] px-5 py-2.5 text-center text-sm font-bold text-white transition hover:bg-[#0a3642]"
+                            >
+                                Request early access
+                            </Link>
+                            <Link
+                                :href="route('login')"
+                                class="rounded-lg border border-slate-300 bg-white/90 px-5 py-2.5 text-center text-sm font-semibold text-slate-800 transition hover:bg-white"
+                            >
+                                Log in
+                            </Link>
+                            <Link
+                                v-if="!$page.props.auth?.user"
+                                :href="route('teacher-registration.create')"
+                                class="rounded-lg border border-teal-800/30 bg-teal-50/80 px-5 py-2.5 text-center text-sm font-semibold text-teal-950 transition hover:bg-teal-100"
+                            >
+                                Mentors — join
+                            </Link>
+                        </div>
+
+                        <div class="mt-5 flex flex-wrap gap-1.5">
+                            <span
+                                v-for="klass in classes"
+                                :key="klass"
+                                class="rounded border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-700"
+                            >
+                                {{ klass }}
+                            </span>
+                            <span class="rounded border border-teal-200 bg-teal-50/90 px-2 py-0.5 text-[11px] font-semibold text-teal-900">
+                                CBSE · ICSE
+                            </span>
+                        </div>
                     </div>
 
-                    <div class="overflow-hidden rounded-lg border border-white/15 bg-[#f8faf9] shadow-2xl shadow-black/25">
-                        <div class="flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-3 py-2">
-                            <span class="h-2.5 w-2.5 rounded-full bg-rose-400"></span>
-                            <span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span>
-                            <span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
-                            <span class="ml-2 text-[11px] font-semibold text-slate-500">mentormaths.in · Student home</span>
+                    <div class="mm-rise-late min-w-0">
+                        <div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                            <p class="text-[11px] font-bold uppercase tracking-[0.14em] text-[#0f4c5c]">
+                                Study plan scorecard
+                            </p>
+                            <p class="text-[11px] font-medium text-slate-500">
+                                Individual · School · Coaching
+                            </p>
                         </div>
 
-                        <div class="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
-                            <div class="border-b border-slate-200 p-3 sm:p-4 lg:border-b-0 lg:border-r">
-                                <div class="mb-3 grid grid-cols-3 gap-2">
-                                    <div class="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-sky-800">Completion %</p>
-                                        <p class="text-2xl font-extrabold tabular-nums text-sky-950">26%</p>
-                                        <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-sky-200">
-                                            <div class="mm-bar h-full rounded-full bg-sky-600" style="--mm-w: 26%"></div>
-                                        </div>
-                                    </div>
-                                    <div class="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2">
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Score %</p>
-                                        <p class="text-2xl font-extrabold tabular-nums text-emerald-950">78%</p>
-                                        <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-emerald-200">
-                                            <div class="mm-bar h-full rounded-full bg-emerald-600" style="--mm-w: 78%"></div>
-                                        </div>
-                                    </div>
-                                    <div class="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-2">
-                                        <p class="text-[10px] font-bold uppercase tracking-wide text-orange-900">Revision status</p>
-                                        <p class="text-lg font-extrabold leading-tight text-orange-950">
-                                            <span class="text-emerald-700">0</span>
-                                            <span class="text-slate-400"> · </span>
-                                            <span class="text-rose-700">8</span>
-                                        </p>
-                                        <p class="text-[10px] font-medium text-orange-800/80">pending redo</p>
-                                    </div>
-                                </div>
-
-                                <table class="w-full border-collapse text-left text-[11px] sm:text-xs">
-                                    <thead>
-                                        <tr class="bg-[#0b2a5b] text-white">
-                                            <th class="px-2 py-1.5 font-semibold">Ch No</th>
-                                            <th class="px-2 py-1.5 font-semibold">Chapter</th>
-                                            <th class="bg-sky-800 px-2 py-1.5 text-center font-bold">Completion %</th>
-                                            <th class="bg-violet-800 px-2 py-1.5 text-center font-bold">Score %</th>
-                                            <th class="bg-orange-700 px-2 py-1.5 text-center font-bold">Revision status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr
-                                            v-for="(row, i) in mockChapters"
-                                            :key="row.no"
-                                            :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
-                                        >
-                                            <td class="whitespace-nowrap px-2 py-1.5 font-semibold text-slate-800">{{ row.no }}</td>
-                                            <td class="max-w-[9rem] truncate px-2 py-1.5 text-slate-700 sm:max-w-none">
-                                                {{ row.name }}
-                                                <span
-                                                    v-if="row.under"
-                                                    class="ml-1 rounded bg-amber-100 px-1 py-px text-[9px] font-bold uppercase text-amber-900"
-                                                >Under study</span>
-                                            </td>
-                                            <td class="px-2 py-1.5 text-center font-bold tabular-nums text-sky-800">{{ row.comp }}</td>
-                                            <td class="px-2 py-1.5 text-center font-bold tabular-nums text-emerald-800">{{ row.score }}</td>
-                                            <td class="px-2 py-1.5 text-center font-bold tabular-nums text-orange-800">{{ row.revise }}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                        <div class="overflow-hidden rounded-lg border border-slate-300/80 bg-[#f8faf9] shadow-xl shadow-slate-900/10">
+                            <div class="flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-3 py-1.5">
+                                <span class="h-2 w-2 rounded-full bg-rose-400"></span>
+                                <span class="h-2 w-2 rounded-full bg-amber-400"></span>
+                                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                                <span class="ml-1.5 text-[10px] font-semibold text-slate-500">mentormaths.in · Student home</span>
                             </div>
 
-                            <div class="space-y-3 bg-slate-50/80 p-3 sm:p-4">
-                                <div class="rounded-md border border-slate-200 bg-white p-3">
-                                    <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Daily formula drill</p>
-                                    <p class="mt-1 text-sm font-semibold text-slate-900">Algebra · identities &amp; forms</p>
-                                    <p class="mt-2 text-xs leading-relaxed text-slate-600">
-                                        Short, regular drills so formulas stay automatic — designed the way a classroom mentor
-                                        would warm up a batch before harder sets.
-                                    </p>
-                                    <div class="mt-3 flex items-center justify-between text-xs">
-                                        <span class="font-semibold text-teal-800">Today’s streak ready</span>
-                                        <span class="rounded bg-teal-700 px-2 py-1 font-bold text-white">Start drill</span>
+                            <div class="grid gap-0 xl:grid-cols-[1.2fr_0.8fr]">
+                                <div class="border-b border-slate-200 p-2.5 sm:p-3 xl:border-b-0 xl:border-r">
+                                    <div class="mb-2 grid grid-cols-3 gap-1.5">
+                                        <div class="rounded border border-sky-200 bg-sky-50 px-2 py-1.5">
+                                            <p class="text-[9px] font-bold uppercase tracking-wide text-sky-800">Completion %</p>
+                                            <p class="text-lg font-extrabold tabular-nums text-sky-950">26%</p>
+                                            <div class="mt-1 h-1 overflow-hidden rounded-full bg-sky-200">
+                                                <div class="mm-bar h-full rounded-full bg-sky-600" style="--mm-w: 26%"></div>
+                                            </div>
+                                        </div>
+                                        <div class="rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+                                            <p class="text-[9px] font-bold uppercase tracking-wide text-emerald-800">Score %</p>
+                                            <p class="text-lg font-extrabold tabular-nums text-emerald-950">78%</p>
+                                            <div class="mt-1 h-1 overflow-hidden rounded-full bg-emerald-200">
+                                                <div class="mm-bar h-full rounded-full bg-emerald-600" style="--mm-w: 78%"></div>
+                                            </div>
+                                        </div>
+                                        <div class="rounded border border-orange-200 bg-orange-50 px-2 py-1.5">
+                                            <p class="text-[9px] font-bold uppercase tracking-wide text-orange-900">Revision</p>
+                                            <p class="text-sm font-extrabold leading-tight text-orange-950">
+                                                <span class="text-emerald-700">0</span>
+                                                <span class="text-slate-400"> · </span>
+                                                <span class="text-rose-700">8</span>
+                                            </p>
+                                            <p class="text-[9px] font-medium text-orange-800/80">pending</p>
+                                        </div>
                                     </div>
+
+                                    <table class="w-full border-collapse text-left text-[10px] sm:text-[11px]">
+                                        <thead>
+                                            <tr class="bg-[#0b2a5b] text-white">
+                                                <th class="px-1.5 py-1 font-semibold">Ch</th>
+                                                <th class="px-1.5 py-1 font-semibold">Chapter</th>
+                                                <th class="bg-sky-800 px-1.5 py-1 text-center font-bold">Comp %</th>
+                                                <th class="bg-violet-800 px-1.5 py-1 text-center font-bold">Score %</th>
+                                                <th class="bg-orange-700 px-1.5 py-1 text-center font-bold">Rev.</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr
+                                                v-for="(row, i) in mockChapters"
+                                                :key="row.no"
+                                                :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
+                                            >
+                                                <td class="whitespace-nowrap px-1.5 py-1 font-semibold text-slate-800">{{ row.no }}</td>
+                                                <td class="max-w-[7rem] truncate px-1.5 py-1 text-slate-700 sm:max-w-[10rem]">
+                                                    {{ row.name }}
+                                                    <span
+                                                        v-if="row.under"
+                                                        class="ml-0.5 rounded bg-amber-100 px-1 py-px text-[8px] font-bold uppercase text-amber-900"
+                                                    >Under study</span>
+                                                </td>
+                                                <td class="px-1.5 py-1 text-center font-bold tabular-nums text-sky-800">{{ row.comp }}</td>
+                                                <td class="px-1.5 py-1 text-center font-bold tabular-nums text-emerald-800">{{ row.score }}</td>
+                                                <td class="px-1.5 py-1 text-center font-bold tabular-nums text-orange-800">{{ row.revise }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
-                                <div class="rounded-md border border-slate-200 bg-white p-3">
-                                    <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Teacher · whole class</p>
-                                    <p class="mt-1 text-sm font-semibold text-slate-900">Manage professionally</p>
-                                    <ul class="mt-2 space-y-1.5 text-xs text-slate-700">
-                                        <li class="flex justify-between gap-2"><span>Class study plans</span><span class="font-bold text-emerald-700">one view</span></li>
-                                        <li class="flex justify-between gap-2"><span>Completion % / Score % / Revision</span><span class="font-bold text-sky-800">per student</span></li>
-                                        <li class="flex justify-between gap-2"><span>Weak sums to redo</span><span class="font-bold text-rose-700">queued</span></li>
-                                    </ul>
+
+                                <div class="space-y-2 bg-slate-50/80 p-2.5 sm:p-3">
+                                    <div class="rounded border border-slate-200 bg-white p-2.5">
+                                        <p class="text-[9px] font-bold uppercase tracking-wide text-slate-500">Daily formula drill</p>
+                                        <p class="mt-0.5 text-xs font-semibold text-slate-900">Algebra · identities</p>
+                                        <p class="mt-1 text-[11px] leading-snug text-slate-600">
+                                            Short drills so formulas stay automatic.
+                                        </p>
+                                        <div class="mt-2 flex items-center justify-between text-[11px]">
+                                            <span class="font-semibold text-teal-800">Streak ready</span>
+                                            <span class="rounded bg-teal-700 px-2 py-0.5 font-bold text-white">Start</span>
+                                        </div>
+                                    </div>
+                                    <div class="rounded border border-slate-200 bg-white p-2.5">
+                                        <p class="text-[9px] font-bold uppercase tracking-wide text-slate-500">Teacher · whole class</p>
+                                        <p class="mt-0.5 text-xs font-semibold text-slate-900">Manage professionally</p>
+                                        <ul class="mt-1.5 space-y-1 text-[11px] text-slate-700">
+                                            <li class="flex justify-between gap-2"><span>Class study plans</span><span class="font-bold text-emerald-700">one view</span></li>
+                                            <li class="flex justify-between gap-2"><span>Scorecard</span><span class="font-bold text-sky-800">per student</span></li>
+                                            <li class="flex justify-between gap-2"><span>Weak sums</span><span class="font-bold text-rose-700">queued</span></li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
