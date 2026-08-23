@@ -62,6 +62,78 @@ const mockChapters = [
     { no: 'Ch 4', name: 'Letter-Numbers · Equations', comp: '21%', score: '87%', revise: '0/5', studied: true },
     { no: 'Ch 6', name: 'Measuring Space', comp: '0%', score: '—', revise: '0/0', under: true },
 ];
+
+/** One-chapter demo of how the question bank is arranged */
+const sampleBank = {
+    grade: 'Class 7',
+    chapter: 'Ch 2 — Integers',
+    board: 'CBSE',
+    books: [
+        {
+            name: 'NCERT',
+            code: 'ncert',
+            parts: [
+                { label: 'Part 1', mcq: 12, fill: 12, written: 8 },
+                { label: 'Part 2', mcq: 10, fill: 10, written: 6 },
+            ],
+        },
+        {
+            name: 'RD Sharma',
+            code: 'rds',
+            parts: [
+                { label: 'Part 1', mcq: 18, fill: 14, written: 10 },
+            ],
+        },
+    ],
+    tiers: [
+        {
+            key: 'learner',
+            label: 'Learner',
+            tone: 'sky',
+            tagline: 'Build confidence',
+            sets: [
+                { code: 'S721', kind: 'MCQ', count: 20 },
+                { code: 'SF721', kind: 'Fill-blank', count: 18 },
+                { code: 'SW721', kind: 'Written', count: 12 },
+            ],
+        },
+        {
+            key: 'achiever',
+            label: 'Achiever',
+            tone: 'amber',
+            tagline: 'Stretch further',
+            sets: [
+                { code: 'B721', kind: 'MCQ', count: 20 },
+                { code: 'BF721', kind: 'Fill-blank', count: 16 },
+                { code: 'BW721', kind: 'Written', count: 12 },
+            ],
+        },
+        {
+            key: 'expert',
+            label: 'Expert',
+            tone: 'emerald',
+            tagline: 'Exam-ready',
+            sets: [
+                { code: 'C721', kind: 'MCQ', count: 18 },
+                { code: 'CF721', kind: 'Fill-blank', count: 15 },
+                { code: 'CW721', kind: 'Written', count: 10 },
+                { code: 'T721', kind: 'Chapter test', count: 25 },
+            ],
+        },
+    ],
+};
+
+const tierShell = {
+    sky: 'border-sky-300 bg-sky-50/80',
+    amber: 'border-amber-300 bg-amber-50/80',
+    emerald: 'border-emerald-300 bg-emerald-50/80',
+};
+
+const tierHead = {
+    sky: 'bg-sky-700 text-white',
+    amber: 'bg-amber-600 text-white',
+    emerald: 'bg-emerald-700 text-white',
+};
 </script>
 
 <template>
@@ -299,6 +371,111 @@ const mockChapters = [
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Question bank layout — one chapter demo -->
+            <section class="border-y border-slate-200/80 bg-white/70">
+                <div class="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-14">
+                    <div class="flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-teal-800">Question bank</p>
+                            <h2 class="mt-1 font-['Fraunces',Georgia,serif] text-3xl font-semibold text-[#0f4c5c]">
+                                How content is arranged
+                            </h2>
+                            <p class="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">
+                                One chapter at a time: textbook / book content first, then practice packaged as
+                                <span class="font-semibold text-slate-800">Learner</span>,
+                                <span class="font-semibold text-slate-800">Achiever</span>, and
+                                <span class="font-semibold text-slate-800">Expert</span>
+                                — MCQ, fill-in-blank, written, and chapter test.
+                            </p>
+                        </div>
+                        <p class="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                            Sample · {{ sampleBank.board }} {{ sampleBank.grade }} · {{ sampleBank.chapter }}
+                        </p>
+                    </div>
+
+                    <div class="mt-8 overflow-hidden rounded-xl border border-slate-300 bg-[#f8faf9] shadow-lg shadow-slate-900/5">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-[#0f4c5c] px-4 py-3">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-teal-200">Chapter question bank</p>
+                                <p class="font-['Fraunces',Georgia,serif] text-lg font-semibold text-white sm:text-xl">
+                                    {{ sampleBank.grade }} · {{ sampleBank.chapter }}
+                                </p>
+                            </div>
+                            <p class="text-[11px] text-teal-100/90">Book content → Learner → Achiever → Expert</p>
+                        </div>
+
+                        <div class="space-y-4 p-4 sm:p-5">
+                            <!-- Book content -->
+                            <div class="rounded-lg border border-slate-300 bg-white p-3 sm:p-4">
+                                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                    <h3 class="text-sm font-bold uppercase tracking-wide text-slate-800">Book content</h3>
+                                    <p class="text-[11px] text-slate-500">MCQ · Fill-blank · Written per part</p>
+                                </div>
+                                <div class="grid gap-3 md:grid-cols-2">
+                                    <div
+                                        v-for="book in sampleBank.books"
+                                        :key="book.code"
+                                        class="rounded-md border border-indigo-200 bg-indigo-50/50 p-3"
+                                    >
+                                        <p class="text-sm font-bold text-indigo-950">
+                                            {{ book.name }}
+                                            <span class="font-mono text-[11px] font-semibold text-indigo-700">({{ book.code }})</span>
+                                        </p>
+                                        <ul class="mt-2 space-y-1.5">
+                                            <li
+                                                v-for="part in book.parts"
+                                                :key="`${book.code}-${part.label}`"
+                                                class="flex flex-wrap items-center justify-between gap-2 rounded border border-indigo-100 bg-white px-2.5 py-1.5 text-[11px] text-slate-700"
+                                            >
+                                                <span class="font-semibold text-slate-800">{{ part.label }}</span>
+                                                <span class="flex flex-wrap gap-1.5 font-mono tabular-nums">
+                                                    <span class="rounded bg-sky-100 px-1.5 py-0.5 text-sky-900">MCQ {{ part.mcq }}</span>
+                                                    <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-900">Fill {{ part.fill }}</span>
+                                                    <span class="rounded bg-violet-100 px-1.5 py-0.5 text-violet-900">Writ {{ part.written }}</span>
+                                                </span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Learner / Achiever / Expert -->
+                            <div class="grid gap-3 lg:grid-cols-3">
+                                <article
+                                    v-for="tier in sampleBank.tiers"
+                                    :key="tier.key"
+                                    class="overflow-hidden rounded-lg border"
+                                    :class="tierShell[tier.tone]"
+                                >
+                                    <div class="px-3 py-2" :class="tierHead[tier.tone]">
+                                        <p class="text-sm font-bold">{{ tier.label }}</p>
+                                        <p class="text-[11px] opacity-90">{{ tier.tagline }}</p>
+                                    </div>
+                                    <ul class="space-y-1.5 p-3">
+                                        <li
+                                            v-for="set in tier.sets"
+                                            :key="set.code"
+                                            class="flex items-center justify-between gap-2 rounded border border-white/80 bg-white/90 px-2.5 py-1.5 text-[11px]"
+                                        >
+                                            <div class="min-w-0">
+                                                <p class="font-mono text-xs font-bold text-slate-900">{{ set.code }}</p>
+                                                <p class="text-slate-600">{{ set.kind }}</p>
+                                            </div>
+                                            <span class="shrink-0 font-semibold tabular-nums text-slate-800">{{ set.count }}</span>
+                                        </li>
+                                    </ul>
+                                </article>
+                            </div>
+
+                            <p class="text-center text-[11px] leading-relaxed text-slate-500 sm:text-left">
+                                Uploaders package banks into Learner / Achiever / Expert after checking the sums —
+                                so the set code matches the real difficulty, not only the prompt.
+                            </p>
                         </div>
                     </div>
                 </div>
