@@ -100,6 +100,103 @@ class SetAttemptService
         }
     }
 
+    /**
+     * Persist one MCQ choice during a batch (chapter test) attempt without grading.
+     * Survives refresh / WiFi drops until final submit.
+     *
+     * @return array{answered: int, total: int, answers: array<int, int>}
+     */
+    public function saveDraftAnswer(SetAttempt $attempt, int $questionId, ?int $optionId): array
+    {
+        if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS || $attempt->isGuided()) {
+            throw new \InvalidArgumentException('This test attempt is not active.');
+        }
+
+        $this->assertNotIntegrityLocked($attempt);
+
+        $attempt->loadMissing('assignment.practiceSet.questions.options');
+        $questions = $attempt->assignment->practiceSet->questions;
+        $question = $questions->firstWhere('id', $questionId);
+
+        if (! $question) {
+            throw new \InvalidArgumentException('That question is not part of this test.');
+        }
+
+        $reportedIds = app(QuestionIssueReportService::class)->reportedQuestionIdsForAttempt($attempt);
+        if (in_array($questionId, $reportedIds, true)) {
+            throw new \InvalidArgumentException('That question was reported and is skipped.');
+        }
+
+        if ($optionId === null) {
+            SetAttemptAnswer::query()
+                ->where('set_attempt_id', $attempt->id)
+                ->where('question_id', $questionId)
+                ->delete();
+        } else {
+            $option = $question->options->firstWhere('id', $optionId);
+            if (! $option) {
+                throw new \InvalidArgumentException('Invalid option for this question.');
+            }
+
+            SetAttemptAnswer::updateOrCreate(
+                [
+                    'set_attempt_id' => $attempt->id,
+                    'question_id' => $questionId,
+                ],
+                [
+                    'question_option_id' => $optionId,
+                    'is_correct' => false,
+                ],
+            );
+        }
+
+        $drafts = $this->draftAnswersMap($attempt->fresh());
+        $activeTotal = $questions->count() - count($reportedIds);
+
+        $attempt->update([
+            'current_question_index' => count($drafts),
+        ]);
+
+        return [
+            'answered' => count($drafts),
+            'total' => max($activeTotal, 0),
+            'answers' => $drafts,
+        ];
+    }
+
+    /**
+     * @return array<int, int> question_id => selected option_id
+     */
+    public function draftAnswersMap(SetAttempt $attempt): array
+    {
+        $attempt->loadMissing('answers');
+
+        $map = [];
+        foreach ($attempt->answers as $answer) {
+            if ($answer->question_option_id) {
+                $map[(int) $answer->question_id] = (int) $answer->question_option_id;
+            }
+        }
+
+        return $map;
+    }
+
+    public function clearDraftAnswer(SetAttempt $attempt, int $questionId): void
+    {
+        if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS || $attempt->isGuided()) {
+            return;
+        }
+
+        SetAttemptAnswer::query()
+            ->where('set_attempt_id', $attempt->id)
+            ->where('question_id', $questionId)
+            ->delete();
+
+        $attempt->update([
+            'current_question_index' => count($this->draftAnswersMap($attempt->fresh())),
+        ]);
+    }
+
     public function submit(SetAttempt $attempt, array $answers): SetAttempt
     {
         if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {

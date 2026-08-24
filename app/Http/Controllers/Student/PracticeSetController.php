@@ -165,8 +165,36 @@ class PracticeSetController extends Controller
             ],
             'referencePdfUrl' => $this->referencePdfUrlFor($assignment),
             'questions' => $questions,
+            'savedAnswers' => $this->attemptService->draftAnswersMap($attempt),
             'reportedQuestionIds' => $this->issueReports->reportedQuestionIdsForAttempt($attempt),
         ]);
+    }
+
+    public function saveDraftAnswer(Request $request, SetAttempt $attempt): JsonResponse
+    {
+        $assignment = $attempt->assignment;
+        $this->authorizeAssignment($request, $assignment);
+
+        if ($attempt->isGuided()) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'question_id' => ['required', 'integer'],
+            'question_option_id' => ['nullable', 'integer'],
+        ]);
+
+        try {
+            $payload = $this->attemptService->saveDraftAnswer(
+                $attempt,
+                (int) $validated['question_id'],
+                isset($validated['question_option_id']) ? (int) $validated['question_option_id'] : null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($payload);
     }
 
     public function pauseAttemptTiming(Request $request, SetAttempt $attempt): JsonResponse

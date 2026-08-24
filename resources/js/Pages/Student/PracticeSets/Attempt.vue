@@ -13,12 +13,14 @@ import ReportQuestionIssueButton from '@/Components/ReportQuestionIssueButton.vu
 import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
 import { useAttemptContentProtection } from '@/composables/useAttemptContentProtection';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
+import axios from 'axios';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
     attempt: Object,
     practiceSet: Object,
     questions: Array,
+    savedAnswers: { type: Object, default: () => ({}) },
     reportedQuestionIds: { type: Array, default: () => [] },
     referencePdfUrl: { type: String, default: null },
     integrity: {
@@ -28,9 +30,23 @@ const props = defineProps({
 });
 
 const page = usePage();
-const answers = ref({});
+
+const hydrateAnswers = (saved) => {
+    const next = {};
+    Object.entries(saved || {}).forEach(([questionId, optionId]) => {
+        if (optionId != null) {
+            next[Number(questionId)] = Number(optionId);
+        }
+    });
+    return next;
+};
+
+const answers = ref(hydrateAnswers(props.savedAnswers));
 const reportedIds = ref([...(props.reportedQuestionIds || [])]);
 const fullscreenReady = ref(!(props.integrity?.require_fullscreen ?? false));
+const saveState = ref('idle'); // idle | saving | saved | error
+const saveError = ref('');
+let saveSeq = 0;
 
 const { elapsed, formatTime } = useAttemptActiveTimer(props.attempt?.id, {
     active_seconds: props.attempt?.active_seconds ?? 0,
@@ -62,11 +78,39 @@ const setLabel = () => props.practiceSet.set_code || `Set ${props.practiceSet.se
 
 const isReported = (questionId) => reportedIds.value.includes(questionId);
 
+const saveDraft = async (questionId, optionId) => {
+    if (attemptLocked.value) {
+        return;
+    }
+
+    const seq = ++saveSeq;
+    saveState.value = 'saving';
+    saveError.value = '';
+
+    try {
+        await axios.post(route('student.attempts.answers.save', props.attempt.id), {
+            question_id: questionId,
+            question_option_id: optionId,
+        });
+        if (seq === saveSeq) {
+            saveState.value = 'saved';
+        }
+    } catch (error) {
+        if (seq !== saveSeq) {
+            return;
+        }
+        saveState.value = 'error';
+        saveError.value = error?.response?.data?.message
+            || 'Could not save — check your WiFi and select the answer again.';
+    }
+};
+
 const selectOption = (questionId, optionId) => {
-    if (isReported(questionId)) {
+    if (isReported(questionId) || attemptLocked.value) {
         return;
     }
     answers.value[questionId] = optionId;
+    saveDraft(questionId, optionId);
 };
 
 const onIssueReported = (questionId) => {
@@ -84,6 +128,22 @@ const submit = () => {
 };
 
 const allAnswered = () => activeQuestions.value.every((q) => answers.value[q.id]);
+
+const saveStatusLabel = computed(() => {
+    if (saveState.value === 'saving') {
+        return 'Saving answers…';
+    }
+    if (saveState.value === 'saved') {
+        return 'Answers saved — safe to continue if WiFi drops.';
+    }
+    if (saveState.value === 'error') {
+        return saveError.value;
+    }
+    if (Object.keys(answers.value).length > 0) {
+        return 'Answers are saved as you select them.';
+    }
+    return '';
+});
 </script>
 
 <template>
@@ -130,7 +190,14 @@ const allAnswered = () => activeQuestions.value.every((q) => answers.value[q.id]
 
                 <div class="rounded-lg bg-white p-4 shadow-sm">
                     <p class="text-sm text-gray-600">
-                        Read each question and select one answer. Reported misprints are skipped and do not affect your score.
+                        Read each question and select one answer. Each choice is saved automatically — if WiFi drops, open Continue and your answers will still be here. Reported misprints are skipped and do not affect your score.
+                    </p>
+                    <p
+                        v-if="saveStatusLabel"
+                        class="mt-2 text-sm"
+                        :class="saveState === 'error' ? 'font-medium text-rose-700' : 'text-emerald-800'"
+                    >
+                        {{ saveStatusLabel }}
                     </p>
                 </div>
 
@@ -181,6 +248,7 @@ const allAnswered = () => activeQuestions.value.every((q) => answers.value[q.id]
                                     :value="opt.id"
                                     :checked="answers[q.id] === opt.id"
                                     class="mt-1 shrink-0 text-indigo-600"
+                                    :disabled="attemptLocked"
                                     @change="selectOption(q.id, opt.id)"
                                 />
                                 <McqOptionLine :index="optIndex" :text="opt.option_text" />
@@ -206,6 +274,9 @@ const allAnswered = () => activeQuestions.value.every((q) => answers.value[q.id]
                             {{ Object.keys(answers).length }} / {{ activeQuestions.length }} answered
                             <span v-if="reportedIds.length" class="text-amber-800">
                                 · {{ reportedIds.length }} reported
+                            </span>
+                            <span v-if="saveState === 'error'" class="ml-1 font-medium text-rose-700">
+                                · not all saved
                             </span>
                         </template>
                     </p>
