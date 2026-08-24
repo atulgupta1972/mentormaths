@@ -19,9 +19,9 @@ return new class extends Migration
             $table->foreignId('coaching_class_teacher_id')->nullable()->constrained()->nullOnDelete();
             $table->string('email')->nullable();
             $table->string('mobile', 20)->nullable();
-            $table->timestamp('generated_at');
-            $table->timestamp('expires_at');
-            $table->timestamp('extended_at')->nullable();
+            $table->dateTime('generated_at');
+            $table->dateTime('expires_at');
+            $table->dateTime('extended_at')->nullable();
             $table->unsignedInteger('extension_days_total')->default(0);
             $table->string('payment_reference')->nullable();
             $table->text('notes')->nullable();
