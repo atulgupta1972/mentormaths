@@ -28,8 +28,9 @@ class AssignmentMailer
 
         $studentEmail = self::resolveStudentEmail($student);
         $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
+        $mentorEmail = AccessCodeMailer::resolveMentorEmail($student);
 
-        if (! $studentEmail && ! $adminEmail) {
+        if (! $studentEmail && ! $adminEmail && ! $mentorEmail) {
             return ['sent' => false, 'email' => null, 'error' => 'no_email'];
         }
 
@@ -44,17 +45,36 @@ class AssignmentMailer
 
         $summary = AttemptResultSummary::forAdmin($attempt->fresh($relations));
 
-        try {
-            $recipient = $studentEmail ?: $adminEmail;
-            $pending = Mail::to($recipient);
+        // Mentor/teacher primary when available; always CC admin; include student when mentor is To.
+        if ($mentorEmail) {
+            $to = $mentorEmail;
+            $ccs = array_values(array_filter([
+                $studentEmail && strcasecmp($studentEmail, $mentorEmail) !== 0 ? $studentEmail : null,
+                $adminEmail && strcasecmp($adminEmail, $mentorEmail) !== 0 ? $adminEmail : null,
+            ]));
+        } else {
+            $to = $studentEmail ?: $adminEmail;
+            $ccs = array_values(array_filter([
+                $studentEmail && $adminEmail && strcasecmp($adminEmail, $studentEmail) !== 0
+                    ? $adminEmail
+                    : null,
+            ]));
+        }
 
-            if ($studentEmail && $adminEmail && strcasecmp($adminEmail, $studentEmail) !== 0) {
-                $pending->cc($adminEmail);
+        if (! $to) {
+            return ['sent' => false, 'email' => null, 'error' => 'no_email'];
+        }
+
+        try {
+            $pending = Mail::to($to);
+
+            if ($ccs !== []) {
+                $pending->cc($ccs);
             }
 
             $pending->send(new AssignmentCompleted($student, $summary));
 
-            return ['sent' => true, 'email' => $recipient, 'error' => null];
+            return ['sent' => true, 'email' => $to, 'error' => null];
         } catch (\Throwable $e) {
             Log::error('Failed to send completion email.', [
                 'attempt_id' => $attempt->id,
@@ -64,7 +84,7 @@ class AssignmentMailer
                 'error' => $e->getMessage(),
             ]);
 
-            return ['sent' => false, 'email' => $studentEmail ?: $adminEmail, 'error' => 'send_failed'];
+            return ['sent' => false, 'email' => $to, 'error' => 'send_failed'];
         }
     }
 

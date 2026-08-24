@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AccessCodeController;
 use App\Http\Controllers\Admin\CoachingClassController;
 use App\Http\Controllers\Admin\AcademicYearController;
 use App\Http\Controllers\Admin\BasicsDrillSettingsController;
@@ -38,6 +39,7 @@ use App\Http\Controllers\Admin\WrittenReviewController;
 use App\Http\Controllers\ContentUploader\ChapterLibraryController;
 use App\Http\Controllers\ContentUploader\ContentTaskController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MentorTrialSignupController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
 use App\Http\Controllers\Student\BasicsDrillController;
@@ -69,9 +71,16 @@ Route::post('/register/request', [RegistrationRequestController::class, 'store']
 Route::get('/register/thank-you', [RegistrationRequestController::class, 'thankYou'])
     ->name('registration.thank-you');
 
+Route::get('/mentors/access', [MentorTrialSignupController::class, 'create'])
+    ->name('mentor-access.create');
+Route::post('/mentors/access', [MentorTrialSignupController::class, 'store'])
+    ->name('mentor-access.store');
+Route::get('/mentors/access/thank-you', [MentorTrialSignupController::class, 'thankYou'])
+    ->name('mentor-access.thank-you');
+Route::redirect('/mentors/register', '/mentors/access');
+
 Route::get('/teachers/register', [TeacherRegistrationRequestController::class, 'create'])
     ->name('teacher-registration.create');
-Route::redirect('/mentors/register', '/teachers/register');
 Route::post('/teachers/register', [TeacherRegistrationRequestController::class, 'store'])
     ->name('teacher-registration.store');
 Route::get('/teachers/register/thank-you', [TeacherRegistrationRequestController::class, 'thankYou'])
@@ -121,6 +130,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('registration-requests.reject');
     Route::patch('/registration-requests/{registrationRequest}/contacts', [AdminRegistrationRequestController::class, 'updateContacts'])
         ->name('registration-requests.contacts.update');
+
+    Route::get('/access-codes', [AccessCodeController::class, 'index'])
+        ->name('access-codes.index');
+    Route::post('/access-codes/{accessCode}/extend', [AccessCodeController::class, 'extend'])
+        ->name('access-codes.extend');
 
     Route::get('/teacher-registrations', [AdminTeacherRegistrationRequestController::class, 'index'])
         ->name('teacher-registrations.index');

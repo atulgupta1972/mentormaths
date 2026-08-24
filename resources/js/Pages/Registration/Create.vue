@@ -13,6 +13,7 @@ const props = defineProps({
     gradeLevels: Array,
     enrollmentOptions: { type: Array, default: () => [] },
     coachingClasses: { type: Array, default: () => [] },
+    trialDays: { type: Number, default: 15 },
 });
 
 const form = useForm({
@@ -21,6 +22,7 @@ const form = useForm({
     student_mobile: '',
     parent1_name: '',
     parent1_mobile: '',
+    parent1_email: '',
     parent2_name: '',
     parent2_mobile: '',
     school_name: '',
@@ -33,7 +35,7 @@ const form = useForm({
     password: '',
     password_confirmation: '',
     notes: '',
-    notify_student_mobile: false,
+    notify_student_mobile: true,
     notify_parent1_mobile: true,
     notify_parent2_mobile: false,
 });
@@ -56,10 +58,10 @@ const notifyOptions = computed(() => [
     },
     {
         key: 'parent1',
-        label: 'Parent 1 mobile',
+        label: 'Mentor mobile',
         mobile: form.parent1_mobile,
         notifyField: 'notify_parent1_mobile',
-        hint: 'Enter parent 1 mobile above first',
+        hint: 'Enter mentor mobile above first',
     },
     {
         key: 'parent2',
@@ -117,9 +119,9 @@ const submit = () => {
                 <span class="inline-block rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">
                     Registration {{ academicYear.name }}
                 </span>
-                <h1 class="mt-3 text-3xl font-bold text-gray-900">Request access for your child</h1>
+                <h1 class="mt-3 text-3xl font-bold text-gray-900">Get student access</h1>
                 <p class="mt-2 text-gray-600">
-                    Fill in the details below. Your teacher will review and approve access.
+                    Self-serve trial — you receive an access code (tcode) by email/mobile. Valid {{ trialDays }} days. No admin approval.
                 </p>
             </div>
 
@@ -150,30 +152,39 @@ const submit = () => {
                     </div>
                 </section>
 
-                <!-- Parents -->
+                <!-- Mentor (home) -->
                 <section class="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-emerald-100">
                     <div class="border-b border-emerald-100 bg-gradient-to-r from-emerald-600 to-teal-500 px-6 py-3">
-                        <h2 class="font-semibold text-white">Parent / guardian</h2>
+                        <h2 class="font-semibold text-white">Mentor contact</h2>
                     </div>
                     <div class="space-y-4 p-6">
+                        <p class="text-sm text-slate-600">
+                            For home learning, this mentor replaces any previous contact (one mentor only).
+                            They get the access code and completion emails.
+                        </p>
                         <div class="grid gap-4 sm:grid-cols-2">
                             <div>
-                                <InputLabel for="parent1_name" value="Parent 1 name *" />
+                                <InputLabel for="parent1_name" value="Mentor name *" />
                                 <TextInput id="parent1_name" v-model="form.parent1_name" class="mt-1 block w-full" required />
                                 <InputError class="mt-1" :message="form.errors.parent1_name" />
                             </div>
                             <div>
-                                <InputLabel for="parent1_mobile" value="Parent 1 mobile *" />
+                                <InputLabel for="parent1_mobile" value="Mentor mobile *" />
                                 <TextInput id="parent1_mobile" v-model="form.parent1_mobile" type="tel" class="mt-1 block w-full" required placeholder="10-digit mobile" />
                                 <InputError class="mt-1" :message="form.errors.parent1_mobile" />
                             </div>
+                            <div class="sm:col-span-2">
+                                <InputLabel for="parent1_email" value="Mentor email" />
+                                <TextInput id="parent1_email" v-model="form.parent1_email" type="email" class="mt-1 block w-full" placeholder="Defaults to login email if blank" />
+                                <InputError class="mt-1" :message="form.errors.parent1_email" />
+                            </div>
                             <div>
-                                <InputLabel for="parent2_name" value="Parent 2 name" />
+                                <InputLabel for="parent2_name" value="Second contact name (optional)" />
                                 <TextInput id="parent2_name" v-model="form.parent2_name" class="mt-1 block w-full" />
                                 <InputError class="mt-1" :message="form.errors.parent2_name" />
                             </div>
                             <div>
-                                <InputLabel for="parent2_mobile" value="Parent 2 mobile" />
+                                <InputLabel for="parent2_mobile" value="Second contact mobile" />
                                 <TextInput id="parent2_mobile" v-model="form.parent2_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" />
                                 <InputError class="mt-1" :message="form.errors.parent2_mobile" />
                             </div>
@@ -188,7 +199,7 @@ const submit = () => {
                     </div>
                     <div class="space-y-4 p-6">
                         <p class="text-sm text-slate-600">
-                            Default is <strong>Individual</strong> — parent with Notify tick is the mentor.
+                            Default is <strong>Individual</strong> — mentor contact above receives the tcode and progress mail.
                             Choose Coaching if you join through a tuition / coaching class.
                         </p>
                         <div class="flex flex-wrap gap-3">
@@ -303,27 +314,30 @@ const submit = () => {
                 <section class="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-amber-100">
                     <div class="border-b border-amber-100 bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-3">
                         <h2 class="font-semibold text-white">Login account</h2>
-                        <p class="text-sm text-amber-100">Choose email &amp; password — used after admin approves your request</p>
+                        <p class="text-sm text-amber-100">
+                            Instant access — we email/SMS an access code (tcode). Valid {{ trialDays }} days.
+                        </p>
                     </div>
                     <div class="space-y-4 p-6">
                         <div>
                             <InputLabel for="email" value="Login email *" />
                             <TextInput id="email" v-model="form.email" type="email" class="mt-1 block w-full" required autocomplete="username" />
-                            <p class="mt-1 text-xs text-gray-500">Parent or student email — must be unique. You will use this to log in.</p>
+                            <p class="mt-1 text-xs text-gray-500">Log in with this email + your tcode (or optional password below).</p>
                             <InputError class="mt-1" :message="form.errors.email" />
                         </div>
                         <div class="grid gap-4 sm:grid-cols-2">
                             <div>
-                                <InputLabel for="password" value="Password *" />
-                                <TextInput id="password" v-model="form.password" type="password" class="mt-1 block w-full" required autocomplete="new-password" />
+                                <InputLabel for="password" value="Password (optional)" />
+                                <TextInput id="password" v-model="form.password" type="password" class="mt-1 block w-full" autocomplete="new-password" />
                                 <InputError class="mt-1" :message="form.errors.password" />
                             </div>
                             <div>
-                                <InputLabel for="password_confirmation" value="Confirm password *" />
-                                <TextInput id="password_confirmation" v-model="form.password_confirmation" type="password" class="mt-1 block w-full" required autocomplete="new-password" />
+                                <InputLabel for="password_confirmation" value="Confirm password" />
+                                <TextInput id="password_confirmation" v-model="form.password_confirmation" type="password" class="mt-1 block w-full" autocomplete="new-password" />
                                 <InputError class="mt-1" :message="form.errors.password_confirmation" />
                             </div>
                         </div>
+                        <p class="text-xs text-gray-500">Leave password blank to use your tcode as the login password.</p>
                         <div>
                             <InputLabel for="notes" value="Notes" />
                             <textarea

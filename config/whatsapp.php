@@ -12,6 +12,7 @@ return [
     'default_country_code' => env('WHATSAPP_DEFAULT_COUNTRY_CODE', '91'),
 
     'channels' => [
+        'access_code' => env('WHATSAPP_CHANNEL_ACCESS_CODE', true),
         'progress_summary' => env('WHATSAPP_PROGRESS_SUMMARY', true),
         'daily_balance' => env('WHATSAPP_DAILY_BALANCE', true),
         'assignment_assigned' => env('WHATSAPP_ASSIGNMENT_ASSIGNED', true),

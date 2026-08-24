@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Services\AccessCodeService;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -28,8 +29,8 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => ['required', 'string', 'email'],
-            'password' => ['required', 'string'],
+            'email' => ['required', 'string', 'max:255'],
+            'password' => ['nullable', 'string'],
         ];
     }
 
@@ -42,7 +43,29 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        $accessCodes = app(AccessCodeService::class);
+        $login = trim((string) $this->input('email'));
+        $password = (string) $this->input('password', '');
+
+        $authenticated = false;
+
+        if ($accessCodes->looksLikeCode($login)) {
+            $accessCode = $accessCodes->findUsableByCode($login);
+            if ($accessCode?->user) {
+                Auth::login($accessCode->user, $this->boolean('remember'));
+                $authenticated = true;
+            }
+        } elseif (filled($password) && Auth::attempt(['email' => $login, 'password' => $password], $this->boolean('remember'))) {
+            $authenticated = true;
+        } elseif (filled($password) && $accessCodes->looksLikeCode($password)) {
+            $accessCode = $accessCodes->findUsableByCode($password);
+            if ($accessCode?->user && strcasecmp((string) $accessCode->user->email, $login) === 0) {
+                Auth::login($accessCode->user, $this->boolean('remember'));
+                $authenticated = true;
+            }
+        }
+
+        if (! $authenticated) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -58,6 +81,13 @@ class LoginRequest extends FormRequest
             throw ValidationException::withMessages([
                 'email' => 'Your account is inactive. Please contact the administrator.',
             ]);
+        }
+
+        try {
+            $accessCodes->assertUserMayLogin($user);
+        } catch (ValidationException $e) {
+            Auth::logout();
+            throw $e;
         }
 
         RateLimiter::clear($this->throttleKey());

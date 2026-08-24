@@ -23,6 +23,7 @@ const peopleGroup = computed(() => ({
         route().current('admin.users.*')
         || route().current('admin.groups.*')
         || route().current('admin.registration-requests.*')
+        || route().current('admin.access-codes.*')
         || route().current('admin.teacher-registrations.*')
         || route().current('admin.students.*'),
     items: [
@@ -36,6 +37,12 @@ const peopleGroup = computed(() => ({
             label: 'Registrations',
             href: route('admin.registration-requests.index'),
             active: route().current('admin.registration-requests.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Access codes (tcode)',
+            href: route('admin.access-codes.index'),
+            active: route().current('admin.access-codes.*'),
             show: isAdmin.value,
         },
         {

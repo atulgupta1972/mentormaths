@@ -215,7 +215,7 @@ class StudentMentorService
 
         return [
             'ok' => false,
-            'message' => 'Tick Notify on a parent mobile — that parent is the mentor for individual enrollment.',
+            'message' => 'Tick Notify on mentor mobile — that contact is the mentor for individual enrollment.',
         ];
     }
 

@@ -20,6 +20,7 @@ class SetAttemptService
         private GuidedPracticeService $guidedPractice,
         private AnswerValidationService $answerValidation,
         private PracticeCorrectionQueueService $correctionQueue,
+        private ClassCoverageService $classCoverage,
     ) {}
 
     public function start(SetAssignment $assignment): SetAttempt
@@ -37,6 +38,8 @@ class SetAttemptService
         if ($assignment->status === SetAssignment::STATUS_COMPLETED) {
             throw new \InvalidArgumentException('Ask your teacher to allow another attempt.');
         }
+
+        $this->assertChapterMarkedForStudy($assignment);
 
         $nextNumber = ($assignment->attempts()->max('attempt_number') ?? 0) + 1;
 
@@ -359,5 +362,29 @@ class SetAttemptService
                 ? AttemptResultSummary::correctAnswerForQuestion($question)
                 : null,
         ];
+    }
+
+    private function assertChapterMarkedForStudy(SetAssignment $assignment): void
+    {
+        $assignment->loadMissing(['enrollment', 'practiceSet']);
+
+        $enrollment = $assignment->enrollment;
+        $worksheet = $assignment->practiceSet;
+
+        if (! $enrollment || ! $worksheet) {
+            return;
+        }
+
+        $chapterId = $this->classCoverage->syllabusChapterIdForContent($worksheet);
+
+        if (! $chapterId) {
+            return;
+        }
+
+        if (! $this->classCoverage->enrollmentHasChapterInStudy($enrollment, $chapterId)) {
+            throw new \InvalidArgumentException(
+                'Mark this chapter as Studied or Under study on your study plan before attempting the set.'
+            );
+        }
     }
 }

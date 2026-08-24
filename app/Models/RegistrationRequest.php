@@ -22,6 +22,7 @@ class RegistrationRequest extends Model
         'student_mobile',
         'parent1_name',
         'parent1_mobile',
+        'parent1_email',
         'parent2_name',
         'parent2_mobile',
         'school_name',

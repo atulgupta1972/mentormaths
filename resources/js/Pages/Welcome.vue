@@ -197,10 +197,10 @@ const tierHead = {
                         :href="route('registration.create')"
                         class="rounded-lg border border-slate-300/80 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 backdrop-blur transition hover:bg-white sm:px-5 sm:py-2.5"
                     >
-                        Request access
+                        Student access
                     </Link>
                     <Link
-                        :href="route('teacher-registration.create')"
+                        :href="route('mentor-access.create')"
                         class="rounded-lg bg-[#0f4c5c] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0a3642] sm:px-5 sm:py-2.5"
                     >
                         Join as mentor
@@ -249,7 +249,7 @@ const tierHead = {
                             </Link>
                             <Link
                                 v-if="!$page.props.auth?.user"
-                                :href="route('teacher-registration.create')"
+                                :href="route('mentor-access.create')"
                                 class="rounded-lg border border-teal-800/30 bg-teal-50/80 px-5 py-2.5 text-center text-sm font-semibold text-teal-950 transition hover:bg-teal-100"
                             >
                                 Mentors — join
@@ -608,7 +608,7 @@ const tierHead = {
                         </Link>
                         <Link
                             v-if="!$page.props.auth?.user"
-                            :href="route('teacher-registration.create')"
+                            :href="route('mentor-access.create')"
                             class="rounded-lg border border-[#0f4c5c]/40 bg-teal-50 px-8 py-3.5 text-base font-bold text-[#0f4c5c] transition hover:bg-teal-100"
                         >
                             Request mentor access
@@ -621,7 +621,7 @@ const tierHead = {
                         </Link>
                     </div>
                     <p class="mt-5 text-sm text-slate-500">
-                        mentormaths.in · Access after a short approval · Soft launch
+                        mentormaths.in · Instant access code (tcode) · Soft launch
                     </p>
                 </div>
             </section>

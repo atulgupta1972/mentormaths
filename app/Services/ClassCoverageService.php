@@ -587,6 +587,23 @@ class ClassCoverageService
         return $total;
     }
 
+    public function syllabusChapterIdForContent(Worksheet $worksheet): ?int
+    {
+        return $this->syllabusChapterIdForWorksheet($worksheet);
+    }
+
+    public function enrollmentHasChapterInStudy(StudentEnrollment $enrollment, int $syllabusChapterId): bool
+    {
+        return StudentChapterCoverage::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->where('syllabus_chapter_id', $syllabusChapterId)
+            ->whereIn('status', [
+                StudentChapterCoverage::STATUS_STUDIED,
+                StudentChapterCoverage::STATUS_UNDER_STUDY,
+            ])
+            ->exists();
+    }
+
     private function syllabusChapterIdForWorksheet(Worksheet $worksheet): ?int
     {
         if ($worksheet->syllabus_chapter_id) {
