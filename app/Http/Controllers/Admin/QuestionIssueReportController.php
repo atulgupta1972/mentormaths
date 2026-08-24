@@ -16,7 +16,7 @@ class QuestionIssueReportController extends Controller
 
     public function markFixed(Request $request, QuestionIssueReport $report): RedirectResponse
     {
-        abort_unless($report->isPendingAdmin(), 404);
+        abort_unless($report->isOpenForAdmin(), 404);
 
         $validated = $request->validate([
             'admin_note' => ['nullable', 'string', 'max:500'],
@@ -37,7 +37,7 @@ class QuestionIssueReportController extends Controller
 
     public function dismiss(Request $request, QuestionIssueReport $report): RedirectResponse
     {
-        abort_unless($report->isPendingAdmin(), 404);
+        abort_unless($report->isOpenForAdmin(), 404);
 
         $validated = $request->validate([
             'admin_note' => ['nullable', 'string', 'max:500'],
@@ -93,7 +93,7 @@ class QuestionIssueReportController extends Controller
         }
 
         try {
-            $this->issueReports->returnToUploader(
+            $result = $this->issueReports->returnToUploader(
                 $report,
                 $request->user(),
                 $validated['issue'],
@@ -103,6 +103,11 @@ class QuestionIssueReportController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'This sum is on the uploader dashboard to correct. After they fix it, mark Fixed — return to student.');
+        $message = 'Moved to Sent to uploader. They were emailed to fix this incorrect / incomplete sum.';
+        if (! ($result['emailed'] ?? false)) {
+            $message = 'Moved to Sent to uploader, but no uploader email was on file — tell them on the content tasks page.';
+        }
+
+        return back()->with('success', $message);
     }
 }

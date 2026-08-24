@@ -45,6 +45,7 @@ const props = defineProps({
     students: { type: Array, default: () => [] },
     helpRequests: { type: Array, default: () => [] },
     questionIssueReports: { type: Array, default: () => [] },
+    questionIssueReportsSentToUploader: { type: Array, default: () => [] },
     contentPublishQueue: { type: Array, default: () => [] },
     contentRecheckQueue: { type: Array, default: () => [] },
     lockedAttempts: { type: Array, default: () => [] },
@@ -317,8 +318,14 @@ const toggleHelpRequests = async () => {
     }
 };
 
+const openQuestionIssueCount = computed(() =>
+    (props.questionIssueReports?.length || 0)
+    + (props.questionIssueReportsSentToUploader?.length || 0)
+    || (props.stats?.question_issue_reports_count || 0),
+);
+
 const toggleQuestionIssues = async () => {
-    if (! props.questionIssueReports.length && ! (props.stats?.question_issue_reports_count > 0)) {
+    if (! openQuestionIssueCount.value) {
         return;
     }
 
@@ -446,14 +453,14 @@ const formatHelpDate = (value) => {
                             :class="showQuestionIssues
                                 ? 'border-amber-500 bg-amber-100 ring-2 ring-amber-400'
                                 : 'border-amber-200 bg-amber-50 hover:border-amber-400'"
-                            :disabled="!(questionIssueReports.length || stats.question_issue_reports_count)"
-                            :title="(questionIssueReports.length || stats.question_issue_reports_count) ? 'Click to show or hide misprint reports' : 'No misprint reports'"
+                            :disabled="!openQuestionIssueCount"
+                            :title="openQuestionIssueCount ? 'Click to show or hide misprint reports' : 'No misprint reports'"
                             @click="toggleQuestionIssues"
                         >
-                            <p class="text-2xl font-extrabold leading-none text-amber-800">{{ stats.question_issue_reports_count || questionIssueReports.length || 0 }}</p>
+                            <p class="text-2xl font-extrabold leading-none text-amber-800">{{ stats.question_issue_reports_count || openQuestionIssueCount || 0 }}</p>
                             <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">
                                 Misprints
-                                <span v-if="questionIssueReports.length || stats.question_issue_reports_count" class="ml-0.5">{{ showQuestionIssues ? '▲' : '▼' }}</span>
+                                <span v-if="openQuestionIssueCount" class="ml-0.5">{{ showQuestionIssues ? '▲' : '▼' }}</span>
                             </p>
                         </button>
                         <button
@@ -498,58 +505,111 @@ const formatHelpDate = (value) => {
                     <section
                         v-if="showQuestionIssues"
                         ref="questionIssuesSection"
-                        class="scroll-mt-4 rounded-xl border-2 border-amber-400 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 p-4 shadow-md"
+                        class="scroll-mt-4 space-y-4"
                     >
-                        <h3 class="text-sm font-bold uppercase tracking-wide text-amber-950">
-                            Misprint / incomplete sums · {{ questionIssueReports.length }}
-                        </h3>
-                        <p v-if="!questionIssueReports.length" class="mt-2 text-sm text-amber-900">
-                            No open misprint reports to show
-                            <span v-if="(stats.question_issue_reports_count || 0) > 0">
-                                (count may include reports whose questions were removed).
-                            </span>
-                        </p>
-                        <template v-else>
-                            <p class="mt-1 text-xs text-amber-900">
-                                Open to check the sum. Edit it yourself, or send only that sum to the uploader.
-                                If the question is fine, choose <span class="font-semibold">Question is correct — please re-attempt</span>
-                                (score stays 0; student is emailed). When content is fixed, tap Fixed — return to student.
+                        <div class="rounded-xl border-2 border-amber-400 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 p-4 shadow-md">
+                            <h3 class="text-sm font-bold uppercase tracking-wide text-amber-950">
+                                Misprint / incomplete sums · pending · {{ questionIssueReports.length }}
+                            </h3>
+                            <p v-if="!questionIssueReports.length" class="mt-2 text-sm text-amber-900">
+                                No pending reports — check yourself or send to uploader from new student flags here.
                             </p>
-                            <div class="mt-3 space-y-2">
-                                <div
-                                    v-for="item in questionIssueReports"
-                                    :key="item.id"
-                                    class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200 bg-white p-3 shadow-sm"
-                                >
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <Link
-                                                :href="route('admin.students.show', item.student_id)"
-                                                class="text-sm font-bold text-indigo-700 hover:underline"
-                                            >
-                                                {{ item.student_name }}
-                                            </Link>
-                                            <span v-if="item.class_name" class="text-xs text-gray-500">{{ item.class_name }}</span>
-                                            <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-900">
-                                                {{ item.context_label }}
-                                            </span>
-                                            <Link
-                                                v-if="item.set_code && item.set_url"
-                                                :href="item.set_url"
-                                                class="font-mono text-xs font-semibold text-indigo-600 hover:underline"
-                                            >
-                                                {{ item.set_code }}
-                                            </Link>
+                            <template v-else>
+                                <p class="mt-1 text-xs text-amber-900">
+                                    Open to check. Edit yourself, or send only that sum to the uploader (they get an email).
+                                    If the question is fine, choose <span class="font-semibold">Question is correct — please re-attempt</span>.
+                                    When content is fixed, tap Fixed — return to student.
+                                </p>
+                                <div class="mt-3 space-y-2">
+                                    <div
+                                        v-for="item in questionIssueReports"
+                                        :key="item.id"
+                                        class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200 bg-white p-3 shadow-sm"
+                                    >
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <Link
+                                                    :href="route('admin.students.show', item.student_id)"
+                                                    class="text-sm font-bold text-indigo-700 hover:underline"
+                                                >
+                                                    {{ item.student_name }}
+                                                </Link>
+                                                <span v-if="item.class_name" class="text-xs text-gray-500">{{ item.class_name }}</span>
+                                                <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-900">
+                                                    {{ item.context_label }}
+                                                </span>
+                                                <Link
+                                                    v-if="item.set_code && item.set_url"
+                                                    :href="item.set_url"
+                                                    class="font-mono text-xs font-semibold text-indigo-600 hover:underline"
+                                                >
+                                                    {{ item.set_code }}
+                                                </Link>
+                                            </div>
+                                            <p class="mt-1 line-clamp-2 text-sm text-gray-800">{{ item.question_text }}</p>
                                         </div>
-                                        <p class="mt-1 line-clamp-2 text-sm text-gray-800">{{ item.question_text }}</p>
-                                    </div>
-                                    <div class="flex shrink-0 flex-col items-end gap-1">
-                                        <p class="text-xs text-gray-500">{{ formatIssueDate(item.reported_at) }}</p>
-                                        <QuestionIssueReportActions :item="item" compact />
+                                        <div class="flex shrink-0 flex-col items-end gap-1">
+                                            <p class="text-xs text-gray-500">{{ formatIssueDate(item.reported_at) }}</p>
+                                            <QuestionIssueReportActions :item="item" compact />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </template>
+                            </template>
+                        </div>
+
+                        <div class="rounded-xl border-2 border-violet-400 bg-gradient-to-br from-violet-50 via-indigo-50 to-slate-50 p-4 shadow-md">
+                            <h3 class="text-sm font-bold uppercase tracking-wide text-violet-950">
+                                Sent to uploader · {{ questionIssueReportsSentToUploader.length }}
+                            </h3>
+                            <p v-if="!questionIssueReportsSentToUploader.length" class="mt-2 text-sm text-violet-900">
+                                Nothing waiting on an uploader right now.
+                            </p>
+                            <template v-else>
+                                <p class="mt-1 text-xs text-violet-900">
+                                    Uploader was emailed to fix these incorrect / incomplete sums. When done, mark Fixed — return to student.
+                                </p>
+                                <div class="mt-3 space-y-2">
+                                    <div
+                                        v-for="item in questionIssueReportsSentToUploader"
+                                        :key="'sent-'+item.id"
+                                        class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-violet-200 bg-white p-3 shadow-sm"
+                                    >
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <Link
+                                                    :href="route('admin.students.show', item.student_id)"
+                                                    class="text-sm font-bold text-indigo-700 hover:underline"
+                                                >
+                                                    {{ item.student_name }}
+                                                </Link>
+                                                <span v-if="item.class_name" class="text-xs text-gray-500">{{ item.class_name }}</span>
+                                                <span class="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-violet-900">
+                                                    {{ item.context_label }}
+                                                </span>
+                                                <span
+                                                    v-if="item.uploader_name"
+                                                    class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+                                                >
+                                                    → {{ item.uploader_name }}
+                                                </span>
+                                                <Link
+                                                    v-if="item.set_code && item.set_url"
+                                                    :href="item.set_url"
+                                                    class="font-mono text-xs font-semibold text-indigo-600 hover:underline"
+                                                >
+                                                    {{ item.set_code }}
+                                                </Link>
+                                            </div>
+                                            <p class="mt-1 line-clamp-2 text-sm text-gray-800">{{ item.question_text }}</p>
+                                        </div>
+                                        <div class="flex shrink-0 flex-col items-end gap-1">
+                                            <p class="text-xs text-gray-500">{{ formatIssueDate(item.reported_at) }}</p>
+                                            <QuestionIssueReportActions :item="item" compact />
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </section>
 
                     <section

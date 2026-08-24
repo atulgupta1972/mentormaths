@@ -133,10 +133,12 @@ class DashboardService
 
         $questionIssueCounts = collect();
         $questionIssueReports = [];
+        $questionIssueReportsSentToUploader = [];
         try {
             if ($studentIds !== [] && \Illuminate\Support\Facades\Schema::hasTable('question_issue_reports')) {
                 $questionIssueCounts = $this->issueReports->pendingCountForStudentIds($studentIds);
                 $questionIssueReports = $this->issueReports->pendingForAdmin($studentIds);
+                $questionIssueReportsSentToUploader = $this->issueReports->sentToUploaderForAdmin($studentIds);
             }
         } catch (Throwable $e) {
             Log::error('Admin dashboard failed to load question issue reports.', ['message' => $e->getMessage()]);
@@ -237,7 +239,9 @@ class DashboardService
                 'under_review_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_under_review_count'] ?? 0)),
                 'completed_sets_count' => collect($students)->sum(fn (array $row) => (int) ($row['assignments_completed_count'] ?? 0)),
                 'help_requests_count' => $helpRequestsCount,
-                'question_issue_reports_count' => count($questionIssueReports),
+                'question_issue_reports_count' => count($questionIssueReports) + count($questionIssueReportsSentToUploader),
+                'question_issue_reports_pending_count' => count($questionIssueReports),
+                'question_issue_reports_sent_count' => count($questionIssueReportsSentToUploader),
                 'locked_attempts_count' => count($lockedAttempts),
                 'content_publish_queue_count' => count($contentPublishQueue),
                 'content_recheck_queue_count' => count($contentRecheckQueue),
@@ -245,6 +249,7 @@ class DashboardService
             'students' => $students,
             'helpRequests' => $helpRequests,
             'questionIssueReports' => $questionIssueReports,
+            'questionIssueReportsSentToUploader' => $questionIssueReportsSentToUploader,
             'lockedAttempts' => $lockedAttempts,
             'contentPublishQueue' => $contentPublishQueue,
             'contentRecheckQueue' => $contentRecheckQueue,
@@ -270,6 +275,8 @@ class DashboardService
                 'completed_sets_count' => 0,
                 'help_requests_count' => 0,
                 'question_issue_reports_count' => 0,
+                'question_issue_reports_pending_count' => 0,
+                'question_issue_reports_sent_count' => 0,
                 'locked_attempts_count' => 0,
                 'content_publish_queue_count' => 0,
                 'content_recheck_queue_count' => 0,
@@ -277,6 +284,7 @@ class DashboardService
             'students' => [],
             'helpRequests' => [],
             'questionIssueReports' => [],
+            'questionIssueReportsSentToUploader' => [],
             'lockedAttempts' => [],
             'contentPublishQueue' => [],
             'contentRecheckQueue' => [],

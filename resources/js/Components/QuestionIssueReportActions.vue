@@ -20,11 +20,15 @@ const uploaderForm = useForm({
 });
 
 const canReturnToUploader = computed(() =>
-    hasRoute('admin.question-issue-reports.return-to-uploader')
+    !props.item.sent_to_uploader
+    && hasRoute('admin.question-issue-reports.return-to-uploader')
     && props.item.can_return_to_uploader === true,
 );
 
-const canPostAction = computed(() => hasRoute('admin.question-issue-reports.return-to-uploader'));
+const canPostAction = computed(() =>
+    !props.item.sent_to_uploader
+    && hasRoute('admin.question-issue-reports.return-to-uploader'),
+);
 
 const isQuestionCorrect = computed(() => uploaderForm.issue === 'question_correct');
 
@@ -94,7 +98,7 @@ const submitAction = () => {
             ? 'incomplete / missing diagram'
             : 'a content issue';
 
-    if (!window.confirm(`Send only this sum to ${who}${chapter} to fix (${issueLabel})?\n\nReport stays open until you mark Fixed after they correct it.`)) {
+    if (!window.confirm(`Send only this sum to ${who}${chapter} to fix (${issueLabel})?\n\nThey will be emailed. It moves to Sent to uploader until you mark Fixed.`)) {
         return;
     }
 
@@ -190,6 +194,15 @@ const submitAction = () => {
             class="text-xs text-gray-500"
         >
             No content uploader is assigned — use Edit yourself to fix it, or dismiss if not needed.
+        </p>
+
+        <p
+            v-if="item.sent_to_uploader"
+            class="rounded-md border border-violet-200 bg-violet-50 px-2 py-1.5 text-xs text-violet-950"
+            :class="compact ? 'text-right' : ''"
+        >
+            Waiting on uploader{{ item.uploader_name ? ` (${item.uploader_name})` : '' }}.
+            When they fix it, tap Fixed — return to student.
         </p>
 
         <p v-if="item.admin_note" class="text-xs text-amber-900">

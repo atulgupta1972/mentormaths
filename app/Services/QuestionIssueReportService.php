@@ -118,7 +118,7 @@ class QuestionIssueReportService
             throw new \InvalidArgumentException('Student not found for this attempt.');
         }
 
-        return $this->createOrRefreshReport([
+        $report = $this->createOrRefreshReport([
             'student_id' => $student->id,
             'student_enrollment_id' => $attempt->assignment->student_enrollment_id,
             'question_id' => $question->id,
@@ -126,6 +126,10 @@ class QuestionIssueReportService
             'set_attempt_id' => $attempt->id,
             'context' => QuestionIssueReport::CONTEXT_BATCH,
         ]);
+
+        app(SetAttemptService::class)->clearDraftAnswer($attempt, (int) $question->id);
+
+        return $report;
     }
 
     /**
@@ -138,6 +142,7 @@ class QuestionIssueReportService
             ->where('score_forfeited', false)
             ->whereIn('status', [
                 QuestionIssueReport::STATUS_PENDING_ADMIN,
+                QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
                 QuestionIssueReport::STATUS_AWAITING_REATTEMPT,
                 QuestionIssueReport::STATUS_CLEARED,
             ])
@@ -192,7 +197,7 @@ class QuestionIssueReportService
      */
     public function markFixedAndReturnToStudent(QuestionIssueReport $report, User $admin, ?string $note = null): void
     {
-        if (! $report->isPendingAdmin()) {
+        if (! $report->isOpenForAdmin()) {
             throw new \InvalidArgumentException('This report is no longer waiting for a fix.');
         }
 
@@ -212,7 +217,7 @@ class QuestionIssueReportService
 
     public function dismiss(QuestionIssueReport $report, User $admin, ?string $note = null): void
     {
-        if (! $report->isPendingAdmin()) {
+        if (! $report->isOpenForAdmin()) {
             throw new \InvalidArgumentException('This report is no longer waiting for a fix.');
         }
 
@@ -276,16 +281,18 @@ class QuestionIssueReportService
     }
 
     /**
-     * Send only this sum to the content uploader. Report stays open until admin marks fixed.
+     * Send only this sum to the content uploader (email). Moves report to “Sent to uploader” until Fixed.
+     *
+     * @return array{emailed: bool}
      */
     public function returnToUploader(
         QuestionIssueReport $report,
         User $admin,
         string $issue,
         ?string $remark = null,
-    ): void {
+    ): array {
         if (! $report->isPendingAdmin()) {
-            throw new \InvalidArgumentException('This report is no longer waiting for a fix.');
+            throw new \InvalidArgumentException('This report is no longer waiting to be sent, or was already sent to the uploader.');
         }
 
         $report->loadMissing('question');
@@ -294,12 +301,12 @@ class QuestionIssueReportService
             throw new \InvalidArgumentException('This question is no longer available.');
         }
 
-        $this->contentUploadTasks->returnHelpRequestQuestion(
+        $task = $this->contentUploadTasks->returnHelpRequestQuestion(
             $report->question,
             $admin,
             $issue,
             $remark,
-            'Student reported misprint/incomplete. Fix only this sum.',
+            'Student reported misprint/incomplete. Fix only this sum — it is incorrect or incomplete.',
             ContentQuestionCorrection::SOURCE_ADMIN_RETURN,
         );
 
@@ -314,8 +321,15 @@ class QuestionIssueReportService
             .($extra !== '' ? ': '.$extra : '');
 
         $report->update([
+            'status' => QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
             'admin_note' => $note,
+            'resolved_by' => $admin->id,
         ]);
+
+        $uploader = $task->assignee;
+        $emailed = $uploader && filled($uploader->email) && str_contains($uploader->email, '@');
+
+        return ['emailed' => (bool) $emailed];
     }
 
     public function clearAwaitingForStudentQuestion(int $studentId, int $questionId): void
@@ -335,6 +349,72 @@ class QuestionIssueReportService
      */
     public function pendingForAdmin(?array $studentIds = null, int $limit = 40): array
     {
+        return $this->formatOpenReportsForAdmin(
+            QuestionIssueReport::STATUS_PENDING_ADMIN,
+            $studentIds,
+            $limit,
+        );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function sentToUploaderForAdmin(?array $studentIds = null, int $limit = 40): array
+    {
+        return $this->formatOpenReportsForAdmin(
+            QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
+            $studentIds,
+            $limit,
+        );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function pendingForStudent(int $studentId): array
+    {
+        return $this->formatOpenReportsForAdmin(
+            QuestionIssueReport::STATUS_PENDING_ADMIN,
+            [$studentId],
+            100,
+        );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function sentToUploaderForStudent(int $studentId): array
+    {
+        return $this->formatOpenReportsForAdmin(
+            QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
+            [$studentId],
+            100,
+        );
+    }
+
+    public function pendingCountForStudentIds(array $studentIds): Collection
+    {
+        if ($studentIds === []) {
+            return collect();
+        }
+
+        return QuestionIssueReport::query()
+            ->selectRaw('student_id, count(*) as c')
+            ->whereIn('status', [
+                QuestionIssueReport::STATUS_PENDING_ADMIN,
+                QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
+            ])
+            ->whereIn('student_id', $studentIds)
+            ->groupBy('student_id')
+            ->pluck('c', 'student_id');
+    }
+
+    /**
+     * @param  list<int>|null  $studentIds
+     * @return list<array<string, mixed>>
+     */
+    private function formatOpenReportsForAdmin(string $status, ?array $studentIds, int $limit): array
+    {
         $query = QuestionIssueReport::query()
             ->with([
                 'student:id,name',
@@ -345,7 +425,7 @@ class QuestionIssueReportService
                 'question.worksheets:id,set_code,set_number',
                 'assignment.practiceSet:id,set_code,set_number',
             ])
-            ->where('status', QuestionIssueReport::STATUS_PENDING_ADMIN)
+            ->where('status', $status)
             ->orderByDesc('reported_at');
 
         if ($studentIds !== null) {
@@ -375,53 +455,6 @@ class QuestionIssueReportService
     }
 
     /**
-     * @return list<array<string, mixed>>
-     */
-    public function pendingForStudent(int $studentId): array
-    {
-        $reports = QuestionIssueReport::query()
-            ->with([
-                'question:id,question_text,type,diagram_path',
-                'question.options',
-                'question.blankAnswer',
-                'question.worksheets:id,set_code,set_number',
-                'assignment.practiceSet:id,set_code,set_number',
-            ])
-            ->where('student_id', $studentId)
-            ->where('status', QuestionIssueReport::STATUS_PENDING_ADMIN)
-            ->orderByDesc('reported_at')
-            ->get()
-            ->filter(fn (QuestionIssueReport $report) => $report->question !== null)
-            ->values();
-
-        $uploaderByQuestion = $this->contentUploadTasks->tasksKeyedByQuestionId(
-            $reports->pluck('question_id')->all(),
-        );
-
-        return $reports
-            ->map(fn (QuestionIssueReport $report) => $this->formatAdminItem(
-                $report,
-                $uploaderByQuestion->get((int) $report->question_id),
-            ))
-            ->values()
-            ->all();
-    }
-
-    public function pendingCountForStudentIds(array $studentIds): Collection
-    {
-        if ($studentIds === []) {
-            return collect();
-        }
-
-        return QuestionIssueReport::query()
-            ->selectRaw('student_id, count(*) as c')
-            ->where('status', QuestionIssueReport::STATUS_PENDING_ADMIN)
-            ->whereIn('student_id', $studentIds)
-            ->groupBy('student_id')
-            ->pluck('c', 'student_id');
-    }
-
-    /**
      * @param  array<string, mixed>  $data
      */
     private function createOrRefreshReport(array $data): QuestionIssueReport
@@ -429,7 +462,10 @@ class QuestionIssueReportService
         $existing = QuestionIssueReport::query()
             ->where('student_id', $data['student_id'])
             ->where('question_id', $data['question_id'])
-            ->where('status', QuestionIssueReport::STATUS_PENDING_ADMIN)
+            ->whereIn('status', [
+                QuestionIssueReport::STATUS_PENDING_ADMIN,
+                QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
+            ])
             ->first();
 
         $payload = [
@@ -717,6 +753,8 @@ class QuestionIssueReportService
             'options' => $options,
             'correct_answer' => $correctAnswer,
             'admin_note' => $report->admin_note,
+            'status' => $report->status,
+            'sent_to_uploader' => $report->isSentToUploader(),
             'context' => $report->context,
             'context_label' => match ($report->context) {
                 QuestionIssueReport::CONTEXT_BATCH => 'Chapter test',

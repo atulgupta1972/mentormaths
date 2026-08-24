@@ -9,6 +9,8 @@ class QuestionIssueReport extends Model
 {
     public const STATUS_PENDING_ADMIN = 'pending_admin';
 
+    public const STATUS_SENT_TO_UPLOADER = 'sent_to_uploader';
+
     public const STATUS_AWAITING_REATTEMPT = 'awaiting_reattempt';
 
     public const STATUS_CLEARED = 'cleared';
@@ -85,5 +87,19 @@ class QuestionIssueReport extends Model
     public function isPendingAdmin(): bool
     {
         return $this->status === self::STATUS_PENDING_ADMIN;
+    }
+
+    public function isSentToUploader(): bool
+    {
+        return $this->status === self::STATUS_SENT_TO_UPLOADER;
+    }
+
+    /** Still needs admin Fixed / Dismiss (pending check or waiting on uploader). */
+    public function isOpenForAdmin(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_PENDING_ADMIN,
+            self::STATUS_SENT_TO_UPLOADER,
+        ], true);
     }
 }

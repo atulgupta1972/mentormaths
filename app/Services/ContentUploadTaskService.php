@@ -579,7 +579,7 @@ class ContentUploadTaskService
                 'question_text' => $question->question_text,
                 'remark' => $this->remarkForHelpIssue($issue, $remark),
             ]],
-            notifyNow: false,
+            notifyNow: true,
             source: $source,
         );
     }

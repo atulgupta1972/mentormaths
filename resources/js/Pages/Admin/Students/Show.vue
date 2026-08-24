@@ -33,6 +33,7 @@ const props = defineProps({
     resolutionItems: { type: Array, default: () => [] },
     helpRequestsCount: { type: Number, default: 0 },
     questionIssueReports: { type: Array, default: () => [] },
+    questionIssueReportsSentToUploader: { type: Array, default: () => [] },
     defaultSummaryEmail: { type: String, default: '' },
     summaryEmailRecipients: { type: Array, default: () => [] },
     whatsappRecipientCount: { type: Number, default: 0 },
@@ -233,13 +234,13 @@ const destroyStudent = () => {
 
                 <div class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">
                     <h3 class="font-medium text-amber-950">
-                        Misprint / incomplete reports
+                        Misprint / incomplete · pending
                         <span v-if="questionIssueReports.length" class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-bold text-amber-900">
                             {{ questionIssueReports.length }}
                         </span>
                     </h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Open to check. Edit yourself or send only that sum to the uploader. When fixed, mark Fixed — return to student so it goes back on their correction list. No marks were deducted.
+                        Check yourself or send to uploader (they get an email). When fixed, mark Fixed — return to student.
                     </p>
                     <ul v-if="questionIssueReports.length" class="mt-4 divide-y divide-gray-100">
                         <li v-for="item in questionIssueReports" :key="item.id" class="py-3">
@@ -268,6 +269,47 @@ const destroyStudent = () => {
                     </ul>
                     <p v-else class="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
                         No pending misprint reports for this student.
+                    </p>
+                </div>
+
+                <div class="overflow-hidden bg-white p-6 shadow-sm sm:rounded-lg">
+                    <h3 class="font-medium text-violet-950">
+                        Sent to uploader
+                        <span v-if="questionIssueReportsSentToUploader.length" class="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-sm font-bold text-violet-900">
+                            {{ questionIssueReportsSentToUploader.length }}
+                        </span>
+                    </h3>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Waiting on the uploader. When they fix the sum, mark Fixed — return to student.
+                    </p>
+                    <ul v-if="questionIssueReportsSentToUploader.length" class="mt-4 divide-y divide-gray-100">
+                        <li v-for="item in questionIssueReportsSentToUploader" :key="'sent-'+item.id" class="py-3">
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-violet-900">
+                                            {{ item.context_label }}
+                                        </span>
+                                        <span v-if="item.uploader_name" class="text-xs text-slate-600">→ {{ item.uploader_name }}</span>
+                                        <Link
+                                            v-if="item.set_code && item.set_url"
+                                            :href="item.set_url"
+                                            class="font-mono text-sm font-semibold text-indigo-600 hover:underline"
+                                        >
+                                            {{ item.set_code }}
+                                        </Link>
+                                    </div>
+                                    <p class="mt-1 text-sm text-gray-800">{{ item.question_text }}</p>
+                                    <QuestionIssueReportActions :item="item" />
+                                </div>
+                                <p class="text-xs text-gray-500">
+                                    Reported {{ item.reported_at ? new Date(item.reported_at).toLocaleDateString('en-IN') : '—' }}
+                                </p>
+                            </div>
+                        </li>
+                    </ul>
+                    <p v-else class="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                        None waiting on an uploader for this student.
                     </p>
                 </div>
 

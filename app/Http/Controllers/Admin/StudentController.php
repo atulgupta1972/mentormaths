@@ -181,6 +181,7 @@ class StudentController extends Controller
                 ? $this->resolutionService->pendingCountForEnrollment($resolutionEnrollment->id)
                 : 0,
             'questionIssueReports' => $this->issueReports->pendingForStudent($student->id),
+            'questionIssueReportsSentToUploader' => $this->issueReports->sentToUploaderForStudent($student->id),
             'defaultSummaryEmail' => AssignmentMailer::resolveStudentEmail($student),
             'summaryEmailRecipients' => $this->notificationEmailService->recipientsForStudent($student),
             'whatsappRecipientCount' => count($this->notificationContactService->recipientsForStudent($student)),
