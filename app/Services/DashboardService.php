@@ -85,6 +85,7 @@ class DashboardService
         $enrollmentIds = $enrollments->pluck('id')->all();
 
         $helpCounts = collect();
+        $helpRequests = [];
         try {
             if ($studentIds !== []) {
                 $helpCounts = QuestionResolutionItem::query()
@@ -96,6 +97,11 @@ class DashboardService
                     ->where('student_enrollments.academic_year_id', $activeYear->id)
                     ->groupBy('student_enrollments.student_id')
                     ->pluck('c', 'student_id');
+
+                $helpRequests = $this->resolutionService
+                    ->pendingForStudentIds($studentIds, $activeYear->id)
+                    ->values()
+                    ->all();
             }
         } catch (Throwable $e) {
             Log::error('Admin dashboard failed to count help requests.', ['message' => $e->getMessage()]);
@@ -173,7 +179,9 @@ class DashboardService
             ];
         })->values()->all();
 
-        $helpRequestsCount = (int) $helpCounts->sum();
+        $helpRequestsCount = count($helpRequests) > 0
+            ? count($helpRequests)
+            : (int) $helpCounts->sum();
 
         $contentPublishQueue = [];
         $contentRecheckQueue = [];
@@ -235,7 +243,7 @@ class DashboardService
                 'content_recheck_queue_count' => count($contentRecheckQueue),
             ],
             'students' => $students,
-            'helpRequests' => [],
+            'helpRequests' => $helpRequests,
             'questionIssueReports' => $questionIssueReports,
             'lockedAttempts' => $lockedAttempts,
             'contentPublishQueue' => $contentPublishQueue,
