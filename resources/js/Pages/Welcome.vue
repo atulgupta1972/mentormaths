@@ -237,15 +237,25 @@ const tierHead = {
                             <template v-if="!$page.props.auth?.user">
                                 <Link
                                     :href="route('registration.create')"
-                                    class="block w-full rounded-xl bg-[#0f4c5c] px-5 py-3.5 text-center text-base font-bold text-white shadow-sm transition hover:bg-[#0a3642] sm:text-lg"
+                                    class="block w-full rounded-xl bg-[#0f4c5c] px-5 py-3.5 text-center shadow-sm transition hover:bg-[#0a3642]"
                                 >
-                                    Request early access — Students
+                                    <span class="block text-base font-bold text-white sm:text-lg">
+                                        Request early access — Students
+                                    </span>
+                                    <span class="mt-0.5 block text-sm font-semibold text-teal-100">
+                                        Free access — 15 days
+                                    </span>
                                 </Link>
                                 <Link
                                     :href="route('mentor-access.create')"
-                                    class="block w-full rounded-xl border-2 border-teal-700/40 bg-teal-50 px-5 py-3.5 text-center text-base font-bold text-teal-950 transition hover:bg-teal-100 sm:text-lg"
+                                    class="block w-full rounded-xl border-2 border-teal-700/40 bg-teal-50 px-5 py-3.5 text-center transition hover:bg-teal-100"
                                 >
-                                    Request early access — Mentors / Classes / School
+                                    <span class="block text-base font-bold text-teal-950 sm:text-lg">
+                                        Request early access — Mentors / Classes / School
+                                    </span>
+                                    <span class="mt-0.5 block text-sm font-semibold text-teal-800">
+                                        Free access — 15 days
+                                    </span>
                                 </Link>
                             </template>
                             <Link
@@ -607,16 +617,26 @@ const tierHead = {
                         <Link
                             v-if="!$page.props.auth?.user"
                             :href="route('registration.create')"
-                            class="rounded-xl bg-[#0f4c5c] px-6 py-3.5 text-center text-base font-bold text-white transition hover:bg-[#0a3642]"
+                            class="rounded-xl bg-[#0f4c5c] px-6 py-3.5 text-center transition hover:bg-[#0a3642]"
                         >
-                            Request early access — Students
+                            <span class="block text-base font-bold text-white">
+                                Request early access — Students
+                            </span>
+                            <span class="mt-0.5 block text-sm font-semibold text-teal-100">
+                                Free access — 15 days
+                            </span>
                         </Link>
                         <Link
                             v-if="!$page.props.auth?.user"
                             :href="route('mentor-access.create')"
-                            class="rounded-xl border-2 border-teal-700/40 bg-teal-50 px-6 py-3.5 text-center text-base font-bold text-teal-950 transition hover:bg-teal-100"
+                            class="rounded-xl border-2 border-teal-700/40 bg-teal-50 px-6 py-3.5 text-center transition hover:bg-teal-100"
                         >
-                            Request early access — Mentors / Classes / School
+                            <span class="block text-base font-bold text-teal-950">
+                                Request early access — Mentors / Classes / School
+                            </span>
+                            <span class="mt-0.5 block text-sm font-semibold text-teal-800">
+                                Free access — 15 days
+                            </span>
                         </Link>
                         <Link
                             :href="route('login')"
