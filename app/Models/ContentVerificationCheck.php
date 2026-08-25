@@ -29,6 +29,9 @@ class ContentVerificationCheck extends Model
         'check_difficulty',
         'check_diagram',
         'diagram_note',
+        'skipped',
+        'skip_reason',
+        'skipped_at',
         'verified_at',
     ];
 
@@ -42,7 +45,9 @@ class ContentVerificationCheck extends Model
             'check_explanation' => 'boolean',
             'check_difficulty' => 'boolean',
             'check_diagram' => 'boolean',
+            'skipped' => 'boolean',
             'verified_at' => 'datetime',
+            'skipped_at' => 'datetime',
         ];
     }
 
@@ -56,8 +61,13 @@ class ContentVerificationCheck extends Model
         return $this->belongsTo(Question::class);
     }
 
+    /** Verified for upload, or deliberately skipped (irrelevant — not paid). */
     public function isComplete(): bool
     {
+        if ($this->skipped) {
+            return true;
+        }
+
         foreach (self::CHECK_FIELDS as $field) {
             if (! $this->{$field}) {
                 return false;
@@ -65,5 +75,10 @@ class ContentVerificationCheck extends Model
         }
 
         return true;
+    }
+
+    public function countsForPay(): bool
+    {
+        return ! $this->skipped;
     }
 }

@@ -633,6 +633,52 @@ class ContentUploadTaskController extends Controller
         return back()->with('success', 'Question saved.');
     }
 
+    public function skipVerificationQuestion(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+            'skip_reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $run = $this->authorizeVerificationRun($contentTask, (int) $validated['run_id']);
+
+        try {
+            $this->verificationService->skipQuestion(
+                $run,
+                (int) $validated['question_id'],
+                $request->user(),
+                $validated['skip_reason'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Question skipped — not counted in uploader payment.');
+    }
+
+    public function unskipVerificationQuestion(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+        ]);
+
+        $run = $this->authorizeVerificationRun($contentTask, (int) $validated['run_id']);
+
+        try {
+            $this->verificationService->unskipQuestion(
+                $run,
+                (int) $validated['question_id'],
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Skip cleared.');
+    }
+
     public function markVerificationBatch(Request $request, ContentUploadTask $contentTask): RedirectResponse
     {
         $validated = $request->validate([
@@ -927,7 +973,11 @@ class ContentUploadTaskController extends Controller
             'rate_basis' => $task->rate_basis,
             'rate_basis_label' => $task->rateBasisLabel(),
             'rate_description' => $task->rateDescription(),
+            'calculation_label' => $task->calculationLabel(),
             'payable_amount_inr' => $task->payableAmountInr(),
+            'payable_question_count' => $task->payableQuestionCount(),
+            'skipped_question_count' => $task->skippedQuestionCount(),
+            'uploaded_question_count' => $task->uploadedQuestionCount(),
             'offered_amount_inr' => $task->offered_amount_inr,
             'agreed_amount_inr' => $task->agreed_amount_inr,
             'agreed_at' => $task->agreed_at?->toIso8601String(),

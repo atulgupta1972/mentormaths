@@ -206,6 +206,64 @@ class ContentTaskController extends Controller
         return back()->with('success', 'Question saved and marked verified.');
     }
 
+    public function skipVerificationQuestion(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+            'skip_reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $run = ContentVerificationRun::query()->findOrFail($validated['run_id']);
+
+        if ($run->content_upload_task_id !== $contentTask->id) {
+            abort(403);
+        }
+
+        try {
+            $this->verificationService->skipQuestion(
+                $run,
+                (int) $validated['question_id'],
+                $request->user(),
+                $validated['skip_reason'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Question skipped — it will not count toward your payment.');
+    }
+
+    public function unskipVerificationQuestion(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+        ]);
+
+        $run = ContentVerificationRun::query()->findOrFail($validated['run_id']);
+
+        if ($run->content_upload_task_id !== $contentTask->id) {
+            abort(403);
+        }
+
+        try {
+            $this->verificationService->unskipQuestion(
+                $run,
+                (int) $validated['question_id'],
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Skip cleared — verify or skip again.');
+    }
+
     public function uploadVerificationDiagram(Request $request, ContentUploadTask $contentTask): RedirectResponse
     {
         $this->authorizeTask($contentTask, $request);

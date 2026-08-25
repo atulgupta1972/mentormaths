@@ -12,6 +12,8 @@ const props = defineProps({
     verification: { type: Object, required: true },
     batchVerifyRoute: { type: String, required: true },
     returnRoute: { type: String, required: true },
+    skipRoute: { type: String, default: '' },
+    unskipRoute: { type: String, default: '' },
     uploadDiagramRoute: { type: String, default: '' },
     removeDiagramRoute: { type: String, default: '' },
     canReturn: { type: Boolean, default: false },
@@ -24,6 +26,7 @@ const flagRemarks = reactive({});
 const sendBackCart = ref([]);
 const overallReason = ref('');
 const diagramUploading = ref({});
+const skippingId = ref(null);
 
 const batchForm = useForm({
     run_id: props.verification?.run_id ?? null,
@@ -35,6 +38,14 @@ const returnForm = useForm({
     items: [],
 });
 
+const skipForm = useForm({
+    run_id: props.verification?.run_id ?? null,
+    question_id: null,
+    skip_reason: '',
+});
+
+const canSkip = computed(() => Boolean(props.skipRoute) && props.skipRoute !== '#');
+
 watch(
     () => props.verification?.run_id,
     (runId) => {
@@ -44,7 +55,9 @@ watch(
 
 const allQuestions = computed(() => props.verification?.questions ?? []);
 const pendingQuestions = computed(() => allQuestions.value.filter((q) => !q.is_verified));
+const skippedQuestions = computed(() => allQuestions.value.filter((q) => q.is_skipped));
 const verifiedCount = computed(() => props.verification?.summary?.verified ?? 0);
+const skippedCount = computed(() => props.verification?.summary?.skipped ?? skippedQuestions.value.length);
 const totalCount = computed(() => props.verification?.summary?.total ?? 0);
 
 const totalPages = computed(() => Math.max(1, Math.ceil(pendingQuestions.value.length / PAGE_SIZE)));
@@ -67,14 +80,14 @@ const pageQuestions = computed(() => {
 const pageLabel = computed(() => {
     if (pendingQuestions.value.length === 0) {
         return totalCount.value > 0
-            ? `All ${totalCount.value} questions verified`
+            ? `All ${totalCount.value} questions done (${verifiedCount.value} verified · ${skippedCount.value} skipped)`
             : 'No questions to verify';
     }
 
     const start = pageIndex.value * PAGE_SIZE + 1;
     const end = Math.min((pageIndex.value + 1) * PAGE_SIZE, pendingQuestions.value.length);
 
-    return `Pending ${start}–${end} of ${pendingQuestions.value.length} · ${verifiedCount.value}/${totalCount.value} verified`;
+    return `Pending ${start}–${end} of ${pendingQuestions.value.length} · ${verifiedCount.value} verified · ${skippedCount.value} skipped (not paid)`;
 });
 
 const canManageDiagram = computed(() => {
@@ -118,6 +131,32 @@ const markSelectedVerified = () => {
         preserveScroll: true,
         onSuccess: () => {
             selectedIds.value = [];
+        },
+    });
+};
+
+const skipQuestion = (row) => {
+    if (!canSkip.value || skipForm.processing) {
+        return;
+    }
+
+    const reason = window.prompt(
+        `Skip Q${row.number} as irrelevant?\nIt will not count toward uploader payment.\nOptional reason:`,
+        'Irrelevant / not suitable for upload',
+    );
+
+    if (reason === null) {
+        return;
+    }
+
+    skippingId.value = row.question_id;
+    skipForm.run_id = props.verification.run_id;
+    skipForm.question_id = row.question_id;
+    skipForm.skip_reason = reason.trim();
+    skipForm.post(props.skipRoute, {
+        preserveScroll: true,
+        onFinish: () => {
+            skippingId.value = null;
         },
     });
 };
@@ -240,6 +279,9 @@ const optionLine = (row) =>
             <div>
                 <p class="text-sm font-semibold text-indigo-950">Batch verification (10 at a time)</p>
                 <p class="text-xs text-indigo-900">{{ pageLabel }}</p>
+                <p class="mt-1 text-xs text-indigo-800">
+                    Skip irrelevant questions — they do not count in uploader pay.
+                </p>
             </div>
             <div class="flex flex-wrap gap-2">
                 <SecondaryButton type="button" class="!text-xs" :disabled="pageIndex <= 0" @click="pageIndex -= 1">
@@ -274,10 +316,17 @@ const optionLine = (row) =>
         </div>
 
                 <div v-if="pageQuestions.length === 0" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-6 text-sm text-emerald-950">
-                    <p class="font-semibold">All questions verified.</p>
+                    <p class="font-semibold">All questions reviewed.</p>
                     <p class="mt-1 text-xs">
+                        {{ verifiedCount }} verified · {{ skippedCount }} skipped (not paid).
                         Status should show as Verified on the task list. Use <strong>Publish</strong> below to mark the task published.
                     </p>
+                    <ul v-if="skippedQuestions.length" class="mt-3 space-y-1 text-xs text-slate-700">
+                        <li v-for="row in skippedQuestions" :key="row.question_id">
+                            Q{{ row.number }} skipped
+                            <span v-if="row.skip_reason">— {{ row.skip_reason }}</span>
+                        </li>
+                    </ul>
                 </div>
 
         <div v-else class="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -292,6 +341,7 @@ const optionLine = (row) =>
                         <th class="px-2 py-2 min-w-[7rem]">Hint</th>
                         <th class="px-2 py-2 min-w-[8rem]">Explanation</th>
                         <th class="px-2 py-2">Figure</th>
+                        <th class="px-2 py-2 min-w-[6rem]">Skip</th>
                         <th class="px-2 py-2 min-w-[10rem]">Send back</th>
                     </tr>
                 </thead>
@@ -367,6 +417,18 @@ const optionLine = (row) =>
                                 </div>
                             </td>
                             <td class="px-2 py-2 align-top">
+                                <button
+                                    v-if="canSkip"
+                                    type="button"
+                                    class="text-[10px] font-semibold text-slate-700 hover:underline"
+                                    :disabled="skipForm.processing && skippingId === row.question_id"
+                                    @click="skipQuestion(row)"
+                                >
+                                    {{ skipForm.processing && skippingId === row.question_id ? '…' : 'Skip (not paid)' }}
+                                </button>
+                                <span v-else class="text-[10px] text-gray-400">—</span>
+                            </td>
+                            <td class="px-2 py-2 align-top">
                                 <input
                                     v-model="flagRemarks[row.question_id]"
                                     type="text"
@@ -393,7 +455,7 @@ const optionLine = (row) =>
                             </td>
                         </tr>
                         <tr v-if="expandedId === row.question_id" class="bg-slate-50">
-                            <td colspan="9" class="px-4 py-3">
+                            <td colspan="10" class="px-4 py-3">
                                 <div class="grid gap-3 text-sm text-gray-900 lg:grid-cols-2">
                                     <div>
                                         <p class="text-[10px] font-semibold uppercase text-gray-500">Full question</p>

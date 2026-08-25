@@ -81,6 +81,60 @@ class ContentTaskVerificationTest extends TestCase
         );
     }
 
+    public function test_skipping_question_excludes_it_from_uploader_pay(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $task->update([
+            'rate_basis' => \App\Models\ContentRateCard::BASIS_PER_QUESTION,
+            'agreed_amount_inr' => 10,
+            'offered_amount_inr' => 10,
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'submitted_at' => now(),
+        ]);
+
+        $this->assertSame(1, $task->fresh()->uploadedQuestionCount());
+        $this->assertSame(10, $task->fresh()->payableAmountInr());
+
+        $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk();
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $admin->id)
+            ->value('id');
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.verification-skip', $task), [
+                'run_id' => $runId,
+                'question_id' => $questionId,
+                'skip_reason' => 'Irrelevant practice sum',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $check = \App\Models\ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $runId)
+            ->where('question_id', $questionId)
+            ->firstOrFail();
+
+        $this->assertTrue($check->skipped);
+        $this->assertTrue($check->isComplete());
+        $this->assertFalse($check->countsForPay());
+
+        $task = $task->fresh();
+        $this->assertSame(1, $task->skippedQuestionCount());
+        $this->assertSame(0, $task->payableQuestionCount());
+        $this->assertSame(0, $task->payableAmountInr());
+        $this->assertStringContainsString('skipped', strtolower($task->calculationLabel()));
+    }
+
     public function test_admin_verification_shows_uploader_chapter_breakup(): void
     {
         $this->withoutVite();

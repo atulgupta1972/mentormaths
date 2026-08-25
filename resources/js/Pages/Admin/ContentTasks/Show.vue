@@ -274,6 +274,12 @@ const formatDuration = (seconds) => {
                         <p class="font-semibold">{{ task.rate_description || (task.agreed_amount_inr ? formatInr(task.agreed_amount_inr) : formatInr(task.offered_amount_inr)) }}</p>
                         <p v-if="task.payable_amount_inr > 0 && task.rate_basis === 'per_question'" class="mt-1 text-xs text-gray-500">
                             Payable now: {{ formatInr(task.payable_amount_inr) }}
+                            <span v-if="task.skipped_question_count > 0">
+                                · {{ task.skipped_question_count }} skipped (not paid)
+                            </span>
+                        </p>
+                        <p v-else-if="task.calculation_label" class="mt-1 text-xs text-gray-500">
+                            {{ task.calculation_label }}
                         </p>
                     </div>
                     <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
@@ -494,6 +500,8 @@ const formatDuration = (seconds) => {
                     :verification="verification"
                     :batch-verify-route="safeRoute('admin.content-tasks.verification-batch', task.id, adminTaskPath('/verification-batch'))"
                     :return-route="safeRoute('admin.content-tasks.return-for-reverification', task.id, adminTaskPath('/return-for-reverification'))"
+                    :skip-route="safeRoute('admin.content-tasks.verification-skip', task.id, adminTaskPath('/verification-skip'))"
+                    :unskip-route="safeRoute('admin.content-tasks.verification-unskip', task.id, adminTaskPath('/verification-unskip'))"
                     :upload-diagram-route="safeRoute('admin.content-tasks.verification-diagram', task.id, adminTaskPath('/verification-diagram'))"
                     :remove-diagram-route="safeRoute('admin.content-tasks.verification-diagram.remove', task.id, adminTaskPath('/verification-diagram/remove'))"
                     :can-return="Boolean(task.can_return_for_reverification)"
@@ -504,6 +512,8 @@ const formatDuration = (seconds) => {
                     :task="task"
                     :verification="verification"
                     :save-question-route="safeRoute('admin.content-tasks.verification-question', task.id, adminTaskPath('/verification-question'))"
+                    :skip-route="safeRoute('admin.content-tasks.verification-skip', task.id, adminTaskPath('/verification-skip'))"
+                    :unskip-route="safeRoute('admin.content-tasks.verification-unskip', task.id, adminTaskPath('/verification-unskip'))"
                     :upload-diagram-route="safeRoute('admin.content-tasks.verification-diagram', task.id, adminTaskPath('/verification-diagram'))"
                     :remove-diagram-route="safeRoute('admin.content-tasks.verification-diagram.remove', task.id, adminTaskPath('/verification-diagram/remove'))"
                     :editable-statuses="['uploaded', 'verification_in_progress', 'verified', 'submitted_for_publish', 'published']"

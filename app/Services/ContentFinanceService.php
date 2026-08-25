@@ -223,6 +223,12 @@ class ContentFinanceService
             'question_count' => $task->rate_basis === ContentRateCard::BASIS_PER_QUESTION
                 ? $task->uploadedQuestionCount()
                 : null,
+            'payable_question_count' => $task->rate_basis === ContentRateCard::BASIS_PER_QUESTION
+                ? $task->payableQuestionCount()
+                : null,
+            'skipped_question_count' => $task->rate_basis === ContentRateCard::BASIS_PER_QUESTION
+                ? $task->skippedQuestionCount()
+                : null,
             'rate_agreed_label' => $task->rateAgreedLabel(),
             'calculation_label' => $task->calculationLabel(),
             'rate_description' => $task->rateDescription(),

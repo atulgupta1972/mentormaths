@@ -127,7 +127,7 @@ class ContentUploadTask extends Model
         }
 
         if ($this->rate_basis === ContentRateCard::BASIS_PER_QUESTION) {
-            return $unit * $this->uploadedQuestionCount();
+            return $unit * $this->payableQuestionCount();
         }
 
         return $unit;
@@ -136,6 +136,34 @@ class ContentUploadTask extends Model
     public function rateUnitInr(): int
     {
         return (int) ($this->agreed_amount_inr ?? $this->offered_amount_inr ?? 0);
+    }
+
+    /**
+     * Questions that count toward uploader pay (uploaded minus skipped-as-irrelevant).
+     */
+    public function payableQuestionCount(): int
+    {
+        $uploaded = $this->uploadedQuestionCount();
+        $skipped = $this->skippedQuestionCount();
+
+        return max(0, $uploaded - $skipped);
+    }
+
+    public function skippedQuestionCount(): int
+    {
+        $this->loadMissing('verificationRuns');
+
+        $runIds = $this->verificationRuns->pluck('id');
+
+        if ($runIds->isEmpty()) {
+            return 0;
+        }
+
+        return (int) ContentVerificationCheck::query()
+            ->whereIn('content_verification_run_id', $runIds)
+            ->where('skipped', true)
+            ->distinct()
+            ->count('question_id');
     }
 
     public function uploadedQuestionCount(): int
@@ -198,24 +226,37 @@ class ContentUploadTask extends Model
             return '₹'.number_format($unit).' per chapter';
         }
 
-        $count = $this->uploadedQuestionCount();
+        $payable = $this->payableQuestionCount();
+        $skipped = $this->skippedQuestionCount();
         $total = $this->payableAmountInr();
 
-        if ($count <= 0) {
+        if ($payable <= 0 && $skipped <= 0) {
             return 'No questions counted yet — ₹0 until questions are uploaded';
         }
 
-        return $count.' questions × ₹'.number_format($unit).' = ₹'.number_format($total);
+        $label = $payable.' payable × ₹'.number_format($unit).' = ₹'.number_format($total);
+
+        if ($skipped > 0) {
+            $label .= ' ('.$skipped.' skipped — not paid)';
+        }
+
+        return $label;
     }
 
     public function rateDescription(): string
     {
         if ($this->rate_basis === ContentRateCard::BASIS_PER_QUESTION) {
-            $count = $this->uploadedQuestionCount();
+            $payable = $this->payableQuestionCount();
+            $skipped = $this->skippedQuestionCount();
             $total = $this->payableAmountInr();
 
-            if ($count > 0) {
-                return $this->rateAgreedLabel().' × '.$count.' = ₹'.number_format($total);
+            if ($payable > 0 || $skipped > 0) {
+                $label = $this->rateAgreedLabel().' × '.$payable.' = ₹'.number_format($total);
+                if ($skipped > 0) {
+                    $label .= ' · '.$skipped.' skipped (not paid)';
+                }
+
+                return $label;
             }
 
             return $this->rateAgreedLabel();

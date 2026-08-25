@@ -10,6 +10,8 @@ const props = defineProps({
     task: { type: Object, required: true },
     verification: { type: Object, required: true },
     saveQuestionRoute: { type: String, required: true },
+    skipRoute: { type: String, default: '' },
+    unskipRoute: { type: String, default: '' },
     uploadDiagramRoute: { type: String, default: '' },
     removeDiagramRoute: { type: String, default: '' },
     editableStatuses: {
@@ -23,20 +25,40 @@ const props = defineProps({
 
 const completeForm = useForm({ run_id: props.verification?.run_id ?? null });
 const submitForm = useForm({});
+const skipForm = useForm({
+    run_id: props.verification?.run_id ?? null,
+    question_id: null,
+    skip_reason: '',
+});
+const unskipForm = useForm({
+    run_id: props.verification?.run_id ?? null,
+    question_id: null,
+});
 const questionForms = reactive({});
 const filterMode = reactive({ value: 'pending' });
 const diagramUploading = ref({});
 const diagramFileInputs = ref({});
 
-const verificationSummary = computed(() => props.verification?.summary ?? { total: 0, verified: 0, unverified: 0 });
+const verificationSummary = computed(() => props.verification?.summary ?? {
+    total: 0,
+    verified: 0,
+    skipped: 0,
+    unverified: 0,
+});
 const canEditQuestions = computed(() => props.editableStatuses.includes(props.task.status));
+const canSkip = computed(() => Boolean(props.skipRoute) && props.skipRoute !== '#' && canEditQuestions.value);
+const canUnskip = computed(() => Boolean(props.unskipRoute) && props.unskipRoute !== '#' && canEditQuestions.value);
 
 const pendingQuestions = computed(() =>
     (props.verification?.questions ?? []).filter((row) => !row.is_verified),
 );
 
 const verifiedQuestions = computed(() =>
-    (props.verification?.questions ?? []).filter((row) => row.is_verified),
+    (props.verification?.questions ?? []).filter((row) => row.is_verified && !row.is_skipped),
+);
+
+const skippedQuestions = computed(() =>
+    (props.verification?.questions ?? []).filter((row) => row.is_skipped),
 );
 
 const currentPending = computed(() => pendingQuestions.value[0] ?? null);
@@ -46,25 +68,34 @@ const visibleQuestions = computed(() => {
         return verifiedQuestions.value;
     }
 
+    if (filterMode.value === 'skipped') {
+        return skippedQuestions.value;
+    }
+
     return currentPending.value ? [currentPending.value] : [];
 });
 
 const queueLabel = computed(() => {
     const total = verificationSummary.value.total;
     const verified = verificationSummary.value.verified;
+    const skipped = verificationSummary.value.skipped ?? 0;
     const remaining = verificationSummary.value.unverified;
 
     if (filterMode.value === 'verified') {
         return `${verified} verified — open any to re-check and save again`;
     }
 
+    if (filterMode.value === 'skipped') {
+        return `${skipped} skipped — not counted in uploader pay`;
+    }
+
     if (!currentPending.value) {
         return remaining === 0 && total > 0
-            ? 'All questions verified'
+            ? `All questions done (${verified} verified · ${skipped} skipped)`
             : 'No pending questions';
     }
 
-    return `Now reviewing Q${currentPending.value.number} of ${total} · ${verified} done · ${remaining} left`;
+    return `Now reviewing Q${currentPending.value.number} of ${total} · ${verified} verified · ${skipped} skipped · ${remaining} left`;
 });
 
 const buildForm = (row) => useForm({
@@ -146,6 +177,66 @@ const saveQuestion = (questionId) => {
     });
 };
 
+const skipQuestion = (questionId) => {
+    if (!canSkip.value || skipForm.processing) {
+        return;
+    }
+
+    const reason = window.prompt(
+        'Skip this question as irrelevant?\nIt will not count toward uploader payment.\nOptional reason:',
+        'Irrelevant / not suitable for upload',
+    );
+
+    if (reason === null) {
+        return;
+    }
+
+    filterMode.value = 'pending';
+    skipForm.run_id = props.verification.run_id;
+    skipForm.question_id = questionId;
+    skipForm.skip_reason = reason.trim();
+    skipForm.post(props.skipRoute, {
+        preserveScroll: false,
+        onSuccess: () => {
+            filterMode.value = 'pending';
+            window.setTimeout(() => {
+                document.getElementById('verification-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 80);
+        },
+    });
+};
+
+const unskipQuestion = (questionId) => {
+    if (!canUnskip.value || unskipForm.processing) {
+        return;
+    }
+
+    if (!window.confirm('Clear skip and put this question back in the verify queue?')) {
+        return;
+    }
+
+    unskipForm.run_id = props.verification.run_id;
+    unskipForm.question_id = questionId;
+    unskipForm.post(props.unskipRoute, {
+        preserveScroll: true,
+        onSuccess: () => {
+            filterMode.value = 'pending';
+        },
+    });
+};
+
+const statusBadge = (row) => {
+    if (row.is_skipped) {
+        return { label: 'Skipped (not paid)', className: 'bg-slate-200 text-slate-800' };
+    }
+
+    if (row.is_verified) {
+        return { label: 'Verified', className: 'bg-emerald-100 text-emerald-800' };
+    }
+
+    return { label: 'Needs review', className: 'bg-amber-100 text-amber-900' };
+};
+
 const canManageDiagram = computed(() => {
     const url = props.uploadDiagramRoute;
 
@@ -207,6 +298,9 @@ const removeDiagram = (questionId) => {
                 <div>
                     <p class="text-sm font-semibold text-gray-900">MCQ verification</p>
                     <p class="mt-1 text-sm text-gray-600">{{ queueLabel }}</p>
+                    <p class="mt-1 text-xs text-slate-500">
+                        Skip irrelevant questions — they stay off the pay count for the uploader.
+                    </p>
                 </div>
                 <div class="flex flex-wrap gap-2 text-xs">
                     <button
@@ -225,13 +319,21 @@ const removeDiagram = (questionId) => {
                     >
                         Verified ({{ verificationSummary.verified }})
                     </button>
+                    <button
+                        type="button"
+                        class="rounded-md border px-3 py-1.5"
+                        :class="filterMode.value === 'skipped' ? 'border-slate-400 bg-slate-100 text-slate-900' : 'border-gray-300 text-gray-700'"
+                        @click="filterMode.value = 'skipped'"
+                    >
+                        Skipped ({{ verificationSummary.skipped ?? 0 }})
+                    </button>
                 </div>
             </div>
             <p v-if="verificationSummary.total === 0" class="mt-2 text-sm text-amber-800">
                 No published MCQ questions found yet.
             </p>
             <p v-else-if="filterMode.value === 'pending' && !currentPending && verificationSummary.unverified === 0" class="mt-2 text-sm text-emerald-800">
-                All questions verified.
+                All questions reviewed (verified or skipped).
             </p>
         </div>
 
@@ -239,7 +341,7 @@ const removeDiagram = (questionId) => {
             v-for="row in visibleQuestions"
             :key="row.question_id"
             class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200"
-            :class="row.is_verified ? 'ring-emerald-300' : 'ring-amber-200'"
+            :class="row.is_skipped ? 'ring-slate-300' : (row.is_verified ? 'ring-emerald-300' : 'ring-amber-200')"
         >
             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <p class="text-sm font-semibold text-gray-900">
@@ -249,11 +351,17 @@ const removeDiagram = (questionId) => {
                 </p>
                 <span
                     class="rounded-full px-2.5 py-0.5 text-xs font-medium"
-                    :class="row.is_verified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'"
+                    :class="statusBadge(row).className"
                 >
-                    {{ row.is_verified ? 'Verified' : 'Needs review' }}
+                    {{ statusBadge(row).label }}
                 </span>
             </div>
+            <p
+                v-if="row.is_skipped && row.skip_reason"
+                class="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800"
+            >
+                Skip reason: {{ row.skip_reason }}
+            </p>
             <p
                 v-if="row.correction_remark"
                 class="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900"
@@ -261,7 +369,20 @@ const removeDiagram = (questionId) => {
                 Admin: {{ row.correction_remark }}
             </p>
 
-            <div v-if="questionForms[row.question_id]" class="space-y-3">
+            <div v-if="row.is_skipped" class="space-y-3">
+                <p class="whitespace-pre-wrap text-sm text-slate-700">{{ row.question_text }}</p>
+                <div v-if="canUnskip" class="pt-1">
+                    <SecondaryButton
+                        type="button"
+                        :disabled="unskipForm.processing"
+                        @click="unskipQuestion(row.question_id)"
+                    >
+                        {{ unskipForm.processing ? 'Working…' : 'Undo skip — verify instead' }}
+                    </SecondaryButton>
+                </div>
+            </div>
+
+            <div v-else-if="questionForms[row.question_id]" class="space-y-3">
                 <div>
                     <InputLabel value="Question text" />
                     <textarea
@@ -403,6 +524,14 @@ const removeDiagram = (questionId) => {
                             ? 'Saving…'
                             : (row.is_verified ? 'Save again' : 'Save & mark verified → next') }}
                     </PrimaryButton>
+                    <SecondaryButton
+                        v-if="canSkip && !row.is_verified"
+                        type="button"
+                        :disabled="skipForm.processing"
+                        @click="skipQuestion(row.question_id)"
+                    >
+                        {{ skipForm.processing ? 'Skipping…' : 'Skip (not paid)' }}
+                    </SecondaryButton>
                 </div>
             </div>
         </div>
@@ -412,6 +541,13 @@ const removeDiagram = (questionId) => {
             class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500"
         >
             No verified questions yet.
+        </div>
+
+        <div
+            v-if="filterMode.value === 'skipped' && !skippedQuestions.length"
+            class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500"
+        >
+            No skipped questions.
         </div>
 
         <div v-if="showCompleteActions && (task.status === 'verification_in_progress' || task.status === 'verified')" class="flex flex-wrap gap-3">

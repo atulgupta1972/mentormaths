@@ -92,6 +92,8 @@ class ContentVerificationService
                     ? chr(65 + (int) $question->options->values()->search(fn (QuestionOption $option) => $option->is_correct))
                     : null,
                 'is_verified' => $check?->isComplete() ?? false,
+                'is_skipped' => (bool) ($check?->skipped),
+                'skip_reason' => $check?->skip_reason,
                 'checks' => $check ? [
                     'check_text' => $check->check_text,
                     'check_options' => $check->check_options,
@@ -101,13 +103,17 @@ class ContentVerificationService
                     'check_difficulty' => $check->check_difficulty,
                     'check_diagram' => $check->check_diagram,
                     'diagram_note' => $check->diagram_note,
+                    'skipped' => (bool) $check->skipped,
+                    'skip_reason' => $check->skip_reason,
                     'is_complete' => $check->isComplete(),
                 ] : null,
             ];
         })->values()->all();
 
-        $verified = collect($rows)->filter(fn ($row) => $row['is_verified'])->count();
+        $verified = collect($rows)->filter(fn ($row) => $row['is_verified'] && ! $row['is_skipped'])->count();
+        $skipped = collect($rows)->filter(fn ($row) => $row['is_skipped'])->count();
         $total = count($rows);
+        $done = collect($rows)->filter(fn ($row) => $row['is_verified'])->count();
 
         return [
             'run' => $run->fresh(),
@@ -115,7 +121,9 @@ class ContentVerificationService
             'summary' => [
                 'total' => $total,
                 'verified' => $verified,
-                'unverified' => $total - $verified,
+                'skipped' => $skipped,
+                'done' => $done,
+                'unverified' => $total - $done,
             ],
         ];
     }
@@ -211,6 +219,9 @@ class ContentVerificationService
                 ? 'Diagram reviewed'
                 : 'No diagram needed';
             $payloadChecks['verified_at'] = now();
+            $payloadChecks['skipped'] = false;
+            $payloadChecks['skip_reason'] = null;
+            $payloadChecks['skipped_at'] = null;
 
             $check->update($payloadChecks);
 
@@ -323,6 +334,9 @@ class ContentVerificationService
                     ? 'Diagram reviewed'
                     : 'No diagram needed';
                 $payload['verified_at'] = now();
+                $payload['skipped'] = false;
+                $payload['skip_reason'] = null;
+                $payload['skipped_at'] = null;
                 $check->update($payload);
                 $marked++;
                 app(ContentUploadTaskService::class)->completeQuestionCorrection($run->task, (int) $questionId);
@@ -334,6 +348,72 @@ class ContentVerificationService
         $this->maybeCompleteRunIfAllVerified($run->fresh());
 
         return $marked;
+    }
+
+    /**
+     * Skip an irrelevant question — counts as reviewed, excluded from uploader pay.
+     */
+    public function skipQuestion(
+        ContentVerificationRun $run,
+        int $questionId,
+        User $user,
+        ?string $reason = null,
+    ): ContentVerificationCheck {
+        $this->assertCanEditRun($run, $user);
+        $this->questionForRun($run, $questionId);
+
+        $check = ContentVerificationCheck::query()->firstOrCreate(
+            [
+                'content_verification_run_id' => $run->id,
+                'question_id' => $questionId,
+            ],
+            ['diagram_note' => 'No diagram needed'],
+        );
+
+        $check->update([
+            'skipped' => true,
+            'skip_reason' => filled($reason) ? trim($reason) : 'Irrelevant — skipped during verification',
+            'skipped_at' => now(),
+            'verified_at' => now(),
+        ]);
+
+        $this->syncTaskStatus($run);
+        $this->maybeCompleteRunIfAllVerified($run->fresh());
+
+        return $check->fresh();
+    }
+
+    public function unskipQuestion(
+        ContentVerificationRun $run,
+        int $questionId,
+        User $user,
+    ): ContentVerificationCheck {
+        $this->assertCanEditRun($run, $user);
+        $this->questionForRun($run, $questionId);
+
+        $check = ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $run->id)
+            ->where('question_id', $questionId)
+            ->firstOrFail();
+
+        $allChecked = true;
+        foreach (ContentVerificationCheck::CHECK_FIELDS as $field) {
+            if (! $check->{$field}) {
+                $allChecked = false;
+                break;
+            }
+        }
+
+        $check->update([
+            'skipped' => false,
+            'skip_reason' => null,
+            'skipped_at' => null,
+            'verified_at' => $allChecked ? ($check->verified_at ?? now()) : null,
+        ]);
+
+        $this->syncTaskStatus($run);
+
+        return $check->fresh();
     }
 
     /**
@@ -363,6 +443,9 @@ class ContentVerificationService
         foreach ($runs as $run) {
             $reset = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, false);
             $reset['verified_at'] = null;
+            $reset['skipped'] = false;
+            $reset['skip_reason'] = null;
+            $reset['skipped_at'] = null;
 
             ContentVerificationCheck::query()
                 ->where('content_verification_run_id', $run->id)

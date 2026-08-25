@@ -410,6 +410,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/content-tasks/{contentTask}', [ContentUploadTaskController::class, 'show'])->name('content-tasks.show');
     Route::post('/content-tasks/{contentTask}/reassign', [ContentUploadTaskController::class, 'reassign'])->name('content-tasks.reassign');
     Route::post('/content-tasks/{contentTask}/verification-question', [ContentUploadTaskController::class, 'saveVerificationQuestion'])->name('content-tasks.verification-question');
+    Route::post('/content-tasks/{contentTask}/verification-skip', [ContentUploadTaskController::class, 'skipVerificationQuestion'])->name('content-tasks.verification-skip');
+    Route::post('/content-tasks/{contentTask}/verification-unskip', [ContentUploadTaskController::class, 'unskipVerificationQuestion'])->name('content-tasks.verification-unskip');
     Route::post('/content-tasks/{contentTask}/verification-batch', [ContentUploadTaskController::class, 'markVerificationBatch'])->name('content-tasks.verification-batch');
     Route::post('/content-tasks/{contentTask}/verification-diagram', [ContentUploadTaskController::class, 'uploadVerificationDiagram'])->name('content-tasks.verification-diagram');
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
@@ -514,6 +516,8 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/corrections/{correction}/start', [ContentTaskController::class, 'startCorrection'])->name('corrections.start');
     Route::post('/tasks/{contentTask}/verification-check', [ContentTaskController::class, 'saveVerificationCheck'])->name('tasks.verification-check');
     Route::post('/tasks/{contentTask}/verification-question', [ContentTaskController::class, 'saveVerificationQuestion'])->name('tasks.verification-question');
+    Route::post('/tasks/{contentTask}/verification-skip', [ContentTaskController::class, 'skipVerificationQuestion'])->name('tasks.verification-skip');
+    Route::post('/tasks/{contentTask}/verification-unskip', [ContentTaskController::class, 'unskipVerificationQuestion'])->name('tasks.verification-unskip');
     Route::post('/tasks/{contentTask}/verification-diagram', [ContentTaskController::class, 'uploadVerificationDiagram'])->name('tasks.verification-diagram');
     Route::post('/tasks/{contentTask}/verification-diagram/remove', [ContentTaskController::class, 'removeVerificationDiagram'])->name('tasks.verification-diagram.remove');
     Route::post('/tasks/{contentTask}/complete-verification', [ContentTaskController::class, 'completeVerification'])->name('tasks.complete-verification');
