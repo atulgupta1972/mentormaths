@@ -49,6 +49,10 @@ const canSubmit = computed(() => canEdit.value
     && props.progress.included > 0
     && props.progress.checked === props.progress.included);
 
+const nonNumericRows = computed(() =>
+    props.rows.filter((row) => !row.skipped && row.non_numeric_answer),
+);
+
 const lastCheck = computed(() => page.props.flash?.conversion_check ?? null);
 
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
@@ -92,6 +96,40 @@ const skipRow = (row, skipped) => {
         only: ['rows', 'progress', 'flash', 'task'],
     });
 };
+
+const deleteFromConversion = (indexes) => {
+    if (!indexes.length) {
+        return;
+    }
+
+    router.post(route('content.tasks.convert-clear', props.task.id), {
+        indexes,
+    }, {
+        preserveScroll: true,
+        only: ['rows', 'progress', 'flash', 'task'],
+    });
+};
+
+const deleteWordAnswerRow = (row) => {
+    if (!window.confirm('Delete this question from fill-in-blank conversion? The MCQ stays. Use this when the answer is words, not a number.')) {
+        return;
+    }
+
+    deleteFromConversion([row.index]);
+};
+
+const deleteAllNonNumeric = () => {
+    const indexes = nonNumericRows.value.map((row) => row.index);
+    if (!indexes.length) {
+        return;
+    }
+
+    if (!window.confirm(`Delete ${indexes.length} question(s) whose answers are not numbers from conversion? MCQs stay.`)) {
+        return;
+    }
+
+    deleteFromConversion(indexes);
+};
 </script>
 
 <template>
@@ -127,16 +165,27 @@ const skipRow = (row, skipped) => {
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
                     Blank answers must be <strong>numbers or fractions</strong> only (e.g. 42, 3.5, 3/4) — not English words.
-                    Skip rows you cannot rewrite numerically. For the rest, edit the blank, then
+                    If a question’s answer is not a number, use <strong>Delete from conversion</strong> (MCQ stays).
+                    For the rest, edit the blank, then
                     <strong>Check as a student</strong> with the key hidden. After Check, the stored answer is shown so you can confirm —
                     if the MCQ key looks wrong, edit the fill-in-blank answer and Check again.
                     Admin publishes fill-in-blank and written after you submit.
                 </div>
 
-                <p class="text-sm text-slate-600">
-                    {{ progress.checked }} of {{ progress.included }} included blanks checked
-                    · {{ progress.skipped }} skipped (MCQ only)
-                </p>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <p class="text-sm text-slate-600">
+                        {{ progress.checked }} of {{ progress.included }} included blanks checked
+                        · {{ progress.skipped }} skipped / deleted (MCQ only)
+                    </p>
+                    <button
+                        v-if="canEdit && nonNumericRows.length"
+                        type="button"
+                        class="rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-100"
+                        @click="deleteAllNonNumeric"
+                    >
+                        Delete all non-numeric ({{ nonNumericRows.length }})
+                    </button>
+                </div>
 
                 <div v-if="task.awaiting_agreement" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <p class="text-sm text-gray-700">
@@ -157,12 +206,22 @@ const skipRow = (row, skipped) => {
                     v-for="row in rows"
                     :key="row.index"
                     class="rounded-xl border bg-white p-4 shadow-sm"
-                    :class="row.skipped ? 'border-slate-200 opacity-80' : row.checked ? 'border-emerald-300' : 'border-slate-200'"
+                    :class="row.skipped
+                        ? 'border-slate-200 opacity-80'
+                        : row.non_numeric_answer
+                            ? 'border-amber-300 bg-amber-50/40'
+                            : row.checked
+                                ? 'border-emerald-300'
+                                : 'border-slate-200'"
                 >
                     <div class="flex flex-wrap items-start justify-between gap-2">
                         <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ row.source_label }}</p>
                         <div class="flex flex-wrap gap-2">
                             <span v-if="row.skipped" class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">Skipped · MCQ only</span>
+                            <span
+                                v-else-if="row.non_numeric_answer"
+                                class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-950"
+                            >Answer not a number</span>
                             <span v-else-if="row.checked" class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">Checked</span>
                             <span v-else class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">Needs Check</span>
                         </div>
@@ -177,17 +236,32 @@ const skipRow = (row, skipped) => {
                         </details>
                     </div>
 
-                    <div v-if="canEdit" class="mt-3 flex justify-end">
+                    <div v-if="canEdit" class="mt-3 flex flex-wrap items-center justify-end gap-3">
+                        <button
+                            v-if="!row.skipped && row.non_numeric_answer"
+                            type="button"
+                            class="rounded-md border border-rose-300 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-900 hover:bg-rose-100"
+                            @click="deleteWordAnswerRow(row)"
+                        >
+                            Delete from conversion (not a number)
+                        </button>
                         <button
                             type="button"
                             class="text-xs font-medium text-slate-600 hover:underline"
                             @click="skipRow(row, !row.skipped)"
                         >
-                            {{ row.skipped ? 'Unskip — convert this one' : 'Skip (number name / keep MCQ)' }}
+                            {{ row.skipped ? 'Unskip — convert this one' : 'Skip (keep MCQ only)' }}
                         </button>
                     </div>
 
                     <template v-if="!row.skipped">
+                        <div
+                            v-if="row.non_numeric_answer"
+                            class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+                        >
+                            This answer looks like words, not a number. Delete it from conversion, or rewrite the blank answer as a number/fraction and Check.
+                        </div>
+
                         <label class="mt-4 block text-xs font-semibold text-slate-600">Fill-in-blank stem (must include ____)</label>
                         <textarea
                             v-model="drafts[row.index].fill_blank_question_text"

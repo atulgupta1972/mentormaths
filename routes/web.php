@@ -528,6 +528,7 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/tasks/{contentTask}/convert-save', [ContentTaskController::class, 'saveConversionRow'])->name('tasks.convert-save');
     Route::post('/tasks/{contentTask}/convert-check', [ContentTaskController::class, 'checkConversionRow'])->name('tasks.convert-check');
     Route::post('/tasks/{contentTask}/convert-skip', [ContentTaskController::class, 'skipConversionRow'])->name('tasks.convert-skip');
+    Route::post('/tasks/{contentTask}/convert-clear', [ContentTaskController::class, 'clearConversionRows'])->name('tasks.convert-clear');
     Route::post('/tasks/{contentTask}/ping-session', [ContentTaskController::class, 'pingSession'])->name('tasks.ping-session');
 
     Route::middleware('content.chapter')->group(function () {

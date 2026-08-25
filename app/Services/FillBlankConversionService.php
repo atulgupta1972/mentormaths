@@ -104,10 +104,48 @@ class FillBlankConversionService
                 'skipped' => $skipped,
                 'checked' => $checked && ! $skipped,
                 'include_in_written' => (bool) ($item['include_in_written'] ?? true),
+                'non_numeric_answer' => $this->looksLikeWordAnswer($answer)
+                    || $this->looksLikeWordAnswer((string) ($item['correct_answer'] ?? '')),
             ];
         }
 
         return $rows;
+    }
+
+    /**
+     * True when the answer has letters and is not a plain number / fraction.
+     */
+    public function looksLikeWordAnswer(?string $answer): bool
+    {
+        $value = trim((string) $answer);
+
+        if ($value === '') {
+            return false;
+        }
+
+        $compact = str_replace(',', '', $value);
+
+        if (preg_match('/^-?\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)?$/', $compact)) {
+            return false;
+        }
+
+        if (preg_match('/^-?\d+\s+\d+\s*\/\s*\d+$/', $value)) {
+            return false;
+        }
+
+        return (bool) preg_match('/[a-zA-Z]/', $value);
+    }
+
+    /**
+     * Remove fill-blank conversion for selected rows (MCQs stay). Uploader must be in progress.
+     *
+     * @param  list<int>  $indexes
+     */
+    public function removeFromConversion(ContentUploadTask $task, array $indexes): int
+    {
+        $this->assertWorkable($task);
+
+        return $this->clearRows($task, $indexes);
     }
 
     /**

@@ -119,6 +119,74 @@ class FillBlankConversionTest extends TestCase
         $this->assertNotEmpty($mcqChapter->writtenWorksheetIds());
     }
 
+    public function test_uploader_can_delete_non_numeric_answers_from_conversion(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash',
+            'code' => 'GP',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $chapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 3,
+            'title' => 'Words',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+            'extraction_items' => [
+                [
+                    'question_text' => 'What is forty plus five?',
+                    'correct_answer' => 'forty five',
+                    'label' => 'Words',
+                ],
+                [
+                    'question_text' => 'What is 2+2?',
+                    'correct_answer' => '4',
+                    'label' => 'Numbers',
+                ],
+            ],
+        ]);
+
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $task = ContentUploadTask::create([
+            'textbook_chapter_id' => $chapter->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_FILL_BLANK_CONVERSION,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 20,
+            'agreed_amount_inr' => 20,
+            'agreed_at' => now(),
+        ]);
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.convert', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('ContentUploader/Tasks/FillBlankConvert')
+                ->where('rows.0.non_numeric_answer', true)
+                ->where('rows.1.non_numeric_answer', false));
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.convert-clear', $task), [
+                'indexes' => [0],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $chapter->refresh();
+        $this->assertTrue((bool) ($chapter->extraction_items[0]['fill_blank_skipped'] ?? false));
+        $this->assertSame('4', $chapter->extraction_items[1]['correct_answer']);
+        $this->assertCount(2, $chapter->extraction_items);
+    }
+
     public function test_admin_can_clear_partial_and_all_conversion_rows(): void
     {
         [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();

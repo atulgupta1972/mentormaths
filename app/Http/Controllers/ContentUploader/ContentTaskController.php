@@ -503,6 +503,27 @@ class ContentTaskController extends Controller
             : 'Unskipped. Convert and Check this blank.');
     }
 
+    public function clearConversionRows(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+        abort_unless($contentTask->isFillBlankConversion(), 404);
+
+        $validated = $request->validate([
+            'indexes' => ['required', 'array', 'min:1'],
+            'indexes.*' => ['integer', 'min:0'],
+        ]);
+
+        try {
+            $cleared = $this->fillBlankConversion->removeFromConversion($contentTask, $validated['indexes']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', $cleared === 1
+            ? 'Deleted from conversion — stays MCQ only (answer was not a number).'
+            : "Deleted {$cleared} questions from conversion (MCQs kept).");
+    }
+
     /**
      * @return array<string, mixed>
      */
