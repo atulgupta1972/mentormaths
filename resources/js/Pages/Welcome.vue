@@ -197,13 +197,13 @@ const tierHead = {
                         :href="route('registration.create')"
                         class="rounded-lg border border-slate-300/80 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 backdrop-blur transition hover:bg-white sm:px-5 sm:py-2.5"
                     >
-                        Student access
+                        Students
                     </Link>
                     <Link
                         :href="route('mentor-access.create')"
                         class="rounded-lg bg-[#0f4c5c] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0a3642] sm:px-5 sm:py-2.5"
                     >
-                        Join as mentor
+                        Mentors / School
                     </Link>
                 </template>
             </div>
@@ -233,40 +233,45 @@ const tierHead = {
                             <span class="font-semibold text-slate-800">coaching class</span>.
                         </p>
 
-                        <div class="mm-rise-late mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                            <Link
-                                v-if="!$page.props.auth?.user"
-                                :href="route('registration.create')"
-                                class="rounded-lg bg-[#0f4c5c] px-5 py-2.5 text-center text-sm font-bold text-white transition hover:bg-[#0a3642]"
-                            >
-                                Request early access
-                            </Link>
+                        <div class="mm-rise-late mt-6 space-y-3">
+                            <template v-if="!$page.props.auth?.user">
+                                <Link
+                                    :href="route('registration.create')"
+                                    class="block w-full rounded-xl bg-[#0f4c5c] px-5 py-3.5 text-center text-base font-bold text-white shadow-sm transition hover:bg-[#0a3642] sm:text-lg"
+                                >
+                                    Request early access — Students
+                                </Link>
+                                <Link
+                                    :href="route('mentor-access.create')"
+                                    class="block w-full rounded-xl border-2 border-teal-700/40 bg-teal-50 px-5 py-3.5 text-center text-base font-bold text-teal-950 transition hover:bg-teal-100 sm:text-lg"
+                                >
+                                    Request early access — Mentors / Classes / School
+                                </Link>
+                            </template>
                             <Link
                                 :href="route('login')"
-                                class="rounded-lg border border-slate-300 bg-white/90 px-5 py-2.5 text-center text-sm font-semibold text-slate-800 transition hover:bg-white"
+                                class="block w-full rounded-xl border border-slate-300 bg-white/90 px-5 py-3 text-center text-sm font-semibold text-slate-800 transition hover:bg-white sm:text-base"
                             >
-                                Log in
-                            </Link>
-                            <Link
-                                v-if="!$page.props.auth?.user"
-                                :href="route('mentor-access.create')"
-                                class="rounded-lg border border-teal-800/30 bg-teal-50/80 px-5 py-2.5 text-center text-sm font-semibold text-teal-950 transition hover:bg-teal-100"
-                            >
-                                Mentors — join
+                                Already have access? Log in
                             </Link>
                         </div>
 
-                        <div class="mt-5 flex flex-wrap gap-1.5">
-                            <span
-                                v-for="klass in classes"
-                                :key="klass"
-                                class="rounded border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-700"
-                            >
-                                {{ klass }}
-                            </span>
-                            <span class="rounded border border-teal-200 bg-teal-50/90 px-2 py-0.5 text-[11px] font-semibold text-teal-900">
-                                CBSE · ICSE
-                            </span>
+                        <div class="mt-6">
+                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                Classes &amp; boards
+                            </p>
+                            <div class="mt-2 flex flex-wrap gap-2">
+                                <span
+                                    v-for="klass in classes"
+                                    :key="klass"
+                                    class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800"
+                                >
+                                    {{ klass }}
+                                </span>
+                                <span class="rounded-lg border border-teal-300 bg-teal-50 px-3 py-1.5 text-sm font-semibold text-teal-900">
+                                    CBSE · ICSE
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -598,24 +603,24 @@ const tierHead = {
                         Soft launch for individual learners, school classes, and coaching classes.
                         Request access and start on the study-plan scorecard — Completion %, Score %, Revision status.
                     </p>
-                    <div class="mt-8 flex flex-wrap justify-center gap-3">
+                    <div class="mt-8 flex flex-col items-stretch justify-center gap-3 sm:mx-auto sm:max-w-xl sm:flex-row sm:flex-wrap">
                         <Link
                             v-if="!$page.props.auth?.user"
                             :href="route('registration.create')"
-                            class="rounded-lg bg-[#0f4c5c] px-8 py-3.5 text-base font-bold text-white transition hover:bg-[#0a3642]"
+                            class="rounded-xl bg-[#0f4c5c] px-6 py-3.5 text-center text-base font-bold text-white transition hover:bg-[#0a3642]"
                         >
-                            Request student access
+                            Request early access — Students
                         </Link>
                         <Link
                             v-if="!$page.props.auth?.user"
                             :href="route('mentor-access.create')"
-                            class="rounded-lg border border-[#0f4c5c]/40 bg-teal-50 px-8 py-3.5 text-base font-bold text-[#0f4c5c] transition hover:bg-teal-100"
+                            class="rounded-xl border-2 border-teal-700/40 bg-teal-50 px-6 py-3.5 text-center text-base font-bold text-teal-950 transition hover:bg-teal-100"
                         >
-                            Request mentor access
+                            Request early access — Mentors / Classes / School
                         </Link>
                         <Link
                             :href="route('login')"
-                            class="rounded-lg border border-slate-300 bg-white px-8 py-3.5 text-base font-semibold text-slate-800 transition hover:bg-slate-50"
+                            class="rounded-xl border border-slate-300 bg-white px-6 py-3.5 text-center text-base font-semibold text-slate-800 transition hover:bg-slate-50"
                         >
                             Log in
                         </Link>
