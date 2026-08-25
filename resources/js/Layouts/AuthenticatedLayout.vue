@@ -64,6 +64,7 @@ const teachingGroup = computed(() => ({
     label: 'Teaching',
     active:
         route().current('admin.classes.*')
+        || route().current('mentor.classes.*')
         || route().current('admin.practice-sets.*')
         || route().current('admin.catch-up.*')
         || route().current('admin.written-sheets.*')
@@ -78,9 +79,13 @@ const teachingGroup = computed(() => ({
     items: [
         {
             label: 'Classes',
-            href: route('admin.classes.index'),
-            active: route().current('admin.classes.index') || route().current('admin.classes.show'),
-            show: true,
+            href: isMentor.value && !isAdmin.value
+                ? route('mentor.classes.index')
+                : route('admin.classes.index'),
+            active: route().current('admin.classes.index')
+                || route().current('admin.classes.show')
+                || route().current('mentor.classes.*'),
+            show: isAdmin.value || isMentor.value,
         },
         {
             label: 'Assign to class',

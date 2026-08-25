@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CoachingClassTeacher;
 use App\Models\Student;
 use App\Models\StudentMentorAssignment;
+use App\Models\User;
 use App\Support\EnrollmentSource;
 use Illuminate\Support\Facades\Auth;
 
@@ -295,6 +296,62 @@ class StudentMentorService
                 'started_at' => now(),
                 'notes' => 'Mapped via enrollment source: '.$student->enrollment_source,
             ]);
+        }
+    }
+
+    /**
+     * Student IDs linked to this platform mentor (coaching teacher user or mentor_user_id).
+     *
+     * @return list<int>
+     */
+    public function studentIdsForUser(User $user): array
+    {
+        $teacherIds = CoachingClassTeacher::query()
+            ->where('user_id', $user->id)
+            ->pluck('id')
+            ->all();
+
+        $fromTeachers = $teacherIds === []
+            ? collect()
+            : Student::query()
+                ->whereIn('coaching_class_teacher_id', $teacherIds)
+                ->pluck('id');
+
+        $fromMentorUser = Student::query()
+            ->where('mentor_user_id', $user->id)
+            ->pluck('id');
+
+        $fromAssignments = StudentMentorAssignment::query()
+            ->where('mentor_user_id', $user->id)
+            ->where('is_active', true)
+            ->pluck('student_id');
+
+        return $fromTeachers
+            ->merge($fromMentorUser)
+            ->merge($fromAssignments)
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function canAccessStudent(User $user, int $studentId): bool
+    {
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if (! $user->isMentor()) {
+            return false;
+        }
+
+        return in_array($studentId, $this->studentIdsForUser($user), true);
+    }
+
+    public function assertCanAccessStudent(User $user, int $studentId): void
+    {
+        if (! $this->canAccessStudent($user, $studentId)) {
+            abort(403, 'You can only view students enrolled under you.');
         }
     }
 }

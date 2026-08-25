@@ -14,10 +14,9 @@ use App\Models\SyllabusVersion;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\ClassAssignmentService;
-use App\Services\ClassCoverageService;
+use App\Services\ClassHubProgressService;
 use App\Services\ExamPlanService;
-use App\Support\StudentEngagementMetrics;
-use Carbon\Carbon;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -29,11 +28,13 @@ class ClassHubController extends Controller
         private AdminGradeContext $gradeContext,
         private ExamPlanService $examPlanService,
         private ClassAssignmentService $classAssignmentService,
-        private ClassCoverageService $classCoverage,
+        private ClassHubProgressService $classHubProgress,
     ) {}
 
     public function index(Request $request): Response
     {
+        $this->denyMentors($request);
+
         $activeYear = AcademicYear::active();
         $maths = Subject::query()->where('code', 'MATHS')->first();
 
@@ -89,6 +90,8 @@ class ClassHubController extends Controller
 
     public function show(Request $request, GradeLevel $gradeLevel): Response
     {
+        $this->denyMentors($request);
+
         if (! in_array($gradeLevel->sort_order, AdminGradeContext::CLASS_SORT_ORDERS, true)) {
             abort(404);
         }
@@ -179,7 +182,7 @@ class ClassHubController extends Controller
             $enrollments = $this->examPlanService->activeEnrollmentForYear($activeYear->id, $gradeLevel->id, $boardId);
             $enrollments->loadMissing(['student.user', 'academicYear']);
             $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, true);
-            $examPlanRows = $this->attachClassProgressSummaries($enrollments, $examPlanRows);
+            $examPlanRows = $this->classHubProgress->attach($enrollments, $examPlanRows);
             $examPlanStats = [
                 'with_upcoming' => collect($examPlanRows)->where('has_upcoming', true)->count(),
                 'without_plan' => collect($examPlanRows)->where('has_plan', false)->count(),
@@ -229,6 +232,8 @@ class ClassHubController extends Controller
 
     public function updateAttemptProtection(Request $request, GradeLevel $gradeLevel): RedirectResponse
     {
+        abort_unless($request->user()?->isAdmin(), 403);
+
         if (! in_array($gradeLevel->sort_order, AdminGradeContext::CLASS_SORT_ORDERS, true)) {
             abort(404);
         }
@@ -243,68 +248,16 @@ class ClassHubController extends Controller
         return back()->with('success', 'Attempt protection settings saved for '.$gradeLevel->name.'.');
     }
 
-    /**
-     * @param  \Illuminate\Support\Collection<int, StudentEnrollment>  $enrollments
-     * @param  list<array<string, mixed>>  $rows
-     * @return list<array<string, mixed>>
-     */
-    private function attachClassProgressSummaries($enrollments, array $rows): array
+    private function denyMentors(Request $request): void
     {
-        $byEnrollmentId = $enrollments->keyBy('id');
+        $user = $request->user();
 
-        return array_map(function (array $row) use ($byEnrollmentId) {
-            $enrollment = $byEnrollmentId->get($row['enrollment_id'] ?? null);
-
-            if (! $enrollment) {
-                $row['progress'] = $this->emptyProgressSummary();
-
-                return $row;
-            }
-
-            $from = $enrollment->academicYear?->starts_on
-                ? Carbon::parse($enrollment->academicYear->starts_on)->startOfDay()
-                : now()->subMonths(6)->startOfDay();
-            $to = now()->endOfDay();
-
-            $engagement = StudentEngagementMetrics::forEnrollment($enrollment, $from, $to);
-            $performance = $this->classCoverage->studyPlanPerformance($enrollment) ?? [];
-
-            $seconds = (int) ($engagement['time_spent_seconds'] ?? 0);
-            $hours = $seconds > 0 ? round($seconds / 3600, 1) : 0.0;
-
-            $row['progress'] = [
-                'completion_pct' => $performance['completion_pct'] ?? null,
-                'score_pct' => $performance['score_pct'] ?? null,
-                'revision_done' => $performance['correction_done'] ?? 0,
-                'revision_pending' => $performance['correction_pending'] ?? 0,
-                'open_wrongs' => $performance['open_wrongs'] ?? 0,
-                'sets_done' => $performance['done'] ?? 0,
-                'sets_total' => $performance['total'] ?? 0,
-                'days_logged' => (int) ($engagement['days_logged_in'] ?? 0),
-                'time_spent_label' => $engagement['time_spent_label'] ?? '0 sec',
-                'time_spent_hours' => $hours,
-            ];
-
-            return $row;
-        }, $rows);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function emptyProgressSummary(): array
-    {
-        return [
-            'completion_pct' => null,
-            'score_pct' => null,
-            'revision_done' => 0,
-            'revision_pending' => 0,
-            'open_wrongs' => 0,
-            'sets_done' => 0,
-            'sets_total' => 0,
-            'days_logged' => 0,
-            'time_spent_label' => '0 sec',
-            'time_spent_hours' => 0,
-        ];
+        if ($user?->isMentor() && ! $user->isAdmin()) {
+            throw new HttpResponseException(
+                redirect()
+                    ->route('mentor.classes.index')
+                    ->with('warning', 'You can only see classes and students enrolled under you.')
+            );
+        }
     }
 }

@@ -10,6 +10,7 @@ use App\Models\SyllabusChapter;
 use App\Services\AdminGradeContext;
 use App\Services\ClassCoverageService;
 use App\Services\ExamPlanService;
+use App\Services\StudentMentorService;
 use App\Services\StudyPlanReminderEmailService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class SchoolStudyPlanController extends Controller
         private AdminGradeContext $gradeContext,
         private StudyPlanReminderEmailService $reminderEmails,
         private ExamPlanService $examPlanService,
+        private StudentMentorService $mentorService,
     ) {}
 
     public function index(Request $request): Response
@@ -30,6 +32,11 @@ class SchoolStudyPlanController extends Controller
         $activeYear = AcademicYear::active();
         $gradeLevel = $this->gradeContext->resolve($request);
         $studentId = $request->integer('student_id') ?: null;
+        $user = $request->user();
+
+        if ($studentId && $user?->isMentor() && ! $user->isAdmin()) {
+            $this->mentorService->assertCanAccessStudent($user, $studentId);
+        }
 
         $breakdown = $gradeLevel
             ? $this->reminderEmails->classBreakdown($gradeLevel, $activeYear)
@@ -48,6 +55,12 @@ class SchoolStudyPlanController extends Controller
 
         $students = collect($breakdown['students']);
 
+        if ($user?->isMentor() && ! $user->isAdmin()) {
+            $allowed = $this->mentorService->studentIdsForUser($user);
+            $students = $students->filter(fn (array $row) => in_array((int) ($row['id'] ?? 0), $allowed, true))->values();
+            $breakdown['students'] = $students->all();
+        }
+
         $selectedStudent = null;
         $classCoverage = ['chapters' => [], 'under_study_chapter_id' => null];
         $context = null;
@@ -60,7 +73,10 @@ class SchoolStudyPlanController extends Controller
                 ->with(['student:id,name', 'gradeLevel:id,name', 'board:id,name'])
                 ->where('student_id', $studentId)
                 ->when($activeYear, fn ($q) => $q->where('academic_year_id', $activeYear->id))
-                ->when($gradeLevel, fn ($q) => $q->where('grade_level_id', $gradeLevel->id))
+                ->when(
+                    $gradeLevel && ! ($user?->isMentor() && ! $user->isAdmin()),
+                    fn ($q) => $q->where('grade_level_id', $gradeLevel->id),
+                )
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
                 ->first();
 
@@ -138,13 +154,21 @@ class SchoolStudyPlanController extends Controller
 
     public function update(Request $request, Student $student, SyllabusChapter $syllabusChapter): RedirectResponse
     {
+        $user = $request->user();
+        if ($user?->isMentor() && ! $user->isAdmin()) {
+            $this->mentorService->assertCanAccessStudent($user, $student->id);
+        }
+
         $activeYear = AcademicYear::active();
         $gradeLevel = $this->gradeContext->resolve($request);
 
         $enrollment = StudentEnrollment::query()
             ->where('student_id', $student->id)
             ->when($activeYear, fn ($q) => $q->where('academic_year_id', $activeYear->id))
-            ->when($gradeLevel, fn ($q) => $q->where('grade_level_id', $gradeLevel->id))
+            ->when(
+                $gradeLevel && ! ($user?->isMentor() && ! $user->isAdmin()),
+                fn ($q) => $q->where('grade_level_id', $gradeLevel->id),
+            )
             ->where('status', StudentEnrollment::STATUS_ACTIVE)
             ->first();
 

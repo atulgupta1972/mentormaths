@@ -40,6 +40,7 @@ use App\Http\Controllers\ContentUploader\ChapterLibraryController;
 use App\Http\Controllers\ContentUploader\ContentTaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MentorTrialSignupController;
+use App\Http\Controllers\Mentor\ClassHubController as MentorClassHubController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
 use App\Http\Controllers\Student\BasicsDrillController;
@@ -97,6 +98,13 @@ Route::post('/teachers/register/profile/{token}', [TeacherRegistrationRequestCon
 Route::get('/dashboard', DashboardController::class)
     ->middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])
     ->name('dashboard');
+
+Route::middleware(['auth', 'verified'])->prefix('mentor')->name('mentor.')->group(function () {
+    Route::get('/classes', [MentorClassHubController::class, 'index'])->name('classes.index');
+    Route::get('/classes/{coachingClass}', [MentorClassHubController::class, 'show'])
+        ->whereNumber('coachingClass')
+        ->name('classes.show');
+});
 
 Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/classes', [ClassHubController::class, 'index'])->name('classes.index');

@@ -84,6 +84,10 @@ class DashboardController extends Controller
             return redirect()->route('content.tasks.index');
         }
 
+        if ($user->isMentor() && ! $user->isAdmin()) {
+            return redirect()->route('mentor.classes.index');
+        }
+
         $enrollment = $user->student?->currentEnrollment();
         $enrollment?->loadMissing(['gradeLevel:id,name', 'board:id,name']);
         $gradeLevelId = $request->integer('grade_level_id') ?: null;
