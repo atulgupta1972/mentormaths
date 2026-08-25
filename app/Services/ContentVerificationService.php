@@ -94,6 +94,10 @@ class ContentVerificationService
                 'is_verified' => $check?->isComplete() ?? false,
                 'is_skipped' => (bool) ($check?->skipped),
                 'skip_reason' => $check?->skip_reason,
+                'ai_verdict' => $check?->ai_verdict,
+                'ai_confidence' => $check?->ai_confidence,
+                'ai_note' => $check?->ai_note,
+                'ai_reviewed_at' => $check?->ai_reviewed_at?->toIso8601String(),
                 'checks' => $check ? [
                     'check_text' => $check->check_text,
                     'check_options' => $check->check_options,

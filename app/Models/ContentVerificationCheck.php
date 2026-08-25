@@ -32,6 +32,10 @@ class ContentVerificationCheck extends Model
         'skipped',
         'skip_reason',
         'skipped_at',
+        'ai_verdict',
+        'ai_confidence',
+        'ai_note',
+        'ai_reviewed_at',
         'verified_at',
     ];
 
@@ -48,6 +52,7 @@ class ContentVerificationCheck extends Model
             'skipped' => 'boolean',
             'verified_at' => 'datetime',
             'skipped_at' => 'datetime',
+            'ai_reviewed_at' => 'datetime',
         ];
     }
 

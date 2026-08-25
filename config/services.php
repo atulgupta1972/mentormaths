@@ -41,6 +41,8 @@ return [
         'textbook_extraction_model' => env('OPENAI_TEXTBOOK_EXTRACTION_MODEL', 'gpt-4o-mini'),
         'textbook_extraction_pages_per_batch' => (int) env('OPENAI_TEXTBOOK_EXTRACTION_PAGES_PER_BATCH', 5),
         'textbook_extraction_max_tokens' => (int) env('OPENAI_TEXTBOOK_EXTRACTION_MAX_TOKENS', 16384),
+        'content_verification_model' => env('OPENAI_CONTENT_VERIFICATION_MODEL', env('OPENAI_GRADING_MODEL', 'gpt-4o-mini')),
+        'content_verification_batch_size' => (int) env('OPENAI_CONTENT_VERIFICATION_BATCH_SIZE', 12),
     ],
 
 ];

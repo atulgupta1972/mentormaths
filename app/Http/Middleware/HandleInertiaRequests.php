@@ -58,6 +58,7 @@ class HandleInertiaRequests extends Middleware
                 'guided_feedback' => fn () => $request->session()->get('guided_feedback'),
                 'save_confirmation' => fn () => $request->session()->get('save_confirmation'),
                 'conversion_check' => fn () => $request->session()->get('conversion_check'),
+                'ai_review' => fn () => $request->session()->get('ai_review'),
             ],
             'contentUploaderGuideUrl' => '/guides/content-uploader-guide.html',
             'appTimezone' => config('app.timezone'),

@@ -7,6 +7,7 @@ use App\Models\ContentQuestionCorrection;
 use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
 use App\Models\QuestionBlankAnswer;
+use App\Services\ContentAiVerificationService;
 use App\Services\ContentUploaderDashboardService;
 use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
@@ -23,6 +24,7 @@ class ContentTaskController extends Controller
     public function __construct(
         private ContentUploadTaskService $taskService,
         private ContentVerificationService $verificationService,
+        private ContentAiVerificationService $aiVerificationService,
         private ContentWorkSessionService $sessionService,
         private ContentUploaderDashboardService $uploaderDashboard,
         private FillBlankConversionService $fillBlankConversion,
@@ -262,6 +264,47 @@ class ContentTaskController extends Controller
         }
 
         return back()->with('success', 'Skip cleared — verify or skip again.');
+    }
+
+    public function aiReviewVerification(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+        ]);
+
+        $run = ContentVerificationRun::query()->findOrFail($validated['run_id']);
+
+        if ($run->content_upload_task_id !== $contentTask->id) {
+            abort(403);
+        }
+
+        try {
+            $result = $this->aiVerificationService->reviewAndApply(
+                $contentTask,
+                $run,
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $message = sprintf(
+            'AI reviewed %d question(s): %d approved, %d skipped (not paid), %d need your attention.',
+            $result['reviewed'],
+            $result['approved'],
+            $result['skipped'],
+            $result['needs_attention'],
+        );
+
+        if ($result['reviewed'] === 0) {
+            $message = 'Nothing left to AI-review — all questions are already verified or skipped.';
+        }
+
+        return back()
+            ->with('success', $message)
+            ->with('ai_review', $result);
     }
 
     public function uploadVerificationDiagram(Request $request, ContentUploadTask $contentTask): RedirectResponse

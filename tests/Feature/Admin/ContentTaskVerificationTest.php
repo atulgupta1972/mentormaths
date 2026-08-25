@@ -135,6 +135,67 @@ class ContentTaskVerificationTest extends TestCase
         $this->assertStringContainsString('skipped', strtolower($task->calculationLabel()));
     }
 
+    public function test_ai_review_auto_approves_high_confidence_ok_questions(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'submitted_at' => now(),
+        ]);
+
+        $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
+
+        config(['services.openai.api_key' => 'test-key']);
+
+        \Illuminate\Support\Facades\Http::fake([
+            'api.openai.com/*' => \Illuminate\Support\Facades\Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'items' => [[
+                                'question_id' => $questionId,
+                                'verdict' => 'approve',
+                                'confidence' => 'high',
+                                'note' => 'Correct MCQ',
+                            ]],
+                        ], JSON_THROW_ON_ERROR),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk();
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $admin->id)
+            ->value('id');
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.verification-ai-review', $task), [
+                'run_id' => $runId,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success')
+            ->assertSessionHas('ai_review');
+
+        $check = \App\Models\ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $runId)
+            ->where('question_id', $questionId)
+            ->firstOrFail();
+
+        $this->assertTrue($check->isComplete());
+        $this->assertFalse($check->skipped);
+        $this->assertSame('approve', $check->ai_verdict);
+        $this->assertSame('high', $check->ai_confidence);
+    }
+
     public function test_admin_verification_shows_uploader_chapter_breakup(): void
     {
         $this->withoutVite();

@@ -14,6 +14,7 @@ use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Services\AdminGradeContext;
 use App\Services\ClassAssignmentService;
+use App\Services\ContentAiVerificationService;
 use App\Services\ContentAllocationMatrixService;
 use App\Services\ContentChapterQuestionService;
 use App\Services\ContentDuplicateGuardService;
@@ -36,6 +37,7 @@ class ContentUploadTaskController extends Controller
     public function __construct(
         private ContentUploadTaskService $taskService,
         private ContentVerificationService $verificationService,
+        private ContentAiVerificationService $aiVerificationService,
         private ContentWorkSessionService $sessionService,
         private AdminGradeContext $gradeContext,
         private ClassAssignmentService $classAssignment,
@@ -677,6 +679,41 @@ class ContentUploadTaskController extends Controller
         }
 
         return back()->with('success', 'Skip cleared.');
+    }
+
+    public function aiReviewVerification(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+        ]);
+
+        $run = $this->authorizeVerificationRun($contentTask, (int) $validated['run_id']);
+
+        try {
+            $result = $this->aiVerificationService->reviewAndApply(
+                $contentTask,
+                $run,
+                $request->user(),
+            );
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $message = sprintf(
+            'AI reviewed %d question(s): %d approved, %d skipped (not paid), %d need your attention.',
+            $result['reviewed'],
+            $result['approved'],
+            $result['skipped'],
+            $result['needs_attention'],
+        );
+
+        if ($result['reviewed'] === 0) {
+            $message = 'Nothing left to AI-review — all questions are already verified or skipped.';
+        }
+
+        return back()
+            ->with('success', $message)
+            ->with('ai_review', $result);
     }
 
     public function markVerificationBatch(Request $request, ContentUploadTask $contentTask): RedirectResponse

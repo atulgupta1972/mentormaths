@@ -369,6 +369,9 @@ const optionLine = (row) =>
                             <td class="px-2 py-2 align-top text-gray-900">
                                 <p class="line-clamp-3 whitespace-pre-wrap">{{ row.question_text }}</p>
                                 <p v-if="row.set_code" class="mt-1 font-mono text-[10px] text-gray-500">{{ row.set_code }}</p>
+                                <p v-if="row.ai_note" class="mt-1 text-[10px] text-violet-800">
+                                    AI {{ row.ai_verdict }}: {{ row.ai_note }}
+                                </p>
                             </td>
                             <td class="px-2 py-2 align-top text-gray-700">
                                 <p class="line-clamp-4">{{ optionLine(row) }}</p>

@@ -1,5 +1,6 @@
 <script setup>
 import AdminContentVerificationBatch from '@/Components/AdminContentVerificationBatch.vue';
+import ContentAiReviewPanel from '@/Components/ContentAiReviewPanel.vue';
 import ContentVerificationPanel from '@/Components/ContentVerificationPanel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -217,6 +218,10 @@ const submitChangeBook = () => {
 const page = usePage();
 const publishForm = useForm({});
 const reviewMode = ref('batch');
+
+const verificationPendingCount = computed(() =>
+    Number(props.verification?.summary?.unverified ?? 0),
+);
 
 const adminTaskPath = (suffix = '') => `/admin/content-tasks/${props.task.id}${suffix}`;
 
@@ -493,6 +498,13 @@ const formatDuration = (seconds) => {
                 >
                     No MCQ set plan saved for this chapter yet.
                 </div>
+
+                <ContentAiReviewPanel
+                    v-if="verification && task.can_verify_questions"
+                    :run-id="verification.run_id"
+                    :pending-count="verificationPendingCount"
+                    :ai-review-route="safeRoute('admin.content-tasks.verification-ai-review', task.id, adminTaskPath('/verification-ai-review'))"
+                />
 
                 <AdminContentVerificationBatch
                     v-if="verification && task.can_verify_questions && reviewMode === 'batch'"

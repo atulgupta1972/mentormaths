@@ -368,6 +368,12 @@ const removeDiagram = (questionId) => {
             >
                 Admin: {{ row.correction_remark }}
             </p>
+            <p
+                v-if="row.ai_note && !row.is_skipped"
+                class="mb-3 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-950"
+            >
+                AI ({{ row.ai_verdict || 'note' }} · {{ row.ai_confidence || 'n/a' }}): {{ row.ai_note }}
+            </p>
 
             <div v-if="row.is_skipped" class="space-y-3">
                 <p class="whitespace-pre-wrap text-sm text-slate-700">{{ row.question_text }}</p>
