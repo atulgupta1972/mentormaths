@@ -12,6 +12,7 @@ use App\Rules\UniqueStudentLoginEmail;
 use App\Services\SelfServeAccessService;
 use App\Support\AccessCodeMailer;
 use App\Support\EnrollmentSource;
+use App\Support\StudentOnboardingMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -147,6 +148,12 @@ class RegistrationRequestController extends Controller
             $registrationRequest->student_name,
             $registrationRequest->parent1_email,
             $mobiles,
+        );
+
+        StudentOnboardingMailer::send(
+            $result['student'],
+            $result['login_email'],
+            $registrationRequest->parent1_email,
         );
 
         AccessCodeMailer::notifyAdmin(

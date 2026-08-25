@@ -19,6 +19,7 @@ class FormulaDrillSessionService
         private PracticeCorrectionQueueService $correctionQueue,
         private AnswerValidationService $answerValidation,
         private QuestionResolutionService $resolutionService,
+        private ClassCoverageService $coverageService,
     ) {}
 
     public function todayDate(): Carbon
@@ -35,8 +36,20 @@ class FormulaDrillSessionService
             ->first();
     }
 
+    /**
+     * Drills start only after the student has filled their school study plan.
+     */
+    public function drillsUnlocked(Student $student): bool
+    {
+        return $this->coverageService->hasMarkedStudyPlan($student->currentEnrollment());
+    }
+
     public function gatePassed(Student $student): bool
     {
+        if (! $this->drillsUnlocked($student)) {
+            return true;
+        }
+
         $session = $this->todaysSession($student);
 
         if (! $session) {

@@ -809,12 +809,14 @@ const formatHelpDate = (value) => {
                         </div>
 
                         <div
-                            v-else-if="classCoverage.chapters?.length && studiedChapterRows.length === 0"
-                            class="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+                            v-else-if="classCoverage.chapters?.length && studiedChapterRows.length === 0 && underStudyChapterRows.length === 0"
+                            class="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3"
                         >
-                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-900">Please start</p>
-                            <p class="mt-1 text-sm text-slate-700">
-                                Mark one chapter as <span class="font-semibold">Under study</span> below so we know what you are learning in school.
+                            <p class="text-xs font-semibold uppercase tracking-wide text-sky-950">Please start — study plan first</p>
+                            <p class="mt-1 text-sm text-sky-900">
+                                Mark chapters as <span class="font-semibold">Studied</span> or one as
+                                <span class="font-semibold">Under study</span> below.
+                                Daily drills unlock only after your study plan is filled.
                             </p>
                         </div>
 

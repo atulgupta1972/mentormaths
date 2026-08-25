@@ -15,6 +15,7 @@ use App\Models\QuestionOption;
 use App\Models\QuestionResolutionItem;
 use App\Models\SetAssignment;
 use App\Models\Student;
+use App\Models\StudentChapterCoverage;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
@@ -95,6 +96,12 @@ class FormulaDrillTest extends TestCase
             'grade_level_id' => $grade->id,
             'school_name' => 'Demo',
             'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => StudentChapterCoverage::STATUS_STUDIED,
         ]);
 
         $worksheet = Worksheet::query()->create([
@@ -237,6 +244,12 @@ class FormulaDrillTest extends TestCase
             'status' => StudentEnrollment::STATUS_ACTIVE,
         ]);
 
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapter7->id,
+            'status' => StudentChapterCoverage::STATUS_UNDER_STUDY,
+        ]);
+
         $worksheet = Worksheet::query()->create([
             'title' => 'Integers practice',
             'set_code' => 'C7-INT-P1',
@@ -361,13 +374,19 @@ class FormulaDrillTest extends TestCase
             'school_name' => 'Demo',
         ]);
 
-        StudentEnrollment::query()->create([
+        $enrollment = StudentEnrollment::query()->create([
             'student_id' => $student->id,
             'academic_year_id' => $year->id,
             'board_id' => $otherBoard->id,
             'grade_level_id' => $grade7->id,
             'school_name' => 'Demo',
             'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $otherChapter7->id,
+            'status' => StudentChapterCoverage::STATUS_UNDER_STUDY,
         ]);
 
         return [
@@ -459,6 +478,12 @@ class FormulaDrillTest extends TestCase
             'grade_level_id' => $grade9->id,
             'school_name' => 'Demo',
             'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapter9->id,
+            'status' => StudentChapterCoverage::STATUS_UNDER_STUDY,
         ]);
 
         $worksheet = Worksheet::query()->create([

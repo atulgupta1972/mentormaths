@@ -124,6 +124,21 @@ class ClassCoverageService
     }
 
     /**
+     * True when the student has marked at least one chapter Studied or Under study.
+     * Daily drills unlock only after this (first time and thereafter).
+     */
+    public function hasMarkedStudyPlan(?StudentEnrollment $enrollment): bool
+    {
+        if (! $enrollment) {
+            return false;
+        }
+
+        return StudentChapterCoverage::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->exists();
+    }
+
+    /**
      * Overall study-plan status for chapters marked Studied / Under study (matches dashboard card).
      *
      * @return array{

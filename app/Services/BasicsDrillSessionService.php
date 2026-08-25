@@ -27,6 +27,10 @@ class BasicsDrillSessionService
 
     public function gatePassed(Student $student): bool
     {
+        if (! $this->formulaService->drillsUnlocked($student)) {
+            return true;
+        }
+
         if (! $this->settingsService->isEnabledForEnrollment($student->currentEnrollment())) {
             return ! $this->correctionService->needsFinalCorrection($student);
         }

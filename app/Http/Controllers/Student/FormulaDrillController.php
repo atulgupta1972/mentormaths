@@ -23,6 +23,12 @@ class FormulaDrillController extends Controller
 
         abort_unless($student, 403);
 
+        if (! $this->sessionService->drillsUnlocked($student)) {
+            return redirect()
+                ->route('student.school-study-plan.show')
+                ->with('warning', 'Mark your school study plan first (Studied / Under study). Daily drills unlock after that.');
+        }
+
         $session = $this->sessionService->getOrCreateTodaysSession($student);
 
         if ($session->isComplete()) {

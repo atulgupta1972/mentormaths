@@ -58,6 +58,7 @@ class EnsureBasicsDrillComplete
         return $request->routeIs(
             'student.formula-drill.*',
             'student.basics-drill.*',
+            'student.school-study-plan.*',
             'logout',
             'verification.*',
         );

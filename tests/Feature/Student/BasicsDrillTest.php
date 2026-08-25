@@ -12,8 +12,11 @@ use App\Models\Board;
 use App\Models\FormulaDrillSession;
 use App\Models\GradeLevel;
 use App\Models\Student;
+use App\Models\StudentChapterCoverage;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
+use App\Models\SyllabusChapter;
+use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Services\BasicsDrillSessionService;
 use App\Services\BasicsDrillSettingsService;
@@ -45,7 +48,7 @@ class BasicsDrillTest extends TestCase
 
         $board = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
         $grade = GradeLevel::query()->create(['name' => 'Class 7', 'sort_order' => 7, 'is_active' => true]);
-        Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
 
         $user = User::factory()->create(['role' => User::ROLE_STUDENT]);
         $student = Student::query()->create([
@@ -56,13 +59,32 @@ class BasicsDrillTest extends TestCase
             'school_name' => 'Demo',
         ]);
 
-        StudentEnrollment::query()->create([
+        $enrollment = StudentEnrollment::query()->create([
             'student_id' => $student->id,
             'academic_year_id' => $year->id,
             'board_id' => $board->id,
             'grade_level_id' => $grade->id,
             'school_name' => 'Demo',
             'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        $syllabus = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+            'status' => SyllabusVersion::STATUS_PUBLISHED,
+        ]);
+        $chapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabus->id,
+            'chapter_number' => 1,
+            'name' => 'Integers',
+            'sort_order' => 1,
+        ]);
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => StudentChapterCoverage::STATUS_STUDIED,
         ]);
 
         FormulaDrillSession::query()->create([

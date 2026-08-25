@@ -7,18 +7,30 @@ use App\Models\BasicsDrillItem;
 use App\Models\BasicsDrillSession;
 use App\Models\Student;
 use App\Services\BasicsDrillSessionService;
+use App\Services\FormulaDrillSessionService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class BasicsDrillController extends Controller
 {
-    public function __construct(private BasicsDrillSessionService $sessionService) {}
+    public function __construct(
+        private BasicsDrillSessionService $sessionService,
+        private FormulaDrillSessionService $formulaService,
+    ) {}
 
-    public function show(Request $request): Response
+    public function show(Request $request): Response|RedirectResponse
     {
         $student = $this->student($request);
+
+        if (! $this->formulaService->drillsUnlocked($student)) {
+            return redirect()
+                ->route('student.school-study-plan.show')
+                ->with('warning', 'Mark your school study plan first (Studied / Under study). Daily drills unlock after that.');
+        }
+
         $session = $this->sessionService->getOrCreateTodaysSession($student);
         $session->load(['items', 'student']);
 
