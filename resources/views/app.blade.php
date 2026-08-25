@@ -6,7 +6,8 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <title inertia>{{ config('app.name', 'Mentor Maths') }}</title>
-        <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+        <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
+        <link rel="apple-touch-icon" href="/logo.jpg" />
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

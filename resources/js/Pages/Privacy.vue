@@ -43,7 +43,7 @@ const sections = [
 
 <template>
     <Head title="Privacy Policy — Mentor Maths">
-        <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+        <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
         <link rel="preconnect" href="https://fonts.bunny.net" />
         <link href="https://fonts.bunny.net/css?family=plus-jakarta-sans:400,500,600,700&display=swap" rel="stylesheet" />
     </Head>

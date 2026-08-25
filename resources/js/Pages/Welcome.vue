@@ -138,7 +138,7 @@ const tierHead = {
 
 <template>
     <Head title="Mentor Maths — The maths of studying maths.">
-        <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+        <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
         <link rel="preconnect" href="https://fonts.bunny.net" />
         <link href="https://fonts.bunny.net/css?family=fraunces:600,700&family=source-sans-3:400,500,600,700&display=swap" rel="stylesheet" />
         <meta

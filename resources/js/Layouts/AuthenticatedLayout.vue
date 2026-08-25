@@ -307,9 +307,8 @@ const navGroups = computed(() =>
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div class="flex h-16 items-center justify-between gap-4">
                         <div class="flex min-w-0 flex-1 items-center gap-6 lg:gap-8">
-                            <Link :href="route('dashboard')" class="flex shrink-0 items-center gap-2.5">
+                            <Link :href="route('dashboard')" class="flex shrink-0 items-center">
                                 <ApplicationLogo />
-                                <span class="hidden font-semibold text-slate-800 sm:inline">Mentor Maths</span>
                             </Link>
 
                             <div class="hidden items-center gap-6 sm:flex lg:gap-8">
