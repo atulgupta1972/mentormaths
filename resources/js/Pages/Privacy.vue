@@ -56,7 +56,7 @@ const sections = [
 
         <header class="relative z-10 mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-5">
             <Link href="/" class="transition hover:opacity-90">
-                <MentorMathsLogo size-class="h-10 w-auto" />
+                <MentorMathsLogo size-class="h-14 w-auto max-w-[18rem] sm:h-16" />
             </Link>
             <Link
                 :href="route('home')"
