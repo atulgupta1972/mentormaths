@@ -4,7 +4,7 @@ import MentorMathsLogo from '@/Components/MentorMathsLogo.vue';
 defineProps({
     sizeClass: {
         type: String,
-        default: 'block h-12 w-auto max-w-[15rem] shrink-0 object-contain object-left sm:h-14 sm:max-w-[17rem]',
+        default: 'block h-16 w-auto max-w-[20rem] shrink-0 object-contain object-left sm:h-[4.75rem] sm:max-w-[26rem]',
     },
 });
 </script>

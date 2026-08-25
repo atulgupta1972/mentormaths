@@ -176,7 +176,7 @@ const tierHead = {
 
         <header class="relative z-20 mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-8">
             <Link href="/" class="opacity-95 transition hover:opacity-100">
-                <MentorMathsLogo size-class="h-16 w-auto max-w-[18rem] sm:h-20 sm:max-w-[22rem]" />
+                <MentorMathsLogo size-class="h-20 w-auto max-w-[22rem] sm:h-28 sm:max-w-[32rem]" />
             </Link>
             <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                 <Link
@@ -633,7 +633,7 @@ const tierHead = {
         </main>
 
         <footer class="relative z-10 border-t border-slate-200 bg-white/80 py-8 text-center">
-            <MentorMathsLogo size-class="mx-auto h-14 w-auto max-w-[18rem] sm:h-16" />
+            <MentorMathsLogo size-class="mx-auto h-20 w-auto max-w-[24rem] sm:h-24 sm:max-w-[28rem]" />
             <p class="mt-3 text-sm text-slate-500">
                 <a href="https://mentormaths.in" class="font-medium text-[#0f4c5c] hover:underline">mentormaths.in</a>
                 · CBSE &amp; ICSE Mathematics · Class 4–10

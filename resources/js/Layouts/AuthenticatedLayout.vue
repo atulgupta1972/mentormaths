@@ -305,9 +305,9 @@ const navGroups = computed(() =>
             <nav class="border-b border-gray-100 bg-white">
                 <!-- Horizontal bar (desktop) -->
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    <div class="flex h-16 items-center justify-between gap-4">
-                        <div class="flex min-w-0 flex-1 items-center gap-6 lg:gap-8">
-                            <Link :href="route('dashboard')" class="flex shrink-0 items-center">
+                    <div class="flex h-20 items-center justify-between gap-4 sm:h-24">
+                        <div class="flex min-w-0 flex-1 items-center gap-5 lg:gap-8">
+                            <Link :href="route('dashboard')" class="flex shrink-0 items-center py-1">
                                 <ApplicationLogo />
                             </Link>
 

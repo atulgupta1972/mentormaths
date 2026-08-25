@@ -7,7 +7,7 @@ import { Link } from '@inertiajs/vue3';
     <div class="flex min-h-screen flex-col items-center bg-gradient-to-b from-slate-50 to-blue-50/40 pt-8 sm:justify-center sm:pt-0">
         <div class="px-4 text-center">
             <Link href="/" class="inline-block transition hover:opacity-90">
-                <MentorMathsLogo size-class="mx-auto h-16 w-auto max-w-[20rem] sm:h-20 sm:max-w-[24rem]" />
+                <MentorMathsLogo size-class="mx-auto h-20 w-auto max-w-[24rem] sm:h-28 sm:max-w-[32rem]" />
             </Link>
             <p class="mt-2 text-sm text-slate-500">The maths of studying maths</p>
         </div>
