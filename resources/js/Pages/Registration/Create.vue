@@ -40,6 +40,9 @@ const form = useForm({
     notify_parent2_mobile: false,
 });
 
+const isCoaching = computed(() => form.enrollment_source === 'coaching');
+const isIndividual = computed(() => form.enrollment_source === 'individual');
+
 const hasMobile = (value) => String(value || '').replace(/\D/g, '').length >= 10;
 
 const teachersForClass = computed(() => {
@@ -48,29 +51,41 @@ const teachersForClass = computed(() => {
     return row?.teachers || [];
 });
 
-const notifyOptions = computed(() => [
-    {
-        key: 'student',
-        label: 'Student mobile',
-        mobile: form.student_mobile,
-        notifyField: 'notify_student_mobile',
-        hint: 'Enter student mobile above first',
-    },
-    {
-        key: 'parent1',
-        label: 'Mentor mobile',
-        mobile: form.parent1_mobile,
-        notifyField: 'notify_parent1_mobile',
-        hint: 'Enter mentor mobile above first',
-    },
-    {
+const selectedTeacher = computed(() =>
+    teachersForClass.value.find((t) => Number(t.id) === Number(form.coaching_class_teacher_id)) || null,
+);
+
+const notifyOptions = computed(() => {
+    const options = [
+        {
+            key: 'student',
+            label: 'Student mobile',
+            mobile: form.student_mobile,
+            notifyField: 'notify_student_mobile',
+            hint: 'Enter student mobile above first',
+        },
+    ];
+
+    if (isIndividual.value) {
+        options.push({
+            key: 'parent1',
+            label: 'Mentor mobile',
+            mobile: form.parent1_mobile,
+            notifyField: 'notify_parent1_mobile',
+            hint: 'Enter mentor mobile above first',
+        });
+    }
+
+    options.push({
         key: 'parent2',
-        label: 'Parent 2 mobile',
+        label: isCoaching.value ? 'Parent mobile (optional)' : 'Parent 2 mobile',
         mobile: form.parent2_mobile,
         notifyField: 'notify_parent2_mobile',
-        hint: 'Enter parent 2 mobile above first',
-    },
-]);
+        hint: isCoaching.value ? 'Add optional parent mobile below first' : 'Enter parent 2 mobile above first',
+    });
+
+    return options;
+});
 
 const toggleNotify = (field, checked, mobile) => {
     if (checked && !hasMobile(mobile)) {
@@ -88,6 +103,15 @@ watch(() => form.enrollment_source, (source) => {
     if (source !== 'coaching') {
         form.coaching_class_id = '';
         form.coaching_class_teacher_id = '';
+    } else {
+        form.parent1_name = '';
+        form.parent1_mobile = '';
+        form.parent1_email = '';
+        form.notify_parent1_mobile = false;
+    }
+
+    if (source === 'individual') {
+        form.notify_parent1_mobile = true;
     }
 });
 
@@ -126,81 +150,16 @@ const submit = () => {
             </div>
 
             <form class="space-y-6" @submit.prevent="submit">
-                <!-- Student -->
-                <section class="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-indigo-100">
-                    <div class="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-3">
-                        <h2 class="font-semibold text-white">Student details</h2>
-                    </div>
-                    <div class="space-y-4 p-6">
-                        <div>
-                            <InputLabel for="student_name" value="Student full name *" />
-                            <TextInput id="student_name" v-model="form.student_name" class="mt-1 block w-full" required />
-                            <InputError class="mt-1" :message="form.errors.student_name" />
-                        </div>
-                        <div class="grid gap-4 sm:grid-cols-2">
-                            <div>
-                                <InputLabel for="date_of_birth" value="Date of birth" />
-                                <TextInput id="date_of_birth" v-model="form.date_of_birth" type="date" class="mt-1 block w-full" />
-                                <InputError class="mt-1" :message="form.errors.date_of_birth" />
-                            </div>
-                            <div>
-                                <InputLabel for="student_mobile" value="Student mobile" />
-                                <TextInput id="student_mobile" v-model="form.student_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" required />
-                                <InputError class="mt-1" :message="form.errors.student_mobile" />
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Mentor (home) -->
-                <section class="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-emerald-100">
-                    <div class="border-b border-emerald-100 bg-gradient-to-r from-emerald-600 to-teal-500 px-6 py-3">
-                        <h2 class="font-semibold text-white">Mentor contact</h2>
-                    </div>
-                    <div class="space-y-4 p-6">
-                        <p class="text-sm text-slate-600">
-                            For home learning, this mentor replaces any previous contact (one mentor only).
-                            They get the access code and completion emails.
-                        </p>
-                        <div class="grid gap-4 sm:grid-cols-2">
-                            <div>
-                                <InputLabel for="parent1_name" value="Mentor name *" />
-                                <TextInput id="parent1_name" v-model="form.parent1_name" class="mt-1 block w-full" required />
-                                <InputError class="mt-1" :message="form.errors.parent1_name" />
-                            </div>
-                            <div>
-                                <InputLabel for="parent1_mobile" value="Mentor mobile *" />
-                                <TextInput id="parent1_mobile" v-model="form.parent1_mobile" type="tel" class="mt-1 block w-full" required placeholder="10-digit mobile" />
-                                <InputError class="mt-1" :message="form.errors.parent1_mobile" />
-                            </div>
-                            <div class="sm:col-span-2">
-                                <InputLabel for="parent1_email" value="Mentor email" />
-                                <TextInput id="parent1_email" v-model="form.parent1_email" type="email" class="mt-1 block w-full" placeholder="Defaults to login email if blank" />
-                                <InputError class="mt-1" :message="form.errors.parent1_email" />
-                            </div>
-                            <div>
-                                <InputLabel for="parent2_name" value="Second contact name (optional)" />
-                                <TextInput id="parent2_name" v-model="form.parent2_name" class="mt-1 block w-full" />
-                                <InputError class="mt-1" :message="form.errors.parent2_name" />
-                            </div>
-                            <div>
-                                <InputLabel for="parent2_mobile" value="Second contact mobile" />
-                                <TextInput id="parent2_mobile" v-model="form.parent2_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" />
-                                <InputError class="mt-1" :message="form.errors.parent2_mobile" />
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Enrollment source -->
+                <!-- Enrolled by — first -->
                 <section class="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-violet-100">
                     <div class="border-b border-violet-100 bg-gradient-to-r from-violet-600 to-indigo-500 px-6 py-3">
                         <h2 class="font-semibold text-white">Enrolled by</h2>
                     </div>
                     <div class="space-y-4 p-6">
                         <p class="text-sm text-slate-600">
-                            Default is <strong>Individual</strong> — mentor contact above receives the tcode and progress mail.
-                            Choose Coaching if you join through a tuition / coaching class.
+                            Choose this first.
+                            <strong>Coaching / Tuition</strong> — pick your class and teacher (mentor comes from the dropdown; no separate mentor contact needed).
+                            <strong>Individual</strong> — home learning; you will enter mentor contact next.
                         </p>
                         <div class="flex flex-wrap gap-3">
                             <label
@@ -226,7 +185,7 @@ const submit = () => {
                         </div>
                         <InputError :message="form.errors.enrollment_source" />
 
-                        <div v-if="form.enrollment_source === 'coaching'" class="grid gap-4 sm:grid-cols-2">
+                        <div v-if="isCoaching" class="grid gap-4 sm:grid-cols-2">
                             <div>
                                 <InputLabel value="Coaching class *" />
                                 <select
@@ -259,6 +218,107 @@ const submit = () => {
                                     </option>
                                 </select>
                                 <InputError class="mt-1" :message="form.errors.coaching_class_teacher_id" />
+                            </div>
+                            <p v-if="selectedTeacher" class="sm:col-span-2 text-sm text-violet-900">
+                                Mentor for this student:
+                                <strong>{{ selectedTeacher.name }}</strong>
+                                · {{ selectedTeacher.mobile }}
+                                <span v-if="selectedTeacher.email"> · {{ selectedTeacher.email }}</span>
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Student -->
+                <section class="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-indigo-100">
+                    <div class="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-3">
+                        <h2 class="font-semibold text-white">Student details</h2>
+                    </div>
+                    <div class="space-y-4 p-6">
+                        <div>
+                            <InputLabel for="student_name" value="Student full name *" />
+                            <TextInput id="student_name" v-model="form.student_name" class="mt-1 block w-full" required />
+                            <InputError class="mt-1" :message="form.errors.student_name" />
+                        </div>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <InputLabel for="date_of_birth" value="Date of birth" />
+                                <TextInput id="date_of_birth" v-model="form.date_of_birth" type="date" class="mt-1 block w-full" />
+                                <InputError class="mt-1" :message="form.errors.date_of_birth" />
+                            </div>
+                            <div>
+                                <InputLabel for="student_mobile" value="Student mobile" />
+                                <TextInput id="student_mobile" v-model="form.student_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" required />
+                                <InputError class="mt-1" :message="form.errors.student_mobile" />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Mentor contact — individual only -->
+                <section
+                    v-if="isIndividual"
+                    class="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-emerald-100"
+                >
+                    <div class="border-b border-emerald-100 bg-gradient-to-r from-emerald-600 to-teal-500 px-6 py-3">
+                        <h2 class="font-semibold text-white">Mentor contact</h2>
+                    </div>
+                    <div class="space-y-4 p-6">
+                        <p class="text-sm text-slate-600">
+                            For home learning, this mentor receives the access code and completion emails.
+                        </p>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <InputLabel for="parent1_name" value="Mentor name *" />
+                                <TextInput id="parent1_name" v-model="form.parent1_name" class="mt-1 block w-full" required />
+                                <InputError class="mt-1" :message="form.errors.parent1_name" />
+                            </div>
+                            <div>
+                                <InputLabel for="parent1_mobile" value="Mentor mobile *" />
+                                <TextInput id="parent1_mobile" v-model="form.parent1_mobile" type="tel" class="mt-1 block w-full" required placeholder="10-digit mobile" />
+                                <InputError class="mt-1" :message="form.errors.parent1_mobile" />
+                            </div>
+                            <div class="sm:col-span-2">
+                                <InputLabel for="parent1_email" value="Mentor email" />
+                                <TextInput id="parent1_email" v-model="form.parent1_email" type="email" class="mt-1 block w-full" placeholder="Defaults to login email if blank" />
+                                <InputError class="mt-1" :message="form.errors.parent1_email" />
+                            </div>
+                            <div>
+                                <InputLabel for="parent2_name" value="Second contact name (optional)" />
+                                <TextInput id="parent2_name" v-model="form.parent2_name" class="mt-1 block w-full" />
+                                <InputError class="mt-1" :message="form.errors.parent2_name" />
+                            </div>
+                            <div>
+                                <InputLabel for="parent2_mobile" value="Second contact mobile" />
+                                <TextInput id="parent2_mobile" v-model="form.parent2_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" />
+                                <InputError class="mt-1" :message="form.errors.parent2_mobile" />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Optional parent contact for coaching -->
+                <section
+                    v-if="isCoaching"
+                    class="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-emerald-100"
+                >
+                    <div class="border-b border-emerald-100 bg-gradient-to-r from-emerald-600 to-teal-500 px-6 py-3">
+                        <h2 class="font-semibold text-white">Parent contact (optional)</h2>
+                    </div>
+                    <div class="space-y-4 p-6">
+                        <p class="text-sm text-slate-600">
+                            Mentor is your coaching teacher above. Add a parent number only if they should also get progress updates.
+                        </p>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <InputLabel for="parent2_name_coaching" value="Parent name" />
+                                <TextInput id="parent2_name_coaching" v-model="form.parent2_name" class="mt-1 block w-full" />
+                                <InputError class="mt-1" :message="form.errors.parent2_name" />
+                            </div>
+                            <div>
+                                <InputLabel for="parent2_mobile_coaching" value="Parent mobile" />
+                                <TextInput id="parent2_mobile_coaching" v-model="form.parent2_mobile" type="tel" class="mt-1 block w-full" placeholder="10-digit mobile" />
+                                <InputError class="mt-1" :message="form.errors.parent2_mobile" />
                             </div>
                         </div>
                     </div>
@@ -359,6 +419,9 @@ const submit = () => {
                         <p class="text-sm text-violet-100">Who should receive messages about assignments &amp; results?</p>
                     </div>
                     <div class="space-y-3 p-6">
+                        <p v-if="isCoaching && selectedTeacher" class="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-sm text-violet-950">
+                            Your coaching mentor ({{ selectedTeacher.name }}) receives the tcode and progress mail automatically.
+                        </p>
                         <label
                             v-for="option in notifyOptions"
                             :key="option.key"

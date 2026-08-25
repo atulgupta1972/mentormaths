@@ -126,6 +126,47 @@ class SelfServeAccessCodeTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
+    public function test_coaching_enrollment_uses_teacher_as_mentor_without_parent1_fields(): void
+    {
+        Mail::fake();
+        ['board' => $board, 'grade' => $grade] = $this->seedYearBoardGrade();
+
+        $this->post(route('mentor-access.store'), [
+            'class_name' => 'Sunrise Tuition',
+            'teacher_name' => 'Neeru Mentor',
+            'mobile' => '9876500091',
+            'email' => 'neeru.coach@example.com',
+        ])->assertRedirect(route('mentor-access.thank-you'));
+
+        $teacher = \App\Models\CoachingClassTeacher::query()
+            ->where('mobile', '9876500091')
+            ->first();
+        $this->assertNotNull($teacher);
+
+        $response = $this->post(route('registration.store'), [
+            'student_name' => 'Akshara Singh',
+            'student_mobile' => '9876543222',
+            'school_name' => 'Demo School',
+            'board_id' => $board->id,
+            'grade_level_id' => $grade->id,
+            'email' => 'akshara.coach@example.com',
+            'notify_student_mobile' => true,
+            'enrollment_source' => 'coaching',
+            'coaching_class_id' => $teacher->coaching_class_id,
+            'coaching_class_teacher_id' => $teacher->id,
+        ]);
+
+        $response->assertRedirect(route('registration.thank-you'));
+
+        $this->assertDatabaseHas('students', [
+            'name' => 'Akshara Singh',
+            'parent1_name' => 'Neeru Mentor',
+            'parent1_mobile' => '9876500091',
+            'coaching_class_teacher_id' => $teacher->id,
+            'enrollment_source' => 'coaching',
+        ]);
+    }
+
     public function test_expired_tcode_blocks_login(): void
     {
         Mail::fake();

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\CoachingClass;
+use App\Models\CoachingClassTeacher;
 use App\Models\GradeLevel;
 use App\Models\RegistrationRequest;
 use App\Rules\UniqueStudentIdentity;
@@ -67,8 +68,18 @@ class RegistrationRequestController extends Controller
             'student_name' => ['required', 'string', 'max:255'],
             'date_of_birth' => ['nullable', 'date', 'before:today'],
             'student_mobile' => ['required', 'string', 'max:15', new UniqueStudentIdentity],
-            'parent1_name' => ['required', 'string', 'max:255'],
-            'parent1_mobile' => ['required', 'string', 'max:15'],
+            'parent1_name' => [
+                Rule::requiredIf(fn () => $request->input('enrollment_source') !== EnrollmentSource::COACHING),
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'parent1_mobile' => [
+                Rule::requiredIf(fn () => $request->input('enrollment_source') !== EnrollmentSource::COACHING),
+                'nullable',
+                'string',
+                'max:15',
+            ],
             'parent1_email' => ['nullable', 'string', 'email', 'max:255'],
             'parent2_name' => ['nullable', 'string', 'max:255'],
             'parent2_mobile' => ['nullable', 'string', 'max:15'],
@@ -106,11 +117,33 @@ class RegistrationRequestController extends Controller
         ], [
             'email.unique' => 'This login email is already registered or has a pending request. Try another email or log in.',
             'student_mobile.required' => 'Student mobile is required so we can identify returning students.',
+            'parent1_name.required' => 'Mentor name is required for individual (home) enrollment.',
+            'parent1_mobile.required' => 'Mentor mobile is required for individual (home) enrollment.',
         ]);
 
         if (($validated['enrollment_source'] ?? '') !== EnrollmentSource::COACHING) {
             $validated['coaching_class_id'] = null;
             $validated['coaching_class_teacher_id'] = null;
+        }
+
+        // Coaching: mentor comes from teacher dropdown — copy into parent1 for storage / WhatsApp.
+        if (($validated['enrollment_source'] ?? '') === EnrollmentSource::COACHING) {
+            $teacher = CoachingClassTeacher::query()
+                ->whereKey($validated['coaching_class_teacher_id'])
+                ->where('coaching_class_id', $validated['coaching_class_id'])
+                ->where('is_active', true)
+                ->first();
+
+            if (! $teacher) {
+                return back()->withErrors([
+                    'coaching_class_teacher_id' => 'Select a teacher from the chosen coaching class.',
+                ])->withInput();
+            }
+
+            $validated['parent1_name'] = $teacher->name;
+            $validated['parent1_mobile'] = $teacher->mobile;
+            $validated['parent1_email'] = $teacher->email ?: ($validated['parent1_email'] ?? null);
+            $validated['notify_parent1_mobile'] = filled($teacher->mobile);
         }
 
         // Home learning: mentor = parent1 contact (single mentor; replaces prior mapping).
