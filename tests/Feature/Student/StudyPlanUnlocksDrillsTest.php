@@ -46,7 +46,7 @@ class StudyPlanUnlocksDrillsTest extends TestCase
 
     public function test_formula_drill_redirects_to_study_plan_until_marked(): void
     {
-        ['user' => $user] = $this->seedStudent(withStudyPlan: false);
+        ['user' => $user] = $this->seedStudent(withStudyPlan: false, pastFirstDay: true);
 
         $this->actingAs($user)
             ->get(route('student.formula-drill.show'))
@@ -55,11 +55,24 @@ class StudyPlanUnlocksDrillsTest extends TestCase
 
     public function test_after_study_plan_marked_dashboard_forces_formula_drill(): void
     {
-        ['user' => $user] = $this->seedStudent(withStudyPlan: true);
+        ['user' => $user] = $this->seedStudent(withStudyPlan: true, pastFirstDay: true);
 
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertRedirect(route('student.formula-drill.show'));
+    }
+
+    public function test_first_day_skips_drills_even_with_study_plan(): void
+    {
+        ['user' => $user] = $this->seedStudent(withStudyPlan: true, pastFirstDay: false);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('student.formula-drill.show'))
+            ->assertRedirect(route('dashboard'));
     }
 
     public function test_student_signup_sends_onboarding_process_email(): void
@@ -99,7 +112,7 @@ class StudyPlanUnlocksDrillsTest extends TestCase
     /**
      * @return array{student: Student, user: User}
      */
-    private function seedStudent(bool $withStudyPlan): array
+    private function seedStudent(bool $withStudyPlan, bool $pastFirstDay = true): array
     {
         $year = AcademicYear::query()->create([
             'name' => '2026-27',
@@ -119,6 +132,12 @@ class StudyPlanUnlocksDrillsTest extends TestCase
             'parent1_mobile' => '9876500111',
             'school_name' => 'S',
         ]);
+
+        if ($pastFirstDay) {
+            $yesterday = now()->subDay();
+            $user->forceFill(['created_at' => $yesterday])->save();
+            $student->forceFill(['created_at' => $yesterday])->save();
+        }
 
         $enrollment = StudentEnrollment::query()->create([
             'student_id' => $student->id,

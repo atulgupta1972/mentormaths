@@ -37,10 +37,35 @@ class FormulaDrillSessionService
     }
 
     /**
-     * Drills start only after the student has filled their school study plan.
+     * Calendar day of account creation (Asia/Kolkata) — no drills on that first day.
+     */
+    public function isFirstAccessDay(Student $student): bool
+    {
+        $created = $student->relationLoaded('user')
+            ? $student->user?->created_at
+            : $student->user()->value('created_at');
+
+        $created ??= $student->created_at;
+
+        if (! $created) {
+            return false;
+        }
+
+        $tz = config('formula_drill.timezone', 'Asia/Kolkata');
+
+        return Carbon::parse($created)->timezone($tz)->toDateString()
+            === $this->todayDate()->toDateString();
+    }
+
+    /**
+     * Drills unlock after study plan is filled, starting the day after first login/signup day.
      */
     public function drillsUnlocked(Student $student): bool
     {
+        if ($this->isFirstAccessDay($student)) {
+            return false;
+        }
+
         return $this->coverageService->hasMarkedStudyPlan($student->currentEnrollment());
     }
 

@@ -58,6 +58,9 @@ class BasicsDrillTest extends TestCase
             'parent1_mobile' => '9876543210',
             'school_name' => 'Demo',
         ]);
+        $yesterday = now()->subDay();
+        $user->forceFill(['created_at' => $yesterday])->save();
+        $student->forceFill(['created_at' => $yesterday])->save();
 
         $enrollment = StudentEnrollment::query()->create([
             'student_id' => $student->id,

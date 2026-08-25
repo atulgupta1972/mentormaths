@@ -816,7 +816,7 @@ const formatHelpDate = (value) => {
                             <p class="mt-1 text-sm text-sky-900">
                                 Mark chapters as <span class="font-semibold">Studied</span> or one as
                                 <span class="font-semibold">Under study</span> below.
-                                Daily drills unlock only after your study plan is filled.
+                                No drills on day one — daily drills unlock from tomorrow after your study plan is filled.
                             </p>
                         </div>
 

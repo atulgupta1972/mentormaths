@@ -24,6 +24,12 @@ class FormulaDrillController extends Controller
         abort_unless($student, 403);
 
         if (! $this->sessionService->drillsUnlocked($student)) {
+            if ($this->sessionService->isFirstAccessDay($student)) {
+                return redirect()
+                    ->route('dashboard')
+                    ->with('warning', 'No drills on your first day — mark your study plan today. Formula and basics drills start from tomorrow.');
+            }
+
             return redirect()
                 ->route('student.school-study-plan.show')
                 ->with('warning', 'Mark your school study plan first (Studied / Under study). Daily drills unlock after that.');

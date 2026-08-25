@@ -88,6 +88,7 @@ class FormulaDrillTest extends TestCase
             'parent1_mobile' => '9876543210',
             'school_name' => 'Demo',
         ]);
+        $this->markPastFirstDay($user, $student);
 
         $enrollment = StudentEnrollment::query()->create([
             'student_id' => $student->id,
@@ -132,6 +133,13 @@ class FormulaDrillTest extends TestCase
             'formulaQuestion' => $question,
             'topic' => $topic,
         ];
+    }
+
+    private function markPastFirstDay(User $user, Student $student): void
+    {
+        $yesterday = now()->subDay();
+        $user->forceFill(['created_at' => $yesterday])->save();
+        $student->forceFill(['created_at' => $yesterday])->save();
     }
 
     private function createFormulaQuestion(SyllabusTopic $topic, string $text, string $correctAnswer): Question
@@ -234,6 +242,7 @@ class FormulaDrillTest extends TestCase
             'parent1_mobile' => '9876543210',
             'school_name' => 'Demo',
         ]);
+        $this->markPastFirstDay($user, $student);
 
         $enrollment = StudentEnrollment::query()->create([
             'student_id' => $student->id,
@@ -373,6 +382,7 @@ class FormulaDrillTest extends TestCase
             'parent1_mobile' => '9876543210',
             'school_name' => 'Demo',
         ]);
+        $this->markPastFirstDay($user, $student);
 
         $enrollment = StudentEnrollment::query()->create([
             'student_id' => $student->id,
@@ -470,6 +480,7 @@ class FormulaDrillTest extends TestCase
             'parent1_mobile' => '9876543210',
             'school_name' => 'Demo',
         ]);
+        $this->markPastFirstDay($user, $student);
 
         $enrollment = StudentEnrollment::query()->create([
             'student_id' => $student->id,
