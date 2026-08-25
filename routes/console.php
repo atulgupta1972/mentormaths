@@ -17,6 +17,11 @@ Schedule::command('students:send-daily-balance-reminders')
     ->timezone('Asia/Kolkata')
     ->when(fn () => config('progress_summary.daily_balance_enabled', true));
 
+Schedule::command('mentors:send-early-access-digests')
+    ->dailyAt(config('mentor_digest.time', '09:00'))
+    ->timezone('Asia/Kolkata')
+    ->when(fn () => config('mentor_digest.enabled', true));
+
 Schedule::command('whatsapp:send-weekly-summaries')
     ->weeklyOn(
         (int) config('whatsapp.schedule.weekly_summary_day', 6),
