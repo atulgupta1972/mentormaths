@@ -19,6 +19,7 @@ defineProps({
             selected_board_id: null,
         }),
     },
+    browseOnly: { type: Boolean, default: false },
 });
 </script>
 
@@ -40,31 +41,43 @@ defineProps({
             <div class="mx-auto max-w-7xl space-y-4 sm:px-6 lg:px-8">
                 <BrowseModeNotice />
 
+                <div
+                    v-if="browseOnly"
+                    class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                >
+                    Browse-only for mentors: expand chapters to see what is in the bank.
+                    You cannot take or start tests from this view.
+                </div>
+
                 <p class="text-sm text-gray-600">
-                    Same view students see on their dashboard, plus draft sets.
-                    <Link :href="route('admin.questions.index')" class="font-medium text-indigo-600 hover:underline">
-                        Browse question bank
-                    </Link>
-                    ·
-                    <Link :href="route('admin.formula-bank.index')" class="font-medium text-indigo-600 hover:underline">
-                        Formula bank matrix
-                    </Link>
+                    <template v-if="!browseOnly">
+                        Same view students see on their dashboard, plus draft sets.
+                        <Link :href="route('admin.questions.index')" class="font-medium text-indigo-600 hover:underline">
+                            Browse question bank
+                        </Link>
+                        ·
+                        <Link :href="route('admin.formula-bank.index')" class="font-medium text-indigo-600 hover:underline">
+                            Formula bank matrix
+                        </Link>
+                    </template>
+                    <template v-else>
+                        Syllabus content available on the platform for each class and board.
+                        Counts include practice, tests, written, fill-in-blank, and formula sets.
+                    </template>
                 </p>
 
                 <div
                     v-if="!activeYear"
                     class="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900"
                 >
-                    No active academic year. Set one from
-                    <Link :href="route('admin.academic-years.index')" class="font-medium text-indigo-600 hover:underline">
-                        Academic years
-                    </Link>.
+                    No active academic year.
                 </div>
 
                 <AdminContentCoveragePanel
                     v-else
                     :coverage="coverage"
                     :coverage-filters="coverageFilters"
+                    :browse-only="browseOnly"
                 />
             </div>
         </div>

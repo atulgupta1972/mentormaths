@@ -16,6 +16,7 @@ class StudyPlanReminderEmailService
     ) {}
 
     /**
+     * @param  list<int>|null  $onlyStudentIds  When set, only these students are included (mentor scope).
      * @return array{
      *     students: list<array<string, mixed>>,
      *     with_plan: list<array<string, mixed>>,
@@ -29,11 +30,15 @@ class StudyPlanReminderEmailService
      *     }
      * }
      */
-    public function classBreakdown(GradeLevel $gradeLevel, ?AcademicYear $year = null): array
+    public function classBreakdown(GradeLevel $gradeLevel, ?AcademicYear $year = null, ?array $onlyStudentIds = null): array
     {
         $year ??= AcademicYear::active();
 
         if (! $year) {
+            return $this->emptyBreakdown();
+        }
+
+        if ($onlyStudentIds !== null && $onlyStudentIds === []) {
             return $this->emptyBreakdown();
         }
 
@@ -42,6 +47,7 @@ class StudyPlanReminderEmailService
             ->where('academic_year_id', $year->id)
             ->where('grade_level_id', $gradeLevel->id)
             ->where('status', StudentEnrollment::STATUS_ACTIVE)
+            ->when($onlyStudentIds !== null, fn ($q) => $q->whereIn('student_id', $onlyStudentIds))
             ->whereHas('student')
             ->get()
             ->sortBy(fn (StudentEnrollment $enrollment) => mb_strtolower((string) $enrollment->student?->name))
@@ -91,11 +97,12 @@ class StudyPlanReminderEmailService
     /**
      * Email students in the selected class who have not marked any study plan.
      *
+     * @param  list<int>|null  $onlyStudentIds
      * @return array{sent: int, skipped: int, failed: int, already_planned: int}
      */
-    public function sendToMissingInGrade(GradeLevel $gradeLevel): array
+    public function sendToMissingInGrade(GradeLevel $gradeLevel, ?array $onlyStudentIds = null): array
     {
-        $breakdown = $this->classBreakdown($gradeLevel);
+        $breakdown = $this->classBreakdown($gradeLevel, null, $onlyStudentIds);
         $counts = ['sent' => 0, 'skipped' => 0, 'failed' => 0, 'already_planned' => $breakdown['summary']['with_plan']];
 
         /** @var Collection<int, array<string, mixed>> $withoutPlan */

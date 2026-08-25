@@ -15,6 +15,9 @@ class ContentCoverageController extends Controller
 
     public function index(Request $request): Response
     {
+        $user = $request->user();
+        abort_unless($user?->isAdmin() || $user?->isMentor(), 403);
+
         $activeYear = AcademicYear::active();
         $filters = [
             'grade_levels' => [],
@@ -44,10 +47,13 @@ class ContentCoverageController extends Controller
             }
         }
 
+        $browseOnly = ! $user->isAdmin();
+
         return Inertia::render('Admin/Questions/ContentCoverage', [
             'activeYear' => $activeYear?->only(['id', 'name']),
             'coverage' => $coverage,
             'coverageFilters' => $filters,
+            'browseOnly' => $browseOnly,
         ]);
     }
 }

@@ -9,50 +9,49 @@ defineProps({
 </script>
 
 <template>
-    <Head title="My classes" />
+    <Head title="Classes" />
 
     <AuthenticatedLayout>
         <template #header>
             <div>
-                <h2 class="text-xl font-semibold text-gray-800">My classes</h2>
-                <p v-if="activeYear" class="text-sm text-gray-500">
-                    {{ activeYear.name }} · only students enrolled under you
-                </p>
+                <h2 class="text-xl font-semibold text-gray-800">Classes</h2>
+                <p v-if="activeYear" class="text-sm text-gray-500">{{ activeYear.name }} · your students only</p>
             </div>
         </template>
 
         <div class="py-12">
             <div class="mx-auto max-w-6xl sm:px-6 lg:px-8">
-                <p class="mb-6 text-sm text-gray-600">
-                    Select a class to see student progress (completion %, score %, revision, login days).
-                    You cannot see students from other mentors or classes.
-                </p>
-
-                <div v-if="!classes.length" class="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-600">
-                    No classes or students linked to your mentor account yet.
-                    Students who register under your coaching class will appear here.
+                <div class="mb-6 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-950">
+                    Students appear here after they enrol and select your coaching institute or mentor.
+                    You only see learners linked to you — never other mentors’ classes.
                 </div>
 
-                <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <p class="mb-6 text-sm text-gray-600">
+                    Open a class to see student progress, then click a student to go to their study plan.
+                </p>
+
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     <Link
                         v-for="klass in classes"
-                        :key="`${klass.type}-${klass.id}`"
+                        :key="klass.id"
                         :href="route('mentor.classes.show', klass.id)"
                         class="rounded-xl border bg-white p-6 shadow-sm transition hover:border-teal-400 hover:shadow-md"
                     >
                         <h3 class="text-xl font-bold text-gray-900">{{ klass.name }}</h3>
-                        <p v-if="klass.city" class="mt-1 text-sm text-gray-500">{{ klass.city }}</p>
-                        <p v-if="klass.teacher_names?.length" class="mt-1 text-xs text-gray-500">
-                            {{ klass.teacher_names.join(', ') }}
-                        </p>
                         <dl class="mt-4 text-sm">
                             <div>
-                                <dt class="text-gray-500">Students</dt>
+                                <dt class="text-gray-500">Your students</dt>
                                 <dd class="text-2xl font-bold text-teal-800">{{ klass.students_count }}</dd>
                             </div>
                         </dl>
-                        <p class="mt-4 text-xs font-semibold text-teal-700">
-                            Open student list →
+                        <p v-if="klass.has_syllabus" class="mt-3 text-xs text-green-700">
+                            {{ klass.chapters_count }} chapters in syllabus
+                        </p>
+                        <p v-else class="mt-3 text-xs text-amber-700">
+                            Syllabus not imported yet
+                        </p>
+                        <p class="mt-4 text-sm font-semibold text-teal-700">
+                            View students →
                         </p>
                     </Link>
                 </div>

@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Mentor;
 
 use App\Http\Controllers\Controller;
-use App\Models\CoachingClass;
+use App\Models\GradeLevel;
+use App\Services\AdminGradeContext;
 use App\Services\MentorClassHubService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,6 +14,7 @@ class ClassHubController extends Controller
 {
     public function __construct(
         private MentorClassHubService $mentorClasses,
+        private AdminGradeContext $gradeContext,
     ) {}
 
     public function index(Request $request): Response
@@ -26,22 +28,15 @@ class ClassHubController extends Controller
         ]);
     }
 
-    public function show(Request $request, int $coachingClass): Response
+    public function show(Request $request, GradeLevel $gradeLevel): Response
     {
         $user = $request->user();
         abort_unless($user?->isMentor() || $user?->isAdmin(), 403);
 
-        // Individual learners card uses id 0.
-        if ($coachingClass < 0) {
-            abort(404);
-        }
-
-        if ($coachingClass > 0) {
-            CoachingClass::query()->findOrFail($coachingClass);
-        }
+        $this->gradeContext->persist($request, $gradeLevel->id);
 
         $examFilter = $request->string('exam_filter')->toString();
-        $detail = $this->mentorClasses->classDetail($user, $coachingClass, $examFilter);
+        $detail = $this->mentorClasses->classDetail($user, $gradeLevel, $examFilter);
 
         return Inertia::render('Mentor/Classes/Show', $detail);
     }

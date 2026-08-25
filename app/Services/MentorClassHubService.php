@@ -3,10 +3,10 @@
 namespace App\Services;
 
 use App\Models\AcademicYear;
-use App\Models\CoachingClass;
-use App\Models\CoachingClassTeacher;
-use App\Models\Student;
+use App\Models\GradeLevel;
 use App\Models\StudentEnrollment;
+use App\Models\Subject;
+use App\Models\SyllabusVersion;
 use App\Models\User;
 
 class MentorClassHubService
@@ -15,111 +15,75 @@ class MentorClassHubService
         private StudentMentorService $mentorService,
         private ExamPlanService $examPlanService,
         private ClassHubProgressService $progress,
+        private AdminGradeContext $gradeContext,
     ) {}
 
     /**
-     * Class cards for mentor dashboard — coaching classes they teach + optional individual learners.
+     * Grade-level cards (same layout as admin Classes) with counts of this mentor's students only.
      *
      * @return list<array<string, mixed>>
      */
     public function classCards(User $mentor): array
     {
         $activeYear = AcademicYear::active();
-        $teachers = CoachingClassTeacher::query()
-            ->with('coachingClass:id,name,city,is_active')
-            ->where('user_id', $mentor->id)
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->get();
+        $maths = Subject::query()->where('code', 'MATHS')->first();
+        $mentorStudentIds = $this->mentorService->studentIdsForUser($mentor);
 
-        $cards = [];
+        return $this->gradeContext->classLevels()->map(function (GradeLevel $grade) use ($activeYear, $maths, $mentorStudentIds) {
+            $syllabus = null;
 
-        foreach ($teachers->groupBy('coaching_class_id') as $classId => $rows) {
-            $class = $rows->first()?->coachingClass;
-            if (! $class || ! $class->is_active) {
-                continue;
+            if ($activeYear && $maths) {
+                $syllabus = SyllabusVersion::query()
+                    ->where('academic_year_id', $activeYear->id)
+                    ->where('grade_level_id', $grade->id)
+                    ->where('subject_id', $maths->id)
+                    ->withCount('chapters')
+                    ->first();
             }
 
-            $teacherIds = $rows->pluck('id')->all();
-            $studentIds = Student::query()
-                ->whereIn('coaching_class_teacher_id', $teacherIds)
-                ->pluck('id')
-                ->all();
+            $studentsCount = 0;
+            if ($activeYear && $mentorStudentIds !== []) {
+                $studentsCount = StudentEnrollment::query()
+                    ->where('academic_year_id', $activeYear->id)
+                    ->where('grade_level_id', $grade->id)
+                    ->where('status', StudentEnrollment::STATUS_ACTIVE)
+                    ->whereIn('student_id', $mentorStudentIds)
+                    ->count();
+            }
 
-            $activeCount = $this->activeEnrollmentCount($studentIds, $activeYear?->id);
-
-            $cards[] = [
-                'id' => (int) $classId,
-                'type' => 'coaching',
-                'name' => $class->name,
-                'city' => $class->city,
-                'teacher_names' => $rows->pluck('name')->unique()->values()->all(),
-                'students_count' => $activeCount,
+            return [
+                'id' => $grade->id,
+                'name' => $grade->name,
+                'sort_order' => $grade->sort_order,
+                'chapters_count' => $syllabus?->chapters_count ?? 0,
+                'students_count' => $studentsCount,
+                'has_syllabus' => (bool) $syllabus,
             ];
-        }
-
-        $allMentorStudentIds = $this->mentorService->studentIdsForUser($mentor);
-        $coachingStudentIds = $teachers === null || $teachers->isEmpty()
-            ? []
-            : Student::query()
-                ->whereIn('coaching_class_teacher_id', $teachers->pluck('id')->all())
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->all();
-
-        $individualIds = array_values(array_diff($allMentorStudentIds, $coachingStudentIds));
-        $individualCount = $this->activeEnrollmentCount($individualIds, $activeYear?->id);
-
-        if ($individualCount > 0 || ($cards === [] && $allMentorStudentIds !== [])) {
-            $cards[] = [
-                'id' => 0,
-                'type' => 'individual',
-                'name' => 'Individual learners',
-                'city' => null,
-                'teacher_names' => [$mentor->name],
-                'students_count' => $individualCount,
-            ];
-        }
-
-        return $cards;
+        })->values()->all();
     }
 
     /**
      * @return array{
-     *     coachingClass: ?array<string, mixed>,
+     *     gradeLevel: array<string, mixed>,
      *     examPlanRows: list<array<string, mixed>>,
      *     examPlanStats: array<string, int>,
      *     examFilter: string,
      *     activeYear: ?array<string, mixed>,
+     *     students_count: int,
      * }
      */
-    public function classDetail(User $mentor, int $coachingClassId, string $examFilter = 'upcoming'): array
+    public function classDetail(User $mentor, GradeLevel $gradeLevel, string $examFilter = 'upcoming'): array
     {
+        if (! in_array($gradeLevel->sort_order, AdminGradeContext::CLASS_SORT_ORDERS, true)) {
+            abort(404);
+        }
+
         if (! in_array($examFilter, ['upcoming', 'past', 'all'], true)) {
             $examFilter = 'upcoming';
         }
 
         $activeYear = AcademicYear::active();
-        $studentIds = $this->studentIdsForClassCard($mentor, $coachingClassId);
-
-        $coachingClass = null;
-        if ($coachingClassId > 0) {
-            $class = CoachingClass::query()->findOrFail($coachingClassId);
-            $this->assertMentorTeachesClass($mentor, $class);
-            $coachingClass = [
-                'id' => $class->id,
-                'name' => $class->name,
-                'city' => $class->city,
-                'type' => 'coaching',
-            ];
-        } else {
-            $coachingClass = [
-                'id' => 0,
-                'name' => 'Individual learners',
-                'city' => null,
-                'type' => 'individual',
-            ];
-        }
+        $studentIds = $this->mentorService->studentIdsForUser($mentor);
 
         $examPlanRows = [];
         $examPlanStats = ['with_upcoming' => 0, 'without_plan' => 0, 'without_upcoming' => 0];
@@ -128,6 +92,7 @@ class MentorClassHubService
             $enrollments = StudentEnrollment::query()
                 ->with(['student:id,name', 'academicYear', 'gradeLevel:id,name', 'board:id,name'])
                 ->where('academic_year_id', $activeYear->id)
+                ->where('grade_level_id', $gradeLevel->id)
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
                 ->whereIn('student_id', $studentIds)
                 ->orderBy('id')
@@ -143,80 +108,12 @@ class MentorClassHubService
         }
 
         return [
-            'coachingClass' => $coachingClass,
+            'gradeLevel' => $gradeLevel->only(['id', 'name', 'sort_order']),
             'examPlanRows' => $examPlanRows,
             'examPlanStats' => $examPlanStats,
             'examFilter' => $examFilter,
             'activeYear' => $activeYear?->only(['id', 'name']),
             'students_count' => count($examPlanRows),
         ];
-    }
-
-    /**
-     * @return list<int>
-     */
-    private function studentIdsForClassCard(User $mentor, int $coachingClassId): array
-    {
-        if ($coachingClassId > 0) {
-            $teacherIds = CoachingClassTeacher::query()
-                ->where('coaching_class_id', $coachingClassId)
-                ->where('user_id', $mentor->id)
-                ->pluck('id')
-                ->all();
-
-            if ($teacherIds === []) {
-                abort(403, 'You are not assigned to this class.');
-            }
-
-            return Student::query()
-                ->whereIn('coaching_class_teacher_id', $teacherIds)
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->all();
-        }
-
-        $all = $this->mentorService->studentIdsForUser($mentor);
-        $teacherIds = CoachingClassTeacher::query()
-            ->where('user_id', $mentor->id)
-            ->pluck('id')
-            ->all();
-
-        $coachingStudentIds = $teacherIds === []
-            ? []
-            : Student::query()
-                ->whereIn('coaching_class_teacher_id', $teacherIds)
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->all();
-
-        return array_values(array_diff($all, $coachingStudentIds));
-    }
-
-    private function assertMentorTeachesClass(User $mentor, CoachingClass $class): void
-    {
-        $teaches = CoachingClassTeacher::query()
-            ->where('coaching_class_id', $class->id)
-            ->where('user_id', $mentor->id)
-            ->exists();
-
-        if (! $teaches) {
-            abort(403, 'You are not assigned to this class.');
-        }
-    }
-
-    /**
-     * @param  list<int>  $studentIds
-     */
-    private function activeEnrollmentCount(array $studentIds, ?int $yearId): int
-    {
-        if ($studentIds === [] || ! $yearId) {
-            return 0;
-        }
-
-        return StudentEnrollment::query()
-            ->where('academic_year_id', $yearId)
-            ->where('status', StudentEnrollment::STATUS_ACTIVE)
-            ->whereIn('student_id', $studentIds)
-            ->count();
     }
 }

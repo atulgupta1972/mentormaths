@@ -33,13 +33,17 @@ class SchoolStudyPlanController extends Controller
         $gradeLevel = $this->gradeContext->resolve($request);
         $studentId = $request->integer('student_id') ?: null;
         $user = $request->user();
+        $mentorScoped = $user?->isMentor() && ! $user->isAdmin();
+        $allowedStudentIds = $mentorScoped
+            ? $this->mentorService->studentIdsForUser($user)
+            : null;
 
-        if ($studentId && $user?->isMentor() && ! $user->isAdmin()) {
+        if ($studentId && $mentorScoped) {
             $this->mentorService->assertCanAccessStudent($user, $studentId);
         }
 
         $breakdown = $gradeLevel
-            ? $this->reminderEmails->classBreakdown($gradeLevel, $activeYear)
+            ? $this->reminderEmails->classBreakdown($gradeLevel, $activeYear, $allowedStudentIds)
             : [
                 'students' => [],
                 'with_plan' => [],
@@ -55,12 +59,6 @@ class SchoolStudyPlanController extends Controller
 
         $students = collect($breakdown['students']);
 
-        if ($user?->isMentor() && ! $user->isAdmin()) {
-            $allowed = $this->mentorService->studentIdsForUser($user);
-            $students = $students->filter(fn (array $row) => in_array((int) ($row['id'] ?? 0), $allowed, true))->values();
-            $breakdown['students'] = $students->all();
-        }
-
         $selectedStudent = null;
         $classCoverage = ['chapters' => [], 'under_study_chapter_id' => null];
         $context = null;
@@ -74,7 +72,7 @@ class SchoolStudyPlanController extends Controller
                 ->where('student_id', $studentId)
                 ->when($activeYear, fn ($q) => $q->where('academic_year_id', $activeYear->id))
                 ->when(
-                    $gradeLevel && ! ($user?->isMentor() && ! $user->isAdmin()),
+                    $gradeLevel && ! $mentorScoped,
                     fn ($q) => $q->where('grade_level_id', $gradeLevel->id),
                 )
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
@@ -123,7 +121,12 @@ class SchoolStudyPlanController extends Controller
 
         abort_unless($gradeLevel, 422, 'Select a class from the top bar first.');
 
-        $counts = $this->reminderEmails->sendToMissingInGrade($gradeLevel);
+        $user = $request->user();
+        $onlyStudentIds = ($user?->isMentor() && ! $user->isAdmin())
+            ? $this->mentorService->studentIdsForUser($user)
+            : null;
+
+        $counts = $this->reminderEmails->sendToMissingInGrade($gradeLevel, $onlyStudentIds);
 
         if ($counts['sent'] === 0 && $counts['failed'] === 0) {
             if ($counts['already_planned'] > 0 && ($counts['skipped'] === 0)) {
@@ -161,12 +164,13 @@ class SchoolStudyPlanController extends Controller
 
         $activeYear = AcademicYear::active();
         $gradeLevel = $this->gradeContext->resolve($request);
+        $mentorScoped = $user?->isMentor() && ! $user->isAdmin();
 
         $enrollment = StudentEnrollment::query()
             ->where('student_id', $student->id)
             ->when($activeYear, fn ($q) => $q->where('academic_year_id', $activeYear->id))
             ->when(
-                $gradeLevel && ! ($user?->isMentor() && ! $user->isAdmin()),
+                $gradeLevel && ! $mentorScoped,
                 fn ($q) => $q->where('grade_level_id', $gradeLevel->id),
             )
             ->where('status', StudentEnrollment::STATUS_ACTIVE)

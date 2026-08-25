@@ -6,7 +6,7 @@ import { ref, watch } from 'vue';
 import { hasRoute } from '@/utils/routes';
 
 const props = defineProps({
-    coachingClass: { type: Object, required: true },
+    gradeLevel: { type: Object, required: true },
     activeYear: { type: Object, default: null },
     examFilter: { type: String, default: 'upcoming' },
     examPlanRows: { type: Array, default: () => [] },
@@ -17,7 +17,7 @@ const props = defineProps({
 const examFilter = ref(props.examFilter || 'upcoming');
 
 const reloadExamFilter = () => {
-    router.get(route('mentor.classes.show', props.coachingClass.id), {
+    router.get(route('mentor.classes.show', props.gradeLevel.id), {
         exam_filter: examFilter.value,
     }, { preserveState: true, preserveScroll: true });
 };
@@ -76,15 +76,15 @@ const studyPlanHref = (studentId) => {
 </script>
 
 <template>
-    <Head :title="coachingClass.name" />
+    <Head :title="gradeLevel.name" />
 
     <AuthenticatedLayout>
         <template #header>
             <div>
                 <Link :href="route('mentor.classes.index')" class="text-sm text-teal-700 hover:underline">
-                    ← My classes
+                    ← Classes
                 </Link>
-                <h2 class="mt-1 text-xl font-semibold text-gray-800">{{ coachingClass.name }}</h2>
+                <h2 class="mt-1 text-xl font-semibold text-gray-800">{{ gradeLevel.name }}</h2>
                 <p v-if="activeYear" class="text-sm text-gray-500">
                     {{ activeYear.name }} · your students only
                 </p>
@@ -96,7 +96,7 @@ const studyPlanHref = (studentId) => {
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-teal-700">{{ students_count }}</p>
-                        <p class="text-xs text-gray-500">Students</p>
+                        <p class="text-xs text-gray-500">Your students</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
                         <p class="text-2xl font-bold text-amber-700">{{ examPlanStats.without_upcoming || 0 }}</p>
@@ -110,7 +110,7 @@ const studyPlanHref = (studentId) => {
                             <div>
                                 <h3 class="font-medium text-gray-900">Student progress</h3>
                                 <p class="mt-1 text-sm text-gray-500">
-                                    Completion %, score %, revision, login days, and time spent — same view as admin, limited to your class.
+                                    Completion %, score %, revision, login days, and time spent — only students enrolled under you.
                                 </p>
                             </div>
                             <div class="flex items-center gap-2">
@@ -131,7 +131,8 @@ const studyPlanHref = (studentId) => {
                     </div>
 
                     <div v-if="!examPlanRows.length" class="px-6 py-8 text-center text-sm text-gray-500">
-                        No students enrolled under you in this class yet.
+                        No students enrolled under you in {{ gradeLevel.name }} yet.
+                        They appear when they register and select your coaching institute or mentor.
                     </div>
 
                     <div v-else class="overflow-x-auto">

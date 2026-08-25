@@ -101,8 +101,8 @@ Route::get('/dashboard', DashboardController::class)
 
 Route::middleware(['auth', 'verified'])->prefix('mentor')->name('mentor.')->group(function () {
     Route::get('/classes', [MentorClassHubController::class, 'index'])->name('classes.index');
-    Route::get('/classes/{coachingClass}', [MentorClassHubController::class, 'show'])
-        ->whereNumber('coachingClass')
+    Route::get('/classes/{gradeLevel}', [MentorClassHubController::class, 'show'])
+        ->whereNumber('gradeLevel')
         ->name('classes.show');
 });
 

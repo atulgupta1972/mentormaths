@@ -186,7 +186,7 @@ const contentGroup = computed(() => ({
             label: 'Content coverage',
             href: route('admin.questions.coverage'),
             active: route().current('admin.questions.coverage'),
-            show: isAdmin.value,
+            show: isAdmin.value || isMentor.value,
         },
         {
             label: 'Look up set code',

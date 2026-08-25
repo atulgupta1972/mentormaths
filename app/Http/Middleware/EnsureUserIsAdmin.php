@@ -18,8 +18,8 @@ class EnsureUserIsAdmin
 
         if ($user?->isMentor() && $request->routeIs([
             'admin.school-study-plan.*',
-            'admin.practice-sets.assign',
             'admin.grade-context.update',
+            'admin.questions.coverage',
         ])) {
             return $next($request);
         }

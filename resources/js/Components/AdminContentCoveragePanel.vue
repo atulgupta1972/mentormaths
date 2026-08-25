@@ -16,6 +16,7 @@ const props = defineProps({
             selected_board_id: null,
         }),
     },
+    browseOnly: { type: Boolean, default: false },
 });
 
 const expandedChapterIds = ref(new Set());
@@ -377,12 +378,16 @@ const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chap
                             <td :colspan="6" :class="[gridCell, 'py-1.5']">
                                 <div class="space-y-2">
                                     <Link
+                                        v-if="!browseOnly"
                                         :href="chapterHubUrl(chapter.id)"
                                         class="inline-block text-[10px] font-bold uppercase tracking-wide text-indigo-700 hover:underline"
                                         @click.stop
                                     >
                                         Open chapter hub →
                                     </Link>
+                                    <p v-else class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                        Browse only — set codes listed below (no test taking)
+                                    </p>
 
                                     <div class="grid gap-2 lg:grid-cols-3">
                                         <div
@@ -407,11 +412,13 @@ const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chap
                                                         v-if="itemsForBlockRow(chapter, block.tier, row.key).length"
                                                         class="mt-0.5 flex flex-wrap gap-1"
                                                     >
-                                                        <Link
+                                                        <component
+                                                            :is="browseOnly ? 'span' : Link"
                                                             v-for="item in itemsForBlockRow(chapter, block.tier, row.key)"
                                                             :key="`${row.key}-${item.worksheet_id}`"
-                                                            :href="item.admin_url"
-                                                            class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm hover:border-indigo-400"
+                                                            v-bind="browseOnly ? {} : { href: item.admin_url }"
+                                                            class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm"
+                                                            :class="browseOnly ? 'cursor-default' : 'hover:border-indigo-400'"
                                                             @click.stop
                                                         >
                                                             <span class="font-mono text-[11px] font-bold text-slate-900">
@@ -423,7 +430,7 @@ const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chap
                                                             >
                                                                 {{ item.status_label }}
                                                             </span>
-                                                        </Link>
+                                                        </component>
                                                     </div>
                                                     <p v-else class="mt-0.5 text-[10px] text-slate-400">—</p>
                                                 </div>
@@ -434,17 +441,19 @@ const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chap
                                     <div v-if="chapter.items?.formula?.length" class="rounded-lg border border-violet-300 bg-violet-50/70 p-2">
                                         <p class="text-[10px] font-bold uppercase tracking-wide text-violet-900">Formula</p>
                                         <div class="mt-0.5 flex flex-wrap gap-1">
-                                            <Link
+                                            <component
+                                                :is="browseOnly ? 'span' : Link"
                                                 v-for="item in chapter.items.formula"
                                                 :key="`formula-${item.worksheet_id}`"
-                                                :href="item.admin_url"
-                                                class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm hover:border-indigo-400"
+                                                v-bind="browseOnly ? {} : { href: item.admin_url }"
+                                                class="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 shadow-sm"
+                                                :class="browseOnly ? 'cursor-default' : 'hover:border-indigo-400'"
                                                 @click.stop
                                             >
                                                 <span class="font-mono text-[11px] font-bold text-slate-900">
                                                     {{ item.short_label }}<span class="font-semibold text-slate-500">{{ questionSuffix(item) }}</span>
                                                 </span>
-                                            </Link>
+                                            </component>
                                         </div>
                                     </div>
                                 </div>
@@ -461,11 +470,13 @@ const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chap
                                         class="space-y-1"
                                     >
                                         <p class="text-[9px] font-bold uppercase tracking-wide text-slate-500">Part {{ part.part }}</p>
-                                        <Link
+                                        <component
+                                            :is="browseOnly ? 'span' : Link"
                                             v-for="item in part.items"
                                             :key="`book-item-${item.worksheet_id}`"
-                                            :href="item.admin_url"
-                                            class="block rounded border border-slate-300 bg-white px-1.5 py-1 shadow-sm hover:border-indigo-400"
+                                            v-bind="browseOnly ? {} : { href: item.admin_url }"
+                                            class="block rounded border border-slate-300 bg-white px-1.5 py-1 shadow-sm"
+                                            :class="browseOnly ? 'cursor-default' : 'hover:border-indigo-400'"
                                             @click.stop
                                         >
                                             <div class="font-mono text-[10px] font-bold text-slate-900">
@@ -478,7 +489,7 @@ const chapterHubUrl = (chapterId) => route('admin.questions.chapters.show', chap
                                             >
                                                 {{ item.status_label }}
                                             </div>
-                                        </Link>
+                                        </component>
                                     </div>
                                 </div>
                                 <span v-else class="font-bold text-slate-400">—</span>
