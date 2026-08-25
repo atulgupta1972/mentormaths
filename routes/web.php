@@ -476,6 +476,7 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
     Route::post('/worksheets/{worksheet}/correction-practice', [PracticeCorrectionController::class, 'store'])->name('worksheets.correction-practice');
     Route::get('/assignments/{assignment}', [StudentPracticeSetController::class, 'showAssignment'])->name('assignments.show');
     Route::post('/assignments/{assignment}/start', [StudentPracticeSetController::class, 'startAttempt'])->name('assignments.start');
+    Route::post('/assignments/{assignment}/redo', [StudentPracticeSetController::class, 'redoAttempt'])->name('assignments.redo');
     Route::get('/written-assignments', [StudentWrittenAssignmentController::class, 'index'])->name('written-assignments.index');
     Route::get('/written-assignments/{assignment}', [StudentWrittenAssignmentController::class, 'show'])->name('written-assignments.show');
     Route::post('/written-assignments/{assignment}/upload', [StudentWrittenAssignmentController::class, 'storeUpload'])->name('written-assignments.upload');

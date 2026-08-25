@@ -319,6 +319,43 @@ class AssignmentProgress
     public static function formatStudentDashboardSummary(SetAssignment $assignment, ?SetAttempt $latest): array
     {
         $summary = self::formatAssignmentSummary($assignment, $latest);
+        $partial = null;
+        $previousScoreLabel = null;
+        $previousScorePercent = null;
+        $submittedAttemptCount = 0;
+        $canRedo = false;
+
+        $assignmentStatus = $assignment->status;
+        $isOnlinePending = in_array($assignmentStatus, [
+            SetAssignment::STATUS_ASSIGNED,
+            SetAssignment::STATUS_IN_PROGRESS,
+        ], true) && ! ($assignment->practiceSet?->isWritten() ?? false);
+
+        if ($isOnlinePending) {
+            $partial = self::partialProgress($assignment);
+        }
+
+        if ($latest && $latest->status === SetAttempt::STATUS_SUBMITTED && ! $latest->is_correction_practice) {
+            $submitted = self::scoredAttempts($assignment);
+            $submittedAttemptCount = $submitted->count();
+            $previous = $submitted->firstWhere(fn (SetAttempt $attempt) => $attempt->id !== $latest->id);
+            if ($previous) {
+                $previousScoreLabel = ScoreLabel::format($previous->score, $previous->max_score);
+                $previousScorePercent = ScoreLabel::percent($previous->score, $previous->max_score);
+            }
+            $canRedo = true;
+        }
+
+        $scoreDisplay = $summary['latest_score_label'];
+        if ($scoreDisplay && $previousScoreLabel) {
+            $scoreDisplay .= ' (redo · was '.$previousScoreLabel.')';
+        }
+
+        $statusDetail = null;
+        if ($partial && ($partial['started'] || $assignmentStatus === SetAssignment::STATUS_IN_PROGRESS)) {
+            $remaining = max(0, $partial['total'] - $partial['done']);
+            $statusDetail = $partial['label'].($remaining > 0 ? " · {$remaining} left" : '');
+        }
 
         return [
             'assignment_id' => $summary['assignment_id'],
@@ -332,23 +369,50 @@ class AssignmentProgress
             'topic_name' => $summary['topic_name'],
             'target_date' => $summary['target_date'],
             'is_overdue' => $summary['is_overdue'],
+            'question_count' => $summary['question_count'],
             'latest_score' => $summary['latest_score'],
             'latest_max_score' => $summary['latest_max_score'],
             'latest_score_percent' => $summary['latest_score_percent'],
             'latest_score_label' => $summary['latest_score_label'],
+            'score_display' => $scoreDisplay,
+            'previous_score_label' => $previousScoreLabel,
+            'previous_score_percent' => $previousScorePercent,
+            'submitted_attempt_count' => $submittedAttemptCount,
+            'can_redo' => $canRedo,
+            'partial_progress' => $partial,
+            'status_detail' => $statusDetail,
             'submitted_at' => $summary['submitted_at'],
             'latest_time_seconds' => $summary['latest_time_seconds'],
             'submission_timing' => $summary['submission_timing'],
             'status' => $summary['status'],
+            'assignment_status' => $assignmentStatus,
             'latest_attempt_id' => $latest?->status === SetAttempt::STATUS_SUBMITTED ? $latest->id : null,
+            'in_progress_attempt_id' => $latest?->status === SetAttempt::STATUS_IN_PROGRESS ? $latest->id : null,
             'written_submission_status' => null,
         ];
     }
 
     /**
+     * Submitted scored attempts (full tests/practice), newest first — excludes correction-only runs.
+     *
+     * @return \Illuminate\Support\Collection<int, SetAttempt>
+     */
+    public static function scoredAttempts(SetAssignment $assignment)
+    {
+        return $assignment->attempts()
+            ->where('status', SetAttempt::STATUS_SUBMITTED)
+            ->where(function ($query) {
+                $query->where('is_correction_practice', false)
+                    ->orWhereNull('is_correction_practice');
+            })
+            ->orderByDesc('attempt_number')
+            ->get();
+    }
+
+    /**
      * Partial completion for pending / in-progress assignments (e.g. 7/20 questions).
      *
-     * @return array{done: int, total: int, label: string, started: bool}
+     * @return array{done: int, total: int, label: string, started: bool, remaining: int}
      */
     public static function partialProgress(SetAssignment $assignment): array
     {
@@ -374,6 +438,7 @@ class AssignmentProgress
                     'total' => max($total, 1),
                     'label' => 'Uploaded',
                     'started' => true,
+                    'remaining' => 0,
                 ];
             }
 
@@ -382,6 +447,7 @@ class AssignmentProgress
                 'total' => max($total, 1),
                 'label' => '0/'.$total,
                 'started' => false,
+                'remaining' => max($total, 1),
             ];
         }
 
@@ -394,6 +460,7 @@ class AssignmentProgress
                 'total' => max($total, 1),
                 'label' => '0/'.$total,
                 'started' => false,
+                'remaining' => max($total, 1),
             ];
         }
 
@@ -408,25 +475,23 @@ class AssignmentProgress
                 'total' => $guidedTotal,
                 'label' => "{$done}/{$guidedTotal}",
                 'started' => $done > 0 || $attempt->status === SetAttempt::STATUS_IN_PROGRESS,
+                'remaining' => max(0, $guidedTotal - $done),
             ];
         }
 
+        // Batch / chapter test: count saved answers only (honest “left to do”).
         $answered = $attempt->relationLoaded('answers')
             ? $attempt->answers->count()
             : $attempt->answers()->count();
-        $done = max($answered, (int) $attempt->current_question_index);
-
         $batchTotal = max($total, 1);
-
-        if ($attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
-            $done = max($done, min((int) $attempt->current_question_index + 1, $batchTotal));
-        }
+        $done = min($answered, $batchTotal);
 
         return [
-            'done' => min($done, $batchTotal),
+            'done' => $done,
             'total' => $batchTotal,
-            'label' => min($done, $batchTotal).'/'.$batchTotal,
+            'label' => "{$done}/{$batchTotal}",
             'started' => $done > 0 || $attempt->status === SetAttempt::STATUS_IN_PROGRESS,
+            'remaining' => max(0, $batchTotal - $done),
         ];
     }
 }

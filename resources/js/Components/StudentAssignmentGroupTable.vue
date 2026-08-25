@@ -74,9 +74,8 @@ const completedAssignmentHref = (set) => {
         return route('student.written-assignments.show', set.assignment_id);
     }
 
-    return set.latest_attempt_id
-        ? route('student.attempts.result', set.latest_attempt_id)
-        : route('student.assignments.show', set.assignment_id);
+    // Assignment page shows Continue/Redo and attempt history.
+    return route('student.assignments.show', set.assignment_id);
 };
 
 const prepAssignmentHref = (prep) => (
@@ -101,7 +100,7 @@ const pendingStatusLabel = (set) => {
         return 'Overdue';
     }
     if (set.status === 'yellow') {
-        return 'In progress';
+        return set.status_detail ? `In progress (${set.status_detail})` : 'In progress';
     }
 
     return 'To do';
@@ -133,6 +132,11 @@ const pendingButtonLabel = (set) => {
     }
 
     if (set.status === 'yellow') {
+        const remaining = set.partial_progress?.remaining;
+        if (remaining > 0) {
+            return `Continue (${remaining} left)`;
+        }
+
         return 'Continue';
     }
     if (set.is_overdue) {
@@ -158,10 +162,12 @@ const completedLinkLabel = (set) => {
         return 'View / re-upload';
     }
 
-    return 'Open';
+    return set.can_redo ? 'View / Redo' : 'Open';
 };
 
-const scoreLabel = (set) => set.latest_score_label || formatScoreLabel(set.latest_score, set.latest_max_score);
+const scoreLabel = (set) => set.score_display
+    || set.latest_score_label
+    || formatScoreLabel(set.latest_score, set.latest_max_score);
 </script>
 
 <template>

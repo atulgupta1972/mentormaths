@@ -10,10 +10,13 @@ use App\Models\SetAttempt;
 use App\Services\GuidedPracticeService;
 use App\Services\QuestionIssueReportService;
 use App\Services\QuestionResolutionService;
+use App\Services\SetAssignmentService;
 use App\Services\SetAttemptService;
 use App\Support\AttemptIntegrity;
 use App\Support\AttemptResultSummary;
 use App\Support\AttemptTiming;
+use App\Support\AssignmentProgress;
+use App\Support\ScoreLabel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,6 +27,7 @@ class PracticeSetController extends Controller
 {
     public function __construct(
         private SetAttemptService $attemptService,
+        private SetAssignmentService $assignmentService,
         private GuidedPracticeService $guidedPractice,
         private QuestionResolutionService $resolutionService,
         private QuestionIssueReportService $issueReports,
@@ -44,10 +48,13 @@ class PracticeSetController extends Controller
 
         $inProgress = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_IN_PROGRESS);
         $latestSubmitted = $assignment->attempts->firstWhere('status', SetAttempt::STATUS_SUBMITTED);
+        $scoredAttempts = AssignmentProgress::scoredAttempts($assignment);
+        $previousSubmitted = $scoredAttempts->firstWhere(fn (SetAttempt $attempt) => $attempt->id !== $latestSubmitted?->id);
         $practiceSet = $assignment->practiceSet;
         $enrollment = $request->user()->student?->currentEnrollment();
         $enrollment?->loadMissing('gradeLevel:id,name,protect_test_attempts,protect_practice_attempts');
         $isTest = $practiceSet->isChapterScope();
+        $partial = $inProgress ? AssignmentProgress::partialProgress($assignment) : null;
 
         return Inertia::render('Student/PracticeSets/Assignment', [
             'assignment' => [
@@ -58,11 +65,17 @@ class PracticeSetController extends Controller
                 'is_overdue' => $assignment->isOverdue(),
                 'is_guided' => ! $isTest,
                 'latest_attempt_id' => $latestSubmitted?->id,
+                'can_redo' => $assignment->status === SetAssignment::STATUS_COMPLETED && $latestSubmitted !== null,
+                'partial_progress' => $partial,
+                'previous_score_label' => $previousSubmitted
+                    ? ScoreLabel::format($previousSubmitted->score, $previousSubmitted->max_score)
+                    : null,
                 'integrity' => AttemptIntegrity::configFor($enrollment, $isTest),
                 'practice_set' => [
                     'set_code' => $practiceSet->set_code,
                     'set_number' => $practiceSet->set_number,
                     'kind_label' => $practiceSet->isChapterScope() ? 'Test' : 'Practice',
+                    'question_count' => (int) ($practiceSet->questions_count ?? 0),
                 ],
                 'attempts' => $assignment->attempts->map(fn ($a) => [
                     'id' => $a->id,
@@ -71,6 +84,7 @@ class PracticeSetController extends Controller
                     'mode' => $a->mode,
                     'score' => $a->score,
                     'max_score' => $a->max_score,
+                    'is_correction_practice' => (bool) $a->is_correction_practice,
                     'first_try_correct_count' => $a->first_try_correct_count,
                     'corrected_after_help_count' => $a->corrected_after_help_count,
                     'given_up_count' => $a->given_up_count,
@@ -81,6 +95,34 @@ class PracticeSetController extends Controller
                 'in_progress_attempt_id' => $inProgress?->id,
             ],
         ]);
+    }
+
+    public function redoAttempt(Request $request, SetAssignment $assignment): RedirectResponse
+    {
+        $this->authorizeAssignment($request, $assignment);
+
+        if ($assignment->practiceSet->isWritten()) {
+            return back()->with('error', 'Written work uses re-upload, not redo.');
+        }
+
+        if ($assignment->status !== SetAssignment::STATUS_COMPLETED) {
+            return back()->with('error', 'Finish this set first, then you can redo it.');
+        }
+
+        try {
+            $this->assignmentService->reassign(
+                $assignment,
+                $request->user(),
+                now()->addDays(3)->toDateString(),
+                'Student redo — latest score counts',
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('student.assignments.show', $assignment)
+            ->with('success', 'Redo unlocked. Start again when ready — your latest score will count. Previous score is kept for comparison.');
     }
 
     public function startAttempt(Request $request, SetAssignment $assignment): RedirectResponse

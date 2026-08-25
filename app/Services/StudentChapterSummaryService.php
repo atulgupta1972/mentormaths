@@ -513,6 +513,8 @@ class StudentChapterSummaryService
             'can_assign' => $statusMeta['can_assign'],
             'can_open' => $statusMeta['can_open'],
             'latest_score_percent' => $progress['latest_score_percent'] ?? null,
+            'previous_score_percent' => $progress['previous_score_percent'] ?? null,
+            'status_detail' => $progress['status_detail'] ?? null,
             'correction_count' => $correctionCount,
             'can_redo_wrong' => $correctionCount > 0,
             'is_correction' => false,
@@ -567,11 +569,13 @@ class StudentChapterSummaryService
         }
 
         $percent = $progress['latest_score_percent'] ?? null;
+        $previousPercent = $progress['previous_score_percent'] ?? null;
+        $statusDetail = $progress['status_detail'] ?? null;
 
         return match ($progress['status']) {
             'green', 'green-late' => [
                 'status' => 'done',
-                'status_label' => $percent !== null ? "DONE({$percent}%)" : 'DONE',
+                'status_label' => $this->doneStatusLabel($percent, $previousPercent),
                 'can_assign' => true,
                 'can_open' => true,
             ],
@@ -592,12 +596,23 @@ class StudentChapterSummaryService
                     ? 'in_progress'
                     : 'pending',
                 'status_label' => ($progress['assignment_status'] ?? null) === SetAssignment::STATUS_IN_PROGRESS
-                    ? 'IN PROGRESS'
+                    ? ($statusDetail ? "IN PROGRESS ({$statusDetail})" : 'IN PROGRESS')
                     : 'NOT DONE',
                 'can_assign' => false,
                 'can_open' => true,
             ],
         };
+    }
+
+    private function doneStatusLabel(?int $percent, ?int $previousPercent): string
+    {
+        $label = $percent !== null ? "DONE({$percent}%)" : 'DONE';
+
+        if ($previousPercent !== null) {
+            $label .= " (redo · was {$previousPercent}%)";
+        }
+
+        return $label;
     }
 
     private function bucketForWorksheet(Worksheet $worksheet): string

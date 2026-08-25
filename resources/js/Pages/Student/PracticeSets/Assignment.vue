@@ -1,16 +1,19 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { formatScoreLabel } from '@/utils/scores';
 import { requestAttemptFullscreen } from '@/utils/attemptFullscreen';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
 const props = defineProps({
     assignment: Object,
 });
 
+const page = usePage();
 const startForm = useForm({});
+const redoForm = useForm({});
 const startError = ref('');
 const starting = ref(false);
 
@@ -100,6 +103,14 @@ const startLabel = () => {
 
     return props.assignment.integrity?.require_fullscreen ? 'Start practice (fullscreen)' : 'Start practice';
 };
+
+const requestRedo = () => {
+    if (! window.confirm('Redo this set? Your latest score will count. The previous score stays for comparison.')) {
+        return;
+    }
+
+    redoForm.post(route('student.assignments.redo', props.assignment.id));
+};
 </script>
 
 <template>
@@ -158,11 +169,34 @@ const startLabel = () => {
                         {{ startError }}
                     </p>
 
+                    <p v-if="page.props.flash?.success" class="mt-3 rounded bg-emerald-50 p-3 text-sm text-emerald-900">
+                        {{ page.props.flash.success }}
+                    </p>
+                    <p v-if="page.props.flash?.error" class="mt-3 rounded bg-rose-50 p-3 text-sm text-rose-800">
+                        {{ page.props.flash.error }}
+                    </p>
+
+                    <div
+                        v-if="assignment.in_progress_attempt_id && assignment.partial_progress"
+                        class="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                    >
+                        <p class="font-semibold">
+                            In progress — {{ assignment.partial_progress.label }} answered
+                            <span v-if="assignment.partial_progress.remaining > 0">
+                                · {{ assignment.partial_progress.remaining }} left
+                            </span>
+                        </p>
+                        <p class="mt-1 text-xs">Open Continue to finish the remaining questions. Your answers are saved.</p>
+                    </div>
+
                     <div v-if="assignment.attempts.length" class="mt-6">
                         <h3 class="text-sm font-semibold text-gray-800">Your attempts</h3>
                         <ul class="mt-2 space-y-2 text-sm">
                             <li v-for="att in assignment.attempts" :key="att.id" class="flex justify-between rounded border px-3 py-2">
-                                <span>Attempt {{ att.attempt_number }}</span>
+                                <span>
+                                    Attempt {{ att.attempt_number }}
+                                    <span v-if="att.is_correction_practice" class="text-xs text-orange-700">(wrong-sums practice)</span>
+                                </span>
                                 <span v-if="att.status === 'submitted'">
                                     {{ formatScoreLabel(att.score, att.max_score) }} · {{ formatTime(att.time_seconds) }}
                                     <span v-if="att.submission_timing === 'late'" class="text-amber-700">· Delayed</span>
@@ -171,26 +205,35 @@ const startLabel = () => {
                                 <span v-else class="text-yellow-700">In progress</span>
                             </li>
                         </ul>
+                        <p v-if="assignment.previous_score_label" class="mt-2 text-xs text-slate-600">
+                            Latest score counts. Previous: {{ assignment.previous_score_label }}
+                        </p>
                     </div>
 
-                    <Link
-                        v-if="assignment.status === 'completed' && assignment.latest_attempt_id"
-                        :href="route('student.attempts.result', assignment.latest_attempt_id)"
-                        class="mt-6 inline-flex"
-                    >
-                        <PrimaryButton>Review results & retry wrong sums</PrimaryButton>
-                    </Link>
-                    <PrimaryButton
-                        v-else-if="assignment.status !== 'completed' || assignment.in_progress_attempt_id"
-                        class="mt-6"
-                        :disabled="startForm.processing || starting"
-                        @click="startOrContinue"
-                    >
-                        {{ startForm.processing || starting ? 'Starting…' : startLabel() }}
-                    </PrimaryButton>
-                    <p v-else class="mt-6 text-sm text-gray-600">
-                        Completed. Ask your teacher to re-assign for another attempt.
-                    </p>
+                    <div class="mt-6 flex flex-wrap gap-3">
+                        <PrimaryButton
+                            v-if="assignment.status !== 'completed' || assignment.in_progress_attempt_id"
+                            :disabled="startForm.processing || starting"
+                            @click="startOrContinue"
+                        >
+                            {{ startForm.processing || starting ? 'Starting…' : startLabel() }}
+                        </PrimaryButton>
+                        <Link
+                            v-if="assignment.status === 'completed' && assignment.latest_attempt_id"
+                            :href="route('student.attempts.result', assignment.latest_attempt_id)"
+                            class="inline-flex"
+                        >
+                            <PrimaryButton>Review results & retry wrong sums</PrimaryButton>
+                        </Link>
+                        <SecondaryButton
+                            v-if="assignment.can_redo"
+                            type="button"
+                            :disabled="redoForm.processing"
+                            @click="requestRedo"
+                        >
+                            {{ redoForm.processing ? 'Unlocking…' : 'Redo full set' }}
+                        </SecondaryButton>
+                    </div>
                 </div>
             </div>
         </div>
