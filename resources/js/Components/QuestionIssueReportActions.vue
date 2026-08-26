@@ -273,18 +273,18 @@ const submitAction = () => {
 
             <div class="mt-4 flex flex-wrap gap-2">
                 <Link
-                    v-if="item.edit_url"
-                    :href="item.edit_url"
-                    class="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
-                >
-                    Edit yourself
-                </Link>
-                <Link
                     v-if="item.check_url || item.set_url"
                     :href="item.check_url || item.set_url"
+                    class="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                >
+                    Open in set / edit
+                </Link>
+                <Link
+                    v-if="item.edit_url && item.edit_url !== item.check_url"
+                    :href="item.edit_url"
                     class="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50"
                 >
-                    Open in set
+                    Edit yourself
                 </Link>
                 <button
                     type="button"
