@@ -441,6 +441,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/set-attempts/{attempt}/unlock', [SetAssignmentController::class, 'unlockAttempt'])->name('set-attempts.unlock');
     Route::delete('/set-assignments/{assignment}', [SetAssignmentController::class, 'destroy'])->name('set-assignments.destroy');
     Route::post('/set-assignments/{assignment}/reassign', [SetAssignmentController::class, 'reassign'])->name('set-assignments.reassign');
+    Route::post('/set-assignments/{assignment}/effective-chapter', [SetAssignmentController::class, 'updateEffectiveChapter'])->name('set-assignments.effective-chapter');
 
     Route::post('/exam-plans', [AdminExamPlanController::class, 'store'])->name('exam-plans.store');
     Route::put('/exam-plans/{examPlan}', [AdminExamPlanController::class, 'update'])->name('exam-plans.update');

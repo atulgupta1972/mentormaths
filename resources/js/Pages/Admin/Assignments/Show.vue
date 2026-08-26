@@ -4,10 +4,11 @@ import QuestionBody from '@/Components/QuestionBody.vue';
 import { formatDate, formatDateTime, formatTime } from '@/utils/dates';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 
 const props = defineProps({
     assignment: Object,
+    homeChapters: { type: Array, default: () => [] },
     attempts: Array,
     latestResult: { type: Object, default: null },
     tabLeaveLockLimit: { type: Number, default: 4 },
@@ -15,6 +16,16 @@ const props = defineProps({
 
 const page = usePage();
 const unlockForm = useForm({});
+const chapterForm = useForm({
+    effective_syllabus_chapter_id: props.assignment.effective_syllabus_chapter_id || '',
+});
+
+watch(
+    () => props.assignment.effective_syllabus_chapter_id,
+    (value) => {
+        chapterForm.effective_syllabus_chapter_id = value || '';
+    },
+);
 
 const timingLabel = (t) => (t === 'late' ? 'Delayed submission' : t === 'on_time' ? 'On time' : '—');
 
@@ -47,6 +58,16 @@ const unlockAttempt = (attempt) => {
         preserveScroll: true,
     });
 };
+
+const saveEffectiveChapter = () => {
+    chapterForm
+        .transform((data) => ({
+            effective_syllabus_chapter_id: data.effective_syllabus_chapter_id || null,
+        }))
+        .post(route('admin.set-assignments.effective-chapter', props.assignment.assignment_id), {
+            preserveScroll: true,
+        });
+};
 </script>
 
 <template>
@@ -59,7 +80,10 @@ const unlockAttempt = (attempt) => {
                     <span class="font-mono text-indigo-600">{{ assignment.set_code }}</span>
                     · {{ assignment.student_name }}
                 </h2>
-                <p class="text-sm text-gray-500">{{ assignment.display_title }}</p>
+                <p class="text-sm text-gray-500">
+                    {{ assignment.display_title }}
+                    <span v-if="assignment.student_class"> · {{ assignment.student_class }}</span>
+                </p>
             </div>
         </template>
 
@@ -80,13 +104,56 @@ const unlockAttempt = (attempt) => {
 
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div class="rounded-lg bg-white p-4 shadow-sm">
-                        <p class="text-xs text-gray-500">Chapter</p>
-                        <p class="text-lg font-semibold">{{ assignment.chapter_name || '—' }}</p>
+                        <p class="text-xs text-gray-500">Sheet chapter (source)</p>
+                        <p class="text-lg font-semibold">
+                            {{ assignment.source_chapter_label || assignment.chapter_name || '—' }}
+                        </p>
                     </div>
                     <div class="rounded-lg bg-white p-4 shadow-sm">
                         <p class="text-xs text-gray-500">Topic</p>
                         <p class="text-lg font-semibold">{{ assignment.topic_name || '—' }}</p>
                     </div>
+                </div>
+
+                <div class="rounded-lg border border-indigo-200 bg-indigo-50/60 p-4 shadow-sm">
+                    <p class="text-sm font-semibold text-indigo-950">Count under student study-plan chapter</p>
+                    <p class="mt-1 text-xs text-indigo-900">
+                        When the sheet is from another board/class (e.g. ICSE), map it to this student’s CBSE chapter for study plan and scores.
+                        Leave on Auto if names match; override if the system picked wrong.
+                    </p>
+                    <div class="mt-3 flex flex-wrap items-end gap-2">
+                        <div class="min-w-[14rem] flex-1">
+                            <label class="block text-xs font-medium text-indigo-900">Student syllabus chapter</label>
+                            <select
+                                v-model="chapterForm.effective_syllabus_chapter_id"
+                                class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                            >
+                                <option value="">Auto (name / chapter-head match)</option>
+                                <option
+                                    v-for="chapter in homeChapters"
+                                    :key="chapter.id"
+                                    :value="chapter.id"
+                                >
+                                    {{ chapter.label }}
+                                </option>
+                            </select>
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded-md bg-indigo-700 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-800 disabled:opacity-50"
+                            :disabled="chapterForm.processing"
+                            @click="saveEffectiveChapter"
+                        >
+                            {{ chapterForm.processing ? 'Saving…' : 'Save chapter' }}
+                        </button>
+                    </div>
+                    <p v-if="assignment.resolved_chapter_label" class="mt-2 text-xs text-indigo-800">
+                        Currently counting under:
+                        <span class="font-semibold">{{ assignment.resolved_chapter_label }}</span>
+                    </p>
+                    <p v-if="chapterForm.errors.effective_syllabus_chapter_id" class="mt-1 text-xs text-rose-700">
+                        {{ chapterForm.errors.effective_syllabus_chapter_id }}
+                    </p>
                 </div>
 
                 <div class="grid gap-4 sm:grid-cols-2">

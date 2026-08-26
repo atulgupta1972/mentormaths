@@ -472,16 +472,28 @@ class SetAttemptService
             return;
         }
 
-        $chapterId = $this->classCoverage->syllabusChapterIdForContent($worksheet);
-
-        if (! $chapterId) {
+        if ($this->classCoverage->enrollmentCanAttemptContent($enrollment, $worksheet, $assignment)) {
             return;
         }
 
-        if (! $this->classCoverage->enrollmentHasChapterInStudy($enrollment, $chapterId)) {
+        $effectiveId = $this->classCoverage->resolveEffectiveSyllabusChapterId(
+            $worksheet,
+            $enrollment,
+            $assignment,
+        );
+
+        $homeOptions = collect($this->classCoverage->homeChapterOptionsForEnrollment($enrollment))
+            ->pluck('id')
+            ->all();
+
+        if ($effectiveId && in_array($effectiveId, $homeOptions, true)) {
             throw new \InvalidArgumentException(
                 'Mark this chapter as Studied or Under study on your study plan before attempting the set.'
             );
         }
+
+        throw new \InvalidArgumentException(
+            'Mark at least one chapter as Studied or Under study on your study plan before attempting this set.'
+        );
     }
 }

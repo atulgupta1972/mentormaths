@@ -10,6 +10,7 @@ use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Support\PracticeSetScope;
+use App\Support\SyllabusChapterMatch;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -646,6 +647,77 @@ class ClassCoverageService
         return $this->syllabusChapterIdForWorksheet($worksheet);
     }
 
+    /**
+     * Chapter used for study-plan gating and coverage: admin remap, then name/head match, else worksheet chapter.
+     */
+    public function resolveEffectiveSyllabusChapterId(
+        Worksheet $worksheet,
+        StudentEnrollment $enrollment,
+        ?SetAssignment $assignment = null,
+    ): ?int {
+        if ($assignment?->effective_syllabus_chapter_id) {
+            return (int) $assignment->effective_syllabus_chapter_id;
+        }
+
+        $sourceId = $this->syllabusChapterIdForWorksheet($worksheet);
+        $homeChapterIds = $this->examPlanService
+            ->chapterOptionsForEnrollment($enrollment)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if ($sourceId && in_array($sourceId, $homeChapterIds, true)) {
+            return $sourceId;
+        }
+
+        $sourceChapter = $this->sourceChapterForWorksheet($worksheet);
+        if ($sourceChapter && $homeChapterIds !== []) {
+            $homeChapters = SyllabusChapter::query()
+                ->whereIn('id', $homeChapterIds)
+                ->get(['id', 'name', 'chapter_head_id']);
+
+            $matched = SyllabusChapterMatch::matchHomeChapterId($sourceChapter, $homeChapters);
+            if ($matched) {
+                return $matched;
+            }
+        }
+
+        return $sourceId;
+    }
+
+    /**
+     * Whether the student may start this assignment given study-plan marks.
+     */
+    public function enrollmentCanAttemptContent(
+        StudentEnrollment $enrollment,
+        Worksheet $worksheet,
+        ?SetAssignment $assignment = null,
+    ): bool {
+        $effectiveId = $this->resolveEffectiveSyllabusChapterId($worksheet, $enrollment, $assignment);
+
+        if (! $effectiveId) {
+            return true;
+        }
+
+        if ($this->enrollmentHasChapterInStudy($enrollment, $effectiveId)) {
+            return true;
+        }
+
+        $homeChapterIds = $this->examPlanService
+            ->chapterOptionsForEnrollment($enrollment)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        // Sheet belongs to (or was remapped/matched onto) home syllabus — that chapter must be marked.
+        if (in_array($effectiveId, $homeChapterIds, true)) {
+            return false;
+        }
+
+        // Cross-board / cross-class sheet with no home chapter mapping: allow once study plan is started.
+        return $this->hasMarkedStudyPlan($enrollment);
+    }
+
     public function enrollmentHasChapterInStudy(StudentEnrollment $enrollment, int $syllabusChapterId): bool
     {
         return StudentChapterCoverage::query()
@@ -656,6 +728,52 @@ class ClassCoverageService
                 StudentChapterCoverage::STATUS_UNDER_STUDY,
             ])
             ->exists();
+    }
+
+    /**
+     * @return list<array{id: int, label: string}>
+     */
+    public function homeChapterOptionsForEnrollment(StudentEnrollment $enrollment): array
+    {
+        return $this->examPlanService
+            ->chapterOptionsForEnrollment($enrollment)
+            ->map(fn (array $chapter) => [
+                'id' => (int) $chapter['id'],
+                'label' => (string) ($chapter['label'] ?? $chapter['name'] ?? ('Chapter '.$chapter['id'])),
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function assertEffectiveChapterBelongsToEnrollment(
+        StudentEnrollment $enrollment,
+        int $syllabusChapterId,
+    ): void {
+        $allowed = $this->examPlanService
+            ->chapterOptionsForEnrollment($enrollment)
+            ->pluck('id')
+            ->all();
+
+        if (! in_array($syllabusChapterId, $allowed, true)) {
+            throw ValidationException::withMessages([
+                'effective_syllabus_chapter_id' => 'Pick a chapter from this student’s class syllabus.',
+            ]);
+        }
+    }
+
+    private function sourceChapterForWorksheet(Worksheet $worksheet): ?SyllabusChapter
+    {
+        $worksheet->loadMissing([
+            'chapter:id,name,chapter_number,chapter_head_id,syllabus_version_id',
+            'topic:id,name,syllabus_chapter_id',
+            'topic.chapter:id,name,chapter_number,chapter_head_id,syllabus_version_id',
+        ]);
+
+        if ($worksheet->isChapterScope()) {
+            return $worksheet->chapter;
+        }
+
+        return $worksheet->topic?->chapter;
     }
 
     private function syllabusChapterIdForWorksheet(Worksheet $worksheet): ?int

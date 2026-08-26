@@ -7,6 +7,7 @@ use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\Student;
 use App\Models\Worksheet;
+use App\Services\ClassCoverageService;
 use App\Services\SetAssignmentService;
 use App\Services\SetAttemptService;
 use App\Support\AssignmentMailer;
@@ -23,14 +24,19 @@ class SetAssignmentController extends Controller
     public function __construct(
         private SetAssignmentService $assignmentService,
         private SetAttemptService $attemptService,
+        private ClassCoverageService $classCoverage,
     ) {}
 
     public function show(SetAssignment $assignment): Response|RedirectResponse
     {
         $assignment->load([
             'enrollment.student:id,name',
-            'practiceSet.topic.chapter',
+            'enrollment.gradeLevel:id,name',
+            'enrollment.board:id,name,code',
+            'practiceSet.topic.chapter.syllabusVersion.board:id,name,code',
+            'practiceSet.chapter.syllabusVersion.board:id,name,code',
             'practiceSet' => fn ($q) => $q->withCount('questions'),
+            'effectiveChapter:id,name,chapter_number',
             'attempts' => fn ($q) => $q->orderByDesc('attempt_number'),
             'assigner:id,name',
         ]);
@@ -48,13 +54,42 @@ class SetAssignmentController extends Controller
             ? AttemptResultSummary::forAdmin($latest)
             : null;
 
+        $sourceChapter = $assignment->practiceSet->isChapterScope()
+            ? $assignment->practiceSet->chapter
+            : $assignment->practiceSet->topic?->chapter;
+
+        $effectiveId = $this->classCoverage->resolveEffectiveSyllabusChapterId(
+            $assignment->practiceSet,
+            $assignment->enrollment,
+            $assignment,
+        );
+
+        $homeChapters = $this->classCoverage->homeChapterOptionsForEnrollment($assignment->enrollment);
+
         return Inertia::render('Admin/Assignments/Show', [
             'assignment' => [
                 ...AssignmentProgress::formatAssignmentSummary($assignment, $latest),
                 'notes' => $assignment->notes,
                 'student_name' => $assignment->enrollment->student->name,
+                'student_class' => trim(implode(' · ', array_filter([
+                    $assignment->enrollment->gradeLevel?->name,
+                    $assignment->enrollment->board?->code,
+                ]))),
                 'assigned_by' => $assignment->assigner?->name,
+                'source_chapter_label' => $sourceChapter
+                    ? trim(implode(' · ', array_filter([
+                        $sourceChapter->syllabusVersion?->board?->code,
+                        $sourceChapter->name,
+                    ])))
+                    : null,
+                'effective_syllabus_chapter_id' => $assignment->effective_syllabus_chapter_id
+                    ? (int) $assignment->effective_syllabus_chapter_id
+                    : null,
+                'resolved_syllabus_chapter_id' => $effectiveId,
+                'resolved_chapter_label' => collect($homeChapters)
+                    ->firstWhere('id', $effectiveId)['label'] ?? null,
             ],
+            'homeChapters' => $homeChapters,
             'attempts' => $assignment->attempts->map(function ($a) {
                 $locked = AttemptIntegrity::isLocked($a);
 
@@ -77,6 +112,28 @@ class SetAssignmentController extends Controller
             'latestResult' => $latestSummary,
             'tabLeaveLockLimit' => AttemptIntegrity::TAB_LEAVE_LOCK_LIMIT,
         ]);
+    }
+
+    public function updateEffectiveChapter(Request $request, SetAssignment $assignment): RedirectResponse
+    {
+        $validated = $request->validate([
+            'effective_syllabus_chapter_id' => ['nullable', 'integer', 'exists:syllabus_chapters,id'],
+        ]);
+
+        try {
+            $this->assignmentService->updateEffectiveChapter(
+                $assignment,
+                isset($validated['effective_syllabus_chapter_id'])
+                    ? (int) $validated['effective_syllabus_chapter_id']
+                    : null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return back()->withErrors($e->errors());
+        }
+
+        return back()->with('success', 'Study-plan chapter updated for this assignment.');
     }
 
     public function unlockAttempt(SetAttempt $attempt): RedirectResponse
@@ -108,6 +165,7 @@ class SetAssignmentController extends Controller
             'target_date' => ['required', 'date', 'after_or_equal:today'],
             'notes' => ['nullable', 'string'],
             'exam_plan_id' => ['nullable', 'exists:exam_plans,id'],
+            'effective_syllabus_chapter_id' => ['nullable', 'integer', 'exists:syllabus_chapters,id'],
         ]);
 
         $student = Student::findOrFail($validated['student_id']);
@@ -125,6 +183,9 @@ class SetAssignmentController extends Controller
                 $validated['target_date'],
                 $validated['notes'] ?? null,
                 $validated['exam_plan_id'] ?? null,
+                isset($validated['effective_syllabus_chapter_id'])
+                    ? (int) $validated['effective_syllabus_chapter_id']
+                    : null,
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());

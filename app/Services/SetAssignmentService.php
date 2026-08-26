@@ -23,6 +23,7 @@ class SetAssignmentService
         string $dueDate,
         ?string $notes = null,
         ?int $examPlanId = null,
+        ?int $effectiveSyllabusChapterId = null,
     ): SetAssignment {
         if ($practiceSet->status !== Worksheet::STATUS_PUBLISHED) {
             throw new \InvalidArgumentException('Only published practice sets can be assigned.');
@@ -30,6 +31,10 @@ class SetAssignmentService
 
         if ($practiceSet->isWritten() && ! $practiceSet->isWrittenVerified()) {
             throw new \InvalidArgumentException('Written sheet must be verified by admin before assigning.');
+        }
+
+        if ($effectiveSyllabusChapterId) {
+            $this->assertEffectiveChapterForEnrollment($enrollment, $effectiveSyllabusChapterId);
         }
 
         $existing = SetAssignment::query()
@@ -40,7 +45,7 @@ class SetAssignmentService
             ->first();
 
         if ($existing) {
-            return $this->reassign($existing, $assigner, $dueDate, $notes);
+            return $this->reassign($existing, $assigner, $dueDate, $notes, $effectiveSyllabusChapterId);
         }
 
         $examPlan = $this->examPlanService->matchingPlanForAssignment(
@@ -54,6 +59,7 @@ class SetAssignmentService
             'student_enrollment_id' => $enrollment->id,
             'worksheet_id' => $practiceSet->id,
             'exam_plan_id' => $examPlan?->id,
+            'effective_syllabus_chapter_id' => $effectiveSyllabusChapterId,
             'assigned_by' => $assigner->id,
             'assigned_at' => now(),
             'due_date' => $dueDate,
@@ -142,9 +148,15 @@ class SetAssignmentService
         User $assigner,
         string $dueDate,
         ?string $notes = null,
+        ?int $effectiveSyllabusChapterId = null,
     ): SetAssignment {
         if ($assignment->status === SetAssignment::STATUS_CANCELLED) {
             throw new \InvalidArgumentException('This assignment was cancelled.');
+        }
+
+        if ($effectiveSyllabusChapterId) {
+            $assignment->loadMissing('enrollment');
+            $this->assertEffectiveChapterForEnrollment($assignment->enrollment, $effectiveSyllabusChapterId);
         }
 
         $inProgress = $assignment->attempts()->where('status', 'in_progress')->exists();
@@ -152,15 +164,52 @@ class SetAssignmentService
             $assignment->attempts()->where('status', 'in_progress')->delete();
         }
 
-        $assignment->update([
+        $payload = [
             'status' => SetAssignment::STATUS_ASSIGNED,
             'due_date' => $dueDate,
             'notes' => $notes ?? $assignment->notes,
             'assigned_by' => $assigner->id,
             'reassigned_at' => now(),
+        ];
+
+        if ($effectiveSyllabusChapterId !== null) {
+            $payload['effective_syllabus_chapter_id'] = $effectiveSyllabusChapterId ?: null;
+        }
+
+        $assignment->update($payload);
+
+        return $assignment->fresh();
+    }
+
+    public function updateEffectiveChapter(
+        SetAssignment $assignment,
+        ?int $effectiveSyllabusChapterId,
+    ): SetAssignment {
+        $assignment->loadMissing('enrollment');
+
+        if ($effectiveSyllabusChapterId) {
+            $this->assertEffectiveChapterForEnrollment($assignment->enrollment, $effectiveSyllabusChapterId);
+        }
+
+        $assignment->update([
+            'effective_syllabus_chapter_id' => $effectiveSyllabusChapterId,
         ]);
 
         return $assignment->fresh();
+    }
+
+    private function assertEffectiveChapterForEnrollment(
+        StudentEnrollment $enrollment,
+        int $syllabusChapterId,
+    ): void {
+        $allowed = $this->examPlanService
+            ->chapterOptionsForEnrollment($enrollment)
+            ->pluck('id')
+            ->all();
+
+        if (! in_array($syllabusChapterId, $allowed, true)) {
+            throw new \InvalidArgumentException('Pick a chapter from this student\'s class syllabus.');
+        }
     }
 
     public function studentProgressForTopic(int $enrollmentId, int $topicId): Collection

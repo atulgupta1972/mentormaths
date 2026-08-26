@@ -14,6 +14,7 @@ use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Support\AssignmentProgress;
 use App\Support\PracticeSetScope;
+use App\Support\SyllabusChapterMatch;
 use App\Support\WorksheetDeliveryMode;
 use Illuminate\Support\Collection;
 
@@ -522,7 +523,7 @@ class StudentChapterSummaryService
         $byName = [];
         $byHead = [];
         foreach ($homeChapters as $chapter) {
-            $normalized = $this->normalizeChapterKey((string) $chapter->name);
+            $normalized = SyllabusChapterMatch::normalizeName((string) $chapter->name);
             if ($normalized !== '' && ! isset($byName[$normalized])) {
                 $byName[$normalized] = (int) $chapter->id;
             }
@@ -542,6 +543,10 @@ class StudentChapterSummaryService
                 ? $worksheet->chapter
                 : $worksheet->topic?->chapter;
 
+            $currentAssignment = $this->resolveCurrentAssignment(
+                $assignmentsByWorksheet->get($worksheet->id, collect()),
+            );
+
             $item = $this->buildSetItem(
                 $worksheet,
                 $assignmentsByWorksheet,
@@ -551,13 +556,14 @@ class StudentChapterSummaryService
             $item['is_cross_chapter'] = true;
 
             $matchId = null;
-            if ($sourceChapter) {
-                $normalized = $this->normalizeChapterKey((string) $sourceChapter->name);
-                if ($normalized !== '' && isset($byName[$normalized])) {
-                    $matchId = $byName[$normalized];
-                } elseif ($sourceChapter->chapter_head_id && isset($byHead[(int) $sourceChapter->chapter_head_id])) {
-                    $matchId = $byHead[(int) $sourceChapter->chapter_head_id];
-                }
+            $overrideId = $currentAssignment?->effective_syllabus_chapter_id
+                ? (int) $currentAssignment->effective_syllabus_chapter_id
+                : null;
+
+            if ($overrideId && isset($rowIndexById[$overrideId])) {
+                $matchId = $overrideId;
+            } elseif ($sourceChapter) {
+                $matchId = SyllabusChapterMatch::matchHomeChapterId($sourceChapter, $homeChapters);
             }
 
             if ($matchId !== null && isset($rowIndexById[$matchId])) {
@@ -599,15 +605,6 @@ class StudentChapterSummaryService
         }
 
         return [$chapterRows, array_values($otherBySource)];
-    }
-
-    private function normalizeChapterKey(string $name): string
-    {
-        $name = mb_strtolower(trim($name));
-        $name = preg_replace('/^(ch(apter)?\.?\s*\d+[a-z]?\s*[-–:.]?\s*)/u', '', $name) ?? $name;
-        $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
-
-        return trim($name);
     }
 
     /**

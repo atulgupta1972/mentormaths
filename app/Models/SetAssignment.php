@@ -21,6 +21,7 @@ class SetAssignment extends Model
         'student_enrollment_id',
         'worksheet_id',
         'exam_plan_id',
+        'effective_syllabus_chapter_id',
         'assigned_by',
         'assigned_at',
         'reassigned_at',
@@ -56,6 +57,11 @@ class SetAssignment extends Model
     public function examPlan(): BelongsTo
     {
         return $this->belongsTo(ExamPlan::class);
+    }
+
+    public function effectiveChapter(): BelongsTo
+    {
+        return $this->belongsTo(SyllabusChapter::class, 'effective_syllabus_chapter_id');
     }
 
     public function assigner(): BelongsTo
