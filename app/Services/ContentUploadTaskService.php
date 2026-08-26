@@ -489,30 +489,10 @@ class ContentUploadTaskService
             ->get()
             ->groupBy('textbook_chapter_id');
 
-        $chaptersById = TextbookChapter::query()
-            ->whereIn('id', $mapped->unique()->values()->all())
-            ->get()
-            ->keyBy('id');
-
-        return $mapped->mapWithKeys(function (int $chapterId, int $questionId) use ($tasks, $questions, $chaptersById) {
+        return $mapped->mapWithKeys(function (int $chapterId, int $questionId) use ($tasks) {
             $chapterTasks = $tasks->get($chapterId) ?? collect();
-            $question = $questions->get($questionId);
-            $chapter = $chaptersById->get($chapterId);
-
-            $onFillBlankSet = false;
-            if ($question && $chapter && (int) ($chapter->fill_blank_worksheet_id ?? 0) > 0) {
-                $onFillBlankSet = $question->worksheets
-                    ->contains(fn ($ws) => (int) $ws->id === (int) $chapter->fill_blank_worksheet_id);
-            }
-
-            if ($onFillBlankSet) {
-                $task = $chapterTasks->first(fn (ContentUploadTask $row) => $row->isFillBlankConversion())
-                    ?? $chapterTasks->first(fn (ContentUploadTask $row) => ! $row->isFillBlankConversion())
-                    ?? $chapterTasks->first();
-            } else {
-                $task = $chapterTasks->first(fn (ContentUploadTask $row) => ! $row->isFillBlankConversion())
-                    ?? $chapterTasks->first();
-            }
+            $task = $chapterTasks->first(fn (ContentUploadTask $row) => ! $row->isFillBlankConversion())
+                ?? $chapterTasks->first();
 
             return $task ? [$questionId => $task] : [];
         });
