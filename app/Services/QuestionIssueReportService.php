@@ -230,6 +230,30 @@ class QuestionIssueReportService
     }
 
     /**
+     * Close open misprint reports when a question is removed (no student re-attempt).
+     */
+    public function dismissOpenForQuestion(int $questionId, User $actor, ?string $note = null): int
+    {
+        $reports = QuestionIssueReport::query()
+            ->where('question_id', $questionId)
+            ->whereIn('status', [
+                QuestionIssueReport::STATUS_PENDING_ADMIN,
+                QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
+            ])
+            ->get();
+
+        foreach ($reports as $report) {
+            $this->dismiss(
+                $report,
+                $actor,
+                $note ?? 'Question removed as irrelevant or defective.',
+            );
+        }
+
+        return $reports->count();
+    }
+
+    /**
      * Question and key are fine — student must re-attempt; original marks stay 0.
      */
     public function confirmQuestionCorrectRequireReattempt(

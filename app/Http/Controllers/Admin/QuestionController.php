@@ -17,6 +17,7 @@ use App\Services\PdfTextExtractionService;
 use App\Services\PdfWorksheetImportService;
 use App\Services\QuestionDiagramService;
 use App\Services\QuestionMethodHintService;
+use App\Services\QuestionIssueReportService;
 use App\Services\QuestionSaveConfirmation;
 use App\Services\QuestionZipImportService;
 use App\Support\PracticeSetMasterProfile;
@@ -982,10 +983,32 @@ class QuestionController extends Controller
         return back()->with('success', 'Fill-in-blank question updated.');
     }
 
-    public function destroy(Question $question): RedirectResponse
+    public function destroy(Request $request, Question $question): RedirectResponse
     {
         $topicId = $question->syllabus_topic_id;
+        $setCode = $question->worksheets()
+            ->whereNotNull('set_code')
+            ->where('set_code', '!=', '')
+            ->value('set_code');
+
+        app(QuestionIssueReportService::class)->dismissOpenForQuestion(
+            (int) $question->id,
+            $request->user(),
+            'Question removed as irrelevant or defective.',
+        );
+
         $question->delete();
+
+        $returnTo = $request->string('return_to')->toString();
+        if ($returnTo === 'set-code' && filled($setCode)) {
+            return redirect()
+                ->route('admin.questions.set-code', ['code' => $setCode])
+                ->with('success', 'Question deleted from the set.');
+        }
+
+        if ($returnTo === 'back') {
+            return back()->with('success', 'Question deleted.');
+        }
 
         return redirect()
             ->route('admin.questions.topics.show', $topicId)

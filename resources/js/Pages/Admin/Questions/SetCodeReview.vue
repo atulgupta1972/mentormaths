@@ -73,6 +73,23 @@ const saveEdit = (questionId) => {
     });
 };
 
+const deleteForm = useForm({});
+
+const deleteQuestion = (question) => {
+    if (!confirm('Delete this question from the set? Use this when the sum is irrelevant or too broken to fix. Students will not be asked to re-attempt it.')) {
+        return;
+    }
+
+    deleteForm
+        .transform(() => ({ return_to: 'set-code' }))
+        .delete(route('admin.questions.destroy', question.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                editingId.value = null;
+            },
+        });
+};
+
 const hasResult = computed(() => Boolean(props.result));
 
 watch(
@@ -305,10 +322,18 @@ onMounted(() => {
                                                 <button
                                                     type="button"
                                                     class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-                                                    :disabled="blankForm.processing"
+                                                    :disabled="blankForm.processing || deleteForm.processing"
                                                     @click="saveEdit(question.id)"
                                                 >
                                                     {{ blankForm.processing ? 'Saving…' : 'Save correction' }}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="rounded-md border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                                                    :disabled="blankForm.processing || deleteForm.processing"
+                                                    @click="deleteQuestion(question)"
+                                                >
+                                                    {{ deleteForm.processing ? 'Deleting…' : 'Delete question' }}
                                                 </button>
                                                 <button
                                                     type="button"

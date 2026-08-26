@@ -100,6 +100,16 @@ const submit = () => {
         forceFormData: true,
     });
 };
+
+const deleteForm = useForm({});
+
+const deleteQuestion = () => {
+    if (!confirm('Delete this question? Use when it is irrelevant or too broken to fix. Students will not be asked to re-attempt it.')) {
+        return;
+    }
+
+    deleteForm.delete(route('content.corrections.destroy', props.correction.id));
+};
 </script>
 
 <template>
@@ -241,11 +251,19 @@ const submit = () => {
                     </div>
 
                     <div class="flex flex-wrap items-center gap-3 pt-2">
-                        <PrimaryButton :disabled="form.processing">
+                        <PrimaryButton :disabled="form.processing || deleteForm.processing">
                             {{ form.processing ? 'Saving…' : 'Save & return to student' }}
                         </PrimaryButton>
-                        <p class="text-xs text-gray-500">
-                            Saves the live question and puts it back on the student’s revise list.
+                        <button
+                            type="button"
+                            class="rounded-md border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                            :disabled="form.processing || deleteForm.processing"
+                            @click="deleteQuestion"
+                        >
+                            {{ deleteForm.processing ? 'Deleting…' : 'Delete question' }}
+                        </button>
+                        <p class="w-full text-xs text-gray-500">
+                            Save returns the sum to the student’s revise list. Delete removes it when the sum is irrelevant or unfixable.
                         </p>
                     </div>
                 </form>

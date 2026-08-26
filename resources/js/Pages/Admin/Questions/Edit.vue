@@ -88,9 +88,11 @@ const submit = () => {
     });
 };
 
+const destroyForm = useForm({});
+
 const destroy = () => {
-    if (confirm('Delete this question?')) {
-        form.delete(route('admin.questions.destroy', props.question.id));
+    if (confirm('Delete this question? Use when it is irrelevant or too broken to fix.')) {
+        destroyForm.transform(() => ({ return_to: 'back' })).delete(route('admin.questions.destroy', props.question.id));
     }
 };
 </script>
@@ -201,7 +203,7 @@ const destroy = () => {
 
                     <div class="flex gap-3">
                         <PrimaryButton :disabled="form.processing">Save</PrimaryButton>
-                        <DangerButton type="button" @click="destroy">Delete</DangerButton>
+                        <DangerButton type="button" :disabled="destroyForm.processing" @click="destroy">Delete</DangerButton>
                     </div>
                 </form>
             </div>

@@ -117,6 +117,38 @@ class CorrectionQuestionController extends Controller
             ->with('success', $message);
     }
 
+    public function destroy(Request $request, ContentQuestionCorrection $correction): RedirectResponse
+    {
+        $correction->loadMissing(['task', 'question']);
+        abort_unless($correction->task && $correction->question, 404);
+        $this->authorizeAssignee($correction, $request);
+
+        if (! $correction->isPending()) {
+            return redirect()
+                ->route('content.tasks.index')
+                ->with('error', 'This sum was already corrected.');
+        }
+
+        $question = $correction->question;
+        $questionId = (int) $question->id;
+
+        try {
+            $this->taskService->completeQuestionCorrection($correction->task, $questionId);
+            $this->issueReports->dismissOpenForQuestion(
+                $questionId,
+                $request->user(),
+                'Question removed as irrelevant or defective — no re-attempt needed.',
+            );
+            $question->delete();
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('content.tasks.index')
+            ->with('success', 'Question deleted. Open misprint reports were closed (students will not be asked to re-attempt).');
+    }
+
     private function updateMcq(Request $request, Question $question): void
     {
         $validated = $request->validate([

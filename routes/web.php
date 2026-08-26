@@ -521,6 +521,7 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/corrections/{correction}/start', [ContentTaskController::class, 'startCorrection'])->name('corrections.start');
     Route::get('/corrections/{correction}/edit', [CorrectionQuestionController::class, 'edit'])->name('corrections.edit');
     Route::put('/corrections/{correction}', [CorrectionQuestionController::class, 'update'])->name('corrections.update');
+    Route::delete('/corrections/{correction}', [CorrectionQuestionController::class, 'destroy'])->name('corrections.destroy');
     Route::post('/tasks/{contentTask}/verification-check', [ContentTaskController::class, 'saveVerificationCheck'])->name('tasks.verification-check');
     Route::post('/tasks/{contentTask}/verification-question', [ContentTaskController::class, 'saveVerificationQuestion'])->name('tasks.verification-question');
     Route::post('/tasks/{contentTask}/verification-skip', [ContentTaskController::class, 'skipVerificationQuestion'])->name('tasks.verification-skip');

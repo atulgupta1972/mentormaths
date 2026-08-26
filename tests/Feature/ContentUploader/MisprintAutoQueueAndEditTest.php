@@ -100,6 +100,50 @@ class MisprintAutoQueueAndEditTest extends TestCase
         );
     }
 
+    public function test_uploader_can_delete_irrelevant_question_from_correction(): void
+    {
+        Mail::fake();
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task, $question] = $this->seedPublishedFillBlankWithUploader();
+        [$student] = $this->seedStudent();
+
+        app(QuestionIssueReportService::class)->reportFromBatch(
+            $this->seedInProgressBatchAttempt($student, $question),
+            $question,
+        );
+
+        $correction = ContentQuestionCorrection::query()
+            ->where('question_id', $question->id)
+            ->where('status', ContentQuestionCorrection::STATUS_PENDING)
+            ->firstOrFail();
+
+        $questionId = $question->id;
+
+        $this->actingAs($uploader)
+            ->delete(route('content.corrections.destroy', $correction))
+            ->assertRedirect(route('content.tasks.index'));
+
+        $this->assertDatabaseMissing('questions', ['id' => $questionId]);
+        $this->assertDatabaseMissing('question_issue_reports', ['question_id' => $questionId]);
+        $this->assertDatabaseMissing('worksheet_question', ['question_id' => $questionId]);
+    }
+
+    public function test_admin_can_delete_question_and_return_to_set_code(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task, $question] = $this->seedPublishedFillBlankWithUploader();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        app(UserGroupService::class)->attachGroupByCode($admin, User::ROLE_ADMIN);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.questions.destroy', $question), ['return_to' => 'set-code'])
+            ->assertRedirect(route('admin.questions.set-code', ['code' => 'SF751']));
+
+        $this->assertDatabaseMissing('questions', ['id' => $question->id]);
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask, 3: Question}
      */
