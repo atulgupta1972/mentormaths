@@ -261,7 +261,7 @@ class QuestionIssueReportService
         User $admin,
         ?string $note = null,
     ): array {
-        if (! $report->isPendingAdmin()) {
+        if (! $report->isOpenForAdmin()) {
             throw new \InvalidArgumentException('This report is no longer waiting for a fix.');
         }
 
@@ -305,9 +305,9 @@ class QuestionIssueReportService
     }
 
     /**
-     * Send only this sum to the content uploader (email). Moves report to “Sent to uploader” until Fixed.
+     * Send (or re-send) only this sum to the content uploader. Moves / keeps report as “Sent to uploader”.
      *
-     * @return array{emailed: bool}
+     * @return array{emailed: bool, resent: bool}
      */
     public function returnToUploader(
         QuestionIssueReport $report,
@@ -315,9 +315,11 @@ class QuestionIssueReportService
         string $issue,
         ?string $remark = null,
     ): array {
-        if (! $report->isPendingAdmin()) {
-            throw new \InvalidArgumentException('This report is no longer waiting to be sent, or was already sent to the uploader.');
+        if (! $report->isOpenForAdmin()) {
+            throw new \InvalidArgumentException('This report is no longer open for admin action.');
         }
+
+        $wasAlreadySent = $report->isSentToUploader();
 
         $report->loadMissing('question');
 
@@ -325,12 +327,16 @@ class QuestionIssueReportService
             throw new \InvalidArgumentException('This question is no longer available.');
         }
 
+        $adminContext = $wasAlreadySent
+            ? 'Admin re-checked after uploader work — diagram/content still wrong. Fix only this sum again.'
+            : 'Student reported misprint/incomplete. Fix only this sum — it is incorrect or incomplete.';
+
         $task = $this->contentUploadTasks->returnHelpRequestQuestion(
             $report->question,
             $admin,
             $issue,
             $remark,
-            'Student reported misprint/incomplete. Fix only this sum — it is incorrect or incomplete.',
+            $adminContext,
             ContentQuestionCorrection::SOURCE_ADMIN_RETURN,
         );
 
@@ -341,19 +347,21 @@ class QuestionIssueReportService
         };
 
         $extra = trim((string) $remark);
-        $note = 'Sent to uploader ('.$label.')'
+        $note = ($wasAlreadySent ? 'Re-sent to uploader' : 'Sent to uploader')
+            .' ('.$label.')'
             .($extra !== '' ? ': '.$extra : '');
 
         $report->update([
             'status' => QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
             'admin_note' => $note,
             'resolved_by' => $admin->id,
+            'resolved_at' => null,
         ]);
 
         $uploader = $task->assignee;
         $emailed = $uploader && filled($uploader->email) && str_contains($uploader->email, '@');
 
-        return ['emailed' => (bool) $emailed];
+        return ['emailed' => (bool) $emailed, 'resent' => $wasAlreadySent];
     }
 
     public function clearAwaitingForStudentQuestion(int $studentId, int $questionId): void

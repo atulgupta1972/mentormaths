@@ -129,6 +129,61 @@ class MisprintAutoQueueAndEditTest extends TestCase
         $this->assertDatabaseMissing('worksheet_question', ['question_id' => $questionId]);
     }
 
+    public function test_admin_can_resend_sent_report_to_uploader_after_they_completed_correction(): void
+    {
+        Mail::fake();
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task, $question] = $this->seedPublishedFillBlankWithUploader();
+        [$student] = $this->seedStudent();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        app(UserGroupService::class)->attachGroupByCode($admin, User::ROLE_ADMIN);
+
+        app(QuestionIssueReportService::class)->reportFromBatch(
+            $this->seedInProgressBatchAttempt($student, $question),
+            $question,
+        );
+
+        $report = QuestionIssueReport::query()->where('question_id', $question->id)->firstOrFail();
+        $this->assertSame(QuestionIssueReport::STATUS_SENT_TO_UPLOADER, $report->status);
+
+        $correction = ContentQuestionCorrection::query()
+            ->where('question_id', $question->id)
+            ->where('status', ContentQuestionCorrection::STATUS_PENDING)
+            ->firstOrFail();
+
+        $correction->update([
+            'status' => ContentQuestionCorrection::STATUS_COMPLETED,
+            'completed_at' => now()->subHour(),
+            'notified_at' => now()->subHour(),
+        ]);
+
+        Mail::fake();
+
+        $this->actingAs($admin)
+            ->from(route('dashboard'))
+            ->post(route('admin.question-issue-reports.return-to-uploader', $report), [
+                'issue' => 'incomplete',
+                'remark' => 'Diagram still missing / wrong',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $report->refresh();
+        $this->assertSame(QuestionIssueReport::STATUS_SENT_TO_UPLOADER, $report->status);
+        $this->assertStringContainsString('Re-sent to uploader', (string) $report->admin_note);
+        $this->assertStringContainsString('Diagram still missing', (string) $report->admin_note);
+
+        $reopened = ContentQuestionCorrection::query()
+            ->where('question_id', $question->id)
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame(ContentQuestionCorrection::STATUS_PENDING, $reopened->status);
+        $this->assertStringContainsString('Diagram still missing', (string) $reopened->remark);
+        Mail::assertSent(ContentTaskReturnedUploader::class);
+    }
+
     public function test_admin_can_delete_question_and_return_to_set_code(): void
     {
         $this->withoutVite();

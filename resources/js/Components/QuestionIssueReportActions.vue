@@ -20,19 +20,19 @@ const uploaderForm = useForm({
 });
 
 const canReturnToUploader = computed(() =>
-    !props.item.sent_to_uploader
-    && hasRoute('admin.question-issue-reports.return-to-uploader')
+    hasRoute('admin.question-issue-reports.return-to-uploader')
     && props.item.can_return_to_uploader === true,
 );
 
 const canPostAction = computed(() =>
-    !props.item.sent_to_uploader
-    && hasRoute('admin.question-issue-reports.return-to-uploader'),
+    hasRoute('admin.question-issue-reports.return-to-uploader'),
 );
 
 const isQuestionCorrect = computed(() => uploaderForm.issue === 'question_correct');
 
 const showActionPanel = computed(() => canReturnToUploader.value || canPostAction.value);
+
+const isResend = computed(() => Boolean(props.item.sent_to_uploader));
 
 const busy = computed(() =>
     fixForm.processing || dismissForm.processing || uploaderForm.processing,
@@ -40,12 +40,14 @@ const busy = computed(() =>
 
 const actionButtonLabel = computed(() => {
     if (uploaderForm.processing) {
-        return isQuestionCorrect.value ? 'Confirming…' : 'Sending…';
+        return isQuestionCorrect.value ? 'Confirming…' : (isResend.value ? 'Re-sending…' : 'Sending…');
     }
 
-    return isQuestionCorrect.value
-        ? 'Confirm — 0 marks & email'
-        : 'Send to uploader';
+    if (isQuestionCorrect.value) {
+        return 'Confirm — 0 marks & email';
+    }
+
+    return isResend.value ? 'Resend to uploader' : 'Send to uploader';
 });
 
 const markFixed = () => {
@@ -98,7 +100,11 @@ const submitAction = () => {
             ? 'incomplete / missing diagram'
             : 'a content issue';
 
-    if (!window.confirm(`Send only this sum to ${who}${chapter} to fix (${issueLabel})?\n\nThey will be emailed. It moves to Sent to uploader until you mark Fixed.`)) {
+    const confirmText = isResend.value
+        ? `Resend this sum to ${who}${chapter}?\n\nThey will be emailed again to fix (${issueLabel}). Use this when the uploader already worked on it but the diagram/content is still wrong.`
+        : `Send only this sum to ${who}${chapter} to fix (${issueLabel})?\n\nThey will be emailed. It moves to Sent to uploader until you mark Fixed.`;
+
+    if (!window.confirm(confirmText)) {
         return;
     }
 
@@ -147,6 +153,11 @@ const submitAction = () => {
                     Question and answer look fine — student must re-attempt.
                     <span class="font-semibold">Score stays 0</span> even if they get it right later. Email notifies them.
                 </template>
+                <template v-else-if="isResend">
+                    Still wrong after uploader work? Resend
+                    <span class="font-semibold">only this sum</span>
+                    to {{ item.uploader_name || 'the uploader' }} with a clearer note (e.g. missing/wrong diagram).
+                </template>
                 <template v-else>
                     If you prefer not to fix it yourself, send
                     <span class="font-semibold">only this sum</span>
@@ -190,19 +201,36 @@ const submitAction = () => {
             </p>
         </div>
         <p
-            v-else-if="item.content_task_id === null && item.can_return_to_uploader === false && !compact"
+            v-else-if="item.content_task_id === null && item.can_return_to_uploader === false"
             class="text-xs text-gray-500"
+            :class="compact ? 'text-right' : ''"
         >
             No content uploader is assigned — use Edit yourself to fix it, or dismiss if not needed.
         </p>
 
         <p
-            v-if="item.sent_to_uploader"
+            v-else-if="!item.can_return_to_uploader && item.content_task_id"
+            class="text-xs text-amber-800"
+            :class="compact ? 'text-right' : ''"
+        >
+            Uploader task is not ready for a return yet — edit yourself, or try again after the chapter is uploaded.
+        </p>
+
+        <p
+            v-if="item.sent_to_uploader && !showActionPanel"
             class="rounded-md border border-violet-200 bg-violet-50 px-2 py-1.5 text-xs text-violet-950"
             :class="compact ? 'text-right' : ''"
         >
             Waiting on uploader{{ item.uploader_name ? ` (${item.uploader_name})` : '' }}.
             When they fix it, tap Fixed — return to student.
+        </p>
+
+        <p
+            v-else-if="item.sent_to_uploader && showActionPanel && compact"
+            class="text-[11px] text-violet-800"
+            :class="compact ? 'text-right' : ''"
+        >
+            Waiting on {{ item.uploader_name || 'uploader' }} — resend if still wrong.
         </p>
 
         <p v-if="item.admin_note" class="text-xs text-amber-900">

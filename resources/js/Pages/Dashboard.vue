@@ -566,7 +566,8 @@ const formatHelpDate = (value) => {
                             </p>
                             <template v-else>
                                 <p class="mt-1 text-xs text-violet-900">
-                                    Uploader was emailed to fix these incorrect / incomplete sums. When done, mark Fixed — return to student.
+                                    Uploader was emailed to fix these. If still wrong (e.g. diagram), use
+                                    <span class="font-semibold">Resend to uploader</span> with a note, or mark Fixed when done.
                                 </p>
                                 <div class="mt-3 space-y-2">
                                     <div

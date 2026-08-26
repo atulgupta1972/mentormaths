@@ -58,7 +58,7 @@ class QuestionIssueReportController extends Controller
 
     public function returnToUploader(Request $request, QuestionIssueReport $report): RedirectResponse
     {
-        abort_unless($report->isPendingAdmin(), 404);
+        abort_unless($report->isOpenForAdmin(), 404);
 
         $validated = $request->validate([
             'issue' => ['required', 'in:wrong_answer,incomplete,other,question_correct'],
@@ -66,6 +66,8 @@ class QuestionIssueReportController extends Controller
         ]);
 
         if ($validated['issue'] === 'question_correct') {
+            abort_unless($report->isPendingAdmin() || $report->isSentToUploader(), 404);
+
             try {
                 $mail = $this->issueReports->confirmQuestionCorrectRequireReattempt(
                     $report,
@@ -103,9 +105,13 @@ class QuestionIssueReportController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        $message = 'Moved to Sent to uploader. They were emailed to fix this incorrect / incomplete sum.';
+        $message = ($result['resent'] ?? false)
+            ? 'Re-sent to uploader with your note. They were emailed to fix this sum again.'
+            : 'Moved to Sent to uploader. They were emailed to fix this incorrect / incomplete sum.';
         if (! ($result['emailed'] ?? false)) {
-            $message = 'Moved to Sent to uploader, but no uploader email was on file — tell them on the content tasks page.';
+            $message = ($result['resent'] ?? false)
+                ? 'Re-sent to uploader, but no uploader email was on file — tell them on the content tasks page.'
+                : 'Moved to Sent to uploader, but no uploader email was on file — tell them on the content tasks page.';
         }
 
         return back()->with('success', $message);

@@ -489,10 +489,30 @@ class ContentUploadTaskService
             ->get()
             ->groupBy('textbook_chapter_id');
 
-        return $mapped->mapWithKeys(function (int $chapterId, int $questionId) use ($tasks) {
+        $chaptersById = TextbookChapter::query()
+            ->whereIn('id', $mapped->unique()->values()->all())
+            ->get()
+            ->keyBy('id');
+
+        return $mapped->mapWithKeys(function (int $chapterId, int $questionId) use ($tasks, $questions, $chaptersById) {
             $chapterTasks = $tasks->get($chapterId) ?? collect();
-            $task = $chapterTasks->first(fn (ContentUploadTask $row) => ! $row->isFillBlankConversion())
-                ?? $chapterTasks->first();
+            $question = $questions->get($questionId);
+            $chapter = $chaptersById->get($chapterId);
+
+            $onFillBlankSet = false;
+            if ($question && $chapter && (int) ($chapter->fill_blank_worksheet_id ?? 0) > 0) {
+                $onFillBlankSet = $question->worksheets
+                    ->contains(fn ($ws) => (int) $ws->id === (int) $chapter->fill_blank_worksheet_id);
+            }
+
+            if ($onFillBlankSet) {
+                $task = $chapterTasks->first(fn (ContentUploadTask $row) => $row->isFillBlankConversion())
+                    ?? $chapterTasks->first(fn (ContentUploadTask $row) => ! $row->isFillBlankConversion())
+                    ?? $chapterTasks->first();
+            } else {
+                $task = $chapterTasks->first(fn (ContentUploadTask $row) => ! $row->isFillBlankConversion())
+                    ?? $chapterTasks->first();
+            }
 
             return $task ? [$questionId => $task] : [];
         });
@@ -713,7 +733,7 @@ class ContentUploadTaskService
                     $existing = ContentQuestionCorrection::query()
                         ->where('content_upload_task_id', $task->id)
                         ->where('question_id', $item['question_id'])
-                        ->where('status', ContentQuestionCorrection::STATUS_PENDING)
+                        ->latest('id')
                         ->first();
 
                     $payload = [
@@ -722,6 +742,9 @@ class ContentUploadTaskService
                         'remark' => $remark,
                         'source' => $source,
                         'requested_by' => $admin->id,
+                        'status' => ContentQuestionCorrection::STATUS_PENDING,
+                        'completed_at' => null,
+                        'notified_at' => null,
                     ];
 
                     if ($existing) {
@@ -730,7 +753,6 @@ class ContentUploadTaskService
                         ContentQuestionCorrection::query()->create([
                             'content_upload_task_id' => $task->id,
                             'question_id' => $item['question_id'],
-                            'status' => ContentQuestionCorrection::STATUS_PENDING,
                             ...$payload,
                         ]);
                     }
