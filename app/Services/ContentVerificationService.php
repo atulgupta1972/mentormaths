@@ -613,8 +613,49 @@ class ContentVerificationService
             throw new \InvalidArgumentException('You cannot edit this verification run.');
         }
 
-        if ($run->status === ContentVerificationRun::STATUS_COMPLETED) {
-            throw new \InvalidArgumentException('Verification is already complete.');
+        if ($run->status !== ContentVerificationRun::STATUS_COMPLETED) {
+            return;
+        }
+
+        // Uploader locked verification but still needs to fix a sum before publish.
+        if ($this->uploaderMayReopenCompletedRun($run->task, $user)) {
+            $this->reopenCompletedRunForUploader($run);
+
+            return;
+        }
+
+        throw new \InvalidArgumentException('Verification is locked. Ask admin to send this chapter back if you still need to edit.');
+    }
+
+    private function uploaderMayReopenCompletedRun(?ContentUploadTask $task, User $user): bool
+    {
+        if (! $task || (int) $task->assigned_to_user_id !== (int) $user->id) {
+            return false;
+        }
+
+        return in_array($task->status, [
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+        ], true);
+    }
+
+    private function reopenCompletedRunForUploader(ContentVerificationRun $run): void
+    {
+        $run->update([
+            'status' => ContentVerificationRun::STATUS_IN_PROGRESS,
+            'completed_at' => null,
+        ]);
+
+        $task = $run->task;
+        if ($task && in_array($task->status, [
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+        ], true)) {
+            $task->update([
+                'status' => ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+                'submitted_at' => null,
+            ]);
         }
     }
 

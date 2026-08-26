@@ -44,7 +44,10 @@ const seedDrafts = () => {
 seedDrafts();
 watch(() => props.rows, seedDrafts, { deep: true });
 
-const canEdit = computed(() => props.task.can_work && props.task.status === 'in_progress');
+const canEdit = computed(() =>
+    props.task.can_work
+    && ['in_progress', 'uploaded', 'verification_in_progress', 'verified', 'submitted_for_publish'].includes(props.task.status),
+);
 const canSubmit = computed(() => canEdit.value
     && props.progress.included > 0
     && props.progress.checked === props.progress.included);

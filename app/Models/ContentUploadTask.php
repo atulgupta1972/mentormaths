@@ -307,6 +307,7 @@ class ContentUploadTask extends Model
             self::STATUS_UPLOADED,
             self::STATUS_VERIFICATION_IN_PROGRESS,
             self::STATUS_VERIFIED,
+            self::STATUS_SUBMITTED_FOR_PUBLISH,
         ], true);
     }
 

@@ -16,7 +16,8 @@ const props = defineProps({
     removeDiagramRoute: { type: String, default: '' },
     editableStatuses: {
         type: Array,
-        default: () => ['uploaded', 'verification_in_progress'],
+        // Stay editable until admin publishes — locking verification must not freeze the form.
+        default: () => ['uploaded', 'verification_in_progress', 'verified', 'submitted_for_publish'],
     },
     showCompleteActions: { type: Boolean, default: true },
     completeVerificationRoute: { type: String, default: '' },
@@ -300,6 +301,10 @@ const removeDiagram = (questionId) => {
                     <p class="mt-1 text-sm text-gray-600">{{ queueLabel }}</p>
                     <p class="mt-1 text-xs text-slate-500">
                         Skip irrelevant questions — they stay off the pay count for the uploader.
+                        You can edit fields until admin publishes (lock does not freeze editing).
+                    </p>
+                    <p v-if="!canEditQuestions" class="mt-2 text-sm font-medium text-rose-700">
+                        Published — editing is locked. Ask admin to send the chapter back if a sum still needs a fix.
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2 text-xs">
@@ -563,7 +568,7 @@ const removeDiagram = (questionId) => {
                 :disabled="completeForm.processing || verificationSummary.unverified > 0"
                 @click="completeForm.post(completeVerificationRoute)"
             >
-                All verified — lock verification
+                All verified — ready for publish
             </PrimaryButton>
             <PrimaryButton
                 v-if="submitForPublishRoute && task.status === 'verified'"
