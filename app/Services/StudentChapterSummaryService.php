@@ -27,6 +27,7 @@ class StudentChapterSummaryService
      * @return array{
      *     book_columns: list<array<string, mixed>>,
      *     chapters: list<array<string, mixed>>,
+     *     other_groups: list<array<string, mixed>>,
      *     context: array<string, mixed>
      * }
      */
@@ -55,6 +56,7 @@ class StudentChapterSummaryService
             return [
                 'book_columns' => [],
                 'chapters' => [],
+                'other_groups' => [],
                 'context' => $context,
             ];
         }
@@ -64,12 +66,13 @@ class StudentChapterSummaryService
         $chapters = SyllabusChapter::query()
             ->where('syllabus_version_id', $syllabusVersion->id)
             ->orderBy('sort_order')
-            ->get(['id', 'chapter_number', 'name', 'sort_order']);
+            ->get(['id', 'chapter_number', 'name', 'sort_order', 'chapter_head_id']);
 
         if ($chapters->isEmpty()) {
             return [
                 'book_columns' => $this->textbookColumnsForGrade($gradeLevelId),
                 'chapters' => [],
+                'other_groups' => [],
                 'context' => array_merge($context, [
                     'selected_grade_name' => $syllabusVersion->gradeLevel?->name,
                     'selected_board_name' => $syllabusVersion->board?->name,
@@ -158,7 +161,6 @@ class StudentChapterSummaryService
         $correctionCountsByWorksheet = PracticeCorrectionItem::query()
             ->where('student_id', $enrollment->student_id)
             ->where('status', PracticeCorrectionItem::STATUS_PENDING)
-            ->whereIn('syllabus_chapter_id', $chapterIds)
             ->selectRaw('worksheet_id, count(*) as aggregate')
             ->groupBy('worksheet_id')
             ->pluck('aggregate', 'worksheet_id');
@@ -289,9 +291,18 @@ class StudentChapterSummaryService
             ];
         })->values()->all();
 
+        [$chapterRows, $otherGroups] = $this->mergeCrossChapterAssignments(
+            $chapterRows,
+            $chapters,
+            $assignmentsByWorksheet,
+            $correctionCountsByWorksheet,
+            (int) $boardId,
+        );
+
         return [
             'book_columns' => $textbookColumns,
             'chapters' => $chapterRows,
+            'other_groups' => $otherGroups,
             'context' => array_merge($context, [
                 'selected_grade_name' => $syllabusVersion->gradeLevel?->name,
                 'selected_board_name' => $syllabusVersion->board?->name,
@@ -431,6 +442,172 @@ class StudentChapterSummaryService
             ->whereIn('textbook_id', $textbookIds)
             ->where('status', TextbookChapter::STATUS_PUBLISHED)
             ->get();
+    }
+
+    /**
+     * Fold assigned worksheets from other class/board into home chapters when the chapter
+     * name or chapter head matches; otherwise return them as Other groups.
+     *
+     * @param  list<array<string, mixed>>  $chapterRows
+     * @param  Collection<int, SyllabusChapter>  $homeChapters
+     * @param  Collection<int, Collection<int, SetAssignment>>  $assignmentsByWorksheet
+     * @param  Collection<int, int|string>  $correctionCountsByWorksheet
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    private function mergeCrossChapterAssignments(
+        array $chapterRows,
+        Collection $homeChapters,
+        Collection $assignmentsByWorksheet,
+        Collection $correctionCountsByWorksheet,
+        int $homeBoardId,
+    ): array {
+        $coveredIds = [];
+
+        foreach ($chapterRows as $row) {
+            foreach (['practice', 'practice_correction', 'test', 'written', 'fill_blank', 'formula'] as $key) {
+                foreach ($row['items'][$key] ?? [] as $item) {
+                    if (! empty($item['worksheet_id'])) {
+                        $coveredIds[(int) $item['worksheet_id']] = true;
+                    }
+                }
+            }
+
+            foreach ($row['items']['books'] ?? [] as $bookItems) {
+                if (! is_array($bookItems)) {
+                    continue;
+                }
+
+                foreach ($bookItems as $item) {
+                    if (is_array($item) && ! empty($item['worksheet_id'])) {
+                        $coveredIds[(int) $item['worksheet_id']] = true;
+                    }
+                }
+            }
+        }
+
+        $orphanWorksheetIds = $assignmentsByWorksheet->keys()
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0 && ! isset($coveredIds[$id]))
+            ->values();
+
+        if ($orphanWorksheetIds->isEmpty()) {
+            return [$chapterRows, []];
+        }
+
+        $orphanWorksheets = Worksheet::query()
+            ->whereIn('id', $orphanWorksheetIds)
+            ->where('status', Worksheet::STATUS_PUBLISHED)
+            ->with([
+                'topic:id,name,syllabus_chapter_id',
+                'topic.chapter:id,name,chapter_number,chapter_head_id,syllabus_version_id',
+                'topic.chapter.syllabusVersion.gradeLevel:id,name',
+                'topic.chapter.syllabusVersion.board:id,name,code',
+                'chapter:id,name,chapter_number,chapter_head_id,syllabus_version_id',
+                'chapter.syllabusVersion.gradeLevel:id,name',
+                'chapter.syllabusVersion.board:id,name,code',
+                'questions:id,type',
+            ])
+            ->withCount('questions')
+            ->get();
+
+        if ($orphanWorksheets->isEmpty()) {
+            return [$chapterRows, []];
+        }
+
+        $rowIndexById = [];
+        foreach ($chapterRows as $index => $row) {
+            $rowIndexById[(int) $row['id']] = $index;
+        }
+
+        $byName = [];
+        $byHead = [];
+        foreach ($homeChapters as $chapter) {
+            $normalized = $this->normalizeChapterKey((string) $chapter->name);
+            if ($normalized !== '' && ! isset($byName[$normalized])) {
+                $byName[$normalized] = (int) $chapter->id;
+            }
+            if ($chapter->chapter_head_id && ! isset($byHead[(int) $chapter->chapter_head_id])) {
+                $byHead[(int) $chapter->chapter_head_id] = (int) $chapter->id;
+            }
+        }
+
+        $otherBySource = [];
+
+        foreach ($orphanWorksheets as $worksheet) {
+            if ($worksheet->isCatchUp()) {
+                continue;
+            }
+
+            $sourceChapter = $worksheet->isChapterScope()
+                ? $worksheet->chapter
+                : $worksheet->topic?->chapter;
+
+            $item = $this->buildSetItem(
+                $worksheet,
+                $assignmentsByWorksheet,
+                null,
+                (int) ($correctionCountsByWorksheet[$worksheet->id] ?? 0),
+            );
+            $item['is_cross_chapter'] = true;
+
+            $matchId = null;
+            if ($sourceChapter) {
+                $normalized = $this->normalizeChapterKey((string) $sourceChapter->name);
+                if ($normalized !== '' && isset($byName[$normalized])) {
+                    $matchId = $byName[$normalized];
+                } elseif ($sourceChapter->chapter_head_id && isset($byHead[(int) $sourceChapter->chapter_head_id])) {
+                    $matchId = $byHead[(int) $sourceChapter->chapter_head_id];
+                }
+            }
+
+            if ($matchId !== null && isset($rowIndexById[$matchId])) {
+                $index = $rowIndexById[$matchId];
+                $bucket = $this->bucketForWorksheet($worksheet);
+                $chapterRows[$index]['items'][$bucket][] = $item;
+                $chapterRows[$index]['counts'][$bucket] = (int) ($chapterRows[$index]['counts'][$bucket] ?? 0) + 1;
+
+                continue;
+            }
+
+            $sourceKey = $sourceChapter?->id
+                ? 'sc:'.$sourceChapter->id
+                : 'ws:'.$worksheet->id;
+
+            if (! isset($otherBySource[$sourceKey])) {
+                $gradeName = $sourceChapter?->syllabusVersion?->gradeLevel?->name ?? 'Other class';
+                $chapterName = $sourceChapter?->name
+                    ?? (string) ($worksheet->title ?: $worksheet->set_code ?: 'Extra sheet');
+                $boardName = $sourceChapter?->syllabusVersion?->board?->name;
+                $boardCode = $sourceChapter?->syllabusVersion?->board?->code;
+                $sourceBoardId = (int) ($sourceChapter?->syllabusVersion?->board_id ?? 0);
+                $label = ($sourceBoardId > 0 && $sourceBoardId !== $homeBoardId && $boardCode)
+                    ? "{$gradeName} · {$boardCode} - {$chapterName}"
+                    : "{$gradeName} - {$chapterName}";
+
+                $otherBySource[$sourceKey] = [
+                    'id' => $sourceKey,
+                    'label' => $label,
+                    'grade_name' => $gradeName,
+                    'board_name' => $boardName,
+                    'chapter_name' => $chapterName,
+                    'syllabus_chapter_id' => $sourceChapter?->id,
+                    'items' => [],
+                ];
+            }
+
+            $otherBySource[$sourceKey]['items'][] = $item;
+        }
+
+        return [$chapterRows, array_values($otherBySource)];
+    }
+
+    private function normalizeChapterKey(string $name): string
+    {
+        $name = mb_strtolower(trim($name));
+        $name = preg_replace('/^(ch(apter)?\.?\s*\d+[a-z]?\s*[-–:.]?\s*)/u', '', $name) ?? $name;
+        $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
+
+        return trim($name);
     }
 
     /**

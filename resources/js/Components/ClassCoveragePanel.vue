@@ -325,12 +325,13 @@ const hasDashboardContent = (dashboard) => {
     }
 
     const blockItems = (dashboard.blocks || []).some((block) => (block.item_count || 0) > 0);
-    const extras = ['formula', 'practice_correction', 'books'].some(
+    const extras = ['formula', 'practice_correction', 'books', 'other'].some(
         (key) => (dashboard[key]?.items?.length || 0) > 0,
     );
     const bookGroups = (dashboard.book_groups || []).some((group) => (group.items?.length || 0) > 0);
+    const otherGroups = (dashboard.other_groups || []).some((group) => (group.items?.length || 0) > 0);
 
-    return blockItems || extras || bookGroups;
+    return blockItems || extras || bookGroups || otherGroups;
 };
 
 const bookGroups = (dashboard) => {
@@ -360,6 +361,24 @@ const bookGroups = (dashboard) => {
     }));
 };
 
+const otherGroups = (dashboard) => {
+    const groups = (dashboard?.other_groups ?? []).filter((group) => (group.items?.length || 0) > 0);
+    if (groups.length) {
+        return groups;
+    }
+
+    const items = dashboard?.other?.items ?? [];
+    if (! items.length) {
+        return [];
+    }
+
+    return [{
+        id: 'other',
+        label: 'Other',
+        items,
+    }];
+};
+
 /** Hide empty Fill / Written / Test rows; keep only tiers that have at least one set. */
 const visibleBlocks = (dashboard) =>
     (dashboard?.blocks ?? [])
@@ -384,6 +403,15 @@ const collectDashboardItems = (dashboard) => {
 
     for (const key of ['formula', 'practice_correction', 'books']) {
         items.push(...(dashboard[key]?.items ?? []));
+    }
+
+    const groups = dashboard.other_groups ?? [];
+    if (groups.length) {
+        for (const group of groups) {
+            items.push(...(group.items ?? []));
+        }
+    } else {
+        items.push(...(dashboard.other?.items ?? []));
     }
 
     return items;
@@ -974,6 +1002,41 @@ const startCorrection = (item) => {
                                                             @cancel-staff-assign="pendingAssignKey = null"
                                                         />
                                                     </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        v-if="otherGroups(chapterDashboard(chapter)).length"
+                                        class="rounded-xl border-2 border-slate-700 bg-white p-3 shadow-md ring-1 ring-slate-300"
+                                    >
+                                        <p class="text-[11px] font-extrabold uppercase tracking-wide text-slate-900">Other</p>
+                                        <div class="mt-2 space-y-2.5">
+                                            <div
+                                                v-for="group in otherGroups(chapterDashboard(chapter))"
+                                                :key="`${chapter.id}-other-${group.id}`"
+                                            >
+                                                <p class="text-[10px] font-bold tracking-wide text-slate-700">
+                                                    {{ group.label }}
+                                                </p>
+                                                <div class="mt-1 flex flex-wrap gap-1.5">
+                                                    <CoverageSetItemCard
+                                                        v-for="item in group.items"
+                                                        :key="`other-${group.id}-${item.worksheet_id}`"
+                                                        :item="item"
+                                                        group-key="other"
+                                                        :is-student-view="isStudentView"
+                                                        :can-staff-assign="canStaffAssign"
+                                                        :assigning-worksheet-id="assigningWorksheetId"
+                                                        :pending-assign-key="pendingAssignKey"
+                                                        :staff-assign-form="staffAssignForm"
+                                                        @self-assign="selfAssign"
+                                                        @start-correction="startCorrection"
+                                                        @open-staff-assign="openStaffAssign"
+                                                        @confirm-staff-assign="confirmStaffAssign"
+                                                        @cancel-staff-assign="pendingAssignKey = null"
+                                                    />
                                                 </div>
                                             </div>
                                         </div>

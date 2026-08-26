@@ -60,9 +60,26 @@ class ClassCoverageService
         $summary = $this->chapterSummaryService->forEnrollment($enrollment);
         $summaryById = collect($summary['chapters'] ?? [])->keyBy('id');
         $availabilityColumns = $this->availabilityColumnsFor($summary['book_columns'] ?? []);
+        $otherGroups = $summary['other_groups'] ?? [];
 
-        $underStudyId = null;
-        $chapters = $chapterOptions->values()->map(function (array $chapter) use ($coverages, $summaryById, $availabilityColumns, &$underStudyId) {
+        $underStudyId = $coverages
+            ->first(fn (StudentChapterCoverage $row) => $row->status === StudentChapterCoverage::STATUS_UNDER_STUDY)
+            ?->syllabus_chapter_id;
+        $firstStudiedId = $coverages
+            ->first(fn (StudentChapterCoverage $row) => $row->status === StudentChapterCoverage::STATUS_STUDIED)
+            ?->syllabus_chapter_id;
+        $otherHostChapterId = (int) ($underStudyId
+            ?? $firstStudiedId
+            ?? ($chapterOptions->first()['id'] ?? 0));
+
+        $chapters = $chapterOptions->values()->map(function (array $chapter) use (
+            $coverages,
+            $summaryById,
+            $availabilityColumns,
+            $otherGroups,
+            $otherHostChapterId,
+            &$underStudyId,
+        ) {
             $coverage = $coverages->get($chapter['id']);
             $isStudied = $coverage?->status === StudentChapterCoverage::STATUS_STUDIED;
             $isUnderStudy = $coverage?->status === StudentChapterCoverage::STATUS_UNDER_STUDY;
@@ -84,6 +101,11 @@ class ClassCoverageService
                 }
             }
 
+            $rawItems = $summaryChapter['items'] ?? [];
+            if ((int) $chapter['id'] === $otherHostChapterId && $otherGroups !== []) {
+                $rawItems['other'] = $otherGroups;
+            }
+
             return [
                 'id' => $chapter['id'],
                 'chapter_number' => $chapter['chapter_number'],
@@ -94,7 +116,7 @@ class ClassCoverageService
                 'studied' => $isStudied,
                 'under_study' => $isUnderStudy,
                 'availability' => $availability,
-                'items' => $this->formatDetailItems($summaryChapter['items'] ?? []),
+                'items' => $this->formatDetailItems($rawItems),
             ];
         })->sort(function (array $left, array $right) {
             $rank = static fn (array $chapter): int => match (true) {
@@ -268,6 +290,19 @@ class ClassCoverageService
                 }
             }
 
+            $otherGroups = $itemsPayload['other_groups'] ?? [];
+            if ($otherGroups !== []) {
+                foreach ($otherGroups as $group) {
+                    foreach ($group['items'] ?? [] as $item) {
+                        $collected[] = $item;
+                    }
+                }
+            } else {
+                foreach ($itemsPayload['other']['items'] ?? [] as $item) {
+                    $collected[] = $item;
+                }
+            }
+
             return $collected;
         }
 
@@ -334,6 +369,7 @@ class ClassCoverageService
             'is_correction' => (bool) ($item['is_correction'] ?? false),
             'textbook_id' => $item['textbook_id'] ?? null,
             'textbook_name' => $item['textbook_name'] ?? null,
+            'is_cross_chapter' => (bool) ($item['is_cross_chapter'] ?? false),
         ];
     }
 

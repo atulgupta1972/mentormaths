@@ -20,7 +20,9 @@ class SetCoverageGrouping
      *     formula: array{key: string, label: string, items: list<array<string, mixed>>},
      *     practice_correction: array{key: string, label: string, items: list<array<string, mixed>>},
      *     books: array{key: string, label: string, items: list<array<string, mixed>>},
-     *     book_groups: list<array{id: string, name: string, items: list<array<string, mixed>>}>
+     *     book_groups: list<array{id: string, name: string, items: list<array<string, mixed>>}>,
+     *     other: array{key: string, label: string, items: list<array<string, mixed>>},
+     *     other_groups: list<array{id: string, label: string, items: list<array<string, mixed>>}>
      * }
      */
     public function formatDashboard(array $items, ?Closure $mapItem = null): array
@@ -66,6 +68,10 @@ class SetCoverageGrouping
         }
 
         $bookGroups = $this->formatBookGroups($items['books'] ?? [], $mapItem);
+        $otherGroups = $this->formatOtherGroups(
+            $items['other'] ?? $items['other_groups'] ?? [],
+            $mapItem,
+        );
 
         return [
             'layout' => 'tier_blocks',
@@ -94,6 +100,12 @@ class SetCoverageGrouping
                 'items' => collect($bookGroups)->flatMap(fn (array $group) => $group['items'])->values()->all(),
             ],
             'book_groups' => $bookGroups,
+            'other' => [
+                'key' => 'other',
+                'label' => 'Other',
+                'items' => collect($otherGroups)->flatMap(fn (array $group) => $group['items'])->values()->all(),
+            ],
+            'other_groups' => $otherGroups,
         ];
     }
 
@@ -130,6 +142,45 @@ class SetCoverageGrouping
                 'id' => (string) ($first['textbook_id'] ?? $bookId),
                 'name' => (string) ($first['textbook_name'] ?? 'Book content'),
                 'items' => $mapped,
+            ];
+        }
+
+        return $groups;
+    }
+
+    /**
+     * @param  array<int, mixed>  $other
+     * @param  Closure(array<string, mixed>): array<string, mixed>  $mapItem
+     * @return list<array{id: string, label: string, items: list<array<string, mixed>>}>
+     */
+    private function formatOtherGroups(array $other, Closure $mapItem): array
+    {
+        $groups = [];
+
+        foreach ($other as $index => $group) {
+            if (! is_array($group)) {
+                continue;
+            }
+
+            $rows = collect($group['items'] ?? [])
+                ->filter(fn ($item) => is_array($item))
+                ->map(fn (array $item) => $mapItem($item))
+                ->sort(fn (array $left, array $right) => $this->studiedFirstCompare($left, $right))
+                ->values()
+                ->all();
+
+            if ($rows === []) {
+                continue;
+            }
+
+            $groups[] = [
+                'id' => (string) ($group['id'] ?? $group['syllabus_chapter_id'] ?? $index),
+                'label' => (string) ($group['label'] ?? $group['name'] ?? 'Other'),
+                'grade_name' => $group['grade_name'] ?? null,
+                'board_name' => $group['board_name'] ?? null,
+                'chapter_name' => $group['chapter_name'] ?? null,
+                'syllabus_chapter_id' => $group['syllabus_chapter_id'] ?? null,
+                'items' => $rows,
             ];
         }
 
@@ -178,6 +229,21 @@ class SetCoverageGrouping
                 'color' => null,
                 'kind' => $section['key'],
                 'items' => $section['items'],
+            ];
+        }
+
+        foreach ($dashboard['other_groups'] ?? [] as $otherGroup) {
+            if (($otherGroup['items'] ?? []) === []) {
+                continue;
+            }
+
+            $groups[] = [
+                'key' => 'other:'.($otherGroup['id'] ?? 'x'),
+                'label' => 'Other · '.($otherGroup['label'] ?? 'Extra'),
+                'tier' => null,
+                'color' => null,
+                'kind' => 'other',
+                'items' => $otherGroup['items'],
             ];
         }
 

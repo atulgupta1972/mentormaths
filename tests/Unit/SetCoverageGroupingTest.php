@@ -37,4 +37,28 @@ class SetCoverageGroupingTest extends TestCase
         $this->assertSame('NCERT', $dashboard['book_groups'][1]['name']);
         $this->assertCount(2, $dashboard['books']['items']);
     }
+
+    public function test_other_groups_are_formatted_for_dashboard(): void
+    {
+        $dashboard = (new SetCoverageGrouping)->formatDashboard([
+            'other' => [
+                [
+                    'id' => 'sc:9',
+                    'label' => 'Class 6 - Decimals',
+                    'items' => [
+                        [
+                            'worksheet_id' => 50,
+                            'short_label' => 'P1',
+                            'status' => 'pending',
+                            'tier' => 'starter',
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->assertCount(1, $dashboard['other_groups']);
+        $this->assertSame('Class 6 - Decimals', $dashboard['other_groups'][0]['label']);
+        $this->assertCount(1, $dashboard['other']['items']);
+    }
 }

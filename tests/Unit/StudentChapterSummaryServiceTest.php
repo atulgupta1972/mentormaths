@@ -151,6 +151,85 @@ class StudentChapterSummaryServiceTest extends TestCase
         $this->assertSame('Integers', $summary['chapters'][0]['name']);
     }
 
+    public function test_cross_class_assignment_merges_by_chapter_name_or_lands_in_other(): void
+    {
+        [$enrollment, $homeChapter] = $this->seedChapterContent(withOtherGrade: true);
+
+        $board = Board::query()->where('code', 'CBSE')->firstOrFail();
+        $classSix = GradeLevel::query()->where('name', 'Class 6')->firstOrFail();
+
+        $syllabusSix = SyllabusVersion::query()
+            ->where('grade_level_id', $classSix->id)
+            ->where('board_id', $board->id)
+            ->firstOrFail();
+
+        $matchingSixChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabusSix->id,
+            'name' => 'Algebraic Expressions',
+            'chapter_number' => 2,
+            'sort_order' => 2,
+        ]);
+        $matchingTopic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $matchingSixChapter->id,
+            'name' => 'Like terms',
+            'sort_order' => 1,
+        ]);
+        $matchedWorksheet = Worksheet::query()->create([
+            'title' => 'Class 6 algebra practice',
+            'set_number' => 9,
+            'set_code' => 'S609',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::TOPIC,
+            'syllabus_topic_id' => $matchingTopic->id,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+            'status' => Worksheet::STATUS_PUBLISHED,
+        ]);
+
+        $otherSixChapter = SyllabusChapter::query()->where('name', 'Integers')->firstOrFail();
+        $otherTopic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $otherSixChapter->id,
+            'name' => 'Negative numbers',
+            'sort_order' => 1,
+        ]);
+        $otherWorksheet = Worksheet::query()->create([
+            'title' => 'Class 6 integers practice',
+            'set_number' => 3,
+            'set_code' => 'S603',
+            'tier' => PracticeSetTier::BUILDER,
+            'scope' => PracticeSetScope::TOPIC,
+            'syllabus_topic_id' => $otherTopic->id,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+            'status' => Worksheet::STATUS_PUBLISHED,
+        ]);
+
+        SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $matchedWorksheet->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addDays(3),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+        SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $otherWorksheet->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addDays(3),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        $summary = app(StudentChapterSummaryService::class)->forEnrollment($enrollment);
+        $homeRow = collect($summary['chapters'])->firstWhere('id', $homeChapter->id);
+
+        $this->assertSame(3, $homeRow['counts']['practice']);
+        $this->assertTrue(
+            collect($homeRow['items']['practice'])->contains(fn (array $item) => $item['worksheet_id'] === $matchedWorksheet->id),
+        );
+
+        $this->assertCount(1, $summary['other_groups']);
+        $this->assertSame('Class 6 - Integers', $summary['other_groups'][0]['label']);
+        $this->assertSame($otherWorksheet->id, $summary['other_groups'][0]['items'][0]['worksheet_id']);
+    }
+
     private function studentUserForEnrollment(StudentEnrollment $enrollment): User
     {
         $studentUser = User::factory()->create(['role' => User::ROLE_STUDENT]);
