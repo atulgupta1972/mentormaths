@@ -7,6 +7,7 @@ use App\Models\Question;
 use App\Models\QuestionResolutionItem;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
+use App\Models\User;
 use App\Support\AnswerValidationService;
 use App\Support\DateLabels;
 use App\Support\DoubtsClearedMailer;
@@ -182,6 +183,53 @@ class QuestionResolutionService
             'resolved' => true,
             'message' => 'Well done — this sum is cleared from your help list. It will come back in daily drill so you can show you can do it on your own.',
         ];
+    }
+
+    /**
+     * Teacher/admin fixed the stored question (or explained and wants it off the help list).
+     * Clears the help request and queues the sum for the student to re-attempt.
+     */
+    public function markCorrectedByTeacher(QuestionResolutionItem $item, User $actor): void
+    {
+        if ($item->status !== QuestionResolutionItem::STATUS_PENDING) {
+            throw new \InvalidArgumentException('This help request is already cleared.');
+        }
+
+        $item->loadMissing([
+            'question.topic',
+            'question.worksheets:id,set_code,set_number',
+            'enrollment.student',
+            'assignment',
+        ]);
+
+        if (! $item->question) {
+            throw new \InvalidArgumentException('This question is no longer available.');
+        }
+
+        $student = $item->enrollment?->student;
+
+        if (! $student) {
+            throw new \InvalidArgumentException('Student enrollment is missing for this help request.');
+        }
+
+        $item->update([
+            'status' => QuestionResolutionItem::STATUS_RESOLVED,
+            'resolved_at' => now(),
+            'clearance_method' => QuestionResolutionItem::CLEARANCE_ACKNOWLEDGED,
+        ]);
+
+        $worksheetId = $item->assignment?->worksheet_id
+            ?? $item->question->worksheets->first()?->id;
+
+        $chapterId = $item->question->topic?->syllabus_chapter_id;
+
+        $this->correctionQueue->recordContentFixedPending([
+            'student_id' => $student->id,
+            'question_id' => $item->question_id,
+            'syllabus_chapter_id' => $chapterId,
+            'worksheet_id' => $worksheetId,
+            'first_failure_at' => now(),
+        ]);
     }
 
     /**

@@ -24,6 +24,7 @@ use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
 use App\Services\FillBlankConversionService;
+use App\Services\QuestionResolutionService;
 use App\Services\TextbookMcqSetPlanService;
 use App\Services\TextbookChapterBookService;
 use Illuminate\Http\RedirectResponse;
@@ -856,6 +857,19 @@ class ContentUploadTaskController extends Controller
         }
 
         return back()->with('success', 'This sum is on the uploader dashboard to correct. They get an email when they open it.');
+    }
+
+    public function markHelpRequestCorrected(Request $request, QuestionResolutionItem $item): RedirectResponse
+    {
+        abort_unless($item->status === QuestionResolutionItem::STATUS_PENDING, 404);
+
+        try {
+            app(QuestionResolutionService::class)->markCorrectedByTeacher($item, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Marked corrected. The sum is back on the student\'s list to retry.');
     }
 
     public function publish(ContentUploadTask $contentTask, Request $request): RedirectResponse

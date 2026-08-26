@@ -138,6 +138,28 @@ class HelpRequestReturnToUploaderTest extends TestCase
             ->assertSessionHas('error');
     }
 
+    public function test_admin_can_mark_help_request_corrected_themselves(): void
+    {
+        $this->withoutVite();
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class);
+
+        $item = $this->seedHelpRequestWithoutUploader();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.help-requests.mark-corrected', $item))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(QuestionResolutionItem::STATUS_RESOLVED, $item->fresh()->status);
+        $this->assertSame(QuestionResolutionItem::CLEARANCE_ACKNOWLEDGED, $item->fresh()->clearance_method);
+        $this->assertDatabaseHas('practice_correction_items', [
+            'question_id' => $item->question_id,
+            'status' => \App\Models\PracticeCorrectionItem::STATUS_PENDING,
+            'failure_reason' => \App\Models\PracticeCorrectionItem::REASON_CONTENT_FIXED,
+        ]);
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask, 3: int, 4: int}
      */

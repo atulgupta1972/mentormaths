@@ -321,7 +321,9 @@ const destroyStudent = () => {
                         </span>
                     </h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Sums the student gave up during guided practice or daily revision. Explain in class, then they retry from their dashboard. Open the set to check the stored answer. If the answer is wrong or the sum is incomplete, send only that sum back to the uploader.
+                        Sums the student gave up during guided practice or daily revision. Explain in class, or Edit question then tap
+                        <span class="font-semibold">I have corrected</span>
+                        so they can retry. If needed, send only that sum back to the uploader.
                     </p>
                     <ul v-if="resolutionItems.length" class="mt-4 divide-y divide-gray-100">
                         <li v-for="item in resolutionItems" :key="item.id" class="py-3">

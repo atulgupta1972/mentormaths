@@ -63,6 +63,32 @@ class QuestionResolutionServiceTest extends TestCase
         $this->assertSame(\App\Models\PracticeCorrectionItem::REASON_TEACHER_HELP, $queued->failure_reason);
     }
 
+    public function test_teacher_can_mark_help_request_corrected_and_queue_reattempt(): void
+    {
+        [$item, $student] = $this->seedResolutionItem(withOptions: true);
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        app(QuestionResolutionService::class)->markCorrectedByTeacher($item->fresh([
+            'question.topic',
+            'question.worksheets',
+            'enrollment.student',
+            'assignment',
+        ]), $admin);
+
+        $fresh = $item->fresh();
+        $this->assertSame(QuestionResolutionItem::STATUS_RESOLVED, $fresh->status);
+        $this->assertSame(QuestionResolutionItem::CLEARANCE_ACKNOWLEDGED, $fresh->clearance_method);
+
+        $queued = \App\Models\PracticeCorrectionItem::query()
+            ->where('student_id', $student->id)
+            ->where('question_id', $item->question_id)
+            ->first();
+
+        $this->assertNotNull($queued);
+        $this->assertSame(\App\Models\PracticeCorrectionItem::STATUS_PENDING, $queued->status);
+        $this->assertSame(\App\Models\PracticeCorrectionItem::REASON_CONTENT_FIXED, $queued->failure_reason);
+    }
+
     public function test_batch_clearance_email_sends_once_with_all_items(): void
     {
         Mail::fake();

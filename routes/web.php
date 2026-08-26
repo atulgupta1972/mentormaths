@@ -421,6 +421,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
     Route::post('/content-tasks/{contentTask}/return-for-reverification', [ContentUploadTaskController::class, 'returnForReverification'])->name('content-tasks.return-for-reverification');
     Route::post('/help-requests/{item}/return-to-uploader', [ContentUploadTaskController::class, 'returnHelpRequestQuestion'])->name('help-requests.return-to-uploader');
+    Route::post('/help-requests/{item}/mark-corrected', [ContentUploadTaskController::class, 'markHelpRequestCorrected'])->name('help-requests.mark-corrected');
     Route::post('/question-issue-reports/{report}/mark-fixed', [QuestionIssueReportController::class, 'markFixed'])->name('question-issue-reports.mark-fixed');
     Route::post('/question-issue-reports/{report}/dismiss', [QuestionIssueReportController::class, 'dismiss'])->name('question-issue-reports.dismiss');
     Route::post('/question-issue-reports/{report}/return-to-uploader', [QuestionIssueReportController::class, 'returnToUploader'])->name('question-issue-reports.return-to-uploader');
