@@ -328,8 +328,36 @@ const hasDashboardContent = (dashboard) => {
     const extras = ['formula', 'practice_correction', 'books'].some(
         (key) => (dashboard[key]?.items?.length || 0) > 0,
     );
+    const bookGroups = (dashboard.book_groups || []).some((group) => (group.items?.length || 0) > 0);
 
-    return blockItems || extras;
+    return blockItems || extras || bookGroups;
+};
+
+const bookGroups = (dashboard) => {
+    const groups = (dashboard?.book_groups ?? []).filter((group) => (group.items?.length || 0) > 0);
+    if (groups.length) {
+        return groups;
+    }
+
+    const items = dashboard?.books?.items ?? [];
+    if (! items.length) {
+        return [];
+    }
+
+    const byName = {};
+    for (const item of items) {
+        const name = item.textbook_name || 'Book content';
+        if (! byName[name]) {
+            byName[name] = [];
+        }
+        byName[name].push(item);
+    }
+
+    return Object.entries(byName).map(([name, groupItems]) => ({
+        id: name,
+        name,
+        items: groupItems,
+    }));
 };
 
 /** Hide empty Fill / Written / Test rows; keep only tiers that have at least one set. */
@@ -822,54 +850,30 @@ const startCorrection = (item) => {
 
                                 <div v-else-if="isTierDashboard(chapter)" class="space-y-3">
                                     <div
-                                        class="grid gap-3"
-                                        :class="visibleBlocks(chapterDashboard(chapter)).length >= 3
-                                            ? 'lg:grid-cols-3'
-                                            : visibleBlocks(chapterDashboard(chapter)).length === 2
-                                                ? 'lg:grid-cols-2'
-                                                : 'lg:grid-cols-1'"
+                                        v-for="book in bookGroups(chapterDashboard(chapter))"
+                                        :key="`${chapter.id}-book-${book.id}`"
+                                        class="rounded-xl border-2 border-slate-500 bg-white p-3 shadow-md ring-1 ring-slate-200"
                                     >
-                                        <div
-                                            v-for="block in visibleBlocks(chapterDashboard(chapter))"
-                                            :key="`${chapter.id}-${block.tier}`"
-                                            class="overflow-hidden rounded-xl"
-                                            :class="blockShellClass(block.color)"
-                                        >
-                                            <div
-                                                class="px-3 py-2.5 text-center text-xs font-extrabold uppercase tracking-wider"
-                                                :class="blockTitleClass(block.color)"
-                                            >
-                                                {{ block.label }}
-                                                <span class="ml-1 font-bold opacity-95">({{ block.item_count || 0 }})</span>
-                                            </div>
-                                            <div class="space-y-2.5 bg-white p-3">
-                                                <div
-                                                    v-for="row in block.rows"
-                                                    :key="`${block.tier}-${row.key}`"
-                                                >
-                                                    <p class="text-[10px] font-extrabold uppercase tracking-wide text-slate-800">
-                                                        {{ row.label }}
-                                                    </p>
-                                                    <div class="mt-1 flex flex-wrap gap-1.5">
-                                                        <CoverageSetItemCard
-                                                            v-for="item in row.items"
-                                                            :key="`${row.key}-${item.worksheet_id}`"
-                                                            :item="item"
-                                                            :group-key="`${block.tier}:${row.key}`"
-                                                            :is-student-view="isStudentView"
-                                                            :can-staff-assign="canStaffAssign"
-                                                            :assigning-worksheet-id="assigningWorksheetId"
-                                                            :pending-assign-key="pendingAssignKey"
-                                                            :staff-assign-form="staffAssignForm"
-                                                            @self-assign="selfAssign"
-                                                            @start-correction="startCorrection"
-                                                            @open-staff-assign="openStaffAssign"
-                                                            @confirm-staff-assign="confirmStaffAssign"
-                                                            @cancel-staff-assign="pendingAssignKey = null"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
+                                        <p class="text-[11px] font-extrabold uppercase tracking-wide text-slate-900">
+                                            {{ book.name }}
+                                        </p>
+                                        <div class="mt-1.5 flex flex-wrap gap-1.5">
+                                            <CoverageSetItemCard
+                                                v-for="item in book.items"
+                                                :key="`book-${book.id}-${item.worksheet_id}`"
+                                                :item="item"
+                                                group-key="books"
+                                                :is-student-view="isStudentView"
+                                                :can-staff-assign="canStaffAssign"
+                                                :assigning-worksheet-id="assigningWorksheetId"
+                                                :pending-assign-key="pendingAssignKey"
+                                                :staff-assign-form="staffAssignForm"
+                                                @self-assign="selfAssign"
+                                                @start-correction="startCorrection"
+                                                @open-staff-assign="openStaffAssign"
+                                                @confirm-staff-assign="confirmStaffAssign"
+                                                @cancel-staff-assign="pendingAssignKey = null"
+                                            />
                                         </div>
                                     </div>
 
@@ -924,27 +928,54 @@ const startCorrection = (item) => {
                                     </div>
 
                                     <div
-                                        v-if="chapterDashboard(chapter).books?.items?.length"
-                                        class="rounded-xl border-2 border-slate-500 bg-white p-3 shadow-md ring-1 ring-slate-200"
+                                        class="grid gap-3"
+                                        :class="visibleBlocks(chapterDashboard(chapter)).length >= 3
+                                            ? 'lg:grid-cols-3'
+                                            : visibleBlocks(chapterDashboard(chapter)).length === 2
+                                                ? 'lg:grid-cols-2'
+                                                : 'lg:grid-cols-1'"
                                     >
-                                        <p class="text-[11px] font-extrabold uppercase tracking-wide text-slate-900">Book content</p>
-                                        <div class="mt-1.5 flex flex-wrap gap-1.5">
-                                            <CoverageSetItemCard
-                                                v-for="item in chapterDashboard(chapter).books.items"
-                                                :key="`book-${item.worksheet_id}`"
-                                                :item="item"
-                                                group-key="books"
-                                                :is-student-view="isStudentView"
-                                                :can-staff-assign="canStaffAssign"
-                                                :assigning-worksheet-id="assigningWorksheetId"
-                                                :pending-assign-key="pendingAssignKey"
-                                                :staff-assign-form="staffAssignForm"
-                                                @self-assign="selfAssign"
-                                                @start-correction="startCorrection"
-                                                @open-staff-assign="openStaffAssign"
-                                                @confirm-staff-assign="confirmStaffAssign"
-                                                @cancel-staff-assign="pendingAssignKey = null"
-                                            />
+                                        <div
+                                            v-for="block in visibleBlocks(chapterDashboard(chapter))"
+                                            :key="`${chapter.id}-${block.tier}`"
+                                            class="overflow-hidden rounded-xl"
+                                            :class="blockShellClass(block.color)"
+                                        >
+                                            <div
+                                                class="px-3 py-2.5 text-center text-xs font-extrabold uppercase tracking-wider"
+                                                :class="blockTitleClass(block.color)"
+                                            >
+                                                {{ block.label }}
+                                                <span class="ml-1 font-bold opacity-95">({{ block.item_count || 0 }})</span>
+                                            </div>
+                                            <div class="space-y-2.5 bg-white p-3">
+                                                <div
+                                                    v-for="row in block.rows"
+                                                    :key="`${block.tier}-${row.key}`"
+                                                >
+                                                    <p class="text-[10px] font-extrabold uppercase tracking-wide text-slate-800">
+                                                        {{ row.label }}
+                                                    </p>
+                                                    <div class="mt-1 flex flex-wrap gap-1.5">
+                                                        <CoverageSetItemCard
+                                                            v-for="item in row.items"
+                                                            :key="`${row.key}-${item.worksheet_id}`"
+                                                            :item="item"
+                                                            :group-key="`${block.tier}:${row.key}`"
+                                                            :is-student-view="isStudentView"
+                                                            :can-staff-assign="canStaffAssign"
+                                                            :assigning-worksheet-id="assigningWorksheetId"
+                                                            :pending-assign-key="pendingAssignKey"
+                                                            :staff-assign-form="staffAssignForm"
+                                                            @self-assign="selfAssign"
+                                                            @start-correction="startCorrection"
+                                                            @open-staff-assign="openStaffAssign"
+                                                            @confirm-staff-assign="confirmStaffAssign"
+                                                            @cancel-staff-assign="pendingAssignKey = null"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 

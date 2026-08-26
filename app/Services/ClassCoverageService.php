@@ -332,6 +332,8 @@ class ClassCoverageService
             'can_redo_wrong' => (bool) ($item['can_redo_wrong'] ?? false),
             'correction_count' => (int) ($item['correction_count'] ?? 0),
             'is_correction' => (bool) ($item['is_correction'] ?? false),
+            'textbook_id' => $item['textbook_id'] ?? null,
+            'textbook_name' => $item['textbook_name'] ?? null,
         ];
     }
 

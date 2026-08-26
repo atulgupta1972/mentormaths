@@ -19,7 +19,8 @@ class SetCoverageGrouping
      *     blocks: list<array<string, mixed>>,
      *     formula: array{key: string, label: string, items: list<array<string, mixed>>},
      *     practice_correction: array{key: string, label: string, items: list<array<string, mixed>>},
-     *     books: array{key: string, label: string, items: list<array<string, mixed>>}
+     *     books: array{key: string, label: string, items: list<array<string, mixed>>},
+     *     book_groups: list<array{id: string, name: string, items: list<array<string, mixed>>}>
      * }
      */
     public function formatDashboard(array $items, ?Closure $mapItem = null): array
@@ -64,6 +65,8 @@ class SetCoverageGrouping
             ];
         }
 
+        $bookGroups = $this->formatBookGroups($items['books'] ?? [], $mapItem);
+
         return [
             'layout' => 'tier_blocks',
             'blocks' => $blocks,
@@ -88,14 +91,49 @@ class SetCoverageGrouping
             'books' => [
                 'key' => 'books',
                 'label' => 'Book content',
-                'items' => collect($items['books'] ?? [])
-                    ->flatten(1)
-                    ->map(fn (array $item) => $mapItem($item))
-                    ->sort(fn (array $left, array $right) => $this->studiedFirstCompare($left, $right))
-                    ->values()
-                    ->all(),
+                'items' => collect($bookGroups)->flatMap(fn (array $group) => $group['items'])->values()->all(),
             ],
+            'book_groups' => $bookGroups,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $books
+     * @param  Closure(array<string, mixed>): array<string, mixed>  $mapItem
+     * @return list<array{id: string, name: string, items: list<array<string, mixed>>}>
+     */
+    private function formatBookGroups(array $books, Closure $mapItem): array
+    {
+        $groups = [];
+
+        foreach ($books as $bookId => $bookItems) {
+            if (! is_array($bookItems)) {
+                continue;
+            }
+
+            $rows = collect($bookItems)
+                ->filter(fn ($item) => is_array($item))
+                ->values();
+
+            if ($rows->isEmpty()) {
+                continue;
+            }
+
+            $first = $rows->first();
+            $mapped = $rows
+                ->map(fn (array $item) => $mapItem($item))
+                ->sort(fn (array $left, array $right) => $this->studiedFirstCompare($left, $right))
+                ->values()
+                ->all();
+
+            $groups[] = [
+                'id' => (string) ($first['textbook_id'] ?? $bookId),
+                'name' => (string) ($first['textbook_name'] ?? 'Book content'),
+                'items' => $mapped,
+            ];
+        }
+
+        return $groups;
     }
 
     /**

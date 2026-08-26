@@ -253,6 +253,8 @@ class StudentChapterSummaryService
                             $item['part'] = $part['part'];
                             $item['kind'] = $kind;
                             $item['kind_label'] = $kindLabel;
+                            $item['textbook_id'] = (int) $bookColumn['id'];
+                            $item['textbook_name'] = (string) ($bookColumn['name'] ?? $bookColumn['label'] ?? 'Book');
                             $bookItems[] = $item;
                         }
                     }
