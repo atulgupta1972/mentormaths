@@ -626,7 +626,7 @@ const formatHelpDate = (value) => {
                         </p>
                         <template v-else>
                             <p class="mt-1 text-xs text-rose-800">
-                                These sums were given up during guided practice or daily revision. Explain in class, or fix the stored answer yourself (Edit question → I have corrected). The student then retries from their dashboard. Or send only that sum to the uploader.
+                                Edit question if needed, then tap <span class="font-semibold">I have corrected</span> — student retries. No need to send to uploader unless you can’t fix it yourself.
                             </p>
                             <div class="mt-3 space-y-2">
                                 <div
