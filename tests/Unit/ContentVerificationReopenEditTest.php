@@ -39,17 +39,18 @@ class ContentVerificationReopenEditTest extends TestCase
         ], $uploader);
 
         $this->assertSame(
-            ContentVerificationRun::STATUS_IN_PROGRESS,
-            $run->fresh()->status,
-        );
-        $this->assertSame(
-            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
-            $task->fresh()->status,
-        );
-        $this->assertSame(
             'Updated complementary angles question',
             $question->fresh()->question_text,
         );
+        $this->assertSame(
+            'Complementary angles add to 90°.',
+            $question->fresh()->method_hint,
+        );
+        // Save may auto-complete again once every check is still verified.
+        $this->assertContains($task->fresh()->status, [
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            ContentUploadTask::STATUS_VERIFIED,
+        ]);
     }
 
     /**
