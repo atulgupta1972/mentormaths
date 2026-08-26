@@ -282,45 +282,132 @@ def build():
 
     # 10 Competitive
     s = blank_slide(prs)
-    header_bar(s, "How we differ from market tools", "Question banks & tuition CRMs vs a coaching OS")
+    header_bar(
+        s,
+        "How we differ from market tools",
+        "Byju’s · EduGain · Open Door · fee CRMs — vs a coaching-class OS",
+    )
 
-    # simple table via text grid
-    headers = ["Capability", "Generic Q-bank\n/ YouTube packs", "Tuition CRM\n/ fee apps", "MentorMaths"]
+    headers = ["Capability", "Byju’s", "EduGain", "Open Door", "Fee / tuition\nCRMs", "MentorMaths"]
     rows = [
-        ["Exam-linked study plan", "—", "Rare", "Yes — per student"],
-        ["Revision of wrong sums", "Manual", "—", "Auto queue"],
-        ["Basics / formula drills", "Separate apps", "—", "Built-in, class-tuned"],
-        ["Parent email / WhatsApp", "Ad-hoc", "Fees only", "On every attempt"],
-        ["Coach class dashboard", "Weak", "Attendance/fees", "Completion · score · hours"],
-        ["Content matrix (books+sets)", "Flat folders", "—", "Chapter × format"],
-        ["Agile changes for YOUR batch", "Roadmap months", "Vendor queue", "Weekly — owner builds"],
+        [
+            "Exam-linked study plan",
+            "Course packs",
+            "Topic practice",
+            "Topic tests",
+            "Rare",
+            "Yes — per student",
+        ],
+        [
+            "Revision of wrong sums",
+            "In-app only",
+            "Focus areas",
+            "Assessment gap",
+            "—",
+            "Auto redo queue",
+        ],
+        [
+            "Basics / formula drills",
+            "General app",
+            "Worksheets",
+            "—",
+            "—",
+            "Class-tuned daily",
+        ],
+        [
+            "Parent email / WhatsApp",
+            "Parent app",
+            "Limited",
+            "School reports",
+            "Fees only",
+            "On every attempt",
+        ],
+        [
+            "Coach class dashboard",
+            "Consumer-led",
+            "Teacher assign",
+            "School admin",
+            "Attendance/fees",
+            "Done · score · hours",
+        ],
+        [
+            "Your books + sets matrix",
+            "Their content",
+            "Generated bank",
+            "Their workbooks",
+            "—",
+            "Chapter × format",
+        ],
+        [
+            "Built for YOUR batch",
+            "Big roadmap",
+            "Product SKU",
+            "School program",
+            "Vendor queue",
+            "Weekly — mentor builds",
+        ],
     ]
-    # header row
-    col_x = [0.4, 3.2, 6.4, 9.6]
-    col_w = [2.7, 3.0, 3.0, 3.3]
-    y = 1.2
+
+    # 6 columns across 13.333" slide
+    col_w = [2.55, 1.95, 1.95, 1.95, 1.95, 2.35]
+    col_x = [0.35]
+    for w in col_w[:-1]:
+        col_x.append(col_x[-1] + w + 0.08)
+    last_i = len(headers) - 1
+
+    y = 1.15
     for i, h in enumerate(headers):
-        rect(s, Inches(col_x[i]), Inches(y), Inches(col_w[i]), Inches(0.7), NAVY if i else TEAL)
-        add_textbox(s, Inches(col_x[i] + 0.1), Inches(y + 0.1), Inches(col_w[i] - 0.15), Inches(0.55), h, size=12, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-    y = 1.95
+        if i == 0:
+            fill = TEAL
+        elif i == last_i:
+            fill = RGBColor(0x14, 0x5A, 0x32)
+        else:
+            fill = NAVY
+        rect(s, Inches(col_x[i]), Inches(y), Inches(col_w[i]), Inches(0.72), fill)
+        add_textbox(
+            s,
+            Inches(col_x[i] + 0.05),
+            Inches(y + 0.08),
+            Inches(col_w[i] - 0.1),
+            Inches(0.58),
+            h,
+            size=11,
+            bold=True,
+            color=WHITE,
+            align=PP_ALIGN.CENTER,
+        )
+
+    y = 1.92
     for r, row in enumerate(rows):
         bg = LIGHT if r % 2 == 0 else WHITE
         for i, cell in enumerate(row):
-            rect(s, Inches(col_x[i]), Inches(y), Inches(col_w[i]), Inches(0.55), bg if i else RGBColor(0xEC, 0xFE, 0xFF))
-            color = GREEN if i == 3 and cell not in ("—",) else INK
+            cell_bg = RGBColor(0xEC, 0xFE, 0xFF) if i == 0 else (RGBColor(0xEC, 0xFD, 0xF5) if i == last_i else bg)
+            rect(s, Inches(col_x[i]), Inches(y), Inches(col_w[i]), Inches(0.58), cell_bg)
+            color = GREEN if i == last_i else INK
             add_textbox(
                 s,
-                Inches(col_x[i] + 0.08),
+                Inches(col_x[i] + 0.05),
                 Inches(y + 0.12),
-                Inches(col_w[i] - 0.12),
+                Inches(col_w[i] - 0.1),
                 Inches(0.4),
                 cell,
-                size=12,
-                bold=(i == 0 or i == 3),
+                size=11,
+                bold=(i == 0 or i == last_i),
                 color=color,
                 align=PP_ALIGN.CENTER if i else PP_ALIGN.LEFT,
             )
-        y += 0.55
+        y += 0.58
+
+    add_textbox(
+        s,
+        Inches(0.4),
+        Inches(6.75),
+        Inches(12.5),
+        Inches(0.3),
+        "Fair positioning by typical product strength — not a full SKU audit of every plan.",
+        size=10,
+        color=MUTED,
+    )
     footer(s, 10, total)
 
     # 11 Built by user + agile
