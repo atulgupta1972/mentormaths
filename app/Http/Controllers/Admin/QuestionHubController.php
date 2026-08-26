@@ -49,10 +49,22 @@ class QuestionHubController extends Controller
     {
         $code = trim((string) $request->query('code', ''));
         $result = $code !== '' ? $this->setCodeLookup->lookup($code) : null;
+        $focusQuestionId = $request->integer('question_id') ?: null;
+
+        if ($result && $focusQuestionId) {
+            $questions = collect($result['questions'] ?? [])
+                ->filter(fn (array $row) => (int) ($row['id'] ?? 0) === $focusQuestionId)
+                ->values()
+                ->all();
+            $result['questions'] = $questions;
+            $result['focus_question_id'] = $focusQuestionId;
+            $result['focused'] = true;
+        }
 
         return Inertia::render('Admin/Questions/SetCodeReview', [
             'code' => $code,
             'result' => $result,
+            'focusQuestionId' => $focusQuestionId,
             'answerFormats' => QuestionBlankAnswer::formats(),
         ]);
     }
@@ -475,7 +487,7 @@ class QuestionHubController extends Controller
         ]);
     }
 
-    public function setQuestions(Request $request, Worksheet $worksheet): Response
+    public function setQuestions(Request $request, Worksheet $worksheet): Response|RedirectResponse
     {
         if (! $request->user()?->isAdmin() && $worksheet->status !== Worksheet::STATUS_PUBLISHED) {
             abort(403, 'This practice set is not available for preview.');
@@ -566,6 +578,25 @@ class QuestionHubController extends Controller
                 : null;
         }
 
+        $focusQuestionId = $request->integer('question_id') ?: null;
+        if ($focusQuestionId && $isAdmin) {
+            $focused = $worksheet->questions->firstWhere('id', $focusQuestionId);
+            if ($focused?->isMcq()) {
+                return redirect()->route('admin.questions.edit', $focused);
+            }
+            if ($focused?->isFillInBlank() && filled($worksheet->set_code)) {
+                return redirect()->route('admin.questions.set-code', [
+                    'code' => $worksheet->set_code,
+                    'question_id' => $focused->id,
+                ]);
+            }
+
+            $questions = collect($questions)
+                ->filter(fn (array $row) => (int) ($row['id'] ?? 0) === $focusQuestionId)
+                ->values()
+                ->all();
+        }
+
         return Inertia::render('Admin/Questions/SetQuestions', [
             'practiceSet' => [
                 'id' => $worksheet->id,
@@ -614,6 +645,7 @@ class QuestionHubController extends Controller
             'isFillInBlankSet' => $isFillInBlankSet,
             'canViewQuestions' => $isAdmin,
             'questions' => $questions,
+            'focusQuestionId' => $focusQuestionId,
             'hintStats' => $hintStats,
             'topicHintStats' => $topicHintStats,
             'assignmentPanel' => $assignmentPanel,

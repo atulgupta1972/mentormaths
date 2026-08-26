@@ -4,17 +4,21 @@ import QuestionBody from '@/Components/QuestionBody.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
     code: { type: String, default: '' },
     result: { type: Object, default: null },
+    focusQuestionId: { type: Number, default: null },
     answerFormats: { type: Array, default: () => ['integer', 'decimal', 'fraction'] },
 });
 
 const page = usePage();
 const searchCode = ref(props.code || '');
 const editingId = ref(null);
+
+const focusedOnly = computed(() => Boolean(props.focusQuestionId) || Boolean(props.result?.focused));
+const visibleQuestions = computed(() => props.result?.questions || []);
 
 const lookup = () => {
     router.get(route('admin.questions.set-code'), {
@@ -77,6 +81,17 @@ watch(
         searchCode.value = value || '';
     },
 );
+
+onMounted(() => {
+    const targetId = props.focusQuestionId || props.result?.focus_question_id;
+    if (!targetId) {
+        return;
+    }
+    const question = visibleQuestions.value.find((row) => Number(row.id) === Number(targetId));
+    if (question?.type === 'fill_in_blank') {
+        startEdit(question);
+    }
+});
 </script>
 
 <template>
@@ -87,15 +102,31 @@ watch(
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <Link :href="route('admin.questions.index')" class="text-sm text-indigo-600">← Question bank</Link>
-                    <h2 class="mt-1 text-xl font-semibold text-gray-800">Look up set code</h2>
-                    <p class="mt-1 text-sm text-gray-500">Enter a code like SF121 or S121 to review every question and correct AI-generated answers.</p>
+                    <h2 class="mt-1 text-xl font-semibold text-gray-800">
+                        {{ focusedOnly ? 'Edit reported sum' : 'Look up set code' }}
+                    </h2>
+                    <p class="mt-1 text-sm text-gray-500">
+                        <template v-if="focusedOnly">
+                            Showing only the flagged question from {{ code || 'this set' }} — edit and save below.
+                            <Link
+                                v-if="code"
+                                :href="route('admin.questions.set-code', { code })"
+                                class="ml-1 font-medium text-indigo-700 hover:underline"
+                            >
+                                View full set
+                            </Link>
+                        </template>
+                        <template v-else>
+                            Enter a code like SF121 or S121 to review every question and correct AI-generated answers.
+                        </template>
+                    </p>
                 </div>
             </div>
         </template>
 
         <div class="py-12">
             <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
-                <form class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm" @submit.prevent="lookup">
+                <form v-if="!focusedOnly" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm" @submit.prevent="lookup">
                     <label class="block text-sm font-medium text-gray-700">Set code</label>
                     <div class="mt-2 flex flex-wrap gap-3">
                         <TextInput
@@ -162,7 +193,7 @@ watch(
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200">
-                                <template v-for="(question, index) in result.questions" :key="question.id">
+                                <template v-for="(question, index) in visibleQuestions" :key="question.id">
                                     <tr :id="`question-${question.id}`">
                                         <td class="px-4 py-3 align-top text-gray-500">{{ index + 1 }}</td>
                                         <td class="px-4 py-3 align-top">

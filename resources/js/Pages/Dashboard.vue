@@ -539,8 +539,8 @@ const formatHelpDate = (value) => {
                                                     {{ item.context_label }}
                                                 </span>
                                                 <Link
-                                                    v-if="item.set_code && item.set_url"
-                                                    :href="item.set_url"
+                                                    v-if="item.set_code && (item.check_url || item.set_url)"
+                                                    :href="item.check_url || item.set_url"
                                                     class="font-mono text-xs font-semibold text-indigo-600 hover:underline"
                                                 >
                                                     {{ item.set_code }}
@@ -593,8 +593,8 @@ const formatHelpDate = (value) => {
                                                     → {{ item.uploader_name }}
                                                 </span>
                                                 <Link
-                                                    v-if="item.set_code && item.set_url"
-                                                    :href="item.set_url"
+                                                    v-if="item.set_code && (item.check_url || item.set_url)"
+                                                    :href="item.check_url || item.set_url"
                                                     class="font-mono text-xs font-semibold text-indigo-600 hover:underline"
                                                 >
                                                     {{ item.set_code }}
@@ -643,8 +643,8 @@ const formatHelpDate = (value) => {
                                             </Link>
                                             <span v-if="item.class_name" class="text-xs text-gray-500">{{ item.class_name }}</span>
                                             <Link
-                                                v-if="item.set_code && item.set_url"
-                                                :href="item.set_url"
+                                                v-if="item.set_code && (item.check_url || item.set_url)"
+                                                :href="item.check_url || item.set_url"
                                                 class="font-mono text-xs font-semibold text-indigo-600 hover:underline"
                                             >
                                                 {{ item.set_code }}

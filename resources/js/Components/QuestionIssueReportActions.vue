@@ -123,10 +123,10 @@ const submitAction = () => {
                 :href="item.check_url || item.set_url"
                 class="text-xs font-semibold text-indigo-700 hover:underline"
             >
-                Open in set
+                Open in set / edit
             </Link>
             <Link
-                v-if="item.edit_url"
+                v-if="item.edit_url && item.edit_url !== item.check_url"
                 :href="item.edit_url"
                 class="text-xs font-semibold text-indigo-700 hover:underline"
             >

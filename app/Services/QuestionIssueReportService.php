@@ -796,18 +796,29 @@ class QuestionIssueReportService
             $setUrl = route('admin.questions.set-code', ['code' => $setCode]);
         }
 
+        // Open in set → only this sum, ready to edit (not the full set list).
         $checkUrl = null;
-        if ($question && filled($setCode) && $setUrl) {
-            $checkUrl = $setUrl.'#question-'.$question->id;
-        } elseif ($question) {
-            $checkUrl = route('admin.questions.edit', $question);
-        }
-
         $editUrl = null;
         if ($question) {
-            $editUrl = $question->isFillInBlank() && filled($setCode)
-                ? route('admin.questions.set-code', ['code' => $setCode]).'#question-'.$question->id
-                : route('admin.questions.edit', $question);
+            if ($question->isMcq()) {
+                $checkUrl = route('admin.questions.edit', $question);
+                $editUrl = $checkUrl;
+            } elseif (filled($setCode)) {
+                $checkUrl = route('admin.questions.set-code', [
+                    'code' => $setCode,
+                    'question_id' => $question->id,
+                ]);
+                $editUrl = $checkUrl;
+            } elseif ($worksheetId) {
+                $checkUrl = route('admin.questions.sets.show', [
+                    'worksheet' => $worksheetId,
+                    'question_id' => $question->id,
+                ]);
+                $editUrl = $checkUrl;
+            } else {
+                $checkUrl = route('admin.questions.edit', $question);
+                $editUrl = $checkUrl;
+            }
         }
 
         $options = [];

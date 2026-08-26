@@ -251,8 +251,8 @@ const destroyStudent = () => {
                                             {{ item.context_label }}
                                         </span>
                                         <Link
-                                            v-if="item.set_code && item.set_url"
-                                            :href="item.set_url"
+                                            v-if="item.set_code && (item.check_url || item.set_url)"
+                                            :href="item.check_url || item.set_url"
                                             class="font-mono text-sm font-semibold text-indigo-600 hover:underline"
                                         >
                                             {{ item.set_code }}
@@ -292,8 +292,8 @@ const destroyStudent = () => {
                                         </span>
                                         <span v-if="item.uploader_name" class="text-xs text-slate-600">→ {{ item.uploader_name }}</span>
                                         <Link
-                                            v-if="item.set_code && item.set_url"
-                                            :href="item.set_url"
+                                            v-if="item.set_code && (item.check_url || item.set_url)"
+                                            :href="item.check_url || item.set_url"
                                             class="font-mono text-sm font-semibold text-indigo-600 hover:underline"
                                         >
                                             {{ item.set_code }}
@@ -329,8 +329,8 @@ const destroyStudent = () => {
                                 <div>
                                     <div class="flex flex-wrap items-center gap-2">
                                         <Link
-                                            v-if="item.set_code && item.set_url"
-                                            :href="item.set_url"
+                                            v-if="item.set_code && (item.check_url || item.set_url)"
+                                            :href="item.check_url || item.set_url"
                                             class="font-mono text-sm font-semibold text-indigo-600 hover:underline"
                                         >
                                             {{ item.set_code }}
