@@ -143,6 +143,7 @@ class ContentVerificationReopenEditTest extends TestCase
             'content_upload_task_id' => $task->id,
             'user_id' => $uploader->id,
             'status' => ContentVerificationRun::STATUS_COMPLETED,
+            'started_at' => now()->subHour(),
             'completed_at' => now(),
         ]);
 
