@@ -399,7 +399,68 @@ class ContentUploadTaskService
      */
     public function taskForQuestion(Question $question): ?ContentUploadTask
     {
-        return $this->tasksKeyedByQuestionId([(int) $question->id])->get((int) $question->id);
+        return $this->returnableTaskForQuestion($question);
+    }
+
+    /**
+     * Best assigned task that can receive a single-sum return / resend.
+     */
+    public function returnableTaskForQuestion(Question $question): ?ContentUploadTask
+    {
+        $question->loadMissing(['worksheets', 'topic:id,syllabus_chapter_id']);
+
+        $chapterIds = $this->candidateChapterIdsForQuestion($question);
+        if ($chapterIds === []) {
+            return null;
+        }
+
+        $candidates = ContentUploadTask::query()
+            ->with(['assignee:id,name,email', 'textbookChapter.textbook.gradeLevel'])
+            ->whereIn('textbook_chapter_id', $chapterIds)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->latest()
+            ->get();
+
+        if ($candidates->isEmpty()) {
+            return null;
+        }
+
+        $chapter = TextbookChapter::query()->whereIn('id', $chapterIds)->get()
+            ->first(function (TextbookChapter $chapter) use ($question) {
+                $owned = [
+                    ...$chapter->mcqWorksheetIds(),
+                    ...$chapter->fillBlankWorksheetIds(),
+                    ...$chapter->writtenWorksheetIds(),
+                ];
+                $qWs = $question->worksheets->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+                return array_intersect($owned, $qWs) !== [];
+            });
+
+        return $this->pickTaskForQuestion($candidates, $question, $chapter)
+            ?? $candidates->first(fn (ContentUploadTask $task) => filled($task->assigned_to_user_id))
+            ?? $candidates->first();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function candidateChapterIdsForQuestion(Question $question): array
+    {
+        $worksheetIds = $question->worksheets->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $chapterIds = $this->chaptersForWorksheetIds($worksheetIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $syllabusChapterId = (int) ($question->topic?->syllabus_chapter_id ?? 0);
+        if ($syllabusChapterId > 0) {
+            $bySyllabus = TextbookChapter::query()
+                ->where('syllabus_chapter_id', $syllabusChapterId)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+            $chapterIds = array_values(array_unique([...$chapterIds, ...$bySyllabus]));
+        }
+
+        return $chapterIds;
     }
 
     /**
@@ -424,80 +485,13 @@ class ContentUploadTaskService
             ->get()
             ->keyBy('id');
 
-        $worksheetIds = $questions
-            ->flatMap(fn (Question $question) => $question->worksheets->pluck('id'))
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
-
-        $chapters = $this->chaptersForWorksheetIds($worksheetIds);
-        $mapped = collect();
-        /** @var Collection<int, TextbookChapter> $chapterByQuestion */
-        $chapterByQuestion = collect();
-
-        foreach ($questions as $question) {
-            $questionWorksheetIds = $question->worksheets->pluck('id')->map(fn ($id) => (int) $id)->all();
-            $chapter = $chapters->first(function (TextbookChapter $chapter) use ($questionWorksheetIds) {
-                $owned = array_values(array_filter([
-                    ...$chapter->mcqWorksheetIds(),
-                    ...$chapter->fillBlankWorksheetIds(),
-                    ...$chapter->writtenWorksheetIds(),
-                ]));
-
-                return array_intersect($owned, $questionWorksheetIds) !== [];
-            });
-
-            if ($chapter) {
-                $mapped[$question->id] = $chapter->id;
-                $chapterByQuestion[$question->id] = $chapter;
-            }
-        }
-
-        $missing = $ids->filter(fn (int $id) => ! $mapped->has($id));
-        if ($missing->isNotEmpty()) {
-            $syllabusChapterIds = $questions
-                ->only($missing->all())
-                ->map(fn (Question $question) => (int) ($question->topic?->syllabus_chapter_id ?? 0))
-                ->filter(fn (int $id) => $id > 0)
-                ->unique()
-                ->values()
-                ->all();
-
-            if ($syllabusChapterIds !== []) {
-                $bySyllabus = TextbookChapter::query()
-                    ->whereIn('syllabus_chapter_id', $syllabusChapterIds)
-                    ->get()
-                    ->groupBy('syllabus_chapter_id');
-
-                foreach ($missing as $questionId) {
-                    $syllabusChapterId = (int) ($questions->get($questionId)?->topic?->syllabus_chapter_id ?? 0);
-                    $chapter = $bySyllabus->get($syllabusChapterId)?->first();
-                    if ($chapter) {
-                        $mapped[$questionId] = $chapter->id;
-                        $chapterByQuestion[$questionId] = $chapter;
-                    }
-                }
-            }
-        }
-
-        if ($mapped->isEmpty()) {
-            return collect();
-        }
-
-        $tasks = ContentUploadTask::query()
-            ->with(['assignee:id,name,email', 'textbookChapter.textbook.gradeLevel'])
-            ->whereIn('textbook_chapter_id', $mapped->unique()->values()->all())
-            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
-            ->latest()
-            ->get()
-            ->groupBy('textbook_chapter_id');
-
-        return $mapped->mapWithKeys(function (int $chapterId, int $questionId) use ($tasks, $questions, $chapterByQuestion) {
-            $chapterTasks = $tasks->get($chapterId) ?? collect();
+        return $ids->mapWithKeys(function (int $questionId) use ($questions) {
             $question = $questions->get($questionId);
-            $chapter = $chapterByQuestion->get($questionId);
-            $task = $this->pickTaskForQuestion($chapterTasks, $question, $chapter);
+            if (! $question) {
+                return [];
+            }
+
+            $task = $this->returnableTaskForQuestion($question);
 
             return $task ? [$questionId => $task] : [];
         });
@@ -606,7 +600,7 @@ class ContentUploadTaskService
         string $adminContext = 'Student asked for teacher help. Admin found a content issue — fix only this sum.',
         string $source = ContentQuestionCorrection::SOURCE_HELP_REQUEST,
     ): ContentUploadTask {
-        $task = $this->taskForQuestion($question);
+        $task = $this->returnableTaskForQuestion($question);
 
         if (! $task) {
             throw new \InvalidArgumentException('No content uploader is assigned to this question. Edit it yourself.');
@@ -641,6 +635,7 @@ class ContentUploadTaskService
     public function canReturnSpecificQuestions(ContentUploadTask $task): bool
     {
         return in_array($task->status, [
+            ContentUploadTask::STATUS_PENDING_AGREEMENT,
             ContentUploadTask::STATUS_IN_PROGRESS,
             ContentUploadTask::STATUS_UPLOADED,
             ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
@@ -703,6 +698,7 @@ class ContentUploadTaskService
 
         $allowed = $hasSpecificItems
             ? [
+                ContentUploadTask::STATUS_PENDING_AGREEMENT,
                 ContentUploadTask::STATUS_IN_PROGRESS,
                 ContentUploadTask::STATUS_UPLOADED,
                 ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,

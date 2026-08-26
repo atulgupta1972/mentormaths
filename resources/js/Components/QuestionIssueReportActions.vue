@@ -21,7 +21,7 @@ const uploaderForm = useForm({
 
 const canReturnToUploader = computed(() =>
     hasRoute('admin.question-issue-reports.return-to-uploader')
-    && props.item.can_return_to_uploader === true,
+    && Boolean(props.item.can_return_to_uploader),
 );
 
 const canPostAction = computed(() =>
@@ -86,13 +86,7 @@ const submitAction = () => {
         return;
     }
 
-    if (!canReturnToUploader.value) {
-        window.alert('No content uploader is assigned for this chapter. Choose “Question is correct — please re-attempt”, or use Edit yourself.');
-
-        return;
-    }
-
-    const who = props.item.uploader_name || 'the uploader';
+    const who = props.item.uploader_name || 'the chapter uploader';
     const chapter = props.item.chapter_label ? ` (${props.item.chapter_label})` : '';
     const issueLabel = uploaderForm.issue === 'wrong_answer'
         ? 'wrong answer'
@@ -189,11 +183,8 @@ const submitAction = () => {
                 <button
                     type="button"
                     class="rounded px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                    :class="isQuestionCorrect ? 'bg-sky-700 hover:bg-sky-800' : (canReturnToUploader ? 'bg-amber-700 hover:bg-amber-800' : 'bg-amber-300')"
-                    :disabled="busy || (!isQuestionCorrect && !canReturnToUploader)"
-                    :title="!isQuestionCorrect && !canReturnToUploader
-                        ? (item.content_task_id ? 'Uploader task is not ready for return yet' : 'No content uploader assigned for this chapter')
-                        : undefined"
+                    :class="isQuestionCorrect ? 'bg-sky-700 hover:bg-sky-800' : 'bg-amber-700 hover:bg-amber-800'"
+                    :disabled="busy"
                     @click="submitAction"
                 >
                     {{ actionButtonLabel }}
