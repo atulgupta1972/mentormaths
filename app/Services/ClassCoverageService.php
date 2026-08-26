@@ -361,6 +361,7 @@ class ClassCoverageService
             'assignment_id' => $item['assignment_id'] ?? null,
             'target_date' => $item['target_date'] ?? null,
             'latest_attempt_id' => $item['latest_attempt_id'] ?? null,
+            'in_progress_attempt_id' => $item['in_progress_attempt_id'] ?? null,
             'delivery_mode' => $item['delivery_mode'] ?? null,
             'can_assign' => (bool) ($item['can_assign'] ?? false),
             'can_open' => (bool) ($item['can_open'] ?? false),

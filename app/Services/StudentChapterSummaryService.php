@@ -687,6 +687,7 @@ class StudentChapterSummaryService
             'assignment_id' => $assignment?->id,
             'target_date' => $assignment?->due_date?->toDateString(),
             'latest_attempt_id' => $progress['latest_attempt_id'] ?? null,
+            'in_progress_attempt_id' => $progress['in_progress_attempt_id'] ?? null,
             'status' => $statusMeta['status'],
             'status_label' => $statusMeta['status_label'],
             'can_assign' => $statusMeta['can_assign'],

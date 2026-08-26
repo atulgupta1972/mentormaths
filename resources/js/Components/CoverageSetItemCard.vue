@@ -52,7 +52,14 @@ const itemHref = computed(() => {
         return null;
     }
 
-    if (props.item.latest_attempt_id && route().has('student.attempts.show')) {
+    // Continue an open attempt first.
+    if (props.item.in_progress_attempt_id && route().has('student.attempts.show')) {
+        return route('student.attempts.show', props.item.in_progress_attempt_id);
+    }
+
+    // Only open a finished result when the set is marked done.
+    // After reassign (NOT DONE), go to the assignment so the student starts the full current set.
+    if (props.item.status === 'done' && props.item.latest_attempt_id && route().has('student.attempts.show')) {
         return route('student.attempts.show', props.item.latest_attempt_id);
     }
 

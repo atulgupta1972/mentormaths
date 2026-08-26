@@ -112,7 +112,11 @@ const itemHref = (item) => {
         return route('student.written-assignments.show', item.assignment_id);
     }
 
-    if (item.latest_attempt_id) {
+    if (item.in_progress_attempt_id) {
+        return route('student.attempts.show', item.in_progress_attempt_id);
+    }
+
+    if (item.status === 'done' && item.latest_attempt_id) {
         return route('student.attempts.result', item.latest_attempt_id);
     }
 

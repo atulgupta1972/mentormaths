@@ -621,7 +621,11 @@ const itemHref = (item) => {
         return null;
     }
 
-    if (item.latest_attempt_id && route().has('student.attempts.show')) {
+    if (item.in_progress_attempt_id && route().has('student.attempts.show')) {
+        return route('student.attempts.show', item.in_progress_attempt_id);
+    }
+
+    if (item.status === 'done' && item.latest_attempt_id && route().has('student.attempts.show')) {
         return route('student.attempts.show', item.latest_attempt_id);
     }
 

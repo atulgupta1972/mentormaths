@@ -137,6 +137,61 @@ class GuidedPracticeServiceTest extends TestCase
         ]);
     }
 
+    public function test_initialize_expands_guided_queue_when_worksheet_grows(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt();
+        $worksheet = $attempt->assignment->practiceSet;
+
+        $extra = Question::query()->create([
+            'syllabus_topic_id' => $worksheet->questions()->first()->syllabus_topic_id,
+            'question_text' => 'What is 3 + 3?',
+            'type' => Question::TYPE_MCQ,
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+        QuestionOption::query()->create([
+            'question_id' => $extra->id,
+            'option_text' => '6',
+            'is_correct' => true,
+            'sort_order' => 1,
+        ]);
+        $worksheet->questions()->attach($extra->id, ['sort_order' => 2]);
+
+        $this->assertSame(1, $attempt->guidedQuestions()->count());
+
+        app(GuidedPracticeService::class)->initialize($attempt->fresh(['guidedQuestions', 'assignment.practiceSet']));
+
+        $this->assertSame(2, $attempt->fresh()->guidedQuestions()->count());
+        $this->assertSame(
+            [$worksheet->questions()->orderBy('worksheet_question.sort_order')->pluck('questions.id')->all()],
+            [$attempt->fresh()->guidedQuestions()->orderBy('sort_order')->pluck('question_id')->all()],
+        );
+    }
+
+    public function test_ensure_attempt_ready_expands_stale_guided_queue(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt();
+        $worksheet = $attempt->assignment->practiceSet;
+        $topicId = $worksheet->questions()->first()->syllabus_topic_id;
+
+        $extra = Question::query()->create([
+            'syllabus_topic_id' => $topicId,
+            'question_text' => 'What is 5 + 5?',
+            'type' => Question::TYPE_MCQ,
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+        QuestionOption::query()->create([
+            'question_id' => $extra->id,
+            'option_text' => '10',
+            'is_correct' => true,
+            'sort_order' => 1,
+        ]);
+        $worksheet->questions()->attach($extra->id, ['sort_order' => 2]);
+
+        app(GuidedPracticeService::class)->ensureAttemptReady($attempt->fresh(['guidedQuestions', 'assignment.practiceSet']));
+
+        $this->assertSame(2, $attempt->fresh()->guidedQuestions()->count());
+    }
+
     public function test_report_issue_skips_marks_and_queues_admin_report(): void
     {
         [$attempt] = $this->seedGuidedAttempt();

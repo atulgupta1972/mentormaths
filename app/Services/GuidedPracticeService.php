@@ -24,20 +24,87 @@ class GuidedPracticeService
     ) {}
     public function initialize(SetAttempt $attempt): void
     {
+        if ($attempt->is_correction_practice) {
+            if ($attempt->guidedQuestions()->exists()) {
+                if (! $attempt->isGuided()) {
+                    $attempt->update(['mode' => SetAttempt::MODE_GUIDED]);
+                }
+
+                $this->ensureAttemptReady($attempt);
+            }
+
+            return;
+        }
+
+        $assignment = $attempt->assignment()->with('practiceSet')->first();
+        $expectedIds = $this->orderedWorksheetQuestions($assignment->practiceSet)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+
         if ($attempt->guidedQuestions()->exists()) {
             if (! $attempt->isGuided()) {
                 $attempt->update(['mode' => SetAttempt::MODE_GUIDED]);
             }
 
+            $this->syncGuidedQueueWithWorksheet($attempt, $expectedIds);
             $this->ensureAttemptReady($attempt);
 
             return;
         }
 
-        $assignment = $attempt->assignment()->with('practiceSet.questions')->first();
-        $questions = $this->orderedWorksheetQuestions($assignment->practiceSet);
+        $this->createGuidedQuestions($attempt, $expectedIds);
+    }
 
-        $this->createGuidedQuestions($attempt, $questions->pluck('id')->all());
+    /**
+     * When a set grows after an attempt started (e.g. more textbook MCQs appended),
+     * keep the guided queue aligned so the student sees every current question.
+     *
+     * @param  list<int>  $expectedIds
+     */
+    private function syncGuidedQueueWithWorksheet(SetAttempt $attempt, array $expectedIds): void
+    {
+        if ($expectedIds === [] || $attempt->status !== SetAttempt::STATUS_IN_PROGRESS) {
+            return;
+        }
+
+        $existing = $attempt->guidedQuestions()->orderBy('sort_order')->get();
+        $existingIds = $existing->pluck('question_id')->map(fn ($id) => (int) $id)->all();
+        $missing = array_values(array_diff($expectedIds, $existingIds));
+
+        if ($missing === []) {
+            return;
+        }
+
+        $untouched = (int) $attempt->current_question_index === 0
+            && $existing->every(function (GuidedAttemptQuestion $row) {
+                return in_array($row->phase, [
+                    GuidedAttemptQuestion::PHASE_PENDING,
+                    GuidedAttemptQuestion::PHASE_ANSWERING,
+                ], true)
+                    && $row->final_option_id === null
+                    && $row->first_wrong_option_id === null
+                    && ! $row->used_early_hint;
+            });
+
+        if ($untouched) {
+            $attempt->guidedQuestions()->delete();
+            $this->createGuidedQuestions($attempt, $expectedIds);
+
+            return;
+        }
+
+        $nextOrder = ((int) $existing->max('sort_order')) + 1;
+
+        foreach ($missing as $questionId) {
+            GuidedAttemptQuestion::create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $questionId,
+                'sort_order' => $nextOrder++,
+                'phase' => GuidedAttemptQuestion::PHASE_PENDING,
+            ]);
+        }
     }
 
     /**
@@ -88,6 +155,17 @@ class GuidedPracticeService
     {
         if (! $attempt->isGuided() || $attempt->status !== SetAttempt::STATUS_IN_PROGRESS) {
             return;
+        }
+
+        if (! $attempt->is_correction_practice) {
+            $attempt->loadMissing('assignment.practiceSet');
+            $expectedIds = $this->orderedWorksheetQuestions($attempt->assignment->practiceSet)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all();
+            $this->syncGuidedQueueWithWorksheet($attempt, $expectedIds);
+            $attempt->unsetRelation('guidedQuestions');
         }
 
         $attempt->loadMissing('guidedQuestions');
