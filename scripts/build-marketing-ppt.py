@@ -10,6 +10,7 @@ from pptx.util import Inches, Pt
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "MentorMaths_Coaching_Marketing.pptx"
+OUT_ALT = ROOT / "docs" / "MentorMaths_Coaching_Marketing_v2.pptx"
 ASSETS = Path(
     r"C:\Users\Atul.Gupta\.cursor\projects\c-Users-Atul-Gupta-maths-foundation\assets"
 )
@@ -446,8 +447,23 @@ def build():
     add_textbox(s, Inches(1), Inches(5.3), Inches(11.3), Inches(0.4), "Plan · Practice · Perform", size=16, color=RGBColor(0xC7, 0xD2, 0xFE), align=PP_ALIGN.CENTER)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    prs.save(OUT)
-    print(f"Wrote {OUT}")
+    # Prefer primary path; if PowerPoint/Cursor has the file open, write v2.
+    targets = [OUT, OUT_ALT]
+    saved = None
+    last_err = None
+    for target in targets:
+        try:
+            prs.save(target)
+            saved = target
+            break
+        except OSError as err:
+            last_err = err
+            continue
+    if not saved:
+        raise last_err
+    print(f"Wrote {saved}")
+    if saved != OUT:
+        print("Close the open PPTX, then copy v2 over the original (or re-run the script).")
     for k, p in SHOTS.items():
         print(f"  {k}: {'OK' if p.exists() else 'MISSING'} {p.name}")
 
