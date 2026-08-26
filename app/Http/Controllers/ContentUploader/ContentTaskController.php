@@ -130,15 +130,7 @@ class ContentTaskController extends Controller
         abort_unless($correction->task, 404);
         $this->authorizeTask($correction->task, $request);
 
-        try {
-            $task = $this->taskService->startQuestionCorrection($correction, $request->user());
-        } catch (\InvalidArgumentException $e) {
-            return back()->with('error', $e->getMessage());
-        }
-
-        return redirect()
-            ->route('content.tasks.show', $task)
-            ->with('success', 'Fix this sum, then save and mark verified. An email with the remark was sent.');
+        return redirect()->route('content.corrections.edit', $correction);
     }
 
     public function saveVerificationCheck(Request $request, ContentUploadTask $contentTask): RedirectResponse

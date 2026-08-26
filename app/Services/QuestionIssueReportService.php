@@ -468,23 +468,111 @@ class QuestionIssueReportService
             ])
             ->first();
 
+        $alreadyWithUploader = $existing?->isSentToUploader() ?? false;
+
         $payload = [
             ...$data,
             'reason' => QuestionIssueReport::REASON_MISPRINT_INCOMPLETE,
-            'status' => QuestionIssueReport::STATUS_PENDING_ADMIN,
+            'status' => $alreadyWithUploader
+                ? QuestionIssueReport::STATUS_SENT_TO_UPLOADER
+                : QuestionIssueReport::STATUS_PENDING_ADMIN,
             'reported_at' => now(),
-            'resolved_by' => null,
+            'resolved_by' => $alreadyWithUploader ? $existing->resolved_by : null,
             'resolved_at' => null,
-            'admin_note' => null,
+            'admin_note' => $alreadyWithUploader ? $existing->admin_note : null,
         ];
 
         if ($existing) {
             $existing->update($payload);
-
-            return $existing->fresh();
+            $report = $existing->fresh();
+        } else {
+            $report = QuestionIssueReport::query()->create($payload);
         }
 
-        return QuestionIssueReport::query()->create($payload);
+        if (! $alreadyWithUploader) {
+            $this->autoQueueToUploader($report);
+        }
+
+        return $report->fresh();
+    }
+
+    /**
+     * As soon as a student flags a sum, put it on the assigned uploader's corrections list
+     * (and keep it visible on the admin misprint queue as “Sent to uploader”).
+     */
+    private function autoQueueToUploader(QuestionIssueReport $report): void
+    {
+        $report->loadMissing('question');
+
+        if (! $report->question || ! $report->isPendingAdmin()) {
+            return;
+        }
+
+        $task = $this->contentUploadTasks->taskForQuestion($report->question);
+
+        if (! $task || ! $this->contentUploadTasks->canReturnSpecificQuestions($task)) {
+            return;
+        }
+
+        $actor = User::query()
+            ->where(function ($query) {
+                $query->where('role', User::ROLE_ADMIN)
+                    ->orWhereHas('groups', fn ($q) => $q->where('code', User::ROLE_ADMIN));
+            })
+            ->orderBy('id')
+            ->first()
+            ?? $task->assignee;
+
+        if (! $actor) {
+            return;
+        }
+
+        try {
+            $this->contentUploadTasks->returnHelpRequestQuestion(
+                $report->question,
+                $actor,
+                'incomplete',
+                null,
+                'Student reported misprint/incomplete. Fix only this sum — it is incorrect or incomplete.',
+                ContentQuestionCorrection::SOURCE_STUDENT_REPORT,
+            );
+
+            $report->update([
+                'status' => QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
+                'admin_note' => 'Auto-sent to uploader (student report)',
+                'resolved_by' => $actor->id,
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            Log::info('Misprint report kept pending_admin — could not auto-queue to uploader.', [
+                'report_id' => $report->id,
+                'question_id' => $report->question_id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * After the uploader (or admin) fixes a live question, return every open report for that sum to students.
+     */
+    public function markFixedForQuestion(int $questionId, User $actor, ?string $note = null): int
+    {
+        $reports = QuestionIssueReport::query()
+            ->where('question_id', $questionId)
+            ->whereIn('status', [
+                QuestionIssueReport::STATUS_PENDING_ADMIN,
+                QuestionIssueReport::STATUS_SENT_TO_UPLOADER,
+            ])
+            ->get();
+
+        foreach ($reports as $report) {
+            $this->markFixedAndReturnToStudent(
+                $report,
+                $actor,
+                $note ?? 'Fixed by content uploader — please re-attempt',
+            );
+        }
+
+        return $reports->count();
     }
 
     private function enqueueReattempt(QuestionIssueReport $report, ?string $failureReason = null): void

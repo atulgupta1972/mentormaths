@@ -15,6 +15,8 @@ class ContentQuestionCorrection extends Model
 
     public const SOURCE_ADMIN_RETURN = 'admin_return';
 
+    public const SOURCE_STUDENT_REPORT = 'student_report';
+
     protected $fillable = [
         'content_upload_task_id',
         'question_id',

@@ -516,9 +516,9 @@ const formatHelpDate = (value) => {
                             </p>
                             <template v-else>
                                 <p class="mt-1 text-xs text-amber-900">
-                                    Open to check. Edit yourself, or send only that sum to the uploader (they get an email).
-                                    If the question is fine, choose <span class="font-semibold">Question is correct — please re-attempt</span>.
-                                    When content is fixed, tap Fixed — return to student.
+                                    Open to check. Student reports are auto-sent to the uploader when a chapter assignee exists
+                                    (they edit via Correct →). You can still Edit yourself, mark Fixed, or choose
+                                    <span class="font-semibold">Question is correct — please re-attempt</span>.
                                 </p>
                                 <div class="mt-3 space-y-2">
                                     <div

@@ -38,6 +38,7 @@ use App\Http\Controllers\Admin\WrittenSheetController;
 use App\Http\Controllers\Admin\WrittenReviewController;
 use App\Http\Controllers\ContentUploader\ChapterLibraryController;
 use App\Http\Controllers\ContentUploader\ContentTaskController;
+use App\Http\Controllers\ContentUploader\CorrectionQuestionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MentorTrialSignupController;
 use App\Http\Controllers\Mentor\ClassHubController as MentorClassHubController;
@@ -516,6 +517,8 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/tasks/{contentTask}/mark-uploaded', [ContentTaskController::class, 'markUploaded'])->name('tasks.mark-uploaded');
     Route::post('/tasks/{contentTask}/start-review', [ContentTaskController::class, 'startReview'])->name('tasks.start-review');
     Route::post('/corrections/{correction}/start', [ContentTaskController::class, 'startCorrection'])->name('corrections.start');
+    Route::get('/corrections/{correction}/edit', [CorrectionQuestionController::class, 'edit'])->name('corrections.edit');
+    Route::put('/corrections/{correction}', [CorrectionQuestionController::class, 'update'])->name('corrections.update');
     Route::post('/tasks/{contentTask}/verification-check', [ContentTaskController::class, 'saveVerificationCheck'])->name('tasks.verification-check');
     Route::post('/tasks/{contentTask}/verification-question', [ContentTaskController::class, 'saveVerificationQuestion'])->name('tasks.verification-question');
     Route::post('/tasks/{contentTask}/verification-skip', [ContentTaskController::class, 'skipVerificationQuestion'])->name('tasks.verification-skip');
