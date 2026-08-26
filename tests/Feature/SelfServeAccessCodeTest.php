@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\AccessCodeIssued;
 use App\Models\AcademicYear;
 use App\Models\AccessCode;
 use App\Models\Board;
@@ -74,6 +75,13 @@ class SelfServeAccessCodeTest extends TestCase
         $this->assertNotNull($code);
         $this->assertSame(AccessCode::TYPE_MENTOR, $code->type);
         $this->assertTrue($code->expires_at->equalTo($code->generated_at->copy()->addDays(15)));
+
+        Mail::assertSent(AccessCodeIssued::class, function (AccessCodeIssued $mail) use ($code) {
+            return $mail->hasTo('anita.mentor@example.com')
+                && $mail->accessCode->is($code)
+                && $mail->envelope()->subject === 'Your Mentor Maths tcode + next steps'
+                && $mail->content()->view === 'emails.mentor-access-welcome';
+        });
 
         $this->assertTrue(
             $this->post(route('login'), [

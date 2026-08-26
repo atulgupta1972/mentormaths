@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AccessCode;
 use App\Services\AccessCodeService;
+use App\Support\AccessCodeMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -50,5 +51,19 @@ class AccessCodeController extends Controller
         $accessCodes->extend($accessCode, $validated['days'] ?? null);
 
         return back()->with('success', "Access code {$accessCode->code} extended.");
+    }
+
+    public function resend(AccessCode $accessCode): RedirectResponse
+    {
+        $sent = AccessCodeMailer::resendIssued($accessCode);
+
+        $to = $accessCode->email ?: $accessCode->user?->email ?: 'the recipient';
+
+        return back()->with(
+            $sent ? 'success' : 'error',
+            $sent
+                ? "Welcome email resent to {$to}."
+                : 'Could not resend email — check the address on the access code or mail settings.',
+        );
     }
 }

@@ -15,6 +15,10 @@ const extendCode = (id) => {
     router.post(route('admin.access-codes.extend', id), { days: props.trialDays }, { preserveScroll: true });
 };
 
+const resendCode = (id) => {
+    router.post(route('admin.access-codes.resend', id), {}, { preserveScroll: true });
+};
+
 const filter = (key, value) => {
     router.get(route('admin.access-codes.index'), {
         ...props.filters,
@@ -78,7 +82,10 @@ const filter = (key, value) => {
                                 </td>
                                 <td class="px-4 py-3">{{ row.expires_at }}</td>
                                 <td class="px-4 py-3">{{ row.status }}</td>
-                                <td class="px-4 py-3 text-right">
+                                <td class="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                                    <PrimaryButton type="button" class="text-xs" @click="resendCode(row.id)">
+                                        Resend email
+                                    </PrimaryButton>
                                     <PrimaryButton type="button" class="text-xs" @click="extendCode(row.id)">
                                         Extend +{{ trialDays }}d
                                     </PrimaryButton>

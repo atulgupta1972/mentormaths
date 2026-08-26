@@ -144,6 +144,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('access-codes.index');
     Route::post('/access-codes/{accessCode}/extend', [AccessCodeController::class, 'extend'])
         ->name('access-codes.extend');
+    Route::post('/access-codes/{accessCode}/resend', [AccessCodeController::class, 'resend'])
+        ->name('access-codes.resend');
 
     Route::get('/teacher-registrations', [AdminTeacherRegistrationRequestController::class, 'index'])
         ->name('teacher-registrations.index');

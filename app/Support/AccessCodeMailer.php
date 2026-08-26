@@ -119,6 +119,43 @@ class AccessCodeMailer
             ."Login: ".route('login')."\n"
             ."Email: {$loginEmail}\n"
             ."Use your tcode as the password.\n"
-            ."Valid until: {$expires}";
+            ."Valid until: {$expires}\n"
+            ."Next: ask students to enrol (Coaching → your name) and tick Study Plan.";
+    }
+
+    /**
+     * Re-send the issued email (with next steps for mentors) using the stored plain code.
+     */
+    public static function resendIssued(AccessCode $accessCode): bool
+    {
+        $accessCode->loadMissing('user');
+
+        $loginEmail = $accessCode->email
+            ?: $accessCode->user?->email;
+
+        if (! AssignmentMailer::isDeliverableEmail($loginEmail) || ! filled($accessCode->code)) {
+            return false;
+        }
+
+        $name = $accessCode->user?->name ?: 'Mentor';
+
+        try {
+            Mail::to($loginEmail)->send(new AccessCodeIssued(
+                $accessCode,
+                $loginEmail,
+                $accessCode->code,
+                $name,
+            ));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Failed to resend access code email.', [
+                'access_code_id' => $accessCode->id,
+                'email' => $loginEmail,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 }
