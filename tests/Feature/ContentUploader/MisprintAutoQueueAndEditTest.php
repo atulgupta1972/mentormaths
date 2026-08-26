@@ -184,6 +184,42 @@ class MisprintAutoQueueAndEditTest extends TestCase
         Mail::assertSent(ContentTaskReturnedUploader::class);
     }
 
+    public function test_fill_blank_question_picks_fill_blank_task_when_mcq_task_is_not_returnable(): void
+    {
+        [$uploader, $chapter, $fillTask, $question] = $this->seedPublishedFillBlankWithUploader();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $fillTask->update([
+            'work_type' => ContentUploadTask::WORK_TYPE_FILL_BLANK_CONVERSION,
+        ]);
+
+        // Blocked MCQ task on the same chapter — must not disable Send for FIB sums.
+        ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $chapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            'work_type' => ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
+            'offered_amount_inr' => 1000,
+            'created_at' => now()->addMinute(),
+            'updated_at' => now()->addMinute(),
+        ]);
+
+        // Put SF751 only in the JSON list (common for multi-part chapters).
+        $chapter->update([
+            'fill_blank_worksheet_id' => null,
+            'fill_blank_worksheet_ids' => [$question->worksheets()->first()->id],
+        ]);
+
+        $task = app(\App\Services\ContentUploadTaskService::class)->taskForQuestion($question->fresh(['worksheets', 'topic']));
+        $payload = app(\App\Services\ContentUploadTaskService::class)->uploaderReturnPayload($task);
+
+        $this->assertNotNull($task);
+        $this->assertSame($fillTask->id, $task->id);
+        $this->assertTrue($payload['can_return_to_uploader']);
+        $this->assertSame($uploader->name, $payload['uploader_name']);
+    }
+
     public function test_admin_can_delete_question_and_return_to_set_code(): void
     {
         $this->withoutVite();

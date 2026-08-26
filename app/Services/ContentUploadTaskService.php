@@ -433,21 +433,24 @@ class ContentUploadTaskService
 
         $chapters = $this->chaptersForWorksheetIds($worksheetIds);
         $mapped = collect();
+        /** @var Collection<int, TextbookChapter> $chapterByQuestion */
+        $chapterByQuestion = collect();
 
         foreach ($questions as $question) {
             $questionWorksheetIds = $question->worksheets->pluck('id')->map(fn ($id) => (int) $id)->all();
             $chapter = $chapters->first(function (TextbookChapter $chapter) use ($questionWorksheetIds) {
-                $owned = array_filter([
+                $owned = array_values(array_filter([
                     ...$chapter->mcqWorksheetIds(),
-                    (int) ($chapter->fill_blank_worksheet_id ?? 0),
-                    (int) ($chapter->written_worksheet_id ?? 0),
-                ]);
+                    ...$chapter->fillBlankWorksheetIds(),
+                    ...$chapter->writtenWorksheetIds(),
+                ]));
 
                 return array_intersect($owned, $questionWorksheetIds) !== [];
             });
 
             if ($chapter) {
                 $mapped[$question->id] = $chapter->id;
+                $chapterByQuestion[$question->id] = $chapter;
             }
         }
 
@@ -472,6 +475,7 @@ class ContentUploadTaskService
                     $chapter = $bySyllabus->get($syllabusChapterId)?->first();
                     if ($chapter) {
                         $mapped[$questionId] = $chapter->id;
+                        $chapterByQuestion[$questionId] = $chapter;
                     }
                 }
             }
@@ -489,13 +493,58 @@ class ContentUploadTaskService
             ->get()
             ->groupBy('textbook_chapter_id');
 
-        return $mapped->mapWithKeys(function (int $chapterId, int $questionId) use ($tasks) {
+        return $mapped->mapWithKeys(function (int $chapterId, int $questionId) use ($tasks, $questions, $chapterByQuestion) {
             $chapterTasks = $tasks->get($chapterId) ?? collect();
-            $task = $chapterTasks->first(fn (ContentUploadTask $row) => ! $row->isFillBlankConversion())
-                ?? $chapterTasks->first();
+            $question = $questions->get($questionId);
+            $chapter = $chapterByQuestion->get($questionId);
+            $task = $this->pickTaskForQuestion($chapterTasks, $question, $chapter);
 
             return $task ? [$questionId => $task] : [];
         });
+    }
+
+    /**
+     * Prefer a returnable assigned task — fill-blank conversion when the sum lives on a FIB set.
+     *
+     * @param  Collection<int, ContentUploadTask>  $chapterTasks
+     */
+    private function pickTaskForQuestion(
+        Collection $chapterTasks,
+        ?Question $question,
+        ?TextbookChapter $chapter,
+    ): ?ContentUploadTask {
+        if ($chapterTasks->isEmpty()) {
+            return null;
+        }
+
+        $onFillBlankSet = false;
+        if ($question && $chapter) {
+            $fillIds = $chapter->fillBlankWorksheetIds();
+            $onFillBlankSet = $fillIds !== [] && $question->worksheets
+                ->contains(fn ($ws) => in_array((int) $ws->id, $fillIds, true));
+        }
+
+        $ranked = $chapterTasks->sortByDesc(function (ContentUploadTask $task) use ($onFillBlankSet) {
+            $score = 0;
+            if ($this->canReturnSpecificQuestions($task)) {
+                $score += 100;
+            }
+            if ($task->assigned_to_user_id) {
+                $score += 40;
+            }
+            if ($onFillBlankSet && $task->isFillBlankConversion()) {
+                $score += 20;
+            }
+            if (! $onFillBlankSet && ! $task->isFillBlankConversion()) {
+                $score += 20;
+            }
+
+            return $score;
+        })->values();
+
+        return $ranked->first(fn (ContentUploadTask $task) => $this->canReturnSpecificQuestions($task) && $task->assigned_to_user_id)
+            ?? $ranked->first(fn (ContentUploadTask $task) => $this->canReturnSpecificQuestions($task))
+            ?? $ranked->first();
     }
 
     /**
@@ -524,7 +573,8 @@ class ContentUploadTaskService
             : null;
 
         return [
-            'can_return_to_uploader' => $this->canReturnSpecificQuestions($task),
+            'can_return_to_uploader' => $this->canReturnSpecificQuestions($task)
+                && filled($task->assigned_to_user_id),
             'content_task_id' => $task->id,
             'uploader_name' => $task->assignee?->name,
             'chapter_label' => $chapterLabel,
@@ -560,6 +610,10 @@ class ContentUploadTaskService
 
         if (! $task) {
             throw new \InvalidArgumentException('No content uploader is assigned to this question. Edit it yourself.');
+        }
+
+        if (! $task->assigned_to_user_id) {
+            throw new \InvalidArgumentException('No content uploader is assigned to this chapter. Edit it yourself.');
         }
 
         if (! $this->canReturnSpecificQuestions($task)) {
@@ -615,10 +669,20 @@ class ContentUploadTaskService
             ->get();
 
         $fromJson = TextbookChapter::query()
-            ->whereNotNull('mcq_worksheet_ids')
+            ->where(function ($query) {
+                $query->whereNotNull('mcq_worksheet_ids')
+                    ->orWhereNotNull('fill_blank_worksheet_ids')
+                    ->orWhereNotNull('written_worksheet_ids');
+            })
             ->get()
             ->filter(function (TextbookChapter $chapter) use ($worksheetIds) {
-                return array_intersect($chapter->mcqWorksheetIds(), $worksheetIds) !== [];
+                $owned = [
+                    ...$chapter->mcqWorksheetIds(),
+                    ...$chapter->fillBlankWorksheetIds(),
+                    ...$chapter->writtenWorksheetIds(),
+                ];
+
+                return array_intersect($owned, $worksheetIds) !== [];
             });
 
         return $direct->concat($fromJson)->unique('id')->values();
