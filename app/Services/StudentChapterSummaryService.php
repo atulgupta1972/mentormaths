@@ -692,6 +692,8 @@ class StudentChapterSummaryService
             'latest_score_percent' => $progress['latest_score_percent'] ?? null,
             'previous_score_percent' => $progress['previous_score_percent'] ?? null,
             'status_detail' => $progress['status_detail'] ?? null,
+            'completion_pct' => $progress['completion_pct'] ?? null,
+            'pool_metrics' => $progress['pool_metrics'] ?? null,
             'correction_count' => $correctionCount,
             'can_redo_wrong' => $correctionCount > 0,
             'is_correction' => false,
@@ -748,11 +750,13 @@ class StudentChapterSummaryService
         $percent = $progress['latest_score_percent'] ?? null;
         $previousPercent = $progress['previous_score_percent'] ?? null;
         $statusDetail = $progress['status_detail'] ?? null;
+        $pool = $progress['pool_metrics'] ?? null;
+        $completionPct = $progress['completion_pct'] ?? ($pool['completion_pct'] ?? null);
 
         return match ($progress['status']) {
             'green', 'green-late' => [
                 'status' => 'done',
-                'status_label' => $this->doneStatusLabel($percent, $previousPercent),
+                'status_label' => $this->doneStatusLabel($percent, $previousPercent, $completionPct),
                 'can_assign' => true,
                 'can_open' => true,
             ],
@@ -764,26 +768,51 @@ class StudentChapterSummaryService
             ],
             'overdue' => [
                 'status' => 'overdue',
-                'status_label' => 'OVERDUE',
+                'status_label' => $pool && ($pool['pending'] ?? 0) > 0
+                    ? 'OVERDUE · '.($statusDetail ?: 'remedial left')
+                    : 'OVERDUE',
                 'can_assign' => true,
                 'can_open' => true,
             ],
             default => [
                 'status' => ($progress['assignment_status'] ?? null) === SetAssignment::STATUS_IN_PROGRESS
+                    || (($pool['pending'] ?? 0) > 0 && ($pool['attempted'] ?? 0) > 0)
                     ? 'in_progress'
                     : 'pending',
-                'status_label' => ($progress['assignment_status'] ?? null) === SetAssignment::STATUS_IN_PROGRESS
-                    ? ($statusDetail ? "IN PROGRESS ({$statusDetail})" : 'IN PROGRESS')
-                    : 'NOT DONE',
+                'status_label' => $this->progressStatusLabel($progress, $pool, $statusDetail),
                 'can_assign' => false,
                 'can_open' => true,
             ],
         };
     }
 
-    private function doneStatusLabel(?int $percent, ?int $previousPercent): string
+    /**
+     * @param  array<string, mixed>  $progress
+     * @param  array<string, mixed>|null  $pool
+     */
+    private function progressStatusLabel(array $progress, ?array $pool, ?string $statusDetail): string
+    {
+        if ($pool && ($pool['pool'] ?? 0) > 0 && ($pool['attempted'] ?? 0) > 0) {
+            $score = $pool['score_pct'] ?? 0;
+            $detail = $statusDetail ?: "{$pool['attempted']}/{$pool['pool']}";
+
+            return "IN PROGRESS ({$detail} · score {$score}%)";
+        }
+
+        return ($progress['assignment_status'] ?? null) === SetAssignment::STATUS_IN_PROGRESS
+            ? ($statusDetail ? "IN PROGRESS ({$statusDetail})" : 'IN PROGRESS')
+            : 'NOT DONE';
+    }
+
+    private function doneStatusLabel(?int $percent, ?int $previousPercent, ?int $completionPct = null): string
     {
         $label = $percent !== null ? "DONE({$percent}%)" : 'DONE';
+
+        if ($completionPct !== null && $completionPct < 100) {
+            $label = $percent !== null
+                ? "SCORE({$percent}%) · {$completionPct}% done"
+                : "{$completionPct}% done";
+        }
 
         if ($previousPercent !== null) {
             $label .= " (redo · was {$previousPercent}%)";

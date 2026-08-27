@@ -92,6 +92,10 @@ class PracticeCorrectionPracticeService
                 $assignment->update(['status' => SetAssignment::STATUS_IN_PROGRESS]);
             }
 
+            app(AssignmentPoolScore::class)->ensureOriginals(
+                $assignment->fresh(['enrollment', 'practiceSet.questions']),
+            );
+
             return $attempt->fresh();
         });
     }

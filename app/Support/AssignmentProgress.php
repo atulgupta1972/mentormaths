@@ -2,9 +2,11 @@
 
 namespace App\Support;
 
+use App\Models\AssignmentSumInstance;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\WrittenSubmission;
+use App\Services\AssignmentPoolScore;
 use Carbon\Carbon;
 
 class AssignmentProgress
@@ -357,6 +359,22 @@ class AssignmentProgress
             $statusDetail = $partial['label'].($remaining > 0 ? " · {$remaining} left" : '');
         }
 
+        $poolMetrics = null;
+        $completionPct = null;
+        $scorePct = $summary['latest_score_percent'];
+
+        if (AssignmentSumInstance::query()->where('set_assignment_id', $assignment->id)->exists()) {
+            $poolMetrics = app(AssignmentPoolScore::class)->metricsForAssignment($assignment);
+            if (($poolMetrics['pool'] ?? 0) > 0) {
+                $scorePct = $poolMetrics['score_pct'];
+                $completionPct = $poolMetrics['completion_pct'];
+                $summary['latest_score_percent'] = $scorePct;
+                if ($poolMetrics['pending'] > 0) {
+                    $statusDetail = "{$poolMetrics['attempted']}/{$poolMetrics['pool']} · {$poolMetrics['pending']} left";
+                }
+            }
+        }
+
         return [
             'assignment_id' => $summary['assignment_id'],
             'set_code' => $summary['set_code'],
@@ -372,7 +390,7 @@ class AssignmentProgress
             'question_count' => $summary['question_count'],
             'latest_score' => $summary['latest_score'],
             'latest_max_score' => $summary['latest_max_score'],
-            'latest_score_percent' => $summary['latest_score_percent'],
+            'latest_score_percent' => $scorePct,
             'latest_score_label' => $summary['latest_score_label'],
             'score_display' => $scoreDisplay,
             'previous_score_label' => $previousScoreLabel,
@@ -381,15 +399,37 @@ class AssignmentProgress
             'can_redo' => $canRedo,
             'partial_progress' => $partial,
             'status_detail' => $statusDetail,
+            'pool_metrics' => $poolMetrics,
+            'completion_pct' => $completionPct,
             'submitted_at' => $summary['submitted_at'],
             'latest_time_seconds' => $summary['latest_time_seconds'],
             'submission_timing' => $summary['submission_timing'],
-            'status' => $summary['status'],
+            'status' => self::dashboardStatusWithPool($summary['status'], $poolMetrics, $summary['is_overdue']),
             'assignment_status' => $assignmentStatus,
             'latest_attempt_id' => $latest?->status === SetAttempt::STATUS_SUBMITTED ? $latest->id : null,
             'in_progress_attempt_id' => $latest?->status === SetAttempt::STATUS_IN_PROGRESS ? $latest->id : null,
             'written_submission_status' => null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $poolMetrics
+     */
+    private static function dashboardStatusWithPool(string $fallback, ?array $poolMetrics, bool $overdue): string
+    {
+        if (! $poolMetrics || ($poolMetrics['pool'] ?? 0) <= 0) {
+            return $fallback;
+        }
+
+        if (($poolMetrics['pending'] ?? 0) > 0) {
+            return $overdue ? 'overdue' : 'yellow';
+        }
+
+        if (($poolMetrics['completion_pct'] ?? null) === 100) {
+            return $overdue ? 'green-late' : 'green';
+        }
+
+        return $fallback;
     }
 
     /**

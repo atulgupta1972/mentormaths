@@ -359,6 +359,8 @@ class ClassCoverageService
             'status' => $item['status'] ?? 'not_assigned',
             'status_label' => $displayStatus,
             'score_percent' => $percent,
+            'completion_pct' => $item['completion_pct'] ?? ($item['pool_metrics']['completion_pct'] ?? null),
+            'pool_metrics' => $item['pool_metrics'] ?? null,
             'assignment_id' => $item['assignment_id'] ?? null,
             'target_date' => $item['target_date'] ?? null,
             'latest_attempt_id' => $item['latest_attempt_id'] ?? null,

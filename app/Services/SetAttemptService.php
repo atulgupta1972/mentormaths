@@ -21,6 +21,7 @@ class SetAttemptService
         private AnswerValidationService $answerValidation,
         private PracticeCorrectionQueueService $correctionQueue,
         private ClassCoverageService $classCoverage,
+        private AssignmentPoolScore $poolScore,
     ) {}
 
     public function start(SetAssignment $assignment): SetAttempt
@@ -31,6 +32,7 @@ class SetAttemptService
 
         if ($inProgress) {
             $this->ensureGuidedForTopicPractice($inProgress);
+            $this->poolScore->ensureOriginals($assignment->fresh(['enrollment', 'practiceSet.questions']));
 
             return $inProgress->fresh();
         }
@@ -46,6 +48,8 @@ class SetAttemptService
         $assignment->loadMissing('practiceSet');
 
         return DB::transaction(function () use ($assignment, $nextNumber) {
+            $this->poolScore->ensureOriginals($assignment->fresh(['enrollment', 'practiceSet.questions']));
+
             $attempt = SetAttempt::create([
                 'set_assignment_id' => $assignment->id,
                 'attempt_number' => $nextNumber,
@@ -261,6 +265,7 @@ class SetAttemptService
             $freshAttempt = $attempt->fresh(['answers', 'assignment.practiceSet']);
 
             $this->correctionQueue->syncFromBatchAttempt($freshAttempt);
+            $this->poolScore->syncFromBatchAttempt($freshAttempt);
 
             AssignmentMailer::sendCompleted($freshAttempt);
 

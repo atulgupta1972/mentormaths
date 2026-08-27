@@ -21,6 +21,7 @@ class GuidedPracticeService
     public function __construct(
         private AnswerValidationService $answerValidation,
         private PracticeCorrectionQueueService $correctionQueue,
+        private AssignmentPoolScore $poolScore,
     ) {}
     public function initialize(SetAttempt $attempt): void
     {
@@ -614,6 +615,7 @@ class GuidedPracticeService
         $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
 
         $this->correctionQueue->syncFromBatchAttempt($attempt->fresh(['guidedQuestions', 'answers']));
+        $this->poolScore->syncFromGuidedAttempt($attempt->fresh(['guidedQuestions', 'assignment.enrollment', 'assignment.practiceSet.questions']));
 
         AssignmentMailer::sendCompleted($attempt->fresh([
             'guidedQuestions.question.topic.chapter',
