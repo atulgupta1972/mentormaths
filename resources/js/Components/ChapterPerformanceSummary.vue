@@ -47,7 +47,7 @@ const performanceBarClass = (pct) => {
                     <template v-else>—</template>
                 </p>
                 <p class="text-[10px] font-semibold text-slate-500">
-                    {{ perf.done }}/{{ perf.total }} sets done
+                    {{ perf.done }}/{{ perf.total }} sums attempted
                 </p>
                 <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
                     <div
@@ -64,7 +64,7 @@ const performanceBarClass = (pct) => {
                     <template v-else>—</template>
                 </p>
                 <p class="text-[10px] font-semibold text-slate-500">
-                    <template v-if="perf.scoredCount">Avg of {{ perf.scoredCount }} scored set(s)</template>
+                    <template v-if="perf.total">{{ perf.correct ?? perf.scoredCount }}/{{ perf.total }} first-try correct</template>
                     <template v-else>No scores yet</template>
                 </p>
                 <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -82,7 +82,7 @@ const performanceBarClass = (pct) => {
                     <template v-else>—</template>
                 </p>
                 <p class="text-[10px] font-semibold text-slate-500">
-                    {{ perf.revisionDone || 0 }}/{{ perf.revisionTotal || 0 }} revision sheet(s)
+                    {{ perf.revisionDone || 0 }}/{{ perf.revisionTotal || 0 }} revision sums attempted
                 </p>
                 <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
                     <div
@@ -99,7 +99,9 @@ const performanceBarClass = (pct) => {
                     <template v-else>—</template>
                 </p>
                 <p class="text-[10px] font-semibold text-slate-500">
-                    <template v-if="perf.revisionScoredCount">Avg of {{ perf.revisionScoredCount }} revision(s)</template>
+                    <template v-if="perf.revisionTotal">
+                        {{ perf.revisionCorrect ?? perf.revisionScoredCount }}/{{ perf.revisionTotal }} first-try correct
+                    </template>
                     <template v-else>No revision scores yet</template>
                 </p>
                 <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">

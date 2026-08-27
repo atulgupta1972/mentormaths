@@ -234,34 +234,8 @@ class ClassCoverageService
         $revisionItems = array_values(array_filter($items, fn (array $item) => (bool) ($item['is_revision'] ?? false)));
         $corrections = array_values(array_filter($items, fn (array $item) => (bool) ($item['is_correction'] ?? false)));
 
-        $total = count($main);
-        $done = count(array_filter($main, fn (array $item) => ($item['status'] ?? '') === 'done'));
-        $completionPct = $total > 0 ? (int) round(($done / $total) * 100) : null;
-
-        $scored = array_values(array_filter(
-            $main,
-            fn (array $item) => ($item['status'] ?? '') === 'done'
-                && isset($item['score_percent'])
-                && $item['score_percent'] !== null
-                && $item['score_percent'] !== '',
-        ));
-        $scorePct = $scored !== []
-            ? (int) round(array_sum(array_map(fn (array $item) => (float) $item['score_percent'], $scored)) / count($scored))
-            : null;
-
-        $revisionTotal = count($revisionItems);
-        $revisionDone = count(array_filter($revisionItems, fn (array $item) => ($item['status'] ?? '') === 'done'));
-        $revisionCompletionPct = $revisionTotal > 0 ? (int) round(($revisionDone / $revisionTotal) * 100) : null;
-        $revisionScored = array_values(array_filter(
-            $revisionItems,
-            fn (array $item) => ($item['status'] ?? '') === 'done'
-                && isset($item['score_percent'])
-                && $item['score_percent'] !== null
-                && $item['score_percent'] !== '',
-        ));
-        $revisionScorePct = $revisionScored !== []
-            ? (int) round(array_sum(array_map(fn (array $item) => (float) $item['score_percent'], $revisionScored)) / count($revisionScored))
-            : null;
+        $mainAgg = \App\Support\SumPoolAggregate::fromItems($main);
+        $revisionAgg = \App\Support\SumPoolAggregate::fromItems($revisionItems);
 
         $correctionDone = count(array_filter($corrections, fn (array $item) => ($item['status'] ?? '') === 'done'));
         $correctionPending = count(array_filter($corrections, fn (array $item) => ($item['status'] ?? '') !== 'done'));
@@ -274,16 +248,20 @@ class ClassCoverageService
         ));
 
         return [
-            'total' => $total,
-            'done' => $done,
-            'completion_pct' => $completionPct,
-            'score_pct' => $scorePct,
-            'scored_count' => count($scored),
-            'revision_total' => $revisionTotal,
-            'revision_done' => $revisionDone,
-            'revision_completion_pct' => $revisionCompletionPct,
-            'revision_score_pct' => $revisionScorePct,
-            'revision_scored_count' => count($revisionScored),
+            'total' => $mainAgg['pool'],
+            'done' => $mainAgg['attempted'],
+            'correct' => $mainAgg['correct'],
+            'completion_pct' => $mainAgg['completion_pct'],
+            'score_pct' => $mainAgg['score_pct'],
+            'scored_count' => $mainAgg['correct'],
+            'set_total' => $mainAgg['set_total'],
+            'set_done' => $mainAgg['set_done'],
+            'revision_total' => $revisionAgg['pool'],
+            'revision_done' => $revisionAgg['attempted'],
+            'revision_correct' => $revisionAgg['correct'],
+            'revision_completion_pct' => $revisionAgg['completion_pct'],
+            'revision_score_pct' => $revisionAgg['score_pct'],
+            'revision_scored_count' => $revisionAgg['correct'],
             'correction_done' => $correctionDone,
             'correction_pending' => $correctionPending,
             'open_wrongs' => $openWrongs,

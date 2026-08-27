@@ -424,27 +424,71 @@ const collectDashboardItems = (dashboard) => {
     return items;
 };
 
+const sumsForItem = (item) => {
+    const poolMetrics = item.pool_metrics;
+    if (poolMetrics && Number(poolMetrics.pool || 0) > 0) {
+        return {
+            pool: Number(poolMetrics.pool || 0),
+            attempted: Number(poolMetrics.attempted || 0),
+            correct: Number(poolMetrics.correct || 0),
+        };
+    }
+
+    const questions = Number(item.question_count || 0);
+    if (questions <= 0) {
+        return { pool: 0, attempted: 0, correct: 0 };
+    }
+
+    if (item.status === 'done') {
+        const pct = item.score_percent ?? item.latest_score_percent;
+        const correct = pct != null && pct !== ''
+            ? Math.round((Number(pct) / 100) * questions)
+            : questions;
+
+        return {
+            pool: questions,
+            attempted: questions,
+            correct: Math.max(0, Math.min(questions, correct)),
+        };
+    }
+
+    return { pool: questions, attempted: 0, correct: 0 };
+};
+
+const aggregateSums = (items) => {
+    let pool = 0;
+    let attempted = 0;
+    let correct = 0;
+    let setDone = 0;
+
+    for (const item of items) {
+        const sums = sumsForItem(item);
+        pool += sums.pool;
+        attempted += sums.attempted;
+        correct += sums.correct;
+        if (item.status === 'done') {
+            setDone += 1;
+        }
+    }
+
+    return {
+        pool,
+        attempted,
+        correct,
+        completionPct: pool > 0 ? Math.round((attempted / pool) * 100) : null,
+        scorePct: pool > 0 ? Math.round((correct / pool) * 100) : null,
+        setTotal: items.length,
+        setDone,
+    };
+};
+
 const performanceFromItems = (items) => {
     const main = items.filter((item) => ! item.is_correction && ! item.is_revision);
     const revisions = items.filter((item) => item.is_revision);
     const corrections = items.filter((item) => item.is_correction);
 
-    const total = main.length;
-    const done = main.filter((item) => item.status === 'done').length;
-    const completionPct = total > 0 ? Math.round((done / total) * 100) : null;
-
-    const scored = main.filter((item) => item.status === 'done' && item.score_percent != null && item.score_percent !== '');
-    const scorePct = scored.length
-        ? Math.round(scored.reduce((sum, item) => sum + Number(item.score_percent), 0) / scored.length)
-        : null;
-
-    const revisionTotal = revisions.length;
-    const revisionDone = revisions.filter((item) => item.status === 'done').length;
-    const revisionCompletionPct = revisionTotal > 0 ? Math.round((revisionDone / revisionTotal) * 100) : null;
-    const revisionScored = revisions.filter((item) => item.status === 'done' && item.score_percent != null && item.score_percent !== '');
-    const revisionScorePct = revisionScored.length
-        ? Math.round(revisionScored.reduce((sum, item) => sum + Number(item.score_percent), 0) / revisionScored.length)
-        : null;
+    const mainAgg = aggregateSums(main);
+    const revisionAgg = aggregateSums(revisions);
 
     const correctionDone = corrections.filter((item) => item.status === 'done').length;
     const correctionPending = corrections.filter((item) => item.status !== 'done').length;
@@ -453,20 +497,24 @@ const performanceFromItems = (items) => {
         .reduce((sum, item) => sum + Number(item.correction_count || 0), 0);
 
     return {
-        total,
-        done,
-        completionPct,
-        scorePct,
-        scoredCount: scored.length,
-        revisionTotal,
-        revisionDone,
-        revisionCompletionPct,
-        revisionScorePct,
-        revisionScoredCount: revisionScored.length,
+        total: mainAgg.pool,
+        done: mainAgg.attempted,
+        correct: mainAgg.correct,
+        completionPct: mainAgg.completionPct,
+        scorePct: mainAgg.scorePct,
+        scoredCount: mainAgg.correct,
+        setTotal: mainAgg.setTotal,
+        setDone: mainAgg.setDone,
+        revisionTotal: revisionAgg.pool,
+        revisionDone: revisionAgg.attempted,
+        revisionCorrect: revisionAgg.correct,
+        revisionCompletionPct: revisionAgg.completionPct,
+        revisionScorePct: revisionAgg.scorePct,
+        revisionScoredCount: revisionAgg.correct,
         correctionDone,
         correctionPending,
         openWrongs,
-        revisionPending: (revisionTotal - revisionDone) + openWrongs,
+        revisionPending: Math.max(0, revisionAgg.pool - revisionAgg.attempted) + openWrongs,
     };
 };
 
@@ -718,10 +766,10 @@ const startRevision = (item) => {
                         <th class="w-16 px-2 py-1.5 text-left font-semibold whitespace-nowrap">Ch No</th>
                         <th class="min-w-[9rem] max-w-[14rem] px-2 py-1.5 text-left font-semibold">Chapter</th>
                         <th class="min-w-[8rem] max-w-[12rem] px-2 py-1.5 text-left font-semibold">Topics</th>
-                        <th class="bg-sky-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Sets done / available">
+                        <th class="bg-sky-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Sums attempted / total pool sums">
                             Completion %
                         </th>
-                        <th class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Average score on scored sets">
+                        <th class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="First-try correct sums / total pool sums">
                             Score %
                         </th>
                         <th class="bg-indigo-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Revision completion / score">
@@ -791,8 +839,8 @@ const startRevision = (item) => {
                                 class="bg-sky-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                                 :title="stats.total
-                                    ? `${stats.done}/${stats.total} sets done`
-                                    : 'No sets yet'"
+                                    ? `${stats.done}/${stats.total} sums attempted`
+                                    : 'No sums yet'"
                             >
                                 <span
                                     class="text-[14px] font-extrabold tabular-nums leading-none"
@@ -809,6 +857,9 @@ const startRevision = (item) => {
                             <td
                                 class="bg-violet-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
+                                :title="stats.total
+                                    ? `${stats.correct ?? 0}/${stats.total} first-try correct`
+                                    : 'No sums yet'"
                             >
                                 <span
                                     class="text-[14px] font-extrabold tabular-nums leading-none"
@@ -817,6 +868,10 @@ const startRevision = (item) => {
                                     <template v-if="stats.scorePct != null">{{ stats.scorePct }}%</template>
                                     <template v-else>—</template>
                                 </span>
+                                <span
+                                    v-if="stats.total && stats.scorePct != null"
+                                    class="ml-0.5 text-[10px] font-semibold tabular-nums text-slate-500"
+                                >{{ stats.correct ?? 0 }}/{{ stats.total }}</span>
                             </td>
                             <td
                                 class="bg-indigo-50/80 px-1.5 py-1 text-center align-middle"

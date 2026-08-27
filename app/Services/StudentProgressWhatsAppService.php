@@ -92,14 +92,15 @@ class StudentProgressWhatsAppService
 
         $done = (int) ($perf['done'] ?? 0);
         $total = (int) ($perf['total'] ?? 0);
+        $correct = (int) ($perf['correct'] ?? $perf['scored_count'] ?? 0);
         $completion = $perf['completion_pct'] ?? null;
-        $lines[] = 'Completion: '.$done.'/'.$total
+        $lines[] = 'Completion: '.$done.'/'.$total.' sums'
             .($completion !== null ? " ({$completion}%)" : '');
 
         if (($perf['score_pct'] ?? null) !== null) {
-            $lines[] = 'Average score: '.$perf['score_pct'].'%';
+            $lines[] = 'Score: '.$correct.'/'.$total.' first-try ('.$perf['score_pct'].'%)';
         } else {
-            $lines[] = 'Average score: no scores yet';
+            $lines[] = 'Score: no scores yet';
         }
 
         $lines[] = 'Corrections: '.(int) ($perf['correction_done'] ?? 0).' done, '

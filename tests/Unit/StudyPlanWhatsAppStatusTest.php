@@ -25,8 +25,32 @@ class StudyPlanWhatsAppStatusTest extends TestCase
                                 'rows' => [
                                     [
                                         'items' => [
-                                            ['status' => 'done', 'score_percent' => 80, 'is_correction' => false, 'correction_count' => 0, 'can_redo_wrong' => false],
-                                            ['status' => 'not_done', 'score_percent' => null, 'is_correction' => false, 'correction_count' => 2, 'can_redo_wrong' => true],
+                                            [
+                                                'status' => 'done',
+                                                'score_percent' => 80,
+                                                'question_count' => 10,
+                                                'pool_metrics' => [
+                                                    'pool' => 10,
+                                                    'attempted' => 10,
+                                                    'correct' => 8,
+                                                ],
+                                                'is_correction' => false,
+                                                'correction_count' => 0,
+                                                'can_redo_wrong' => false,
+                                            ],
+                                            [
+                                                'status' => 'pending',
+                                                'score_percent' => null,
+                                                'question_count' => 10,
+                                                'pool_metrics' => [
+                                                    'pool' => 10,
+                                                    'attempted' => 0,
+                                                    'correct' => 0,
+                                                ],
+                                                'is_correction' => false,
+                                                'correction_count' => 2,
+                                                'can_redo_wrong' => true,
+                                            ],
                                         ],
                                     ],
                                 ],
@@ -74,10 +98,11 @@ class StudyPlanWhatsAppStatusTest extends TestCase
         $this->assertNotNull($perf);
         $this->assertSame(1, $perf['chapter_count']);
         $this->assertSame(['Ch 2'], $perf['chapter_labels']);
-        $this->assertSame(2, $perf['total']);
-        $this->assertSame(1, $perf['done']);
+        $this->assertSame(20, $perf['total']);
+        $this->assertSame(10, $perf['done']);
+        $this->assertSame(8, $perf['correct']);
         $this->assertSame(50, $perf['completion_pct']);
-        $this->assertSame(80, $perf['score_pct']);
+        $this->assertSame(40, $perf['score_pct']);
         $this->assertSame(1, $perf['correction_done']);
         $this->assertSame(1, $perf['correction_pending']);
         $this->assertSame(2, $perf['open_wrongs']);
@@ -93,11 +118,12 @@ class StudyPlanWhatsAppStatusTest extends TestCase
             'pending_count' => 1,
             'overdue_count' => 2,
             'study_plan' => [
-                'total' => 10,
-                'done' => 4,
+                'total' => 50,
+                'done' => 20,
+                'correct' => 42,
                 'completion_pct' => 40,
                 'score_pct' => 84,
-                'scored_count' => 4,
+                'scored_count' => 42,
                 'correction_done' => 1,
                 'correction_pending' => 2,
                 'open_wrongs' => 3,
@@ -107,8 +133,8 @@ class StudyPlanWhatsAppStatusTest extends TestCase
         ]);
 
         $this->assertStringContainsString('Study plan status for Vishvesh', $message);
-        $this->assertStringContainsString('Completion: 4/10 (40%)', $message);
-        $this->assertStringContainsString('Average score: 84%', $message);
+        $this->assertStringContainsString('Completion: 20/50 sums (40%)', $message);
+        $this->assertStringContainsString('Score: 42/50 first-try (84%)', $message);
         $this->assertStringContainsString('Corrections: 1 done, 2 pending', $message);
         $this->assertStringContainsString('2 overdue, 1 pending', $message);
         $this->assertStringContainsString('https://mentormaths.in/dashboard', $message);
