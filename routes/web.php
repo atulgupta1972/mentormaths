@@ -474,6 +474,8 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
 
     Route::put('/class-coverage/{syllabusChapter}', [ClassCoverageController::class, 'update'])
         ->name('class-coverage.update');
+    Route::post('/assignments/{assignment}/study-chapter', [ClassCoverageController::class, 'updateAssignmentChapter'])
+        ->name('assignments.study-chapter');
     Route::get('/school-study-plan', [ClassCoverageController::class, 'show'])
         ->name('school-study-plan.show');
 

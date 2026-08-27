@@ -226,8 +226,77 @@ class StudentChapterSummaryServiceTest extends TestCase
         );
 
         $this->assertCount(1, $summary['other_groups']);
-        $this->assertSame('Class 6 - Integers', $summary['other_groups'][0]['label']);
+        $this->assertSame('Class 6 — Integers', $summary['other_groups'][0]['label']);
         $this->assertSame($otherWorksheet->id, $summary['other_groups'][0]['items'][0]['worksheet_id']);
+    }
+
+    public function test_cross_board_assignment_lands_in_additional_not_auto_merged(): void
+    {
+        [$enrollment, $homeChapter] = $this->seedChapterContent(withOtherGrade: true);
+
+        $icse = Board::query()->create(['code' => 'ICSE', 'name' => 'ICSE', 'is_active' => true]);
+        $classSeven = GradeLevel::query()->firstOrCreate(
+            ['name' => 'Class 7'],
+            ['sort_order' => 7, 'is_active' => true],
+        );
+        $year = $enrollment->academic_year_id
+            ? \App\Models\AcademicYear::query()->find($enrollment->academic_year_id)
+            : \App\Models\AcademicYear::query()->firstOrFail();
+        $subject = \App\Models\Subject::query()->where('code', 'MATHS')->firstOrFail();
+
+        $icseSyllabus = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $classSeven->id,
+            'board_id' => $icse->id,
+            'subject_id' => $subject->id,
+        ]);
+        $icseChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $icseSyllabus->id,
+            'name' => $homeChapter->name,
+            'chapter_number' => 1,
+            'sort_order' => 1,
+        ]);
+        $icseTopic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $icseChapter->id,
+            'name' => 'ICSE topic',
+            'sort_order' => 1,
+        ]);
+        $icseWorksheet = Worksheet::query()->create([
+            'title' => 'ICSE practice',
+            'set_number' => 4,
+            'set_code' => 'I704',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::TOPIC,
+            'syllabus_topic_id' => $icseTopic->id,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+            'status' => Worksheet::STATUS_PUBLISHED,
+        ]);
+
+        SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $icseWorksheet->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addDays(3),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        $summary = app(StudentChapterSummaryService::class)->forEnrollment($enrollment);
+        $homeRow = collect($summary['chapters'])->firstWhere('id', $homeChapter->id);
+
+        $this->assertFalse(
+            collect($homeRow['items']['practice'] ?? [])->contains(
+                fn (array $item) => $item['worksheet_id'] === $icseWorksheet->id,
+            ),
+        );
+        $this->assertTrue(
+            collect($summary['other_groups'])->contains(
+                fn (array $group) => collect($group['items'])->contains(
+                    fn (array $item) => $item['worksheet_id'] === $icseWorksheet->id,
+                ),
+            ),
+        );
+        $this->assertStringContainsString('ICSE', $summary['other_groups'][0]['label']);
+        $this->assertStringContainsString('Class 7', $summary['other_groups'][0]['label']);
     }
 
     private function studentUserForEnrollment(StudentEnrollment $enrollment): User

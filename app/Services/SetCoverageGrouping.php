@@ -195,6 +195,18 @@ class SetCoverageGrouping
      * @param  Closure(array<string, mixed>): array<string, mixed>  $mapItem
      * @return list<array{id: string, label: string, items: list<array<string, mixed>>}>
      */
+    public function formatAdditionalGroups(array $other, ?Closure $mapItem = null): array
+    {
+        $mapItem ??= fn (array $item) => $item;
+
+        return $this->formatOtherGroups($other, $mapItem);
+    }
+
+    /**
+     * @param  array<int, mixed>  $other
+     * @param  Closure(array<string, mixed>): array<string, mixed>  $mapItem
+     * @return list<array{id: string, label: string, items: list<array<string, mixed>>}>
+     */
     private function formatOtherGroups(array $other, Closure $mapItem): array
     {
         $groups = [];

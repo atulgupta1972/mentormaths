@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
+use App\Models\SetAssignment;
 use App\Models\SyllabusChapter;
 use App\Services\ClassCoverageService;
 use App\Services\ExamPlanService;
+use App\Services\SetAssignmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,6 +18,7 @@ class ClassCoverageController extends Controller
     public function __construct(
         private ClassCoverageService $coverageService,
         private ExamPlanService $examPlanService,
+        private SetAssignmentService $assignmentService,
     ) {}
 
     public function show(Request $request): Response
@@ -66,5 +69,41 @@ class ClassCoverageController extends Controller
         };
 
         return back()->with('success', $message);
+    }
+
+    /**
+     * Move an assigned sheet into a home syllabus chapter, or leave it in Additional (null).
+     */
+    public function updateAssignmentChapter(Request $request, SetAssignment $assignment): RedirectResponse
+    {
+        $enrollment = $request->user()->student?->currentEnrollment();
+
+        if (! $enrollment || (int) $assignment->student_enrollment_id !== (int) $enrollment->id) {
+            abort(403, 'This assignment is not on your study plan.');
+        }
+
+        $validated = $request->validate([
+            'effective_syllabus_chapter_id' => ['nullable', 'integer', 'exists:syllabus_chapters,id'],
+        ]);
+
+        try {
+            $this->assignmentService->updateEffectiveChapter(
+                $assignment,
+                isset($validated['effective_syllabus_chapter_id'])
+                    ? (int) $validated['effective_syllabus_chapter_id']
+                    : null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $moved = isset($validated['effective_syllabus_chapter_id']);
+
+        return back()->with(
+            'success',
+            $moved
+                ? 'Sheet moved to that chapter on your study plan.'
+                : 'Sheet left in Additional.',
+        );
     }
 }

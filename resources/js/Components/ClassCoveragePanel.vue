@@ -39,10 +39,68 @@ const assigningWorksheetId = ref(null);
 const expandedChapterIds = ref(new Set());
 
 const chapters = computed(() => props.classCoverage?.chapters ?? []);
+const additionalGroups = computed(() => props.classCoverage?.additional_groups ?? []);
+const chapterChoices = computed(() => props.classCoverage?.chapter_choices ?? []);
 const isStudentView = computed(() => String(props.updateRouteName).startsWith('student.'));
 const canStaffAssign = computed(() => ! isStudentView.value && Boolean(props.assignStudentId) && route().has('admin.practice-sets.assign'));
+const canMoveChapter = computed(() =>
+    (isStudentView.value && route().has('student.assignments.study-chapter'))
+    || route().has('admin.set-assignments.effective-chapter'),
+);
 /** Ch No + Chapter + Topics + Completion % + Score % + Revision status + Studied + Under study */
 const columnCount = computed(() => 8);
+
+const movingAssignmentId = ref(null);
+const moveTargets = ref({});
+
+const studyChapterUrl = (assignmentId) => {
+    if (isStudentView.value && route().has('student.assignments.study-chapter')) {
+        return route('student.assignments.study-chapter', assignmentId);
+    }
+
+    return route('admin.set-assignments.effective-chapter', assignmentId);
+};
+
+const moveAdditionalToChapter = (item) => {
+    if (! item.assignment_id || ! canMoveChapter.value) {
+        return;
+    }
+
+    const chapterId = moveTargets.value[item.assignment_id];
+    if (! chapterId) {
+        saveError.value = 'Pick a chapter first, then click Move.';
+
+        return;
+    }
+
+    movingAssignmentId.value = item.assignment_id;
+    saveError.value = '';
+    router.post(studyChapterUrl(item.assignment_id), {
+        effective_syllabus_chapter_id: chapterId,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            movingAssignmentId.value = null;
+        },
+    });
+};
+
+const leaveInAdditional = (item) => {
+    if (! item.assignment_id || ! canMoveChapter.value) {
+        return;
+    }
+
+    movingAssignmentId.value = item.assignment_id;
+    saveError.value = '';
+    router.post(studyChapterUrl(item.assignment_id), {
+        effective_syllabus_chapter_id: null,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            movingAssignmentId.value = null;
+        },
+    });
+};
 
 const todayDate = () => {
     const date = new Date();
@@ -643,6 +701,10 @@ const studyPlanPerformance = computed(() => {
         labels.push(short);
     }
 
+    for (const group of additionalGroups.value) {
+        items.push(...(group.items ?? []));
+    }
+
     return {
         ...performanceFromItems(items),
         chapterCount: tracked.length,
@@ -1059,7 +1121,7 @@ const startRevision = (item) => {
                                         v-if="otherGroups(chapterDashboard(chapter)).length"
                                         class="rounded-xl border-2 border-slate-700 bg-white p-3 shadow-md ring-1 ring-slate-300"
                                     >
-                                        <p class="text-[11px] font-extrabold uppercase tracking-wide text-slate-900">Other</p>
+                                        <p class="text-[11px] font-extrabold uppercase tracking-wide text-slate-900">Additional (in chapter)</p>
                                         <div class="mt-2 space-y-2.5">
                                             <div
                                                 v-for="group in otherGroups(chapterDashboard(chapter))"
@@ -1140,6 +1202,85 @@ const startRevision = (item) => {
                     </template>
                 </tbody>
             </table>
+        </div>
+
+        <div
+            v-if="additionalGroups.length"
+            class="mt-3 rounded-xl border-2 border-slate-700 bg-white p-3 shadow-md ring-1 ring-slate-300"
+        >
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <p class="text-[12px] font-extrabold uppercase tracking-wide text-slate-950">
+                    Additional
+                </p>
+                <p class="text-[11px] font-semibold text-slate-600">
+                    Sheets from another class / board / book — move into a chapter, or leave here.
+                </p>
+            </div>
+
+            <div class="mt-2 space-y-3">
+                <div
+                    v-for="group in additionalGroups"
+                    :key="`additional-${group.id}`"
+                >
+                    <p class="text-[11px] font-bold tracking-wide text-slate-800">
+                        {{ group.label }}
+                    </p>
+                    <div class="mt-1.5 space-y-2">
+                        <div
+                            v-for="item in group.items"
+                            :key="`additional-item-${item.assignment_id || item.worksheet_id}`"
+                            class="flex flex-wrap items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-2 py-1.5"
+                        >
+                            <CoverageSetItemCard
+                                :item="item"
+                                group-key="additional"
+                                :is-student-view="isStudentView"
+                                :can-staff-assign="canStaffAssign"
+                                :assigning-worksheet-id="assigningWorksheetId"
+                                :pending-assign-key="pendingAssignKey"
+                                :staff-assign-form="staffAssignForm"
+                                @self-assign="selfAssign"
+                                @start-correction="startCorrection"
+                                @start-revision="startRevision"
+                                @open-staff-assign="openStaffAssign"
+                                @confirm-staff-assign="confirmStaffAssign"
+                                @cancel-staff-assign="pendingAssignKey = null"
+                            />
+                            <template v-if="canMoveChapter && item.assignment_id && item.can_move_chapter !== false">
+                                <select
+                                    v-model="moveTargets[item.assignment_id]"
+                                    class="rounded border-slate-300 px-1.5 py-1 text-[11px] font-semibold text-slate-800"
+                                >
+                                    <option value="">Move to chapter…</option>
+                                    <option
+                                        v-for="choice in chapterChoices"
+                                        :key="choice.id"
+                                        :value="choice.id"
+                                    >
+                                        {{ choice.label }}
+                                    </option>
+                                </select>
+                                <button
+                                    type="button"
+                                    class="rounded bg-indigo-700 px-2 py-1 text-[10px] font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
+                                    :disabled="movingAssignmentId === item.assignment_id"
+                                    @click="moveAdditionalToChapter(item)"
+                                >
+                                    Move
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded border border-slate-400 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                                    :disabled="movingAssignmentId === item.assignment_id"
+                                    @click="leaveInAdditional(item)"
+                                >
+                                    Leave in Additional
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 </template>

@@ -529,18 +529,6 @@ class StudentChapterSummaryService
             $rowIndexById[(int) $row['id']] = $index;
         }
 
-        $byName = [];
-        $byHead = [];
-        foreach ($homeChapters as $chapter) {
-            $normalized = SyllabusChapterMatch::normalizeName((string) $chapter->name);
-            if ($normalized !== '' && ! isset($byName[$normalized])) {
-                $byName[$normalized] = (int) $chapter->id;
-            }
-            if ($chapter->chapter_head_id && ! isset($byHead[(int) $chapter->chapter_head_id])) {
-                $byHead[(int) $chapter->chapter_head_id] = (int) $chapter->id;
-            }
-        }
-
         $otherBySource = [];
 
         foreach ($orphanWorksheets as $worksheet) {
@@ -569,9 +557,14 @@ class StudentChapterSummaryService
                 ? (int) $currentAssignment->effective_syllabus_chapter_id
                 : null;
 
+            $sourceBoardId = (int) ($sourceChapter?->syllabusVersion?->board_id ?? 0);
+            $sameBoard = $sourceBoardId === 0 || $sourceBoardId === $homeBoardId;
+
+            // Explicit remap always wins. Auto-match by name/head only within the same board —
+            // cross-board sheets stay in Additional until moved to a chapter.
             if ($overrideId && isset($rowIndexById[$overrideId])) {
                 $matchId = $overrideId;
-            } elseif ($sourceChapter) {
+            } elseif ($sameBoard && $sourceChapter) {
                 $matchId = SyllabusChapterMatch::matchHomeChapterId($sourceChapter, $homeChapters);
             }
 
@@ -594,26 +587,76 @@ class StudentChapterSummaryService
                     ?? (string) ($worksheet->title ?: $worksheet->set_code ?: 'Extra sheet');
                 $boardName = $sourceChapter?->syllabusVersion?->board?->name;
                 $boardCode = $sourceChapter?->syllabusVersion?->board?->code;
-                $sourceBoardId = (int) ($sourceChapter?->syllabusVersion?->board_id ?? 0);
-                $label = ($sourceBoardId > 0 && $sourceBoardId !== $homeBoardId && $boardCode)
-                    ? "{$gradeName} · {$boardCode} - {$chapterName}"
-                    : "{$gradeName} - {$chapterName}";
+                $textbookName = $this->textbookNameForWorksheet((int) $worksheet->id);
+                $crossBoard = $sourceBoardId > 0 && $sourceBoardId !== $homeBoardId;
+
+                $labelParts = [];
+                if ($textbookName) {
+                    $labelParts[] = $textbookName;
+                }
+                $labelParts[] = $gradeName;
+                if ($crossBoard && $boardCode) {
+                    $labelParts[] = $boardCode;
+                } elseif ($crossBoard && $boardName) {
+                    $labelParts[] = $boardName;
+                }
+                $label = implode(' · ', $labelParts).' — '.$chapterName;
 
                 $otherBySource[$sourceKey] = [
                     'id' => $sourceKey,
                     'label' => $label,
                     'grade_name' => $gradeName,
                     'board_name' => $boardName,
+                    'board_code' => $boardCode,
+                    'textbook_name' => $textbookName,
                     'chapter_name' => $chapterName,
                     'syllabus_chapter_id' => $sourceChapter?->id,
                     'items' => [],
                 ];
             }
 
+            $item['source_label'] = $otherBySource[$sourceKey]['label'];
+            $item['can_move_chapter'] = true;
             $otherBySource[$sourceKey]['items'][] = $item;
         }
 
         return [$chapterRows, array_values($otherBySource)];
+    }
+
+    private function textbookNameForWorksheet(int $worksheetId): ?string
+    {
+        if ($worksheetId <= 0) {
+            return null;
+        }
+
+        $row = TextbookChapter::query()
+            ->with('textbook:id,name')
+            ->where(function ($query) use ($worksheetId) {
+                $query->where('mcq_worksheet_id', $worksheetId)
+                    ->orWhere('fill_blank_worksheet_id', $worksheetId)
+                    ->orWhere('written_worksheet_id', $worksheetId);
+            })
+            ->first();
+
+        if ($row?->textbook?->name) {
+            return (string) $row->textbook->name;
+        }
+
+        // Multi-part MCQ lists stored as JSON array.
+        $candidates = TextbookChapter::query()
+            ->with('textbook:id,name')
+            ->whereNotNull('mcq_worksheet_ids')
+            ->get(['id', 'textbook_id', 'mcq_worksheet_ids']);
+
+        foreach ($candidates as $candidate) {
+            if (in_array($worksheetId, $candidate->mcqWorksheetIds(), true)) {
+                return $candidate->textbook?->name
+                    ? (string) $candidate->textbook->name
+                    : null;
+            }
+        }
+
+        return null;
     }
 
     /**

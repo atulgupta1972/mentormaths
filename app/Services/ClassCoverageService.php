@@ -41,6 +41,8 @@ class ClassCoverageService
                 'chapters' => [],
                 'under_study_chapter_id' => null,
                 'availability_columns' => $emptyColumns,
+                'additional_groups' => [],
+                'chapter_choices' => [],
             ];
         }
 
@@ -62,23 +64,12 @@ class ClassCoverageService
         $summaryById = collect($summary['chapters'] ?? [])->keyBy('id');
         $availabilityColumns = $this->availabilityColumnsFor($summary['book_columns'] ?? []);
         $otherGroups = $summary['other_groups'] ?? [];
-
-        $underStudyId = $coverages
-            ->first(fn (StudentChapterCoverage $row) => $row->status === StudentChapterCoverage::STATUS_UNDER_STUDY)
-            ?->syllabus_chapter_id;
-        $firstStudiedId = $coverages
-            ->first(fn (StudentChapterCoverage $row) => $row->status === StudentChapterCoverage::STATUS_STUDIED)
-            ?->syllabus_chapter_id;
-        $otherHostChapterId = (int) ($underStudyId
-            ?? $firstStudiedId
-            ?? ($chapterOptions->first()['id'] ?? 0));
+        $underStudyId = null;
 
         $chapters = $chapterOptions->values()->map(function (array $chapter) use (
             $coverages,
             $summaryById,
             $availabilityColumns,
-            $otherGroups,
-            $otherHostChapterId,
             &$underStudyId,
         ) {
             $coverage = $coverages->get($chapter['id']);
@@ -103,9 +94,6 @@ class ClassCoverageService
             }
 
             $rawItems = $summaryChapter['items'] ?? [];
-            if ((int) $chapter['id'] === $otherHostChapterId && $otherGroups !== []) {
-                $rawItems['other'] = $otherGroups;
-            }
 
             return [
                 'id' => $chapter['id'],
@@ -139,10 +127,25 @@ class ClassCoverageService
             return ((int) $left['id']) <=> ((int) $right['id']);
         })->values()->all();
 
+        $chapterChoices = collect($chapters)->map(fn (array $chapter) => [
+            'id' => (int) $chapter['id'],
+            'label' => (string) ($chapter['label'] ?? $chapter['name'] ?? 'Chapter'),
+        ])->values()->all();
+
+        $additionalGroups = app(SetCoverageGrouping::class)->formatAdditionalGroups(
+            $otherGroups,
+            fn (array $item) => $this->detailItemPayload(array_merge($item, [
+                'can_move_chapter' => true,
+                'is_additional' => true,
+            ])),
+        );
+
         return [
             'chapters' => $chapters,
             'under_study_chapter_id' => $underStudyId,
             'availability_columns' => $availabilityColumns,
+            'additional_groups' => $additionalGroups,
+            'chapter_choices' => $chapterChoices,
         ];
     }
 
@@ -224,6 +227,17 @@ class ClassCoverageService
                     : 'Ch '.$number;
             } else {
                 $labels[] = (string) ($chapter['name'] ?? 'Chapter');
+            }
+        }
+
+        foreach ($coverage['additional_groups'] ?? [] as $group) {
+            if (! is_array($group)) {
+                continue;
+            }
+            foreach ($group['items'] ?? [] as $item) {
+                if (is_array($item)) {
+                    $items[] = $item;
+                }
             }
         }
 
@@ -387,9 +401,12 @@ class ClassCoverageService
             'is_revision' => (bool) ($item['is_revision'] ?? false),
             'revision_number' => (int) ($item['revision_number'] ?? 0),
             'can_start_revision' => (bool) ($item['can_start_revision'] ?? false),
+            'is_cross_chapter' => (bool) ($item['is_cross_chapter'] ?? false),
+            'is_additional' => (bool) ($item['is_additional'] ?? false),
+            'can_move_chapter' => (bool) ($item['can_move_chapter'] ?? false),
+            'source_label' => $item['source_label'] ?? null,
             'textbook_id' => $item['textbook_id'] ?? null,
             'textbook_name' => $item['textbook_name'] ?? null,
-            'is_cross_chapter' => (bool) ($item['is_cross_chapter'] ?? false),
         ];
     }
 
