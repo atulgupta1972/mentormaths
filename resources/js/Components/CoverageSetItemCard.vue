@@ -16,6 +16,7 @@ const props = defineProps({
 const emit = defineEmits([
     'self-assign',
     'start-correction',
+    'start-revision',
     'open-staff-assign',
     'confirm-staff-assign',
     'cancel-staff-assign',
@@ -39,7 +40,7 @@ const statusClass = computed(() => ({
     draft: 'bg-amber-200 text-amber-950',
 }[props.item.status] ?? 'bg-slate-200 text-slate-800'));
 
-const itemKey = computed(() => `${props.groupKey}-${props.item.worksheet_id}`);
+const itemKey = computed(() => `${props.groupKey}-${props.item.worksheet_id}-${props.item.assignment_id || 0}`);
 
 const canAssign = computed(() =>
     props.canStaffAssign && props.item.worksheet_id && ! props.item.is_correction,
@@ -52,14 +53,12 @@ const itemHref = computed(() => {
         return null;
     }
 
-    // Continue an open attempt first.
     if (props.item.in_progress_attempt_id && route().has('student.attempts.show')) {
         return route('student.attempts.show', props.item.in_progress_attempt_id);
     }
 
-    // Only open a finished result when the set is marked done.
-    // After reassign (NOT DONE), go to the assignment so the student starts the full current set.
-    if (props.item.status === 'done' && props.item.latest_attempt_id && route().has('student.attempts.show')) {
+    // Done learning sheets: show result. Revisions use "Revise again" instead of opening old result as primary CTA.
+    if (props.item.status === 'done' && ! props.item.is_revision && props.item.latest_attempt_id && route().has('student.attempts.show')) {
         return route('student.attempts.show', props.item.latest_attempt_id);
     }
 
@@ -69,10 +68,21 @@ const itemHref = computed(() => {
 
     return null;
 });
+
+const assignButtonLabel = computed(() => {
+    if (props.item.is_revision || props.item.can_start_revision) {
+        return `Revise again (R${Number(props.item.revision_number || 0) + 1})`;
+    }
+
+    return 'Assign me';
+});
 </script>
 
 <template>
-    <div class="inline-flex flex-wrap items-center gap-1.5 rounded-md border-2 border-slate-400 bg-white px-2 py-1 shadow-sm">
+    <div
+        class="inline-flex flex-wrap items-center gap-1.5 rounded-md border-2 bg-white px-2 py-1 shadow-sm"
+        :class="item.is_revision ? 'border-indigo-500' : 'border-slate-400'"
+    >
         <span class="font-mono text-[11px] font-extrabold text-slate-950">
             {{ item.short_label }}<span class="font-bold text-slate-600">{{ questionSuffix }}</span>
         </span>
@@ -102,16 +112,25 @@ const itemHref = computed(() => {
                 :disabled="assigningWorksheetId === item.worksheet_id"
                 @click.stop="emit('start-correction', item)"
             >
-                Redo wrong
+                Correction
             </button>
             <button
-                v-if="item.can_assign"
+                v-if="item.can_start_revision || (item.is_revision && item.can_assign)"
+                type="button"
+                class="rounded bg-indigo-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
+                :disabled="assigningWorksheetId === item.worksheet_id"
+                @click.stop="emit('start-revision', item)"
+            >
+                {{ assignButtonLabel }}
+            </button>
+            <button
+                v-else-if="item.can_assign && !item.is_revision"
                 type="button"
                 class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800 disabled:opacity-50"
                 :disabled="assigningWorksheetId === item.worksheet_id"
                 @click.stop="emit('self-assign', item)"
             >
-                {{ item.status === 'done' ? 'Redo' : 'Assign me' }}
+                Assign me
             </button>
             <Link
                 v-else-if="itemHref"
@@ -129,7 +148,7 @@ const itemHref = computed(() => {
                 class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800"
                 @click.stop="emit('open-staff-assign', item, groupKey)"
             >
-                {{ item.status === 'not_assigned' ? 'Assign' : 'Reassign' }}
+                {{ item.is_revision ? 'Assign revision' : (item.status === 'not_assigned' ? 'Assign' : 'Reassign') }}
             </button>
             <form
                 v-else-if="staffAssignForm"

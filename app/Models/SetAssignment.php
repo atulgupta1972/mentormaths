@@ -20,6 +20,8 @@ class SetAssignment extends Model
     protected $fillable = [
         'student_enrollment_id',
         'worksheet_id',
+        'parent_assignment_id',
+        'revision_number',
         'exam_plan_id',
         'effective_syllabus_chapter_id',
         'assigned_by',
@@ -33,10 +35,21 @@ class SetAssignment extends Model
     protected function casts(): array
     {
         return [
+            'revision_number' => 'integer',
             'assigned_at' => 'datetime',
             'reassigned_at' => 'datetime',
             'due_date' => 'date',
         ];
+    }
+
+    public function isRevision(): bool
+    {
+        return ((int) $this->revision_number) > 0;
+    }
+
+    public function isOriginalLearning(): bool
+    {
+        return ! $this->isRevision();
     }
 
     public function isOverdue(): bool
@@ -52,6 +65,21 @@ class SetAssignment extends Model
     public function practiceSet(): BelongsTo
     {
         return $this->belongsTo(Worksheet::class, 'worksheet_id');
+    }
+
+    public function parentAssignment(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_assignment_id');
+    }
+
+    public function childRevisions(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_assignment_id')->orderBy('revision_number');
+    }
+
+    public function sumInstances(): HasMany
+    {
+        return $this->hasMany(AssignmentSumInstance::class, 'set_assignment_id');
     }
 
     public function examPlan(): BelongsTo

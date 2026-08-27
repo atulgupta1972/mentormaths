@@ -616,6 +616,7 @@ class GuidedPracticeService
 
         $this->correctionQueue->syncFromBatchAttempt($attempt->fresh(['guidedQuestions', 'answers']));
         $this->poolScore->syncFromGuidedAttempt($attempt->fresh(['guidedQuestions', 'assignment.enrollment', 'assignment.practiceSet.questions']));
+        app(RevisionAssignmentService::class)->ensureFirstRevisionIfReady($assignment->fresh());
 
         AssignmentMailer::sendCompleted($attempt->fresh([
             'guidedQuestions.question.topic.chapter',

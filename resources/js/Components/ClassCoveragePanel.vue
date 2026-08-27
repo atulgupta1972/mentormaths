@@ -325,10 +325,12 @@ const hasDashboardContent = (dashboard) => {
     }
 
     const blockItems = (dashboard.blocks || []).some((block) => (block.item_count || 0) > 0);
-    const extras = ['formula', 'practice_correction', 'books', 'other'].some(
+    const extras = ['formula', 'books', 'other', 'revisions'].some(
         (key) => (dashboard[key]?.items?.length || 0) > 0,
     );
-    const bookGroups = (dashboard.book_groups || []).some((group) => (group.items?.length || 0) > 0);
+    const bookGroups = (dashboard.book_groups || []).some(
+        (group) => (group.items?.length || 0) > 0 || (group.revision_items?.length || 0) > 0,
+    );
     const otherGroups = (dashboard.other_groups || []).some((group) => (group.items?.length || 0) > 0);
 
     return blockItems || extras || bookGroups || otherGroups;
@@ -398,11 +400,16 @@ const collectDashboardItems = (dashboard) => {
     for (const block of dashboard.blocks ?? []) {
         for (const row of block.rows ?? []) {
             items.push(...(row.items ?? []));
+            items.push(...(row.revision_items ?? []));
         }
     }
 
-    for (const key of ['formula', 'practice_correction', 'books']) {
+    for (const key of ['formula', 'books']) {
         items.push(...(dashboard[key]?.items ?? []));
+    }
+
+    for (const book of dashboard.book_groups ?? []) {
+        items.push(...(book.revision_items ?? []));
     }
 
     const groups = dashboard.other_groups ?? [];
@@ -417,9 +424,9 @@ const collectDashboardItems = (dashboard) => {
     return items;
 };
 
-const chapterPerformance = (dashboard) => {
-    const items = collectDashboardItems(dashboard);
-    const main = items.filter((item) => ! item.is_correction);
+const performanceFromItems = (items) => {
+    const main = items.filter((item) => ! item.is_correction && ! item.is_revision);
+    const revisions = items.filter((item) => item.is_revision);
     const corrections = items.filter((item) => item.is_correction);
 
     const total = main.length;
@@ -431,15 +438,19 @@ const chapterPerformance = (dashboard) => {
         ? Math.round(scored.reduce((sum, item) => sum + Number(item.score_percent), 0) / scored.length)
         : null;
 
+    const revisionTotal = revisions.length;
+    const revisionDone = revisions.filter((item) => item.status === 'done').length;
+    const revisionCompletionPct = revisionTotal > 0 ? Math.round((revisionDone / revisionTotal) * 100) : null;
+    const revisionScored = revisions.filter((item) => item.score_percent != null && item.score_percent !== '');
+    const revisionScorePct = revisionScored.length
+        ? Math.round(revisionScored.reduce((sum, item) => sum + Number(item.score_percent), 0) / revisionScored.length)
+        : null;
+
     const correctionDone = corrections.filter((item) => item.status === 'done').length;
     const correctionPending = corrections.filter((item) => item.status !== 'done').length;
-    const openWrongs = main
-        .filter((item) => ! item.is_correction && Number(item.correction_count || 0) > 0 && item.can_redo_wrong)
+    const openWrongs = items
+        .filter((item) => Number(item.correction_count || 0) > 0 && item.can_redo_wrong)
         .reduce((sum, item) => sum + Number(item.correction_count || 0), 0);
-
-    if (completionPct === null && scorePct === null && correctionDone === 0 && correctionPending === 0 && openWrongs === 0) {
-        return null;
-    }
 
     return {
         total,
@@ -447,10 +458,35 @@ const chapterPerformance = (dashboard) => {
         completionPct,
         scorePct,
         scoredCount: scored.length,
+        revisionTotal,
+        revisionDone,
+        revisionCompletionPct,
+        revisionScorePct,
+        revisionScoredCount: revisionScored.length,
         correctionDone,
         correctionPending,
         openWrongs,
+        revisionPending: (revisionTotal - revisionDone) + openWrongs,
     };
+};
+
+const chapterPerformance = (dashboard) => {
+    const perf = performanceFromItems(collectDashboardItems(dashboard));
+
+    if (
+        perf.completionPct === null
+        && perf.scorePct === null
+        && perf.revisionCompletionPct === null
+        && perf.revisionScorePct === null
+        && perf.correctionDone === 0
+        && perf.correctionPending === 0
+        && perf.openWrongs === 0
+        && perf.revisionTotal === 0
+    ) {
+        return null;
+    }
+
+    return perf;
 };
 
 /** Always returns glance stats for the coverage table (— when no data). */
@@ -462,36 +498,11 @@ const chapterRowStats = (chapter) => {
     } else {
         for (const group of chapter.items ?? []) {
             items.push(...(group.items ?? []));
+            items.push(...(group.revision_items ?? []));
         }
     }
 
-    const main = items.filter((item) => ! item.is_correction);
-    const corrections = items.filter((item) => item.is_correction);
-
-    const total = main.length;
-    const done = main.filter((item) => item.status === 'done').length;
-    const completionPct = total > 0 ? Math.round((done / total) * 100) : null;
-
-    const scored = main.filter((item) => item.score_percent != null && item.score_percent !== '');
-    const scorePct = scored.length
-        ? Math.round(scored.reduce((sum, item) => sum + Number(item.score_percent), 0) / scored.length)
-        : null;
-
-    const correctionDone = corrections.filter((item) => item.status === 'done').length;
-    const correctionPending = corrections.filter((item) => item.status !== 'done').length;
-    const openWrongs = main
-        .filter((item) => Number(item.correction_count || 0) > 0 && item.can_redo_wrong)
-        .reduce((sum, item) => sum + Number(item.correction_count || 0), 0);
-    const revisionPending = correctionPending + openWrongs;
-
-    return {
-        total,
-        done,
-        completionPct,
-        scorePct,
-        correctionDone,
-        revisionPending,
-    };
+    return performanceFromItems(items);
 };
 
 const chapterStatsById = computed(() => {
@@ -572,6 +583,7 @@ const studyPlanPerformance = computed(() => {
         } else {
             for (const group of chapter.items ?? []) {
                 items.push(...(group.items ?? []));
+                items.push(...(group.revision_items ?? []));
             }
         }
 
@@ -582,33 +594,8 @@ const studyPlanPerformance = computed(() => {
         labels.push(short);
     }
 
-    const main = items.filter((item) => ! item.is_correction);
-    const corrections = items.filter((item) => item.is_correction);
-
-    const total = main.length;
-    const done = main.filter((item) => item.status === 'done').length;
-    const completionPct = total > 0 ? Math.round((done / total) * 100) : null;
-
-    const scored = main.filter((item) => item.score_percent != null && item.score_percent !== '');
-    const scorePct = scored.length
-        ? Math.round(scored.reduce((sum, item) => sum + Number(item.score_percent), 0) / scored.length)
-        : null;
-
-    const correctionDone = corrections.filter((item) => item.status === 'done').length;
-    const correctionPending = corrections.filter((item) => item.status !== 'done').length;
-    const openWrongs = main
-        .filter((item) => Number(item.correction_count || 0) > 0 && item.can_redo_wrong)
-        .reduce((sum, item) => sum + Number(item.correction_count || 0), 0);
-
     return {
-        total,
-        done,
-        completionPct,
-        scorePct,
-        scoredCount: scored.length,
-        correctionDone,
-        correctionPending,
-        openWrongs,
+        ...performanceFromItems(items),
         chapterCount: tracked.length,
         chapterLabels: labels.slice(0, 6),
     };
@@ -662,7 +649,27 @@ const startCorrection = (item) => {
 
     assigningWorksheetId.value = item.worksheet_id;
 
-    router.post(route('student.worksheets.correction-practice', item.worksheet_id), {}, {
+    router.post(route('student.worksheets.correction-practice', item.worksheet_id), {
+        assignment_id: item.assignment_id || null,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            assigningWorksheetId.value = null;
+        },
+    });
+};
+
+const startRevision = (item) => {
+    if (! isStudentView.value || ! item.worksheet_id || assigningWorksheetId.value) {
+        return;
+    }
+
+    assigningWorksheetId.value = item.worksheet_id;
+
+    router.post(route('student.worksheets.self-assign', item.worksheet_id), {
+        start_revision: 1,
+        assignment_id: item.assignment_id || null,
+    }, {
         preserveScroll: true,
         onFinish: () => {
             assigningWorksheetId.value = null;
@@ -697,7 +704,7 @@ const startCorrection = (item) => {
             class="mb-3 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 px-3 py-2.5 text-[11px] font-semibold text-indigo-950"
         >
             Mark chapters as <span class="font-extrabold">Studied</span> or <span class="font-extrabold">Under study</span>
-            to see completion, score, and correction performance here (as on today).
+            to see learning and revision completion / score here (as on today).
         </div>
 
         <div v-if="!chapters.length" class="rounded border border-dashed border-slate-300 px-3 py-3 text-xs text-slate-600">
@@ -717,8 +724,8 @@ const startCorrection = (item) => {
                         <th class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Average score on scored sets">
                             Score %
                         </th>
-                        <th class="bg-orange-700 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Revision status — corrections done / pending">
-                            Revision status
+                        <th class="bg-indigo-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Revision completion / score">
+                            Revision
                         </th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Studied</th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Under study</th>
@@ -812,16 +819,21 @@ const startCorrection = (item) => {
                                 </span>
                             </td>
                             <td
-                                class="bg-orange-50/80 px-1.5 py-1 text-center align-middle"
+                                class="bg-indigo-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
-                                title="Revision status — corrections done / pending"
+                                title="Revision completion % · score %"
                             >
-                                <span class="text-[14px] font-extrabold tabular-nums leading-none text-orange-800">
-                                    <span class="text-emerald-700">{{ stats.correctionDone }}</span>
-                                    <span class="mx-px text-slate-400">/</span>
-                                    <span :class="stats.revisionPending > 0 ? 'text-rose-700' : 'text-slate-500'">
-                                        {{ stats.revisionPending }}
-                                    </span>
+                                <span class="text-[12px] font-extrabold tabular-nums leading-none text-indigo-900">
+                                    <template v-if="stats.revisionCompletionPct != null || stats.revisionScorePct != null">
+                                        <span :class="pctToneClass(stats.revisionCompletionPct)">
+                                            {{ stats.revisionCompletionPct != null ? `${stats.revisionCompletionPct}%` : '—' }}
+                                        </span>
+                                        <span class="mx-px text-slate-400">·</span>
+                                        <span :class="pctToneClass(stats.revisionScorePct)">
+                                            {{ stats.revisionScorePct != null ? `${stats.revisionScorePct}%` : '—' }}
+                                        </span>
+                                    </template>
+                                    <template v-else>—</template>
                                 </span>
                             </td>
                             <td
@@ -902,10 +914,38 @@ const startCorrection = (item) => {
                                                 :staff-assign-form="staffAssignForm"
                                                 @self-assign="selfAssign"
                                                 @start-correction="startCorrection"
+                                                @start-revision="startRevision"
                                                 @open-staff-assign="openStaffAssign"
                                                 @confirm-staff-assign="confirmStaffAssign"
                                                 @cancel-staff-assign="pendingAssignKey = null"
                                             />
+                                        </div>
+                                        <div
+                                            v-if="book.revision_items?.length"
+                                            class="mt-2 border-t border-indigo-200 pt-2"
+                                        >
+                                            <p class="text-[10px] font-extrabold uppercase tracking-wide text-indigo-900">
+                                                Revision
+                                            </p>
+                                            <div class="mt-1 flex flex-wrap gap-1.5">
+                                                <CoverageSetItemCard
+                                                    v-for="item in book.revision_items"
+                                                    :key="`book-rev-${book.id}-${item.assignment_id}`"
+                                                    :item="item"
+                                                    group-key="revisions"
+                                                    :is-student-view="isStudentView"
+                                                    :can-staff-assign="canStaffAssign"
+                                                    :assigning-worksheet-id="assigningWorksheetId"
+                                                    :pending-assign-key="pendingAssignKey"
+                                                    :staff-assign-form="staffAssignForm"
+                                                    @self-assign="selfAssign"
+                                                    @start-correction="startCorrection"
+                                                    @start-revision="startRevision"
+                                                    @open-staff-assign="openStaffAssign"
+                                                    @confirm-staff-assign="confirmStaffAssign"
+                                                    @cancel-staff-assign="pendingAssignKey = null"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
@@ -927,31 +967,7 @@ const startCorrection = (item) => {
                                                 :staff-assign-form="staffAssignForm"
                                                 @self-assign="selfAssign"
                                                 @start-correction="startCorrection"
-                                                @open-staff-assign="openStaffAssign"
-                                                @confirm-staff-assign="confirmStaffAssign"
-                                                @cancel-staff-assign="pendingAssignKey = null"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div
-                                        v-if="chapterDashboard(chapter).practice_correction?.items?.length"
-                                        class="rounded-xl border-2 border-orange-500 bg-white p-3 shadow-md ring-1 ring-orange-200"
-                                    >
-                                        <p class="text-[11px] font-extrabold uppercase tracking-wide text-orange-950">Practice · Correction</p>
-                                        <div class="mt-1.5 flex flex-wrap gap-1.5">
-                                            <CoverageSetItemCard
-                                                v-for="item in chapterDashboard(chapter).practice_correction.items"
-                                                :key="`corr-${item.worksheet_id}`"
-                                                :item="item"
-                                                group-key="practice_correction"
-                                                :is-student-view="isStudentView"
-                                                :can-staff-assign="canStaffAssign"
-                                                :assigning-worksheet-id="assigningWorksheetId"
-                                                :pending-assign-key="pendingAssignKey"
-                                                :staff-assign-form="staffAssignForm"
-                                                @self-assign="selfAssign"
-                                                @start-correction="startCorrection"
+                                                @start-revision="startRevision"
                                                 @open-staff-assign="openStaffAssign"
                                                 @confirm-staff-assign="confirmStaffAssign"
                                                 @cancel-staff-assign="pendingAssignKey = null"
@@ -1001,10 +1017,38 @@ const startCorrection = (item) => {
                                                             :staff-assign-form="staffAssignForm"
                                                             @self-assign="selfAssign"
                                                             @start-correction="startCorrection"
+                                                            @start-revision="startRevision"
                                                             @open-staff-assign="openStaffAssign"
                                                             @confirm-staff-assign="confirmStaffAssign"
                                                             @cancel-staff-assign="pendingAssignKey = null"
                                                         />
+                                                    </div>
+                                                    <div
+                                                        v-if="row.revision_items?.length"
+                                                        class="mt-1.5 border-t border-indigo-100 pt-1.5"
+                                                    >
+                                                        <p class="text-[9px] font-extrabold uppercase tracking-wide text-indigo-800">
+                                                            Revision
+                                                        </p>
+                                                        <div class="mt-1 flex flex-wrap gap-1.5">
+                                                            <CoverageSetItemCard
+                                                                v-for="item in row.revision_items"
+                                                                :key="`${row.key}-rev-${item.assignment_id}`"
+                                                                :item="item"
+                                                                :group-key="`${block.tier}:${row.key}:rev`"
+                                                                :is-student-view="isStudentView"
+                                                                :can-staff-assign="canStaffAssign"
+                                                                :assigning-worksheet-id="assigningWorksheetId"
+                                                                :pending-assign-key="pendingAssignKey"
+                                                                :staff-assign-form="staffAssignForm"
+                                                                @self-assign="selfAssign"
+                                                                @start-correction="startCorrection"
+                                                                @start-revision="startRevision"
+                                                                @open-staff-assign="openStaffAssign"
+                                                                @confirm-staff-assign="confirmStaffAssign"
+                                                                @cancel-staff-assign="pendingAssignKey = null"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1037,6 +1081,7 @@ const startCorrection = (item) => {
                                                         :staff-assign-form="staffAssignForm"
                                                         @self-assign="selfAssign"
                                                         @start-correction="startCorrection"
+                                                        @start-revision="startRevision"
                                                         @open-staff-assign="openStaffAssign"
                                                         @confirm-staff-assign="confirmStaffAssign"
                                                         @cancel-staff-assign="pendingAssignKey = null"
@@ -1082,6 +1127,7 @@ const startCorrection = (item) => {
                                                 :staff-assign-form="staffAssignForm"
                                                 @self-assign="selfAssign"
                                                 @start-correction="startCorrection"
+                                                @start-revision="startRevision"
                                                 @open-staff-assign="openStaffAssign"
                                                 @confirm-staff-assign="confirmStaffAssign"
                                                 @cancel-staff-assign="pendingAssignKey = null"

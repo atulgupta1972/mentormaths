@@ -37,9 +37,11 @@ class SetAssignmentService
             $this->assertEffectiveChapterForEnrollment($enrollment, $effectiveSyllabusChapterId);
         }
 
+        // Learning path only — never reassign a revision row as the "main" assignment.
         $existing = SetAssignment::query()
             ->where('student_enrollment_id', $enrollment->id)
             ->where('worksheet_id', $practiceSet->id)
+            ->where('revision_number', 0)
             ->whereNot('status', SetAssignment::STATUS_CANCELLED)
             ->orderByDesc('id')
             ->first();
@@ -58,6 +60,8 @@ class SetAssignmentService
         return SetAssignment::create([
             'student_enrollment_id' => $enrollment->id,
             'worksheet_id' => $practiceSet->id,
+            'parent_assignment_id' => null,
+            'revision_number' => 0,
             'exam_plan_id' => $examPlan?->id,
             'effective_syllabus_chapter_id' => $effectiveSyllabusChapterId,
             'assigned_by' => $assigner->id,

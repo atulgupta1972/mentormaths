@@ -227,7 +227,11 @@ class ClassCoverageService
             }
         }
 
-        $main = array_values(array_filter($items, fn (array $item) => ! ($item['is_correction'] ?? false)));
+        $main = array_values(array_filter(
+            $items,
+            fn (array $item) => ! ($item['is_correction'] ?? false) && ! ($item['is_revision'] ?? false),
+        ));
+        $revisionItems = array_values(array_filter($items, fn (array $item) => (bool) ($item['is_revision'] ?? false)));
         $corrections = array_values(array_filter($items, fn (array $item) => (bool) ($item['is_correction'] ?? false)));
 
         $total = count($main);
@@ -242,12 +246,23 @@ class ClassCoverageService
             ? (int) round(array_sum(array_map(fn (array $item) => (float) $item['score_percent'], $scored)) / count($scored))
             : null;
 
+        $revisionTotal = count($revisionItems);
+        $revisionDone = count(array_filter($revisionItems, fn (array $item) => ($item['status'] ?? '') === 'done'));
+        $revisionCompletionPct = $revisionTotal > 0 ? (int) round(($revisionDone / $revisionTotal) * 100) : null;
+        $revisionScored = array_values(array_filter(
+            $revisionItems,
+            fn (array $item) => isset($item['score_percent']) && $item['score_percent'] !== null && $item['score_percent'] !== '',
+        ));
+        $revisionScorePct = $revisionScored !== []
+            ? (int) round(array_sum(array_map(fn (array $item) => (float) $item['score_percent'], $revisionScored)) / count($revisionScored))
+            : null;
+
         $correctionDone = count(array_filter($corrections, fn (array $item) => ($item['status'] ?? '') === 'done'));
         $correctionPending = count(array_filter($corrections, fn (array $item) => ($item['status'] ?? '') !== 'done'));
         $openWrongs = (int) array_sum(array_map(
             fn (array $item) => (int) ($item['correction_count'] ?? 0),
             array_filter(
-                $main,
+                $items,
                 fn (array $item) => (int) ($item['correction_count'] ?? 0) > 0 && ($item['can_redo_wrong'] ?? false),
             ),
         ));
@@ -258,6 +273,11 @@ class ClassCoverageService
             'completion_pct' => $completionPct,
             'score_pct' => $scorePct,
             'scored_count' => count($scored),
+            'revision_total' => $revisionTotal,
+            'revision_done' => $revisionDone,
+            'revision_completion_pct' => $revisionCompletionPct,
+            'revision_score_pct' => $revisionScorePct,
+            'revision_scored_count' => count($revisionScored),
             'correction_done' => $correctionDone,
             'correction_pending' => $correctionPending,
             'open_wrongs' => $openWrongs,
@@ -282,11 +302,20 @@ class ClassCoverageService
                     foreach ($row['items'] ?? [] as $item) {
                         $collected[] = $item;
                     }
+                    foreach ($row['revision_items'] ?? [] as $item) {
+                        $collected[] = $item;
+                    }
                 }
             }
 
             foreach (['formula', 'practice_correction', 'books'] as $key) {
                 foreach ($itemsPayload[$key]['items'] ?? [] as $item) {
+                    $collected[] = $item;
+                }
+            }
+
+            foreach ($itemsPayload['book_groups'] ?? [] as $book) {
+                foreach ($book['revision_items'] ?? [] as $item) {
                     $collected[] = $item;
                 }
             }
@@ -371,6 +400,9 @@ class ClassCoverageService
             'can_redo_wrong' => (bool) ($item['can_redo_wrong'] ?? false),
             'correction_count' => (int) ($item['correction_count'] ?? 0),
             'is_correction' => (bool) ($item['is_correction'] ?? false),
+            'is_revision' => (bool) ($item['is_revision'] ?? false),
+            'revision_number' => (int) ($item['revision_number'] ?? 0),
+            'can_start_revision' => (bool) ($item['can_start_revision'] ?? false),
             'textbook_id' => $item['textbook_id'] ?? null,
             'textbook_name' => $item['textbook_name'] ?? null,
             'is_cross_chapter' => (bool) ($item['is_cross_chapter'] ?? false),

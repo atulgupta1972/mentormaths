@@ -67,11 +67,38 @@ class SetCoverageGrouping
             ];
         }
 
-        $bookGroups = $this->formatBookGroups($items['books'] ?? [], $mapItem);
+        $bookGroups = $this->formatBookGroups($items['books'] ?? [], $items['revisions'] ?? [], $mapItem);
         $otherGroups = $this->formatOtherGroups(
             $items['other'] ?? $items['other_groups'] ?? [],
             $mapItem,
         );
+
+        $revisionItems = collect($items['revisions'] ?? [])
+            ->map(fn (array $item) => $mapItem($item))
+            ->sort(fn (array $left, array $right) => $this->studiedFirstCompare($left, $right))
+            ->values()
+            ->all();
+
+        $revisionsByWorksheet = collect($revisionItems)->groupBy(fn (array $item) => (string) ($item['worksheet_id'] ?? ''));
+
+        foreach ($blocks as &$block) {
+            foreach ($block['rows'] as &$row) {
+                $rowRevisionItems = [];
+                foreach ($row['items'] as $item) {
+                    $worksheetId = (string) ($item['worksheet_id'] ?? '');
+                    foreach ($revisionsByWorksheet->get($worksheetId, collect()) as $revision) {
+                        // Skip book-tagged revisions here — those render under book groups.
+                        if (! empty($revision['textbook_id'])) {
+                            continue;
+                        }
+                        $rowRevisionItems[] = $revision;
+                    }
+                }
+                $row['revision_items'] = $rowRevisionItems;
+            }
+            unset($row);
+        }
+        unset($block);
 
         return [
             'layout' => 'tier_blocks',
@@ -88,11 +115,12 @@ class SetCoverageGrouping
             'practice_correction' => [
                 'key' => 'practice_correction',
                 'label' => 'Practice · Correction',
-                'items' => collect($items['practice_correction'] ?? [])
-                    ->map(fn (array $item) => $mapItem($item))
-                    ->sort(fn (array $left, array $right) => $this->studiedFirstCompare($left, $right))
-                    ->values()
-                    ->all(),
+                'items' => [],
+            ],
+            'revisions' => [
+                'key' => 'revisions',
+                'label' => 'Revision',
+                'items' => $revisionItems,
             ],
             'books' => [
                 'key' => 'books',
@@ -111,11 +139,16 @@ class SetCoverageGrouping
 
     /**
      * @param  array<string, mixed>  $books
+     * @param  list<array<string, mixed>>  $revisions
      * @param  Closure(array<string, mixed>): array<string, mixed>  $mapItem
-     * @return list<array{id: string, name: string, items: list<array<string, mixed>>}>
+     * @return list<array{id: string, name: string, items: list<array<string, mixed>>, revision_items: list<array<string, mixed>>}>
      */
-    private function formatBookGroups(array $books, Closure $mapItem): array
+    private function formatBookGroups(array $books, array $revisions, Closure $mapItem): array
     {
+        $revisionsByWorksheet = collect($revisions)
+            ->filter(fn ($item) => is_array($item))
+            ->groupBy(fn (array $item) => (string) ($item['worksheet_id'] ?? ''));
+
         $groups = [];
 
         foreach ($books as $bookId => $bookItems) {
@@ -138,10 +171,19 @@ class SetCoverageGrouping
                 ->values()
                 ->all();
 
+            $revisionItems = [];
+            foreach ($mapped as $item) {
+                $worksheetId = (string) ($item['worksheet_id'] ?? '');
+                foreach ($revisionsByWorksheet->get($worksheetId, collect()) as $revision) {
+                    $revisionItems[] = $mapItem($revision);
+                }
+            }
+
             $groups[] = [
                 'id' => (string) ($first['textbook_id'] ?? $bookId),
                 'name' => (string) ($first['textbook_name'] ?? 'Book content'),
                 'items' => $mapped,
+                'revision_items' => $revisionItems,
             ];
         }
 

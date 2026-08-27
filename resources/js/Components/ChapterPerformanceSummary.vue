@@ -39,7 +39,7 @@ const performanceBarClass = (pct) => {
                 {{ subtitle }}
             </p>
         </div>
-        <div class="mt-2 grid gap-2 sm:grid-cols-3">
+        <div class="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <div class="rounded-lg border border-indigo-300 bg-white px-3 py-2 shadow-md">
                 <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Completion %</p>
                 <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
@@ -76,26 +76,44 @@ const performanceBarClass = (pct) => {
                 </div>
             </div>
             <div class="rounded-lg border border-indigo-300 bg-white px-3 py-2 shadow-md">
-                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Revision status</p>
-                <div class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                    <p class="text-sm font-extrabold text-emerald-800">
-                        Done {{ perf.correctionDone }}
-                    </p>
-                    <p class="text-sm font-extrabold text-amber-800">
-                        Pending {{ perf.correctionPending }}
-                    </p>
+                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Revision completion</p>
+                <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
+                    <template v-if="perf.revisionCompletionPct != null">{{ perf.revisionCompletionPct }}%</template>
+                    <template v-else>—</template>
+                </p>
+                <p class="text-[10px] font-semibold text-slate-500">
+                    {{ perf.revisionDone || 0 }}/{{ perf.revisionTotal || 0 }} revision sheet(s)
+                </p>
+                <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                        class="h-full rounded-full transition-all"
+                        :class="performanceBarClass(perf.revisionCompletionPct)"
+                        :style="{ width: `${perf.revisionCompletionPct ?? 0}%` }"
+                    />
+                </div>
+            </div>
+            <div class="rounded-lg border border-indigo-300 bg-white px-3 py-2 shadow-md">
+                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Revision score</p>
+                <p class="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">
+                    <template v-if="perf.revisionScorePct != null">{{ perf.revisionScorePct }}%</template>
+                    <template v-else>—</template>
+                </p>
+                <p class="text-[10px] font-semibold text-slate-500">
+                    <template v-if="perf.revisionScoredCount">Avg of {{ perf.revisionScoredCount }} revision(s)</template>
+                    <template v-else>No revision scores yet</template>
+                </p>
+                <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                        class="h-full rounded-full transition-all"
+                        :class="performanceBarClass(perf.revisionScorePct)"
+                        :style="{ width: `${perf.revisionScorePct ?? 0}%` }"
+                    />
                 </div>
                 <p
                     v-if="perf.openWrongs > 0"
                     class="mt-1 text-[10px] font-bold text-orange-800"
                 >
-                    {{ perf.openWrongs }} wrong still to redo
-                </p>
-                <p
-                    v-else-if="!perf.correctionDone && !perf.correctionPending"
-                    class="mt-1 text-[10px] font-semibold text-slate-500"
-                >
-                    No revisions pending
+                    {{ perf.openWrongs }} wrong still to correct
                 </p>
             </div>
         </div>

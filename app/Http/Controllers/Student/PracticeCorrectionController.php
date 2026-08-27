@@ -18,17 +18,19 @@ class PracticeCorrectionController extends Controller
         $student = $user->student;
 
         if (! $student) {
-            abort(403, 'Only students can redo wrong questions.');
+            abort(403, 'Only students can correct wrong questions.');
         }
 
+        $assignmentId = $request->integer('assignment_id') ?: null;
+
         try {
-            $attempt = $this->correctionPractice->start($student, $worksheet, $user);
+            $attempt = $this->correctionPractice->start($student, $worksheet, $user, $assignmentId);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
         return redirect()
             ->route('student.attempts.show', $attempt)
-            ->with('success', 'Redo wrong — answer each question again.');
+            ->with('success', 'Correction — answer each wrong sum again.');
     }
 }

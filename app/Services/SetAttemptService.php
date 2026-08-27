@@ -266,6 +266,7 @@ class SetAttemptService
 
             $this->correctionQueue->syncFromBatchAttempt($freshAttempt);
             $this->poolScore->syncFromBatchAttempt($freshAttempt);
+            app(RevisionAssignmentService::class)->ensureFirstRevisionIfReady($assignment->fresh());
 
             AssignmentMailer::sendCompleted($freshAttempt);
 

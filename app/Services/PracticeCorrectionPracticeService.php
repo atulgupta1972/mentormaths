@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AssignmentSumInstance;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\Student;
@@ -17,14 +18,12 @@ class PracticeCorrectionPracticeService
         private GuidedPracticeService $guidedPractice,
     ) {}
 
-    public function start(Student $student, Worksheet $worksheet, User $user): SetAttempt
-    {
-        $pending = $this->correctionQueue->pendingForWorksheet($student->id, $worksheet->id);
-
-        if ($pending->isEmpty()) {
-            throw new \InvalidArgumentException('No wrong questions to redo for this set.');
-        }
-
+    public function start(
+        Student $student,
+        Worksheet $worksheet,
+        User $user,
+        ?int $assignmentId = null,
+    ): SetAttempt {
         $enrollment = $student->currentEnrollment();
 
         if (! $enrollment) {
@@ -35,31 +34,24 @@ class PracticeCorrectionPracticeService
             throw new \InvalidArgumentException('This practice set is not available.');
         }
 
-        $questionIds = $pending->pluck('question_id')->unique()->values()->all();
+        $assignment = $this->resolveAssignment($enrollment->id, $worksheet->id, $assignmentId);
+
+        $questionIds = $this->pendingQuestionIds($student->id, $worksheet->id, $assignment);
+
+        if ($questionIds === []) {
+            throw new \InvalidArgumentException('No wrong questions to correct for this set.');
+        }
+
         $dueDate = now()->addDays(3)->toDateString();
 
-        return DB::transaction(function () use ($student, $worksheet, $user, $enrollment, $questionIds, $dueDate) {
-            $assignment = SetAssignment::query()
-                ->where('student_enrollment_id', $enrollment->id)
-                ->where('worksheet_id', $worksheet->id)
-                ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
-                ->orderByDesc('id')
-                ->first();
-
+        return DB::transaction(function () use ($worksheet, $user, $enrollment, $questionIds, $dueDate, $assignment) {
             if (! $assignment) {
                 $assignment = $this->assignmentService->assign(
                     $worksheet,
                     $enrollment,
                     $user,
                     $dueDate,
-                    'Correction redo from study plan',
-                );
-            } elseif ($assignment->status === SetAssignment::STATUS_COMPLETED) {
-                $assignment = $this->assignmentService->reassign(
-                    $assignment,
-                    $user,
-                    $dueDate,
-                    'Correction redo from study plan',
+                    'Correction from study plan',
                 );
             } else {
                 $inProgress = $assignment->attempts()
@@ -70,6 +62,11 @@ class PracticeCorrectionPracticeService
                     $assignment->attempts()
                         ->where('status', SetAttempt::STATUS_IN_PROGRESS)
                         ->delete();
+                }
+
+                // Keep the same assignment (and its Total Pool) — do not reassign revisions/originals.
+                if ($assignment->status === SetAssignment::STATUS_COMPLETED) {
+                    $assignment->update(['status' => SetAssignment::STATUS_IN_PROGRESS]);
                 }
             }
 
@@ -98,5 +95,73 @@ class PracticeCorrectionPracticeService
 
             return $attempt->fresh();
         });
+    }
+
+    private function resolveAssignment(int $enrollmentId, int $worksheetId, ?int $assignmentId): ?SetAssignment
+    {
+        if ($assignmentId) {
+            $assignment = SetAssignment::query()
+                ->whereKey($assignmentId)
+                ->where('student_enrollment_id', $enrollmentId)
+                ->where('worksheet_id', $worksheetId)
+                ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
+                ->first();
+
+            if ($assignment) {
+                return $assignment;
+            }
+        }
+
+        // Prefer an assignment that still has pending pool remediations.
+        $withPending = SetAssignment::query()
+            ->where('student_enrollment_id', $enrollmentId)
+            ->where('worksheet_id', $worksheetId)
+            ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
+            ->whereHas('sumInstances', fn ($q) => $q->where('status', AssignmentSumInstance::STATUS_PENDING))
+            ->orderByDesc('revision_number')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($withPending) {
+            return $withPending;
+        }
+
+        return SetAssignment::query()
+            ->where('student_enrollment_id', $enrollmentId)
+            ->where('worksheet_id', $worksheetId)
+            ->where('revision_number', 0)
+            ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function pendingQuestionIds(int $studentId, int $worksheetId, ?SetAssignment $assignment): array
+    {
+        if ($assignment) {
+            $fromPool = AssignmentSumInstance::query()
+                ->where('set_assignment_id', $assignment->id)
+                ->where('status', AssignmentSumInstance::STATUS_PENDING)
+                ->where('generation', '>', 0)
+                ->pluck('question_id')
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($fromPool !== []) {
+                return $fromPool;
+            }
+        }
+
+        return $this->correctionQueue
+            ->pendingForWorksheet($studentId, $worksheetId)
+            ->pluck('question_id')
+            ->unique()
+            ->values()
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 }

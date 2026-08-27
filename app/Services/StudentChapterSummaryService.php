@@ -152,13 +152,7 @@ class StudentChapterSummaryService
             ->get()
             ->groupBy('worksheet_id');
 
-        $pendingCorrections = PracticeCorrectionItem::query()
-            ->where('student_id', $enrollment->student_id)
-            ->where('status', PracticeCorrectionItem::STATUS_PENDING)
-            ->whereIn('syllabus_chapter_id', $chapterIds)
-            ->get()
-            ->groupBy('syllabus_chapter_id');
-
+        // Pending wrongs for badge/counts (also refined per-assignment via pool in buildSetItem).
         $correctionCountsByWorksheet = PracticeCorrectionItem::query()
             ->where('student_id', $enrollment->student_id)
             ->where('status', PracticeCorrectionItem::STATUS_PENDING)
@@ -175,19 +169,18 @@ class StudentChapterSummaryService
             $textbookChapters,
             $textbookColumns,
             $assignmentsByWorksheet,
-            $pendingCorrections,
             $correctionCountsByWorksheet,
         ) {
             $chapterWorksheets = $worksheetsByChapter->get($chapter->id, collect());
             $chapterTextbookRows = $textbookChapters->where('syllabus_chapter_id', $chapter->id);
 
             $practice = [];
-            $practiceCorrection = [];
             $tests = [];
             $written = [];
             $fillBlank = [];
             $formula = [];
             $books = [];
+            $revisions = [];
 
             foreach ($chapterWorksheets as $worksheet) {
                 if ($this->isTextbookWorksheet($worksheet, $chapterTextbookRows)) {
@@ -213,17 +206,18 @@ class StudentChapterSummaryService
                     'formula' => $formula[] = $item,
                     default => $practice[] = $item,
                 };
-            }
 
-            foreach (($pendingCorrections->get($chapter->id) ?? collect())->groupBy('worksheet_id') as $worksheetId => $items) {
-                $worksheet = $worksheetsById->get((int) $worksheetId);
-
-                if (! $worksheet) {
-                    continue;
+                foreach ($this->buildRevisionItems(
+                    $worksheet,
+                    $assignmentsByWorksheet,
+                    $item['short_label'],
+                ) as $revisionItem) {
+                    $revisions[] = $revisionItem;
                 }
-
-                $practiceCorrection[] = $this->buildCorrectionItem($worksheet, $items->count());
             }
+
+            // Correction stays on the parent / Rev card — no separate strip.
+            $practiceCorrection = [];
 
             foreach ($textbookColumns as $bookColumn) {
                 $bookItems = [];
@@ -259,6 +253,19 @@ class StudentChapterSummaryService
                             $item['textbook_id'] = (int) $bookColumn['id'];
                             $item['textbook_name'] = (string) ($bookColumn['name'] ?? $bookColumn['label'] ?? 'Book');
                             $bookItems[] = $item;
+
+                            foreach ($this->buildRevisionItems(
+                                $worksheet,
+                                $assignmentsByWorksheet,
+                                $item['short_label'],
+                                (int) $bookColumn['id'],
+                                (string) ($bookColumn['name'] ?? $bookColumn['label'] ?? 'Book'),
+                            ) as $revisionItem) {
+                                $revisionItem['part'] = $part['part'];
+                                $revisionItem['kind'] = $kind;
+                                $revisionItem['kind_label'] = $kindLabel;
+                                $revisions[] = $revisionItem;
+                            }
                         }
                     }
                 }
@@ -273,12 +280,13 @@ class StudentChapterSummaryService
                 'label' => ExamPlanService::chapterLabel($chapter),
                 'counts' => [
                     'practice' => count($practice),
-                    'practice_correction' => count($practiceCorrection),
+                    'practice_correction' => 0,
                     'test' => count($tests),
                     'written' => count($written),
                     'fill_blank' => count($fillBlank),
                     'formula' => count($formula),
                     'books' => collect($books)->map(fn (array $items) => count($items))->all(),
+                    'revisions' => count($revisions),
                 ],
                 'items' => [
                     'practice' => $practice,
@@ -288,6 +296,7 @@ class StudentChapterSummaryService
                     'fill_blank' => $fillBlank,
                     'formula' => $formula,
                     'books' => $books,
+                    'revisions' => $revisions,
                 ],
             ];
         })->values()->all();
@@ -639,7 +648,7 @@ class StudentChapterSummaryService
         ?string $prefixOverride = null,
         int $correctionCount = 0,
     ): array {
-        $assignment = $this->resolveCurrentAssignment(
+        $assignment = $this->resolveOriginalAssignment(
             $assignmentsByWorksheet->get($worksheet->id, collect()),
         );
 
@@ -672,6 +681,12 @@ class StudentChapterSummaryService
         $shortLabel = "{$prefix}{$setNumber}";
         $statusMeta = $this->statusMeta($progress, $assignment !== null);
 
+        $poolPending = (int) ($progress['pool_metrics']['pending'] ?? 0);
+        $effectiveCorrectionCount = $poolPending > 0 ? $poolPending : $correctionCount;
+
+        // Learning sheet: Assign me only when not yet assigned. No full "Redo" — that is Revision.
+        $canAssign = ($statusMeta['status'] ?? null) === 'not_assigned';
+
         return [
             'worksheet_id' => $worksheet->id,
             'set_code' => $worksheet->set_code,
@@ -687,17 +702,109 @@ class StudentChapterSummaryService
             'in_progress_attempt_id' => $progress['in_progress_attempt_id'] ?? null,
             'status' => $statusMeta['status'],
             'status_label' => $statusMeta['status_label'],
-            'can_assign' => $statusMeta['can_assign'],
+            'can_assign' => $canAssign,
             'can_open' => $statusMeta['can_open'],
             'latest_score_percent' => $progress['latest_score_percent'] ?? null,
             'previous_score_percent' => $progress['previous_score_percent'] ?? null,
             'status_detail' => $progress['status_detail'] ?? null,
             'completion_pct' => $progress['completion_pct'] ?? null,
             'pool_metrics' => $progress['pool_metrics'] ?? null,
-            'correction_count' => $correctionCount,
-            'can_redo_wrong' => $correctionCount > 0,
+            'correction_count' => $effectiveCorrectionCount,
+            'can_redo_wrong' => $effectiveCorrectionCount > 0,
             'is_correction' => false,
+            'is_revision' => false,
+            'revision_number' => 0,
+            'can_start_revision' => false,
         ];
+    }
+
+    /**
+     * @param  Collection<int, Collection<int, SetAssignment>>  $assignmentsByWorksheet
+     * @return list<array<string, mixed>>
+     */
+    private function buildRevisionItems(
+        Worksheet $worksheet,
+        Collection $assignmentsByWorksheet,
+        string $parentShortLabel,
+        ?int $textbookId = null,
+        ?string $textbookName = null,
+    ): array {
+        $assignments = $assignmentsByWorksheet->get($worksheet->id, collect())
+            ->filter(fn (SetAssignment $a) => $a->isRevision())
+            ->sortBy([
+                ['revision_number', 'asc'],
+                ['id', 'asc'],
+            ])
+            ->values();
+
+        if ($assignments->isEmpty()) {
+            return [];
+        }
+
+        // Show the latest revision card only (history lives in revision_number / scores).
+        $assignment = $assignments->last();
+        $progress = null;
+
+        if ($worksheet->isWritten()) {
+            $progress = AssignmentProgress::formatWrittenStudentDashboardSummary(
+                $assignment,
+                $assignment->writtenSubmissions->first(),
+            );
+        } else {
+            $progress = AssignmentProgress::formatStudentDashboardSummary(
+                $assignment,
+                $assignment->attempts->first(),
+            );
+        }
+
+        $statusMeta = $this->statusMeta($progress, true);
+        $poolPending = (int) ($progress['pool_metrics']['pending'] ?? 0);
+        $revNo = (int) $assignment->revision_number;
+        $statusLabel = 'R'.$revNo.' · '.($statusMeta['status_label'] ?? 'NOT DONE');
+
+        $item = [
+            'worksheet_id' => $worksheet->id,
+            'set_code' => $worksheet->set_code,
+            'set_number' => $worksheet->set_number ?: 1,
+            'short_label' => 'Rev '.$parentShortLabel,
+            'tier' => $worksheet->tier,
+            'tier_label' => $worksheet->tier_label,
+            'question_count' => (int) ($worksheet->questions_count ?? 0),
+            'delivery_mode' => $worksheet->delivery_mode ?? WorksheetDeliveryMode::ONLINE,
+            'assignment_id' => $assignment->id,
+            'target_date' => $assignment->due_date?->toDateString(),
+            'latest_attempt_id' => $progress['latest_attempt_id'] ?? null,
+            'in_progress_attempt_id' => $progress['in_progress_attempt_id'] ?? null,
+            'status' => $statusMeta['status'],
+            'status_label' => $statusLabel,
+            'can_assign' => ($statusMeta['status'] ?? null) === 'done',
+            'can_open' => $statusMeta['can_open'],
+            'latest_score_percent' => $progress['latest_score_percent'] ?? null,
+            'previous_score_percent' => $progress['previous_score_percent'] ?? null,
+            'status_detail' => $progress['status_detail'] ?? null,
+            'completion_pct' => $progress['completion_pct'] ?? null,
+            'pool_metrics' => $progress['pool_metrics'] ?? null,
+            'correction_count' => $poolPending,
+            'can_redo_wrong' => $poolPending > 0,
+            'is_correction' => false,
+            'is_revision' => true,
+            'revision_number' => $revNo,
+            'can_start_revision' => ($statusMeta['status'] ?? null) === 'done',
+            'textbook_id' => $textbookId,
+            'textbook_name' => $textbookName,
+        ];
+
+        return [$item];
+    }
+
+    /**
+     * @param  Collection<int, SetAssignment>  $assignments
+     */
+    private function resolveOriginalAssignment(Collection $assignments): ?SetAssignment
+    {
+        $originals = $assignments->filter(fn (SetAssignment $a) => $a->isOriginalLearning());
+
+        return $this->resolveCurrentAssignment($originals);
     }
 
     private function buildCorrectionItem(Worksheet $worksheet, int $wrongCount): array
@@ -724,11 +831,14 @@ class StudentChapterSummaryService
             'correction_count' => $wrongCount,
             'delivery_mode' => $worksheet->delivery_mode,
             'status' => 'correction_pending',
-            'status_label' => 'REDO WRONG',
+            'status_label' => 'CORRECTION',
             'can_assign' => false,
             'can_open' => false,
             'can_redo_wrong' => $wrongCount > 0,
             'is_correction' => true,
+            'is_revision' => false,
+            'revision_number' => 0,
+            'can_start_revision' => false,
         ];
     }
 
@@ -769,7 +879,7 @@ class StudentChapterSummaryService
             'overdue' => [
                 'status' => 'overdue',
                 'status_label' => $pool && ($pool['pending'] ?? 0) > 0
-                    ? 'OVERDUE · '.($statusDetail ?: 'remedial left')
+                    ? 'OVERDUE · '.($statusDetail ?: 'correction left')
                     : 'OVERDUE',
                 'can_assign' => true,
                 'can_open' => true,
