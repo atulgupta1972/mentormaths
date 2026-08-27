@@ -7,7 +7,6 @@ use App\Models\GuidedAttemptQuestion;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\SetAttemptAnswer;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -16,6 +15,9 @@ use Illuminate\Support\Facades\DB;
  * Total Pool = original sums + all remedial instances spawned from wrongs.
  * Correct = first evaluation of that instance only (never retroactively fixed).
  * Completion% = attempted / pool; Score% = correct / pool.
+ *
+ * Learning is "fully corrected" when pending = 0 and completion = 100%
+ * (Score% may stay below 100 after wrongs — originals are never retroactively fixed).
  */
 class AssignmentPoolScore
 {
@@ -77,84 +79,81 @@ class AssignmentPoolScore
     }
 
     /**
-     * Apply guided attempt outcomes to the pool (first-try only) and spawn remediations for wrongs.
+     * Rebuild the pool from all submitted attempts (idempotent source of truth).
+     * Fixes historical attempts that finished before pool scoring existed,
+     * and prevents correction-only sync from marking the wrong instances.
      */
-    public function syncFromGuidedAttempt(SetAttempt $attempt): void
+    public function rebuildFromAttempts(SetAssignment $assignment): array
     {
-        $attempt->loadMissing([
-            'assignment.enrollment:id,student_id',
-            'assignment.practiceSet.questions:id',
-            'guidedQuestions',
+        $assignment->loadMissing([
+            'enrollment:id,student_id',
+            'practiceSet.questions:id',
         ]);
 
-        $assignment = $attempt->assignment;
-        if (! $assignment) {
-            return;
+        if (! $assignment->practiceSet) {
+            return $this->emptyMetrics();
         }
 
-        $this->ensureOriginals($assignment);
+        $attempts = SetAttempt::query()
+            ->where('set_assignment_id', $assignment->id)
+            ->where('status', SetAttempt::STATUS_SUBMITTED)
+            ->orderBy('attempt_number')
+            ->orderBy('id')
+            ->with(['guidedQuestions', 'answers'])
+            ->get();
 
-        DB::transaction(function () use ($attempt, $assignment) {
-            foreach ($attempt->guidedQuestions as $row) {
-                if ($row->reported_issue || $row->phase === GuidedAttemptQuestion::PHASE_REPORTED_ISSUE) {
-                    continue;
-                }
+        DB::transaction(function () use ($assignment, $attempts) {
+            AssignmentSumInstance::query()
+                ->where('set_assignment_id', $assignment->id)
+                ->where('generation', '>', 0)
+                ->delete();
+            AssignmentSumInstance::query()
+                ->where('set_assignment_id', $assignment->id)
+                ->delete();
 
-                if ($row->phase === GuidedAttemptQuestion::PHASE_PENDING) {
-                    continue;
-                }
+            $this->ensureOriginals($assignment);
 
-                $firstTryCorrect = (bool) $row->first_try_correct;
-                $this->evaluateQuestionInstance(
-                    $assignment,
-                    (int) $row->question_id,
-                    $firstTryCorrect,
-                    $attempt,
-                    (int) $row->id,
-                    preferPendingRemedial: (bool) $attempt->is_correction_practice,
-                );
+            foreach ($attempts as $attempt) {
+                $this->applySubmittedAttempt($attempt, $assignment);
             }
         });
+
+        return $this->metricsForAssignment($assignment);
     }
 
     /**
-     * Apply batch (chapter test) outcomes and spawn remediations for wrongs.
+     * Apply guided attempt outcomes — rebuilds whole pool from all submitted attempts.
+     */
+    public function syncFromGuidedAttempt(SetAttempt $attempt): void
+    {
+        $attempt->loadMissing('assignment');
+        if ($attempt->assignment) {
+            $this->rebuildFromAttempts($attempt->assignment);
+        }
+    }
+
+    /**
+     * Apply batch outcomes — rebuilds whole pool from all submitted attempts.
      */
     public function syncFromBatchAttempt(SetAttempt $attempt): void
     {
-        $attempt->loadMissing([
-            'assignment.enrollment:id,student_id',
-            'assignment.practiceSet.questions:id',
-            'answers',
-        ]);
-
-        $assignment = $attempt->assignment;
-        if (! $assignment) {
-            return;
+        $attempt->loadMissing('assignment');
+        if ($attempt->assignment) {
+            $this->rebuildFromAttempts($attempt->assignment);
         }
+    }
 
-        $this->ensureOriginals($assignment);
+    /**
+     * True when every sum instance is evaluated and no remediations remain open.
+     * Score% may be &lt; 100 if earlier wrongs permanently count against the pool.
+     */
+    public function isFullyCorrected(SetAssignment $assignment): bool
+    {
+        $metrics = $this->metricsForAssignment($assignment);
 
-        DB::transaction(function () use ($attempt, $assignment) {
-            $answersByQuestion = $attempt->answers->keyBy('question_id');
-
-            foreach ($assignment->practiceSet->questions as $question) {
-                /** @var SetAttemptAnswer|null $answer */
-                $answer = $answersByQuestion->get($question->id);
-                if (! $answer) {
-                    continue;
-                }
-
-                $this->evaluateQuestionInstance(
-                    $assignment,
-                    (int) $question->id,
-                    (bool) $answer->is_correct,
-                    $attempt,
-                    null,
-                    preferPendingRemedial: (bool) $attempt->is_correction_practice,
-                );
-            }
-        });
+        return ($metrics['pool'] ?? 0) > 0
+            && ($metrics['pending'] ?? 0) === 0
+            && ($metrics['completion_pct'] ?? null) === 100;
     }
 
     /**
@@ -163,6 +162,7 @@ class AssignmentPoolScore
      *     attempted: int,
      *     correct: int,
      *     pending: int,
+     *     pending_remedial: int,
      *     wrong: int,
      *     completion_pct: int|null,
      *     score_pct: int|null
@@ -182,16 +182,14 @@ class AssignmentPoolScore
         $pool = $pending + $correct + $wrong;
         $attempted = $correct + $wrong;
 
+        $pendingRemedial = (int) AssignmentSumInstance::query()
+            ->where('set_assignment_id', $assignment->id)
+            ->where('status', AssignmentSumInstance::STATUS_PENDING)
+            ->where('generation', '>', 0)
+            ->count();
+
         if ($pool === 0) {
-            return [
-                'pool' => 0,
-                'attempted' => 0,
-                'correct' => 0,
-                'pending' => 0,
-                'wrong' => 0,
-                'completion_pct' => null,
-                'score_pct' => null,
-            ];
+            return $this->emptyMetrics();
         }
 
         return [
@@ -199,6 +197,7 @@ class AssignmentPoolScore
             'attempted' => $attempted,
             'correct' => $correct,
             'pending' => $pending,
+            'pending_remedial' => $pendingRemedial,
             'wrong' => $wrong,
             'completion_pct' => (int) round(($attempted / $pool) * 100),
             'score_pct' => (int) round(($correct / $pool) * 100),
@@ -211,6 +210,7 @@ class AssignmentPoolScore
      *     attempted: int,
      *     correct: int,
      *     pending: int,
+     *     pending_remedial: int,
      *     wrong: int,
      *     completion_pct: int|null,
      *     score_pct: int|null
@@ -225,6 +225,62 @@ class AssignmentPoolScore
         $assignment = SetAssignment::query()->find($assignmentId);
 
         return $assignment ? $this->metricsForAssignment($assignment) : null;
+    }
+
+    private function applySubmittedAttempt(SetAttempt $attempt, SetAssignment $assignment): void
+    {
+        $preferRemedial = (bool) $attempt->is_correction_practice;
+
+        if ($attempt->guidedQuestions->isNotEmpty()) {
+            foreach ($attempt->guidedQuestions as $row) {
+                if ($row->reported_issue || $row->phase === GuidedAttemptQuestion::PHASE_REPORTED_ISSUE) {
+                    continue;
+                }
+
+                if ($row->phase === GuidedAttemptQuestion::PHASE_PENDING) {
+                    continue;
+                }
+
+                // Prefer first-try outcome; older rows may only have final + help flags.
+                $firstTryCorrect = $row->first_try_correct;
+                if ($firstTryCorrect === null) {
+                    if ($row->corrected_after_help || $row->gave_up) {
+                        $firstTryCorrect = false;
+                    } else {
+                        $firstTryCorrect = (bool) $row->final_is_correct;
+                    }
+                }
+
+                $this->evaluateQuestionInstance(
+                    $assignment,
+                    (int) $row->question_id,
+                    (bool) $firstTryCorrect,
+                    $attempt,
+                    (int) $row->id,
+                    preferPendingRemedial: $preferRemedial,
+                );
+            }
+
+            return;
+        }
+
+        $answersByQuestion = $attempt->answers->keyBy('question_id');
+        foreach ($assignment->practiceSet->questions as $question) {
+            /** @var SetAttemptAnswer|null $answer */
+            $answer = $answersByQuestion->get($question->id);
+            if (! $answer) {
+                continue;
+            }
+
+            $this->evaluateQuestionInstance(
+                $assignment,
+                (int) $question->id,
+                (bool) $answer->is_correct,
+                $attempt,
+                null,
+                preferPendingRemedial: $preferRemedial,
+            );
+        }
     }
 
     private function evaluateQuestionInstance(
@@ -315,5 +371,31 @@ class AssignmentPoolScore
             'generation' => ((int) $wrong->generation) + 1,
             'status' => AssignmentSumInstance::STATUS_PENDING,
         ]);
+    }
+
+    /**
+     * @return array{
+     *     pool: int,
+     *     attempted: int,
+     *     correct: int,
+     *     pending: int,
+     *     pending_remedial: int,
+     *     wrong: int,
+     *     completion_pct: int|null,
+     *     score_pct: int|null
+     * }
+     */
+    private function emptyMetrics(): array
+    {
+        return [
+            'pool' => 0,
+            'attempted' => 0,
+            'correct' => 0,
+            'pending' => 0,
+            'pending_remedial' => 0,
+            'wrong' => 0,
+            'completion_pct' => null,
+            'score_pct' => null,
+        ];
     }
 }

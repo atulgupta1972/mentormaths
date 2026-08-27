@@ -13,7 +13,6 @@ const props = defineProps({
 
 const page = usePage();
 const startForm = useForm({});
-const redoForm = useForm({});
 const startError = ref('');
 const starting = ref(false);
 
@@ -104,12 +103,14 @@ const startLabel = () => {
     return props.assignment.integrity?.require_fullscreen ? 'Start practice (fullscreen)' : 'Start practice';
 };
 
-const requestRedo = () => {
-    if (! window.confirm('Redo this set? Your latest score will count. The previous score stays for comparison.')) {
+const requestCorrection = () => {
+    if (! props.assignment.practice_set?.id) {
         return;
     }
 
-    redoForm.post(route('student.assignments.redo', props.assignment.id));
+    router.post(route('student.worksheets.correction-practice', props.assignment.practice_set.id), {
+        assignment_id: props.assignment.id,
+    });
 };
 </script>
 
@@ -195,18 +196,27 @@ const requestRedo = () => {
                             <li v-for="att in assignment.attempts" :key="att.id" class="flex justify-between rounded border px-3 py-2">
                                 <span>
                                     Attempt {{ att.attempt_number }}
-                                    <span v-if="att.is_correction_practice" class="text-xs text-orange-700">(wrong-sums practice)</span>
+                                    <span v-if="att.is_correction_practice" class="text-xs text-orange-700">(correction)</span>
                                 </span>
                                 <span v-if="att.status === 'submitted'">
                                     {{ formatScoreLabel(att.score, att.max_score) }} · {{ formatTime(att.time_seconds) }}
                                     <span v-if="att.submission_timing === 'late'" class="text-amber-700">· Delayed</span>
-                                    <Link :href="route('student.attempts.result', att.id)" class="ml-2 text-indigo-600">Review & retry wrong sums</Link>
+                                    <Link :href="route('student.attempts.result', att.id)" class="ml-2 text-indigo-600">Review</Link>
                                 </span>
                                 <span v-else class="text-yellow-700">In progress</span>
                             </li>
                         </ul>
+                        <p
+                            v-if="assignment.pool_metrics?.pool"
+                            class="mt-2 text-xs text-slate-600"
+                        >
+                            Sheet pool: {{ assignment.pool_metrics.correct }}/{{ assignment.pool_metrics.pool }} first-try correct
+                            (score {{ assignment.pool_metrics.score_pct }}%)
+                            · {{ assignment.pool_metrics.attempted }}/{{ assignment.pool_metrics.pool }} attempted
+                            (completion {{ assignment.pool_metrics.completion_pct }}%)
+                        </p>
                         <p v-if="assignment.previous_score_label" class="mt-2 text-xs text-slate-600">
-                            Latest score counts. Previous: {{ assignment.previous_score_label }}
+                            Latest full-set score shown above. Previous: {{ assignment.previous_score_label }}
                         </p>
                     </div>
 
@@ -223,16 +233,22 @@ const requestRedo = () => {
                             :href="route('student.attempts.result', assignment.latest_attempt_id)"
                             class="inline-flex"
                         >
-                            <PrimaryButton>Review results & retry wrong sums</PrimaryButton>
+                            <PrimaryButton>Review results</PrimaryButton>
                         </Link>
                         <SecondaryButton
-                            v-if="assignment.can_redo"
+                            v-if="assignment.can_correct"
                             type="button"
-                            :disabled="redoForm.processing"
-                            @click="requestRedo"
+                            @click="requestCorrection"
                         >
-                            {{ redoForm.processing ? 'Unlocking…' : 'Redo full set' }}
+                            Correction
                         </SecondaryButton>
+                        <Link
+                            v-if="assignment.can_open_revision && assignment.revision_assignment_id"
+                            :href="route('student.assignments.show', assignment.revision_assignment_id)"
+                            class="inline-flex"
+                        >
+                            <PrimaryButton>Open revision sheet</PrimaryButton>
+                        </Link>
                     </div>
                 </div>
             </div>

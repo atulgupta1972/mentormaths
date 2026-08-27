@@ -29,6 +29,60 @@ class RevisionAssignmentServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_auto_spawns_revision_after_wrongs_are_corrected(): void
+    {
+        [$assignment, $questions, $correctByQuestion, $wrongByQuestion] = $this->seedAssignment(2);
+        $pool = app(AssignmentPoolScore::class);
+        $pool->ensureOriginals($assignment->fresh(['enrollment', 'practiceSet.questions']));
+
+        $first = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'completed_at' => now(),
+        ]);
+        SetAttemptAnswer::query()->create([
+            'set_attempt_id' => $first->id,
+            'question_id' => $questions[0]->id,
+            'selected_option_id' => $correctByQuestion[$questions[0]->id],
+            'is_correct' => true,
+        ]);
+        SetAttemptAnswer::query()->create([
+            'set_attempt_id' => $first->id,
+            'question_id' => $questions[1]->id,
+            'selected_option_id' => $wrongByQuestion[$questions[1]->id],
+            'is_correct' => false,
+        ]);
+
+        $correction = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 2,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'completed_at' => now(),
+            'is_correction_practice' => true,
+        ]);
+        SetAttemptAnswer::query()->create([
+            'set_attempt_id' => $correction->id,
+            'question_id' => $questions[1]->id,
+            'selected_option_id' => $correctByQuestion[$questions[1]->id],
+            'is_correct' => true,
+        ]);
+
+        $metrics = $pool->rebuildFromAttempts($assignment->fresh(['enrollment', 'practiceSet.questions']));
+        $this->assertSame(3, $metrics['pool']);
+        $this->assertSame(100, $metrics['completion_pct']);
+        $this->assertSame(67, $metrics['score_pct']); // 2/3 — original wrong stays wrong
+        $this->assertTrue($pool->isFullyCorrected($assignment));
+
+        $revision = app(RevisionAssignmentService::class)->ensureFirstRevisionIfReady($assignment->fresh());
+        $this->assertNotNull($revision);
+        $this->assertSame(1, (int) $revision->revision_number);
+    }
+
     public function test_auto_spawns_revision_one_when_original_score_hits_100(): void
     {
         [$assignment, $questions, $correctByQuestion] = $this->seedAssignment(3);

@@ -433,7 +433,7 @@ const performanceFromItems = (items) => {
     const done = main.filter((item) => item.status === 'done').length;
     const completionPct = total > 0 ? Math.round((done / total) * 100) : null;
 
-    const scored = main.filter((item) => item.score_percent != null && item.score_percent !== '');
+    const scored = main.filter((item) => item.status === 'done' && item.score_percent != null && item.score_percent !== '');
     const scorePct = scored.length
         ? Math.round(scored.reduce((sum, item) => sum + Number(item.score_percent), 0) / scored.length)
         : null;
@@ -441,7 +441,7 @@ const performanceFromItems = (items) => {
     const revisionTotal = revisions.length;
     const revisionDone = revisions.filter((item) => item.status === 'done').length;
     const revisionCompletionPct = revisionTotal > 0 ? Math.round((revisionDone / revisionTotal) * 100) : null;
-    const revisionScored = revisions.filter((item) => item.score_percent != null && item.score_percent !== '');
+    const revisionScored = revisions.filter((item) => item.status === 'done' && item.score_percent != null && item.score_percent !== '');
     const revisionScorePct = revisionScored.length
         ? Math.round(revisionScored.reduce((sum, item) => sum + Number(item.score_percent), 0) / revisionScored.length)
         : null;

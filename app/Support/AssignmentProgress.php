@@ -7,6 +7,7 @@ use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\WrittenSubmission;
 use App\Services\AssignmentPoolScore;
+use App\Services\RevisionAssignmentService;
 use Carbon\Carbon;
 
 class AssignmentProgress
@@ -363,15 +364,31 @@ class AssignmentProgress
         $completionPct = null;
         $scorePct = $summary['latest_score_percent'];
 
-        if (AssignmentSumInstance::query()->where('set_assignment_id', $assignment->id)->exists()) {
-            $poolMetrics = app(AssignmentPoolScore::class)->metricsForAssignment($assignment);
+        $hasSubmittedAttempts = $assignment->attempts()
+            ->where('status', SetAttempt::STATUS_SUBMITTED)
+            ->exists();
+        $hasPoolRows = AssignmentSumInstance::query()->where('set_assignment_id', $assignment->id)->exists();
+
+        if ($hasSubmittedAttempts || $hasPoolRows) {
+            $poolScore = app(AssignmentPoolScore::class);
+            $poolMetrics = $hasSubmittedAttempts
+                ? $poolScore->rebuildFromAttempts($assignment)
+                : $poolScore->metricsForAssignment($assignment);
+
             if (($poolMetrics['pool'] ?? 0) > 0) {
                 $scorePct = $poolMetrics['score_pct'];
                 $completionPct = $poolMetrics['completion_pct'];
                 $summary['latest_score_percent'] = $scorePct;
                 if ($poolMetrics['pending'] > 0) {
-                    $statusDetail = "{$poolMetrics['attempted']}/{$poolMetrics['pool']} · {$poolMetrics['pending']} left";
+                    $left = ($poolMetrics['pending_remedial'] ?? 0) > 0
+                        ? $poolMetrics['pending_remedial'].' to correct'
+                        : $poolMetrics['pending'].' left';
+                    $statusDetail = "{$poolMetrics['attempted']}/{$poolMetrics['pool']} · {$left}";
                 }
+            }
+
+            if ($assignment->isOriginalLearning()) {
+                app(RevisionAssignmentService::class)->ensureFirstRevisionIfReady($assignment->fresh());
             }
         }
 

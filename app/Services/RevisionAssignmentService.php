@@ -7,9 +7,10 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Revision mentoring: after an original sheet hits Score% = 100, auto-open Rev 1.
+ * Revision mentoring: after an original sheet is fully corrected (completion 100%,
+ * no pending remediations), auto-open Rev 1. Score% may be below 100 — original
+ * wrongs stay in the pool forever.
  * Further revisions (R2, R3…) are started by student/teacher on demand.
- * Each revision is its own SetAssignment with its own Total Pool.
  */
 class RevisionAssignmentService
 {
@@ -18,7 +19,7 @@ class RevisionAssignmentService
     ) {}
 
     /**
-     * If this assignment is an original at Score% 100, ensure Rev 1 exists (due today).
+     * If this assignment is an original that is fully corrected, ensure Rev 1 exists (due today).
      */
     public function ensureFirstRevisionIfReady(SetAssignment $assignment): ?SetAssignment
     {
@@ -28,10 +29,10 @@ class RevisionAssignmentService
             return null;
         }
 
-        $metrics = $this->poolScore->metricsForAssignment($assignment);
-        if (($metrics['pool'] ?? 0) <= 0
-            || ($metrics['score_pct'] ?? null) !== 100
-            || ($metrics['pending'] ?? 0) > 0) {
+        // Rebuild from attempts so older completions (pre-pool) unlock correctly.
+        $this->poolScore->rebuildFromAttempts($assignment);
+
+        if (! $this->poolScore->isFullyCorrected($assignment)) {
             return null;
         }
 
@@ -39,15 +40,16 @@ class RevisionAssignmentService
     }
 
     /**
-     * Start the next revision (R2, R3…) from any completed revision or from the original at 100%.
+     * Start the next revision (R2, R3…) from any completed revision or from the original when ready.
      */
     public function startNextRevision(SetAssignment $fromAssignment, ?User $actor = null): SetAssignment
     {
         $root = $this->rootOriginal($fromAssignment);
 
-        $metrics = $this->poolScore->metricsForAssignment($root);
-        if (($metrics['score_pct'] ?? null) !== 100 || ($metrics['pending'] ?? 0) > 0) {
-            throw new \InvalidArgumentException('Finish the original sheet at 100% score before starting revision.');
+        $this->poolScore->rebuildFromAttempts($root);
+
+        if (! $this->poolScore->isFullyCorrected($root)) {
+            throw new \InvalidArgumentException('Finish and correct the original sheet before starting revision.');
         }
 
         $open = $this->openRevisionForRoot($root);

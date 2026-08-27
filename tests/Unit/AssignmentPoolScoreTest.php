@@ -113,6 +113,13 @@ class AssignmentPoolScoreTest extends TestCase
         $this->assertSame(100, $metrics['completion_pct']);
         $this->assertSame(80, $metrics['score_pct']);
 
+        // Fully corrected (even though score is 80%) → revision unlocks.
+        $this->assertTrue(app(AssignmentPoolScore::class)->isFullyCorrected($assignment));
+        $revision = app(\App\Services\RevisionAssignmentService::class)
+            ->ensureFirstRevisionIfReady($assignment->fresh());
+        $this->assertNotNull($revision);
+        $this->assertSame(1, (int) $revision->revision_number);
+
         // Original wrongs stay wrong forever (never retroactively fixed).
         $this->assertSame(
             5,

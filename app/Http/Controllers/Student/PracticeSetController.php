@@ -56,6 +56,23 @@ class PracticeSetController extends Controller
         $isTest = $practiceSet->isChapterScope();
         $partial = $inProgress ? AssignmentProgress::partialProgress($assignment) : null;
 
+        $poolScore = app(\App\Services\AssignmentPoolScore::class);
+        $revisionService = app(\App\Services\RevisionAssignmentService::class);
+        $poolMetrics = null;
+        $revisionAssignment = null;
+
+        if ($assignment->attempts->contains(fn ($a) => $a->status === SetAttempt::STATUS_SUBMITTED)) {
+            $poolMetrics = $poolScore->rebuildFromAttempts($assignment);
+            if ($assignment->isOriginalLearning() && $poolScore->isFullyCorrected($assignment)) {
+                $revisionAssignment = $revisionService->ensureFirstRevisionIfReady($assignment->fresh());
+            }
+        }
+
+        $openRevision = $assignment->isOriginalLearning()
+            ? $revisionService->openRevisionForRoot($assignment)
+            : null;
+        $latestRevision = $openRevision ?? $revisionAssignment;
+
         return Inertia::render('Student/PracticeSets/Assignment', [
             'assignment' => [
                 'id' => $assignment->id,
@@ -64,14 +81,21 @@ class PracticeSetController extends Controller
                 'target_date' => $assignment->due_date?->toDateString(),
                 'is_overdue' => $assignment->isOverdue(),
                 'is_guided' => ! $isTest,
+                'is_revision' => $assignment->isRevision(),
+                'revision_number' => (int) $assignment->revision_number,
                 'latest_attempt_id' => $latestSubmitted?->id,
-                'can_redo' => $assignment->status === SetAssignment::STATUS_COMPLETED && $latestSubmitted !== null,
+                'can_redo' => false,
+                'can_correct' => (($poolMetrics['pending_remedial'] ?? 0) > 0),
+                'pool_metrics' => $poolMetrics,
+                'revision_assignment_id' => $latestRevision?->id,
+                'can_open_revision' => $latestRevision !== null,
                 'partial_progress' => $partial,
                 'previous_score_label' => $previousSubmitted
                     ? ScoreLabel::format($previousSubmitted->score, $previousSubmitted->max_score)
                     : null,
                 'integrity' => AttemptIntegrity::configFor($enrollment, $isTest),
                 'practice_set' => [
+                    'id' => $practiceSet->id,
                     'set_code' => $practiceSet->set_code,
                     'set_number' => $practiceSet->set_number,
                     'kind_label' => $practiceSet->isChapterScope() ? 'Test' : 'Practice',

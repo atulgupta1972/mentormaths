@@ -681,7 +681,14 @@ class StudentChapterSummaryService
         $shortLabel = "{$prefix}{$setNumber}";
         $statusMeta = $this->statusMeta($progress, $assignment !== null);
 
-        $poolPending = (int) ($progress['pool_metrics']['pending'] ?? 0);
+        $poolPending = (int) ($progress['pool_metrics']['pending_remedial'] ?? 0);
+        if ($poolPending <= 0) {
+            $poolPending = (int) ($progress['pool_metrics']['pending'] ?? 0);
+            // Only treat pending as "wrongs to correct" when some work was already attempted.
+            if (($progress['pool_metrics']['attempted'] ?? 0) <= 0) {
+                $poolPending = 0;
+            }
+        }
         $effectiveCorrectionCount = $poolPending > 0 ? $poolPending : $correctionCount;
 
         // Learning sheet: Assign me only when not yet assigned. No full "Redo" — that is Revision.
@@ -758,7 +765,7 @@ class StudentChapterSummaryService
         }
 
         $statusMeta = $this->statusMeta($progress, true);
-        $poolPending = (int) ($progress['pool_metrics']['pending'] ?? 0);
+        $poolPending = (int) ($progress['pool_metrics']['pending_remedial'] ?? 0);
         $revNo = (int) $assignment->revision_number;
         $statusLabel = 'R'.$revNo.' · '.($statusMeta['status_label'] ?? 'NOT DONE');
 

@@ -240,7 +240,10 @@ class ClassCoverageService
 
         $scored = array_values(array_filter(
             $main,
-            fn (array $item) => isset($item['score_percent']) && $item['score_percent'] !== null && $item['score_percent'] !== '',
+            fn (array $item) => ($item['status'] ?? '') === 'done'
+                && isset($item['score_percent'])
+                && $item['score_percent'] !== null
+                && $item['score_percent'] !== '',
         ));
         $scorePct = $scored !== []
             ? (int) round(array_sum(array_map(fn (array $item) => (float) $item['score_percent'], $scored)) / count($scored))
@@ -251,7 +254,10 @@ class ClassCoverageService
         $revisionCompletionPct = $revisionTotal > 0 ? (int) round(($revisionDone / $revisionTotal) * 100) : null;
         $revisionScored = array_values(array_filter(
             $revisionItems,
-            fn (array $item) => isset($item['score_percent']) && $item['score_percent'] !== null && $item['score_percent'] !== '',
+            fn (array $item) => ($item['status'] ?? '') === 'done'
+                && isset($item['score_percent'])
+                && $item['score_percent'] !== null
+                && $item['score_percent'] !== '',
         ));
         $revisionScorePct = $revisionScored !== []
             ? (int) round(array_sum(array_map(fn (array $item) => (float) $item['score_percent'], $revisionScored)) / count($revisionScored))
