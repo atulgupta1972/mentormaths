@@ -1,6 +1,7 @@
 <script setup>
 import { formatDate } from '@/utils/dates';
 import ChapterPerformanceSummary from '@/Components/ChapterPerformanceSummary.vue';
+import CoverageItemsWithRevisionRail from '@/Components/CoverageItemsWithRevisionRail.vue';
 import CoverageSetItemCard from '@/Components/CoverageSetItemCard.vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -956,52 +957,24 @@ const startRevision = (item) => {
                                         <p class="text-[11px] font-extrabold uppercase tracking-wide text-slate-900">
                                             {{ book.name }}
                                         </p>
-                                        <div class="mt-1.5 flex flex-wrap gap-1.5">
-                                            <CoverageSetItemCard
-                                                v-for="item in book.items"
-                                                :key="`book-${book.id}-${item.worksheet_id}`"
-                                                :item="item"
-                                                group-key="books"
-                                                :is-student-view="isStudentView"
-                                                :can-staff-assign="canStaffAssign"
-                                                :assigning-worksheet-id="assigningWorksheetId"
-                                                :pending-assign-key="pendingAssignKey"
-                                                :staff-assign-form="staffAssignForm"
-                                                @self-assign="selfAssign"
-                                                @start-correction="startCorrection"
-                                                @start-revision="startRevision"
-                                                @open-staff-assign="openStaffAssign"
-                                                @confirm-staff-assign="confirmStaffAssign"
-                                                @cancel-staff-assign="pendingAssignKey = null"
-                                            />
-                                        </div>
-                                        <div
-                                            v-if="book.revision_items?.length"
-                                            class="mt-2 border-t border-indigo-200 pt-2"
-                                        >
-                                            <p class="text-[10px] font-extrabold uppercase tracking-wide text-indigo-900">
-                                                Revision
-                                            </p>
-                                            <div class="mt-1 flex flex-wrap gap-1.5">
-                                                <CoverageSetItemCard
-                                                    v-for="item in book.revision_items"
-                                                    :key="`book-rev-${book.id}-${item.assignment_id}`"
-                                                    :item="item"
-                                                    group-key="revisions"
-                                                    :is-student-view="isStudentView"
-                                                    :can-staff-assign="canStaffAssign"
-                                                    :assigning-worksheet-id="assigningWorksheetId"
-                                                    :pending-assign-key="pendingAssignKey"
-                                                    :staff-assign-form="staffAssignForm"
-                                                    @self-assign="selfAssign"
-                                                    @start-correction="startCorrection"
-                                                    @start-revision="startRevision"
-                                                    @open-staff-assign="openStaffAssign"
-                                                    @confirm-staff-assign="confirmStaffAssign"
-                                                    @cancel-staff-assign="pendingAssignKey = null"
-                                                />
-                                            </div>
-                                        </div>
+                                        <CoverageItemsWithRevisionRail
+                                            :items="book.items"
+                                            :revision-items="book.revision_items || []"
+                                            group-key="books"
+                                            revision-group-key="revisions"
+                                            :item-key-prefix="`book-${book.id}`"
+                                            :is-student-view="isStudentView"
+                                            :can-staff-assign="canStaffAssign"
+                                            :assigning-worksheet-id="assigningWorksheetId"
+                                            :pending-assign-key="pendingAssignKey"
+                                            :staff-assign-form="staffAssignForm"
+                                            @self-assign="selfAssign"
+                                            @start-correction="startCorrection"
+                                            @start-revision="startRevision"
+                                            @open-staff-assign="openStaffAssign"
+                                            @confirm-staff-assign="confirmStaffAssign"
+                                            @cancel-staff-assign="pendingAssignKey = null"
+                                        />
                                     </div>
 
                                     <div
@@ -1059,52 +1032,24 @@ const startRevision = (item) => {
                                                     <p class="text-[10px] font-extrabold uppercase tracking-wide text-slate-800">
                                                         {{ row.label }}
                                                     </p>
-                                                    <div class="mt-1 flex flex-wrap gap-1.5">
-                                                        <CoverageSetItemCard
-                                                            v-for="item in row.items"
-                                                            :key="`${row.key}-${item.worksheet_id}`"
-                                                            :item="item"
-                                                            :group-key="`${block.tier}:${row.key}`"
-                                                            :is-student-view="isStudentView"
-                                                            :can-staff-assign="canStaffAssign"
-                                                            :assigning-worksheet-id="assigningWorksheetId"
-                                                            :pending-assign-key="pendingAssignKey"
-                                                            :staff-assign-form="staffAssignForm"
-                                                            @self-assign="selfAssign"
-                                                            @start-correction="startCorrection"
-                                                            @start-revision="startRevision"
-                                                            @open-staff-assign="openStaffAssign"
-                                                            @confirm-staff-assign="confirmStaffAssign"
-                                                            @cancel-staff-assign="pendingAssignKey = null"
-                                                        />
-                                                    </div>
-                                                    <div
-                                                        v-if="row.revision_items?.length"
-                                                        class="mt-1.5 border-t border-indigo-100 pt-1.5"
-                                                    >
-                                                        <p class="text-[9px] font-extrabold uppercase tracking-wide text-indigo-800">
-                                                            Revision
-                                                        </p>
-                                                        <div class="mt-1 flex flex-wrap gap-1.5">
-                                                            <CoverageSetItemCard
-                                                                v-for="item in row.revision_items"
-                                                                :key="`${row.key}-rev-${item.assignment_id}`"
-                                                                :item="item"
-                                                                :group-key="`${block.tier}:${row.key}:rev`"
-                                                                :is-student-view="isStudentView"
-                                                                :can-staff-assign="canStaffAssign"
-                                                                :assigning-worksheet-id="assigningWorksheetId"
-                                                                :pending-assign-key="pendingAssignKey"
-                                                                :staff-assign-form="staffAssignForm"
-                                                                @self-assign="selfAssign"
-                                                                @start-correction="startCorrection"
-                                                                @start-revision="startRevision"
-                                                                @open-staff-assign="openStaffAssign"
-                                                                @confirm-staff-assign="confirmStaffAssign"
-                                                                @cancel-staff-assign="pendingAssignKey = null"
-                                                            />
-                                                        </div>
-                                                    </div>
+                                                    <CoverageItemsWithRevisionRail
+                                                        :items="row.items"
+                                                        :revision-items="row.revision_items || []"
+                                                        :group-key="`${block.tier}:${row.key}`"
+                                                        :revision-group-key="`${block.tier}:${row.key}:rev`"
+                                                        :item-key-prefix="`${block.tier}-${row.key}`"
+                                                        :is-student-view="isStudentView"
+                                                        :can-staff-assign="canStaffAssign"
+                                                        :assigning-worksheet-id="assigningWorksheetId"
+                                                        :pending-assign-key="pendingAssignKey"
+                                                        :staff-assign-form="staffAssignForm"
+                                                        @self-assign="selfAssign"
+                                                        @start-correction="startCorrection"
+                                                        @start-revision="startRevision"
+                                                        @open-staff-assign="openStaffAssign"
+                                                        @confirm-staff-assign="confirmStaffAssign"
+                                                        @cancel-staff-assign="pendingAssignKey = null"
+                                                    />
                                                 </div>
                                             </div>
                                         </div>
