@@ -122,6 +122,48 @@ class StudentAttemptResumeAndRedoTest extends TestCase
         $this->assertSame(2, $summary['submitted_attempt_count']);
     }
 
+    public function test_dashboard_lists_left_midway_attempts_as_resume_items(): void
+    {
+        $this->withoutVite();
+        $this->withoutMiddleware([
+            \App\Http\Middleware\EnsureFormulaDrillComplete::class,
+            \App\Http\Middleware\EnsureBasicsDrillComplete::class,
+        ]);
+
+        [$assignment, $questions, $user] = $this->seedChapterTestAssignment(questionCount: 5, withUser: true);
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subHour(),
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
+        ]);
+        $assignment->update(['status' => SetAssignment::STATUS_IN_PROGRESS]);
+
+        foreach ($questions->take(2) as $question) {
+            $option = $question->options->firstWhere('is_correct', true);
+            SetAttemptAnswer::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'question_option_id' => $option->id,
+                'is_correct' => true,
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('resumeItems', 1)
+                ->where('resumeItems.0.attempt_id', $attempt->id)
+                ->where('resumeItems.0.done', 2)
+                ->where('resumeItems.0.remaining', 3)
+                ->where('resumeItems.0.total', 5)
+                ->where('resumeItems.0.chapter_name', 'Numbers')
+            );
+    }
+
     /**
      * @return array{0: SetAssignment, 1: \Illuminate\Support\Collection<int, Question>, 2?: User}
      */

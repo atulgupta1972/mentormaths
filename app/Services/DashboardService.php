@@ -48,6 +48,7 @@ class DashboardService
 
         return [
             'assignments' => $assignments,
+            'resumeItems' => $this->resumeItemsFromAssignments($assignments),
             'examPlans' => $examPlanMeta,
             'syllabusChapters' => $syllabusChapters,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
@@ -506,6 +507,61 @@ class DashboardService
      * @param  array{upcoming: list<mixed>, past: list<mixed>}  $examPlans
      * @return array<string, int>
      */
+    /**
+     * Sets the student started but left unfinished — shown at the top of their dashboard.
+     *
+     * @param  list<array<string, mixed>>  $assignments
+     * @return list<array<string, mixed>>
+     */
+    private function resumeItemsFromAssignments(array $assignments): array
+    {
+        $items = [];
+
+        foreach ($assignments as $row) {
+            $attemptId = $row['in_progress_attempt_id'] ?? null;
+            $partial = $row['partial_progress'] ?? null;
+
+            if (! $attemptId || ! is_array($partial)) {
+                continue;
+            }
+
+            $remaining = (int) ($partial['remaining'] ?? 0);
+            if ($remaining <= 0) {
+                continue;
+            }
+
+            $done = (int) ($partial['done'] ?? 0);
+            $total = max(1, (int) ($partial['total'] ?? 0));
+
+            $items[] = [
+                'assignment_id' => $row['assignment_id'] ?? null,
+                'attempt_id' => $attemptId,
+                'set_code' => $row['set_code'] ?? null,
+                'kind_label' => $row['kind_label'] ?? 'Practice',
+                'chapter_name' => $row['chapter_name'] ?? null,
+                'topic_name' => $row['topic_name'] ?? null,
+                'target_date' => $row['target_date'] ?? null,
+                'is_overdue' => (bool) ($row['is_overdue'] ?? false),
+                'delivery_mode' => $row['delivery_mode'] ?? 'online',
+                'done' => $done,
+                'total' => $total,
+                'remaining' => $remaining,
+                'progress_label' => (string) ($partial['label'] ?? "{$done}/{$total}"),
+            ];
+        }
+
+        usort($items, static function (array $left, array $right): int {
+            $byRemaining = $left['remaining'] <=> $right['remaining'];
+            if ($byRemaining !== 0) {
+                return $byRemaining;
+            }
+
+            return strcmp((string) ($left['target_date'] ?? '9999-12-31'), (string) ($right['target_date'] ?? '9999-12-31'));
+        });
+
+        return array_values($items);
+    }
+
     private function studentStats(array $assignments, array $examPlans, int $resolutionCount = 0): array
     {
         $assignmentsCollection = collect($assignments);
