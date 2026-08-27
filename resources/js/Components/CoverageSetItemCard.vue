@@ -48,6 +48,18 @@ const canAssign = computed(() =>
 
 const isPending = computed(() => props.pendingAssignKey === itemKey.value);
 
+const adminAssignmentHref = computed(() => {
+    if (props.item.admin_url) {
+        return props.item.admin_url;
+    }
+
+    if (props.item.assignment_id && route().has('admin.set-assignments.show')) {
+        return route('admin.set-assignments.show', props.item.assignment_id);
+    }
+
+    return null;
+});
+
 const itemHref = computed(() => {
     if (! props.isStudentView || ! props.item.can_open) {
         return null;
@@ -75,6 +87,14 @@ const assignButtonLabel = computed(() => {
     }
 
     return 'Assign me';
+});
+
+const staffAssignLabel = computed(() => {
+    if (props.item.is_revision) {
+        return props.item.assignment_id ? 'Reassign revision' : 'Assign revision';
+    }
+
+    return props.item.status === 'not_assigned' ? 'Assign' : 'Reassign';
 });
 </script>
 
@@ -142,16 +162,24 @@ const assignButtonLabel = computed(() => {
             </Link>
         </template>
         <template v-else-if="canAssign">
+            <Link
+                v-if="item.is_revision && item.assignment_id && adminAssignmentHref && !isPending"
+                :href="adminAssignmentHref"
+                class="rounded bg-emerald-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-emerald-800"
+                @click.stop
+            >
+                Open
+            </Link>
             <button
                 v-if="!isPending"
                 type="button"
                 class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800"
                 @click.stop="emit('open-staff-assign', item, groupKey)"
             >
-                {{ item.is_revision ? 'Assign revision' : (item.status === 'not_assigned' ? 'Assign' : 'Reassign') }}
+                {{ staffAssignLabel }}
             </button>
             <form
-                v-else-if="staffAssignForm"
+                v-else-if="isPending && staffAssignForm"
                 class="inline-flex items-center gap-1"
                 @submit.prevent="emit('confirm-staff-assign', item)"
             >
@@ -178,8 +206,8 @@ const assignButtonLabel = computed(() => {
             </form>
         </template>
         <Link
-            v-else-if="item.admin_url"
-            :href="item.admin_url"
+            v-else-if="adminAssignmentHref"
+            :href="adminAssignmentHref"
             class="rounded bg-indigo-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-indigo-800"
             @click.stop
         >

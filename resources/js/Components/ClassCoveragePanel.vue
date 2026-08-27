@@ -115,7 +115,7 @@ const staffAssignForm = useForm({
     target_date: todayDate(),
 });
 
-const itemKey = (groupKey, item) => `${groupKey}-${item.worksheet_id}`;
+const itemKey = (groupKey, item) => `${groupKey}-${item.worksheet_id}-${item.assignment_id || 0}`;
 
 const canAssignItem = (item) => canStaffAssign.value && item.worksheet_id && ! item.is_correction;
 
@@ -128,6 +128,23 @@ const openStaffAssign = (item, groupKey) => {
 
 const confirmStaffAssign = (item) => {
     if (! item.worksheet_id || staffAssignForm.processing) {
+        return;
+    }
+
+    // Revision rows already have their own assignment — update due date on that assignment.
+    if (item.is_revision && item.assignment_id && route().has('admin.set-assignments.reassign')) {
+        staffAssignForm.post(route('admin.set-assignments.reassign', item.assignment_id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                pendingAssignKey.value = null;
+                saveError.value = '';
+            },
+            onError: (errors) => {
+                const first = Object.values(errors ?? {})[0];
+                saveError.value = Array.isArray(first) ? first[0] : (first || 'Could not reassign revision. Please try again.');
+            },
+        });
+
         return;
     }
 
