@@ -13,6 +13,7 @@ class ContentAllocationMatrixService
 {
     public function __construct(
         private TextbookChapterBookService $bookService,
+        private ContentVerificationService $verificationService,
     ) {}
 
     /**
@@ -27,7 +28,7 @@ class ContentAllocationMatrixService
      *     database_total: int
      * }
      */
-    public function build(?int $boardId, ?int $drillGradeId = null, ?int $drillUploaderId = null): array
+    public function build(?int $boardId, ?int $drillGradeId = null, ?int $drillUploaderId = null, ?User $progressUser = null): array
     {
         $this->bookService->mergeAllDuplicateBookChapters();
 
@@ -198,8 +199,15 @@ class ContentAllocationMatrixService
             $grade = collect($gradeRows)->firstWhere('id', $drillGradeId);
             $uploader = collect($uploaders)->firstWhere('id', $drillUploaderId);
 
+            $progressByTask = $progressUser
+                ? $this->verificationService->progressForTasks($drillTasks, $progressUser)
+                : [];
+
             $chapters = $drillTasks
-                ->map(fn (ContentUploadTask $task) => $this->serializeDrillRow($task))
+                ->map(fn (ContentUploadTask $task) => $this->serializeDrillRow(
+                    $task,
+                    $progressByTask[(int) $task->id] ?? null,
+                ))
                 ->sortBy(function (array $row) {
                     $book = mb_strtolower((string) ($row['chapter']['textbook_name'] ?? ''));
                     $number = (string) ($row['chapter']['chapter_number'] ?? '');
@@ -263,7 +271,7 @@ class ContentAllocationMatrixService
     /**
      * @return array<string, mixed>
      */
-    private function serializeDrillRow(ContentUploadTask $task): array
+    private function serializeDrillRow(ContentUploadTask $task, ?array $geminiProgress = null): array
     {
         $chapter = $task->textbookChapter;
         $questionCount = $this->questionCountForChapter($chapter);
@@ -280,6 +288,8 @@ class ContentAllocationMatrixService
             'breakup_bucket' => $breakupBucket,
             'can_review_and_publish' => $breakupBucket === 'submitted',
             'can_reassign' => $task->canReassign(),
+            'can_gemini_verify' => (bool) ($geminiProgress['can_gemini'] ?? false),
+            'gemini_progress' => $geminiProgress,
             'offered_amount_inr' => $task->offered_amount_inr,
             'agreed_amount_inr' => $task->agreed_amount_inr,
             'question_count' => $questionCount,

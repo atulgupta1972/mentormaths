@@ -417,6 +417,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks/{contentTask}/verification-unskip', [ContentUploadTaskController::class, 'unskipVerificationQuestion'])->name('content-tasks.verification-unskip');
     Route::post('/content-tasks/{contentTask}/verification-ai-review', [ContentUploadTaskController::class, 'aiReviewVerification'])->name('content-tasks.verification-ai-review');
     Route::post('/content-tasks/{contentTask}/verification-gemini-paste', [ContentUploadTaskController::class, 'geminiPasteVerification'])->name('content-tasks.verification-gemini-paste');
+    Route::post('/content-tasks/{contentTask}/reset-gemini-review', [ContentUploadTaskController::class, 'resetGeminiReview'])->name('content-tasks.reset-gemini-review');
     Route::post('/content-tasks/{contentTask}/verification-batch', [ContentUploadTaskController::class, 'markVerificationBatch'])->name('content-tasks.verification-batch');
     Route::post('/content-tasks/{contentTask}/verification-diagram', [ContentUploadTaskController::class, 'uploadVerificationDiagram'])->name('content-tasks.verification-diagram');
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');

@@ -168,7 +168,7 @@ class ContentVerificationService
             throw new \InvalidArgumentException('Mark exactly one option as the correct answer.');
         }
 
-        return DB::transaction(function () use ($run, $question, $payload, $options) {
+        return DB::transaction(function () use ($run, $question, $payload, $options, $user) {
             $question->update([
                 'question_text' => trim((string) $payload['question_text']),
                 'explanation' => trim((string) ($payload['explanation'] ?? '')) ?: null,
@@ -554,6 +554,13 @@ class ContentVerificationService
         foreach ($runs as $run) {
             $reset = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, false);
             $reset['verified_at'] = null;
+            $reset['skipped'] = false;
+            $reset['skip_reason'] = null;
+            $reset['skipped_at'] = null;
+            $reset['ai_verdict'] = null;
+            $reset['ai_confidence'] = null;
+            $reset['ai_note'] = null;
+            $reset['ai_reviewed_at'] = null;
 
             ContentVerificationCheck::query()
                 ->where('content_verification_run_id', $run->id)
@@ -566,6 +573,205 @@ class ContentVerificationService
                 ]);
             }
         }
+    }
+
+    /**
+     * Clear all Gemini / verification ticks so admin can re-check a published chapter.
+     */
+    public function resetForGeminiReview(ContentUploadTask $task, User $user): ContentVerificationRun
+    {
+        if ($task->isFillBlankConversion()) {
+            throw new \InvalidArgumentException('Fill-in-blank conversion tasks do not use Gemini MCQ review.');
+        }
+
+        if ($task->textbookChapter?->mcqWorksheetIds() === []) {
+            throw new \InvalidArgumentException('This chapter has no MCQ worksheets to review.');
+        }
+
+        $this->resetAllVerification($task);
+
+        return $this->resolveRun($task, $user);
+    }
+
+    /**
+     * @param  iterable<ContentUploadTask>  $tasks
+     * @return array<int, array<string, mixed>>
+     */
+    public function progressForTasks(iterable $tasks, User $user): array
+    {
+        $taskList = collect($tasks)->filter(fn ($task) => $task instanceof ContentUploadTask)->values();
+
+        if ($taskList->isEmpty()) {
+            return [];
+        }
+
+        $taskIds = $taskList->pluck('id')->all();
+
+        $runs = ContentVerificationRun::query()
+            ->whereIn('content_upload_task_id', $taskIds)
+            ->where('user_id', $user->id)
+            ->orderByDesc('id')
+            ->get()
+            ->unique('content_upload_task_id')
+            ->keyBy('content_upload_task_id');
+
+        $out = [];
+
+        foreach ($taskList as $task) {
+            $out[(int) $task->id] = $this->buildProgressSummary(
+                $task,
+                $runs->get($task->id),
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array{
+     *     total: int,
+     *     verified: int,
+     *     pending: int,
+     *     skipped: int,
+     *     percent: int,
+     *     sets: list<array{part: int, set_code: string, total: int, verified: int, pending: int}>,
+     *     can_gemini: bool
+     * }
+     */
+    public function progressForTask(ContentUploadTask $task, User $user): array
+    {
+        $run = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $user->id)
+            ->orderByDesc('id')
+            ->first();
+
+        return $this->buildProgressSummary($task, $run);
+    }
+
+    /**
+     * @return array{
+     *     total: int,
+     *     verified: int,
+     *     pending: int,
+     *     skipped: int,
+     *     percent: int,
+     *     sets: list<array{part: int, set_code: string, total: int, verified: int, pending: int}>,
+     *     can_gemini: bool
+     * }
+     */
+    private function buildProgressSummary(ContentUploadTask $task, ?ContentVerificationRun $run): array
+    {
+        $empty = [
+            'total' => 0,
+            'verified' => 0,
+            'pending' => 0,
+            'skipped' => 0,
+            'percent' => 0,
+            'sets' => [],
+            'can_gemini' => false,
+        ];
+
+        if ($task->isFillBlankConversion()) {
+            return $empty;
+        }
+
+        $questionIds = $this->questionIdsForChapter($task);
+        $total = count($questionIds);
+
+        if ($total === 0) {
+            return $empty;
+        }
+
+        $canGemini = in_array($task->status, [
+            ContentUploadTask::STATUS_UPLOADED,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_PUBLISHED,
+        ], true);
+
+        $checks = $run
+            ? ContentVerificationCheck::query()
+                ->where('content_verification_run_id', $run->id)
+                ->whereIn('question_id', $questionIds)
+                ->get()
+                ->keyBy('question_id')
+            : collect();
+
+        $verified = 0;
+        $skipped = 0;
+
+        foreach ($questionIds as $questionId) {
+            $check = $checks->get($questionId);
+
+            if (! $check || ! $check->isComplete()) {
+                continue;
+            }
+
+            if ($check->skipped) {
+                $skipped++;
+            } else {
+                $verified++;
+            }
+        }
+
+        $pending = max(0, $total - $verified - $skipped);
+        $percent = $total > 0 ? (int) round(($verified / $total) * 100) : 0;
+
+        return [
+            'total' => $total,
+            'verified' => $verified,
+            'pending' => $pending,
+            'skipped' => $skipped,
+            'percent' => $percent,
+            'sets' => $this->setProgressRows($task, $questionIds, $checks),
+            'can_gemini' => $canGemini,
+        ];
+    }
+
+    /**
+     * @param  list<int>  $questionIds
+     * @param  \Illuminate\Support\Collection<int, ContentVerificationCheck>  $checks
+     * @return list<array{part: int, set_code: string, total: int, verified: int, pending: int}>
+     */
+    private function setProgressRows(ContentUploadTask $task, array $questionIds, $checks): array
+    {
+        $chapter = $task->textbookChapter;
+        $setPlan = is_array($chapter?->mcq_set_plan) ? $chapter->mcq_set_plan : [];
+
+        if ($setPlan === []) {
+            return [];
+        }
+
+        $rows = [];
+
+        foreach (collect($setPlan)->values() as $index => $part) {
+            $from = max(1, (int) ($part['q_from'] ?? 1));
+            $to = max($from, (int) ($part['q_to'] ?? $from));
+            $sliceIds = array_slice($questionIds, $from - 1, max(0, $to - $from + 1));
+            $setVerified = 0;
+
+            foreach ($sliceIds as $questionId) {
+                $check = $checks->get($questionId);
+
+                if ($check && $check->isComplete() && ! $check->skipped) {
+                    $setVerified++;
+                }
+            }
+
+            $setTotal = count($sliceIds);
+
+            $rows[] = [
+                'part' => $index + 1,
+                'set_code' => (string) ($part['set_code'] ?? ''),
+                'total' => $setTotal,
+                'verified' => $setVerified,
+                'pending' => max(0, $setTotal - $setVerified),
+            ];
+        }
+
+        return $rows;
     }
 
     private function questionForRun(ContentVerificationRun $run, int $questionId): Question

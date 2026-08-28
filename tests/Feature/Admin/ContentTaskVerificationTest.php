@@ -655,4 +655,48 @@ TEXT;
                 ->exists()
         );
     }
+
+    public function test_admin_can_reset_gemini_review_on_published_chapter(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'published_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk();
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $admin->id)
+            ->value('id');
+
+        $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.verification-batch', $task), [
+                'run_id' => $runId,
+                'question_ids' => [$questionId],
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.reset-gemini-review', $task))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertFalse(
+            \App\Models\ContentVerificationCheck::query()
+                ->where('content_verification_run_id', $runId)
+                ->where('question_id', $questionId)
+                ->whereNotNull('verified_at')
+                ->exists()
+        );
+    }
 }

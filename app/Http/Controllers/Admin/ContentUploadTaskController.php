@@ -91,7 +91,7 @@ class ContentUploadTaskController extends Controller
                 'drill_bucket' => $drillBucket,
             ],
             'statuses' => $this->statusOptions(),
-            'matrix' => $this->matrixService->build($boardId, $drillGradeId, $drillUploaderId),
+            'matrix' => $this->matrixService->build($boardId, $drillGradeId, $drillUploaderId, $request->user()),
             'uploaders' => $this->contentUploaders(),
             'pendingPublishCount' => ContentUploadTask::query()
                 ->where('status', ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH)
@@ -759,6 +759,20 @@ class ContentUploadTaskController extends Controller
             ->with('gemini_review', $result);
     }
 
+    public function resetGeminiReview(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        try {
+            $this->verificationService->resetForGeminiReview($contentTask, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with(
+            'success',
+            'Verification reset — all questions are pending again. Copy the Gemini prompt, paste the reply, and fix any flagged sums.',
+        );
+    }
+
     public function markVerificationBatch(Request $request, ContentUploadTask $contentTask): RedirectResponse
     {
         $validated = $request->validate([
@@ -1169,6 +1183,7 @@ class ContentUploadTaskController extends Controller
             'run_id' => $verification['run']->id,
             'questions' => $verification['questions'],
             'summary' => $verification['summary'],
+            'progress' => $this->verificationService->progressForTask($task, $user),
             'gemini_prompt' => $this->geminiPasteService->buildPrompt(
                 $pendingQuestions,
                 $this->geminiPasteService->chapterLabel($task),

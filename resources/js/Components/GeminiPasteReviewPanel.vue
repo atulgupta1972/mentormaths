@@ -8,8 +8,11 @@ import { computed, ref } from 'vue';
 const props = defineProps({
     runId: { type: Number, required: true },
     pendingCount: { type: Number, default: 0 },
+    verifiedCount: { type: Number, default: 0 },
+    totalCount: { type: Number, default: 0 },
     geminiPrompt: { type: String, default: '' },
     pasteRoute: { type: String, required: true },
+    resetRoute: { type: String, default: '' },
     disabled: { type: Boolean, default: false },
 });
 
@@ -21,9 +24,19 @@ const form = useForm({
     gemini_paste: '',
 });
 
+const resetForm = useForm({});
+
 const geminiReview = computed(() => page.props.flash?.gemini_review ?? null);
 const attention = computed(() => geminiReview.value?.attention ?? []);
 const unparsedNumbers = computed(() => geminiReview.value?.unparsed_numbers ?? []);
+
+const progressLabel = computed(() => {
+    if (!props.totalCount) {
+        return '';
+    }
+
+    return `${props.verifiedCount}/${props.totalCount} verified · ${props.pendingCount} pending`;
+});
 
 const copyPrompt = async () => {
     if (!props.geminiPrompt) {
@@ -68,6 +81,18 @@ const applyPaste = () => {
         },
     });
 };
+
+const resetReview = () => {
+    if (resetForm.processing || props.disabled || !props.resetRoute || props.resetRoute === '#') {
+        return;
+    }
+
+    if (!window.confirm('Reset all verification ticks for this chapter?\n\nYou can then run Gemini check again from scratch. This does not email the uploader.')) {
+        return;
+    }
+
+    resetForm.post(props.resetRoute, { preserveScroll: true });
+};
 </script>
 
 <template>
@@ -79,17 +104,28 @@ const applyPaste = () => {
                     Copy the chapter prompt into Gemini, paste the reply here.
                     Questions marked <strong>Correct</strong> are auto-verified; fix the rest and run again.
                 </p>
-                <p v-if="pendingCount > 0" class="mt-1 text-xs text-indigo-800">
-                    {{ pendingCount }} pending for Gemini review
+                <p v-if="totalCount > 0" class="mt-1 text-xs font-semibold text-indigo-800">
+                    Progress: {{ progressLabel }}
                 </p>
             </div>
-            <SecondaryButton
-                type="button"
-                :disabled="!geminiPrompt"
-                @click="copyPrompt"
-            >
-                {{ copied ? 'Copied!' : 'Copy Gemini prompt' }}
-            </SecondaryButton>
+            <div class="flex flex-wrap gap-2">
+                <SecondaryButton
+                    v-if="resetRoute"
+                    type="button"
+                    class="!border-amber-300 !text-amber-900 hover:!bg-amber-50"
+                    :disabled="disabled || resetForm.processing || totalCount === 0"
+                    @click="resetReview"
+                >
+                    {{ resetForm.processing ? 'Resetting…' : 'Reset & check again' }}
+                </SecondaryButton>
+                <SecondaryButton
+                    type="button"
+                    :disabled="!geminiPrompt"
+                    @click="copyPrompt"
+                >
+                    {{ copied ? 'Copied!' : 'Copy Gemini prompt' }}
+                </SecondaryButton>
+            </div>
         </div>
 
         <details class="rounded-md border border-indigo-100 bg-white p-3 text-sm text-slate-700">

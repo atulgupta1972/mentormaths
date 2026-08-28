@@ -433,7 +433,7 @@ watch(
                     <p class="mt-3 text-xs text-slate-500">
                         <template v-if="drillFilter === 'submitted'">Showing submitted chapters — open one to review questions and publish.</template>
                         <template v-else-if="drillFilter === 'under_review'">Showing chapters still under review (not yet submitted).</template>
-                        <template v-else-if="drillFilter === 'published'">Showing published chapters.</template>
+                        <template v-else-if="drillFilter === 'published'">Showing published chapters — click <strong>Gemini check</strong> to verify answers with Gemini paste review.</template>
                         <template v-else>Click a count above to filter. Submitted opens review &amp; publish.</template>
                     </p>
 
@@ -510,6 +510,7 @@ watch(
                                     <th class="px-3 py-2">Type</th>
                                     <th class="px-3 py-2">Status</th>
                                     <th class="px-3 py-2">Questions</th>
+                                    <th class="px-3 py-2">Gemini check</th>
                                     <th class="px-3 py-2">Rate</th>
                                     <th class="px-3 py-2"></th>
                                 </tr>
@@ -517,7 +518,7 @@ watch(
                             <tbody class="divide-y divide-slate-100">
                                 <template v-for="group in groupedDrillChapters" :key="group.key">
                                     <tr class="bg-slate-100">
-                                        <td colspan="11" class="px-3 py-1.5 text-xs font-semibold text-slate-800">
+                                        <td colspan="12" class="px-3 py-1.5 text-xs font-semibold text-slate-800">
                                             <span class="rounded bg-indigo-100 px-1.5 py-0.5 font-bold text-indigo-900">{{ group.board }}</span>
                                             <span class="mx-2 text-slate-400">·</span>
                                             <span>{{ group.book }}</span>
@@ -553,6 +554,17 @@ watch(
                                             </span>
                                         </td>
                                         <td class="px-3 py-2">{{ row.question_count || '—' }}</td>
+                                        <td class="px-3 py-2">
+                                            <template v-if="row.gemini_progress?.can_gemini">
+                                                <span
+                                                    class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold"
+                                                    :class="row.gemini_progress.pending === 0 ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'"
+                                                >
+                                                    {{ row.gemini_progress.verified }}/{{ row.gemini_progress.total }}
+                                                </span>
+                                            </template>
+                                            <span v-else class="text-slate-400">—</span>
+                                        </td>
                                         <td class="px-3 py-2">{{ row.rate_description || formatInr(row.agreed_amount_inr || row.offered_amount_inr) }}</td>
                                         <td class="px-3 py-2 text-right">
                                             <Link
@@ -560,7 +572,7 @@ watch(
                                                 class="font-medium hover:underline"
                                                 :class="row.can_review_and_publish ? 'text-violet-700' : 'text-indigo-600'"
                                             >
-                                                {{ row.can_review_and_publish ? 'Review & publish' : 'Open' }}
+                                                {{ row.can_review_and_publish ? 'Review & publish' : (row.can_gemini_verify ? 'Gemini check' : 'Open') }}
                                             </Link>
                                             <Link
                                                 v-if="row.can_reassign"
@@ -573,7 +585,7 @@ watch(
                                     </tr>
                                 </template>
                                 <tr v-if="!filteredDrillChapters.length">
-                                    <td colspan="11" class="px-3 py-6 text-center text-slate-500">
+                                    <td colspan="12" class="px-3 py-6 text-center text-slate-500">
                                         No chapters in this bucket.
                                     </td>
                                 </tr>
