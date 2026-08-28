@@ -77,7 +77,7 @@ class ContentTaskController extends Controller
                 'summary' => $verification['summary'],
                 'gemini_prompt' => $this->geminiPasteService->buildPrompt(
                     collect($verification['questions'])
-                        ->filter(fn (array $row) => ! ($row['is_verified'] ?? false))
+                        ->filter(fn (array $row) => ! $this->verificationService->isGeminiDoneRow($row))
                         ->values()
                         ->all(),
                     $this->geminiPasteService->chapterLabel($contentTask),

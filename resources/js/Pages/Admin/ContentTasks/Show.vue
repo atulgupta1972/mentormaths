@@ -471,7 +471,7 @@ const formatDuration = (seconds) => {
                         <div>
                             <p class="text-sm font-semibold text-slate-900">Gemini verification progress</p>
                             <p class="mt-1 text-sm text-slate-600">
-                                Class → chapter → sets below. Work through each set with Gemini paste review.
+                                Counts only questions Gemini marked <strong>Correct</strong> — not the old upload review ticks.
                             </p>
                         </div>
                         <p
@@ -479,7 +479,7 @@ const formatDuration = (seconds) => {
                             class="text-lg font-bold"
                             :class="verificationProgress.pending === 0 ? 'text-emerald-700' : 'text-indigo-800'"
                         >
-                            {{ verificationProgress.verified }}/{{ verificationProgress.total }} verified
+                            {{ verificationProgress.verified }}/{{ verificationProgress.total }} Gemini verified
                             <span class="text-sm font-medium text-slate-500">
                                 ({{ verificationProgress.pending }} pending)
                             </span>

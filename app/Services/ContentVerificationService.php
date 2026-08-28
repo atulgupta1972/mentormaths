@@ -705,14 +705,10 @@ class ContentVerificationService
         foreach ($questionIds as $questionId) {
             $check = $checks->get($questionId);
 
-            if (! $check || ! $check->isComplete()) {
-                continue;
-            }
-
-            if ($check->skipped) {
-                $skipped++;
-            } else {
+            if ($this->isGeminiApproved($check)) {
                 $verified++;
+            } elseif ($this->isGeminiSkipped($check)) {
+                $skipped++;
             }
         }
 
@@ -755,7 +751,7 @@ class ContentVerificationService
             foreach ($sliceIds as $questionId) {
                 $check = $checks->get($questionId);
 
-                if ($check && $check->isComplete() && ! $check->skipped) {
+                if ($this->isGeminiApproved($check)) {
                     $setVerified++;
                 }
             }
@@ -772,6 +768,29 @@ class ContentVerificationService
         }
 
         return $rows;
+    }
+
+    public function isGeminiApproved(?ContentVerificationCheck $check): bool
+    {
+        return $check
+            && $check->ai_verdict === ContentAiVerificationService::VERDICT_APPROVE;
+    }
+
+    public function isGeminiSkipped(?ContentVerificationCheck $check): bool
+    {
+        return $check
+            && $check->ai_verdict === ContentAiVerificationService::VERDICT_SKIP;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    public function isGeminiDoneRow(array $row): bool
+    {
+        return in_array($row['ai_verdict'] ?? null, [
+            ContentAiVerificationService::VERDICT_APPROVE,
+            ContentAiVerificationService::VERDICT_SKIP,
+        ], true);
     }
 
     private function questionForRun(ContentVerificationRun $run, int $questionId): Question

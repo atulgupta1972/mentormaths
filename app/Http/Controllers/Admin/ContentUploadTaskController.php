@@ -1175,7 +1175,7 @@ class ContentUploadTaskController extends Controller
         $setPlan = is_array($chapter?->mcq_set_plan) ? $chapter->mcq_set_plan : [];
 
         $pendingQuestions = collect($verification['questions'])
-            ->filter(fn (array $row) => ! ($row['is_verified'] ?? false))
+            ->filter(fn (array $row) => ! $this->verificationService->isGeminiDoneRow($row))
             ->values()
             ->all();
 

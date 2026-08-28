@@ -156,7 +156,7 @@ class GeminiPasteVerificationService
     ): array {
         $payload = $this->verification->forTask($task, $user);
         $pending = collect($payload['questions'])
-            ->filter(fn (array $row) => ! ($row['is_verified'] ?? false))
+            ->filter(fn (array $row) => ! $this->verification->isGeminiDoneRow($row))
             ->values();
 
         if ($pending->isEmpty()) {

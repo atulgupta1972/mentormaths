@@ -433,7 +433,7 @@ watch(
                     <p class="mt-3 text-xs text-slate-500">
                         <template v-if="drillFilter === 'submitted'">Showing submitted chapters — open one to review questions and publish.</template>
                         <template v-else-if="drillFilter === 'under_review'">Showing chapters still under review (not yet submitted).</template>
-                        <template v-else-if="drillFilter === 'published'">Showing published chapters — click <strong>Gemini check</strong> to verify answers with Gemini paste review.</template>
+                        <template v-else-if="drillFilter === 'published'">Showing published chapters — <strong>Gemini check</strong> counts only Gemini paste review (0/N until you run it).</template>
                         <template v-else>Click a count above to filter. Submitted opens review &amp; publish.</template>
                     </p>
 

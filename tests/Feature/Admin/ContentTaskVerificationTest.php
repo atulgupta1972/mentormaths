@@ -699,4 +699,45 @@ TEXT;
                 ->exists()
         );
     }
+
+    public function test_gemini_progress_counts_only_gemini_approve_not_upload_ticks(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'published_at' => now(),
+        ]);
+
+        $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('verification.progress.verified', 0)
+                ->where('verification.progress.pending', 1));
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $admin->id)
+            ->value('id');
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.verification-batch', $task), [
+                'run_id' => $runId,
+                'question_ids' => [$questionId],
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('verification.progress.verified', 0)
+                ->where('verification.progress.pending', 1));
+    }
 }
