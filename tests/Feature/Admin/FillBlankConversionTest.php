@@ -317,6 +317,92 @@ class FillBlankConversionTest extends TestCase
         $this->assertNull($chapter->extraction_items[0]['fill_blank_checked_at'] ?? null);
     }
 
+    public function test_gemini_preview_and_apply_splits_convertible_and_mcq_only_rows(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash',
+            'code' => 'GP',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $chapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 2,
+            'title' => 'Puzzles',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+            'extraction_items' => [
+                [
+                    'question_text' => 'What is 40 + 5?',
+                    'correct_answer' => '45',
+                    'label' => 'Sum',
+                ],
+                [
+                    'question_text' => 'Find two numbers whose sum is 25 and difference is 11.',
+                    'correct_answer' => '18 and 7',
+                    'label' => 'Word puzzle',
+                ],
+                [
+                    'question_text' => 'Shaded part as fraction?',
+                    'correct_answer' => '1 1/2',
+                    'label' => 'Mixed',
+                ],
+            ],
+        ]);
+
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $task = ContentUploadTask::create([
+            'textbook_chapter_id' => $chapter->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_FILL_BLANK_CONVERSION,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 30,
+            'agreed_amount_inr' => 30,
+            'agreed_at' => now(),
+        ]);
+
+        $json = json_encode([
+            'questions' => [[
+                'source_index' => 1,
+                'question' => 'What is 40 + 5? The answer is ____.',
+                'answer_format' => 'integer',
+                'correct_answer' => '45',
+                'explanation' => '40 + 5 = 45.',
+                'method_hint' => 'Add.',
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.convert-gemini-preview', $task), ['json' => $json])
+            ->assertRedirect()
+            ->assertSessionHas('conversion_gemini_preview.convertible_count', 1)
+            ->assertSessionHas('conversion_gemini_preview.not_possible_count', 2);
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.convert-gemini-apply', $task), ['json' => $json])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $chapter->refresh();
+        $this->assertTrue((bool) ($chapter->extraction_items[0]['fill_blank_gemini_ready'] ?? false));
+        $this->assertNotNull($chapter->extraction_items[0]['fill_blank_checked_at'] ?? null);
+        $this->assertTrue((bool) ($chapter->extraction_items[1]['fill_blank_skipped'] ?? false));
+        $this->assertTrue((bool) ($chapter->extraction_items[2]['fill_blank_skipped'] ?? false));
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.submit-for-publish', $task))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+    }
+
     /**
      * @return array{0: GradeLevel, 1: SyllabusChapter, 2: User}
      */

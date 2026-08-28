@@ -45,9 +45,11 @@ Input:
 - Keep source_index matching the MCQ row (1..{$count}). You may SKIP a row (omit it) when it must stay MCQ-only.
 
 Answer rule (strict):
-- "correct_answer" MUST be a number or a fraction only.
-  Allowed examples: "42", "-7", "3.5", "13579", "3/4", "2/3", "1 1/2"
-- NEVER use English words as the blank answer (no "thirteen", "odd", "even", "true", "false", "greater than", option letters, or sentences).
+- "correct_answer" MUST be a whole number, decimal, or a simple proper/improper fraction only.
+  Allowed examples: "42", "-7", "3.5", "13579", "3/4", "2/3"
+- NEVER use English words (no "thirteen", "odd", "even", "true", "false", "greater than", option letters, or sentences).
+- NEVER use mixed fractions (no "1 1/2", "2 3/4") — SKIP those rows; they stay MCQ only.
+- NEVER use true/false or yes/no answers — SKIP those rows.
 - Allowed answer_format values ONLY: "integer", "decimal", "fraction" (never "text").
 
 Conversion rules:
@@ -56,12 +58,13 @@ Conversion rules:
    - whole number → "integer" (store 13579 not "thirteen thousand five hundred seventy-nine"; commas in input are fine)
    - decimal with a required form → "decimal" plus decimal_places (e.g. 2 for 2.50)
    - fraction → "fraction" and store like 3/4 (equivalent 6/8 is accepted when students answer)
-3. If the MCQ answer is words / a statement / an option letter, you MUST rewrite the question completely so the blank has a numeric or fraction answer that still tests the same idea. Example: instead of "The number is ____." → "odd", write "Is 15 odd or even? Write 1 for odd and 0 for even. The answer is ____." with correct_answer "1" — or invent a better equivalent sum. Prefer a real calculation when possible.
-4. SKIP (omit the row) only when you cannot create a sensible numeric/fraction blank for that MCQ (e.g. pure "which statement is true" with no numeric rewrite). Those stay MCQ only.
+3. If the MCQ answer is words / true-false / a mixed fraction / an option letter, SKIP the row (omit it from JSON). Those questions stay MCQ only in the same test set.
+4. If the MCQ answer is a simple whole number or fraction like 3/4, convert directly — verify the blank answer matches the MCQ key.
 5. Algebra: do not ask for a full expansion in one blank. Pick one numeric blank (e.g. a coefficient) by rewriting, or skip.
 6. Preserve topic names, tables, and diagram needs from the source MCQ when still relevant after rewrite.
 7. Explanation must end with the same value as correct_answer.
 8. Do NOT include options arrays.
+9. Return ONLY rows you can convert. Omitted rows = MCQ-only in the published set.
 
 After publish, book content is three matching parts: MCQ {$codes['mcq']} / {$codes['mcq']}2…, fill-blank {$codes['fill_blank']}1 / {$codes['fill_blank']}2…, written {$codes['written']}1 / {$codes['written']}2….
 

@@ -1,4 +1,5 @@
 <script setup>
+import GeminiFillBlankConversionPanel from '@/Components/GeminiFillBlankConversionPanel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { safeRoute } from '@/utils/routes';
@@ -10,6 +11,7 @@ const props = defineProps({
     rows: { type: Array, default: () => [] },
     progress: { type: Object, default: () => ({ total: 0, included: 0, checked: 0, skipped: 0 }) },
     formats: { type: Array, default: () => [] },
+    gemini: { type: Object, default: null },
     activeSeconds: { type: Number, default: 0 },
 });
 
@@ -167,13 +169,19 @@ const deleteAllNonNumeric = () => {
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                    Blank answers must be <strong>numbers or fractions</strong> only (e.g. 42, 3.5, 3/4) — not English words.
-                    If a question’s answer is not a number, use <strong>Delete from conversion</strong> (MCQ stays).
-                    For the rest, edit the blank, then
-                    <strong>Check as a student</strong> with the key hidden. After Check, the stored answer is shown so you can confirm —
-                    if the MCQ key looks wrong, edit the fill-in-blank answer and Check again.
-                    Admin publishes fill-in-blank and written after you submit.
+                    Use <strong>Gemini bulk conversion</strong> below for the whole set (recommended).
+                    Gemini converts whole numbers and simple fractions; words, true/false, and mixed fractions stay MCQ in the same test.
+                    You can still edit individual rows or use manual Check as a student before submit.
                 </div>
+
+                <GeminiFillBlankConversionPanel
+                    v-if="gemini && !task.awaiting_agreement"
+                    :gemini="gemini"
+                    :task-id="task.id"
+                    :disabled="!canEdit"
+                    :preview-route="route('content.tasks.convert-gemini-preview', task.id)"
+                    :apply-route="route('content.tasks.convert-gemini-apply', task.id)"
+                />
 
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <p class="text-sm text-slate-600">

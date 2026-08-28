@@ -112,6 +112,15 @@ class ContentUploaderChapterLibraryService
                 'correct_answer' => $item['correct_answer'] ?? null,
                 'explanation' => $item['explanation'] ?? null,
                 'diagram_preview_url' => $item['diagram_preview_url'] ?? null,
+                'fill_blank' => filled($item['fill_blank_question_text'] ?? null) && ! ($item['fill_blank_skipped'] ?? false)
+                    ? [
+                        'question_text' => $item['fill_blank_question_text'] ?? '',
+                        'correct_answer' => $item['fill_blank_correct_answer'] ?? '',
+                        'answer_format' => $item['fill_blank_answer_format'] ?? null,
+                        'checked' => filled($item['fill_blank_checked_at'] ?? null),
+                        'skipped' => (bool) ($item['fill_blank_skipped'] ?? false),
+                    ]
+                    : null,
                 'delete_request' => $pending ? [
                     'id' => $pending->id,
                     'status' => $pending->status,

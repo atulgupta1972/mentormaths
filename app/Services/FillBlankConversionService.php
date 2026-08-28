@@ -123,6 +123,10 @@ class FillBlankConversionService
             return false;
         }
 
+        if ($this->isMixedFraction($value)) {
+            return true;
+        }
+
         $compact = str_replace(',', '', $value);
 
         if (preg_match('/^-?\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)?$/', $compact)) {
@@ -134,6 +138,134 @@ class FillBlankConversionService
         }
 
         return (bool) preg_match('/[a-zA-Z]/', $value);
+    }
+
+    public function isMixedFraction(?string $answer): bool
+    {
+        return (bool) preg_match('/^-?\d+\s+\d+\s*\/\s*\d+$/', trim((string) $answer));
+    }
+
+    public function isTrueFalseAnswer(?string $answer): bool
+    {
+        $value = strtolower(trim((string) $answer));
+
+        return in_array($value, ['true', 'false', 'yes', 'no', 't', 'f'], true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    public function notConvertibleReason(array $item): string
+    {
+        $answer = (string) ($item['correct_answer'] ?? '');
+
+        if ($this->isTrueFalseAnswer($answer)) {
+            return 'True / false or yes / no answer — stays MCQ';
+        }
+
+        if ($this->isMixedFraction($answer)) {
+            return 'Mixed fraction answer — stays MCQ';
+        }
+
+        if ($this->looksLikeWordAnswer($answer)) {
+            return 'Word or non-numeric MCQ answer — stays MCQ';
+        }
+
+        return 'Not converted — stays MCQ in this set';
+    }
+
+    /**
+     * Apply Gemini fill-blank JSON: convert matching rows, skip the rest as MCQ-only, mark converted as checked.
+     *
+     * @return array{convertible_count: int, not_possible_count: int, checked_count: int, total: int}
+     */
+    public function applyGeminiJson(ContentUploadTask $task, string $json): array
+    {
+        $this->assertConversionTask($task);
+        $this->assertWorkable($task);
+
+        $chapter = $task->textbookChapter;
+        $items = array_values(array_filter(
+            is_array($chapter->extraction_items) ? $chapter->extraction_items : [],
+            fn ($item) => is_array($item),
+        ));
+
+        if ($items === []) {
+            throw new InvalidArgumentException('Import MCQs first.');
+        }
+
+        $rows = app(FillBlankImportService::class)->parseJson($json);
+        $convertedIndexes = [];
+
+        foreach ($rows as $row) {
+            $sourceIndex = (int) ($row['source_index'] ?? 0);
+            $itemIndex = $sourceIndex - 1;
+
+            if ($itemIndex < 0 || $itemIndex >= count($items)) {
+                throw new InvalidArgumentException("Fill-blank row source_index {$sourceIndex} has no matching MCQ.");
+            }
+
+            $questionText = trim((string) ($row['question_text'] ?? ''));
+
+            if (! str_contains($questionText, '____')) {
+                throw new InvalidArgumentException("Question {$sourceIndex} must contain ____ for the blank.");
+            }
+
+            $answer = trim((string) ($row['correct_answer'] ?? ''));
+
+            if ($this->looksLikeWordAnswer($answer) || $this->isMixedFraction($answer) || $this->isTrueFalseAnswer($answer)) {
+                throw new InvalidArgumentException("Question {$sourceIndex} has a non-convertible answer ({$answer}). Omit it from Gemini JSON.");
+            }
+
+            $mismatch = app(\App\Support\FillBlankAnswerConsistency::class)->mismatch(
+                $answer,
+                $row['explanation'] ?? null,
+                $row['answer_format'],
+            );
+
+            if ($mismatch !== null) {
+                throw new InvalidArgumentException("Question {$sourceIndex}: {$mismatch['message']}");
+            }
+
+            $format = (string) ($row['answer_format'] ?? QuestionBlankAnswer::FORMAT_INTEGER);
+            $places = $row['decimal_places'] ?? null;
+
+            $items[$itemIndex]['fill_blank_question_text'] = $questionText;
+            $items[$itemIndex]['fill_blank_correct_answer'] = $answer;
+            $items[$itemIndex]['fill_blank_answer_format'] = $format;
+            $items[$itemIndex]['fill_blank_decimal_places'] = is_numeric($places) ? (int) $places : null;
+            $items[$itemIndex]['fill_blank_method_hint'] = $row['method_hint'] ?? null;
+            $items[$itemIndex]['fill_blank_explanation'] = $row['explanation'] ?? null;
+            $items[$itemIndex]['include_in_fill_blank'] = true;
+            $items[$itemIndex]['include_in_written'] = true;
+            $items[$itemIndex]['fill_blank_skipped'] = false;
+            $items[$itemIndex]['fill_blank_imported_at'] = now()->toIso8601String();
+            $items[$itemIndex]['fill_blank_gemini_ready'] = true;
+            $items[$itemIndex]['fill_blank_checked_at'] = now()->toIso8601String();
+            $items[$itemIndex]['fill_blank_checked_hash'] = $this->checkHash($questionText, $format, $answer, $places);
+            $convertedIndexes[] = $itemIndex;
+        }
+
+        if ($convertedIndexes === []) {
+            throw new InvalidArgumentException('No convertible questions found in Gemini JSON.');
+        }
+
+        foreach ($items as $index => $item) {
+            if (in_array($index, $convertedIndexes, true)) {
+                continue;
+            }
+
+            $items[$index] = $this->strippedFillBlankFields($item);
+        }
+
+        $chapter->update(['extraction_items' => array_values($items)]);
+
+        return [
+            'convertible_count' => count($convertedIndexes),
+            'not_possible_count' => count($items) - count($convertedIndexes),
+            'checked_count' => count($convertedIndexes),
+            'total' => count($items),
+        ];
     }
 
     /**

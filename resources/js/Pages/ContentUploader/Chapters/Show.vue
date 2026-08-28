@@ -261,6 +261,28 @@ const submitRequest = () => {
                             {{ item.explanation }}
                         </p>
 
+                        <div
+                            v-if="item.fill_blank"
+                            class="mt-4 rounded-lg border border-violet-200 bg-violet-50/60 p-3"
+                        >
+                            <p class="text-xs font-semibold uppercase tracking-wide text-violet-800">
+                                Fill-in-blank
+                                <span
+                                    v-if="item.fill_blank.checked"
+                                    class="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800"
+                                >
+                                    Ready
+                                </span>
+                            </p>
+                            <p class="mt-1 whitespace-pre-wrap text-sm font-medium text-violet-950">
+                                {{ item.fill_blank.question_text }}
+                            </p>
+                            <p class="mt-1 text-xs text-violet-900">
+                                Answer: <strong>{{ item.fill_blank.correct_answer }}</strong>
+                                <span v-if="item.fill_blank.answer_format"> ({{ item.fill_blank.answer_format }})</span>
+                            </p>
+                        </div>
+
                         <form
                             v-if="requestIndex === item.index"
                             class="mt-3 space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3"

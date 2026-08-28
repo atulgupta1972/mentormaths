@@ -14,6 +14,7 @@ use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
 use App\Services\FillBlankConversionService;
+use App\Services\GeminiFillBlankConversionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -30,6 +31,7 @@ class ContentTaskController extends Controller
         private ContentWorkSessionService $sessionService,
         private ContentUploaderDashboardService $uploaderDashboard,
         private FillBlankConversionService $fillBlankConversion,
+        private GeminiFillBlankConversionService $geminiFillBlank,
     ) {}
 
     public function index(Request $request): Response
@@ -473,6 +475,13 @@ class ContentTaskController extends Controller
         $included = collect($rows)->where('skipped', false);
         $checked = $included->where('checked', true)->count();
 
+        $gemini = null;
+        try {
+            $gemini = $this->geminiFillBlank->payload($contentTask->textbookChapter);
+        } catch (\InvalidArgumentException) {
+            // Chapter may not have MCQs yet.
+        }
+
         return Inertia::render('ContentUploader/Tasks/FillBlankConvert', [
             'task' => $this->uploaderDashboard->serializeTask($contentTask) + [
                 'admin_notes' => $contentTask->admin_notes,
@@ -487,6 +496,7 @@ class ContentTaskController extends Controller
                 'checked' => $checked,
                 'skipped' => collect($rows)->where('skipped', true)->count(),
             ],
+            'gemini' => $gemini,
             'formats' => collect([
                 QuestionBlankAnswer::FORMAT_INTEGER,
                 QuestionBlankAnswer::FORMAT_DECIMAL,
@@ -578,6 +588,48 @@ class ContentTaskController extends Controller
         return back()->with('success', $cleared === 1
             ? 'Deleted from conversion — stays MCQ only (answer was not a number).'
             : "Deleted {$cleared} questions from conversion (MCQs kept).");
+    }
+
+    public function previewGeminiConversion(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+        abort_unless($contentTask->isFillBlankConversion(), 404);
+
+        $validated = $request->validate([
+            'json' => ['required', 'string', 'min:20'],
+        ]);
+
+        try {
+            $preview = $this->geminiFillBlank->preview($contentTask->textbookChapter, $validated['json']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()
+            ->with('conversion_gemini_preview', $preview)
+            ->with('conversion_gemini_json', $validated['json']);
+    }
+
+    public function applyGeminiConversion(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+        abort_unless($contentTask->isFillBlankConversion(), 404);
+
+        $validated = $request->validate([
+            'json' => ['required', 'string', 'min:20'],
+        ]);
+
+        try {
+            $result = $this->geminiFillBlank->apply($contentTask, $validated['json']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', sprintf(
+            'Applied Gemini conversion: %d fill-in-blank ready, %d stay MCQ-only in this set.',
+            $result['convertible_count'],
+            $result['not_possible_count'],
+        ));
     }
 
     /**
