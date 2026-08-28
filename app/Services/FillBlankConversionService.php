@@ -184,7 +184,14 @@ class FillBlankConversionService
         $this->assertConversionTask($task);
         $this->assertWorkable($task);
 
-        $chapter = $task->textbookChapter;
+        return $this->applyGeminiJsonToChapter($task->textbookChapter, $json);
+    }
+
+    /**
+     * @return array{convertible_count: int, not_possible_count: int, checked_count: int, total: int}
+     */
+    public function applyGeminiJsonToChapter(TextbookChapter $chapter, string $json): array
+    {
         $items = array_values(array_filter(
             is_array($chapter->extraction_items) ? $chapter->extraction_items : [],
             fn ($item) => is_array($item),

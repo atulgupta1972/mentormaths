@@ -1,14 +1,52 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
-defineProps({
+const props = defineProps({
     chapters: { type: Array, default: () => [] },
+    books: { type: Array, default: () => [] },
+    filters: { type: Object, default: () => ({ book_id: null }) },
     gradeLevel: { type: Object, default: null },
 });
 
 const page = usePage();
+
+const selectedBookId = computed(() => props.filters?.book_id ?? '');
+
+const groupedChapters = computed(() => {
+    const groups = [];
+    let current = null;
+
+    for (const row of props.chapters) {
+        if (! current || current.textbook_id !== row.textbook_id) {
+            current = {
+                textbook_id: row.textbook_id,
+                book_name: row.book_name,
+                book_code: row.book_code,
+                grade_name: row.grade_name,
+                rows: [],
+            };
+            groups.push(current);
+        }
+
+        current.rows.push(row);
+    }
+
+    return groups;
+});
+
+const setBookFilter = (event) => {
+    const bookId = event.target.value || undefined;
+
+    router.get(route('admin.textbooks.index'), {
+        book_id: bookId,
+    }, {
+        preserveState: true,
+        replace: true,
+    });
+};
 </script>
 
 <template>
@@ -38,8 +76,30 @@ const page = usePage();
                     {{ page.props.flash.error }}
                 </div>
 
-                <div v-if="gradeLevel" class="mb-4 text-sm text-gray-600">
-                    Filtered for <strong>{{ gradeLevel.name }}</strong> (change class from the top bar)
+                <div class="mb-4 flex flex-wrap items-end gap-4">
+                    <div v-if="gradeLevel" class="text-sm text-gray-600">
+                        Class: <strong>{{ gradeLevel.name }}</strong> (change from the top bar)
+                    </div>
+                    <div v-if="books.length" class="min-w-[14rem]">
+                        <label for="book_filter" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Book
+                        </label>
+                        <select
+                            id="book_filter"
+                            :value="selectedBookId"
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            @change="setBookFilter"
+                        >
+                            <option value="">All books</option>
+                            <option
+                                v-for="book in books"
+                                :key="book.id"
+                                :value="book.id"
+                            >
+                                {{ book.label }}
+                            </option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
@@ -53,47 +113,71 @@ const page = usePage();
                                 <th class="px-4 py-3 text-right font-semibold text-gray-600">Action</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <tr v-for="row in chapters" :key="row.id">
-                                <td class="px-4 py-3">
-                                    <div class="font-medium text-gray-900">{{ row.book_name }}</div>
-                                    <div class="text-xs text-gray-500">{{ row.book_code }} · {{ row.grade_name }}</div>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <div class="font-medium">Ch {{ row.chapter_number }} — {{ row.title }}</div>
-                                    <div class="text-xs text-gray-500">{{ row.items_count }} question(s) extracted</div>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <span
-                                        class="rounded-full px-2 py-1 text-xs font-medium"
-                                        :class="{
-                                            'bg-emerald-100 text-emerald-800': row.status === 'published',
-                                            'bg-amber-100 text-amber-900': row.status === 'review',
-                                            'bg-sky-100 text-sky-800': row.status === 'extracting',
-                                            'bg-rose-100 text-rose-800': row.status === 'failed',
-                                            'bg-slate-100 text-slate-700': row.status === 'draft',
-                                        }"
-                                    >
-                                        {{ row.status_label }}
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3 text-xs text-gray-600">
-                                    <div v-if="row.mcq_set_codes?.length">
-                                        MCQ: {{ row.mcq_set_codes.join(', ') }}
-                                    </div>
-                                    <div v-else-if="row.mcq_set_code">MCQ: {{ row.mcq_set_code }}</div>
-                                    <div v-if="row.written_set_code">Written: {{ row.written_set_code }}</div>
-                                    <span v-if="!row.mcq_set_code && !row.mcq_set_codes?.length && !row.written_set_code">—</span>
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    <Link :href="route('admin.textbooks.show', row.id)" class="text-indigo-600 hover:underline">
-                                        Open
-                                    </Link>
-                                </td>
-                            </tr>
-                            <tr v-if="!chapters.length">
+                        <template v-for="group in groupedChapters" :key="`book-${group.textbook_id}`">
+                            <tbody v-if="!selectedBookId" class="divide-y divide-gray-100 border-t-2 border-indigo-100">
+                                <tr class="bg-indigo-50/70">
+                                    <td colspan="5" class="px-4 py-2 text-xs font-bold uppercase tracking-wide text-indigo-900">
+                                        {{ group.book_name }} · {{ group.book_code }} · {{ group.grade_name }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody class="divide-y divide-gray-100">
+                                <tr v-for="row in group.rows" :key="row.id">
+                                    <td class="px-4 py-3">
+                                        <div class="font-medium text-gray-900">{{ row.book_name }}</div>
+                                        <div class="text-xs text-gray-500">{{ row.book_code }} · {{ row.grade_name }}</div>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <div class="font-medium">Ch {{ row.chapter_number }} — {{ row.title }}</div>
+                                        <div class="text-xs text-gray-500">{{ row.items_count }} question(s) extracted</div>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <span
+                                            class="rounded-full px-2 py-1 text-xs font-medium"
+                                            :class="{
+                                                'bg-emerald-100 text-emerald-800': row.status === 'published',
+                                                'bg-amber-100 text-amber-900': row.status === 'review',
+                                                'bg-sky-100 text-sky-800': row.status === 'extracting',
+                                                'bg-rose-100 text-rose-800': row.status === 'failed',
+                                                'bg-slate-100 text-slate-700': row.status === 'draft',
+                                            }"
+                                        >
+                                            {{ row.status_label }}
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-3 text-xs text-gray-600">
+                                        <div v-if="row.mcq_set_codes?.length">
+                                            MCQ: {{ row.mcq_set_codes.join(', ') }}
+                                        </div>
+                                        <div v-else-if="row.mcq_set_code">MCQ: {{ row.mcq_set_code }}</div>
+                                        <div v-if="row.fill_blank_set_code">Fill-blank: {{ row.fill_blank_set_code }}</div>
+                                        <div v-if="row.written_set_code">Written: {{ row.written_set_code }}</div>
+                                        <div v-if="row.fill_blank_ready_count && !row.fill_blank_set_code" class="text-violet-700">
+                                            {{ row.fill_blank_ready_count }} fill-blank ready (not published)
+                                        </div>
+                                        <span v-if="!row.mcq_set_code && !row.mcq_set_codes?.length && !row.written_set_code && !row.fill_blank_set_code && !row.fill_blank_ready_count">—</span>
+                                    </td>
+                                    <td class="px-4 py-3 text-right">
+                                        <div class="flex flex-col items-end gap-1">
+                                            <Link :href="route('admin.textbooks.show', row.id)" class="text-indigo-600 hover:underline">
+                                                Open
+                                            </Link>
+                                            <Link
+                                                v-if="row.can_convert_fill_blank"
+                                                :href="route('admin.textbooks.convert-gemini', row.id)"
+                                                class="text-xs font-semibold text-violet-700 hover:underline"
+                                            >
+                                                Gemini fill-blank
+                                            </Link>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </template>
+                        <tbody v-if="!chapters.length">
+                            <tr>
                                 <td colspan="5" class="px-4 py-8 text-center text-gray-500">
-                                    No textbook chapters yet. Upload Class 9 Chapter 8 to start.
+                                    No textbook chapters yet. Upload a chapter PDF to start.
                                 </td>
                             </tr>
                         </tbody>

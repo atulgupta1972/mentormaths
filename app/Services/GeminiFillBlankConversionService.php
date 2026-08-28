@@ -104,4 +104,12 @@ class GeminiFillBlankConversionService
     {
         return $this->conversion->applyGeminiJson($task, $json);
     }
+
+    /**
+     * @return array{convertible_count: int, not_possible_count: int, checked_count: int, total: int}
+     */
+    public function applyForChapter(TextbookChapter $chapter, string $json): array
+    {
+        return $this->conversion->applyGeminiJsonToChapter($chapter, $json);
+    }
 }

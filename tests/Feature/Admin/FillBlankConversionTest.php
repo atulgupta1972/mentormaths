@@ -403,6 +403,107 @@ class FillBlankConversionTest extends TestCase
             ->assertSessionHas('success');
     }
 
+    public function test_admin_textbook_index_sorts_by_book_then_chapter_and_links_gemini_convert(): void
+    {
+        $this->withoutVite();
+
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $bookA = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Alpha Book',
+            'code' => 'AB',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $bookB = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Beta Book',
+            'code' => 'BB',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $published = TextbookChapter::create([
+            'textbook_id' => $bookB->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 3,
+            'title' => 'Third',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+            'extraction_items' => [
+                ['question_text' => '2 + 2?', 'correct_answer' => '4'],
+            ],
+        ]);
+        TextbookChapter::create([
+            'textbook_id' => $bookA->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 1,
+            'title' => 'First',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        TextbookChapter::create([
+            'textbook_id' => $bookB->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 2,
+            'title' => 'Second',
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.textbooks.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Textbooks/Index')
+                ->has('books', 2)
+                ->where('chapters.0.book_name', 'Alpha Book')
+                ->where('chapters.0.chapter_number', 1)
+                ->where('chapters.1.book_name', 'Beta Book')
+                ->where('chapters.1.chapter_number', 2)
+                ->where('chapters.2.chapter_number', 3)
+                ->where('chapters.2.can_convert_fill_blank', true),
+            );
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.textbooks.index', ['book_id' => $bookB->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('chapters', 2)
+                ->where('chapters.0.chapter_number', 2)
+                ->where('chapters.1.chapter_number', 3),
+            );
+
+        $this->actingAs($admin)
+            ->get(route('admin.textbooks.convert-gemini', $published))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Textbooks/ConvertGemini')
+                ->has('gemini.prompt'),
+            );
+
+        $json = json_encode([
+            'questions' => [[
+                'source_index' => 1,
+                'question' => '2 + 2 = ____.',
+                'answer_format' => 'integer',
+                'correct_answer' => '4',
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->actingAs($admin)
+            ->from(route('admin.textbooks.convert-gemini', $published))
+            ->post(route('admin.textbooks.convert-gemini-apply', $published), ['json' => $json])
+            ->assertRedirect(route('admin.textbooks.convert-gemini', $published))
+            ->assertSessionHas('success');
+
+        $published->refresh();
+        $this->assertTrue((bool) ($published->extraction_items[0]['fill_blank_gemini_ready'] ?? false));
+    }
+
     /**
      * @return array{0: GradeLevel, 1: SyllabusChapter, 2: User}
      */

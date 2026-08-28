@@ -376,6 +376,9 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/replace-diagram', [TextbookController::class, 'replaceItemDiagram'])->name('textbooks.replace-diagram');
     Route::post('/textbooks/chapters/{textbookChapter}/remove-diagram', [TextbookController::class, 'removeItemDiagram'])->name('textbooks.remove-diagram');
     Route::post('/textbooks/chapters/{textbookChapter}/import-fill-blank', [TextbookController::class, 'importFillBlank'])->name('textbooks.import-fill-blank');
+    Route::get('/textbooks/chapters/{textbookChapter}/convert-gemini', [TextbookController::class, 'convertGemini'])->name('textbooks.convert-gemini');
+    Route::post('/textbooks/chapters/{textbookChapter}/convert-gemini-preview', [TextbookController::class, 'previewGeminiConversion'])->name('textbooks.convert-gemini-preview');
+    Route::post('/textbooks/chapters/{textbookChapter}/convert-gemini-apply', [TextbookController::class, 'applyGeminiConversion'])->name('textbooks.convert-gemini-apply');
     Route::post('/textbooks/chapters/{textbookChapter}/publish-fill-blank-written', [TextbookController::class, 'publishFillBlankAndWritten'])->name('textbooks.publish-fill-blank-written');
     Route::get('/textbooks/chapters/{textbookChapter}/mcq-reference', [TextbookController::class, 'downloadMcqReference'])->name('textbooks.mcq-reference');
     Route::post('/textbooks/chapters/{textbookChapter}/reset-import', [TextbookController::class, 'resetImport'])->name('textbooks.reset-import');

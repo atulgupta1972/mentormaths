@@ -12,6 +12,7 @@ use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
+use App\Services\GeminiFillBlankConversionService;
 use App\Services\SetAssignmentService;
 use App\Services\TextbookChapterBookService;
 use App\Services\TextbookChapterConversionPromptService;
@@ -42,11 +43,26 @@ class TextbookController extends Controller
         private TextbookMcqSetPlanService $setPlanService,
         private SetAssignmentService $assignmentService,
         private TextbookChapterBookService $bookService,
+        private GeminiFillBlankConversionService $geminiFillBlank,
     ) {}
 
     public function index(Request $request): Response
     {
         $gradeLevel = $this->gradeContext->resolve($request);
+        $bookId = $request->integer('book_id') ?: null;
+
+        $books = Textbook::query()
+            ->when($gradeLevel, fn ($q) => $q->where('grade_level_id', $gradeLevel->id))
+            ->orderBy('name')
+            ->get(['id', 'name', 'code'])
+            ->map(fn (Textbook $book) => [
+                'id' => $book->id,
+                'name' => $book->name,
+                'code' => $book->code,
+                'label' => trim($book->name.' ('.$book->code.')'),
+            ])
+            ->values()
+            ->all();
 
         $chapters = TextbookChapter::query()
             ->with([
@@ -54,16 +70,22 @@ class TextbookController extends Controller
                 'textbook.gradeLevel:id,name',
                 'syllabusChapter:id,name,chapter_number',
                 'mcqWorksheet:id,set_code',
+                'fillBlankWorksheet:id,set_code',
                 'writtenWorksheet:id,set_code',
             ])
             ->when($gradeLevel, fn ($q) => $q->whereHas(
                 'textbook',
                 fn ($inner) => $inner->where('grade_level_id', $gradeLevel->id),
             ))
-            ->orderByDesc('id')
+            ->when($bookId, fn ($q) => $q->where('textbook_id', $bookId))
+            ->join('textbooks', 'textbooks.id', '=', 'textbook_chapters.textbook_id')
+            ->orderBy('textbooks.name')
+            ->orderBy('textbook_chapters.chapter_number')
+            ->select('textbook_chapters.*')
             ->get()
             ->map(fn (TextbookChapter $chapter) => [
                 'id' => $chapter->id,
+                'textbook_id' => $chapter->textbook_id,
                 'book_name' => $chapter->textbook?->name,
                 'book_code' => $chapter->textbook?->code,
                 'grade_name' => $chapter->textbook?->gradeLevel?->name,
@@ -74,7 +96,13 @@ class TextbookController extends Controller
                 'items_count' => count($chapter->extraction_items ?? []),
                 'mcq_set_code' => $chapter->mcqWorksheet?->set_code,
                 'mcq_set_codes' => $this->publishedMcqSetCodes($chapter),
+                'fill_blank_set_code' => $chapter->fillBlankWorksheet?->set_code,
                 'written_set_code' => $chapter->writtenWorksheet?->set_code,
+                'fill_blank_ready_count' => $this->fillBlankImportService->fillBlankReadyCount(
+                    is_array($chapter->extraction_items) ? $chapter->extraction_items : [],
+                ),
+                'can_convert_fill_blank' => $chapter->status === TextbookChapter::STATUS_PUBLISHED
+                    && count($chapter->extraction_items ?? []) > 0,
                 'published_at' => $chapter->published_at?->toDateTimeString(),
             ])
             ->values()
@@ -82,6 +110,10 @@ class TextbookController extends Controller
 
         return Inertia::render('Admin/Textbooks/Index', [
             'chapters' => $chapters,
+            'books' => $books,
+            'filters' => [
+                'book_id' => $bookId,
+            ],
             'gradeLevel' => $gradeLevel?->only(['id', 'name']),
         ]);
     }
@@ -764,6 +796,89 @@ class TextbookController extends Controller
 
         return $this->redirectToChapterShow($chapter)
             ->with('success', "Published online fill-blank {$codes['fill_blank']} and written {$codes['written']}. MCQ sets unchanged.");
+    }
+
+    public function convertGemini(TextbookChapter $textbookChapter): Response|RedirectResponse
+    {
+        abort_unless(
+            $textbookChapter->status === TextbookChapter::STATUS_PUBLISHED,
+            404,
+            'Publish MCQs first before fill-in-blank conversion.',
+        );
+        abort_unless(count($textbookChapter->extraction_items ?? []) > 0, 404, 'Import MCQs first.');
+
+        $textbookChapter->load([
+            'textbook.gradeLevel:id,name',
+            'syllabusChapter:id,name,chapter_number',
+        ]);
+
+        try {
+            $gemini = $this->geminiFillBlank->payload($textbookChapter);
+        } catch (\InvalidArgumentException $exception) {
+            return redirect()
+                ->route('admin.textbooks.show', $textbookChapter)
+                ->with('error', $exception->getMessage());
+        }
+
+        $items = is_array($textbookChapter->extraction_items) ? $textbookChapter->extraction_items : [];
+
+        return Inertia::render('Admin/Textbooks/ConvertGemini', [
+            'chapter' => [
+                'id' => $textbookChapter->id,
+                'chapter_number' => $textbookChapter->chapter_number,
+                'title' => $textbookChapter->title,
+                'book_name' => $textbookChapter->textbook?->name,
+                'book_code' => $textbookChapter->textbook?->code,
+                'grade_name' => $textbookChapter->textbook?->gradeLevel?->name,
+                'items_count' => count($items),
+                'fill_blank_ready_count' => $this->fillBlankImportService->fillBlankReadyCount($items),
+                'fill_blank_set_code' => $textbookChapter->fillBlankWorksheet?->set_code
+                    ?? ($gemini['fill_blank_set_code'] ?? null),
+            ],
+            'gemini' => $gemini,
+        ]);
+    }
+
+    public function previewGeminiConversion(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        abort_unless(count($textbookChapter->extraction_items ?? []) > 0, 422, 'Import MCQs first.');
+
+        $validated = $request->validate([
+            'json' => ['required', 'string', 'min:20'],
+        ]);
+
+        try {
+            $preview = $this->geminiFillBlank->preview($textbookChapter, $validated['json']);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()
+            ->with('conversion_gemini_preview', $preview)
+            ->with('conversion_gemini_json', $validated['json']);
+    }
+
+    public function applyGeminiConversion(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        abort_unless(count($textbookChapter->extraction_items ?? []) > 0, 422, 'Import MCQs first.');
+
+        $validated = $request->validate([
+            'json' => ['required', 'string', 'min:20'],
+        ]);
+
+        try {
+            $result = $this->geminiFillBlank->applyForChapter($textbookChapter, $validated['json']);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.textbooks.convert-gemini', $textbookChapter)
+            ->with('success', sprintf(
+                'Applied Gemini conversion: %d fill-in-blank ready, %d stay MCQ-only in this set.',
+                $result['convertible_count'],
+                $result['not_possible_count'],
+            ));
     }
 
     public function downloadMcqReference(TextbookChapter $textbookChapter)

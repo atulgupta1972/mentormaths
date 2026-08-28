@@ -7,7 +7,7 @@ import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     gemini: { type: Object, default: null },
-    taskId: { type: Number, required: true },
+    taskId: { type: Number, default: null },
     disabled: { type: Boolean, default: false },
     previewRoute: { type: String, required: true },
     applyRoute: { type: String, required: true },
