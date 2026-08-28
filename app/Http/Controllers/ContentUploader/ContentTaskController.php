@@ -8,6 +8,7 @@ use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
 use App\Models\QuestionBlankAnswer;
 use App\Services\ContentAiVerificationService;
+use App\Services\GeminiPasteVerificationService;
 use App\Services\ContentUploaderDashboardService;
 use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
@@ -25,6 +26,7 @@ class ContentTaskController extends Controller
         private ContentUploadTaskService $taskService,
         private ContentVerificationService $verificationService,
         private ContentAiVerificationService $aiVerificationService,
+        private GeminiPasteVerificationService $geminiPasteService,
         private ContentWorkSessionService $sessionService,
         private ContentUploaderDashboardService $uploaderDashboard,
         private FillBlankConversionService $fillBlankConversion,
@@ -73,6 +75,13 @@ class ContentTaskController extends Controller
                 'run_id' => $verification['run']->id,
                 'questions' => $verification['questions'],
                 'summary' => $verification['summary'],
+                'gemini_prompt' => $this->geminiPasteService->buildPrompt(
+                    collect($verification['questions'])
+                        ->filter(fn (array $row) => ! ($row['is_verified'] ?? false))
+                        ->values()
+                        ->all(),
+                    $this->geminiPasteService->chapterLabel($contentTask),
+                ),
             ] : null,
             'activeSeconds' => $this->sessionService->totalActiveSeconds($contentTask),
             'textbookChapterUrl' => route('content.textbooks.show', $contentTask->textbook_chapter_id),
@@ -297,6 +306,52 @@ class ContentTaskController extends Controller
         return back()
             ->with('success', $message)
             ->with('ai_review', $result);
+    }
+
+    public function geminiPasteVerification(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'gemini_paste' => ['required', 'string', 'min:20'],
+        ]);
+
+        $run = ContentVerificationRun::query()->findOrFail($validated['run_id']);
+
+        if ($run->content_upload_task_id !== $contentTask->id) {
+            abort(403);
+        }
+
+        try {
+            $result = $this->geminiPasteService->applyPaste(
+                $contentTask,
+                $run,
+                $request->user(),
+                $validated['gemini_paste'],
+            );
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($result['reviewed'] === 0 && $result['unparsed'] === 0) {
+            return back()->with('success', 'Nothing left to review — all questions are already verified or skipped.');
+        }
+
+        $message = sprintf(
+            'Gemini review applied: %d verified, %d skipped, %d need your fix.',
+            $result['approved'],
+            $result['skipped'],
+            $result['needs_attention'],
+        );
+
+        if ($result['unparsed'] > 0) {
+            $message .= sprintf(' %d question(s) were missing from the paste.', $result['unparsed']);
+        }
+
+        return back()
+            ->with('success', $message)
+            ->with('gemini_review', $result);
     }
 
     public function uploadVerificationDiagram(Request $request, ContentUploadTask $contentTask): RedirectResponse

@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\AdminGradeContext;
 use App\Services\ClassAssignmentService;
 use App\Services\ContentAiVerificationService;
+use App\Services\GeminiPasteVerificationService;
 use App\Services\ContentAllocationMatrixService;
 use App\Services\ContentChapterQuestionService;
 use App\Services\ContentDuplicateGuardService;
@@ -39,6 +40,7 @@ class ContentUploadTaskController extends Controller
         private ContentUploadTaskService $taskService,
         private ContentVerificationService $verificationService,
         private ContentAiVerificationService $aiVerificationService,
+        private GeminiPasteVerificationService $geminiPasteService,
         private ContentWorkSessionService $sessionService,
         private AdminGradeContext $gradeContext,
         private ClassAssignmentService $classAssignment,
@@ -717,6 +719,46 @@ class ContentUploadTaskController extends Controller
             ->with('ai_review', $result);
     }
 
+    public function geminiPasteVerification(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'gemini_paste' => ['required', 'string', 'min:20'],
+        ]);
+
+        $run = $this->authorizeVerificationRun($contentTask, (int) $validated['run_id']);
+
+        try {
+            $result = $this->geminiPasteService->applyPaste(
+                $contentTask,
+                $run,
+                $request->user(),
+                $validated['gemini_paste'],
+            );
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($result['reviewed'] === 0 && $result['unparsed'] === 0) {
+            return back()->with('success', 'Nothing left to review — all questions are already verified or skipped.');
+        }
+
+        $message = sprintf(
+            'Gemini review applied: %d verified, %d skipped, %d need your fix.',
+            $result['approved'],
+            $result['skipped'],
+            $result['needs_attention'],
+        );
+
+        if ($result['unparsed'] > 0) {
+            $message .= sprintf(' %d question(s) were missing from the paste.', $result['unparsed']);
+        }
+
+        return back()
+            ->with('success', $message)
+            ->with('gemini_review', $result);
+    }
+
     public function markVerificationBatch(Request $request, ContentUploadTask $contentTask): RedirectResponse
     {
         $validated = $request->validate([
@@ -1118,10 +1160,19 @@ class ContentUploadTaskController extends Controller
         $chapter = $task->textbookChapter;
         $setPlan = is_array($chapter?->mcq_set_plan) ? $chapter->mcq_set_plan : [];
 
+        $pendingQuestions = collect($verification['questions'])
+            ->filter(fn (array $row) => ! ($row['is_verified'] ?? false))
+            ->values()
+            ->all();
+
         return [
             'run_id' => $verification['run']->id,
             'questions' => $verification['questions'],
             'summary' => $verification['summary'],
+            'gemini_prompt' => $this->geminiPasteService->buildPrompt(
+                $pendingQuestions,
+                $this->geminiPasteService->chapterLabel($task),
+            ),
             'set_plan' => collect($setPlan)->values()->map(function (array $row, int $index) {
                 $from = (int) ($row['q_from'] ?? 0);
                 $to = (int) ($row['q_to'] ?? 0);

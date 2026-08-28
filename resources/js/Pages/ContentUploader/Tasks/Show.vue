@@ -1,5 +1,5 @@
 <script setup>
-import ContentAiReviewPanel from '@/Components/ContentAiReviewPanel.vue';
+import GeminiPasteReviewPanel from '@/Components/GeminiPasteReviewPanel.vue';
 import ContentVerificationPanel from '@/Components/ContentVerificationPanel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -125,18 +125,19 @@ onUnmounted(() => clearInterval(pingTimer));
                         One question at a time: review details, edit if needed, then
                         <strong>Save &amp; mark verified → next</strong>.
                         Upload a figure when the question needs one.
-                        Or run <strong>AI review</strong> to auto-clear the easy ones.
+                        Or use <strong>Gemini paste review</strong> to auto-verify the correct ones.
                     </p>
                     <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline">
                         Open textbook chapter →
                     </a>
                 </div>
 
-                <ContentAiReviewPanel
+                <GeminiPasteReviewPanel
                     v-if="verification"
                     :run-id="verification.run_id"
                     :pending-count="verificationPendingCount"
-                    :ai-review-route="safeRoute('content.tasks.verification-ai-review', task.id, taskPath('/verification-ai-review'))"
+                    :gemini-prompt="verification.gemini_prompt || ''"
+                    :paste-route="safeRoute('content.tasks.verification-gemini-paste', task.id, taskPath('/verification-gemini-paste'))"
                 />
 
                 <ContentVerificationPanel

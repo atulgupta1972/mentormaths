@@ -605,4 +605,54 @@ class ContentTaskVerificationTest extends TestCase
 
         return [$uploader, $chapter->fresh(), $task->fresh()];
     }
+
+    public function test_admin_can_apply_gemini_paste_to_auto_verify_correct_questions(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'submitted_at' => now(),
+        ]);
+
+        $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('verification.summary.unverified', 1)
+                ->has('verification.gemini_prompt'));
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $admin->id)
+            ->value('id');
+
+        $paste = <<<'TEXT'
+Question 1 Analysis:
+Status: Correct
+Note: 2 + 2 equals 4.
+TEXT;
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.verification-gemini-paste', $task), [
+                'run_id' => $runId,
+                'gemini_paste' => $paste,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success')
+            ->assertSessionHas('gemini_review.approved', 1);
+
+        $this->assertTrue(
+            \App\Models\ContentVerificationCheck::query()
+                ->where('content_verification_run_id', $runId)
+                ->where('question_id', $questionId)
+                ->whereNotNull('verified_at')
+                ->exists()
+        );
+    }
 }

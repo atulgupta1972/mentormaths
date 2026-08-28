@@ -416,6 +416,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks/{contentTask}/verification-skip', [ContentUploadTaskController::class, 'skipVerificationQuestion'])->name('content-tasks.verification-skip');
     Route::post('/content-tasks/{contentTask}/verification-unskip', [ContentUploadTaskController::class, 'unskipVerificationQuestion'])->name('content-tasks.verification-unskip');
     Route::post('/content-tasks/{contentTask}/verification-ai-review', [ContentUploadTaskController::class, 'aiReviewVerification'])->name('content-tasks.verification-ai-review');
+    Route::post('/content-tasks/{contentTask}/verification-gemini-paste', [ContentUploadTaskController::class, 'geminiPasteVerification'])->name('content-tasks.verification-gemini-paste');
     Route::post('/content-tasks/{contentTask}/verification-batch', [ContentUploadTaskController::class, 'markVerificationBatch'])->name('content-tasks.verification-batch');
     Route::post('/content-tasks/{contentTask}/verification-diagram', [ContentUploadTaskController::class, 'uploadVerificationDiagram'])->name('content-tasks.verification-diagram');
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
@@ -531,6 +532,7 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/tasks/{contentTask}/verification-skip', [ContentTaskController::class, 'skipVerificationQuestion'])->name('tasks.verification-skip');
     Route::post('/tasks/{contentTask}/verification-unskip', [ContentTaskController::class, 'unskipVerificationQuestion'])->name('tasks.verification-unskip');
     Route::post('/tasks/{contentTask}/verification-ai-review', [ContentTaskController::class, 'aiReviewVerification'])->name('tasks.verification-ai-review');
+    Route::post('/tasks/{contentTask}/verification-gemini-paste', [ContentTaskController::class, 'geminiPasteVerification'])->name('tasks.verification-gemini-paste');
     Route::post('/tasks/{contentTask}/verification-diagram', [ContentTaskController::class, 'uploadVerificationDiagram'])->name('tasks.verification-diagram');
     Route::post('/tasks/{contentTask}/verification-diagram/remove', [ContentTaskController::class, 'removeVerificationDiagram'])->name('tasks.verification-diagram.remove');
     Route::post('/tasks/{contentTask}/complete-verification', [ContentTaskController::class, 'completeVerification'])->name('tasks.complete-verification');

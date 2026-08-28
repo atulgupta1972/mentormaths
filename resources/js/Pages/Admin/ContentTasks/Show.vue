@@ -1,6 +1,6 @@
 <script setup>
 import AdminContentVerificationBatch from '@/Components/AdminContentVerificationBatch.vue';
-import ContentAiReviewPanel from '@/Components/ContentAiReviewPanel.vue';
+import GeminiPasteReviewPanel from '@/Components/GeminiPasteReviewPanel.vue';
 import ContentVerificationPanel from '@/Components/ContentVerificationPanel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -499,11 +499,12 @@ const formatDuration = (seconds) => {
                     No MCQ set plan saved for this chapter yet.
                 </div>
 
-                <ContentAiReviewPanel
+                <GeminiPasteReviewPanel
                     v-if="verification && task.can_verify_questions"
                     :run-id="verification.run_id"
                     :pending-count="verificationPendingCount"
-                    :ai-review-route="safeRoute('admin.content-tasks.verification-ai-review', task.id, adminTaskPath('/verification-ai-review'))"
+                    :gemini-prompt="verification.gemini_prompt || ''"
+                    :paste-route="safeRoute('admin.content-tasks.verification-gemini-paste', task.id, adminTaskPath('/verification-gemini-paste'))"
                 />
 
                 <AdminContentVerificationBatch
