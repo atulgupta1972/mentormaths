@@ -60,7 +60,7 @@ class ContentUploadTaskController extends Controller
         $drillGradeId = $request->integer('drill_grade_id') ?: null;
         $drillUploaderId = $request->integer('drill_uploader_id') ?: null;
         $drillBucket = $request->string('drill_bucket')->toString();
-        if (! in_array($drillBucket, ['under_review', 'submitted', 'published'], true)) {
+        if (! in_array($drillBucket, ['under_review', 'submitted', 'published', 'gemini_pending', 'gemini_done'], true)) {
             $drillBucket = null;
         }
 

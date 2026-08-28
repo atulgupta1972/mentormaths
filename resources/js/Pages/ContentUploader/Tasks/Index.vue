@@ -1,15 +1,18 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import GeminiVerificationGuide from '@/Components/GeminiVerificationGuide.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
     tasks: { type: Array, default: () => [] },
-    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, convert_pending: 0, corrections_pending: 0, total_active: 0 }) },
+    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, convert_pending: 0, corrections_pending: 0, gemini_pending: 0, gemini_done: 0, total_active: 0 }) },
     uploadPending: { type: Array, default: () => [] },
     reviewPending: { type: Array, default: () => [] },
     convertPending: { type: Array, default: () => [] },
     correctionsPending: { type: Array, default: () => [] },
+    geminiPending: { type: Array, default: () => [] },
+    geminiDone: { type: Array, default: () => [] },
 });
 
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
@@ -43,12 +46,33 @@ const statusTone = (bucket) => ({
 }[bucket] || 'bg-gray-50 text-gray-700 ring-gray-200');
 
 const filteredTasks = computed(() => {
+    if (bucketFilter.value === 'gemini_pending') {
+        return props.tasks.filter((task) => task.needs_gemini_check);
+    }
+
+    if (bucketFilter.value === 'gemini_done') {
+        return props.tasks.filter((task) =>
+            task.gemini_progress?.can_gemini
+            && task.gemini_progress.pending === 0
+            && task.gemini_progress.total > 0,
+        );
+    }
+
     if (bucketFilter.value === 'all') {
         return props.tasks;
     }
 
     return props.tasks.filter((task) => task.bucket === bucketFilter.value);
 });
+
+const geminiProgressLabel = (task) => {
+    const progress = task.gemini_progress;
+    if (!progress?.can_gemini) {
+        return '—';
+    }
+
+    return `${progress.verified}/${progress.total}`;
+};
 </script>
 
 <template>
@@ -104,6 +128,24 @@ const filteredTasks = computed(() => {
                     >
                         Convert fill-in-blank · {{ summary.convert_pending || 0 }}
                     </button>
+                    <button
+                        v-if="summary.gemini_pending"
+                        type="button"
+                        class="rounded-full px-3 py-1 text-xs font-semibold ring-1"
+                        :class="bucketFilter === 'gemini_pending' ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-indigo-50 text-indigo-900 ring-indigo-200'"
+                        @click="bucketFilter = 'gemini_pending'"
+                    >
+                        Gemini pending · {{ summary.gemini_pending }}
+                    </button>
+                    <button
+                        v-if="summary.gemini_done"
+                        type="button"
+                        class="rounded-full px-3 py-1 text-xs font-semibold ring-1"
+                        :class="bucketFilter === 'gemini_done' ? 'bg-teal-600 text-white ring-teal-600' : 'bg-teal-50 text-teal-900 ring-teal-200'"
+                        @click="bucketFilter = 'gemini_done'"
+                    >
+                        Gemini done · {{ summary.gemini_done }}
+                    </button>
                     <span
                         v-if="summary.corrections_pending"
                         class="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-900"
@@ -111,6 +153,8 @@ const filteredTasks = computed(() => {
                         To correct · {{ summary.corrections_pending }}
                     </span>
                 </div>
+
+                <GeminiVerificationGuide v-if="summary.gemini_pending" />
 
                 <div v-if="correctionsPending.length" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-rose-200">
                     <div class="border-b border-rose-100 bg-rose-50 px-3 py-2">
@@ -162,6 +206,7 @@ const filteredTasks = computed(() => {
                                     <th class="min-w-[140px] px-2 py-1.5">Type</th>
                                     <th class="px-2 py-1.5">PDF</th>
                                     <th class="px-2 py-1.5">Status</th>
+                                    <th class="px-2 py-1.5">Gemini</th>
                                     <th class="px-2 py-1.5">Rate</th>
                                     <th class="px-2 py-1.5"></th>
                                 </tr>
@@ -187,12 +232,29 @@ const filteredTasks = computed(() => {
                                             {{ task.status_label }}
                                         </span>
                                     </td>
+                                    <td class="px-2 py-1.5">
+                                        <span
+                                            v-if="task.gemini_progress?.can_gemini"
+                                            class="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                                            :class="task.needs_gemini_check ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'"
+                                        >
+                                            {{ geminiProgressLabel(task) }}
+                                        </span>
+                                        <span v-else class="text-gray-400">—</span>
+                                    </td>
                                     <td class="whitespace-nowrap px-2 py-1.5 text-gray-600">
                                         {{ task.rate_description || formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}
                                     </td>
                                     <td class="whitespace-nowrap px-2 py-1.5 text-right">
+                                        <Link
+                                            v-if="task.needs_gemini_check"
+                                            :href="route('content.tasks.show', task.id)"
+                                            class="font-medium text-indigo-700 hover:underline"
+                                        >
+                                            Gemini check →
+                                        </Link>
                                         <button
-                                            v-if="task.bucket === 'review_pending'"
+                                            v-else-if="task.bucket === 'review_pending'"
                                             type="button"
                                             class="font-medium text-indigo-600 hover:underline"
                                             @click="startReview(task.id)"
@@ -222,7 +284,7 @@ const filteredTasks = computed(() => {
                                     </td>
                                 </tr>
                                 <tr v-if="!filteredTasks.length">
-                                    <td colspan="10" class="px-3 py-8 text-center text-gray-500">
+                                    <td colspan="11" class="px-3 py-8 text-center text-gray-500">
                                         {{ tasks.length ? 'No tasks in this bucket.' : 'No assignments yet.' }}
                                     </td>
                                 </tr>

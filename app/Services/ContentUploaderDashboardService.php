@@ -11,31 +11,53 @@ class ContentUploaderDashboardService
 {
     public function __construct(
         private TextbookChapterBookService $bookService,
+        private ContentVerificationService $verificationService,
     ) {}
 
     /**
      * @return array{
      *     tasks: Collection<int, array<string, mixed>>,
-     *     summary: array{upload_pending: int, review_pending: int, corrections_pending: int, total_active: int},
+     *     summary: array{upload_pending: int, review_pending: int, convert_pending: int, corrections_pending: int, gemini_pending: int, gemini_done: int, total_active: int},
      *     uploadPending: Collection<int, array<string, mixed>>,
      *     reviewPending: Collection<int, array<string, mixed>>,
-     *     correctionsPending: Collection<int, array<string, mixed>>
+     *     convertPending: Collection<int, array<string, mixed>>,
+     *     correctionsPending: Collection<int, array<string, mixed>>,
+     *     geminiPending: Collection<int, array<string, mixed>>,
+     *     geminiDone: Collection<int, array<string, mixed>>
      * }
      */
     public function forUser(User $user): array
     {
-        $tasks = ContentUploadTask::query()
+        $taskModels = ContentUploadTask::query()
             ->where('assigned_to_user_id', $user->id)
             ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
             ->with(['textbookChapter.textbook.gradeLevel', 'textbookChapter.syllabusChapter.chapterHead'])
             ->latest()
-            ->get()
-            ->map(fn (ContentUploadTask $task) => $this->serializeTask($task));
+            ->get();
+
+        $progressByTask = $this->verificationService->progressForTasks($taskModels, $user);
+
+        $tasks = $taskModels
+            ->map(fn (ContentUploadTask $task) => $this->serializeTask(
+                $task,
+                $progressByTask[(int) $task->id] ?? null,
+            ));
 
         $uploadPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'upload_pending')->values();
         $reviewPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'review_pending')->values();
         $convertPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'convert_pending')->values();
         $correctionsPending = $this->pendingCorrectionsForUser($user);
+
+        $geminiPending = $tasks->filter(fn (array $task) =>
+            ($task['gemini_progress']['can_gemini'] ?? false)
+            && (int) ($task['gemini_progress']['pending'] ?? 0) > 0,
+        )->values();
+
+        $geminiDone = $tasks->filter(fn (array $task) =>
+            ($task['gemini_progress']['can_gemini'] ?? false)
+            && (int) ($task['gemini_progress']['pending'] ?? 0) === 0
+            && (int) ($task['gemini_progress']['total'] ?? 0) > 0,
+        )->values();
 
         return [
             'tasks' => $tasks,
@@ -44,12 +66,16 @@ class ContentUploaderDashboardService
                 'review_pending' => $reviewPending->count(),
                 'convert_pending' => $convertPending->count(),
                 'corrections_pending' => $correctionsPending->count(),
-                'total_active' => $uploadPending->count() + $reviewPending->count() + $convertPending->count(),
+                'gemini_pending' => $geminiPending->count(),
+                'gemini_done' => $geminiDone->count(),
+                'total_active' => $uploadPending->count() + $reviewPending->count() + $convertPending->count() + $geminiPending->count(),
             ],
             'uploadPending' => $uploadPending,
             'reviewPending' => $reviewPending,
             'convertPending' => $convertPending,
             'correctionsPending' => $correctionsPending,
+            'geminiPending' => $geminiPending,
+            'geminiDone' => $geminiDone,
         ];
     }
 
@@ -89,9 +115,10 @@ class ContentUploaderDashboardService
     }
 
     /**
+     * @param  array<string, mixed>|null  $geminiProgress
      * @return array<string, mixed>
      */
-    public function serializeTask(ContentUploadTask $task): array
+    public function serializeTask(ContentUploadTask $task, ?array $geminiProgress = null): array
     {
         $chapter = $task->textbookChapter;
         $hasPdf = $chapter ? $this->bookService->hasStoredPdf($chapter) : false;
@@ -121,6 +148,9 @@ class ContentUploaderDashboardService
                 ? $this->bookService->uploaderCanChangeBook($chapter, $task->assignee)
                 : false,
             'has_pdf' => $hasPdf,
+            'gemini_progress' => $geminiProgress,
+            'needs_gemini_check' => (bool) ($geminiProgress['can_gemini'] ?? false)
+                && (int) ($geminiProgress['pending'] ?? 0) > 0,
             'chapter' => $chapter ? [
                 'id' => $chapter->id,
                 'chapter_number' => $chapter->displayChapterNumber(),

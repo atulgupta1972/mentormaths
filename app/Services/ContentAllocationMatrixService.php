@@ -138,8 +138,14 @@ class ContentAllocationMatrixService
                 'under_review' => 0,
                 'submitted' => 0,
                 'published' => 0,
+                'gemini_pending' => 0,
+                'gemini_done' => 0,
             ],
         ];
+
+        $progressByTaskId = $progressUser
+            ? $this->verificationService->progressForTasks($tasks, $progressUser)
+            : [];
 
         $cells = [];
         foreach ($gradeRows as $grade) {
@@ -166,6 +172,17 @@ class ContentAllocationMatrixService
             $cells[$gKey][$uKey]['statuses'][$status] = ($cells[$gKey][$uKey]['statuses'][$status] ?? 0) + 1;
             $bucket = $this->breakupBucket($status);
             $cells[$gKey][$uKey]['breakup'][$bucket] = ($cells[$gKey][$uKey]['breakup'][$bucket] ?? 0) + 1;
+
+            if ($task->status === ContentUploadTask::STATUS_PUBLISHED) {
+                $progress = $progressByTaskId[(int) $task->id] ?? null;
+                if ($progress && ($progress['can_gemini'] ?? false) && (int) ($progress['total'] ?? 0) > 0) {
+                    if ((int) ($progress['pending'] ?? 0) > 0) {
+                        $cells[$gKey][$uKey]['breakup']['gemini_pending']++;
+                    } else {
+                        $cells[$gKey][$uKey]['breakup']['gemini_done']++;
+                    }
+                }
+            }
         }
 
         $uploaders = array_values(array_filter($uploaders, function (array $uploader) use ($cells) {

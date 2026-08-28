@@ -904,13 +904,15 @@ const formatHelpDate = (value) => {
                     <ContentUploadGuidePanel v-if="isContentUploader" variant="uploader" />
 
                     <ContentUploaderTasksPanel
-                        v-if="contentUploaderTasks?.summary?.total_active || contentUploaderTasks?.correctionsPending?.length"
+                        v-if="contentUploaderTasks?.summary?.total_active || contentUploaderTasks?.correctionsPending?.length || contentUploaderTasks?.geminiPending?.length"
                         class="mb-4"
                         compact
                         :summary="contentUploaderTasks.summary"
                         :upload-pending="contentUploaderTasks.uploadPending"
                         :review-pending="contentUploaderTasks.reviewPending"
                         :corrections-pending="contentUploaderTasks.correctionsPending"
+                        :gemini-pending="contentUploaderTasks.geminiPending"
+                        :gemini-done="contentUploaderTasks.geminiDone"
                     />
 
                     <!-- Incomplete attempts left mid-way — finish these first -->

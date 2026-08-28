@@ -43,6 +43,27 @@ const buckets = [
     },
 ];
 
+const geminiBuckets = [
+    {
+        key: 'gemini_pending',
+        label: 'To be verified by Gemini',
+        short: 'Need Gemini',
+        idle: 'bg-amber-50 text-amber-900 ring-amber-200 hover:bg-amber-100',
+        active: 'bg-amber-600 text-white ring-amber-600',
+        heading: 'text-amber-800',
+    },
+    {
+        key: 'gemini_done',
+        label: 'Verified by Gemini',
+        short: 'Gemini done',
+        idle: 'bg-teal-50 text-teal-900 ring-teal-200 hover:bg-teal-100',
+        active: 'bg-teal-600 text-white ring-teal-600',
+        heading: 'text-teal-800',
+    },
+];
+
+const allBuckets = [...buckets, ...geminiBuckets];
+
 const cellBucketCount = (gradeId, uploaderId, bucket) =>
     props.matrix.cells?.[String(gradeId)]?.[String(uploaderId)]?.breakup?.[bucket] ?? 0;
 
@@ -65,13 +86,17 @@ const setBoard = (boardId) => {
 
 const toggleDrill = (gradeId, uploaderId, bucket) => {
     const open = isDrillOpen(gradeId, uploaderId);
-    if (open && drillFilter.value === bucket) {
+    if (open && props.filters.drill_bucket === bucket) {
         closeDrill();
         return;
     }
 
     if (open) {
-        drillFilter.value = bucket;
+        router.get(route('admin.content-tasks.index'), matrixQuery({
+            drill_grade_id: gradeId,
+            drill_uploader_id: uploaderId,
+            drill_bucket: bucket,
+        }), { preserveState: true, replace: true, preserveScroll: true });
         return;
     }
 
@@ -109,7 +134,17 @@ const geminiFilter = ref(null);
 watch(
     () => [props.matrix.drill?.grade?.id, props.matrix.drill?.uploader?.id, props.filters.drill_bucket],
     () => {
-        drillFilter.value = props.filters.drill_bucket || null;
+        const bucket = props.filters.drill_bucket || null;
+        if (bucket === 'gemini_pending') {
+            drillFilter.value = 'published';
+            geminiFilter.value = 'pending';
+        } else if (bucket === 'gemini_done') {
+            drillFilter.value = 'published';
+            geminiFilter.value = 'done';
+        } else {
+            drillFilter.value = bucket;
+            geminiFilter.value = null;
+        }
     },
     { immediate: true },
 );
@@ -124,7 +159,18 @@ const filteredDrillChapters = computed(() => {
     const chapters = props.matrix.drill?.chapters ?? [];
     let rows = chapters;
 
-    if (drillFilter.value) {
+    if (props.filters.drill_bucket === 'gemini_pending') {
+        rows = rows.filter((row) =>
+            row.gemini_progress?.can_gemini
+            && row.gemini_progress.pending > 0,
+        );
+    } else if (props.filters.drill_bucket === 'gemini_done') {
+        rows = rows.filter((row) =>
+            row.gemini_progress?.can_gemini
+            && row.gemini_progress.pending === 0
+            && row.gemini_progress.total > 0,
+        );
+    } else if (drillFilter.value) {
         rows = rows.filter((row) => row.breakup_bucket === drillFilter.value);
     }
 
@@ -190,17 +236,39 @@ const groupedDrillChapters = computed(() => {
 });
 
 const setDrillFilter = (bucket) => {
-    drillFilter.value = drillFilter.value === bucket ? null : bucket;
-    if (drillFilter.value !== 'published') {
-        geminiFilter.value = null;
+    const next = drillFilter.value === bucket ? null : bucket;
+    if (!props.matrix.drill?.grade?.id || !props.matrix.drill?.uploader?.id) {
+        drillFilter.value = next;
+        if (next !== 'published') {
+            geminiFilter.value = null;
+        }
+        return;
     }
+
+    router.get(route('admin.content-tasks.index'), matrixQuery({
+        drill_grade_id: props.matrix.drill.grade.id,
+        drill_uploader_id: props.matrix.drill.uploader.id,
+        drill_bucket: next || undefined,
+    }), { preserveState: true, replace: true, preserveScroll: true });
 };
 
 const setGeminiFilter = (bucket) => {
-    geminiFilter.value = geminiFilter.value === bucket ? null : bucket;
-    if (geminiFilter.value && drillFilter.value !== 'published') {
-        drillFilter.value = 'published';
+    const next = geminiFilter.value === bucket ? null : bucket;
+    if (!props.matrix.drill?.grade?.id || !props.matrix.drill?.uploader?.id) {
+        geminiFilter.value = next;
+        if (next && drillFilter.value !== 'published') {
+            drillFilter.value = 'published';
+        }
+        return;
     }
+
+    const drillBucket = next === 'pending' ? 'gemini_pending' : next === 'done' ? 'gemini_done' : 'published';
+
+    router.get(route('admin.content-tasks.index'), matrixQuery({
+        drill_grade_id: props.matrix.drill.grade.id,
+        drill_uploader_id: props.matrix.drill.uploader.id,
+        drill_bucket: drillBucket,
+    }), { preserveState: true, replace: true, preserveScroll: true });
 };
 
 const actionLinkLabel = (row) => {
@@ -322,7 +390,7 @@ watch(
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Content allocation matrix</h2>
-                    <p class="text-sm text-gray-500">People with assigned chapters only — three counts each: under review, submitted, published.</p>
+                    <p class="text-sm text-gray-500">People with assigned chapters — five counts each: review, submitted, published, Gemini pending, Gemini done.</p>
                 </div>
                 <div class="flex gap-2">
                     <Link :href="route('admin.content-rate-cards.index')" class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
@@ -408,7 +476,7 @@ watch(
                                     <th
                                         v-for="uploader in matrix.uploaders"
                                         :key="uploader.id"
-                                        colspan="3"
+                                        colspan="5"
                                         class="border border-slate-200 px-3 py-2 text-center"
                                         :title="uploader.email"
                                     >
@@ -418,7 +486,7 @@ watch(
                                 <tr class="bg-slate-50 text-center text-[10px] font-semibold uppercase tracking-wide">
                                     <template v-for="uploader in matrix.uploaders" :key="`hdr-${uploader.id}`">
                                         <th
-                                            v-for="bucket in buckets"
+                                            v-for="bucket in allBuckets"
                                             :key="`${uploader.id}-${bucket.key}`"
                                             class="border border-slate-200 px-2 py-1"
                                             :class="bucket.heading"
@@ -435,7 +503,7 @@ watch(
                                     </td>
                                     <template v-for="uploader in matrix.uploaders" :key="`${grade.id}-${uploader.id}`">
                                         <td
-                                            v-for="bucket in buckets"
+                                            v-for="bucket in allBuckets"
                                             :key="`${grade.id}-${uploader.id}-${bucket.key}`"
                                             class="border border-slate-200 px-1 py-1 text-center"
                                         >
@@ -443,7 +511,7 @@ watch(
                                                 v-if="cellBucketCount(grade.id, uploader.id, bucket.key) > 0"
                                                 type="button"
                                                 class="min-w-[2.25rem] rounded-md px-2 py-1 text-sm font-semibold ring-1 transition"
-                                                :class="isDrillOpen(grade.id, uploader.id) && drillFilter === bucket.key
+                                                :class="isDrillOpen(grade.id, uploader.id) && filters.drill_bucket === bucket.key
                                                     ? bucket.active
                                                     : bucket.idle"
                                                 :title="`${uploader.name} · ${bucket.label}`"
@@ -512,8 +580,8 @@ watch(
                         <template v-if="drillFilter === 'submitted'">Showing submitted chapters — open one to review questions and publish.</template>
                         <template v-else-if="drillFilter === 'under_review'">Showing chapters still under review (not yet submitted).</template>
                         <template v-else-if="drillFilter === 'published'">Showing published chapters — use <strong>Gemini pending</strong> / <strong>Gemini done</strong> above to filter.</template>
-                        <template v-else-if="geminiFilter === 'pending'">Showing published chapters still needing Gemini review.</template>
-                        <template v-else-if="geminiFilter === 'done'">Showing published chapters fully Gemini-verified.</template>
+                        <template v-else-if="filters.drill_bucket === 'gemini_pending' || geminiFilter === 'pending'">Showing published chapters still needing Gemini review — open one to complete the check.</template>
+                        <template v-else-if="filters.drill_bucket === 'gemini_done' || geminiFilter === 'done'">Showing published chapters fully Gemini-verified.</template>
                         <template v-else>Click a count above to filter. Submitted opens review &amp; publish.</template>
                     </p>
 

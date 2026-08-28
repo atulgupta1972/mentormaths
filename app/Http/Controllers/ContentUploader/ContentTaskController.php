@@ -51,17 +51,27 @@ class ContentTaskController extends Controller
         $contentTask->load(['textbookChapter.textbook.gradeLevel']);
 
         $verification = null;
+        $progress = null;
         if (in_array($contentTask->status, [
             ContentUploadTask::STATUS_UPLOADED,
             ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
             ContentUploadTask::STATUS_VERIFIED,
             ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_PUBLISHED,
         ], true)) {
             $verification = $this->verificationService->forTask($contentTask, $request->user());
+            $progress = $this->verificationService->progressForTask($contentTask, $request->user());
         }
 
+        $pendingQuestions = $verification
+            ? collect($verification['questions'])
+                ->filter(fn (array $row) => ! $this->verificationService->isGeminiDoneRow($row))
+                ->values()
+                ->all()
+            : [];
+
         return Inertia::render('ContentUploader/Tasks/Show', [
-            'task' => $this->uploaderDashboard->serializeTask($contentTask) + [
+            'task' => $this->uploaderDashboard->serializeTask($contentTask, $progress) + [
                 'admin_notes' => $contentTask->admin_notes,
                 'can_work' => $contentTask->canAssigneeWork(),
                 'awaiting_agreement' => $contentTask->isAwaitingAgreement(),
@@ -75,11 +85,9 @@ class ContentTaskController extends Controller
                 'run_id' => $verification['run']->id,
                 'questions' => $verification['questions'],
                 'summary' => $verification['summary'],
+                'progress' => $progress,
                 'gemini_prompt' => $this->geminiPasteService->buildPrompt(
-                    collect($verification['questions'])
-                        ->filter(fn (array $row) => ! $this->verificationService->isGeminiDoneRow($row))
-                        ->values()
-                        ->all(),
+                    $pendingQuestions,
                     $this->geminiPasteService->chapterLabel($contentTask),
                 ),
             ] : null,

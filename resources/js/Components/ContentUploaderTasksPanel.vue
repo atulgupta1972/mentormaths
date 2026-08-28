@@ -1,13 +1,16 @@
 <script setup>
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import GeminiVerificationGuide from '@/Components/GeminiVerificationGuide.vue';
 import { Link, router } from '@inertiajs/vue3';
 
 const props = defineProps({
-    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, corrections_pending: 0, total_active: 0 }) },
+    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, corrections_pending: 0, gemini_pending: 0, gemini_done: 0, total_active: 0 }) },
     uploadPending: { type: Array, default: () => [] },
     reviewPending: { type: Array, default: () => [] },
     correctionsPending: { type: Array, default: () => [] },
+    geminiPending: { type: Array, default: () => [] },
+    geminiDone: { type: Array, default: () => [] },
     compact: { type: Boolean, default: false },
 });
 
@@ -28,18 +31,27 @@ const chapterHref = (task) => {
 
     return route('content.textbooks.show', task.chapter.id);
 };
+
+const geminiProgressLabel = (task) => {
+    const progress = task.gemini_progress;
+    if (!progress?.can_gemini) {
+        return '';
+    }
+
+    return `${progress.verified}/${progress.total}`;
+};
 </script>
 
 <template>
     <section
-        v-if="summary.total_active > 0 || uploadPending.length || reviewPending.length || correctionsPending.length"
+        v-if="summary.total_active > 0 || uploadPending.length || reviewPending.length || correctionsPending.length || geminiPending.length"
         class="rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 to-indigo-50 p-4 shadow-sm"
         :class="compact ? '' : 'space-y-4'"
     >
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-sky-900">Content upload tasks</h3>
-                <p v-if="!compact" class="mt-1 text-sm text-sky-800">Upload chapter MCQs, then review options and explanations for each question.</p>
+                <p v-if="!compact" class="mt-1 text-sm text-sky-800">Upload chapter MCQs, review questions, then run Gemini checks on published chapters.</p>
             </div>
             <Link :href="route('content.tasks.index')" class="text-sm font-medium text-indigo-700 hover:underline">
                 All tasks →
@@ -54,11 +66,44 @@ const chapterHref = (task) => {
                 Review pending: {{ summary.review_pending }}
             </span>
             <span
+                v-if="summary.gemini_pending"
+                class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-900"
+            >
+                Gemini check: {{ summary.gemini_pending }}
+            </span>
+            <span
                 v-if="summary.corrections_pending"
                 class="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-900"
             >
                 To correct: {{ summary.corrections_pending }}
             </span>
+        </div>
+
+        <GeminiVerificationGuide v-if="geminiPending.length && !compact" class="mt-4" compact />
+
+        <div v-if="geminiPending.length" class="mt-4 space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-indigo-800">Gemini verification pending</p>
+            <GeminiVerificationGuide v-if="compact" compact class="mb-2" />
+            <div
+                v-for="task in geminiPending"
+                :key="`gemini-${task.id}`"
+                class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-indigo-200"
+            >
+                <div>
+                    <p class="font-medium text-gray-900">
+                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
+                    </p>
+                    <p class="text-xs text-gray-500">
+                        Published · Gemini {{ geminiProgressLabel(task) }} verified
+                        · {{ formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}
+                    </p>
+                </div>
+                <Link :href="route('content.tasks.show', task.id)">
+                    <PrimaryButton type="button" class="!py-2 !text-xs">
+                        Gemini check →
+                    </PrimaryButton>
+                </Link>
+            </div>
         </div>
 
         <div v-if="correctionsPending.length" class="mt-4 space-y-2">

@@ -1,5 +1,6 @@
 <script setup>
 import GeminiPasteReviewPanel from '@/Components/GeminiPasteReviewPanel.vue';
+import GeminiVerificationGuide from '@/Components/GeminiVerificationGuide.vue';
 import ContentVerificationPanel from '@/Components/ContentVerificationPanel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -18,8 +19,18 @@ const page = usePage();
 const agreeForm = useForm({});
 const startReviewForm = useForm({});
 
-const verificationPendingCount = computed(() =>
-    Number(props.verification?.summary?.unverified ?? 0),
+const verificationPendingCount = computed(() => {
+    if (props.verification?.progress?.can_gemini) {
+        return Number(props.verification.progress.pending ?? 0);
+    }
+
+    return Number(props.verification?.summary?.unverified ?? 0);
+});
+
+const showGeminiGuide = computed(() =>
+    props.task.status === 'published'
+    || props.task.needs_gemini_check
+    || (props.verification?.progress?.can_gemini && props.verification.progress.pending > 0),
 );
 
 const taskPath = (suffix = '') => `/content/tasks/${props.task.id}${suffix}`;
@@ -130,6 +141,12 @@ onUnmounted(() => clearInterval(pingTimer));
                     <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline">
                         Open textbook chapter →
                     </a>
+                </div>
+
+                <GeminiVerificationGuide v-if="showGeminiGuide" />
+
+                <div v-else-if="task.status === 'published' && !verification" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
+                    <p class="text-sm text-gray-700">This chapter is published. Gemini verification is not available for this task yet.</p>
                 </div>
 
                 <GeminiPasteReviewPanel
