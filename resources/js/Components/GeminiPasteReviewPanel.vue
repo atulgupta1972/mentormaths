@@ -79,6 +79,11 @@ const applyPaste = () => {
         onSuccess: () => {
             form.gemini_paste = '';
         },
+        onError: (errors) => {
+            if (form.hasErrors && Object.keys(errors).length === 0) {
+                window.alert('Could not apply Gemini review (server returned an error). If you just deployed, run: php artisan route:clear on the server, then try again.');
+            }
+        },
     });
 };
 
@@ -91,7 +96,12 @@ const resetReview = () => {
         return;
     }
 
-    resetForm.post(props.resetRoute, { preserveScroll: true });
+    resetForm.post(props.resetRoute, {
+        preserveScroll: true,
+        onError: () => {
+            window.alert('Reset failed (server returned an error). If you just deployed, run: php artisan route:clear on the server, then try again.');
+        },
+    });
 };
 </script>
 
