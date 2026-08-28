@@ -188,6 +188,31 @@ class DashboardTest extends TestCase
         $this->assertSame(0, $attempt->fresh()->tab_leave_count);
     }
 
+    public function test_student_dashboard_still_loads_when_study_plan_fails(): void
+    {
+        $this->withoutVite();
+        $this->withoutMiddleware([
+            \App\Http\Middleware\EnsureFormulaDrillComplete::class,
+            \App\Http\Middleware\EnsureBasicsDrillComplete::class,
+        ]);
+
+        [$admin, $enrollment] = $this->seedAdminDashboard();
+        $user = $enrollment->student->user;
+
+        $this->mock(\App\Services\ClassCoverageService::class, function ($mock) {
+            $mock->shouldReceive('forEnrollment')
+                ->andThrow(new \RuntimeException('missing column effective_syllabus_chapter_id'));
+        });
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Dashboard')
+                ->where('isAdmin', false)
+                ->where('loadError', fn ($message) => str_contains($message, 'study plan')));
+    }
+
     /**
      * @return array{0: User, 1: StudentEnrollment}
      */

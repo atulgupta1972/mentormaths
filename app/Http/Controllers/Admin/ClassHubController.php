@@ -19,8 +19,10 @@ use App\Services\ExamPlanService;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class ClassHubController extends Controller
 {
@@ -178,22 +180,65 @@ class ClassHubController extends Controller
         $examPlanRows = [];
         $examPlanStats = ['with_upcoming' => 0, 'without_plan' => 0, 'without_upcoming' => 0];
 
-        if ($activeYear) {
-            $enrollments = $this->examPlanService->activeEnrollmentForYear($activeYear->id, $gradeLevel->id, $boardId);
-            $enrollments->loadMissing(['student.user', 'academicYear']);
-            $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, true);
-            $examPlanRows = $this->classHubProgress->attach($enrollments, $examPlanRows);
-            $examPlanStats = [
-                'with_upcoming' => collect($examPlanRows)->where('has_upcoming', true)->count(),
-                'without_plan' => collect($examPlanRows)->where('has_plan', false)->count(),
-                'without_upcoming' => collect($examPlanRows)->where('has_upcoming', false)->count(),
-            ];
-        }
-
         $syllabusChapterOptions = $chapters->map(fn ($ch) => [
             'id' => $ch['id'],
             'label' => "Ch {$ch['chapter_number']} — {$ch['name']}",
         ])->values()->all();
+
+        if ($activeYear) {
+            try {
+                $enrollments = $this->examPlanService->activeEnrollmentForYear($activeYear->id, $gradeLevel->id, $boardId);
+                $enrollments->loadMissing(['student.user', 'academicYear']);
+                $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, true);
+                $examPlanRows = $this->classHubProgress->attach($enrollments, $examPlanRows);
+                $examPlanStats = [
+                    'with_upcoming' => collect($examPlanRows)->where('has_upcoming', true)->count(),
+                    'without_plan' => collect($examPlanRows)->where('has_plan', false)->count(),
+                    'without_upcoming' => collect($examPlanRows)->where('has_upcoming', false)->count(),
+                ];
+            } catch (Throwable $e) {
+                Log::error('Admin class hub failed to load student exam rows.', [
+                    'grade_level_id' => $gradeLevel->id,
+                    'board_id' => $boardId,
+                    'message' => $e->getMessage(),
+                ]);
+
+                return Inertia::render('Admin/Classes/Show', [
+                    'gradeLevel' => $gradeLevel->only([
+                        'id',
+                        'name',
+                        'sort_order',
+                        'protect_test_attempts',
+                        'protect_practice_attempts',
+                    ]),
+                    'activeYear' => $activeYear?->only(['id', 'name']),
+                    'boardOptions' => $boardOptions,
+                    'selectedBoardId' => $boardId,
+                    'selectedBoard' => $selectedBoard,
+                    'syllabusVersion' => $syllabusVersion ? [
+                        'id' => $syllabusVersion->id,
+                        'label' => $syllabusVersion->label(),
+                        'board' => $syllabusVersion->board,
+                    ] : null,
+                    'selectedChapterId' => $chapterId,
+                    'chapters' => $chapterFilterOptions,
+                    'chapterRows' => $filteredChapters,
+                    'stats' => [
+                        'chapters_count' => $chapters->count(),
+                        'topics_count' => $filteredChapters->sum('topics_count'),
+                        'questions_count' => $filteredChapters->sum('questions_count'),
+                        'practice_sets_count' => $filteredChapters->sum('topic_sets_count') + $filteredChapters->sum('chapter_tests_count'),
+                        'students_count' => $studentsCount,
+                    ],
+                    'examFilter' => $examFilter,
+                    'examPlanRows' => [],
+                    'examPlanStats' => $examPlanStats,
+                    'syllabusChapterOptions' => $syllabusChapterOptions,
+                    'examTypeOptions' => $this->examPlanService->examTypeOptions(),
+                    'loadError' => 'Could not load student progress for this class. If you recently deployed, run php artisan migrate --force on the server.',
+                ]);
+            }
+        }
 
         return Inertia::render('Admin/Classes/Show', [
             'gradeLevel' => $gradeLevel->only([

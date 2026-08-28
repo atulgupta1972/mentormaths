@@ -37,13 +37,7 @@ class ClassCoverageService
         $emptyColumns = $this->defaultAvailabilityColumns();
 
         if (! $enrollment) {
-            return [
-                'chapters' => [],
-                'under_study_chapter_id' => null,
-                'availability_columns' => $emptyColumns,
-                'additional_groups' => [],
-                'chapter_choices' => [],
-            ];
+            return self::emptyPayload($emptyColumns);
         }
 
         $chapterOptions = $this->examPlanService->chapterOptionsForEnrollment($enrollment);
@@ -146,6 +140,33 @@ class ClassCoverageService
             'availability_columns' => $availabilityColumns,
             'additional_groups' => $additionalGroups,
             'chapter_choices' => $chapterChoices,
+        ];
+    }
+
+    /**
+     * @param  list<array{key: string, label: string, short: string}>|null  $availabilityColumns
+     * @return array{
+     *     chapters: list<array<string, mixed>>,
+     *     under_study_chapter_id: null,
+     *     availability_columns: list<array{key: string, label: string, short: string}>,
+     *     additional_groups: list<array<string, mixed>>,
+     *     chapter_choices: list<array<string, mixed>>
+     * }
+     */
+    public static function emptyPayload(?array $availabilityColumns = null): array
+    {
+        return [
+            'chapters' => [],
+            'under_study_chapter_id' => null,
+            'availability_columns' => $availabilityColumns ?? [
+                ['key' => 'practice', 'label' => 'Practice set', 'short' => 'Prac'],
+                ['key' => 'practice_correction', 'label' => 'Practice correction', 'short' => 'Corr'],
+                ['key' => 'test', 'label' => 'Test', 'short' => 'Test'],
+                ['key' => 'written', 'label' => 'Written', 'short' => 'Writ'],
+                ['key' => 'fill_blank', 'label' => 'Fill in blank', 'short' => 'Fill'],
+            ],
+            'additional_groups' => [],
+            'chapter_choices' => [],
         ];
     }
 

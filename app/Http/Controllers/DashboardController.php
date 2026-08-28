@@ -92,9 +92,35 @@ class DashboardController extends Controller
         $enrollment?->loadMissing(['gradeLevel:id,name', 'board:id,name']);
         $gradeLevelId = $request->integer('grade_level_id') ?: null;
         $boardId = $request->integer('board_id') ?: null;
-        $studentData = $this->dashboardService->forStudent($enrollment, $gradeLevelId, $boardId);
+
+        $loadError = null;
+        $studentData = $this->dashboardService->forStudent(null);
+        $classCoverage = ClassCoverageService::emptyPayload();
+
+        try {
+            $studentData = $this->dashboardService->forStudent($enrollment, $gradeLevelId, $boardId);
+        } catch (Throwable $e) {
+            Log::error('Student dashboard failed to load assignments.', [
+                'user_id' => $user->id,
+                'enrollment_id' => $enrollment?->id,
+                'message' => $e->getMessage(),
+            ]);
+            $loadError = 'Some of your work could not be loaded. Please try again in a few minutes or tell your teacher.';
+        }
+
+        try {
+            $classCoverage = $this->classCoverage->forEnrollment($enrollment);
+        } catch (Throwable $e) {
+            Log::error('Student dashboard failed to load study plan.', [
+                'user_id' => $user->id,
+                'enrollment_id' => $enrollment?->id,
+                'message' => $e->getMessage(),
+            ]);
+            $loadError = $loadError
+                ?? 'Your study plan could not be loaded. Please try again in a few minutes or tell your teacher.';
+        }
+
         $student = $user->student;
-        $classCoverage = $this->classCoverage->forEnrollment($enrollment);
 
         $contentUploaderTasks = null;
         if ($user->isContentUploader()) {
@@ -119,6 +145,7 @@ class DashboardController extends Controller
                 'grade_name' => $enrollment?->gradeLevel?->name,
                 'board_name' => $enrollment?->board?->name,
             ],
+            'loadError' => $loadError,
             ...$studentData,
         ]);
     }

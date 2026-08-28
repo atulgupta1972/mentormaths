@@ -576,6 +576,7 @@ const formatDuration = (seconds) => {
                     :unskip-route="safeRoute('admin.content-tasks.verification-unskip', task.id, adminTaskPath('/verification-unskip'))"
                     :upload-diagram-route="safeRoute('admin.content-tasks.verification-diagram', task.id, adminTaskPath('/verification-diagram'))"
                     :remove-diagram-route="safeRoute('admin.content-tasks.verification-diagram.remove', task.id, adminTaskPath('/verification-diagram/remove'))"
+                    :save-question-route="safeRoute('admin.content-tasks.verification-question', task.id, adminTaskPath('/verification-question'))"
                     :can-return="Boolean(task.can_return_for_reverification)"
                 />
 

@@ -804,6 +804,14 @@ const formatHelpDate = (value) => {
 
                 <!-- Student / teacher / uploader dashboard -->
                 <template v-else>
+                    <div
+                        v-if="loadError"
+                        class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+                    >
+                        <p class="font-semibold">We could not load all of your dashboard.</p>
+                        <p class="mt-1">{{ loadError }}</p>
+                    </div>
+
                     <ContentUploadGuidePanel v-if="isContentUploader" variant="uploader" />
 
                     <ContentUploaderTasksPanel

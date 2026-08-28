@@ -1,4 +1,6 @@
 <script setup>
+import InputError from '@/Components/InputError.vue';
+import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
@@ -16,12 +18,15 @@ const props = defineProps({
     unskipRoute: { type: String, default: '' },
     uploadDiagramRoute: { type: String, default: '' },
     removeDiagramRoute: { type: String, default: '' },
+    saveQuestionRoute: { type: String, default: '' },
     canReturn: { type: Boolean, default: false },
 });
 
 const pageIndex = ref(0);
 const selectedIds = ref([]);
 const expandedId = ref(null);
+const editingId = ref(null);
+const questionForms = reactive({});
 const flagRemarks = reactive({});
 const sendBackCart = ref([]);
 const overallReason = ref('');
@@ -95,6 +100,66 @@ const canManageDiagram = computed(() => {
 
     return Boolean(url) && url !== '#';
 });
+
+const canEditQuestions = computed(() => {
+    const url = props.saveQuestionRoute;
+
+    return Boolean(url) && url !== '#';
+});
+
+const buildQuestionForm = (row) => useForm({
+    run_id: props.verification.run_id,
+    question_id: row.question_id,
+    question_text: row.question_text ?? '',
+    explanation: row.explanation ?? '',
+    method_hint: row.method_hint ?? '',
+    difficulty: row.difficulty ?? 'Easy',
+    options: (row.options ?? []).map((option) => ({
+        id: option.id,
+        option_text: option.option_text ?? '',
+        is_correct: Boolean(option.is_correct),
+    })),
+});
+
+const startEditing = (row) => {
+    questionForms[row.question_id] = buildQuestionForm(row);
+    editingId.value = row.question_id;
+    expandedId.value = row.question_id;
+};
+
+const cancelEditing = (questionId) => {
+    if (editingId.value === questionId) {
+        editingId.value = null;
+    }
+    delete questionForms[questionId];
+};
+
+const setCorrectOption = (questionId, optionIndex) => {
+    const form = questionForms[questionId];
+    if (!form) {
+        return;
+    }
+
+    form.options = form.options.map((option, index) => ({
+        ...option,
+        is_correct: index === optionIndex,
+    }));
+};
+
+const saveQuestion = (row) => {
+    const form = questionForms[row.question_id];
+    if (!form || form.processing || !canEditQuestions.value) {
+        return;
+    }
+
+    form.post(props.saveQuestionRoute, {
+        preserveScroll: true,
+        onSuccess: () => {
+            editingId.value = null;
+            delete questionForms[row.question_id];
+        },
+    });
+};
 
 const isSelected = (id) => selectedIds.value.includes(id);
 
@@ -281,6 +346,7 @@ const optionLine = (row) =>
                 <p class="text-xs text-indigo-900">{{ pageLabel }}</p>
                 <p class="mt-1 text-xs text-indigo-800">
                     Skip irrelevant questions — they do not count in uploader pay.
+                    Expand a row and use <strong>Edit</strong> to fix wrong answers, options, or explanations.
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -364,6 +430,14 @@ const optionLine = (row) =>
                                     @click="expandedId = expandedId === row.question_id ? null : row.question_id"
                                 >
                                     {{ expandedId === row.question_id ? 'Hide' : 'Expand' }}
+                                </button>
+                                <button
+                                    v-if="canEditQuestions"
+                                    type="button"
+                                    class="mt-0.5 block text-[10px] font-semibold text-emerald-700 hover:underline"
+                                    @click="startEditing(row)"
+                                >
+                                    {{ editingId === row.question_id ? 'Editing…' : 'Edit' }}
                                 </button>
                             </td>
                             <td class="px-2 py-2 align-top text-gray-900">
@@ -459,7 +533,94 @@ const optionLine = (row) =>
                         </tr>
                         <tr v-if="expandedId === row.question_id" class="bg-slate-50">
                             <td colspan="10" class="px-4 py-3">
-                                <div class="grid gap-3 text-sm text-gray-900 lg:grid-cols-2">
+                                <div v-if="editingId === row.question_id && questionForms[row.question_id]" class="space-y-3 text-sm">
+                                    <p class="text-xs font-semibold text-emerald-900">Edit question — save marks it verified</p>
+                                    <div>
+                                        <InputLabel value="Question text" />
+                                        <textarea
+                                            v-model="questionForms[row.question_id].question_text"
+                                            rows="3"
+                                            class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                        />
+                                        <InputError :message="questionForms[row.question_id].errors.question_text" class="mt-1" />
+                                    </div>
+                                    <div>
+                                        <InputLabel value="Options (select the correct answer)" />
+                                        <div class="mt-2 space-y-2">
+                                            <label
+                                                v-for="(option, optionIndex) in questionForms[row.question_id].options"
+                                                :key="option.id || `new-${optionIndex}`"
+                                                class="flex items-start gap-3 rounded-md border px-3 py-2"
+                                                :class="option.is_correct ? 'border-emerald-400 bg-emerald-50' : 'border-gray-200'"
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    class="mt-1"
+                                                    :name="`correct-${row.question_id}`"
+                                                    :checked="option.is_correct"
+                                                    @change="setCorrectOption(row.question_id, optionIndex)"
+                                                >
+                                                <span class="mt-0.5 w-5 shrink-0 text-sm font-semibold text-gray-600">
+                                                    {{ String.fromCharCode(65 + optionIndex) }}
+                                                </span>
+                                                <input
+                                                    v-model="option.option_text"
+                                                    type="text"
+                                                    class="block w-full rounded-md border-gray-300 text-sm"
+                                                >
+                                            </label>
+                                        </div>
+                                        <InputError :message="questionForms[row.question_id].errors.options" class="mt-1" />
+                                    </div>
+                                    <div class="grid gap-3 sm:grid-cols-2">
+                                        <div>
+                                            <InputLabel value="Hint" />
+                                            <textarea
+                                                v-model="questionForms[row.question_id].method_hint"
+                                                rows="2"
+                                                class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <InputLabel value="Difficulty" />
+                                            <select
+                                                v-model="questionForms[row.question_id].difficulty"
+                                                class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                            >
+                                                <option>Easy</option>
+                                                <option>Medium</option>
+                                                <option>Hard</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <InputLabel value="Explanation / answer note" />
+                                        <textarea
+                                            v-model="questionForms[row.question_id].explanation"
+                                            rows="3"
+                                            class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                        />
+                                    </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <PrimaryButton
+                                            type="button"
+                                            class="!text-xs"
+                                            :disabled="questionForms[row.question_id].processing"
+                                            @click="saveQuestion(row)"
+                                        >
+                                            {{ questionForms[row.question_id].processing ? 'Saving…' : 'Save & mark verified' }}
+                                        </PrimaryButton>
+                                        <SecondaryButton
+                                            type="button"
+                                            class="!text-xs"
+                                            :disabled="questionForms[row.question_id].processing"
+                                            @click="cancelEditing(row.question_id)"
+                                        >
+                                            Cancel
+                                        </SecondaryButton>
+                                    </div>
+                                </div>
+                                <div v-else class="grid gap-3 text-sm text-gray-900 lg:grid-cols-2">
                                     <div>
                                         <p class="text-[10px] font-semibold uppercase text-gray-500">Full question</p>
                                         <QuestionBody
@@ -486,6 +647,14 @@ const optionLine = (row) =>
                                         <p><span class="text-gray-500">Hint:</span> {{ row.method_hint || '—' }}</p>
                                         <p><span class="text-gray-500">Explanation:</span> {{ row.explanation || '—' }}</p>
                                         <p><span class="text-gray-500">Difficulty:</span> {{ row.difficulty || '—' }}</p>
+                                        <button
+                                            v-if="canEditQuestions"
+                                            type="button"
+                                            class="text-xs font-semibold text-emerald-700 hover:underline"
+                                            @click="startEditing(row)"
+                                        >
+                                            Edit question
+                                        </button>
                                     </div>
                                 </div>
                             </td>

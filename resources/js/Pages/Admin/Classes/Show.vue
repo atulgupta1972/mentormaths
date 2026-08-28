@@ -24,6 +24,7 @@ const props = defineProps({
     boardOptions: { type: Array, default: () => [] },
     selectedBoardId: [Number, String, null],
     selectedBoard: { type: Object, default: null },
+    loadError: { type: String, default: '' },
 });
 
 const boardFilter = ref(props.selectedBoardId ? String(props.selectedBoardId) : '');
@@ -167,6 +168,13 @@ watch(boardFilter, (value, oldValue) => {
         <div class="py-12">
             <div class="mx-auto max-w-6xl space-y-6 sm:px-6 lg:px-8">
                 <BrowseModeNotice />
+
+                <div
+                    v-if="loadError"
+                    class="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950"
+                >
+                    {{ loadError }}
+                </div>
 
                 <ClassAttemptProtectionPanel v-if="isAdmin" :grade-level="gradeLevel" />
 

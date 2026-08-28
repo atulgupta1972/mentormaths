@@ -6,6 +6,8 @@ use App\Models\StudentEnrollment;
 use App\Support\StudentEngagementMetrics;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ClassHubProgressService
 {
@@ -37,7 +39,16 @@ class ClassHubProgressService
             $to = now()->endOfDay();
 
             $engagement = StudentEngagementMetrics::forEnrollment($enrollment, $from, $to);
-            $performance = $this->classCoverage->studyPlanPerformance($enrollment) ?? [];
+            try {
+                $performance = $this->classCoverage->studyPlanPerformance($enrollment) ?? [];
+            } catch (Throwable $e) {
+                Log::error('Class hub failed to load study-plan progress for a student.', [
+                    'enrollment_id' => $enrollment->id,
+                    'student_id' => $enrollment->student_id,
+                    'message' => $e->getMessage(),
+                ]);
+                $performance = [];
+            }
 
             $seconds = (int) ($engagement['time_spent_seconds'] ?? 0);
             $hours = $seconds > 0 ? round($seconds / 3600, 1) : 0.0;
