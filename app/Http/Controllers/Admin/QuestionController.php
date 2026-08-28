@@ -40,6 +40,7 @@ class QuestionController extends Controller
         private QuestionSaveConfirmation $saveConfirmation,
         private QuestionZipImportService $zipImportService,
         private BookBasisPromptService $bookBasisPromptService,
+        private QuestionIssueReportService $issueReports,
     ) {}
 
     public function topicIndex(Request $request, SyllabusTopic $topic): Response
@@ -943,9 +944,20 @@ class QuestionController extends Controller
             $diagramService->attach($question, $request->file('diagram'));
         }
 
+        $resolved = $this->issueReports->resolveAfterQuestionFixed(
+            (int) $question->id,
+            $request->user(),
+            'Fixed by admin — please re-attempt',
+        );
+
+        $message = 'Question updated.';
+        if ($resolved['reports_returned'] > 0) {
+            $message .= ' Open student reports were closed and queued for re-attempt.';
+        }
+
         return redirect()
             ->route('admin.questions.topics.show', $question->syllabus_topic_id)
-            ->with('success', 'Question updated.');
+            ->with('success', $message);
     }
 
     public function updateFillBlank(Request $request, Question $question): RedirectResponse
@@ -980,7 +992,18 @@ class QuestionController extends Controller
             ],
         );
 
-        return back()->with('success', 'Fill-in-blank question updated.');
+        $resolved = $this->issueReports->resolveAfterQuestionFixed(
+            (int) $question->id,
+            $request->user(),
+            'Fixed by admin — please re-attempt',
+        );
+
+        $message = 'Fill-in-blank question updated.';
+        if ($resolved['reports_returned'] > 0) {
+            $message .= ' Open student reports were closed and queued for re-attempt.';
+        }
+
+        return back()->with('success', $message);
     }
 
     public function destroy(Request $request, Question $question): RedirectResponse

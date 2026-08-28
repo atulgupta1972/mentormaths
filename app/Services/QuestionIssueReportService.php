@@ -204,6 +204,7 @@ class QuestionIssueReportService
         $report->loadMissing(['question.topic', 'student', 'assignment']);
 
         DB::transaction(function () use ($report, $admin, $note) {
+            $this->contentUploadTasks->completeAllPendingCorrectionsForQuestion((int) $report->question_id);
             $this->enqueueReattempt($report);
 
             $report->update([
@@ -234,6 +235,8 @@ class QuestionIssueReportService
      */
     public function dismissOpenForQuestion(int $questionId, User $actor, ?string $note = null): int
     {
+        $this->contentUploadTasks->completeAllPendingCorrectionsForQuestion($questionId);
+
         $reports = QuestionIssueReport::query()
             ->where('question_id', $questionId)
             ->whereIn('status', [
@@ -588,6 +591,18 @@ class QuestionIssueReportService
      */
     public function markFixedForQuestion(int $questionId, User $actor, ?string $note = null): int
     {
+        return $this->resolveAfterQuestionFixed($questionId, $actor, $note)['reports_returned'];
+    }
+
+    /**
+     * Question content was fixed — remove from uploader queue and return open student reports.
+     *
+     * @return array{corrections_closed: int, reports_returned: int}
+     */
+    public function resolveAfterQuestionFixed(int $questionId, User $actor, ?string $note = null): array
+    {
+        $correctionsClosed = $this->contentUploadTasks->completeAllPendingCorrectionsForQuestion($questionId);
+
         $reports = QuestionIssueReport::query()
             ->where('question_id', $questionId)
             ->whereIn('status', [
@@ -597,14 +612,22 @@ class QuestionIssueReportService
             ->get();
 
         foreach ($reports as $report) {
-            $this->markFixedAndReturnToStudent(
-                $report,
-                $actor,
-                $note ?? 'Fixed by content uploader — please re-attempt',
-            );
+            DB::transaction(function () use ($report, $actor, $note) {
+                $this->enqueueReattempt($report);
+
+                $report->update([
+                    'status' => QuestionIssueReport::STATUS_AWAITING_REATTEMPT,
+                    'resolved_by' => $actor->id,
+                    'resolved_at' => now(),
+                    'admin_note' => $note ?? 'Question fixed — please re-attempt',
+                ]);
+            });
         }
 
-        return $reports->count();
+        return [
+            'corrections_closed' => $correctionsClosed,
+            'reports_returned' => $reports->count(),
+        ];
     }
 
     private function enqueueReattempt(QuestionIssueReport $report, ?string $failureReason = null): void

@@ -886,6 +886,20 @@ class ContentUploadTaskService
             ]);
     }
 
+    /**
+     * Close every pending uploader correction row for this sum (any chapter task).
+     */
+    public function completeAllPendingCorrectionsForQuestion(int $questionId): int
+    {
+        return ContentQuestionCorrection::query()
+            ->where('question_id', $questionId)
+            ->where('status', ContentQuestionCorrection::STATUS_PENDING)
+            ->update([
+                'status' => ContentQuestionCorrection::STATUS_COMPLETED,
+                'completed_at' => now(),
+            ]);
+    }
+
     private function assertChapterHasPdf(?TextbookChapter $chapter): void
     {
         if (! $chapter || ! filled($chapter->pdf_path)) {

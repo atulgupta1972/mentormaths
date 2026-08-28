@@ -23,10 +23,10 @@ class QuestionIssueReportController extends Controller
         ]);
 
         try {
-            $this->issueReports->markFixedAndReturnToStudent(
-                $report,
+            $this->issueReports->resolveAfterQuestionFixed(
+                (int) $report->question_id,
                 $request->user(),
-                $validated['admin_note'] ?? null,
+                $validated['admin_note'] ?? 'Fixed by admin — please re-attempt',
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());

@@ -99,12 +99,11 @@ class CorrectionQuestionController extends Controller
                 throw new \InvalidArgumentException('This question type cannot be edited here. Ask admin to fix it.');
             }
 
-            $this->taskService->completeQuestionCorrection($correction->task, (int) $question->id);
-            $returned = $this->issueReports->markFixedForQuestion(
+            $returned = $this->issueReports->resolveAfterQuestionFixed(
                 (int) $question->id,
                 $request->user(),
                 'Fixed by content uploader — please re-attempt',
-            );
+            )['reports_returned'];
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }

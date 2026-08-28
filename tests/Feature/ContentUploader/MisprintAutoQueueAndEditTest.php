@@ -129,6 +129,61 @@ class MisprintAutoQueueAndEditTest extends TestCase
         $this->assertDatabaseMissing('worksheet_question', ['question_id' => $questionId]);
     }
 
+    public function test_admin_edit_clears_uploader_correction_queue(): void
+    {
+        Mail::fake();
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task, $question] = $this->seedPublishedFillBlankWithUploader();
+        [$student] = $this->seedStudent();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        app(UserGroupService::class)->attachGroupByCode($admin, User::ROLE_ADMIN);
+
+        app(QuestionIssueReportService::class)->reportFromBatch(
+            $this->seedInProgressBatchAttempt($student, $question),
+            $question,
+        );
+
+        $correction = ContentQuestionCorrection::query()
+            ->where('question_id', $question->id)
+            ->where('status', ContentQuestionCorrection::STATUS_PENDING)
+            ->firstOrFail();
+
+        $options = $question->options()->orderBy('sort_order')->get();
+
+        if ($question->isMcq()) {
+            $this->actingAs($admin)
+                ->put(route('admin.questions.update', $question), [
+                    'question_text' => 'Corrected stem',
+                    'explanation' => 'Fixed',
+                    'method_hint' => 'Hint',
+                    'difficulty' => 'Easy',
+                    'options' => $options->map(fn ($option) => [
+                        'option_text' => $option->option_text,
+                        'is_correct' => (bool) $option->is_correct,
+                    ])->values()->all(),
+                ])
+                ->assertRedirect();
+        } else {
+            $this->actingAs($admin)
+                ->patch(route('admin.questions.fill-blank.update', $question), [
+                    'question_text' => 'Corrected fill blank',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '76',
+                    'explanation' => 'Fixed',
+                    'method_hint' => 'Hint',
+                    'difficulty' => 'Easy',
+                ])
+                ->assertRedirect();
+        }
+
+        $this->assertSame(ContentQuestionCorrection::STATUS_COMPLETED, $correction->fresh()->status);
+        $this->assertSame(
+            QuestionIssueReport::STATUS_AWAITING_REATTEMPT,
+            QuestionIssueReport::query()->where('question_id', $question->id)->value('status'),
+        );
+    }
+
     public function test_admin_can_resend_sent_report_to_uploader_after_they_completed_correction(): void
     {
         Mail::fake();

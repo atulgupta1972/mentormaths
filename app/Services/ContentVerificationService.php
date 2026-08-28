@@ -233,7 +233,11 @@ class ContentVerificationService
 
             $fresh = $check->fresh();
             $this->maybeCompleteRunIfAllVerified($run->fresh());
-            app(ContentUploadTaskService::class)->completeQuestionCorrection($run->task, (int) $question->id);
+            app(QuestionIssueReportService::class)->resolveAfterQuestionFixed(
+                (int) $question->id,
+                $user,
+                'Fixed during verification — please re-attempt',
+            );
 
             return $fresh;
         });
