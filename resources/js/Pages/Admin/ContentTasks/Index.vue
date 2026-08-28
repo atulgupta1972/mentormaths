@@ -104,6 +104,7 @@ const emailSent = computed(() => page.props.flash?.email_sent);
 const assignmentSummary = computed(() => page.props.flash?.assignment_summary);
 
 const drillFilter = ref(null);
+const geminiFilter = ref(null);
 
 watch(
     () => [props.matrix.drill?.grade?.id, props.matrix.drill?.uploader?.id, props.filters.drill_bucket],
@@ -121,12 +122,52 @@ const drillBreakup = computed(() => props.matrix.drill?.breakup ?? {
 
 const filteredDrillChapters = computed(() => {
     const chapters = props.matrix.drill?.chapters ?? [];
-    if (!drillFilter.value) {
-        return chapters;
+    let rows = chapters;
+
+    if (drillFilter.value) {
+        rows = rows.filter((row) => row.breakup_bucket === drillFilter.value);
     }
 
-    return chapters.filter((row) => row.breakup_bucket === drillFilter.value);
+    if (geminiFilter.value === 'done') {
+        rows = rows.filter((row) =>
+            row.gemini_progress?.can_gemini
+            && row.gemini_progress.pending === 0
+            && row.gemini_progress.total > 0,
+        );
+    } else if (geminiFilter.value === 'pending') {
+        rows = rows.filter((row) =>
+            row.gemini_progress?.can_gemini
+            && row.gemini_progress.pending > 0,
+        );
+    }
+
+    return rows;
 });
+
+const geminiBreakup = computed(() => props.matrix.drill?.gemini ?? { done: 0, pending: 0 });
+
+const showGeminiFilters = computed(() =>
+    drillFilter.value === 'published' || (geminiBreakup.value.done + geminiBreakup.value.pending) > 0,
+);
+
+const geminiFilterCards = computed(() => [
+    {
+        key: 'pending',
+        label: 'Gemini pending',
+        hint: 'Still need Gemini paste review',
+        count: geminiBreakup.value.pending ?? 0,
+        idle: 'bg-amber-50 text-amber-950 ring-amber-200 hover:bg-amber-100',
+        active: 'bg-amber-600 text-white ring-amber-600',
+    },
+    {
+        key: 'done',
+        label: 'Gemini done',
+        hint: 'All questions Gemini-verified',
+        count: geminiBreakup.value.done ?? 0,
+        idle: 'bg-emerald-50 text-emerald-950 ring-emerald-200 hover:bg-emerald-100',
+        active: 'bg-emerald-600 text-white ring-emerald-600',
+    },
+]);
 
 const groupedDrillChapters = computed(() => {
     const groups = [];
@@ -150,6 +191,28 @@ const groupedDrillChapters = computed(() => {
 
 const setDrillFilter = (bucket) => {
     drillFilter.value = drillFilter.value === bucket ? null : bucket;
+    if (drillFilter.value !== 'published') {
+        geminiFilter.value = null;
+    }
+};
+
+const setGeminiFilter = (bucket) => {
+    geminiFilter.value = geminiFilter.value === bucket ? null : bucket;
+    if (geminiFilter.value && drillFilter.value !== 'published') {
+        drillFilter.value = 'published';
+    }
+};
+
+const actionLinkLabel = (row) => {
+    if (row.can_review_and_publish) {
+        return 'Review & publish';
+    }
+
+    if (row.can_gemini_verify) {
+        return 'Gemini check';
+    }
+
+    return 'Open';
 };
 
 const breakupCards = computed(() => [
@@ -430,10 +493,27 @@ watch(
                         </button>
                     </div>
 
+                    <div v-if="showGeminiFilters" class="mt-4 grid gap-3 sm:grid-cols-2">
+                        <button
+                            v-for="card in geminiFilterCards"
+                            :key="card.key"
+                            type="button"
+                            class="rounded-lg px-3 py-3 text-left ring-1 transition"
+                            :class="geminiFilter === card.key ? card.active : card.idle"
+                            @click="setGeminiFilter(card.key)"
+                        >
+                            <p class="text-xs font-semibold uppercase tracking-wide opacity-80">{{ card.label }}</p>
+                            <p class="mt-1 text-2xl font-semibold">{{ card.count }}</p>
+                            <p class="mt-1 text-xs opacity-80">{{ card.hint }}</p>
+                        </button>
+                    </div>
+
                     <p class="mt-3 text-xs text-slate-500">
                         <template v-if="drillFilter === 'submitted'">Showing submitted chapters — open one to review questions and publish.</template>
                         <template v-else-if="drillFilter === 'under_review'">Showing chapters still under review (not yet submitted).</template>
-                        <template v-else-if="drillFilter === 'published'">Showing published chapters — <strong>Gemini check</strong> counts only Gemini paste review (0/N until you run it).</template>
+                        <template v-else-if="drillFilter === 'published'">Showing published chapters — use <strong>Gemini pending</strong> / <strong>Gemini done</strong> above to filter.</template>
+                        <template v-else-if="geminiFilter === 'pending'">Showing published chapters still needing Gemini review.</template>
+                        <template v-else-if="geminiFilter === 'done'">Showing published chapters fully Gemini-verified.</template>
                         <template v-else>Click a count above to filter. Submitted opens review &amp; publish.</template>
                     </p>
 
@@ -490,6 +570,9 @@ watch(
                         <table class="min-w-full divide-y divide-slate-100 text-sm">
                             <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                                 <tr>
+                                    <th class="sticky left-0 z-20 min-w-[5.5rem] border-r border-slate-200 bg-slate-50 px-2 py-2 sm:static sm:z-auto sm:border-r-0 sm:px-3">
+                                        Action
+                                    </th>
                                     <th class="w-10 px-3 py-2">
                                         <input
                                             type="checkbox"
@@ -512,7 +595,6 @@ watch(
                                     <th class="px-3 py-2">Questions</th>
                                     <th class="px-3 py-2">Gemini check</th>
                                     <th class="px-3 py-2">Rate</th>
-                                    <th class="px-3 py-2"></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
@@ -525,6 +607,24 @@ watch(
                                         </td>
                                     </tr>
                                     <tr v-for="row in group.rows" :key="row.id">
+                                        <td class="sticky left-0 z-10 border-r border-slate-100 bg-white px-2 py-2 sm:static sm:z-auto sm:border-r-0 sm:px-3">
+                                            <div class="flex min-w-[5.5rem] flex-col gap-1">
+                                                <Link
+                                                    :href="route('admin.content-tasks.show', row.id)"
+                                                    class="text-xs font-semibold hover:underline"
+                                                    :class="row.can_review_and_publish ? 'text-violet-700' : 'text-indigo-600'"
+                                                >
+                                                    {{ actionLinkLabel(row) }}
+                                                </Link>
+                                                <Link
+                                                    v-if="row.can_reassign"
+                                                    :href="route('admin.content-tasks.show', row.id)"
+                                                    class="text-xs text-slate-600 hover:underline"
+                                                >
+                                                    Reassign
+                                                </Link>
+                                            </div>
+                                        </td>
                                         <td class="px-3 py-2">
                                             <input
                                                 v-if="row.can_reassign"
@@ -566,22 +666,6 @@ watch(
                                             <span v-else class="text-slate-400">—</span>
                                         </td>
                                         <td class="px-3 py-2">{{ row.rate_description || formatInr(row.agreed_amount_inr || row.offered_amount_inr) }}</td>
-                                        <td class="px-3 py-2 text-right">
-                                            <Link
-                                                :href="route('admin.content-tasks.show', row.id)"
-                                                class="font-medium hover:underline"
-                                                :class="row.can_review_and_publish ? 'text-violet-700' : 'text-indigo-600'"
-                                            >
-                                                {{ row.can_review_and_publish ? 'Review & publish' : (row.can_gemini_verify ? 'Gemini check' : 'Open') }}
-                                            </Link>
-                                            <Link
-                                                v-if="row.can_reassign"
-                                                :href="route('admin.content-tasks.show', row.id)"
-                                                class="ml-3 text-slate-600 hover:underline"
-                                            >
-                                                Reassign
-                                            </Link>
-                                        </td>
                                     </tr>
                                 </template>
                                 <tr v-if="!filteredDrillChapters.length">

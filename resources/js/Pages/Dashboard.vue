@@ -68,6 +68,7 @@ const unlockingAttemptId = ref(null);
 const unlockForm = useForm({});
 const highlightedExamPlanId = ref(null);
 const returningTaskId = ref(null);
+const geminiQueueFilter = ref('pending');
 const returnForm = useForm({
     reason: 'Please re-check every question. Do not delete any. Correct a sum only if it is wrong.',
 });
@@ -87,6 +88,28 @@ const sendBackForRecheck = (item) => {
         },
     });
 };
+
+const geminiPendingItems = computed(() =>
+    (props.contentRecheckQueue || []).filter((item) =>
+        item.gemini_progress?.can_gemini && (item.gemini_progress.pending ?? 0) > 0,
+    ),
+);
+
+const geminiDoneItems = computed(() =>
+    (props.contentRecheckQueue || []).filter((item) =>
+        item.gemini_progress?.can_gemini
+        && (item.gemini_progress.pending ?? 0) === 0
+        && (item.gemini_progress.total ?? 0) > 0,
+    ),
+);
+
+const filteredGeminiQueue = computed(() => {
+    if (geminiQueueFilter.value === 'done') {
+        return geminiDoneItems.value;
+    }
+
+    return geminiPendingItems.value;
+});
 
 const unlockLockedAttempt = (row) => {
     if (!window.confirm(`Unlock ${row.student_name}? They can continue ${row.set_code || 'this set'}.`)) {
@@ -774,6 +797,72 @@ const formatHelpDate = (value) => {
                                 </div>
                             </li>
                         </ul>
+                    </section>
+
+                    <section
+                        v-if="contentRecheckQueue.length"
+                        class="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-violet-50 p-4 shadow-sm"
+                    >
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-sm font-semibold text-indigo-950">
+                                Gemini answer check · published chapters
+                            </p>
+                            <Link :href="route('admin.content-tasks.index')" class="text-xs font-medium text-indigo-600 hover:underline">
+                                Content matrix →
+                            </Link>
+                        </div>
+                        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                            <button
+                                type="button"
+                                class="rounded-lg px-3 py-2 text-left ring-1 transition"
+                                :class="geminiQueueFilter === 'pending'
+                                    ? 'bg-amber-600 text-white ring-amber-600'
+                                    : 'bg-white text-amber-950 ring-amber-200 hover:bg-amber-50'"
+                                @click="geminiQueueFilter = 'pending'"
+                            >
+                                <p class="text-xs font-semibold uppercase tracking-wide opacity-80">Pending</p>
+                                <p class="text-xl font-bold">{{ stats.gemini_pending_count ?? geminiPendingItems.length }}</p>
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-lg px-3 py-2 text-left ring-1 transition"
+                                :class="geminiQueueFilter === 'done'
+                                    ? 'bg-emerald-600 text-white ring-emerald-600'
+                                    : 'bg-white text-emerald-950 ring-emerald-200 hover:bg-emerald-50'"
+                                @click="geminiQueueFilter = 'done'"
+                            >
+                                <p class="text-xs font-semibold uppercase tracking-wide opacity-80">Done</p>
+                                <p class="text-xl font-bold">{{ stats.gemini_done_count ?? geminiDoneItems.length }}</p>
+                            </button>
+                        </div>
+                        <ul v-if="filteredGeminiQueue.length" class="mt-3 space-y-2">
+                            <li
+                                v-for="item in filteredGeminiQueue"
+                                :key="`gemini-${item.id}`"
+                                class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/90 px-3 py-2 text-sm"
+                            >
+                                <span>
+                                    {{ item.grade_name }} · Ch {{ item.chapter_number }} — {{ item.chapter_title }}
+                                    <span class="text-gray-500">· {{ item.assignee_name }}</span>
+                                    <span
+                                        v-if="item.gemini_progress?.can_gemini"
+                                        class="ml-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold"
+                                        :class="item.gemini_progress.pending === 0 ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'"
+                                    >
+                                        {{ item.gemini_progress.verified }}/{{ item.gemini_progress.total }}
+                                    </span>
+                                </span>
+                                <Link
+                                    :href="route('admin.content-tasks.show', item.id)"
+                                    class="shrink-0 text-xs font-semibold text-indigo-700 hover:underline"
+                                >
+                                    {{ item.gemini_progress?.pending > 0 ? 'Gemini check →' : 'Open →' }}
+                                </Link>
+                            </li>
+                        </ul>
+                        <p v-else class="mt-3 text-sm text-indigo-900">
+                            No chapters in this Gemini bucket.
+                        </p>
                     </section>
 
                     <section class="space-y-3">

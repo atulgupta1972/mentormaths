@@ -225,6 +225,13 @@ class ContentAllocationMatrixService
                     'submitted' => $chapters->where('breakup_bucket', 'submitted')->count(),
                     'published' => $chapters->where('breakup_bucket', 'published')->count(),
                 ],
+                'gemini' => [
+                    'done' => $chapters->filter(fn (array $row) => ($row['gemini_progress']['can_gemini'] ?? false)
+                        && (int) ($row['gemini_progress']['pending'] ?? 0) === 0
+                        && (int) ($row['gemini_progress']['total'] ?? 0) > 0)->count(),
+                    'pending' => $chapters->filter(fn (array $row) => ($row['gemini_progress']['can_gemini'] ?? false)
+                        && (int) ($row['gemini_progress']['pending'] ?? 0) > 0)->count(),
+                ],
             ];
         }
 

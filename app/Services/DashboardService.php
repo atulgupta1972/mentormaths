@@ -22,6 +22,7 @@ class DashboardService
         private AdminGradeContext $gradeContext,
         private QuestionResolutionService $resolutionService,
         private QuestionIssueReportService $issueReports,
+        private ContentVerificationService $verificationService,
     ) {}
 
     /**
@@ -212,12 +213,21 @@ class DashboardService
                 ->map(fn (ContentUploadTask $task) => $this->serializeDashboardContentTask($task))
                 ->all();
 
-            $contentRecheckQueue = $contentTaskQuery()
+            $contentRecheckTasks = $contentTaskQuery()
                 ->where('status', ContentUploadTask::STATUS_PUBLISHED)
                 ->latest('published_at')
                 ->limit(30)
-                ->get()
-                ->map(fn (ContentUploadTask $task) => $this->serializeDashboardContentTask($task))
+                ->get();
+
+            $recheckProgress = $request->user()
+                ? $this->verificationService->progressForTasks($contentRecheckTasks, $request->user())
+                : [];
+
+            $contentRecheckQueue = $contentRecheckTasks
+                ->map(fn (ContentUploadTask $task) => $this->serializeDashboardContentTask(
+                    $task,
+                    $recheckProgress[(int) $task->id] ?? null,
+                ))
                 ->all();
         } catch (Throwable $e) {
             Log::error('Admin dashboard failed to load the content queues.', ['message' => $e->getMessage()]);
@@ -246,6 +256,14 @@ class DashboardService
                 'locked_attempts_count' => count($lockedAttempts),
                 'content_publish_queue_count' => count($contentPublishQueue),
                 'content_recheck_queue_count' => count($contentRecheckQueue),
+                'gemini_pending_count' => collect($contentRecheckQueue)
+                    ->filter(fn (array $row) => (int) ($row['gemini_progress']['pending'] ?? 0) > 0)
+                    ->count(),
+                'gemini_done_count' => collect($contentRecheckQueue)
+                    ->filter(fn (array $row) => ($row['gemini_progress']['can_gemini'] ?? false)
+                        && (int) ($row['gemini_progress']['pending'] ?? 0) === 0
+                        && (int) ($row['gemini_progress']['total'] ?? 0) > 0)
+                    ->count(),
             ],
             'students' => $students,
             'helpRequests' => $helpRequests,
@@ -281,6 +299,8 @@ class DashboardService
                 'locked_attempts_count' => 0,
                 'content_publish_queue_count' => 0,
                 'content_recheck_queue_count' => 0,
+                'gemini_pending_count' => 0,
+                'gemini_done_count' => 0,
             ],
             'students' => [],
             'helpRequests' => [],
@@ -483,9 +503,10 @@ class DashboardService
     }
 
     /**
+     * @param  array<string, mixed>|null  $geminiProgress
      * @return array<string, mixed>
      */
-    private function serializeDashboardContentTask(ContentUploadTask $task): array
+    private function serializeDashboardContentTask(ContentUploadTask $task, ?array $geminiProgress = null): array
     {
         return [
             'id' => $task->id,
@@ -499,6 +520,8 @@ class DashboardService
             'submitted_at' => $task->submitted_at?->toIso8601String(),
             'published_at' => $task->published_at?->toIso8601String(),
             'agreed_amount_inr' => $task->agreed_amount_inr,
+            'gemini_progress' => $geminiProgress,
+            'can_gemini_verify' => (bool) ($geminiProgress['can_gemini'] ?? false),
         ];
     }
 
