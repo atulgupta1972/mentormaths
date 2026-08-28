@@ -86,6 +86,7 @@ class ContentTaskController extends Controller
                 'questions' => $verification['questions'],
                 'summary' => $verification['summary'],
                 'progress' => $progress,
+                'gemini_pending_count' => $this->verificationService->countPendingGeminiQuestions($verification['questions']),
                 'gemini_prompt' => $this->geminiPasteService->buildPrompt(
                     $pendingQuestions,
                     $this->geminiPasteService->chapterLabel($contentTask),

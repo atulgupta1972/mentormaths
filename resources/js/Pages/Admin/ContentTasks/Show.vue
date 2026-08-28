@@ -220,7 +220,12 @@ const publishForm = useForm({});
 const reviewMode = ref('batch');
 
 const verificationPendingCount = computed(() =>
-    Number(props.verification?.summary?.unverified ?? props.verification?.progress?.pending ?? 0),
+    Number(
+        props.verification?.gemini_pending_count
+        ?? props.verification?.progress?.pending
+        ?? props.verification?.summary?.unverified
+        ?? 0,
+    ),
 );
 
 const verificationProgress = computed(() => props.verification?.progress ?? null);

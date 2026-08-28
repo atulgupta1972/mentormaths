@@ -1184,6 +1184,7 @@ class ContentUploadTaskController extends Controller
             'questions' => $verification['questions'],
             'summary' => $verification['summary'],
             'progress' => $this->verificationService->progressForTask($task, $user),
+            'gemini_pending_count' => $this->verificationService->countPendingGeminiQuestions($verification['questions']),
             'gemini_prompt' => $this->geminiPasteService->buildPrompt(
                 $pendingQuestions,
                 $this->geminiPasteService->chapterLabel($task),

@@ -19,13 +19,14 @@ const page = usePage();
 const agreeForm = useForm({});
 const startReviewForm = useForm({});
 
-const verificationPendingCount = computed(() => {
-    if (props.verification?.progress?.can_gemini) {
-        return Number(props.verification.progress.pending ?? 0);
-    }
-
-    return Number(props.verification?.summary?.unverified ?? 0);
-});
+const verificationPendingCount = computed(() =>
+    Number(
+        props.verification?.gemini_pending_count
+        ?? props.verification?.progress?.pending
+        ?? props.verification?.summary?.unverified
+        ?? 0,
+    ),
+);
 
 const showGeminiGuide = computed(() =>
     props.task.status === 'published'

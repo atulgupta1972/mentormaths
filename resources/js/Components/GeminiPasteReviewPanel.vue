@@ -112,6 +112,7 @@ const resetReview = () => {
                 <p class="text-sm font-semibold text-indigo-950">Gemini answer check</p>
                 <p class="mt-1 text-sm text-indigo-900">
                     Copy the chapter prompt into Gemini, paste the reply here.
+                    Only <strong>pending</strong> questions go in the prompt — already Gemini-verified sums are skipped.
                     Questions marked <strong>Correct</strong> are auto-verified; fix the rest and run again.
                 </p>
                 <p v-if="totalCount > 0" class="mt-1 text-xs font-semibold text-indigo-800">
@@ -165,7 +166,7 @@ const resetReview = () => {
                 {{ form.processing ? 'Applying…' : 'Apply Gemini review' }}
             </PrimaryButton>
             <p class="text-xs text-indigo-800">
-                Fix flagged questions below, then copy prompt and paste again until all are verified.
+                Fix flagged questions below, then copy prompt again — only corrected / pending sums are sent to Gemini.
             </p>
         </div>
 

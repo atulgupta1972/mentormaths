@@ -32,7 +32,7 @@ defineProps({
             </li>
             <li class="flex gap-2">
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">5</span>
-                <span>Questions marked <strong>Correct</strong> are auto-verified. Fix any <strong>Needs Verification</strong> rows, then run again until all green.</span>
+                <span>Questions marked <strong>Correct</strong> are auto-verified. Fix any <strong>Needs Verification</strong> rows, then run Gemini again on just those — no need to reset the full chapter.</span>
             </li>
             <li class="flex gap-2">
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">6</span>

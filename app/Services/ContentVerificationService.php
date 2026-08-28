@@ -215,19 +215,43 @@ class ContentVerificationService
                 ->where('question_id', $question->id)
                 ->firstOrFail();
 
-            $payloadChecks = [];
-            foreach (ContentVerificationCheck::CHECK_FIELDS as $field) {
-                $payloadChecks[$field] = true;
-            }
-            $payloadChecks['diagram_note'] = filled($question->fresh()->diagram_url)
-                ? 'Diagram reviewed'
-                : 'No diagram needed';
-            $payloadChecks['verified_at'] = now();
-            $payloadChecks['skipped'] = false;
-            $payloadChecks['skip_reason'] = null;
-            $payloadChecks['skipped_at'] = null;
+            $task = $run->task;
+            $queueGeminiRecheck = $task->status === ContentUploadTask::STATUS_PUBLISHED
+                && in_array($check->ai_verdict, [
+                    ContentAiVerificationService::VERDICT_NEEDS_FIX,
+                    ContentAiVerificationService::VERDICT_NEEDS_DIAGRAM,
+                ], true);
 
-            $check->update($payloadChecks);
+            if ($queueGeminiRecheck) {
+                $recheckPayload = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, false);
+                $recheckPayload['diagram_note'] = filled($question->fresh()->diagram_url)
+                    ? 'Diagram reviewed'
+                    : 'No diagram needed';
+                $recheckPayload['verified_at'] = null;
+                $recheckPayload['skipped'] = false;
+                $recheckPayload['skip_reason'] = null;
+                $recheckPayload['skipped_at'] = null;
+                $recheckPayload['ai_verdict'] = null;
+                $recheckPayload['ai_confidence'] = null;
+                $recheckPayload['ai_note'] = 'Fixed manually — pending Gemini recheck';
+                $recheckPayload['ai_reviewed_at'] = null;
+
+                $check->update($recheckPayload);
+            } else {
+                $payloadChecks = [];
+                foreach (ContentVerificationCheck::CHECK_FIELDS as $field) {
+                    $payloadChecks[$field] = true;
+                }
+                $payloadChecks['diagram_note'] = filled($question->fresh()->diagram_url)
+                    ? 'Diagram reviewed'
+                    : 'No diagram needed';
+                $payloadChecks['verified_at'] = now();
+                $payloadChecks['skipped'] = false;
+                $payloadChecks['skip_reason'] = null;
+                $payloadChecks['skipped_at'] = null;
+
+                $check->update($payloadChecks);
+            }
 
             $this->syncTaskStatus($run);
 
@@ -783,6 +807,16 @@ class ContentVerificationService
     }
 
     /**
+     * @param  list<array<string, mixed>>  $questions
+     */
+    public function countPendingGeminiQuestions(array $questions): int
+    {
+        return collect($questions)
+            ->filter(fn (array $row) => ! $this->isGeminiDoneRow($row))
+            ->count();
+    }
+
+    /**
      * @param  array<string, mixed>  $row
      */
     public function isGeminiDoneRow(array $row): bool
@@ -866,6 +900,7 @@ class ContentVerificationService
             ContentUploadTask::STATUS_VERIFIED,
             ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
             ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            ContentUploadTask::STATUS_PUBLISHED,
         ], true);
     }
 
