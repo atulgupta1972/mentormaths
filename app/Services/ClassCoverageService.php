@@ -102,18 +102,10 @@ class ClassCoverageService
                 'items' => $this->formatDetailItems($rawItems),
             ];
         })->sort(function (array $left, array $right) {
-            $rank = static fn (array $chapter): int => match (true) {
-                (bool) ($chapter['studied'] ?? false) => 0,
-                (bool) ($chapter['under_study'] ?? false) => 1,
-                default => 2,
-            };
-
-            $byStatus = $rank($left) <=> $rank($right);
-            if ($byStatus !== 0) {
-                return $byStatus;
-            }
-
-            $byNumber = ((int) ($left['chapter_number'] ?? 0)) <=> ((int) ($right['chapter_number'] ?? 0));
+            $byNumber = strcmp(
+                SyllabusChapter::orderKey((string) ($left['chapter_number'] ?? '')),
+                SyllabusChapter::orderKey((string) ($right['chapter_number'] ?? '')),
+            );
             if ($byNumber !== 0) {
                 return $byNumber;
             }

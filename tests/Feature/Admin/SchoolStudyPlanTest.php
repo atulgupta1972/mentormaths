@@ -35,7 +35,7 @@ class SchoolStudyPlanTest extends TestCase
         $this->withoutMiddleware(PreventRequestForgery::class);
     }
 
-    public function test_study_plan_lists_studied_chapters_before_not_studied(): void
+    public function test_study_plan_keeps_chapter_serial_order_when_marking_studied(): void
     {
         [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
 
@@ -58,13 +58,13 @@ class SchoolStudyPlanTest extends TestCase
             ->get(route('admin.school-study-plan.index', ['student_id' => $student->id]))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('classCoverage.chapters.0.id', $chapters[2]->id)
-                ->where('classCoverage.chapters.0.studied', true)
-                ->where('classCoverage.chapters.1.id', $chapters[0]->id)
-                ->where('classCoverage.chapters.1.under_study', true)
-                ->where('classCoverage.chapters.2.id', $chapters[1]->id)
-                ->where('classCoverage.chapters.2.studied', false)
-                ->where('classCoverage.chapters.2.under_study', false));
+                ->where('classCoverage.chapters.0.id', $chapters[0]->id)
+                ->where('classCoverage.chapters.0.under_study', true)
+                ->where('classCoverage.chapters.1.id', $chapters[1]->id)
+                ->where('classCoverage.chapters.1.studied', false)
+                ->where('classCoverage.chapters.1.under_study', false)
+                ->where('classCoverage.chapters.2.id', $chapters[2]->id)
+                ->where('classCoverage.chapters.2.studied', true));
     }
 
     public function test_admin_can_view_and_update_student_school_study_plan(): void
