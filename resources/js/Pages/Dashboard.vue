@@ -912,10 +912,13 @@ const formatHelpDate = (value) => {
                             <Link
                                 v-for="grade in gradeLevels"
                                 :key="grade.id"
-                                :href="route('admin.classes.show', grade.id)"
+                                :href="safeRoute('admin.classes.show', grade.id, `/admin/classes/${grade.id}`)"
                                 class="rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
                             >
                                 <p class="text-lg font-bold text-gray-900">{{ grade.name }}</p>
+                                <p class="mt-1 text-sm text-gray-600">
+                                    {{ grade.students_count || 0 }} student{{ (grade.students_count || 0) === 1 ? '' : 's' }}
+                                </p>
                                 <p class="mt-1 text-xs font-medium text-indigo-700">View students →</p>
                             </Link>
                         </div>

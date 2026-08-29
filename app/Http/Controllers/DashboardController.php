@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\AcademicYear;
 use App\Models\GradeLevel;
 use App\Models\Student;
+use App\Models\StudentEnrollment;
+use App\Services\AdminGradeContext;
 use App\Services\ClassCoverageService;
 use App\Services\ContentUploaderDashboardService;
 use App\Services\DashboardService;
@@ -26,6 +28,7 @@ class DashboardController extends Controller
         private ContentUploaderDashboardService $uploaderDashboard,
         private ClassCoverageService $classCoverage,
         private SetAttemptService $attemptService,
+        private AdminGradeContext $gradeContext,
     ) {}
 
     public function __invoke(Request $request): Response|RedirectResponse
@@ -51,11 +54,24 @@ class DashboardController extends Controller
             }
 
             try {
-                $gradeLevels = GradeLevel::query()
-                    ->where('is_active', true)
-                    ->orderBy('sort_order')
-                    ->get(['id', 'name'])
-                    ->map(fn (GradeLevel $grade) => $grade->only(['id', 'name']))
+                $activeYear = AcademicYear::active();
+                $studentCounts = collect();
+                if ($activeYear) {
+                    $studentCounts = StudentEnrollment::query()
+                        ->where('academic_year_id', $activeYear->id)
+                        ->where('status', StudentEnrollment::STATUS_ACTIVE)
+                        ->selectRaw('grade_level_id, count(*) as c')
+                        ->groupBy('grade_level_id')
+                        ->pluck('c', 'grade_level_id');
+                }
+
+                $gradeLevels = $this->gradeContext->classLevels()
+                    ->map(fn (GradeLevel $grade) => [
+                        'id' => $grade->id,
+                        'name' => $grade->name,
+                        'students_count' => (int) ($studentCounts[$grade->id] ?? $studentCounts[(string) $grade->id] ?? 0),
+                    ])
+                    ->values()
                     ->all();
             } catch (Throwable $e) {
                 Log::error('Admin dashboard failed to load grade levels.', ['message' => $e->getMessage()]);

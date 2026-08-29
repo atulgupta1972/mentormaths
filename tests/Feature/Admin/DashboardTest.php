@@ -2,10 +2,14 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Http\Middleware\EnsureBasicsDrillComplete;
+use App\Http\Middleware\EnsureFormulaDrillComplete;
 use App\Models\AcademicYear;
 use App\Models\Board;
-use App\Models\GradeLevel;
 use App\Models\ContentUploadTask;
+use App\Models\GradeLevel;
+use App\Models\SetAssignment;
+use App\Models\SetAttempt;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
@@ -14,8 +18,12 @@ use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\User;
+use App\Models\Worksheet;
+use App\Services\ClassCoverageService;
 use App\Services\QuestionResolutionService;
 use App\Services\UserGroupService;
+use App\Support\PracticeSetScope;
+use App\Support\PracticeSetTier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -36,7 +44,8 @@ class DashboardTest extends TestCase
                 ->component('Dashboard')
                 ->where('isAdmin', true)
                 ->where('stats.students_count', 1)
-                ->has('gradeLevels'));
+                ->has('gradeLevels', 1)
+                ->where('gradeLevels.0.students_count', 1));
     }
 
     public function test_admin_can_load_one_student_dashboard_detail(): void
@@ -143,29 +152,29 @@ class DashboardTest extends TestCase
 
         [$admin, $enrollment] = $this->seedAdminDashboard();
 
-        $worksheet = \App\Models\Worksheet::query()->create([
+        $worksheet = Worksheet::query()->create([
             'title' => 'Chapter test',
             'set_number' => 1,
             'set_code' => 'T701',
-            'tier' => \App\Support\PracticeSetTier::STARTER,
-            'scope' => \App\Support\PracticeSetScope::CHAPTER,
-            'status' => \App\Models\Worksheet::STATUS_PUBLISHED,
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'status' => Worksheet::STATUS_PUBLISHED,
         ]);
 
-        $assignment = \App\Models\SetAssignment::query()->create([
+        $assignment = SetAssignment::query()->create([
             'student_enrollment_id' => $enrollment->id,
             'worksheet_id' => $worksheet->id,
             'assigned_at' => now(),
             'due_date' => now()->addWeek(),
-            'status' => \App\Models\SetAssignment::STATUS_IN_PROGRESS,
+            'status' => SetAssignment::STATUS_IN_PROGRESS,
         ]);
 
-        $attempt = \App\Models\SetAttempt::query()->create([
+        $attempt = SetAttempt::query()->create([
             'set_assignment_id' => $assignment->id,
             'attempt_number' => 1,
-            'mode' => \App\Models\SetAttempt::MODE_BATCH,
+            'mode' => SetAttempt::MODE_BATCH,
             'started_at' => now(),
-            'status' => \App\Models\SetAttempt::STATUS_IN_PROGRESS,
+            'status' => SetAttempt::STATUS_IN_PROGRESS,
             'tab_leave_count' => 4,
         ]);
 
@@ -193,14 +202,14 @@ class DashboardTest extends TestCase
     {
         $this->withoutVite();
         $this->withoutMiddleware([
-            \App\Http\Middleware\EnsureFormulaDrillComplete::class,
-            \App\Http\Middleware\EnsureBasicsDrillComplete::class,
+            EnsureFormulaDrillComplete::class,
+            EnsureBasicsDrillComplete::class,
         ]);
 
         [$admin, $enrollment] = $this->seedAdminDashboard();
         $user = $enrollment->student->user;
 
-        $this->mock(\App\Services\ClassCoverageService::class, function ($mock) {
+        $this->mock(ClassCoverageService::class, function ($mock) {
             $mock->shouldReceive('forEnrollment')
                 ->andThrow(new \RuntimeException('missing column effective_syllabus_chapter_id'));
         });
