@@ -131,15 +131,38 @@ const studyPlanSubtitle = computed(() => {
     return parts.length ? parts.join(' · ') : 'Your class syllabus';
 });
 
+const studyStatusOverrides = ref({});
+
+const coverageChapters = computed(() => {
+    const base = props.classCoverage?.chapters || [];
+    const overrides = studyStatusOverrides.value;
+
+    if (! Object.keys(overrides).length) {
+        return base;
+    }
+
+    return base.map((chapter) => {
+        const patch = overrides[chapter.id];
+
+        return patch ? { ...chapter, ...patch } : chapter;
+    });
+});
+
 const underStudyChapter = computed(() => {
+    const fromMerged = coverageChapters.value.find((chapter) => chapter.under_study);
+
+    if (fromMerged) {
+        return fromMerged;
+    }
+
     const id = props.classCoverage?.under_study_chapter_id;
     if (!id) return null;
     return (props.classCoverage.chapters || []).find((c) => c.id === id) || null;
 });
 
-const studiedChapterRows = computed(() => (props.classCoverage?.chapters || []).filter((c) => c.studied));
+const studiedChapterRows = computed(() => coverageChapters.value.filter((c) => c.studied));
 
-const underStudyChapterRows = computed(() => (props.classCoverage?.chapters || []).filter((c) => c.under_study));
+const underStudyChapterRows = computed(() => coverageChapters.value.filter((c) => c.under_study));
 
 const resumeItems = computed(() => props.resumeItems || []);
 
@@ -1013,6 +1036,7 @@ const formatHelpDate = (value) => {
                         <ClassCoveragePanel
                             :class-coverage="classCoverage"
                             :upcoming-exams="examPlans.upcoming || []"
+                            @status-overrides="studyStatusOverrides = $event"
                         />
 
                         <div class="mt-3 flex flex-wrap gap-2">

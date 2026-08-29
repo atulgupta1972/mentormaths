@@ -4,7 +4,7 @@ import ChapterPerformanceSummary from '@/Components/ChapterPerformanceSummary.vu
 import CoverageItemsWithRevisionRail from '@/Components/CoverageItemsWithRevisionRail.vue';
 import CoverageSetItemCard from '@/Components/CoverageSetItemCard.vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     classCoverage: {
@@ -33,12 +33,57 @@ const props = defineProps({
     },
 });
 
+const emit = defineEmits(['statusOverrides']);
+
 const savingId = ref(null);
 const saveError = ref('');
 const assigningWorksheetId = ref(null);
 const expandedChapterIds = ref(new Set());
+const chapterStatusOverrides = ref({});
 
-const chapters = computed(() => props.classCoverage?.chapters ?? []);
+const rawChapters = computed(() => props.classCoverage?.chapters ?? []);
+
+const chapters = computed(() => {
+    const overrides = chapterStatusOverrides.value;
+
+    if (! Object.keys(overrides).length) {
+        return rawChapters.value;
+    }
+
+    return rawChapters.value.map((chapter) => {
+        const patch = overrides[chapter.id];
+
+        return patch ? { ...chapter, ...patch } : chapter;
+    });
+});
+
+watch(rawChapters, () => {
+    const overrides = chapterStatusOverrides.value;
+
+    if (! Object.keys(overrides).length) {
+        return;
+    }
+
+    const next = { ...overrides };
+    let changed = false;
+
+    for (const [id, patch] of Object.entries(overrides)) {
+        const chapter = rawChapters.value.find((row) => row.id === Number(id));
+
+        if (! chapter) {
+            continue;
+        }
+
+        if (patch.studied === chapter.studied && patch.under_study === chapter.under_study) {
+            delete next[id];
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        chapterStatusOverrides.value = next;
+    }
+}, { deep: true });
 const additionalGroups = computed(() => props.classCoverage?.additional_groups ?? []);
 const chapterChoices = computed(() => props.classCoverage?.chapter_choices ?? []);
 const isStudentView = computed(() => String(props.updateRouteName).startsWith('student.'));
@@ -281,16 +326,20 @@ const mark = (chapter, status) => {
         return;
     }
 
+    const displayChapter = chapters.value.find((row) => row.id === chapter.id) ?? chapter;
+
     let nextStatus = status;
-    if (status === 'studied' && chapter.studied) {
+    if (status === 'studied' && displayChapter.studied) {
         nextStatus = 'none';
-    } else if (status === 'under_study' && chapter.under_study) {
+    } else if (status === 'under_study' && displayChapter.under_study) {
         nextStatus = 'none';
-    } else if (status === 'studied' && chapter.under_study) {
+    } else if (status === 'studied' && displayChapter.under_study) {
         nextStatus = 'studied';
-    } else if (status === 'under_study' && chapter.studied) {
+    } else if (status === 'under_study' && displayChapter.studied) {
         nextStatus = 'under_study';
     }
+
+    applyOptimisticStatus(chapter.id, nextStatus);
 
     savingId.value = chapter.id;
     saveError.value = '';
@@ -300,14 +349,32 @@ const mark = (chapter, status) => {
         syllabusChapter: chapter.id,
     };
 
-    router.put(route(props.updateRouteName, params), {
-        status: nextStatus,
-    }, {
+    const visitOptions = {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => {
             saveError.value = '';
+
+            if (isStudentView.value) {
+                router.reload({
+                    only: ['assignments', 'stats'],
+                    preserveScroll: true,
+                    preserveState: true,
+                });
+            } else {
+                chapterStatusOverrides.value = {};
+                emit('statusOverrides', {});
+                router.reload({
+                    only: ['classCoverage', 'flash'],
+                    preserveScroll: true,
+                    preserveState: true,
+                });
+            }
         },
         onError: (errors) => {
+            chapterStatusOverrides.value = {};
+            emit('statusOverrides', {});
+
             const first = Object.values(errors ?? {})[0];
 
             saveError.value = Array.isArray(first) ? first[0] : (first || 'Could not save. Please try again.');
@@ -315,7 +382,52 @@ const mark = (chapter, status) => {
         onFinish: () => {
             savingId.value = null;
         },
-    });
+    };
+
+    if (isStudentView.value) {
+        visitOptions.only = ['flash'];
+    }
+
+    router.put(route(props.updateRouteName, params), {
+        status: nextStatus,
+    }, visitOptions);
+};
+
+const applyOptimisticStatus = (chapterId, nextStatus) => {
+    const overrides = { ...chapterStatusOverrides.value };
+
+    for (const chapter of rawChapters.value) {
+        const current = overrides[chapter.id]
+            ? { ...chapter, ...overrides[chapter.id] }
+            : chapter;
+
+        let studied = current.studied;
+        let underStudy = current.under_study;
+
+        if (chapter.id === chapterId) {
+            if (nextStatus === 'studied') {
+                studied = true;
+                underStudy = false;
+            } else if (nextStatus === 'under_study') {
+                studied = false;
+                underStudy = true;
+            } else {
+                studied = false;
+                underStudy = false;
+            }
+        } else if (nextStatus === 'under_study') {
+            underStudy = false;
+        }
+
+        if (studied !== chapter.studied || underStudy !== chapter.under_study) {
+            overrides[chapter.id] = { studied, under_study: underStudy };
+        } else {
+            delete overrides[chapter.id];
+        }
+    }
+
+    chapterStatusOverrides.value = overrides;
+    emit('statusOverrides', overrides);
 };
 
 const toggleChapter = (chapterId) => {

@@ -484,8 +484,7 @@ class ClassCoverageService
             );
         });
 
-        $this->formulaBank->ensureChaptersHaveSingleFormulaSet([$chapter->id], auth()->user());
-        $this->assignChapterContentDueToday($enrollment, $chapter);
+        $this->deferChapterMarkSideEffects($enrollment, $chapter);
     }
 
     public function clearCoverage(StudentEnrollment $enrollment, SyllabusChapter $chapter): void
@@ -518,8 +517,7 @@ class ClassCoverageService
             );
         });
 
-        $this->formulaBank->ensureChaptersHaveSingleFormulaSet([$chapter->id], auth()->user());
-        $this->assignChapterContentDueToday($enrollment, $chapter);
+        $this->deferChapterMarkSideEffects($enrollment, $chapter);
     }
 
     /**
@@ -961,5 +959,37 @@ class ClassCoverageService
                 'syllabus_chapter_id' => 'This chapter is not part of your class syllabus.',
             ]);
         }
+    }
+
+    /**
+     * Formula consolidation and set auto-assign run after the HTTP response so Studied / Under study
+     * ticks feel instant on the dashboard.
+     */
+    private function deferChapterMarkSideEffects(StudentEnrollment $enrollment, SyllabusChapter $chapter): void
+    {
+        $enrollmentId = $enrollment->id;
+        $chapterId = $chapter->id;
+        $actorId = auth()->id();
+
+        defer(function () use ($enrollmentId, $chapterId, $actorId) {
+            $enrollment = StudentEnrollment::query()->find($enrollmentId);
+            $chapter = SyllabusChapter::query()->find($chapterId);
+            $actor = $actorId ? User::query()->find($actorId) : null;
+
+            if (! $enrollment || ! $chapter) {
+                return;
+            }
+
+            app(self::class)->runChapterMarkSideEffects($enrollment, $chapter, $actor);
+        });
+    }
+
+    private function runChapterMarkSideEffects(
+        StudentEnrollment $enrollment,
+        SyllabusChapter $chapter,
+        ?User $actor,
+    ): void {
+        $this->formulaBank->ensureChaptersHaveSingleFormulaSet([$chapter->id], $actor);
+        $this->assignChapterContentDueToday($enrollment, $chapter, $actor);
     }
 }
