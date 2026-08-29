@@ -28,8 +28,12 @@ class DashboardService
     /**
      * @return array<string, mixed>
      */
-    public function forStudent(?StudentEnrollment $enrollment, ?int $gradeLevelId = null, ?int $boardId = null): array
-    {
+    public function forStudent(
+        ?StudentEnrollment $enrollment,
+        ?int $gradeLevelId = null,
+        ?int $boardId = null,
+        bool $includeAssignmentList = true,
+    ): array {
         $examPlanMeta = ['upcoming' => [], 'past' => []];
         $syllabusChapters = [];
         $assignments = [];
@@ -47,8 +51,7 @@ class DashboardService
             $resolutionItems = $this->resolutionService->pendingForEnrollment($enrollment->id);
         }
 
-        return [
-            'assignments' => $assignments,
+        $payload = [
             'resumeItems' => $this->resumeItemsFromAssignments($assignments),
             'examPlans' => $examPlanMeta,
             'syllabusChapters' => $syllabusChapters,
@@ -57,6 +60,12 @@ class DashboardService
             'resolutionItems' => $resolutionItems,
             'resolutionCount' => count($resolutionItems),
         ];
+
+        if ($includeAssignmentList) {
+            $payload['assignments'] = $assignments;
+        }
+
+        return $payload;
     }
 
     /**

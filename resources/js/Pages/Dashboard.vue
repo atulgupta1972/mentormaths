@@ -1214,8 +1214,15 @@ const formatHelpDate = (value) => {
                                 </div>
                             </div>
                         </section>
+                    </div>
 
-                        <!-- Catch-up sets -->
+                    <Deferred data="assignments">
+                        <template #fallback>
+                            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-center text-sm text-slate-500">
+                                Loading your set lists…
+                            </div>
+                        </template>
+
                         <section
                             v-if="pendingCatchUpAssignments.length"
                             class="rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 via-cyan-50 to-teal-50 p-4 shadow-sm"
@@ -1234,7 +1241,6 @@ const formatHelpDate = (value) => {
                                 />
                             </div>
                         </section>
-                    </div>
 
                     <!-- Submitted — under review (AI / teacher) -->
                     <section
@@ -1264,6 +1270,7 @@ const formatHelpDate = (value) => {
                             count-suffix="under review"
                         />
                     </section>
+                        </Deferred>
 
                     <!-- Completed exams -->
                     <section v-if="examPlans.past?.length">

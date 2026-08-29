@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Services\ClassCoverageService;
 use App\Services\ContentUploaderDashboardService;
 use App\Services\DashboardService;
+use App\Services\SetAttemptService;
 use App\Support\MailConfigStatus;
 use App\Support\StudentWeeklyReportEmails;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +25,7 @@ class DashboardController extends Controller
         private DashboardService $dashboardService,
         private ContentUploaderDashboardService $uploaderDashboard,
         private ClassCoverageService $classCoverage,
+        private SetAttemptService $attemptService,
     ) {}
 
     public function __invoke(Request $request): Response|RedirectResponse
@@ -105,7 +107,12 @@ class DashboardController extends Controller
         $studentData = $this->dashboardService->forStudent(null);
 
         try {
-            $studentData = $this->dashboardService->forStudent($enrollment, $gradeLevelId, $boardId);
+            $studentData = $this->dashboardService->forStudent(
+                $enrollment,
+                $gradeLevelId,
+                $boardId,
+                includeAssignmentList: false,
+            );
         } catch (Throwable $e) {
             Log::error('Student dashboard failed to load assignments.', [
                 'user_id' => $user->id,
@@ -159,6 +166,13 @@ class DashboardController extends Controller
                 'board_name' => $enrollment?->board?->name,
             ],
             'loadError' => $loadError,
+            'assignments' => Inertia::defer(function () use ($enrollment) {
+                if (! $enrollment) {
+                    return [];
+                }
+
+                return $this->attemptService->dashboardForEnrollment($enrollment);
+            }),
             ...$studentData,
         ]);
     }
