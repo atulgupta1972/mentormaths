@@ -19,6 +19,7 @@ use App\Services\ExamPlanService;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -104,27 +105,24 @@ class ClassHubController extends Controller
         $maths = Subject::query()->where('code', 'MATHS')->first();
 
         $boardOptions = $this->classAssignmentService->boardsForGrade($gradeLevel);
-        $boardId = $request->integer('board_id') ?: null;
+        $boardId = $request->filled('board_id') ? ($request->integer('board_id') ?: null) : null;
 
-        if ($boardId && ! collect($boardOptions)->contains(fn (array $board) => $board['id'] === $boardId)) {
+        if ($boardId && ! collect($boardOptions)->contains(fn (array $board) => (int) $board['id'] === $boardId)) {
             $boardId = null;
         }
 
-        if (! $boardId) {
-            $boardId = $this->classAssignmentService->defaultBoardIdForGrade($gradeLevel);
-        }
-
-        $selectedBoard = collect($boardOptions)->firstWhere('id', $boardId);
+        $syllabusBoardId = $boardId ?: $this->classAssignmentService->defaultBoardIdForGrade($gradeLevel);
+        $selectedBoard = collect($boardOptions)->firstWhere('id', $syllabusBoardId);
 
         $syllabusVersion = null;
         $chapters = collect();
-        if ($activeYear && $maths && $boardId) {
+        if ($activeYear && $maths && $syllabusBoardId) {
             $syllabusVersion = SyllabusVersion::query()
                 ->with(['board:id,code,name', 'subject:id,name'])
                 ->where('academic_year_id', $activeYear->id)
                 ->where('grade_level_id', $gradeLevel->id)
                 ->where('subject_id', $maths->id)
-                ->where('board_id', $boardId)
+                ->where('board_id', $syllabusBoardId)
                 ->first();
 
             if ($syllabusVersion) {
@@ -179,6 +177,7 @@ class ClassHubController extends Controller
 
         $examPlanRows = [];
         $examPlanStats = ['with_upcoming' => 0, 'without_plan' => 0, 'without_upcoming' => 0];
+        $loadError = null;
 
         $syllabusChapterOptions = $chapters->map(fn ($ch) => [
             'id' => $ch['id'],
@@ -186,58 +185,68 @@ class ClassHubController extends Controller
         ])->values()->all();
 
         if ($activeYear) {
+            $enrollments = collect();
+
             try {
                 $enrollments = $this->examPlanService->activeEnrollmentForYear($activeYear->id, $gradeLevel->id, $boardId);
-                $enrollments->loadMissing(['student.user', 'academicYear']);
-                $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, true);
-                $examPlanRows = $this->classHubProgress->attach($enrollments, $examPlanRows);
-                $examPlanStats = [
-                    'with_upcoming' => collect($examPlanRows)->where('has_upcoming', true)->count(),
-                    'without_plan' => collect($examPlanRows)->where('has_plan', false)->count(),
-                    'without_upcoming' => collect($examPlanRows)->where('has_upcoming', false)->count(),
-                ];
+                $enrollments->load(['student:id,name,user_id', 'student.user', 'academicYear']);
             } catch (Throwable $e) {
-                Log::error('Admin class hub failed to load student exam rows.', [
+                Log::error('Admin class hub failed to load enrollments.', [
                     'grade_level_id' => $gradeLevel->id,
                     'board_id' => $boardId,
                     'message' => $e->getMessage(),
                 ]);
 
-                return Inertia::render('Admin/Classes/Show', [
-                    'gradeLevel' => $gradeLevel->only([
-                        'id',
-                        'name',
-                        'sort_order',
-                        'protect_test_attempts',
-                        'protect_practice_attempts',
-                    ]),
-                    'activeYear' => $activeYear?->only(['id', 'name']),
-                    'boardOptions' => $boardOptions,
-                    'selectedBoardId' => $boardId,
-                    'selectedBoard' => $selectedBoard,
-                    'syllabusVersion' => $syllabusVersion ? [
-                        'id' => $syllabusVersion->id,
-                        'label' => $syllabusVersion->label(),
-                        'board' => $syllabusVersion->board,
-                    ] : null,
-                    'selectedChapterId' => $chapterId,
-                    'chapters' => $chapterFilterOptions,
-                    'chapterRows' => $filteredChapters,
-                    'stats' => [
-                        'chapters_count' => $chapters->count(),
-                        'topics_count' => $filteredChapters->sum('topics_count'),
-                        'questions_count' => $filteredChapters->sum('questions_count'),
-                        'practice_sets_count' => $filteredChapters->sum('topic_sets_count') + $filteredChapters->sum('chapter_tests_count'),
-                        'students_count' => $studentsCount,
-                    ],
-                    'examFilter' => $examFilter,
-                    'examPlanRows' => [],
-                    'examPlanStats' => $examPlanStats,
-                    'syllabusChapterOptions' => $syllabusChapterOptions,
-                    'examTypeOptions' => $this->examPlanService->examTypeOptions(),
-                    'loadError' => 'Could not load student progress for this class. If you recently deployed, run php artisan migrate --force on the server.',
-                ]);
+                try {
+                    $enrollments = StudentEnrollment::query()
+                        ->with(['student:id,name,user_id', 'student.user', 'academicYear'])
+                        ->where('academic_year_id', $activeYear->id)
+                        ->where('grade_level_id', $gradeLevel->id)
+                        ->when($boardId, fn ($query) => $query->where('board_id', $boardId))
+                        ->where('status', StudentEnrollment::STATUS_ACTIVE)
+                        ->get()
+                        ->sortBy(fn (StudentEnrollment $enrollment) => $enrollment->student?->name ?? '')
+                        ->values();
+                } catch (Throwable $fallbackError) {
+                    Log::error('Admin class hub failed to load enrollments from fallback query.', [
+                        'grade_level_id' => $gradeLevel->id,
+                        'message' => $fallbackError->getMessage(),
+                    ]);
+                    $enrollments = collect();
+                }
+
+                $loadError = 'Could not load full student progress for this class. Showing the student list only.';
             }
+
+            try {
+                $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, false);
+            } catch (Throwable $e) {
+                Log::error('Admin class hub failed to build student exam rows.', [
+                    'grade_level_id' => $gradeLevel->id,
+                    'board_id' => $boardId,
+                    'message' => $e->getMessage(),
+                ]);
+                $examPlanRows = $this->studentNameRows($enrollments);
+                $loadError ??= 'Could not load exam plans for this class. Student names are still shown.';
+            }
+
+            try {
+                $examPlanRows = $this->classHubProgress->attach($enrollments, $examPlanRows);
+            } catch (Throwable $e) {
+                Log::error('Admin class hub failed to attach student progress.', [
+                    'grade_level_id' => $gradeLevel->id,
+                    'board_id' => $boardId,
+                    'message' => $e->getMessage(),
+                ]);
+                $examPlanRows = $this->classHubProgress->withEmptyProgress($examPlanRows);
+                $loadError ??= 'Could not load student progress for this class. Student names are still shown.';
+            }
+
+            $examPlanStats = [
+                'with_upcoming' => collect($examPlanRows)->where('has_upcoming', true)->count(),
+                'without_plan' => collect($examPlanRows)->where('has_plan', false)->count(),
+                'without_upcoming' => collect($examPlanRows)->where('has_upcoming', false)->count(),
+            ];
         }
 
         return Inertia::render('Admin/Classes/Show', [
@@ -272,6 +281,7 @@ class ClassHubController extends Controller
             'examPlanStats' => $examPlanStats,
             'syllabusChapterOptions' => $syllabusChapterOptions,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
+            'loadError' => $loadError,
         ]);
     }
 
@@ -291,6 +301,24 @@ class ClassHubController extends Controller
         $gradeLevel->update($validated);
 
         return back()->with('success', 'Attempt protection settings saved for '.$gradeLevel->name.'.');
+    }
+
+    /**
+     * @param  Collection<int, StudentEnrollment>  $enrollments
+     * @return list<array<string, mixed>>
+     */
+    private function studentNameRows($enrollments): array
+    {
+        return $enrollments->map(fn (StudentEnrollment $enrollment) => [
+            'student_id' => $enrollment->student_id,
+            'student_name' => $enrollment->student?->name,
+            'enrollment_id' => $enrollment->id,
+            'has_plan' => false,
+            'has_upcoming' => false,
+            'upcoming_count' => 0,
+            'display_plan' => null,
+            'all_plans' => [],
+        ])->values()->all();
     }
 
     private function denyMentors(Request $request): void

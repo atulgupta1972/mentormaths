@@ -6,16 +6,16 @@ import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
-import { assignToClassPath, safeRoute } from '@/utils/routes';
+import { assignToClassPath, hasRoute, safeRoute } from '@/utils/routes';
 
 const props = defineProps({
     gradeLevel: Object,
     activeYear: Object,
     syllabusVersion: Object,
     selectedChapterId: [Number, String, null],
-    chapters: Array,
-    chapterRows: Array,
-    stats: Object,
+    chapters: { type: Array, default: () => [] },
+    chapterRows: { type: Array, default: () => [] },
+    stats: { type: Object, default: () => ({}) },
     examFilter: { type: String, default: 'upcoming' },
     examPlanRows: { type: Array, default: () => [] },
     examPlanStats: { type: Object, default: () => ({}) },
@@ -88,6 +88,22 @@ const revisionLabel = (progress) => {
     return parts.join(' · ');
 };
 
+const studyPlanHref = (studentId) => {
+    if (hasRoute('admin.school-study-plan.index')) {
+        return route('admin.school-study-plan.index', { student_id: studentId });
+    }
+
+    if (hasRoute('admin.students.show')) {
+        return route('admin.students.show', studentId);
+    }
+
+    return '#';
+};
+
+const questionsClassHref = computed(() =>
+    safeRoute('admin.questions.classes.show', props.gradeLevel?.id, `/admin/questions/classes/${props.gradeLevel?.id || ''}`),
+);
+
 const openStudentPlans = (studentId, startCreate = false) => {
     editingStudentId.value = studentId;
     autoOpenCreate.value = startCreate;
@@ -127,22 +143,23 @@ watch(boardFilter, (value, oldValue) => {
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <Link :href="route('admin.classes.index')" class="text-sm text-indigo-600">← All classes</Link>
+                    <Link :href="safeRoute('admin.classes.index', undefined, '/admin/classes')" class="text-sm text-indigo-600">← All classes</Link>
                     <h2 class="mt-1 text-xl font-semibold text-gray-800">{{ gradeLevel.name }}</h2>
                     <p v-if="activeYear" class="text-sm text-gray-500">
-                        {{ activeYear.name }}<span v-if="selectedBoard"> · {{ selectedBoard.name }} board</span>
+                        {{ activeYear.name }}<span v-if="selectedBoardId && selectedBoard"> · {{ selectedBoard.name }} board</span>
+                    <span v-else-if="boardOptions.length > 1"> · all boards</span>
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <Link
                         v-if="syllabusVersion"
-                        :href="route('admin.syllabus.show', syllabusVersion.id)"
+                        :href="safeRoute('admin.syllabus.show', syllabusVersion.id, `/admin/syllabus/${syllabusVersion.id}`)"
                         class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     >
                         Syllabus
                     </Link>
                     <Link
-                        :href="route('admin.questions.classes.show', gradeLevel.id)"
+                        :href="questionsClassHref"
                         class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     >
                         Questions
@@ -156,7 +173,7 @@ watch(boardFilter, (value, oldValue) => {
                     </Link>
                     <Link
                         v-if="isAdmin"
-                        :href="route('admin.practice-sets.index')"
+                        :href="safeRoute('admin.practice-sets.index', undefined, '/admin/practice-sets')"
                         class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                     >
                         Practice sets
@@ -180,34 +197,42 @@ watch(boardFilter, (value, oldValue) => {
 
                 <div class="grid gap-4 sm:grid-cols-4">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
-                        <p class="text-2xl font-bold text-indigo-600">{{ stats.students_count }}</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ stats.students_count || 0 }}</p>
                         <p class="text-xs text-gray-500">Students</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
-                        <p class="text-2xl font-bold text-indigo-600">{{ stats.topics_count }}</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ stats.topics_count || 0 }}</p>
                         <p class="text-xs text-gray-500">Topics</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
-                        <p class="text-2xl font-bold text-indigo-600">{{ stats.questions_count }}</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ stats.questions_count || 0 }}</p>
                         <p class="text-xs text-gray-500">Questions</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm">
-                        <p class="text-2xl font-bold text-indigo-600">{{ stats.practice_sets_count }}</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ stats.practice_sets_count || 0 }}</p>
                         <p class="text-xs text-gray-500">Sets / tests</p>
                     </div>
                 </div>
 
-                <div v-if="activeYear && isAdmin" class="overflow-hidden rounded-lg bg-white shadow-sm">
+                <div v-if="isAdmin" class="overflow-hidden rounded-lg bg-white shadow-sm">
                     <div class="border-b px-6 py-4">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                                <h3 class="font-medium text-gray-900">Class status &amp; exam plans</h3>
+                                <h3 class="font-medium text-gray-900">Students</h3>
                                 <p class="mt-1 text-sm text-gray-500">
-                                    Completion %, score %, revision, login days, and time spent for each student.
                                     Click a student name to open their study plan. Use <strong>Add exam date</strong> when you need an exam plan.
                                 </p>
                             </div>
-                            <div class="flex items-center gap-2">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div v-if="boardOptions.length" class="min-w-[180px]">
+                                    <InputLabel value="Board" class="sr-only" />
+                                    <select v-model="boardFilter" class="rounded-md border-gray-300 text-sm">
+                                        <option value="">All boards</option>
+                                        <option v-for="board in boardOptions" :key="board.id" :value="String(board.id)">
+                                            {{ board.name }} · {{ board.students_count }} student{{ board.students_count === 1 ? '' : 's' }}
+                                        </option>
+                                    </select>
+                                </div>
                                 <InputLabel value="Show" class="sr-only" />
                                 <select
                                     v-model="examFilter"
@@ -244,7 +269,7 @@ watch(boardFilter, (value, oldValue) => {
                                     <tr :class="!row.has_upcoming && examFilter === 'upcoming' ? 'bg-amber-50/60' : ''">
                                         <td class="px-3 py-3">
                                             <Link
-                                                :href="route('admin.school-study-plan.index', { student_id: row.student_id })"
+                                                :href="studyPlanHref(row.student_id)"
                                                 class="font-medium text-indigo-600 hover:underline"
                                                 title="Open school study plan"
                                             >
@@ -328,7 +353,12 @@ watch(boardFilter, (value, oldValue) => {
                                 </template>
                                 <tr v-if="examPlanRows.length === 0">
                                     <td colspan="9" class="px-4 py-8 text-center text-gray-500">
-                                        No active students in this class for the current year.
+                                        <template v-if="!activeYear">
+                                            No active academic year is set, so students cannot be listed yet.
+                                        </template>
+                                        <template v-else>
+                                            No active students in this class{{ boardFilter ? ' for the selected board' : '' }} for the current year.
+                                        </template>
                                     </td>
                                 </tr>
                             </tbody>
@@ -338,7 +368,7 @@ watch(boardFilter, (value, oldValue) => {
 
                 <div v-if="!syllabusVersion" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                     No syllabus imported for {{ gradeLevel.name }} yet.
-                    <Link :href="route('admin.syllabus.index')" class="font-medium text-indigo-600">Import syllabus</Link>
+                    <Link :href="safeRoute('admin.syllabus.index', undefined, '/admin/syllabus')" class="font-medium text-indigo-600">Import syllabus</Link>
                 </div>
 
                 <div v-else class="space-y-4">
@@ -347,6 +377,7 @@ watch(boardFilter, (value, oldValue) => {
                             <div v-if="boardOptions.length" class="min-w-[200px]">
                                 <InputLabel value="Board" />
                                 <select v-model="boardFilter" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                                    <option value="">All boards</option>
                                     <option v-for="board in boardOptions" :key="board.id" :value="String(board.id)">
                                         {{ board.name }} · {{ board.students_count }} student{{ board.students_count === 1 ? '' : 's' }}
                                     </option>
@@ -389,14 +420,14 @@ watch(boardFilter, (value, oldValue) => {
                                     <td class="px-4 py-3">{{ chapter.chapter_tests_count }}</td>
                                     <td class="space-x-3 px-4 py-3 text-right">
                                         <Link
-                                            :href="route('admin.questions.chapters.show', chapter.id)"
+                                            :href="safeRoute('admin.questions.chapters.show', chapter.id, `/admin/questions/chapters/${chapter.id}`)"
                                             class="text-indigo-600 hover:underline"
                                         >
                                             Question bank
                                         </Link>
                                         <Link
                                             v-if="isAdmin"
-                                            :href="route('admin.practice-sets.chapters.show', chapter.id)"
+                                            :href="safeRoute('admin.practice-sets.chapters.show', chapter.id, `/admin/practice-sets/chapters/${chapter.id}`)"
                                             class="text-indigo-600 hover:underline"
                                         >
                                             Chapter tests

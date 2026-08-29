@@ -8,6 +8,8 @@ use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusVersion;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class MentorClassHubService
 {
@@ -98,8 +100,34 @@ class MentorClassHubService
                 ->orderBy('id')
                 ->get();
 
-            $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, true);
-            $examPlanRows = $this->progress->attach($enrollments, $examPlanRows);
+            try {
+                $examPlanRows = $this->examPlanService->classHubRows($enrollments, $examFilter, false);
+            } catch (Throwable $e) {
+                Log::error('Mentor class hub failed to build student rows.', [
+                    'grade_level_id' => $gradeLevel->id,
+                    'message' => $e->getMessage(),
+                ]);
+                $examPlanRows = $enrollments->map(fn (StudentEnrollment $enrollment) => [
+                    'student_id' => $enrollment->student_id,
+                    'student_name' => $enrollment->student?->name,
+                    'enrollment_id' => $enrollment->id,
+                    'has_plan' => false,
+                    'has_upcoming' => false,
+                    'upcoming_count' => 0,
+                    'display_plan' => null,
+                    'all_plans' => [],
+                ])->values()->all();
+            }
+
+            try {
+                $examPlanRows = $this->progress->attach($enrollments, $examPlanRows);
+            } catch (Throwable $e) {
+                Log::error('Mentor class hub failed to attach student progress.', [
+                    'grade_level_id' => $gradeLevel->id,
+                    'message' => $e->getMessage(),
+                ]);
+                $examPlanRows = $this->progress->withEmptyProgress($examPlanRows);
+            }
             $examPlanStats = [
                 'with_upcoming' => collect($examPlanRows)->where('has_upcoming', true)->count(),
                 'without_plan' => collect($examPlanRows)->where('has_plan', false)->count(),
