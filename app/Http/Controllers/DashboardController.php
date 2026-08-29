@@ -66,6 +66,12 @@ class DashboardController extends Controller
                     'mailSettings' => $mailSettings,
                     'gradeLevels' => $gradeLevels,
                     ...$adminDashboard,
+                    'contentPublishQueue' => Inertia::defer(
+                        fn () => $this->dashboardService->contentPublishQueueForAdmin($request),
+                    ),
+                    'contentRecheckQueue' => Inertia::defer(
+                        fn () => $this->dashboardService->contentRecheckQueueForAdmin($request),
+                    ),
                 ]);
             } catch (Throwable $e) {
                 Log::error('Admin dashboard failed to render.', ['message' => $e->getMessage()]);
@@ -76,6 +82,8 @@ class DashboardController extends Controller
                     'gradeLevels' => [],
                     'loadError' => $e->getMessage(),
                     ...$this->dashboardService->emptyAdminPayload($request),
+                    'contentPublishQueue' => Inertia::defer(fn () => []),
+                    'contentRecheckQueue' => Inertia::defer(fn () => []),
                 ]);
             }
         }
@@ -95,7 +103,6 @@ class DashboardController extends Controller
 
         $loadError = null;
         $studentData = $this->dashboardService->forStudent(null);
-        $classCoverage = ClassCoverageService::emptyPayload();
 
         try {
             $studentData = $this->dashboardService->forStudent($enrollment, $gradeLevelId, $boardId);
@@ -108,17 +115,21 @@ class DashboardController extends Controller
             $loadError = 'Some of your work could not be loaded. Please try again in a few minutes or tell your teacher.';
         }
 
-        try {
-            $classCoverage = $this->classCoverage->forEnrollment($enrollment);
-        } catch (Throwable $e) {
-            Log::error('Student dashboard failed to load study plan.', [
-                'user_id' => $user->id,
-                'enrollment_id' => $enrollment?->id,
-                'message' => $e->getMessage(),
-            ]);
-            $loadError = $loadError
-                ?? 'Your study plan could not be loaded. Please try again in a few minutes or tell your teacher.';
-        }
+        $classCoverageDeferred = Inertia::defer(function () use ($enrollment, $user) {
+            try {
+                return $this->classCoverage->forEnrollment($enrollment);
+            } catch (Throwable $e) {
+                Log::error('Student dashboard failed to load study plan.', [
+                    'user_id' => $user->id,
+                    'enrollment_id' => $enrollment?->id,
+                    'message' => $e->getMessage(),
+                ]);
+
+                return array_merge(ClassCoverageService::emptyPayload(), [
+                    'load_error' => 'Your study plan could not be loaded. Please try again in a few minutes or tell your teacher.',
+                ]);
+            }
+        });
 
         $student = $user->student;
 
@@ -142,7 +153,7 @@ class DashboardController extends Controller
                 ? StudentWeeklyReportEmails::display($student->parent1_email, $student->parent2_email)
                 : '',
             'contentUploaderTasks' => $contentUploaderTasks,
-            'classCoverage' => $classCoverage,
+            'classCoverage' => $classCoverageDeferred,
             'studyPlanContext' => [
                 'grade_name' => $enrollment?->gradeLevel?->name,
                 'board_name' => $enrollment?->board?->name,

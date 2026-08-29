@@ -131,9 +131,10 @@ class DashboardTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Dashboard')
-                ->has('contentRecheckQueue', 1)
-                ->where('contentRecheckQueue.0.id', $task->id)
-                ->where('contentRecheckQueue.0.chapter_title', 'Polynomials'));
+                ->loadDeferredProps('default', fn ($deferred) => $deferred
+                    ->has('contentRecheckQueue', 1)
+                    ->where('contentRecheckQueue.0.id', $task->id)
+                    ->where('contentRecheckQueue.0.chapter_title', 'Polynomials')));
     }
 
     public function test_admin_dashboard_lists_locked_attempts_for_unlock(): void
@@ -210,7 +211,8 @@ class DashboardTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Dashboard')
                 ->where('isAdmin', false)
-                ->where('loadError', fn ($message) => str_contains($message, 'study plan')));
+                ->loadDeferredProps('default', fn ($deferred) => $deferred
+                    ->where('classCoverage.load_error', fn ($message) => str_contains($message, 'study plan'))));
     }
 
     /**

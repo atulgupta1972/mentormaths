@@ -42,12 +42,6 @@ class ClassCoverageService
 
         $chapterOptions = $this->examPlanService->chapterOptionsForEnrollment($enrollment);
 
-        // Topic-level formula sets show as many "Fm1" cards — merge into one chapter set first.
-        $this->formulaBank->ensureChaptersHaveSingleFormulaSet(
-            $chapterOptions->pluck('id')->all(),
-            auth()->user(),
-        );
-
         $coverages = StudentChapterCoverage::query()
             ->where('student_enrollment_id', $enrollment->id)
             ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
@@ -490,6 +484,7 @@ class ClassCoverageService
             );
         });
 
+        $this->formulaBank->ensureChaptersHaveSingleFormulaSet([$chapter->id], auth()->user());
         $this->assignChapterContentDueToday($enrollment, $chapter);
     }
 
@@ -523,6 +518,7 @@ class ClassCoverageService
             );
         });
 
+        $this->formulaBank->ensureChaptersHaveSingleFormulaSet([$chapter->id], auth()->user());
         $this->assignChapterContentDueToday($enrollment, $chapter);
     }
 

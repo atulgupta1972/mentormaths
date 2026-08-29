@@ -12,7 +12,7 @@ import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmai
 import { formatScoreLabel } from '@/utils/scores';
 import { formatDate, formatDateTime } from '@/utils/dates';
 import { hasRoute, safeRoute } from '@/utils/routes';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage, Deferred } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref } from 'vue';
 
 const page = usePage();
@@ -760,6 +760,13 @@ const formatHelpDate = (value) => {
                         </ul>
                     </section>
 
+                    <Deferred :data="['contentPublishQueue', 'contentRecheckQueue']">
+                        <template #fallback>
+                            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+                                Loading content queues…
+                            </div>
+                        </template>
+
                     <section
                         v-if="contentPublishQueue.length"
                         class="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm"
@@ -864,6 +871,7 @@ const formatHelpDate = (value) => {
                             No chapters in this Gemini bucket.
                         </p>
                     </section>
+                    </Deferred>
 
                     <section class="space-y-3">
                         <div>
@@ -969,6 +977,19 @@ const formatHelpDate = (value) => {
 
                     <!-- School study plan — primary student landing -->
                     <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <Deferred data="classCoverage">
+                            <template #fallback>
+                                <div class="animate-pulse space-y-3 py-6">
+                                    <div class="h-4 w-48 rounded bg-slate-200" />
+                                    <div class="h-32 rounded-lg bg-slate-100" />
+                                    <p class="text-center text-sm text-slate-500">Loading your study plan…</p>
+                                </div>
+                            </template>
+
+                        <div v-if="classCoverage?.load_error" class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                            {{ classCoverage.load_error }}
+                        </div>
+
                         <div v-if="underStudyChapter" class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
                             <p class="text-xs font-semibold uppercase tracking-wide text-amber-950">Please complete</p>
                             <p class="mt-1 text-sm text-amber-900">
@@ -1005,6 +1026,7 @@ const formatHelpDate = (value) => {
                                 {{ underStudyChapterRows.length }} under study
                             </span>
                         </div>
+                        </Deferred>
                     </section>
 
                     <!-- Welcome — single compact row -->

@@ -187,52 +187,6 @@ class DashboardService
             ? count($helpRequests)
             : (int) $helpCounts->sum();
 
-        $contentPublishQueue = [];
-        $contentRecheckQueue = [];
-        try {
-            $contentTaskQuery = fn () => ContentUploadTask::query()
-                ->with([
-                    'assignee:id,name',
-                    'textbookChapter:id,chapter_number,title,textbook_id',
-                    'textbookChapter.textbook:id,name,grade_level_id',
-                    'textbookChapter.textbook.gradeLevel:id,name',
-                ])
-                ->when(
-                    $grade,
-                    fn ($q) => $q->whereHas(
-                        'textbookChapter.textbook',
-                        fn ($inner) => $inner->where('grade_level_id', $grade->id),
-                    ),
-                );
-
-            $contentPublishQueue = $contentTaskQuery()
-                ->where('status', ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH)
-                ->latest('submitted_at')
-                ->limit(20)
-                ->get()
-                ->map(fn (ContentUploadTask $task) => $this->serializeDashboardContentTask($task))
-                ->all();
-
-            $contentRecheckTasks = $contentTaskQuery()
-                ->where('status', ContentUploadTask::STATUS_PUBLISHED)
-                ->latest('published_at')
-                ->limit(30)
-                ->get();
-
-            $recheckProgress = $request->user()
-                ? $this->verificationService->progressForTasks($contentRecheckTasks, $request->user())
-                : [];
-
-            $contentRecheckQueue = $contentRecheckTasks
-                ->map(fn (ContentUploadTask $task) => $this->serializeDashboardContentTask(
-                    $task,
-                    $recheckProgress[(int) $task->id] ?? null,
-                ))
-                ->all();
-        } catch (Throwable $e) {
-            Log::error('Admin dashboard failed to load the content queues.', ['message' => $e->getMessage()]);
-        }
-
         $lockedAttempts = [];
         try {
             $lockedAttempts = $this->lockedAttemptsForEnrollments($enrollmentIds);
@@ -254,26 +208,92 @@ class DashboardService
                 'question_issue_reports_pending_count' => count($questionIssueReports),
                 'question_issue_reports_sent_count' => count($questionIssueReportsSentToUploader),
                 'locked_attempts_count' => count($lockedAttempts),
-                'content_publish_queue_count' => count($contentPublishQueue),
-                'content_recheck_queue_count' => count($contentRecheckQueue),
-                'gemini_pending_count' => collect($contentRecheckQueue)
-                    ->filter(fn (array $row) => (int) ($row['gemini_progress']['pending'] ?? 0) > 0)
-                    ->count(),
-                'gemini_done_count' => collect($contentRecheckQueue)
-                    ->filter(fn (array $row) => ($row['gemini_progress']['can_gemini'] ?? false)
-                        && (int) ($row['gemini_progress']['pending'] ?? 0) === 0
-                        && (int) ($row['gemini_progress']['total'] ?? 0) > 0)
-                    ->count(),
+                'content_publish_queue_count' => 0,
+                'content_recheck_queue_count' => 0,
+                'gemini_pending_count' => 0,
+                'gemini_done_count' => 0,
             ],
             'students' => $students,
             'helpRequests' => $helpRequests,
             'questionIssueReports' => $questionIssueReports,
             'questionIssueReportsSentToUploader' => $questionIssueReportsSentToUploader,
             'lockedAttempts' => $lockedAttempts,
-            'contentPublishQueue' => $contentPublishQueue,
-            'contentRecheckQueue' => $contentRecheckQueue,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function contentPublishQueueForAdmin(Request $request): array
+    {
+        try {
+            $grade = $this->gradeContext->resolve($request);
+
+            return $this->contentTaskQueryForAdmin($grade)
+                ->where('status', ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH)
+                ->latest('submitted_at')
+                ->limit(20)
+                ->get()
+                ->map(fn (ContentUploadTask $task) => $this->serializeDashboardContentTask($task))
+                ->all();
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard failed to load publish queue.', ['message' => $e->getMessage()]);
+
+            return [];
+        }
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function contentRecheckQueueForAdmin(Request $request): array
+    {
+        try {
+            $grade = $this->gradeContext->resolve($request);
+
+            $contentRecheckTasks = $this->contentTaskQueryForAdmin($grade)
+                ->where('status', ContentUploadTask::STATUS_PUBLISHED)
+                ->latest('published_at')
+                ->limit(30)
+                ->get();
+
+            $recheckProgress = $request->user()
+                ? $this->verificationService->progressForTasks($contentRecheckTasks, $request->user())
+                : [];
+
+            return $contentRecheckTasks
+                ->map(fn (ContentUploadTask $task) => $this->serializeDashboardContentTask(
+                    $task,
+                    $recheckProgress[(int) $task->id] ?? null,
+                ))
+                ->all();
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard failed to load recheck queue.', ['message' => $e->getMessage()]);
+
+            return [];
+        }
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<ContentUploadTask>
+     */
+    private function contentTaskQueryForAdmin(?\App\Models\GradeLevel $grade)
+    {
+        return ContentUploadTask::query()
+            ->with([
+                'assignee:id,name',
+                'textbookChapter:id,chapter_number,title,textbook_id',
+                'textbookChapter.textbook:id,name,grade_level_id',
+                'textbookChapter.textbook.gradeLevel:id,name',
+            ])
+            ->when(
+                $grade,
+                fn ($q) => $q->whereHas(
+                    'textbookChapter.textbook',
+                    fn ($inner) => $inner->where('grade_level_id', $grade->id),
+                ),
+            );
     }
 
     /**
@@ -307,8 +327,6 @@ class DashboardService
             'questionIssueReports' => [],
             'questionIssueReportsSentToUploader' => [],
             'lockedAttempts' => [],
-            'contentPublishQueue' => [],
-            'contentRecheckQueue' => [],
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
         ];
     }
