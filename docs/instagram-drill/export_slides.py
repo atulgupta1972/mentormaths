@@ -98,7 +98,12 @@ def export_pptx(pngs: list[Path]) -> Path:
         from pptx import Presentation
         from pptx.util import Inches
     except ImportError:
-        run([sys.executable, "-m", "pip", "install", "--quiet", "python-pptx"])
+        run([sys.executable, "-m", "pip", "install", "--user", "--quiet", "python-pptx"])
+        import site
+
+        user_site = site.getusersitepackages()
+        if user_site not in sys.path:
+            sys.path.insert(0, user_site)
         from pptx import Presentation
         from pptx.util import Inches
 
