@@ -2,14 +2,29 @@
 
 Ready-to-post portrait slides and a 20-second reel about **Formula drill** and **Basics drill**.
 
-## Files
+## Open in Chrome
+
+Do **not** open the GitHub code page (that only shows source). Use one of these:
+
+| Where | Open this |
+|-------|-----------|
+| **On the website** (after this change is live) | https://mentormaths.in/guides/instagram-drill-reel.html |
+| **From your computer** (this repo) | Double-click `public/guides/instagram-drill-reel.html` |
+| **Right now from GitHub** | https://htmlpreview.github.io/?https://github.com/atulgupta1972/mentormaths/blob/cursor/instagram-drill-reel-f353/public/guides/instagram-drill-reel.html |
+
+Chrome should show **one full slide** with Previous / Play / Next. Arrow keys work too.
+
+If the viewer still fails, open the images directly:
+
+`public/guides/instagram-drill/slides/01.png` … `08.png`
+
+## Files to upload to Instagram
 
 | File | Use |
 |------|-----|
-| `instagram-drill-reel.html` | Open in Chrome. Preview all 8 slides, or tap **Play reel** and screen-record. |
-| `instagram-drill/slides/01.png` … `08.png` | Upload as an Instagram **carousel** (or Stories). 1080×1920. |
-| `instagram-drill/mentor-maths-daily-drill-reel.mp4` | Upload as an Instagram **Reel**. Silent — add trending audio in the app. |
-| `instagram-drill/mentor-maths-daily-drill.pptx` | Same 8 slides as a portrait PowerPoint. |
+| `public/guides/instagram-drill/mentor-maths-daily-drill-reel.mp4` | Instagram **Reel** (20s, silent — add audio in the app) |
+| `public/guides/instagram-drill/slides/01.png` … `08.png` | Instagram **carousel** or Stories |
+| `public/guides/instagram-drill/mentor-maths-daily-drill.pptx` | Portrait PowerPoint |
 
 ## Story (8 beats · ~2.5s each)
 
@@ -34,11 +49,6 @@ Ready-to-post portrait slides and a 20-second reel about **Formula drill** and *
 1. Instagram → **+** → **Post**.
 2. Select `01.png` through `08.png` in order.
 3. Same caption.
-
-### Record your own reel from the HTML
-1. Open `instagram-drill-reel.html` in Chrome.
-2. Click **Play reel**.
-3. Phone: screen-record. Desktop: use a 9:16 window and record.
 
 ## Caption (copy-paste)
 

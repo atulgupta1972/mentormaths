@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HTML = ROOT / "docs" / "instagram-drill-reel.html"
-OUT = Path(__file__).resolve().parent
+OUT = ROOT / "public" / "guides" / "instagram-drill"
 SLIDES = OUT / "slides"
 CHROME = "/usr/bin/google-chrome"
 SLIDE_COUNT = 8

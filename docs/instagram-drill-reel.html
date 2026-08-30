@@ -556,6 +556,11 @@
             body.classList.add('export');
             const clone = slides[exportN - 1].cloneNode(true);
             document.getElementById('exportStage').appendChild(clone);
+        } else {
+            // This file is 1080×1920 and does not fit a normal Chrome window.
+            // Send people to the fitted viewer (works from a local clone).
+            const viewer = new URL('../public/guides/instagram-drill-reel.html', location.href);
+            location.replace(viewer.href);
         }
     </script>
 </body>
