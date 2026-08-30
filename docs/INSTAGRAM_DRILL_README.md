@@ -37,18 +37,41 @@ If the viewer still fails, open the images directly:
 7. Finish drills → today’s practice unlocks
 8. CTA — mentormaths.in
 
-## How to post
+## How to save and upload
 
-### Reel
-1. Open Instagram → **+** → **Reel**.
-2. Upload `mentor-maths-daily-drill-reel.mp4`.
-3. Add a quiet trending audio (education / study / lo-fi).
-4. Paste the caption below. Cover frame: slide 1 or 8.
+### 1) Save the files (phone or computer)
 
-### Carousel (looks like a PPT)
+On the Chrome viewer tap **Save reel (MP4)** and/or **Save all 8 slides**.
+
+Or download from GitHub (works now):
+
+- Reel video: https://github.com/atulgupta1972/mentormaths/raw/cursor/instagram-drill-reel-f353/public/guides/instagram-drill/mentor-maths-daily-drill-reel.mp4
+- All 8 slides (zip): https://github.com/atulgupta1972/mentormaths/raw/cursor/instagram-drill-reel-f353/public/guides/instagram-drill/slides-01-to-08.zip
+- PowerPoint: https://github.com/atulgupta1972/mentormaths/raw/cursor/instagram-drill-reel-f353/public/guides/instagram-drill/mentor-maths-daily-drill.pptx
+
+If you saved on a computer, send the file to your phone (WhatsApp to yourself, AirDrop, Google Drive, or email).
+
+On iPhone: open the file → **Share** → **Save Video** / **Save Image**.  
+On Android: open the download → **Save** to Gallery / Photos.
+
+Unzip `slides-01-to-08.zip` so you have `01.png` … `08.png` in Photos.
+
+### 2) Upload a Reel (recommended)
+
+1. Instagram → **+** → **Reel**.
+2. Pick `mentor-maths-daily-drill-reel.mp4` from your gallery.
+3. **Audio** (bottom) → add a quiet study / lo-fi track (the video is silent).
+4. Next → paste the caption below.
+5. Share.
+
+Cover: leave the first frame, or pick slide 8 (`mentormaths.in`).
+
+### 3) Or upload a carousel (looks like a PPT)
+
 1. Instagram → **+** → **Post**.
-2. Select `01.png` through `08.png` in order.
-3. Same caption.
+2. Select `01.png` through `08.png` **in that order** (hold to pick several).
+3. Next → paste the same caption.
+4. Share.
 
 ## Caption (copy-paste)
 
