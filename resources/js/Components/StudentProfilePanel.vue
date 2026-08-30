@@ -98,6 +98,29 @@ const submit = () => {
             </div>
         </div>
 
+        <div class="border-b border-gray-100 bg-white px-6 py-4">
+            <div class="rounded-xl border border-teal-200 bg-teal-50/80 p-4">
+                <p class="text-xs font-semibold uppercase tracking-wide text-teal-800">Your mentor</p>
+                <template v-if="studentProfile.mentor?.name || studentProfile.mentor?.mobile">
+                    <p class="mt-1 text-lg font-semibold text-teal-950">
+                        {{ studentProfile.mentor.name || 'Mentor' }}
+                    </p>
+                    <p v-if="studentProfile.mentor.mobile" class="mt-0.5 font-mono text-sm text-teal-900">
+                        {{ studentProfile.mentor.mobile }}
+                    </p>
+                    <p class="mt-1 text-xs text-teal-800">
+                        {{ studentProfile.mentor.label }}
+                        <span v-if="studentProfile.mentor.coaching_class">
+                            · {{ studentProfile.mentor.coaching_class }}
+                        </span>
+                    </p>
+                </template>
+                <p v-else class="mt-1 text-sm text-teal-900">
+                    A mentor has not been assigned yet. Ask your teacher or parent if this looks wrong.
+                </p>
+            </div>
+        </div>
+
         <form class="space-y-6 p-6" @submit.prevent="submit">
             <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
                 Parents can update mobile numbers and choose who receives WhatsApp alerts when practice is completed or reports are ready.
