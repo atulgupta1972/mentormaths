@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Services\StudentMentorService;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,10 @@ use Inertia\Response;
 
 class ProfileController extends Controller
 {
+    public function __construct(
+        private StudentMentorService $mentorService,
+    ) {}
+
     /**
      * Display the user's profile form.
      */
@@ -42,6 +47,7 @@ class ProfileController extends Controller
                 'notify_student_mobile' => $student->notify_student_mobile,
                 'notify_parent1_mobile' => $student->notify_parent1_mobile,
                 'notify_parent2_mobile' => $student->notify_parent2_mobile,
+                'mentor' => $this->mentorService->forStudentView($student),
                 'enrollment' => $enrollment ? [
                     'class' => $enrollment->gradeLevel?->name,
                     'board' => $enrollment->board?->name,

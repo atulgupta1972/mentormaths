@@ -57,6 +57,7 @@ const props = defineProps({
     mailSettings: { type: Object, default: null },
     gradeLevels: { type: Array, default: () => [] },
     loadError: { type: String, default: null },
+    mentor: { type: Object, default: null },
 });
 
 const showManageExams = ref(false);
@@ -129,6 +130,14 @@ const studyPlanSubtitle = computed(() => {
     const parts = [props.studyPlanContext?.grade_name, props.studyPlanContext?.board_name].filter(Boolean);
 
     return parts.length ? parts.join(' · ') : 'Your class syllabus';
+});
+
+const mentorLine = computed(() => {
+    if (! props.mentor?.name && ! props.mentor?.mobile) {
+        return null;
+    }
+
+    return [props.mentor.name, props.mentor.mobile].filter(Boolean).join(' · ');
 });
 
 const studyStatusOverrides = ref({});
@@ -443,6 +452,8 @@ const formatHelpDate = (value) => {
                 <p v-else-if="!isAdmin" class="text-sm text-gray-500">
                     {{ studyPlanSubtitle }}
                     <span v-if="activeYear"> · {{ activeYear.name }}</span>
+                    <span v-if="mentorLine"> · Mentor: {{ mentorLine }}</span>
+                    <span v-else-if="mentor && !mentor.mapped"> · Mentor not assigned yet</span>
                 </p>
             </div>
         </template>
@@ -1062,6 +1073,18 @@ const formatHelpDate = (value) => {
                             <p class="text-base font-semibold whitespace-nowrap">Welcome, {{ $page.props.auth.user.name }}</p>
                             <span class="hidden text-emerald-100/70 sm:inline">·</span>
                             <p class="hidden text-xs text-emerald-100 sm:inline">Use your study plan above for practice and exams</p>
+                            <span
+                                v-if="mentorLine"
+                                class="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                Mentor: {{ mentorLine }}
+                            </span>
+                            <span
+                                v-else-if="mentor && !mentor.mapped"
+                                class="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-medium text-emerald-100"
+                            >
+                                Mentor not assigned yet
+                            </span>
                         </div>
                         <div class="flex flex-wrap items-center gap-2 text-xs">
                             <span class="rounded-full bg-white/20 px-2.5 py-0.5">{{ stats.upcoming_exams || 0 }} exams</span>

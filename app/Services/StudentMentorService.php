@@ -20,10 +20,12 @@ class StudentMentorService
     {
         $source = $student->enrollment_source ?: EnrollmentSource::INDIVIDUAL;
 
-        if ($source === EnrollmentSource::COACHING && $student->coaching_class_teacher_id) {
+        if ($source === EnrollmentSource::COACHING) {
             $teacher = $student->relationLoaded('coachingClassTeacher')
                 ? $student->coachingClassTeacher
-                : $student->coachingClassTeacher()->first();
+                : ($student->coaching_class_teacher_id
+                    ? $student->coachingClassTeacher()->first()
+                    : null);
 
             if ($teacher) {
                 return [
@@ -218,6 +220,48 @@ class StudentMentorService
             'ok' => false,
             'message' => 'Tick Notify on mentor mobile — that contact is the mentor for individual enrollment.',
         ];
+    }
+
+    /**
+     * Read-only mentor card for the student's own profile and dashboard.
+     *
+     * Shows name/mobile even when admin mapping is incomplete, as long as a
+     * coaching teacher or notified parent contact exists.
+     *
+     * @return array{mapped: bool, name: ?string, mobile: ?string, label: string, coaching_class: ?string}
+     */
+    public function forStudentView(Student $student): array
+    {
+        $this->loadStudentViewRelations($student);
+
+        $resolved = $this->resolve($student);
+        $hasDetails = filled($resolved['name']) || filled($resolved['mobile']);
+        $mapped = $this->isMapped($student) || $hasDetails;
+        $source = $student->enrollment_source ?: EnrollmentSource::INDIVIDUAL;
+        $coachingClass = $student->coachingClass?->name
+            ?? $student->coachingClassTeacher?->coachingClass?->name;
+
+        return [
+            'mapped' => $mapped,
+            'name' => $hasDetails ? $resolved['name'] : null,
+            'mobile' => $hasDetails ? $resolved['mobile'] : null,
+            'label' => $hasDetails ? $resolved['label'] : 'Not assigned yet',
+            'coaching_class' => $source === EnrollmentSource::COACHING
+                ? ($coachingClass ?: null)
+                : null,
+        ];
+    }
+
+    private function loadStudentViewRelations(Student $student): void
+    {
+        if (! $student->relationLoaded('coachingClassTeacher')) {
+            $student->load('coachingClassTeacher.coachingClass');
+        } elseif ($student->coachingClassTeacher
+            && ! $student->coachingClassTeacher->relationLoaded('coachingClass')) {
+            $student->coachingClassTeacher->load('coachingClass');
+        }
+
+        $student->loadMissing(['coachingClass', 'mentorUser']);
     }
 
     /**

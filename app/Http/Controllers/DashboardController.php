@@ -11,6 +11,7 @@ use App\Services\ClassCoverageService;
 use App\Services\ContentUploaderDashboardService;
 use App\Services\DashboardService;
 use App\Services\SetAttemptService;
+use App\Services\StudentMentorService;
 use App\Support\MailConfigStatus;
 use App\Support\StudentWeeklyReportEmails;
 use Illuminate\Http\JsonResponse;
@@ -29,6 +30,7 @@ class DashboardController extends Controller
         private ClassCoverageService $classCoverage,
         private SetAttemptService $attemptService,
         private AdminGradeContext $gradeContext,
+        private StudentMentorService $mentorService,
     ) {}
 
     public function __invoke(Request $request): Response|RedirectResponse
@@ -190,6 +192,7 @@ class DashboardController extends Controller
                 return $this->attemptService->dashboardForEnrollment($enrollment);
             }),
             ...$studentData,
+            'mentor' => $student ? $this->mentorService->forStudentView($student) : null,
         ]);
     }
 
