@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mentor Maths — Daily drill Instagram reel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --teal: #0f4c5c;
+            --teal-deep: #072f39;
+            --ink: #071820;
+            --gold: #f4c46b;
+            --cream: #f6f1e6;
+            --mint: #6ee7b7;
+            --sky: #7dd3fc;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
+            background: #0b1220;
+            color: #e2e8f0;
+        }
+        .help {
+            max-width: 720px;
+            margin: 16px auto;
+            padding: 16px 20px;
+            background: #142033;
+            border: 1px solid #243247;
+            border-radius: 14px;
+            font-size: 14px;
+            line-height: 1.55;
+            color: #cbd5e1;
+        }
+        .help h1 { font-size: 18px; color: #fff; margin-bottom: 8px; }
+        .help code { background: #0b1220; padding: 1px 6px; border-radius: 4px; color: #fde68a; }
+        .toolbar {
+            max-width: 720px;
+            margin: 0 auto 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+        .toolbar button, .toolbar a {
+            appearance: none;
+            border: 0;
+            border-radius: 999px;
+            padding: 10px 16px;
+            font-weight: 800;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+            color: #072f39;
+            background: #f4c46b;
+        }
+        .toolbar button.ghost, .toolbar a.ghost {
+            background: #1e293b;
+            color: #e2e8f0;
+        }
+        .deck {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
+            padding: 12px 12px 64px;
+        }
+        .slide {
+            width: 1080px;
+            height: 1920px;
+            border-radius: 28px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 24px 80px rgba(0,0,0,.45);
+            background: radial-gradient(circle at 20% 0%, #1a6b7a 0%, #0f4c5c 28%, #072832 100%);
+            color: #f8fafc;
+        }
+        .slide::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 90% 12%, rgba(244,196,107,.22), transparent 28%),
+                radial-gradient(circle at 8% 88%, rgba(110,231,183,.12), transparent 32%);
+            pointer-events: none;
+        }
+        .slide > * { position: relative; z-index: 1; }
+        .safe {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 220px 88px 260px;
+        }
+        .brand-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 48px;
+        }
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .brand-mark img {
+            height: 64px;
+            width: auto;
+            border-radius: 10px;
+            background: #fff;
+        }
+        .brand-name {
+            font-family: Fraunces, Georgia, serif;
+            font-size: 28px;
+            letter-spacing: -.02em;
+        }
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            color: var(--gold);
+            margin-bottom: 28px;
+        }
+        h2 {
+            font-family: Fraunces, Georgia, serif;
+            font-size: 92px;
+            line-height: .98;
+            letter-spacing: -.03em;
+            font-weight: 700;
+        }
+        .lead {
+            margin-top: 32px;
+            font-size: 40px;
+            line-height: 1.25;
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+        .accent { color: var(--gold); }
+        .mint { color: var(--mint); }
+        .footer-bar {
+            margin-top: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 36px;
+            border-top: 2px solid rgba(255,255,255,.14);
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: .04em;
+            color: #dbeafe;
+        }
+        .dots { display: flex; gap: 10px; }
+        .dots span {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: rgba(255,255,255,.25);
+        }
+        .dots span.on { background: var(--gold); }
+        .list { margin-top: 48px; display: grid; gap: 22px; }
+        .list li {
+            list-style: none;
+            font-size: 40px;
+            line-height: 1.2;
+            padding-left: 28px;
+            border-left: 6px solid var(--gold);
+            color: #f1f5f9;
+        }
+        .phone {
+            margin-top: 40px;
+            background: #f8fafc;
+            color: #0f172a;
+            border-radius: 36px;
+            padding: 18px 18px 28px;
+            box-shadow: 0 30px 60px rgba(0,0,0,.35);
+            border: 8px solid #0b1c24;
+        }
+        .phone-bar {
+            height: 18px;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 14px;
+        }
+        .phone-bar i {
+            width: 120px; height: 10px; border-radius: 999px; background: #cbd5e1;
+        }
+        .progress {
+            background: #4f46e5;
+            color: #fff;
+            border-radius: 16px;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            font-weight: 800;
+            margin-bottom: 16px;
+        }
+        .q-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 22px;
+        }
+        .q-label { font-size: 18px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .08em; }
+        .q-text { margin: 12px 0 20px; font-size: 34px; font-weight: 800; line-height: 1.2; }
+        .opt {
+            border: 2px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 16px 18px;
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: #fff;
+        }
+        .opt.pick { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+        .opt.ok { border-color: #059669; background: #ecfdf5; color: #065f46; }
+        .blank {
+            margin-top: 24px;
+            border: 3px dashed #94a3b8;
+            border-radius: 18px;
+            padding: 22px;
+            text-align: center;
+            font-size: 72px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            color: #0f172a;
+        }
+        .timer {
+            height: 14px;
+            background: #e2e8f0;
+            border-radius: 999px;
+            overflow: hidden;
+            margin: 16px 0 8px;
+        }
+        .timer > i { display: block; height: 100%; width: 62%; background: #f59e0b; }
+        .chip-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 36px; }
+        .chip {
+            background: rgba(255,255,255,.1);
+            border: 1px solid rgba(255,255,255,.18);
+            border-radius: 999px;
+            padding: 12px 20px;
+            font-size: 24px;
+            font-weight: 800;
+        }
+        .cta {
+            display: inline-block;
+            margin-top: 40px;
+            background: var(--gold);
+            color: #072f39;
+            font-size: 34px;
+            font-weight: 800;
+            padding: 22px 36px;
+            border-radius: 999px;
+        }
+        .slide-hook { background: radial-gradient(circle at 30% 10%, #248197 0%, #0f4c5c 36%, #05161c 100%); }
+        .slide-dark { background: radial-gradient(circle at 80% 0%, #1e3a5f 0%, #071820 55%, #040b10 100%); }
+        .slide-cta { background: radial-gradient(circle at 50% 0%, #2a8a7a 0%, #0f4c5c 40%, #071820 100%); }
+
+        body.export .help,
+        body.export .toolbar,
+        body.export .deck { display: none !important; }
+        body.export {
+            background: #000;
+            margin: 0;
+            overflow: hidden;
+        }
+        body.export .export-stage {
+            display: block !important;
+            width: 1080px;
+            height: 1920px;
+        }
+        body.export .export-stage .slide {
+            border-radius: 0;
+            box-shadow: none;
+        }
+        .export-stage { display: none; }
+
+        body.playing {
+            background: #000;
+        }
+        body.playing .help,
+        body.playing .toolbar { display: none; }
+        body.playing .deck {
+            padding: 0;
+            gap: 0;
+            min-height: 100vh;
+            justify-content: center;
+        }
+        body.playing .slide { display: none; border-radius: 0; }
+        body.playing .slide.now { display: flex; }
+        .play-meter {
+            display: none;
+            position: fixed;
+            top: 18px;
+            left: 24px;
+            right: 24px;
+            height: 6px;
+            background: rgba(255,255,255,.2);
+            z-index: 9;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        body.playing .play-meter { display: block; }
+        .play-meter i {
+            display: block;
+            height: 100%;
+            width: 0;
+            background: #f4c46b;
+            transition: width .2s linear;
+        }
+        @media (max-width: 1140px) {
+            .deck { transform: scale(.42); transform-origin: top center; height: 840px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="help">
+        <h1>Mentor Maths — Instagram daily-drill reel / carousel</h1>
+        <p>8 portrait slides (1080×1920). Use <strong>Play reel</strong> and screen-record, or export PNGs / the MP4 from <code>docs/instagram-drill/</code>.</p>
+        <p style="margin-top:8px;">Safe zone keeps text away from Instagram’s like/caption chrome. Caption is in <code>INSTAGRAM_DRILL_README.md</code>.</p>
+    </div>
+    <div class="toolbar">
+        <button type="button" id="playBtn">Play reel</button>
+        <button type="button" id="stopBtn" class="ghost">Stop</button>
+        <a class="ghost" href="#slide-1">Jump to slides</a>
+    </div>
+    <div class="play-meter"><i id="meter"></i></div>
+
+    <div class="deck" id="deck">
+        <!-- 1 Hook -->
+        <section class="slide slide-hook" id="slide-1">
+            <div class="safe">
+                <div class="brand-top">
+                    <div class="brand-mark">
+                        <img src="../public/logo.jpg" alt="Mentor Maths">
+                        <div class="brand-name">Mentor Maths</div>
+                    </div>
+                    <div class="eyebrow" style="margin:0">Daily drills</div>
+                </div>
+                <h2>Forget the<br>formula by<br><span class="accent">morning?</span></h2>
+                <p class="lead">School taught it yesterday.<br>The next chapter starts today.</p>
+                <p class="lead" style="color:#fde68a;font-weight:800;">5 minutes a day brings it back.</p>
+                <div class="footer-bar">
+                    <span>Plan · Practice · Perform</span>
+                    <div class="dots"><span class="on"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2 Problem -->
+        <section class="slide slide-dark" id="slide-2">
+            <div class="safe">
+                <p class="eyebrow">The leak</p>
+                <h2>Memory fades.<br>The exam<br>doesn’t wait.</h2>
+                <ul class="list">
+                    <li>Tables get slow</li>
+                    <li>Identities vanish</li>
+                    <li>Squares &amp; cubes stall</li>
+                    <li>Revision piles up the night before</li>
+                </ul>
+                <div class="footer-bar">
+                    <span>Why daily drills exist</span>
+                    <div class="dots"><span></span><span class="on"></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3 Unlock -->
+        <section class="slide" id="slide-3">
+            <div class="safe">
+                <p class="eyebrow">How it starts</p>
+                <h2>Mark the<br>study plan.<br><span class="mint">Drills unlock.</span></h2>
+                <p class="lead">Tick chapters already done in school. Mark one as <strong>Under study</strong>.</p>
+                <div class="phone">
+                    <div class="phone-bar"><i></i></div>
+                    <div class="q-label">My study plan</div>
+                    <div class="opt ok">Ch 1 · Patterns &nbsp; ✓ Studied</div>
+                    <div class="opt pick">Ch 2 · Lines &amp; Angles &nbsp; ◉ Under study</div>
+                    <div class="opt">Ch 3 · Number Play &nbsp; Not started</div>
+                </div>
+                <div class="footer-bar">
+                    <span>No plan → no drills</span>
+                    <div class="dots"><span></span><span></span><span class="on"></span><span></span><span></span><span></span><span></span><span></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4 Formula -->
+        <section class="slide" id="slide-4">
+            <div class="safe">
+                <p class="eyebrow">Formula drill</p>
+                <h2>Recall it.<br>Don’t reread it.</h2>
+                <div class="phone">
+                    <div class="phone-bar"><i></i></div>
+                    <div class="progress"><span>Daily formula drill</span><span>3 / 8</span></div>
+                    <div class="q-card">
+                        <div class="q-label">Fill in the blank</div>
+                        <div class="q-text">(a + b)² = a² + 2ab + ?</div>
+                        <div class="opt">A) ab</div>
+                        <div class="opt pick">B) b²</div>
+                        <div class="opt">C) 2b²</div>
+                    </div>
+                </div>
+                <p class="lead" style="font-size:32px;">Wrong? Try again. Still stuck? Ask the teacher. Misses return later.</p>
+                <div class="footer-bar">
+                    <span>Short daily recall</span>
+                    <div class="dots"><span></span><span></span><span></span><span class="on"></span><span></span><span></span><span></span><span></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5 Basics -->
+        <section class="slide" id="slide-5">
+            <div class="safe">
+                <p class="eyebrow">Basics drill</p>
+                <h2>Make the<br>basics<br><span class="accent">automatic.</span></h2>
+                <div class="phone">
+                    <div class="phone-bar"><i></i></div>
+                    <div class="q-label">Tables · Squares · Cubes</div>
+                    <p class="q-text" style="text-align:center;font-size:56px;margin-top:20px;">12 × 8 = ?</p>
+                    <div class="timer"><i></i></div>
+                    <div class="blank">96</div>
+                </div>
+                <div class="chip-row">
+                    <span class="chip">Timed blanks</span>
+                    <span class="chip">See chart → then recall</span>
+                    <span class="chip">First try must be clean</span>
+                </div>
+                <div class="footer-bar">
+                    <span>Speed you can trust</span>
+                    <div class="dots"><span></span><span></span><span></span><span></span><span class="on"></span><span></span><span></span><span></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 6 Sticky -->
+        <section class="slide slide-dark" id="slide-6">
+            <div class="safe">
+                <p class="eyebrow">How memory is built</p>
+                <h2>Misses don’t<br>disappear.</h2>
+                <p class="lead">They come back until the first attempt is right.</p>
+                <ul class="list">
+                    <li>Formula misses → revision queue</li>
+                    <li>Basics misses → shown again today</li>
+                    <li>Ask teacher, then move on</li>
+                    <li>Flag a misprint — no marks lost</li>
+                </ul>
+                <div class="footer-bar">
+                    <span>Weak spots stay visible</span>
+                    <div class="dots"><span></span><span></span><span></span><span></span><span></span><span class="on"></span><span></span><span></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 7 Unlock work -->
+        <section class="slide" id="slide-7">
+            <div class="safe">
+                <p class="eyebrow">Then the day opens</p>
+                <h2>Finish drills.<br><span class="mint">Practice unlocks.</span></h2>
+                <p class="lead">Dashboard waits until today’s formula + basics drills are done.</p>
+                <ul class="list">
+                    <li>Book-wise sets (Learner → Expert)</li>
+                    <li>MCQ · fill-blank · written</li>
+                    <li>Same-day work for Under study</li>
+                </ul>
+                <div class="chip-row">
+                    <span class="chip">Completion %</span>
+                    <span class="chip">Score %</span>
+                    <span class="chip">Revision status</span>
+                </div>
+                <div class="footer-bar">
+                    <span>Drills first. Then the to-do list.</span>
+                    <div class="dots"><span></span><span></span><span></span><span></span><span></span><span></span><span class="on"></span><span></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 8 CTA -->
+        <section class="slide slide-cta" id="slide-8">
+            <div class="safe">
+                <div class="brand-top">
+                    <div class="brand-mark">
+                        <img src="../public/logo.jpg" alt="Mentor Maths">
+                        <div class="brand-name">Mentor Maths</div>
+                    </div>
+                </div>
+                <p class="eyebrow">Start today</p>
+                <h2>5 minutes.<br>Every day.<br><span class="accent">That’s the drill.</span></h2>
+                <p class="lead">Class 4–10 · CBSE &amp; ICSE<br>Free early access — 15 days</p>
+                <div class="cta">mentormaths.in</div>
+                <div class="footer-bar">
+                    <span>Plan · Practice · Perform</span>
+                    <div class="dots"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span class="on"></span></div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="export-stage" id="exportStage"></div>
+
+    <script>
+        const slides = Array.from(document.querySelectorAll('.deck .slide'));
+        const body = document.body;
+        const meter = document.getElementById('meter');
+        const HOLD_MS = 2500;
+        let timer = null;
+        let idx = 0;
+
+        function show(i) {
+            idx = (i + slides.length) % slides.length;
+            slides.forEach((s, n) => s.classList.toggle('now', n === idx));
+        }
+
+        function stopPlay() {
+            body.classList.remove('playing');
+            slides.forEach((s) => s.classList.remove('now'));
+            clearTimeout(timer);
+            timer = null;
+            meter.style.width = '0%';
+        }
+
+        function tick() {
+            const start = Date.now();
+            const step = () => {
+                const p = Math.min(1, (Date.now() - start) / HOLD_MS);
+                meter.style.width = (p * 100) + '%';
+                if (p < 1 && body.classList.contains('playing')) {
+                    requestAnimationFrame(step);
+                }
+            };
+            step();
+            timer = setTimeout(() => {
+                show(idx + 1);
+                tick();
+            }, HOLD_MS);
+        }
+
+        document.getElementById('playBtn').addEventListener('click', () => {
+            body.classList.add('playing');
+            show(0);
+            tick();
+        });
+        document.getElementById('stopBtn').addEventListener('click', stopPlay);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') stopPlay();
+            if (e.key === 'ArrowRight') { stopPlay(); location.hash = '#slide-' + Math.min(8, (idx + 2)); }
+        });
+
+        const params = new URLSearchParams(location.search);
+        const exportN = parseInt(params.get('export') || '0', 10);
+        if (exportN >= 1 && exportN <= slides.length) {
+            body.classList.add('export');
+            const clone = slides[exportN - 1].cloneNode(true);
+            document.getElementById('exportStage').appendChild(clone);
+        }
+    </script>
+</body>
+</html>
