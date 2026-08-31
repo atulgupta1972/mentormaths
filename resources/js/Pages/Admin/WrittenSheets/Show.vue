@@ -1,6 +1,7 @@
 <script setup>
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import WrittenGradingProgressBar from '@/Components/WrittenGradingProgressBar.vue';
+import PracticeSetMasterProfileSelect from '@/Components/PracticeSetMasterProfileSelect.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -25,6 +26,11 @@ const props = defineProps({
     assignments: { type: Array, default: () => [] },
     activeYear: { type: Object, default: null },
     gradeLevels: { type: Array, default: () => [] },
+    masterProfiles: { type: Array, default: () => [] },
+    difficultyMarks: {
+        type: Object,
+        default: () => ({ easy: 1, medium: 2, hard: 3 }),
+    },
     uploadLimits: {
         type: Object,
         default: () => ({ max_files: 15, max_file_mb: 20 }),
@@ -33,7 +39,9 @@ const props = defineProps({
 
 const page = usePage();
 const regenerateForm = useForm({});
-const verifyForm = useForm({});
+const verifyForm = useForm({
+    master_profile: props.sheet.tier || 'starter',
+});
 const rejectForm = useForm({});
 const replacePdfForm = useForm({ pdf_import_token: '' });
 const removePdfForm = useForm({});
@@ -976,6 +984,7 @@ const progressLabel = (p) => {
                             {{ sheet.written_status_label }}
                         </span>
                         <span class="text-sm text-gray-600">{{ sheet.questions_count }} sums</span>
+                        <span v-if="sheet.tier_label" class="text-sm text-gray-600">· {{ sheet.tier_label }}</span>
                         <a
                             v-if="sheet.written_pdf_url"
                             :href="route('admin.written-sheets.download', sheet.id)"
@@ -984,6 +993,20 @@ const progressLabel = (p) => {
                         >
                             Download PDF
                         </a>
+                    </div>
+
+                    <div
+                        v-if="sheet.written_status === 'pending_review' && masterProfiles.length"
+                        class="mt-4"
+                    >
+                        <PracticeSetMasterProfileSelect
+                            v-model="verifyForm.master_profile"
+                            :master-profiles="masterProfiles"
+                            :difficulty-marks="difficultyMarks"
+                        />
+                        <p class="mt-2 text-xs text-gray-500">
+                            Choose Learner, Achiever, or Expert before verifying — this labels the set on the question bank.
+                        </p>
                     </div>
 
                     <div class="mt-4 flex flex-wrap gap-2">

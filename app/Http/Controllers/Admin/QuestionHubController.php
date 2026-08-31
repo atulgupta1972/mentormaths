@@ -602,6 +602,7 @@ class QuestionHubController extends Controller
                 'id' => $worksheet->id,
                 'set_code' => $worksheet->set_code,
                 'set_number' => $worksheet->set_number,
+                'tier' => $worksheet->tier ?? PracticeSetTier::STARTER,
                 'tier_label' => $worksheet->tier_label,
                 'tier_tagline' => $worksheet->tier_tagline,
                 'display_title' => $worksheet->display_title,
@@ -649,6 +650,7 @@ class QuestionHubController extends Controller
             'hintStats' => $hintStats,
             'topicHintStats' => $topicHintStats,
             'assignmentPanel' => $assignmentPanel,
+            'tierOptions' => PracticeSetTier::options(),
         ]);
     }
 

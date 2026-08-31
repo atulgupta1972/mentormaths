@@ -387,6 +387,7 @@ class WrittenSheetController extends Controller
                     $validated['answer_key'],
                     $request->user(),
                     $validated['notes'] ?? null,
+                    $tier,
                 );
 
                 $this->writtenSheetService->attachUploadedPdf(
@@ -710,6 +711,8 @@ class WrittenSheetController extends Controller
             'assignments' => $assignments,
             'activeYear' => $activeYear?->only(['id', 'name']),
             'gradeLevels' => GradeLevel::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name']),
+            'masterProfiles' => PracticeSetMasterProfile::options(),
+            'difficultyMarks' => PracticeSetMasterProfile::marks(),
             'uploadLimits' => [
                 'max_files' => WrittenSubmissionLimits::MAX_FILES,
                 'max_file_mb' => (int) (WrittenSubmissionLimits::MAX_FILE_KB / 1024),
@@ -738,8 +741,16 @@ class WrittenSheetController extends Controller
     {
         abort_unless($worksheet->isWritten(), 404);
 
+        $validated = $request->validate([
+            'master_profile' => ['nullable', 'in:'.implode(',', PracticeSetMasterProfile::keys())],
+        ]);
+
         try {
-            $this->writtenSheetService->verify($worksheet, $request->user());
+            $this->writtenSheetService->verify(
+                $worksheet,
+                $request->user(),
+                $validated['master_profile'] ?? null,
+            );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }

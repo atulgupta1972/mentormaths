@@ -25,6 +25,7 @@ const props = defineProps({
     hintStats: Object,
     topicHintStats: Object,
     assignmentPanel: { type: Object, default: null },
+    tierOptions: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -46,6 +47,29 @@ const renameForm = useForm({
 });
 
 const deleteSetForm = useForm({});
+
+const tierForm = useForm({
+    tier: props.practiceSet?.tier || 'starter',
+});
+
+watch(
+    () => props.practiceSet?.tier,
+    (tier) => {
+        if (tier) {
+            tierForm.tier = tier;
+        }
+    },
+);
+
+const saveTier = () => {
+    if (tierForm.tier === props.practiceSet?.tier) {
+        return;
+    }
+
+    tierForm.patch(route('admin.practice-sets.update-tier', props.practiceSet.id), {
+        preserveScroll: true,
+    });
+};
 
 onMounted(() => {
     const err = page.props.flash?.error;
@@ -351,7 +375,24 @@ const generateHints = () => {
                         <span class="font-mono text-2xl font-bold tracking-wide text-indigo-600">
                             {{ practiceSet.set_code }}
                         </span>
-                        <span class="text-sm text-gray-600">{{ practiceSet.tier_label }} · {{ practiceSet.questions_count }} sums</span>
+                        <template v-if="isAdmin && tierOptions.length">
+                            <select
+                                v-model="tierForm.tier"
+                                class="rounded-md border-gray-300 py-1 pl-2 pr-8 text-sm text-gray-700"
+                                :disabled="tierForm.processing"
+                                @change="saveTier"
+                            >
+                                <option
+                                    v-for="option in tierOptions"
+                                    :key="option.value"
+                                    :value="option.value"
+                                >
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                        </template>
+                        <span v-else class="text-sm text-gray-600">{{ practiceSet.tier_label }}</span>
+                        <span class="text-sm text-gray-600">· {{ practiceSet.questions_count }} sums</span>
                         <span
                             v-if="isFillInBlankSet"
                             class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800"

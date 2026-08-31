@@ -223,6 +223,7 @@ class WrittenSheetService
         array $rows,
         User $creator,
         ?string $notes = null,
+        string $tier = PracticeSetTier::STARTER,
     ): Worksheet {
         $rows = array_values(array_filter($rows, fn (array $row) => trim((string) ($row['correct_answer'] ?? '')) !== ''));
 
@@ -252,6 +253,7 @@ class WrittenSheetService
             $manualRows,
             $creator,
             $notes,
+            $tier,
         );
     }
 
@@ -383,7 +385,7 @@ class WrittenSheetService
         return $worksheet->fresh();
     }
 
-    public function verify(Worksheet $worksheet, User $admin): Worksheet
+    public function verify(Worksheet $worksheet, User $admin, ?string $tier = null): Worksheet
     {
         if (! $worksheet->isWritten()) {
             throw new \InvalidArgumentException('This is not a written sheet.');
@@ -393,12 +395,18 @@ class WrittenSheetService
             throw new \InvalidArgumentException('Generate and review the PDF before verifying.');
         }
 
-        $worksheet->update([
+        $updates = [
             'written_status' => WrittenSheetStatus::VERIFIED,
             'status' => Worksheet::STATUS_PUBLISHED,
             'written_verified_at' => now(),
             'written_verified_by' => $admin->id,
-        ]);
+        ];
+
+        if ($tier !== null && PracticeSetMasterProfile::isValid($tier)) {
+            $updates['tier'] = $tier;
+        }
+
+        $worksheet->update($updates);
 
         return $worksheet->fresh();
     }
@@ -850,6 +858,9 @@ class WrittenSheetService
             'id' => $worksheet->id,
             'set_code' => $worksheet->set_code,
             'title' => $worksheet->title,
+            'tier' => $worksheet->tier ?? PracticeSetTier::STARTER,
+            'tier_label' => $worksheet->tier_label,
+            'tier_tagline' => $worksheet->tier_tagline,
             'kind_label' => $worksheet->isChapterTest() ? 'Test' : 'Practice',
             'scope' => $worksheet->scope,
             'questions_count' => $worksheet->questions_count,

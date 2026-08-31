@@ -14,6 +14,7 @@ use App\Services\ChapterMixedQuestionService;
 use App\Services\ClassCoverageService;
 use App\Services\PracticeSetService;
 use App\Services\PracticeSetSplitService;
+use App\Support\PracticeSetMasterProfile;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
@@ -337,6 +338,21 @@ class PracticeSetController extends Controller
         $worksheet->update(['set_code' => trim($validated['set_code'])]);
 
         return back()->with('success', "Renamed {$old} → {$worksheet->set_code}.");
+    }
+
+    public function updateTier(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        $validated = $request->validate([
+            'tier' => ['required', 'in:'.implode(',', PracticeSetTier::topicTiers())],
+        ]);
+
+        $oldLabel = $worksheet->tier_label;
+        $worksheet->update(['tier' => $validated['tier']]);
+
+        return back()->with(
+            'success',
+            'Profile updated: '.$oldLabel.' → '.$worksheet->fresh()->tier_label.'.',
+        );
     }
 
     public function split(Request $request, Worksheet $worksheet): RedirectResponse

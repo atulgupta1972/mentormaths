@@ -131,6 +131,21 @@ class PracticeSetSplitTest extends TestCase
         $this->assertSame('C8-GP-CH02-M1-OLD', $worksheet->fresh()->set_code);
     }
 
+    public function test_admin_can_update_set_tier(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        [$worksheet] = $this->seedChapterSetWithQuestions(5, 'C8-GP-CH02-M1');
+        $worksheet->update(['tier' => PracticeSetTier::STARTER]);
+
+        $this->actingAs($admin)
+            ->patch(route('admin.practice-sets.update-tier', $worksheet), [
+                'tier' => PracticeSetTier::BUILDER,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(PracticeSetTier::BUILDER, $worksheet->fresh()->tier);
+    }
+
     public function test_split_blocked_when_target_codes_exist_and_related_sets_are_exposed(): void
     {
         $this->withoutVite();

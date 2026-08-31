@@ -60,6 +60,23 @@ class WrittenSheetServiceTest extends TestCase
         $this->assertNotNull($verified->written_verified_at);
     }
 
+    public function test_verify_can_set_master_profile_tier(): void
+    {
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->generatePdf(
+            $service->createFromTopic($topic, [$question->id], $admin, null, PracticeSetTier::STARTER),
+        );
+
+        $this->assertSame(PracticeSetTier::STARTER, $worksheet->tier);
+
+        $verified = $service->verify($worksheet, $admin, PracticeSetTier::BUILDER);
+
+        $this->assertSame(PracticeSetTier::BUILDER, $verified->tier);
+        $this->assertSame(WrittenSheetStatus::VERIFIED, $verified->written_status);
+    }
+
     public function test_create_written_sheet_from_manual_rows(): void
     {
         [$topic, , $admin] = $this->seedTopicQuestion();
