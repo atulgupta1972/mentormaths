@@ -2,11 +2,40 @@
 
 namespace Tests\Unit;
 
+use App\Models\Worksheet;
 use App\Services\WrittenSheetPdfService;
+use App\Support\PracticeSetScope;
 use Tests\TestCase;
 
 class WrittenSheetPdfServiceTest extends TestCase
 {
+    public function test_written_sheet_pdf_view_includes_answer_format_guidance(): void
+    {
+        $worksheet = Worksheet::make([
+            'set_code' => 'T743-W',
+            'scope' => PracticeSetScope::CHAPTER,
+        ]);
+
+        $html = view('reports.written-sheet-pdf', [
+            'worksheet' => $worksheet,
+            'questions' => [
+                ['number' => 1, 'text' => 'Sample question', 'diagram_path' => null, 'type' => 'fill_in_blank', 'options' => []],
+            ],
+            'className' => 'Class 7',
+            'boardCode' => 'CBSE',
+            'chapterName' => 'Algebraic Expressions',
+            'topicName' => null,
+            'kindLabel' => 'Test',
+        ])->render();
+
+        $this->assertStringContainsString('Guidance — how to write your answers', $html);
+        $this->assertStringContainsString('1. Given:', $html);
+        $this->assertStringContainsString('2. To find:', $html);
+        $this->assertStringContainsString('3. Solution:', $html);
+        $this->assertStringContainsString('4. Answer:', $html);
+        $this->assertStringContainsString('NOT on your sheet', $html);
+    }
+
     public function test_question_text_for_sheet_expands_blanks_for_print(): void
     {
         $service = app(WrittenSheetPdfService::class);
