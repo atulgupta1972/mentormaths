@@ -200,7 +200,9 @@ class AssignmentPoolScore
             'pending_remedial' => $pendingRemedial,
             'wrong' => $wrong,
             'completion_pct' => (int) round(($attempted / $pool) * 100),
-            'score_pct' => (int) round(($correct / $pool) * 100),
+            'score_pct' => $attempted > 0
+                ? (int) round(($correct / $attempted) * 100)
+                : 0,
         ];
     }
 

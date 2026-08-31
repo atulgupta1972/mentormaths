@@ -102,7 +102,7 @@ class StudyPlanWhatsAppStatusTest extends TestCase
         $this->assertSame(10, $perf['done']);
         $this->assertSame(8, $perf['correct']);
         $this->assertSame(50, $perf['completion_pct']);
-        $this->assertSame(40, $perf['score_pct']);
+        $this->assertSame(80, $perf['score_pct']);
         $this->assertSame(1, $perf['correction_done']);
         $this->assertSame(1, $perf['correction_pending']);
         $this->assertSame(2, $perf['open_wrongs']);
@@ -214,10 +214,10 @@ class StudyPlanWhatsAppStatusTest extends TestCase
             'study_plan' => [
                 'total' => 50,
                 'done' => 20,
-                'correct' => 42,
+                'correct' => 17,
                 'completion_pct' => 40,
-                'score_pct' => 84,
-                'scored_count' => 42,
+                'score_pct' => 85,
+                'scored_count' => 17,
                 'correction_done' => 1,
                 'correction_pending' => 2,
                 'open_wrongs' => 3,
@@ -228,7 +228,7 @@ class StudyPlanWhatsAppStatusTest extends TestCase
 
         $this->assertStringContainsString('Study plan status for Vishvesh', $message);
         $this->assertStringContainsString('Completion: 20/50 sums (40%)', $message);
-        $this->assertStringContainsString('Score: 42/50 first-try (84%)', $message);
+        $this->assertStringContainsString('Score: 17/20 first-try (85%)', $message);
         $this->assertStringContainsString('Corrections: 1 done, 2 pending', $message);
         $this->assertStringContainsString('2 overdue, 1 pending', $message);
         $this->assertStringContainsString('https://mentormaths.in/dashboard', $message);

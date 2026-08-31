@@ -186,9 +186,14 @@ class ClassHubProgressService
             return (int) $performance['score_pct'];
         }
 
-        $total = (int) ($performance['total'] ?? 0);
+        $attempted = (int) ($performance['done'] ?? 0);
         $correct = (int) ($performance['correct'] ?? 0);
-        if ($total > 0) {
+        if ($attempted > 0) {
+            return (int) round(($correct / $attempted) * 100);
+        }
+
+        $total = (int) ($performance['total'] ?? 0);
+        if ($total > 0 && $correct > 0) {
             return (int) round(($correct / $total) * 100);
         }
 

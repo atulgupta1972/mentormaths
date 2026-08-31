@@ -64,7 +64,7 @@ const performanceBarClass = (pct) => {
                     <template v-else>—</template>
                 </p>
                 <p class="text-[10px] font-semibold text-slate-500">
-                    <template v-if="perf.total">{{ perf.correct ?? perf.scoredCount }}/{{ perf.total }} first-try correct</template>
+                    <template v-if="perf.done">{{ perf.correct ?? perf.scoredCount }}/{{ perf.done }} first-try correct</template>
                     <template v-else>No scores yet</template>
                 </p>
                 <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -99,8 +99,8 @@ const performanceBarClass = (pct) => {
                     <template v-else>—</template>
                 </p>
                 <p class="text-[10px] font-semibold text-slate-500">
-                    <template v-if="perf.revisionTotal">
-                        {{ perf.revisionCorrect ?? perf.revisionScoredCount }}/{{ perf.revisionTotal }} first-try correct
+                    <template v-if="perf.revisionDone">
+                        {{ perf.revisionCorrect ?? perf.revisionScoredCount }}/{{ perf.revisionDone }} first-try correct
                     </template>
                     <template v-else>No revision scores yet</template>
                 </p>

@@ -6,7 +6,7 @@ namespace App\Support;
  * Aggregate Completion% / Score% by sum counts (Total Pool), not by set counts.
  *
  * Completion% = total attempted sums / total pool sums
- * Score%      = total first-try correct sums / total pool sums
+ * Score%      = total first-try correct sums / total attempted sums
  */
 class SumPoolAggregate
 {
@@ -91,7 +91,9 @@ class SumPoolAggregate
             'attempted' => $attempted,
             'correct' => $correct,
             'completion_pct' => $pool > 0 ? (int) round(($attempted / $pool) * 100) : null,
-            'score_pct' => $pool > 0 ? (int) round(($correct / $pool) * 100) : null,
+            'score_pct' => $attempted > 0
+                ? (int) round(($correct / $attempted) * 100)
+                : ($pool > 0 ? 0 : null),
             'set_total' => count($items),
             'set_done' => $setDone,
         ];

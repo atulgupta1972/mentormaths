@@ -1012,8 +1012,13 @@ class ClassCoverageService
         }
 
         $pool = (int) ($aggregate['pool'] ?? 0);
+        $attempted = (int) ($aggregate['attempted'] ?? 0);
         $correct = (int) ($aggregate['correct'] ?? 0);
-        if ($pool > 0) {
+        if ($attempted > 0) {
+            return (int) round(($correct / $attempted) * 100);
+        }
+
+        if ($pool > 0 && $correct > 0) {
             return (int) round(($correct / $pool) * 100);
         }
 
@@ -1065,7 +1070,12 @@ class ClassCoverageService
         }
 
         $poolTotal = (int) ($pool['pool'] ?? 0);
+        $attempted = (int) ($pool['attempted'] ?? 0);
         $correct = (int) ($pool['correct'] ?? 0);
+        if ($attempted > 0) {
+            return round(($correct / $attempted) * 100, 2);
+        }
+
         if ($poolTotal > 0 && $correct > 0) {
             return round(($correct / $poolTotal) * 100, 2);
         }

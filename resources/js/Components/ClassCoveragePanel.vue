@@ -664,7 +664,7 @@ const aggregateSums = (items) => {
         attempted,
         correct,
         completionPct: pool > 0 ? Math.round((attempted / pool) * 100) : null,
-        scorePct: pool > 0 ? Math.round((correct / pool) * 100) : null,
+        scorePct: attempted > 0 ? Math.round((correct / attempted) * 100) : null,
         setTotal: items.length,
         setDone,
     };
@@ -1049,8 +1049,8 @@ const startRevision = (item) => {
                             <td
                                 class="bg-violet-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
-                                :title="stats.total
-                                    ? `${stats.correct ?? 0}/${stats.total} first-try correct`
+                                :title="stats.done
+                                    ? `${stats.correct ?? 0}/${stats.done} first-try correct`
                                     : 'No sums yet'"
                             >
                                 <span
@@ -1061,9 +1061,9 @@ const startRevision = (item) => {
                                     <template v-else>—</template>
                                 </span>
                                 <span
-                                    v-if="stats.total && stats.scorePct != null"
+                                    v-if="stats.done && stats.scorePct != null"
                                     class="ml-0.5 text-[10px] font-semibold tabular-nums text-slate-500"
-                                >{{ stats.correct ?? 0 }}/{{ stats.total }}</span>
+                                >{{ stats.correct ?? 0 }}/{{ stats.done }}</span>
                             </td>
                             <td
                                 class="bg-indigo-50/80 px-1.5 py-1 text-center align-middle"

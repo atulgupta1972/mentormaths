@@ -74,7 +74,7 @@ class AssignmentPoolScoreTest extends TestCase
         $this->assertSame(5, $metrics['pending']);
         $this->assertSame(5, $metrics['wrong']);
         $this->assertSame(80, $metrics['completion_pct']);
-        $this->assertSame(60, $metrics['score_pct']);
+        $this->assertSame(75, $metrics['score_pct']);
 
         $remedialAttempt = SetAttempt::query()->create([
             'set_assignment_id' => $assignment->id,

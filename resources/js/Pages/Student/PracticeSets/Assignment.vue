@@ -210,7 +210,7 @@ const requestCorrection = () => {
                             v-if="assignment.pool_metrics?.pool"
                             class="mt-2 text-xs text-slate-600"
                         >
-                            Sheet pool: {{ assignment.pool_metrics.correct }}/{{ assignment.pool_metrics.pool }} first-try correct
+                            Sheet pool: {{ assignment.pool_metrics.correct }}/{{ assignment.pool_metrics.attempted || assignment.pool_metrics.pool }} first-try correct
                             (score {{ assignment.pool_metrics.score_pct }}%)
                             · {{ assignment.pool_metrics.attempted }}/{{ assignment.pool_metrics.pool }} attempted
                             (completion {{ assignment.pool_metrics.completion_pct }}%)

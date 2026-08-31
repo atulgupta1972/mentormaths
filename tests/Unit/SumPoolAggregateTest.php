@@ -28,7 +28,7 @@ class SumPoolAggregateTest extends TestCase
         $this->assertSame(25, $agg['attempted']);
         $this->assertSame(20, $agg['correct']);
         $this->assertSame(71, $agg['completion_pct']); // 25/35
-        $this->assertSame(57, $agg['score_pct']); // 20/35
+        $this->assertSame(80, $agg['score_pct']); // 20/25 attempted
         $this->assertSame(2, $agg['set_total']);
         $this->assertSame(1, $agg['set_done']);
     }

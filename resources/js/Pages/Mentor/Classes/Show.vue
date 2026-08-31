@@ -53,8 +53,13 @@ const displayScorePct = (progress) => {
     }
 
     const total = Number(progress.sums_total ?? 0);
+    const attempted = Number(progress.sums_attempted ?? 0);
     const correct = Number(progress.sums_correct ?? 0);
-    if (total > 0) {
+    if (attempted > 0) {
+        return Math.round((correct / attempted) * 100);
+    }
+
+    if (total > 0 && correct > 0) {
         return Math.round((correct / total) * 100);
     }
 

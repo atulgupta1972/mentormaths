@@ -98,7 +98,7 @@ class StudentProgressWhatsAppService
             .($completion !== null ? " ({$completion}%)" : '');
 
         if (($perf['score_pct'] ?? null) !== null) {
-            $lines[] = 'Score: '.$correct.'/'.$total.' first-try ('.$perf['score_pct'].'%)';
+            $lines[] = 'Score: '.$correct.'/'.$done.' first-try ('.$perf['score_pct'].'%)';
         } else {
             $lines[] = 'Score: no scores yet';
         }
