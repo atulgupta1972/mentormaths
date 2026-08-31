@@ -4,7 +4,7 @@ import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import ClassAttemptProtectionPanel from '@/Components/ClassAttemptProtectionPanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import { assignToClassPath, hasRoute, safeRoute } from '@/utils/routes';
 
