@@ -421,6 +421,14 @@ const generateHints = () => {
                     >
                         Print worksheet
                     </a>
+                    <a
+                        v-if="practiceSet.can_print_written"
+                        :href="route('admin.written-sheets.download', practiceSet.id)"
+                        class="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-900 hover:bg-indigo-100"
+                        title="Download worksheet PDF"
+                    >
+                        Download PDF
+                    </a>
                     <Link
                         v-else-if="practiceSet.is_written"
                         :href="route('admin.written-sheets.show', practiceSet.id)"
