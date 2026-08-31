@@ -197,6 +197,34 @@ class ClassCoverageService
     }
 
     /**
+     * Class hub: completion/score across all assigned sets on the syllabus (not gated on Under study/Studied marks).
+     *
+     * @return array{
+     *     total: int,
+     *     done: int,
+     *     completion_pct: int|null,
+     *     score_pct: int|null,
+     *     scored_count: int,
+     *     correction_done: int,
+     *     correction_pending: int,
+     *     open_wrongs: int,
+     *     chapter_count: int,
+     *     chapter_labels: list<string>
+     * }|null
+     */
+    public function classHubPerformance(?StudentEnrollment $enrollment): ?array
+    {
+        if (! $enrollment) {
+            return null;
+        }
+
+        return $this->studyPlanPerformanceFromCoverage(
+            $this->forEnrollment($enrollment),
+            markedChaptersOnly: false,
+        );
+    }
+
+    /**
      * @param  array{chapters?: list<array<string, mixed>>}  $coverage
      * @return array{
      *     total: int,
@@ -211,13 +239,17 @@ class ClassCoverageService
      *     chapter_labels: list<string>
      * }|null
      */
-    public function studyPlanPerformanceFromCoverage(array $coverage): ?array
+    public function studyPlanPerformanceFromCoverage(array $coverage, bool $markedChaptersOnly = true): ?array
     {
-        $tracked = collect($coverage['chapters'] ?? [])
-            ->filter(fn (array $chapter) => ($chapter['studied'] ?? false) || ($chapter['under_study'] ?? false))
-            ->values();
+        $chapters = collect($coverage['chapters'] ?? []);
 
-        if ($tracked->isEmpty()) {
+        $tracked = $markedChaptersOnly
+            ? $chapters->filter(fn (array $chapter) => ($chapter['studied'] ?? false) || ($chapter['under_study'] ?? false))
+            : $chapters;
+
+        $tracked = $tracked->values();
+
+        if ($tracked->isEmpty() && ($coverage['additional_groups'] ?? []) === []) {
             return null;
         }
 

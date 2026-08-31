@@ -229,8 +229,8 @@ const studyPlanHref = (studentId) => {
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Student</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Plan</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Exam date</th>
-                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Sum completion on chapters marked Under study or Studied">Completion %</th>
-                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on marked study-plan chapters">Score %</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Sum-based completion on all assigned sets">Completion %</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on attempted sums">Score %</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Revision</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500">Days logged</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500">Hours spent</th>
@@ -279,7 +279,7 @@ const studyPlanHref = (studentId) => {
                                                 v-else-if="!displayCompletionPct(rowProgress(row)) && hasEngagementMetrics(row)"
                                                 class="text-[10px] text-gray-400"
                                             >
-                                                No Under study / Studied chapter
+                                                No assigned sets yet
                                             </p>
                                         </template>
                                     </td>

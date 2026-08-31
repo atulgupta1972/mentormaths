@@ -346,9 +346,9 @@ watch(boardFilter, (value, oldValue) => {
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Student</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Plan</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Exam date</th>
-                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Sum completion on chapters marked Under study or Studied (not tied to exam plan)">Completion %</th>
-                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on marked study-plan chapters (not tied to exam plan)">Score %</th>
-                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500" title="Revision pending on marked study-plan chapters">Revision</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Sum-based completion on all assigned sets">Completion %</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on attempted sums">Score %</th>
+                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500" title="Revision and corrections pending">Revision</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Login days this academic year">Days logged</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Approx time on practice this year">Hours spent</th>
                                     <th class="px-3 py-3 text-right text-xs uppercase text-gray-500">Actions</th>
@@ -394,7 +394,7 @@ watch(boardFilter, (value, oldValue) => {
                                                     v-else-if="!displayCompletionPct(rowProgress(row)) && hasEngagementMetrics(row)"
                                                     class="text-[10px] text-gray-400"
                                                 >
-                                                    No Under study / Studied chapter
+                                                    No assigned sets yet
                                                 </p>
                                             </template>
                                         </td>

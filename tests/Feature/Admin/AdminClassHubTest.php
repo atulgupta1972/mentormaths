@@ -57,12 +57,13 @@ class AdminClassHubTest extends TestCase
                     ->missing('gradeLevel')));
     }
 
-    public function test_class_hub_progress_uses_study_plan_marks_not_exam_plan(): void
+    public function test_class_hub_progress_uses_all_assigned_sets_not_study_plan_marks(): void
     {
         $this->seedClassSeven();
         $enrollment = StudentEnrollment::query()->firstOrFail();
         $coverage = app(ClassCoverageService::class);
 
+        $this->assertNotNull($coverage->classHubPerformance($enrollment));
         $this->assertNotNull($coverage->studyPlanPerformance($enrollment));
 
         StudentChapterCoverage::query()
@@ -70,6 +71,7 @@ class AdminClassHubTest extends TestCase
             ->delete();
 
         $this->assertNull($coverage->studyPlanPerformance($enrollment));
+        $this->assertNotNull($coverage->classHubPerformance($enrollment));
     }
 
     public function test_class_hub_still_lists_students_when_exam_rows_fail(): void
