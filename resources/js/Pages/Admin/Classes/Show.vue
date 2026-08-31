@@ -104,6 +104,24 @@ const displayScorePct = (progress) => {
     return null;
 };
 
+const displayCompletionPct = (progress) => {
+    if (! progress) {
+        return null;
+    }
+
+    if (progress.completion_pct != null) {
+        return progress.completion_pct;
+    }
+
+    const total = Number(progress.sums_total ?? 0);
+    const attempted = Number(progress.sums_attempted ?? 0);
+    if (total > 0) {
+        return Math.round((attempted / total) * 100);
+    }
+
+    return null;
+};
+
 const revisionLabel = (progress) => {
     if (!progress) {
         return '—';
@@ -295,7 +313,7 @@ watch(boardFilter, (value, oldValue) => {
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Student</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Plan</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Exam date</th>
-                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Study plan completion">Completion %</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Attempted sums / total pool in study plan">Completion %</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on scored sets">Score %</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Revision</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Login days this academic year">Days logged</th>
@@ -328,13 +346,16 @@ watch(boardFilter, (value, oldValue) => {
                                             {{ formatDate(row.display_plan?.exam_date) }}
                                         </td>
                                         <td class="px-3 py-3 text-center">
-                                            <span class="font-semibold tabular-nums text-sky-800">{{ pctLabel(row.progress?.completion_pct) }}</span>
-                                            <p
-                                                v-if="row.progress?.sets_total"
-                                                class="text-[10px] text-gray-500"
-                                            >
-                                                {{ row.progress.sets_done }}/{{ row.progress.sets_total }} sets
-                                            </p>
+                                            <span v-if="progressMetricsLoading" :class="metricPulseClass" />
+                                            <template v-else>
+                                                <span class="font-semibold tabular-nums text-sky-800">{{ pctLabel(displayCompletionPct(rowProgress(row))) }}</span>
+                                                <p
+                                                    v-if="rowProgress(row).sums_total"
+                                                    class="text-[10px] text-gray-500"
+                                                >
+                                                    {{ rowProgress(row).sums_attempted }}/{{ rowProgress(row).sums_total }} sums
+                                                </p>
+                                            </template>
                                         </td>
                                         <td class="px-3 py-3 text-center font-semibold tabular-nums text-emerald-800">
                                             <span v-if="progressMetricsLoading" :class="metricPulseClass" />

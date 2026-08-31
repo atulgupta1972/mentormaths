@@ -56,11 +56,9 @@ class ClassHubProgressService
 
             $setsDone = (int) $assignment['done'];
             $setsTotal = (int) $assignment['total'];
-            $completion = $setsTotal > 0 ? (int) round(($setsDone / $setsTotal) * 100) : null;
 
             $row['progress'] = [
                 ...$this->empty(),
-                'completion_pct' => $completion,
                 'sets_done' => $setsDone,
                 'sets_total' => $setsTotal,
             ];
@@ -149,6 +147,7 @@ class ClassHubProgressService
         $hours = $seconds > 0 ? round($seconds / 3600, 1) : 0.0;
 
         return [
+            'completion_pct' => $this->resolveDisplayCompletionPct($performance),
             'score_pct' => $this->resolveDisplayScorePct($performance),
             'revision_done' => $performance['revision_done'] ?? $performance['correction_done'] ?? 0,
             'revision_pending' => max(
@@ -191,6 +190,9 @@ class ClassHubProgressService
             'open_wrongs' => 0,
             'sets_done' => 0,
             'sets_total' => 0,
+            'sums_attempted' => 0,
+            'sums_total' => 0,
+            'sums_correct' => 0,
             'days_logged' => 0,
             'time_spent_label' => '0 sec',
             'time_spent_hours' => 0,
@@ -240,6 +242,24 @@ class ClassHubProgressService
         }
 
         return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $performance
+     */
+    private function resolveDisplayCompletionPct(array $performance): ?int
+    {
+        if (($performance['completion_pct'] ?? null) !== null) {
+            return (int) $performance['completion_pct'];
+        }
+
+        $pool = (int) ($performance['total'] ?? 0);
+        $attempted = (int) ($performance['done'] ?? 0);
+        if ($pool > 0) {
+            return (int) round(($attempted / $pool) * 100);
+        }
+
+        return null;
     }
 
     /**
