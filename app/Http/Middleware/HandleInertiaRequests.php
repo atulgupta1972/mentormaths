@@ -4,7 +4,9 @@ namespace App\Http\Middleware;
 
 use App\Services\AdminGradeContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Middleware;
+use Throwable;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -41,9 +43,22 @@ class HandleInertiaRequests extends Middleware
                 'isContentUploader' => $user?->isContentUploader() ?? false,
                 'isMentor' => $user?->isMentor() ?? false,
             ],
-            'gradeContext' => fn () => ($user?->isAdmin() || $user?->isMentor())
-                ? app(AdminGradeContext::class)->sharedPayload($request)
-                : null,
+            'gradeContext' => function () use ($user, $request) {
+                if (! ($user?->isAdmin() || $user?->isMentor())) {
+                    return null;
+                }
+
+                try {
+                    return app(AdminGradeContext::class)->sharedPayload($request);
+                } catch (Throwable $e) {
+                    Log::error('Failed to load admin grade context.', ['message' => $e->getMessage()]);
+
+                    return [
+                        'levels' => [],
+                        'selected' => null,
+                    ];
+                }
+            },
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

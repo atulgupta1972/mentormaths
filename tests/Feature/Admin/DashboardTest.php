@@ -224,6 +224,59 @@ class DashboardTest extends TestCase
                     ->where('classCoverage.load_error', fn ($message) => str_contains($message, 'study plan'))));
     }
 
+    public function test_admin_dashboard_survives_grade_context_switch(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $enrollment] = $this->seedAdminDashboard();
+        $gradeSeven = $enrollment->gradeLevel;
+
+        $gradeFive = GradeLevel::query()->create([
+            'name' => 'Class 5',
+            'sort_order' => 5,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $gradeSeven->id])
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Dashboard')
+                ->where('selectedGrade.id', $gradeSeven->id)
+                ->where('stats.students_count', 1));
+
+        $this->actingAs($admin)
+            ->from(route('dashboard'))
+            ->post(route('admin.grade-context.update'), ['grade_level_id' => $gradeFive->id])
+            ->assertRedirect(route('dashboard'));
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $gradeFive->id])
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Dashboard')
+                ->where('selectedGrade.id', $gradeFive->id)
+                ->where('stats.students_count', 0)
+                ->loadDeferredProps('default', fn ($deferred) => $deferred
+                    ->has('contentPublishQueue')
+                    ->has('contentRecheckQueue')));
+
+        $this->actingAs($admin)
+            ->from(route('dashboard'))
+            ->post(route('admin.grade-context.update'), ['grade_level_id' => null])
+            ->assertRedirect(route('dashboard'));
+
+        $this->actingAs($admin)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Dashboard')
+                ->where('selectedGrade', null)
+                ->where('stats.students_count', 1));
+    }
+
     /**
      * @return array{0: User, 1: StudentEnrollment}
      */

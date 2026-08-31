@@ -2,7 +2,7 @@
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { hasRoute, safeRoute } from '@/utils/routes';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 
 const props = defineProps({
     mailSettings: {
@@ -36,6 +36,13 @@ const page = usePage();
 const form = useForm({
     grade_level_id: props.selectedGrade?.id || '',
 });
+
+watch(
+    () => props.selectedGrade?.id,
+    (gradeLevelId) => {
+        form.grade_level_id = gradeLevelId || '';
+    },
+);
 
 const flashSuccess = computed(() => page.props.flash?.success);
 const flashWarning = computed(() => page.props.flash?.warning);

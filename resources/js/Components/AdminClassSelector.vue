@@ -6,8 +6,15 @@ const page = usePage();
 const context = computed(() => page.props.gradeContext);
 
 const onChange = (event) => {
-    const value = event.target.value || null;
-    router.post(route('admin.grade-context.update'), { grade_level_id: value }, { preserveScroll: true });
+    const raw = event.target.value;
+    const gradeLevelId = raw ? Number(raw) : null;
+
+    // Cancel deferred dashboard loads so a stale partial response cannot 500 the page.
+    router.cancel();
+    router.post(route('admin.grade-context.update'), { grade_level_id: gradeLevelId }, {
+        preserveScroll: true,
+        preserveState: false,
+    });
 };
 </script>
 

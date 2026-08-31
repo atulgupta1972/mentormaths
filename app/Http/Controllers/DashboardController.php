@@ -36,6 +36,18 @@ class DashboardController extends Controller
         $user = $request->user();
 
         if ($user->isAdmin()) {
+            if ($this->isAdminDashboardDeferredQueueRequest($request)) {
+                return Inertia::render('Dashboard', [
+                    'isAdmin' => true,
+                    'contentPublishQueue' => Inertia::defer(
+                        fn () => $this->dashboardService->contentPublishQueueForAdmin($request),
+                    ),
+                    'contentRecheckQueue' => Inertia::defer(
+                        fn () => $this->dashboardService->contentRecheckQueueForAdmin($request),
+                    ),
+                ]);
+            }
+
             try {
                 $adminDashboard = $this->dashboardService->forAdmin($request);
             } catch (Throwable $e) {
@@ -217,5 +229,29 @@ class DashboardController extends Controller
                 'message' => 'Could not load this student.',
             ], 500);
         }
+    }
+
+    /**
+     * Inertia deferred loads for admin content queues should not rerun the full dashboard query.
+     */
+    private function isAdminDashboardDeferredQueueRequest(Request $request): bool
+    {
+        if (! $request->header('X-Inertia')
+            || $request->header('X-Inertia-Partial-Component') !== 'Dashboard') {
+            return false;
+        }
+
+        $only = array_values(array_filter(array_map(
+            trim(...),
+            explode(',', (string) $request->header('X-Inertia-Partial-Data', '')),
+        )));
+
+        if ($only === []) {
+            return false;
+        }
+
+        $allowed = ['contentPublishQueue', 'contentRecheckQueue'];
+
+        return array_diff($only, $allowed) === [];
     }
 }

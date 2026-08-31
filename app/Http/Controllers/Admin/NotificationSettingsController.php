@@ -77,10 +77,18 @@ class NotificationSettingsController extends Controller
             'grade_level_id' => ['nullable', 'integer', 'exists:grade_levels,id'],
         ]);
 
-        $counts = $this->pendingWorkEmailService->sendToAll(
-            $validated['grade_level_id'] ?? null,
-            skipIfEmpty: true,
-        );
+        try {
+            $counts = $this->pendingWorkEmailService->sendToAll(
+                $validated['grade_level_id'] ?? null,
+                skipIfEmpty: true,
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Pending work email batch failed.', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return back()->with('error', 'Could not send pending-work emails. Please try again in a few minutes.');
+        }
 
         if ($counts['sent'] === 0 && $counts['failed'] === 0) {
             if ($counts['no_work'] > 0 && $counts['skipped'] === 0) {
