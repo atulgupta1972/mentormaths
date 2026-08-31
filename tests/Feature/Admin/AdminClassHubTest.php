@@ -63,13 +63,13 @@ class AdminClassHubTest extends TestCase
         $enrollment = StudentEnrollment::query()->firstOrFail();
         $coverage = app(ClassCoverageService::class);
 
-        $this->assertNotNull($coverage->studyPlanProgressForClassHub($enrollment));
+        $this->assertNotNull($coverage->studyPlanPerformance($enrollment));
 
         StudentChapterCoverage::query()
             ->where('student_enrollment_id', $enrollment->id)
             ->delete();
 
-        $this->assertNull($coverage->studyPlanProgressForClassHub($enrollment));
+        $this->assertNull($coverage->studyPlanPerformance($enrollment));
     }
 
     public function test_class_hub_still_lists_students_when_exam_rows_fail(): void

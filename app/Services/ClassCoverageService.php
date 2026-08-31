@@ -197,59 +197,6 @@ class ClassCoverageService
     }
 
     /**
-     * Class hub metrics: sum-pool completion/score for chapters marked Studied or Under study only.
-     * Ignores exam plans and cross-board "additional" sets — school study-plan marks only.
-     *
-     * @return array{
-     *     total: int,
-     *     done: int,
-     *     completion_pct: int|null,
-     *     score_pct: int|null,
-     *     scored_count: int,
-     *     correction_done: int,
-     *     correction_pending: int,
-     *     open_wrongs: int,
-     *     chapter_count: int,
-     *     chapter_labels: list<string>
-     * }|null
-     */
-    public function studyPlanProgressForClassHub(?StudentEnrollment $enrollment): ?array
-    {
-        if (! $enrollment) {
-            return null;
-        }
-
-        $markedChapterIds = StudentChapterCoverage::query()
-            ->where('student_enrollment_id', $enrollment->id)
-            ->whereIn('status', [
-                StudentChapterCoverage::STATUS_STUDIED,
-                StudentChapterCoverage::STATUS_UNDER_STUDY,
-            ])
-            ->pluck('syllabus_chapter_id')
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
-
-        if ($markedChapterIds === []) {
-            return null;
-        }
-
-        $coverage = $this->forEnrollment($enrollment);
-        $coverage['chapters'] = collect($coverage['chapters'] ?? [])
-            ->filter(fn (array $chapter) => in_array((int) ($chapter['id'] ?? 0), $markedChapterIds, true))
-            ->values()
-            ->all();
-        $coverage['additional_groups'] = [];
-
-        if ($coverage['chapters'] === []) {
-            return null;
-        }
-
-        return $this->studyPlanPerformanceFromCoverage($coverage);
-    }
-
-    /**
      * @param  array{chapters?: list<array<string, mixed>>}  $coverage
      * @return array{
      *     total: int,

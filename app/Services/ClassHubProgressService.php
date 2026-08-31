@@ -134,7 +134,7 @@ class ClassHubProgressService
         $performance = [];
 
         try {
-            $performance = $this->classCoverage->studyPlanProgressForClassHub($enrollment) ?? [];
+            $performance = $this->classCoverage->studyPlanPerformance($enrollment) ?? [];
         } catch (Throwable $e) {
             Log::error('Class hub failed to load study-plan score for a student.', [
                 'enrollment_id' => $enrollment->id,
