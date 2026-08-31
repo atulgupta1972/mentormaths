@@ -99,6 +99,15 @@ class ClassHubController extends Controller
             abort(404);
         }
 
+        if ($this->isClassHubDeferredProgressRequest($request, 'Admin/Classes/Show')) {
+            return Inertia::render('Admin/Classes/Show', [
+                'examPlanProgress' => $this->deferredExamPlanProgress(
+                    $gradeLevel,
+                    $this->enrollmentIdsForDeferredProgress($request, $gradeLevel),
+                ),
+            ]);
+        }
+
         $this->gradeContext->persist($request, $gradeLevel->id);
 
         $activeYear = AcademicYear::active();
@@ -284,18 +293,7 @@ class ClassHubController extends Controller
             'syllabusChapterOptions' => $syllabusChapterOptions,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
             'loadError' => $loadError,
-            'examPlanProgress' => Inertia::defer(function () use ($enrollmentIds) {
-                if ($enrollmentIds === []) {
-                    return [];
-                }
-
-                $enrollments = StudentEnrollment::query()
-                    ->with(['student:id,name', 'academicYear'])
-                    ->whereIn('id', $enrollmentIds)
-                    ->get();
-
-                return $this->classHubProgress->studyPlanMetricsByEnrollment($enrollments);
-            }),
+            'examPlanProgress' => $this->deferredExamPlanProgress($gradeLevel, $enrollmentIds),
         ]);
     }
 
@@ -346,5 +344,75 @@ class ClassHubController extends Controller
                     ->with('warning', 'You can only see classes and students enrolled under you.')
             );
         }
+    }
+
+    /**
+     * Inertia deferred loads for student metrics should not rerun the full class hub query.
+     */
+    private function isClassHubDeferredProgressRequest(Request $request, string $component): bool
+    {
+        if (! $request->header('X-Inertia')
+            || $request->header('X-Inertia-Partial-Component') !== $component) {
+            return false;
+        }
+
+        $only = array_values(array_filter(array_map(
+            trim(...),
+            explode(',', (string) $request->header('X-Inertia-Partial-Data', '')),
+        )));
+
+        return $only === ['examPlanProgress'];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function enrollmentIdsForDeferredProgress(Request $request, GradeLevel $gradeLevel): array
+    {
+        $activeYear = AcademicYear::active();
+
+        if (! $activeYear) {
+            return [];
+        }
+
+        $boardId = $request->filled('board_id') ? ($request->integer('board_id') ?: null) : null;
+
+        return StudentEnrollment::query()
+            ->where('academic_year_id', $activeYear->id)
+            ->where('grade_level_id', $gradeLevel->id)
+            ->when($boardId, fn ($query) => $query->where('board_id', $boardId))
+            ->where('status', StudentEnrollment::STATUS_ACTIVE)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<int>  $enrollmentIds
+     */
+    private function deferredExamPlanProgress(GradeLevel $gradeLevel, array $enrollmentIds): \Inertia\DeferProp
+    {
+        return Inertia::defer(function () use ($gradeLevel, $enrollmentIds) {
+            try {
+                if ($enrollmentIds === []) {
+                    return [];
+                }
+
+                $enrollments = StudentEnrollment::query()
+                    ->with(['student:id,name', 'academicYear'])
+                    ->whereIn('id', $enrollmentIds)
+                    ->get();
+
+                return $this->classHubProgress->studyPlanMetricsByEnrollment($enrollments);
+            } catch (Throwable $e) {
+                Log::error('Admin class hub failed to load deferred progress metrics.', [
+                    'grade_level_id' => $gradeLevel->id,
+                    'message' => $e->getMessage(),
+                ]);
+
+                return [];
+            }
+        });
     }
 }

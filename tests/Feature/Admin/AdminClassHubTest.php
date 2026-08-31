@@ -39,6 +39,23 @@ class AdminClassHubTest extends TestCase
                     ->has('examPlanProgress')));
     }
 
+    public function test_class_hub_deferred_progress_loads_without_full_page_query(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $grade] = $this->seedClassSeven();
+
+        $this->actingAs($admin)
+            ->get(route('admin.classes.show', $grade->id))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Classes/Show')
+                ->loadDeferredProps('default', fn ($deferred) => $deferred
+                    ->has('examPlanProgress')
+                    ->missing('examPlanRows')
+                    ->missing('gradeLevel')));
+    }
+
     public function test_class_hub_still_lists_students_when_exam_rows_fail(): void
     {
         $this->withoutVite();

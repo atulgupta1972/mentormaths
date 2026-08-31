@@ -1,9 +1,11 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputLabel from '@/Components/InputLabel.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { computed, onMounted, ref, watch } from 'vue';
 import { hasRoute } from '@/utils/routes';
+
+const page = usePage();
 
 const props = defineProps({
     gradeLevel: { type: Object, required: true },
@@ -17,14 +19,28 @@ const props = defineProps({
 
 const examFilter = ref(props.examFilter || 'upcoming');
 
+const examPlanProgressMap = computed(() => page.props.examPlanProgress);
+
 const progressMetricsLoading = computed(() =>
-    props.examPlanProgress === undefined && (props.examPlanRows?.length ?? 0) > 0,
+    examPlanProgressMap.value === undefined && (props.examPlanRows?.length ?? 0) > 0,
 );
+
+onMounted(() => {
+    if (examPlanProgressMap.value !== undefined || (props.examPlanRows?.length ?? 0) === 0) {
+        return;
+    }
+
+    router.reload({
+        only: ['examPlanProgress'],
+        preserveState: true,
+        preserveScroll: true,
+    });
+});
 
 const rowProgress = (row) => {
     const base = row.progress ?? {};
-    const extra = props.examPlanProgress?.[row.enrollment_id]
-        ?? props.examPlanProgress?.[String(row.enrollment_id)]
+    const extra = examPlanProgressMap.value?.[row.enrollment_id]
+        ?? examPlanProgressMap.value?.[String(row.enrollment_id)]
         ?? {};
 
     return { ...base, ...extra };

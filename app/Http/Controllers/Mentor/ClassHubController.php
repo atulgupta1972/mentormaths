@@ -7,8 +7,10 @@ use App\Models\GradeLevel;
 use App\Services\AdminGradeContext;
 use App\Services\MentorClassHubService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class ClassHubController extends Controller
 {
@@ -35,6 +37,25 @@ class ClassHubController extends Controller
 
         $this->gradeContext->persist($request, $gradeLevel->id);
 
+        if ($this->isClassHubDeferredProgressRequest($request, 'Mentor/Classes/Show')) {
+            return Inertia::render('Mentor/Classes/Show', [
+                'examPlanProgress' => Inertia::defer(function () use ($user, $gradeLevel) {
+                    try {
+                        return $this->mentorClasses->studyPlanMetricsForEnrollmentIds(
+                            $this->mentorClasses->enrollmentIdsForGrade($user, $gradeLevel),
+                        );
+                    } catch (Throwable $e) {
+                        Log::error('Mentor class hub failed to load deferred progress metrics.', [
+                            'grade_level_id' => $gradeLevel->id,
+                            'message' => $e->getMessage(),
+                        ]);
+
+                        return [];
+                    }
+                }),
+            ]);
+        }
+
         $examFilter = $request->string('exam_filter')->toString();
         $detail = $this->mentorClasses->classDetail($user, $gradeLevel, $examFilter);
         $enrollmentIds = $detail['enrollment_ids'] ?? [];
@@ -42,9 +63,35 @@ class ClassHubController extends Controller
 
         return Inertia::render('Mentor/Classes/Show', [
             ...$detail,
-            'examPlanProgress' => Inertia::defer(
-                fn () => $this->mentorClasses->studyPlanMetricsForEnrollmentIds($enrollmentIds),
-            ),
+            'examPlanProgress' => Inertia::defer(function () use ($enrollmentIds) {
+                try {
+                    return $this->mentorClasses->studyPlanMetricsForEnrollmentIds($enrollmentIds);
+                } catch (Throwable $e) {
+                    Log::error('Mentor class hub failed to load deferred progress metrics.', [
+                        'message' => $e->getMessage(),
+                    ]);
+
+                    return [];
+                }
+            }),
         ]);
+    }
+
+    /**
+     * Inertia deferred loads for student metrics should not rerun the full class hub query.
+     */
+    private function isClassHubDeferredProgressRequest(Request $request, string $component): bool
+    {
+        if (! $request->header('X-Inertia')
+            || $request->header('X-Inertia-Partial-Component') !== $component) {
+            return false;
+        }
+
+        $only = array_values(array_filter(array_map(
+            trim(...),
+            explode(',', (string) $request->header('X-Inertia-Partial-Data', '')),
+        )));
+
+        return $only === ['examPlanProgress'];
     }
 }

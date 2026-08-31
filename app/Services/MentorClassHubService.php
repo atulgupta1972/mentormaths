@@ -163,4 +163,27 @@ class MentorClassHubService
 
         return $this->progress->studyPlanMetricsByEnrollment($enrollments);
     }
+
+    /**
+     * @return list<int>
+     */
+    public function enrollmentIdsForGrade(User $mentor, GradeLevel $gradeLevel): array
+    {
+        $activeYear = AcademicYear::active();
+        $studentIds = $this->mentorService->studentIdsForUser($mentor);
+
+        if (! $activeYear || $studentIds === []) {
+            return [];
+        }
+
+        return StudentEnrollment::query()
+            ->where('academic_year_id', $activeYear->id)
+            ->where('grade_level_id', $gradeLevel->id)
+            ->where('status', StudentEnrollment::STATUS_ACTIVE)
+            ->whereIn('student_id', $studentIds)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
 }
