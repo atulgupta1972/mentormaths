@@ -385,6 +385,29 @@ class WrittenSheetService
         return $worksheet->fresh();
     }
 
+    /**
+     * Rebuild the stored PDF from current questions without changing verification status.
+     */
+    public function refreshPdfFile(Worksheet $worksheet): Worksheet
+    {
+        if (! $worksheet->isWritten()) {
+            throw new \InvalidArgumentException('This is not a written sheet.');
+        }
+
+        if ($this->usesUploadedPdf($worksheet)) {
+            return $worksheet;
+        }
+
+        if ($worksheet->questions()->count() === 0) {
+            throw new \InvalidArgumentException('Add at least one question before generating the PDF.');
+        }
+
+        $path = $this->pdfService->generate($worksheet);
+        $worksheet->update(['written_pdf_path' => $path]);
+
+        return $worksheet->fresh();
+    }
+
     public function verify(Worksheet $worksheet, User $admin, ?string $tier = null): Worksheet
     {
         if (! $worksheet->isWritten()) {

@@ -77,6 +77,25 @@ class WrittenSheetServiceTest extends TestCase
         $this->assertSame(WrittenSheetStatus::VERIFIED, $verified->written_status);
     }
 
+    public function test_refresh_pdf_file_keeps_verified_status(): void
+    {
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->generatePdf(
+            $service->createFromTopic($topic, [$question->id], $admin),
+        );
+        $verified = $service->verify($worksheet, $admin);
+        $oldPath = $verified->written_pdf_path;
+
+        $refreshed = $service->refreshPdfFile($verified);
+
+        $this->assertSame(WrittenSheetStatus::VERIFIED, $refreshed->written_status);
+        $this->assertSame(Worksheet::STATUS_PUBLISHED, $refreshed->status);
+        $this->assertNotNull($refreshed->written_pdf_path);
+        $this->assertNotSame($oldPath, $refreshed->written_pdf_path);
+    }
+
     public function test_create_written_sheet_from_manual_rows(): void
     {
         [$topic, , $admin] = $this->seedTopicQuestion();

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <title>{{ $worksheet->set_code }} — Written {{ $kindLabel }}</title>
     <style>
-        @page { margin: 10mm 12mm 12mm 12mm; }
+        @page { margin: 10mm 12mm 14mm 12mm; }
         * { box-sizing: border-box; }
         body {
             font-family: DejaVu Sans, sans-serif;
@@ -12,13 +12,13 @@
             line-height: 1.35;
             color: #111827;
             margin: 0;
-            padding: 0 0 8mm 0;
+            padding: 0 0 10mm 0;
         }
         .header { margin-bottom: 6px; }
         h1 { font-size: 14px; margin: 0 0 2px; line-height: 1.2; }
         .meta { font-size: 9px; color: #374151; margin: 0; line-height: 1.3; }
         .instructions {
-            margin: 0 0 8px;
+            margin: 0 0 6px;
             padding: 5px 7px;
             border: 1px solid #cbd5e1;
             background: #f8fafc;
@@ -42,45 +42,39 @@
             padding-top: 3px;
         }
         .answer-guide {
-            margin-top: 10px;
-            padding-top: 8px;
-            border-top: 2px solid #4338ca;
-            page-break-before: always;
+            margin-top: 8px;
+            padding: 6px 7px;
+            border: 1.5px solid #4338ca;
+            background: #f5f3ff;
+            page-break-inside: avoid;
         }
-        .answer-guide h2 {
-            font-size: 12px;
-            margin: 0 0 6px;
+        .answer-guide-title {
+            font-size: 9.5px;
+            font-weight: bold;
+            margin: 0 0 5px;
             color: #312e81;
         }
-        .answer-guide p {
-            margin: 0 0 6px;
-            font-size: 9px;
-            line-height: 1.45;
+        .guide-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8px;
+            line-height: 1.4;
         }
-        .format-box {
-            margin: 6px 0 10px;
-            padding: 7px 9px;
-            border: 1px dashed #6366f1;
-            background: #eef2ff;
-            font-size: 9px;
-            line-height: 1.55;
+        .guide-table td {
+            vertical-align: top;
+            width: 50%;
+            padding: 0 6px 0 0;
         }
-        .format-box .line { margin: 0 0 3px; }
-        .format-box .qno { font-weight: bold; margin-bottom: 5px; }
-        .sample-box {
-            margin-top: 8px;
-            padding: 8px 9px;
-            border: 1px solid #94a3b8;
-            background: #f8fafc;
-            font-size: 9px;
-            line-height: 1.5;
+        .guide-table td + td {
+            padding: 0 0 0 6px;
+            border-left: 1px solid #c7d2fe;
         }
-        .sample-box h3 {
-            font-size: 10px;
-            margin: 0 0 6px;
-            color: #0f172a;
+        .guide-label {
+            font-weight: bold;
+            margin: 0 0 3px;
+            color: #1e1b4b;
         }
-        .sample-box .label { font-weight: bold; }
+        .guide-line { margin: 0 0 2px; }
     </style>
 </head>
 <body>
@@ -96,7 +90,7 @@
     </div>
 
     <p class="instructions">
-        <strong>How to answer:</strong> Write each answer on a separate sheet in order — Q1, then Q2, then Q3, … (one below the other). Use the answer format at the <strong>end of this sheet</strong> (Q no, Given, To find, Solution, Answer). Upload photo(s) in page order for AI checking.
+        <strong>How to answer:</strong> Write each answer on a separate sheet in order — Q1, Q2, Q3, … Use the format below (Given → To find → Solution → Answer). Upload photo(s) in page order for AI checking.
     </p>
 
     <div class="questions">
@@ -118,35 +112,28 @@
     </div>
 
     <div class="answer-guide">
-        <h2>Guidance — how to write your answers</h2>
-        <p>
-            Please solve <strong>each sum</strong> on your answer sheet using the headings below.
-            Write one complete solution under the other (Q1, then Q2, then Q3, …).
-        </p>
-
-        <div class="format-box">
-            <div class="qno">Q no: ______</div>
-            <div class="line"><strong>1. Given:</strong> …</div>
-            <div class="line"><strong>2. To find:</strong> …</div>
-            <div class="line"><strong>3. Solution:</strong> … (show working step by step)</div>
-            <div class="line"><strong>4. Answer:</strong> … (final value with units if needed)</div>
-        </div>
-
-        <div class="sample-box">
-            <h3>Sample (practice format — this sum is NOT on your sheet)</h3>
-            <p class="label">Question:</p>
-            <p>A rectangular garden is 14 m long and 9 m wide. Find its perimeter.</p>
-            <p class="label" style="margin-top: 6px;">Your answer sheet should look like this:</p>
-            <p><strong>Q no:</strong> Sample</p>
-            <p><strong>1. Given:</strong> Length = 14 m, Breadth = 9 m</p>
-            <p><strong>2. To find:</strong> Perimeter of the rectangle</p>
-            <p><strong>3. Solution:</strong> Perimeter = 2 × (length + breadth) = 2 × (14 + 9) = 2 × 23 = 46</p>
-            <p><strong>4. Answer:</strong> 46 m</p>
-        </div>
-
-        <p style="margin-top: 8px;">
-            Follow this same pattern for every question on this worksheet. Neat steps help your teacher and AI checking.
-        </p>
+        <div class="answer-guide-title">How to write each answer (on your answer sheet)</div>
+        <table class="guide-table">
+            <tr>
+                <td>
+                    <p class="guide-label">Format — use for every sum on this sheet</p>
+                    <p class="guide-line"><strong>Q no:</strong> ______</p>
+                    <p class="guide-line"><strong>1. Given:</strong> …</p>
+                    <p class="guide-line"><strong>2. To find:</strong> …</p>
+                    <p class="guide-line"><strong>3. Solution:</strong> … (step-by-step working)</p>
+                    <p class="guide-line"><strong>4. Answer:</strong> … (final value, with units)</p>
+                </td>
+                <td>
+                    <p class="guide-label">Example (not from this sheet — practice the format)</p>
+                    <p class="guide-line"><em>Q:</em> A garden is 14 m long and 9 m wide. Find its perimeter.</p>
+                    <p class="guide-line"><strong>Q no:</strong> Sample</p>
+                    <p class="guide-line"><strong>1. Given:</strong> Length = 14 m, Breadth = 9 m</p>
+                    <p class="guide-line"><strong>2. To find:</strong> Perimeter</p>
+                    <p class="guide-line"><strong>3. Solution:</strong> P = 2 × (14 + 9) = 2 × 23 = 46</p>
+                    <p class="guide-line"><strong>4. Answer:</strong> 46 m</p>
+                </td>
+            </tr>
+        </table>
     </div>
 
     <p class="footer">

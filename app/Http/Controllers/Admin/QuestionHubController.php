@@ -609,7 +609,8 @@ class QuestionHubController extends Controller
                 'status' => $worksheet->status,
                 'questions_count' => $worksheet->questions_count,
                 'is_written' => $worksheet->isWritten(),
-                'can_print_written' => $worksheet->isWritten() && filled($worksheet->written_pdf_path),
+                'can_print_written' => $worksheet->isWritten()
+                    && ($worksheet->questions_count > 0 || filled($worksheet->written_pdf_path)),
             ],
             'canSplitSet' => $isAdmin && $this->splitService->canSplit($worksheet),
             'splitBatchSize' => PracticeSetSplitService::DEFAULT_BATCH_SIZE,

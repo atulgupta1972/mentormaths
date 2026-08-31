@@ -28,12 +28,13 @@ class WrittenSheetPdfServiceTest extends TestCase
             'kindLabel' => 'Test',
         ])->render();
 
-        $this->assertStringContainsString('Guidance — how to write your answers', $html);
+        $this->assertStringContainsString('How to write each answer (on your answer sheet)', $html);
         $this->assertStringContainsString('1. Given:', $html);
         $this->assertStringContainsString('2. To find:', $html);
         $this->assertStringContainsString('3. Solution:', $html);
         $this->assertStringContainsString('4. Answer:', $html);
-        $this->assertStringContainsString('NOT on your sheet', $html);
+        $this->assertStringContainsString('not from this sheet', $html);
+        $this->assertStringNotContainsString('page-break-before: always', $html);
     }
 
     public function test_question_text_for_sheet_expands_blanks_for_print(): void

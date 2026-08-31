@@ -894,7 +894,10 @@ class WrittenSheetController extends Controller
 
     public function download(Worksheet $worksheet): StreamedResponse
     {
-        abort_unless($worksheet->isWritten() && $worksheet->written_pdf_path, 404);
+        abort_unless($worksheet->isWritten(), 404);
+
+        $worksheet = $this->freshWrittenPdfForServing($worksheet);
+        abort_unless($worksheet->written_pdf_path, 404);
 
         return Storage::disk('public')->download(
             $worksheet->written_pdf_path,
@@ -904,7 +907,10 @@ class WrittenSheetController extends Controller
 
     public function print(Worksheet $worksheet): BinaryFileResponse
     {
-        abort_unless($worksheet->isWritten() && $worksheet->written_pdf_path, 404);
+        abort_unless($worksheet->isWritten(), 404);
+
+        $worksheet = $this->freshWrittenPdfForServing($worksheet);
+        abort_unless($worksheet->written_pdf_path, 404);
 
         $filename = ($worksheet->set_code ?: 'written-sheet').'.pdf';
 
@@ -915,6 +921,19 @@ class WrittenSheetController extends Controller
                 'Content-Disposition' => 'inline; filename="'.$filename.'"',
             ],
         );
+    }
+
+    private function freshWrittenPdfForServing(Worksheet $worksheet): Worksheet
+    {
+        if ($this->writtenSheetService->usesUploadedPdf($worksheet)) {
+            return $worksheet;
+        }
+
+        try {
+            return $this->writtenSheetService->refreshPdfFile($worksheet);
+        } catch (\InvalidArgumentException) {
+            return $worksheet;
+        }
     }
 
     public function manualGrade(Request $request, SetAssignment $assignment): RedirectResponse
