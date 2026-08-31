@@ -1453,7 +1453,7 @@ const submit = () => {
 
                     <div v-if="isManualMode" class="space-y-4 rounded-lg border border-violet-200 bg-violet-50/40 p-4">
                         <p class="text-sm text-gray-700">
-                            Add sums here for a new chapter before online practice sets exist. Questions are saved to the bank as fill-in-blank so you can reuse them later for MCQ or packaged sets.
+                            Add complete written sums here for a new chapter before online practice sets exist. Paste JSON from the Cursor prompt above (full problems, not fill-in-blank).
                         </p>
 
                         <ChapterQuestionPlan

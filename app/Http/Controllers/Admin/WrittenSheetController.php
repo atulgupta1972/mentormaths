@@ -174,23 +174,14 @@ class WrittenSheetController extends Controller
         $promptOptions['textbook_chapter_id'] = $bookChapter?->id;
         $promptOptions['book_chapter'] = $bookChapter;
 
+        $promptOptions['sheet_kind'] = $sheetKind;
+
         $cursorPrompt = session('written_sheet_chapter_prompt');
 
         if ($cursorPrompt === null && $sheetKind === 'practice' && $topicScope === 'one' && $topicId) {
             $topic = SyllabusTopic::query()->find($topicId);
             if ($topic) {
-                $cursorPrompt = $this->fillBlankImportService->cursorPrompt($topic, $promptOptions);
-            }
-        } elseif ($cursorPrompt === null && $sheetKind === 'test' && $chapter) {
-            $firstTopic = $chapter->topics->first();
-            if ($firstTopic) {
-                $cursorPrompt = $this->fillBlankImportService->cursorPromptForChapter($chapter, [[
-                    'topic_id' => $firstTopic->id,
-                    'topic_name' => 'Mixed chapter test',
-                    'easy' => $promptOptions['easy'],
-                    'medium' => $promptOptions['medium'],
-                    'hard' => $promptOptions['hard'],
-                ]]);
+                $cursorPrompt = $this->fillBlankImportService->writtenSheetCursorPrompt($topic, $promptOptions);
             }
         }
 
@@ -262,7 +253,11 @@ class WrittenSheetController extends Controller
         );
 
         try {
-            $prompt = $this->fillBlankImportService->cursorPromptForWrittenChapter($chapter, $plan);
+            $prompt = $this->fillBlankImportService->cursorPromptForWrittenChapter(
+                $chapter,
+                $plan,
+                $validated['sheet_kind'] ?? 'test',
+            );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }

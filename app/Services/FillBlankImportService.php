@@ -20,6 +20,48 @@ class FillBlankImportService
      */
     public function cursorPrompt(SyllabusTopic $topic, array $options = []): string
     {
+        [$total, $easy, $medium, $hard, $focusLine, $bookLine, $context] = $this->promptMetaForTopic($topic, $options);
+
+        return <<<PROMPT
+Create fill-in-the-blank maths questions for guided practice. Return ONLY valid JSON (no markdown fences).
+
+Context:
+{$context}
+
+Requirements:
+- Exactly {$total} questions: Easy {$easy}, Medium {$medium}, Hard {$hard}
+- Each question is a short sum with ONE blank shown as "____" in the question text
+- Use only these answer formats: "integer", "decimal", or "fraction"
+- "correct_answer" must match the blank exactly (examples: "42", "-3.5", "3/4", "1 1/2")
+- The final number in "explanation" MUST be identical to "correct_answer" (including sign)
+- For decimals, include "decimal_places" when needed (e.g. 2 for money-style answers)
+- Include "method_hint": theory/rules ONLY — no final numeric answer
+- Include "explanation": full teacher-only working with the final answer
+- Class-appropriate CBSE/ICSE level{$focusLine}{$bookLine}
+- Do NOT include MCQ options
+
+JSON format:
+{
+  "questions": [
+    {
+      "question": "(-12) + 8 = ____",
+      "answer_format": "integer",
+      "correct_answer": "-4",
+      "method_hint": "Add integers with different signs by subtracting and keeping the sign of the larger absolute value.",
+      "explanation": "|-12| > |8|, difference is 4, result is negative: -4",
+      "difficulty": "Easy"
+    }
+  ]
+}
+PROMPT;
+    }
+
+    /**
+     * @param  array{total?: int, easy?: int, medium?: int, hard?: int, focus?: string, book_chapter?: \App\Models\TextbookChapter|null, sheet_kind?: string}  $options
+     * @return array{0: int, 1: int, 2: int, 3: int, 4: string, 5: string, 6: string}
+     */
+    private function promptMetaForTopic(SyllabusTopic $topic, array $options): array
+    {
         $topic->loadMissing(['chapter.syllabusVersion.board', 'chapter.syllabusVersion.gradeLevel', 'chapter.syllabusVersion.academicYear']);
 
         $total = max(1, min(50, (int) ($options['total'] ?? 6)));
@@ -58,19 +100,33 @@ class FillBlankImportService
             ? "\n- Align coverage with the listed book topics (do not invent topics outside that list)"
             : '';
 
+        return [$total, $easy, $medium, $hard, $focusLine, $bookLine, $context];
+    }
+
+    /**
+     * Cursor prompt for a written sheet / test (complete sums on paper — no blanks).
+     *
+     * @param  array{total?: int, easy?: int, medium?: int, hard?: int, focus?: string, book_chapter?: \App\Models\TextbookChapter|null}  $options
+     */
+    public function writtenSheetCursorPrompt(SyllabusTopic $topic, array $options = []): string
+    {
+        [$total, $easy, $medium, $hard, $focusLine, $bookLine, $context] = $this->promptMetaForTopic($topic, $options);
+        $sheetLabel = ($options['sheet_kind'] ?? '') === 'test' ? 'written chapter test' : 'written practice sheet';
+
         return <<<PROMPT
-Create fill-in-the-blank maths questions for guided practice. Return ONLY valid JSON (no markdown fences).
+Create maths questions for a {$sheetLabel} that students solve on paper. Return ONLY valid JSON (no markdown fences).
 
 Context:
 {$context}
 
 Requirements:
 - Exactly {$total} questions: Easy {$easy}, Medium {$medium}, Hard {$hard}
-- Each question is a short sum with ONE blank shown as "____" in the question text
-- Use only these answer formats: "integer", "decimal", or "fraction"
-- "correct_answer" must match the blank exactly (examples: "42", "-3.5", "3/4", "1 1/2")
+- Each question is a COMPLETE sum or problem — do NOT use blanks (____) or fill-in-the-blank wording
+- Write full problem statements (e.g. "Find the value of x if 2x + 5 = 13", "In the figure, find ∠ABC")
+- Use only these answer formats: "integer", "decimal", or "fraction" for correct_answer
+- "correct_answer" is the final answer only (examples: "42", "-3.5", "3/4", "1 1/2")
 - The final number in "explanation" MUST be identical to "correct_answer" (including sign)
-- For decimals, include "decimal_places" when needed (e.g. 2 for money-style answers)
+- For decimals, include "decimal_places" when needed
 - Include "method_hint": theory/rules ONLY — no final numeric answer
 - Include "explanation": full teacher-only working with the final answer
 - Class-appropriate CBSE/ICSE level{$focusLine}{$bookLine}
@@ -80,11 +136,11 @@ JSON format:
 {
   "questions": [
     {
-      "question": "(-12) + 8 = ____",
+      "question": "Find the value of x if 3x - 7 = 14.",
       "answer_format": "integer",
-      "correct_answer": "-4",
-      "method_hint": "Add integers with different signs by subtracting and keeping the sign of the larger absolute value.",
-      "explanation": "|-12| > |8|, difference is 4, result is negative: -4",
+      "correct_answer": "7",
+      "method_hint": "Add 7 to both sides, then divide by the coefficient of x.",
+      "explanation": "3x = 21, so x = 7",
       "difficulty": "Easy"
     }
   ]
@@ -95,9 +151,89 @@ PROMPT;
     /**
      * @param  list<array{topic_id: int, topic_name?: string, easy?: int, medium?: int, hard?: int}>  $planRows
      */
-    public function cursorPromptForWrittenChapter(SyllabusChapter $chapter, array $planRows): string
+    public function cursorPromptForWrittenChapter(SyllabusChapter $chapter, array $planRows, string $sheetKind = 'test'): string
     {
-        $prompt = $this->cursorPromptForChapter($chapter, $planRows);
+        $chapter->loadMissing([
+            'topics' => fn ($q) => $q->orderBy('sort_order'),
+            'syllabusVersion.board',
+            'syllabusVersion.gradeLevel',
+            'syllabusVersion.academicYear',
+        ]);
+
+        $lines = [];
+        $total = 0;
+
+        foreach ($planRows as $row) {
+            $easy = max(0, (int) ($row['easy'] ?? 0));
+            $medium = max(0, (int) ($row['medium'] ?? 0));
+            $hard = max(0, (int) ($row['hard'] ?? 0));
+            $subtotal = $easy + $medium + $hard;
+
+            if ($subtotal === 0) {
+                continue;
+            }
+
+            $name = trim((string) ($row['topic_name'] ?? ''));
+            if ($name === '' && ! empty($row['topic_id'])) {
+                $name = (string) ($chapter->topics->firstWhere('id', (int) $row['topic_id'])?->name ?? '');
+            }
+
+            if ($name === '') {
+                continue;
+            }
+
+            $lines[] = "- {$name}: Easy {$easy}, Medium {$medium}, Hard {$hard}";
+            $total += $subtotal;
+        }
+
+        if ($total === 0) {
+            throw new InvalidArgumentException('Enter at least one question in the chapter plan.');
+        }
+
+        $planBlock = implode("\n", $lines);
+        $context = $this->chapterContext($chapter);
+        $sheetLabel = $sheetKind === 'practice'
+            ? 'written practice sheet'
+            : 'written chapter test';
+
+        $prompt = <<<PROMPT
+Create maths questions for a {$sheetLabel} covering multiple topics. Students solve on paper. Return ONLY valid JSON (no markdown fences).
+
+Context:
+{$context}
+
+Requirements:
+- Exactly {$total} questions total, distributed as follows:
+{$planBlock}
+- Each question MUST include "topic" with the exact topic name from the plan above
+- Each question is a COMPLETE sum or problem — do NOT use blanks (____) or fill-in-the-blank wording
+- Write full problem statements suitable for a written test
+- Use only these answer formats: "integer", "decimal", or "fraction" for correct_answer
+- "correct_answer" is the final answer only (examples: "42", "-3.5", "3/4", "1 1/2")
+- The final number in "explanation" MUST be identical to "correct_answer" (including sign)
+- For decimals, include "decimal_places" when needed
+- Include "method_hint": theory/rules ONLY — no final numeric answer
+- Include "explanation": full teacher-only working with the final answer
+- Set "difficulty" on each question to Easy, Medium, or Hard matching the plan row
+- Do NOT include MCQ options
+
+JSON format:
+{
+  "questions": [
+    {
+      "topic": "Exact topic name from plan",
+      "question": "In the figure, find the measure of ∠x.",
+      "needs_diagram": true,
+      "diagram_file": "q1.jpg",
+      "answer_format": "integer",
+      "correct_answer": "65",
+      "method_hint": "Use angle properties of parallel lines cut by a transversal.",
+      "explanation": "Corresponding angles are equal, so ∠x = 65°",
+      "difficulty": "Easy"
+    }
+  ]
+}
+PROMPT;
 
         if (! DiagramQuestionSupport::looksLikeGeometryChapter($chapter)) {
             return $prompt;
