@@ -36,6 +36,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class WrittenSheetController extends Controller
@@ -898,6 +899,21 @@ class WrittenSheetController extends Controller
         return Storage::disk('public')->download(
             $worksheet->written_pdf_path,
             ($worksheet->set_code ?: 'written-sheet').'.pdf',
+        );
+    }
+
+    public function print(Worksheet $worksheet): BinaryFileResponse
+    {
+        abort_unless($worksheet->isWritten() && $worksheet->written_pdf_path, 404);
+
+        $filename = ($worksheet->set_code ?: 'written-sheet').'.pdf';
+
+        return response()->file(
+            Storage::disk('public')->path($worksheet->written_pdf_path),
+            [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="'.$filename.'"',
+            ],
         );
     }
 

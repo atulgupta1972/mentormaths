@@ -411,6 +411,23 @@ const generateHints = () => {
                     </p>
                 </div>
                 <div v-if="isAdmin" class="flex flex-wrap items-center gap-2">
+                    <a
+                        v-if="practiceSet.can_print_written"
+                        :href="route('admin.written-sheets.print', practiceSet.id)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-900 hover:bg-indigo-100"
+                        title="Open worksheet PDF to print"
+                    >
+                        Print worksheet
+                    </a>
+                    <Link
+                        v-else-if="practiceSet.is_written"
+                        :href="route('admin.written-sheets.show', practiceSet.id)"
+                        class="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-900 hover:bg-indigo-100"
+                    >
+                        Written sheet
+                    </Link>
                     <Link
                         :href="route('admin.questions.set-code', { code: practiceSet.set_code })"
                         class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"

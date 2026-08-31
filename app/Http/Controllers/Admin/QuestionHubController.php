@@ -608,6 +608,8 @@ class QuestionHubController extends Controller
                 'display_title' => $worksheet->display_title,
                 'status' => $worksheet->status,
                 'questions_count' => $worksheet->questions_count,
+                'is_written' => $worksheet->isWritten(),
+                'can_print_written' => $worksheet->isWritten() && filled($worksheet->written_pdf_path),
             ],
             'canSplitSet' => $isAdmin && $this->splitService->canSplit($worksheet),
             'splitBatchSize' => PracticeSetSplitService::DEFAULT_BATCH_SIZE,

@@ -12,6 +12,8 @@ use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Services\WrittenSheetPdfImportService;
+use App\Support\PracticeSetScope;
+use App\Support\PracticeSetTier;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -302,6 +304,34 @@ class WrittenSheetStoreTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('parsed_count', 2);
         $response->assertJsonPath('answer_key.0.correct_answer', '42');
+    }
+
+    public function test_admin_can_open_written_sheet_pdf_for_printing(): void
+    {
+        Storage::fake('public');
+
+        [$chapter, $topics, $admin] = $this->seedChapterWithTopics();
+        $pdfPath = 'written-sheets/T743-W.pdf';
+        Storage::disk('public')->put($pdfPath, '%PDF-1.4 fake worksheet');
+
+        $worksheet = Worksheet::query()->create([
+            'title' => 'T743-W — Written',
+            'set_number' => 1,
+            'set_code' => 'T743-W',
+            'tier' => PracticeSetTier::CHAPTER_TEST,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'written_status' => WrittenSheetStatus::VERIFIED,
+            'written_pdf_path' => $pdfPath,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.written-sheets.print', $worksheet))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
     }
 
     /**
