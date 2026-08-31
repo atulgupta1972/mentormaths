@@ -12,6 +12,10 @@ use Throwable;
 
 class ClassHubProgressService
 {
+    public function __construct(
+        private ClassCoverageService $classCoverage,
+    ) {}
+
     /**
      * @param  Collection<int, StudentEnrollment>  $enrollments
      * @param  list<array<string, mixed>>  $rows
@@ -56,6 +60,17 @@ class ClassHubProgressService
                 ]);
             }
 
+            $performance = [];
+            try {
+                $performance = $this->classCoverage->studyPlanPerformance($enrollment) ?? [];
+            } catch (Throwable $e) {
+                Log::error('Class hub failed to load study-plan score for a student.', [
+                    'enrollment_id' => $enrollment->id,
+                    'student_id' => $enrollment->student_id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+
             $seconds = (int) ($engagement['time_spent_seconds'] ?? 0);
             $hours = $seconds > 0 ? round($seconds / 3600, 1) : 0.0;
             $setsDone = (int) $assignment['done'];
@@ -64,12 +79,18 @@ class ClassHubProgressService
 
             $row['progress'] = [
                 'completion_pct' => $completion,
-                'score_pct' => null,
-                'revision_done' => 0,
-                'revision_pending' => 0,
-                'open_wrongs' => 0,
+                'score_pct' => $this->resolveDisplayScorePct($performance),
+                'revision_done' => $performance['revision_done'] ?? $performance['correction_done'] ?? 0,
+                'revision_pending' => max(
+                    0,
+                    (int) ($performance['revision_total'] ?? 0) - (int) ($performance['revision_done'] ?? 0),
+                ) + (int) ($performance['correction_pending'] ?? 0),
+                'open_wrongs' => $performance['open_wrongs'] ?? 0,
                 'sets_done' => $setsDone,
                 'sets_total' => $setsTotal,
+                'sums_attempted' => $performance['done'] ?? 0,
+                'sums_total' => $performance['total'] ?? 0,
+                'sums_correct' => $performance['correct'] ?? 0,
                 'days_logged' => (int) ($engagement['days_logged_in'] ?? 0),
                 'time_spent_label' => $engagement['time_spent_label'] ?? '0 sec',
                 'time_spent_hours' => $hours,
@@ -154,5 +175,23 @@ class ClassHubProgressService
         }
 
         return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $performance
+     */
+    private function resolveDisplayScorePct(array $performance): ?int
+    {
+        if (($performance['score_pct'] ?? null) !== null) {
+            return (int) $performance['score_pct'];
+        }
+
+        $total = (int) ($performance['total'] ?? 0);
+        $correct = (int) ($performance['correct'] ?? 0);
+        if ($total > 0) {
+            return (int) round(($correct / $total) * 100);
+        }
+
+        return null;
     }
 }

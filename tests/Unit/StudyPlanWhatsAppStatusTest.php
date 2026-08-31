@@ -108,6 +108,100 @@ class StudyPlanWhatsAppStatusTest extends TestCase
         $this->assertSame(2, $perf['open_wrongs']);
     }
 
+    public function test_study_plan_score_uses_pool_metrics_when_set_score_missing(): void
+    {
+        $coverage = [
+            'chapters' => [
+                [
+                    'id' => 1,
+                    'chapter_number' => '2',
+                    'name' => 'Integers',
+                    'studied' => true,
+                    'under_study' => false,
+                    'items' => [
+                        'layout' => 'tier_blocks',
+                        'blocks' => [
+                            [
+                                'rows' => [
+                                    [
+                                        'items' => [
+                                            [
+                                                'status' => 'done',
+                                                'question_count' => 10,
+                                                'pool_metrics' => [
+                                                    'pool' => 10,
+                                                    'attempted' => 10,
+                                                    'correct' => 8,
+                                                    'score_pct' => 80,
+                                                ],
+                                                'is_correction' => false,
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                        'formula' => ['items' => []],
+                        'practice_correction' => ['items' => []],
+                        'books' => ['items' => []],
+                    ],
+                ],
+            ],
+        ];
+
+        $perf = app(ClassCoverageService::class)->studyPlanPerformanceFromCoverage($coverage);
+
+        $this->assertSame(80, $perf['score_pct']);
+        $this->assertSame(100, $perf['completion_pct']);
+    }
+
+    public function test_study_plan_score_falls_back_to_average_on_done_sets(): void
+    {
+        $coverage = [
+            'chapters' => [
+                [
+                    'id' => 1,
+                    'chapter_number' => '1',
+                    'name' => 'Test',
+                    'studied' => true,
+                    'under_study' => false,
+                    'items' => [
+                        'layout' => 'tier_blocks',
+                        'blocks' => [
+                            [
+                                'rows' => [
+                                    [
+                                        'items' => [
+                                            [
+                                                'status' => 'done',
+                                                'question_count' => 0,
+                                                'score_percent' => 80,
+                                                'is_correction' => false,
+                                            ],
+                                            [
+                                                'status' => 'done',
+                                                'question_count' => 0,
+                                                'score_percent' => 60,
+                                                'is_correction' => false,
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                        'formula' => ['items' => []],
+                        'practice_correction' => ['items' => []],
+                        'books' => ['items' => []],
+                    ],
+                ],
+            ],
+        ];
+
+        $perf = app(ClassCoverageService::class)->studyPlanPerformanceFromCoverage($coverage);
+
+        $this->assertSame(70, $perf['score_pct']);
+    }
+
     public function test_study_plan_whatsapp_message_includes_overall_status(): void
     {
         $message = app(StudentProgressWhatsAppService::class)->buildStudyPlanMessage([

@@ -43,6 +43,24 @@ const formatDate = (d) => {
 
 const pctLabel = (value) => (value == null ? '—' : `${value}%`);
 
+const displayScorePct = (progress) => {
+    if (! progress) {
+        return null;
+    }
+
+    if (progress.score_pct != null) {
+        return progress.score_pct;
+    }
+
+    const total = Number(progress.sums_total ?? 0);
+    const correct = Number(progress.sums_correct ?? 0);
+    if (total > 0) {
+        return Math.round((correct / total) * 100);
+    }
+
+    return null;
+};
+
 const revisionLabel = (progress) => {
     if (!progress) {
         return '—';
@@ -183,7 +201,7 @@ const studyPlanHref = (studentId) => {
                                         </p>
                                     </td>
                                     <td class="px-3 py-3 text-center font-semibold tabular-nums text-emerald-800">
-                                        {{ pctLabel(row.progress?.score_pct) }}
+                                        {{ pctLabel(displayScorePct(row.progress)) }}
                                     </td>
                                     <td
                                         class="px-3 py-3 text-xs"

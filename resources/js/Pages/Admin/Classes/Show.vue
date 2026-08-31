@@ -65,6 +65,24 @@ const formatDate = (d) => {
 
 const pctLabel = (value) => (value == null ? '—' : `${value}%`);
 
+const displayScorePct = (progress) => {
+    if (! progress) {
+        return null;
+    }
+
+    if (progress.score_pct != null) {
+        return progress.score_pct;
+    }
+
+    const total = Number(progress.sums_total ?? 0);
+    const correct = Number(progress.sums_correct ?? 0);
+    if (total > 0) {
+        return Math.round((correct / total) * 100);
+    }
+
+    return null;
+};
+
 const revisionLabel = (progress) => {
     if (!progress) {
         return '—';
@@ -298,7 +316,7 @@ watch(boardFilter, (value, oldValue) => {
                                             </p>
                                         </td>
                                         <td class="px-3 py-3 text-center font-semibold tabular-nums text-emerald-800">
-                                            {{ pctLabel(row.progress?.score_pct) }}
+                                            {{ pctLabel(displayScorePct(row.progress)) }}
                                         </td>
                                         <td class="px-3 py-3 text-xs" :class="(row.progress?.revision_pending || row.progress?.open_wrongs) ? 'font-semibold text-orange-800' : 'text-emerald-700'">
                                             {{ revisionLabel(row.progress) }}

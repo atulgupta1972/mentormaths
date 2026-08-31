@@ -257,6 +257,8 @@ class ClassCoverageService
 
         $mainAgg = \App\Support\SumPoolAggregate::fromItems($main);
         $revisionAgg = \App\Support\SumPoolAggregate::fromItems($revisionItems);
+        $scorePct = $this->resolveStudyPlanScorePct($mainAgg, $main);
+        $revisionScorePct = $this->resolveStudyPlanScorePct($revisionAgg, $revisionItems);
 
         $correctionDone = count(array_filter($corrections, fn (array $item) => ($item['status'] ?? '') === 'done'));
         $correctionPending = count(array_filter($corrections, fn (array $item) => ($item['status'] ?? '') !== 'done'));
@@ -273,7 +275,7 @@ class ClassCoverageService
             'done' => $mainAgg['attempted'],
             'correct' => $mainAgg['correct'],
             'completion_pct' => $mainAgg['completion_pct'],
-            'score_pct' => $mainAgg['score_pct'],
+            'score_pct' => $scorePct,
             'scored_count' => $mainAgg['correct'],
             'set_total' => $mainAgg['set_total'],
             'set_done' => $mainAgg['set_done'],
@@ -281,7 +283,7 @@ class ClassCoverageService
             'revision_done' => $revisionAgg['attempted'],
             'revision_correct' => $revisionAgg['correct'],
             'revision_completion_pct' => $revisionAgg['completion_pct'],
-            'revision_score_pct' => $revisionAgg['score_pct'],
+            'revision_score_pct' => $revisionScorePct,
             'revision_scored_count' => $revisionAgg['correct'],
             'correction_done' => $correctionDone,
             'correction_pending' => $correctionPending,
@@ -377,6 +379,12 @@ class ClassCoverageService
     private function detailItemPayload(array $item): array
     {
         $percent = $item['latest_score_percent'] ?? null;
+        if ($percent === null && is_array($item['pool_metrics'] ?? null)) {
+            $pool = $item['pool_metrics'];
+            if ((int) ($pool['attempted'] ?? 0) > 0) {
+                $percent = $pool['score_pct'] ?? null;
+            }
+        }
         $statusLabel = (string) ($item['status_label'] ?? 'NOT DONE');
 
         // Prefer explicit score in brackets when DONE already embeds it; otherwise append.
@@ -991,5 +999,77 @@ class ClassCoverageService
     ): void {
         $this->formulaBank->ensureChaptersHaveSingleFormulaSet([$chapter->id], $actor);
         $this->assignChapterContentDueToday($enrollment, $chapter, $actor);
+    }
+
+    /**
+     * @param  array{pool?: int, attempted?: int, correct?: int, score_pct?: int|null}  $aggregate
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function resolveStudyPlanScorePct(array $aggregate, array $items): ?int
+    {
+        if (($aggregate['score_pct'] ?? null) !== null) {
+            return $aggregate['score_pct'];
+        }
+
+        $pool = (int) ($aggregate['pool'] ?? 0);
+        $correct = (int) ($aggregate['correct'] ?? 0);
+        if ($pool > 0) {
+            return (int) round(($correct / $pool) * 100);
+        }
+
+        return $this->averageScorePercentOnScoredSets($items);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function averageScorePercentOnScoredSets(array $items): ?int
+    {
+        $scores = [];
+
+        foreach ($items as $item) {
+            if (($item['status'] ?? '') !== 'done') {
+                continue;
+            }
+
+            $pct = $this->itemScorePercent($item);
+            if ($pct !== null) {
+                $scores[] = $pct;
+            }
+        }
+
+        if ($scores === []) {
+            return null;
+        }
+
+        return (int) round(array_sum($scores) / count($scores));
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function itemScorePercent(array $item): ?float
+    {
+        $pct = $item['score_percent'] ?? $item['latest_score_percent'] ?? null;
+        if ($pct !== null && $pct !== '') {
+            return (float) $pct;
+        }
+
+        $pool = $item['pool_metrics'] ?? null;
+        if (! is_array($pool)) {
+            return null;
+        }
+
+        if ((int) ($pool['attempted'] ?? 0) > 0 && ($pool['score_pct'] ?? null) !== null) {
+            return (float) $pool['score_pct'];
+        }
+
+        $poolTotal = (int) ($pool['pool'] ?? 0);
+        $correct = (int) ($pool['correct'] ?? 0);
+        if ($poolTotal > 0 && $correct > 0) {
+            return round(($correct / $poolTotal) * 100, 2);
+        }
+
+        return null;
     }
 }
