@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ClassHubMetricSpinner from '@/Components/ClassHubMetricSpinner.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
@@ -21,7 +22,7 @@ const examFilter = ref(props.examFilter || 'upcoming');
 
 const examPlanProgressMap = computed(() => page.props.examPlanProgress);
 
-const progressMetricsLoading = computed(() =>
+const studyMetricsLoading = computed(() =>
     examPlanProgressMap.value === undefined && (props.examPlanRows?.length ?? 0) > 0,
 );
 
@@ -46,7 +47,13 @@ const rowProgress = (row) => {
     return { ...base, ...extra };
 };
 
-const metricPulseClass = 'inline-block h-4 min-w-[2.5rem] animate-pulse rounded bg-gray-200';
+const hasEngagementMetrics = (row) => {
+    const progress = rowProgress(row);
+
+    return (progress.days_logged ?? 0) > 0
+        || (progress.time_spent_hours ?? 0) > 0
+        || (progress.time_spent_label && progress.time_spent_label !== '0 sec');
+};
 
 const reloadExamFilter = () => {
     router.get(route('mentor.classes.show', props.gradeLevel.id), {
@@ -201,6 +208,13 @@ const studyPlanHref = (studentId) => {
                         >
                             {{ examPlanStats.without_upcoming }} student(s) have no upcoming exam plan yet.
                         </div>
+                        <div
+                            v-if="studyMetricsLoading && examPlanRows.length"
+                            class="mt-3 flex items-center gap-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-900"
+                        >
+                            <ClassHubMetricSpinner size="sm" label="Compiling student progress" />
+                            <span>Compiling completion &amp; scores… days and hours show first.</span>
+                        </div>
                     </div>
 
                     <div v-if="!examPlanRows.length" class="px-6 py-8 text-center text-sm text-gray-500">
@@ -250,7 +264,9 @@ const studyPlanHref = (studentId) => {
                                         {{ formatDate(row.display_plan?.exam_date) }}
                                     </td>
                                     <td class="px-3 py-3 text-center">
-                                        <span v-if="progressMetricsLoading" :class="metricPulseClass" />
+                                        <div v-if="studyMetricsLoading" class="flex justify-center py-0.5">
+                                            <ClassHubMetricSpinner label="Loading completion" />
+                                        </div>
                                         <template v-else>
                                             <span class="font-semibold tabular-nums text-sky-800">{{ pctLabel(displayCompletionPct(rowProgress(row))) }}</span>
                                             <p
@@ -259,10 +275,18 @@ const studyPlanHref = (studentId) => {
                                             >
                                                 {{ rowProgress(row).sums_attempted }}/{{ rowProgress(row).sums_total }} sums
                                             </p>
+                                            <p
+                                                v-else-if="!displayCompletionPct(rowProgress(row)) && hasEngagementMetrics(row)"
+                                                class="text-[10px] text-gray-400"
+                                            >
+                                                No Under study / Studied chapter
+                                            </p>
                                         </template>
                                     </td>
                                     <td class="px-3 py-3 text-center font-semibold tabular-nums text-emerald-800">
-                                        <span v-if="progressMetricsLoading" :class="metricPulseClass" />
+                                        <div v-if="studyMetricsLoading" class="flex justify-center py-0.5">
+                                            <ClassHubMetricSpinner label="Loading score" size="sm" />
+                                        </div>
                                         <template v-else>
                                             {{ pctLabel(displayScorePct(rowProgress(row))) }}
                                         </template>
@@ -271,23 +295,19 @@ const studyPlanHref = (studentId) => {
                                         class="px-3 py-3 text-xs"
                                         :class="(rowProgress(row).revision_pending || rowProgress(row).open_wrongs) ? 'font-semibold text-orange-800' : 'text-emerald-700'"
                                     >
-                                        <span v-if="progressMetricsLoading" :class="metricPulseClass" />
+                                        <div v-if="studyMetricsLoading" class="flex justify-center py-0.5">
+                                            <ClassHubMetricSpinner label="Loading revision" size="sm" />
+                                        </div>
                                         <template v-else>
                                             {{ revisionLabel(rowProgress(row)) }}
                                         </template>
                                     </td>
                                     <td class="px-3 py-3 text-center font-semibold tabular-nums text-slate-800">
-                                        <span v-if="progressMetricsLoading" :class="metricPulseClass" />
-                                        <template v-else>
-                                            {{ rowProgress(row).days_logged ?? 0 }}
-                                        </template>
+                                        {{ rowProgress(row).days_logged ?? 0 }}
                                     </td>
                                     <td class="px-3 py-3 text-center">
-                                        <span v-if="progressMetricsLoading" :class="metricPulseClass" />
-                                        <template v-else>
-                                            <span class="font-semibold tabular-nums text-slate-800">{{ rowProgress(row).time_spent_hours ?? 0 }}h</span>
-                                            <p class="text-[10px] text-gray-500">{{ rowProgress(row).time_spent_label || '—' }}</p>
-                                        </template>
+                                        <span class="font-semibold tabular-nums text-slate-800">{{ rowProgress(row).time_spent_hours ?? 0 }}h</span>
+                                        <p class="text-[10px] text-gray-500">{{ rowProgress(row).time_spent_label || '—' }}</p>
                                     </td>
                                 </tr>
                             </tbody>

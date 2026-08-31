@@ -198,7 +198,7 @@ class ClassHubController extends Controller
 
             try {
                 $enrollments = $this->examPlanService->activeEnrollmentForYear($activeYear->id, $gradeLevel->id, $boardId);
-                $enrollments->load(['student:id,name,user_id', 'student.user', 'academicYear']);
+                $enrollments->load(['student:id,name,user_id', 'student.user:id,last_seen_at', 'academicYear']);
             } catch (Throwable $e) {
                 Log::error('Admin class hub failed to load enrollments.', [
                     'grade_level_id' => $gradeLevel->id,
@@ -208,7 +208,7 @@ class ClassHubController extends Controller
 
                 try {
                     $enrollments = StudentEnrollment::query()
-                        ->with(['student:id,name,user_id', 'student.user', 'academicYear'])
+                        ->with(['student:id,name,user_id', 'student.user:id,last_seen_at', 'academicYear'])
                         ->where('academic_year_id', $activeYear->id)
                         ->where('grade_level_id', $gradeLevel->id)
                         ->when($boardId, fn ($query) => $query->where('board_id', $boardId))
@@ -241,6 +241,7 @@ class ClassHubController extends Controller
 
             try {
                 $examPlanRows = $this->classHubProgress->attachFast($enrollments, $examPlanRows);
+                $examPlanRows = $this->classHubProgress->attachEngagement($enrollments, $examPlanRows);
             } catch (Throwable $e) {
                 Log::error('Admin class hub failed to attach student progress.', [
                     'grade_level_id' => $gradeLevel->id,
@@ -400,11 +401,11 @@ class ClassHubController extends Controller
                 }
 
                 $enrollments = StudentEnrollment::query()
-                    ->with(['student:id,name', 'academicYear'])
+                    ->with(['student:id,name,user_id', 'student.user:id,last_seen_at', 'academicYear'])
                     ->whereIn('id', $enrollmentIds)
                     ->get();
 
-                return $this->classHubProgress->studyPlanMetricsByEnrollment($enrollments);
+                return $this->classHubProgress->studyPerformanceMetricsByEnrollment($enrollments);
             } catch (Throwable $e) {
                 Log::error('Admin class hub failed to load deferred progress metrics.', [
                     'grade_level_id' => $gradeLevel->id,

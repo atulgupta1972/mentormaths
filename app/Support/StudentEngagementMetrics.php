@@ -3,9 +3,11 @@
 namespace App\Support;
 
 use App\Models\SetAttempt;
+use App\Models\SetAssignment;
 use App\Models\StudentEnrollment;
 use App\Models\UserLoginDay;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -46,6 +48,155 @@ class StudentEngagementMetrics
             'time_spent_seconds' => $seconds,
             'time_spent_label' => self::formatDuration($seconds),
         ];
+    }
+
+    /**
+     * Batch engagement for class hub — one query set for many enrollments.
+     *
+     * @param  Collection<int, StudentEnrollment>  $enrollments
+     * @return array<int, array{
+     *     days_logged_in: int,
+     *     time_spent_seconds: int,
+     *     time_spent_label: string
+     * }>
+     */
+    public static function forManyEnrollments(Collection $enrollments, Carbon $to): array
+    {
+        if ($enrollments->isEmpty()) {
+            return [];
+        }
+
+        $to = $to->copy()->endOfDay();
+        $windows = [];
+        $userIds = [];
+
+        foreach ($enrollments as $enrollment) {
+            $from = $enrollment->academicYear?->starts_on
+                ? Carbon::parse($enrollment->academicYear->starts_on)->startOfDay()
+                : now()->subMonths(6)->startOfDay();
+
+            if ($from->gt($to)) {
+                $from = $to->copy()->startOfDay();
+            }
+
+            $windows[(int) $enrollment->id] = ['from' => $from, 'to' => $to];
+
+            $userId = $enrollment->student?->user_id;
+            if ($userId) {
+                $userIds[(int) $userId] = true;
+            }
+        }
+
+        $minFrom = collect($windows)->min(fn (array $window) => $window['from']->timestamp);
+        $rangeFrom = Carbon::createFromTimestamp($minFrom)->startOfDay();
+
+        $loginDatesByUser = [];
+        if ($userIds !== [] && self::supportsLoginDays()) {
+            $rows = UserLoginDay::query()
+                ->whereIn('user_id', array_keys($userIds))
+                ->whereBetween('login_date', [$rangeFrom->toDateString(), $to->toDateString()])
+                ->get(['user_id', 'login_date']);
+
+            foreach ($rows as $row) {
+                $date = Carbon::parse($row->login_date)->toDateString();
+                $loginDatesByUser[(int) $row->user_id][$date] = true;
+            }
+        }
+
+        $assignmentsByEnrollment = SetAssignment::query()
+            ->whereIn('student_enrollment_id', array_keys($windows))
+            ->where('status', '!=', SetAssignment::STATUS_CANCELLED)
+            ->get(['id', 'student_enrollment_id'])
+            ->groupBy('student_enrollment_id');
+
+        $assignmentToEnrollment = [];
+        foreach ($assignmentsByEnrollment as $enrollmentId => $rows) {
+            foreach ($rows as $row) {
+                $assignmentToEnrollment[(int) $row->id] = (int) $enrollmentId;
+            }
+        }
+
+        $attemptsByEnrollment = [];
+        if ($assignmentToEnrollment !== []) {
+            $attemptRows = SetAttempt::query()
+                ->whereIn('set_assignment_id', array_keys($assignmentToEnrollment))
+                ->where(function ($query) use ($rangeFrom, $to) {
+                    $query->whereBetween('started_at', [$rangeFrom, $to])
+                        ->orWhereBetween('completed_at', [$rangeFrom, $to])
+                        ->orWhere(function ($q) use ($rangeFrom, $to) {
+                            $q->where('status', SetAttempt::STATUS_IN_PROGRESS)
+                                ->whereBetween('updated_at', [$rangeFrom, $to]);
+                        });
+                })
+                ->get(['set_assignment_id', 'started_at', 'completed_at', 'active_seconds', 'time_seconds', 'active_session_started_at', 'status', 'updated_at']);
+
+            foreach ($attemptRows as $attempt) {
+                $enrollmentId = $assignmentToEnrollment[(int) $attempt->set_assignment_id] ?? null;
+                if (! $enrollmentId) {
+                    continue;
+                }
+
+                $attemptsByEnrollment[$enrollmentId] ??= [];
+                $attemptsByEnrollment[$enrollmentId][] = $attempt;
+            }
+        }
+
+        $metrics = [];
+
+        foreach ($enrollments as $enrollment) {
+            $enrollmentId = (int) $enrollment->id;
+            $from = $windows[$enrollmentId]['from'];
+            $windowTo = $windows[$enrollmentId]['to'];
+            $dates = [];
+
+            $userId = $enrollment->student?->user_id;
+            if ($userId && isset($loginDatesByUser[(int) $userId])) {
+                foreach (array_keys($loginDatesByUser[(int) $userId]) as $date) {
+                    $day = Carbon::parse($date)->startOfDay();
+                    if ($day->between($from, $windowTo)) {
+                        $dates[$date] = true;
+                    }
+                }
+            }
+
+            $lastSeen = $enrollment->student?->user?->last_seen_at;
+            if ($lastSeen && $lastSeen->between($from, $windowTo)) {
+                $dates[$lastSeen->toDateString()] = true;
+            }
+
+            $seconds = 0;
+            foreach ($attemptsByEnrollment[$enrollmentId] ?? [] as $attempt) {
+                foreach (['started_at', 'completed_at'] as $field) {
+                    $value = $attempt->{$field};
+                    if ($value && $value->between($from, $windowTo)) {
+                        $dates[$value->toDateString()] = true;
+                    }
+                }
+
+                $attemptSeconds = (int) ($attempt->active_seconds ?? 0);
+                if ($attemptSeconds <= 0) {
+                    $attemptSeconds = (int) ($attempt->time_seconds ?? 0);
+                }
+
+                if (
+                    $attempt->status === SetAttempt::STATUS_IN_PROGRESS
+                    && $attempt->active_session_started_at
+                    && $attempt->active_session_started_at->between($from, $windowTo)
+                ) {
+                    $attemptSeconds += max(0, (int) $attempt->active_session_started_at->diffInSeconds(now(), true));
+                }
+
+                $seconds += $attemptSeconds;
+            }
+
+            $metrics[$enrollmentId] = [
+                'days_logged_in' => count($dates),
+                'time_spent_seconds' => $seconds,
+                'time_spent_label' => self::formatDuration($seconds),
+            ];
+        }
+
+        return $metrics;
     }
 
     public static function formatDuration(int $seconds): string

@@ -92,7 +92,7 @@ class MentorClassHubService
 
         if ($activeYear && $studentIds !== []) {
             $enrollments = StudentEnrollment::query()
-                ->with(['student:id,name', 'academicYear', 'gradeLevel:id,name', 'board:id,name'])
+                ->with(['student:id,name,user_id', 'student.user:id,last_seen_at', 'academicYear', 'gradeLevel:id,name', 'board:id,name'])
                 ->where('academic_year_id', $activeYear->id)
                 ->where('grade_level_id', $gradeLevel->id)
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
@@ -121,6 +121,7 @@ class MentorClassHubService
 
             try {
                 $examPlanRows = $this->progress->attachFast($enrollments, $examPlanRows);
+                $examPlanRows = $this->progress->attachEngagement($enrollments, $examPlanRows);
             } catch (Throwable $e) {
                 Log::error('Mentor class hub failed to attach student progress.', [
                     'grade_level_id' => $gradeLevel->id,
@@ -157,11 +158,11 @@ class MentorClassHubService
         }
 
         $enrollments = StudentEnrollment::query()
-            ->with(['student:id,name', 'academicYear'])
+            ->with(['student:id,name,user_id', 'student.user:id,last_seen_at', 'academicYear'])
             ->whereIn('id', $enrollmentIds)
             ->get();
 
-        return $this->progress->studyPlanMetricsByEnrollment($enrollments);
+        return $this->progress->studyPerformanceMetricsByEnrollment($enrollments);
     }
 
     /**

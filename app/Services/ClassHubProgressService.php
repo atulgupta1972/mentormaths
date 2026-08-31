@@ -21,6 +21,93 @@ class ClassHubProgressService
      * @param  list<array<string, mixed>>  $rows
      * @return list<array<string, mixed>>
      */
+    public function attachEngagement(Collection $enrollments, array $rows): array
+    {
+        if ($enrollments->isEmpty() || $rows === []) {
+            return $rows;
+        }
+
+        try {
+            $engagementById = StudentEngagementMetrics::forManyEnrollments($enrollments, now()->endOfDay());
+        } catch (Throwable $e) {
+            Log::error('Class hub failed to batch-load engagement metrics.', ['message' => $e->getMessage()]);
+
+            return $rows;
+        }
+
+        return array_map(function (array $row) use ($engagementById) {
+            $enrollmentId = (int) ($row['enrollment_id'] ?? 0);
+            $engagement = $engagementById[$enrollmentId] ?? null;
+
+            if (! $engagement || ! is_array($row['progress'] ?? null)) {
+                return $row;
+            }
+
+            $seconds = (int) ($engagement['time_spent_seconds'] ?? 0);
+            $row['progress'] = array_merge($row['progress'], [
+                'days_logged' => (int) ($engagement['days_logged_in'] ?? 0),
+                'time_spent_label' => $engagement['time_spent_label'] ?? '0 sec',
+                'time_spent_hours' => $seconds > 0 ? round($seconds / 3600, 1) : 0.0,
+            ]);
+
+            return $row;
+        }, $rows);
+    }
+
+    /**
+     * Study-plan sums only — engagement is attached on the first paint via attachEngagement().
+     *
+     * @param  Collection<int, StudentEnrollment>  $enrollments
+     * @return array<int, array<string, mixed>>
+     */
+    public function studyPerformanceMetricsByEnrollment(Collection $enrollments): array
+    {
+        $metrics = [];
+
+        foreach ($enrollments as $enrollment) {
+            $metrics[(int) $enrollment->id] = $this->studyPerformanceMetricsForEnrollment($enrollment);
+        }
+
+        return $metrics;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function studyPerformanceMetricsForEnrollment(StudentEnrollment $enrollment): array
+    {
+        $performance = [];
+
+        try {
+            $performance = $this->classCoverage->studyPlanPerformance($enrollment) ?? [];
+        } catch (Throwable $e) {
+            Log::error('Class hub failed to load study-plan score for a student.', [
+                'enrollment_id' => $enrollment->id,
+                'student_id' => $enrollment->student_id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+
+        return [
+            'completion_pct' => $this->resolveDisplayCompletionPct($performance),
+            'score_pct' => $this->resolveDisplayScorePct($performance),
+            'revision_done' => $performance['revision_done'] ?? $performance['correction_done'] ?? 0,
+            'revision_pending' => max(
+                0,
+                (int) ($performance['revision_total'] ?? 0) - (int) ($performance['revision_done'] ?? 0),
+            ) + (int) ($performance['correction_pending'] ?? 0),
+            'open_wrongs' => $performance['open_wrongs'] ?? 0,
+            'sums_attempted' => $performance['done'] ?? 0,
+            'sums_total' => $performance['total'] ?? 0,
+            'sums_correct' => $performance['correct'] ?? 0,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, StudentEnrollment>  $enrollments
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
     public function attach(Collection $enrollments, array $rows): array
     {
         $rows = $this->attachFast($enrollments, $rows);
