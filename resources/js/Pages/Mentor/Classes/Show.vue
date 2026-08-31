@@ -183,7 +183,7 @@ const studyPlanHref = (studentId) => {
                             <div>
                                 <h3 class="font-medium text-gray-900">Student progress</h3>
                                 <p class="mt-1 text-sm text-gray-500">
-                                    Completion %, score %, revision, login days, and time spent — only students enrolled under you.
+                                    Completion %, score %, and revision use chapters marked <strong>Under study</strong> or <strong>Studied</strong> on the school study plan — not the exam plan column.
                                 </p>
                             </div>
                             <div class="flex items-center gap-2">
@@ -215,8 +215,8 @@ const studyPlanHref = (studentId) => {
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Student</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Plan</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Exam date</th>
-                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500">Completion %</th>
-                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500">Score %</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Sum completion on chapters marked Under study or Studied">Completion %</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on marked study-plan chapters">Score %</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Revision</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500">Days logged</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500">Hours spent</th>

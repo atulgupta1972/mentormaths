@@ -293,7 +293,7 @@ watch(boardFilter, (value, oldValue) => {
                             <div>
                                 <h3 class="font-medium text-gray-900">Students</h3>
                                 <p class="mt-1 text-sm text-gray-500">
-                                    Click a student name to open their study plan. Use <strong>Add exam date</strong> when you need an exam plan.
+                                    Click a student name to open their study plan. Completion % and score % use chapters marked <strong>Under study</strong> or <strong>Studied</strong> — not the exam plan. Use <strong>Add exam date</strong> when you need an exam plan.
                                 </p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
@@ -329,9 +329,9 @@ watch(boardFilter, (value, oldValue) => {
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Student</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Plan</th>
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Exam date</th>
-                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Attempted sums / total pool in study plan">Completion %</th>
-                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on scored sets">Score %</th>
-                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Revision</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Sum completion on chapters marked Under study or Studied (not tied to exam plan)">Completion %</th>
+                                    <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on marked study-plan chapters (not tied to exam plan)">Score %</th>
+                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500" title="Revision pending on marked study-plan chapters">Revision</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Login days this academic year">Days logged</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Approx time on practice this year">Hours spent</th>
                                     <th class="px-3 py-3 text-right text-xs uppercase text-gray-500">Actions</th>

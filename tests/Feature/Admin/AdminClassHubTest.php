@@ -12,6 +12,7 @@ use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\User;
+use App\Services\ClassCoverageService;
 use App\Services\ExamPlanService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -54,6 +55,21 @@ class AdminClassHubTest extends TestCase
                     ->has('examPlanProgress')
                     ->missing('examPlanRows')
                     ->missing('gradeLevel')));
+    }
+
+    public function test_class_hub_progress_uses_study_plan_marks_not_exam_plan(): void
+    {
+        $this->seedClassSeven();
+        $enrollment = StudentEnrollment::query()->firstOrFail();
+        $coverage = app(ClassCoverageService::class);
+
+        $this->assertNotNull($coverage->studyPlanProgressForClassHub($enrollment));
+
+        StudentChapterCoverage::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->delete();
+
+        $this->assertNull($coverage->studyPlanProgressForClassHub($enrollment));
     }
 
     public function test_class_hub_still_lists_students_when_exam_rows_fail(): void
