@@ -4,7 +4,7 @@ import BrowseModeNotice from '@/Components/BrowseModeNotice.vue';
 import ClassAttemptProtectionPanel from '@/Components/ClassAttemptProtectionPanel.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import InputLabel from '@/Components/InputLabel.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import { assignToClassPath, hasRoute, safeRoute } from '@/utils/routes';
 
@@ -18,6 +18,7 @@ const props = defineProps({
     stats: { type: Object, default: () => ({}) },
     examFilter: { type: String, default: 'upcoming' },
     examPlanRows: { type: Array, default: () => [] },
+    examPlanProgress: { type: Object, default: undefined },
     examPlanStats: { type: Object, default: () => ({}) },
     syllabusChapterOptions: { type: Array, default: () => [] },
     examTypeOptions: { type: Array, default: () => [] },
@@ -34,6 +35,21 @@ const editingStudentId = ref(null);
 const autoOpenCreate = ref(false);
 
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
+
+const progressMetricsLoading = computed(() =>
+    props.examPlanProgress === undefined && (props.examPlanRows?.length ?? 0) > 0,
+);
+
+const rowProgress = (row) => {
+    const base = row.progress ?? {};
+    const extra = props.examPlanProgress?.[row.enrollment_id]
+        ?? props.examPlanProgress?.[String(row.enrollment_id)]
+        ?? {};
+
+    return { ...base, ...extra };
+};
+
+const metricPulseClass = 'inline-block h-4 min-w-[2.5rem] animate-pulse rounded bg-gray-200';
 
 const reload = () => {
     router.get(route('admin.classes.show', props.gradeLevel.id), {
@@ -321,17 +337,29 @@ watch(boardFilter, (value, oldValue) => {
                                             </p>
                                         </td>
                                         <td class="px-3 py-3 text-center font-semibold tabular-nums text-emerald-800">
-                                            {{ pctLabel(displayScorePct(row.progress)) }}
+                                            <span v-if="progressMetricsLoading" :class="metricPulseClass" />
+                                            <template v-else>
+                                                {{ pctLabel(displayScorePct(rowProgress(row))) }}
+                                            </template>
                                         </td>
-                                        <td class="px-3 py-3 text-xs" :class="(row.progress?.revision_pending || row.progress?.open_wrongs) ? 'font-semibold text-orange-800' : 'text-emerald-700'">
-                                            {{ revisionLabel(row.progress) }}
+                                        <td class="px-3 py-3 text-xs" :class="(rowProgress(row).revision_pending || rowProgress(row).open_wrongs) ? 'font-semibold text-orange-800' : 'text-emerald-700'">
+                                            <span v-if="progressMetricsLoading" :class="metricPulseClass" />
+                                            <template v-else>
+                                                {{ revisionLabel(rowProgress(row)) }}
+                                            </template>
                                         </td>
                                         <td class="px-3 py-3 text-center font-semibold tabular-nums text-slate-800">
-                                            {{ row.progress?.days_logged ?? 0 }}
+                                            <span v-if="progressMetricsLoading" :class="metricPulseClass" />
+                                            <template v-else>
+                                                {{ rowProgress(row).days_logged ?? 0 }}
+                                            </template>
                                         </td>
                                         <td class="px-3 py-3 text-center">
-                                            <span class="font-semibold tabular-nums text-slate-800">{{ row.progress?.time_spent_hours ?? 0 }}h</span>
-                                            <p class="text-[10px] text-gray-500">{{ row.progress?.time_spent_label || '—' }}</p>
+                                            <span v-if="progressMetricsLoading" :class="metricPulseClass" />
+                                            <template v-else>
+                                                <span class="font-semibold tabular-nums text-slate-800">{{ rowProgress(row).time_spent_hours ?? 0 }}h</span>
+                                                <p class="text-[10px] text-gray-500">{{ rowProgress(row).time_spent_label || '—' }}</p>
+                                            </template>
                                         </td>
                                         <td class="space-x-3 px-3 py-3 text-right">
                                             <button

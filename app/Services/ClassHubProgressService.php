@@ -23,6 +23,20 @@ class ClassHubProgressService
      */
     public function attach(Collection $enrollments, array $rows): array
     {
+        $rows = $this->attachFast($enrollments, $rows);
+
+        return $this->mergeStudyPlanMetrics($rows, $this->studyPlanMetricsByEnrollment($enrollments));
+    }
+
+    /**
+     * Fast path: assignment set counts only — used for the first paint on class hub pages.
+     *
+     * @param  Collection<int, StudentEnrollment>  $enrollments
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    public function attachFast(Collection $enrollments, array $rows): array
+    {
         $byEnrollmentId = $enrollments->keyBy('id');
         $assignmentProgress = $this->assignmentProgressByEnrollment($enrollments);
 
@@ -40,64 +54,115 @@ class ClassHubProgressService
                 ?? $assignmentProgress[(string) $enrollment->id]
                 ?? ['done' => 0, 'total' => 0];
 
-            $from = $enrollment->academicYear?->starts_on
-                ? Carbon::parse($enrollment->academicYear->starts_on)->startOfDay()
-                : now()->subMonths(6)->startOfDay();
-            $to = now()->endOfDay();
-
-            $engagement = [
-                'days_logged_in' => 0,
-                'time_spent_seconds' => 0,
-                'time_spent_label' => '0 sec',
-            ];
-            try {
-                $engagement = StudentEngagementMetrics::forEnrollment($enrollment, $from, $to);
-            } catch (Throwable $e) {
-                Log::error('Class hub failed to load engagement for a student.', [
-                    'enrollment_id' => $enrollment->id,
-                    'student_id' => $enrollment->student_id,
-                    'message' => $e->getMessage(),
-                ]);
-            }
-
-            $performance = [];
-            try {
-                $performance = $this->classCoverage->studyPlanPerformance($enrollment) ?? [];
-            } catch (Throwable $e) {
-                Log::error('Class hub failed to load study-plan score for a student.', [
-                    'enrollment_id' => $enrollment->id,
-                    'student_id' => $enrollment->student_id,
-                    'message' => $e->getMessage(),
-                ]);
-            }
-
-            $seconds = (int) ($engagement['time_spent_seconds'] ?? 0);
-            $hours = $seconds > 0 ? round($seconds / 3600, 1) : 0.0;
             $setsDone = (int) $assignment['done'];
             $setsTotal = (int) $assignment['total'];
             $completion = $setsTotal > 0 ? (int) round(($setsDone / $setsTotal) * 100) : null;
 
             $row['progress'] = [
+                ...$this->empty(),
                 'completion_pct' => $completion,
-                'score_pct' => $this->resolveDisplayScorePct($performance),
-                'revision_done' => $performance['revision_done'] ?? $performance['correction_done'] ?? 0,
-                'revision_pending' => max(
-                    0,
-                    (int) ($performance['revision_total'] ?? 0) - (int) ($performance['revision_done'] ?? 0),
-                ) + (int) ($performance['correction_pending'] ?? 0),
-                'open_wrongs' => $performance['open_wrongs'] ?? 0,
                 'sets_done' => $setsDone,
                 'sets_total' => $setsTotal,
-                'sums_attempted' => $performance['done'] ?? 0,
-                'sums_total' => $performance['total'] ?? 0,
-                'sums_correct' => $performance['correct'] ?? 0,
-                'days_logged' => (int) ($engagement['days_logged_in'] ?? 0),
-                'time_spent_label' => $engagement['time_spent_label'] ?? '0 sec',
-                'time_spent_hours' => $hours,
             ];
 
             return $row;
         }, $rows);
+    }
+
+    /**
+     * Score, revision, and engagement — one study-plan load per student.
+     *
+     * @param  Collection<int, StudentEnrollment>  $enrollments
+     * @return array<int, array<string, mixed>>
+     */
+    public function studyPlanMetricsByEnrollment(Collection $enrollments): array
+    {
+        $metrics = [];
+
+        foreach ($enrollments as $enrollment) {
+            $metrics[(int) $enrollment->id] = $this->studyPlanMetricsForEnrollment($enrollment);
+        }
+
+        return $metrics;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<int, array<string, mixed>>  $metricsByEnrollment
+     * @return list<array<string, mixed>>
+     */
+    public function mergeStudyPlanMetrics(array $rows, array $metricsByEnrollment): array
+    {
+        return array_map(function (array $row) use ($metricsByEnrollment) {
+            $enrollmentId = (int) ($row['enrollment_id'] ?? 0);
+            $metrics = $metricsByEnrollment[$enrollmentId] ?? null;
+
+            if (! $metrics || ! is_array($row['progress'] ?? null)) {
+                return $row;
+            }
+
+            $row['progress'] = array_merge($row['progress'], $metrics);
+
+            return $row;
+        }, $rows);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function studyPlanMetricsForEnrollment(StudentEnrollment $enrollment): array
+    {
+        $from = $enrollment->academicYear?->starts_on
+            ? Carbon::parse($enrollment->academicYear->starts_on)->startOfDay()
+            : now()->subMonths(6)->startOfDay();
+        $to = now()->endOfDay();
+
+        $engagement = [
+            'days_logged_in' => 0,
+            'time_spent_seconds' => 0,
+            'time_spent_label' => '0 sec',
+        ];
+
+        try {
+            $engagement = StudentEngagementMetrics::forEnrollment($enrollment, $from, $to);
+        } catch (Throwable $e) {
+            Log::error('Class hub failed to load engagement for a student.', [
+                'enrollment_id' => $enrollment->id,
+                'student_id' => $enrollment->student_id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+
+        $performance = [];
+
+        try {
+            $performance = $this->classCoverage->studyPlanPerformance($enrollment) ?? [];
+        } catch (Throwable $e) {
+            Log::error('Class hub failed to load study-plan score for a student.', [
+                'enrollment_id' => $enrollment->id,
+                'student_id' => $enrollment->student_id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+
+        $seconds = (int) ($engagement['time_spent_seconds'] ?? 0);
+        $hours = $seconds > 0 ? round($seconds / 3600, 1) : 0.0;
+
+        return [
+            'score_pct' => $this->resolveDisplayScorePct($performance),
+            'revision_done' => $performance['revision_done'] ?? $performance['correction_done'] ?? 0,
+            'revision_pending' => max(
+                0,
+                (int) ($performance['revision_total'] ?? 0) - (int) ($performance['revision_done'] ?? 0),
+            ) + (int) ($performance['correction_pending'] ?? 0),
+            'open_wrongs' => $performance['open_wrongs'] ?? 0,
+            'sums_attempted' => $performance['done'] ?? 0,
+            'sums_total' => $performance['total'] ?? 0,
+            'sums_correct' => $performance['correct'] ?? 0,
+            'days_logged' => (int) ($engagement['days_logged_in'] ?? 0),
+            'time_spent_label' => $engagement['time_spent_label'] ?? '0 sec',
+            'time_spent_hours' => $hours,
+        ];
     }
 
     /**

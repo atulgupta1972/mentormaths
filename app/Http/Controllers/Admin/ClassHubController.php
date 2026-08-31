@@ -231,7 +231,7 @@ class ClassHubController extends Controller
             }
 
             try {
-                $examPlanRows = $this->classHubProgress->attach($enrollments, $examPlanRows);
+                $examPlanRows = $this->classHubProgress->attachFast($enrollments, $examPlanRows);
             } catch (Throwable $e) {
                 Log::error('Admin class hub failed to attach student progress.', [
                     'grade_level_id' => $gradeLevel->id,
@@ -248,6 +248,8 @@ class ClassHubController extends Controller
                 'without_upcoming' => collect($examPlanRows)->where('has_upcoming', false)->count(),
             ];
         }
+
+        $enrollmentIds = collect($examPlanRows)->pluck('enrollment_id')->filter()->map(fn ($id) => (int) $id)->values()->all();
 
         return Inertia::render('Admin/Classes/Show', [
             'gradeLevel' => $gradeLevel->only([
@@ -282,6 +284,18 @@ class ClassHubController extends Controller
             'syllabusChapterOptions' => $syllabusChapterOptions,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
             'loadError' => $loadError,
+            'examPlanProgress' => Inertia::defer(function () use ($enrollmentIds) {
+                if ($enrollmentIds === []) {
+                    return [];
+                }
+
+                $enrollments = StudentEnrollment::query()
+                    ->with(['student:id,name', 'academicYear'])
+                    ->whereIn('id', $enrollmentIds)
+                    ->get();
+
+                return $this->classHubProgress->studyPlanMetricsByEnrollment($enrollments);
+            }),
         ]);
     }
 

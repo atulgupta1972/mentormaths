@@ -34,7 +34,9 @@ class AdminClassHubTest extends TestCase
                 ->where('gradeLevel.id', $grade->id)
                 ->has('examPlanRows', 1)
                 ->where('examPlanRows.0.student_name', 'Class Seven Student')
-                ->where('examPlanRows.0.progress.sets_done', fn ($value) => $value !== null));
+                ->where('examPlanRows.0.progress.sets_done', fn ($value) => $value !== null)
+                ->loadDeferredProps('default', fn ($deferred) => $deferred
+                    ->has('examPlanProgress')));
     }
 
     public function test_class_hub_still_lists_students_when_exam_rows_fail(): void

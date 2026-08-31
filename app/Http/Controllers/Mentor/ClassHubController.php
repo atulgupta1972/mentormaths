@@ -37,7 +37,14 @@ class ClassHubController extends Controller
 
         $examFilter = $request->string('exam_filter')->toString();
         $detail = $this->mentorClasses->classDetail($user, $gradeLevel, $examFilter);
+        $enrollmentIds = $detail['enrollment_ids'] ?? [];
+        unset($detail['enrollment_ids']);
 
-        return Inertia::render('Mentor/Classes/Show', $detail);
+        return Inertia::render('Mentor/Classes/Show', [
+            ...$detail,
+            'examPlanProgress' => Inertia::defer(
+                fn () => $this->mentorClasses->studyPlanMetricsForEnrollmentIds($enrollmentIds),
+            ),
+        ]);
     }
 }

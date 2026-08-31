@@ -120,7 +120,7 @@ class MentorClassHubService
             }
 
             try {
-                $examPlanRows = $this->progress->attach($enrollments, $examPlanRows);
+                $examPlanRows = $this->progress->attachFast($enrollments, $examPlanRows);
             } catch (Throwable $e) {
                 Log::error('Mentor class hub failed to attach student progress.', [
                     'grade_level_id' => $gradeLevel->id,
@@ -142,6 +142,25 @@ class MentorClassHubService
             'examFilter' => $examFilter,
             'activeYear' => $activeYear?->only(['id', 'name']),
             'students_count' => count($examPlanRows),
+            'enrollment_ids' => collect($examPlanRows)->pluck('enrollment_id')->filter()->map(fn ($id) => (int) $id)->values()->all(),
         ];
+    }
+
+    /**
+     * @param  list<int>  $enrollmentIds
+     * @return array<int, array<string, mixed>>
+     */
+    public function studyPlanMetricsForEnrollmentIds(array $enrollmentIds): array
+    {
+        if ($enrollmentIds === []) {
+            return [];
+        }
+
+        $enrollments = StudentEnrollment::query()
+            ->with(['student:id,name', 'academicYear'])
+            ->whereIn('id', $enrollmentIds)
+            ->get();
+
+        return $this->progress->studyPlanMetricsByEnrollment($enrollments);
     }
 }
