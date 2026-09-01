@@ -4,6 +4,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import TextbookChapterGeminiPanel from '@/Components/TextbookChapterGeminiPanel.vue';
 import { safeRoute } from '@/utils/routes';
 import { formatScoreLabel } from '@/utils/scores';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
@@ -21,6 +22,7 @@ const props = defineProps({
     routeNamespace: { type: String, default: 'admin' },
     uploaderMode: { type: Boolean, default: false },
     contentUploadTask: { type: Object, default: null },
+    stagingGemini: { type: Object, default: () => ({}) },
     textbooks: { type: Array, default: () => [] },
     syllabusChaptersForRelink: { type: Array, default: () => [] },
 });
@@ -101,6 +103,11 @@ const awaitingImport = computed(() => props.chapter.status === 'draft' && !hasIt
 const canEdit = computed(() => ['review', 'published', 'failed'].includes(props.chapter.status) || hasItems.value);
 const showImportSteps = computed(() => awaitingImport.value || (canEdit.value && !hasItems.value));
 const approvedCount = computed(() => items.value.filter((item) => item.approved !== false).length);
+const fillBlankItemCount = computed(() => items.value.filter((item) => item.question_type === 'fill_blank').length);
+const mcqItemCount = computed(() => items.value.filter((item) => item.question_type === 'mcq' || !item.question_type).length);
+const showLegacyFillBlankStep = computed(() => fillBlankItemCount.value === 0 && hasItems.value);
+const optionLetter = (index) => String.fromCharCode(65 + index);
+const isFillBlankItem = (item) => item.question_type === 'fill_blank';
 const diagramLinkedCount = computed(() => items.value.filter((item) => item.diagram_staging_path || item.diagram_preview_url).length);
 const replacingDiagramIndex = ref(null);
 
@@ -722,14 +729,17 @@ const canChangeBook = computed(() =>
                 </div>
 
                 <div v-if="hasItems && canEdit && !hideUploaderEditPanels" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                    <strong>Review {{ items.length }} MCQ(s)</strong> —
+                    <strong>Review {{ items.length }} question(s)</strong>
+                    —
+                    <span v-if="fillBlankItemCount || mcqItemCount">
+                        {{ fillBlankItemCount }} fill-in-blank · {{ mcqItemCount }} MCQ (8 options).
+                    </span>
                     <span v-if="uploaderMode">
-                        bifurcate into sets below, tick <strong>Approved</strong> on each question you checked, then publish sets and return to your task to mark upload complete.
+                        Tick <strong>Include</strong>, upload missing figures, run <strong>Gemini check</strong>, then publish sets.
                     </span>
                     <span v-else>
-                        use the set plan matrix below.
-                        Small chapter (~25)? Keep <strong>one row</strong> covering Q1–{{ items.length }}.
-                        Large chapter? Add rows and set q_from / q_to per class (e.g. AP, GP).
+                        Uploader runs Gemini check; you publish when content looks good.
+                        Use the set plan matrix below — one row for small chapters, split for large ones.
                     </span>
                     <SecondaryButton type="button" class="ml-3 !py-1 !text-xs" @click="resetImport">
                         Clear &amp; re-import
@@ -843,10 +853,11 @@ const canChangeBook = computed(() =>
                             <tr>
                                 <th class="px-3 py-2 text-left">#</th>
                                 <th class="px-3 py-2 text-left">Use</th>
+                                <th class="px-3 py-2 text-left">Type</th>
                                 <th class="px-3 py-2 text-left">Label</th>
                                 <th class="px-3 py-2 text-left">Chart</th>
                                 <th class="px-3 py-2 text-left">Question</th>
-                                <th class="px-3 py-2 text-left">Answer / explanation</th>
+                                <th class="px-3 py-2 text-left">Answer / options</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
@@ -858,6 +869,15 @@ const canChangeBook = computed(() =>
                                         Include
                                     </label>
                                     <p v-if="item.difficulty" class="mt-1 text-[10px] uppercase text-gray-400">{{ item.difficulty }}</p>
+                                    <p v-if="item.gemini_verified" class="mt-1 text-[10px] font-semibold text-emerald-700">✓ Gemini</p>
+                                </td>
+                                <td class="px-3 py-3 align-top">
+                                    <span
+                                        class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                                        :class="isFillBlankItem(item) ? 'bg-violet-100 text-violet-900' : 'bg-indigo-100 text-indigo-900'"
+                                    >
+                                        {{ isFillBlankItem(item) ? 'Fill blank' : 'MCQ ×8' }}
+                                    </span>
                                 </td>
                                 <td class="px-3 py-3 align-top font-medium text-gray-800">{{ item.label }}</td>
                                 <td class="px-3 py-3 align-top">
@@ -901,8 +921,42 @@ const canChangeBook = computed(() =>
                                     <textarea v-model="item.question_text" rows="3" class="w-full min-w-[16rem] rounded-md border-gray-300 text-sm" />
                                 </td>
                                 <td class="px-3 py-3 align-top">
-                                    <input v-model="item.correct_answer" type="text" class="mb-2 w-full rounded-md border-gray-300 text-sm">
-                                    <textarea v-model="item.explanation" rows="2" class="w-full rounded-md border-gray-300 text-xs" />
+                                    <template v-if="isFillBlankItem(item)">
+                                        <p class="mb-1 text-xs text-violet-900">
+                                            Answer: <strong>{{ item.fill_blank_correct_answer || item.correct_answer }}</strong>
+                                            <span v-if="item.fill_blank_answer_format" class="text-gray-500">({{ item.fill_blank_answer_format }})</span>
+                                        </p>
+                                        <textarea
+                                            v-model="item.fill_blank_question_text"
+                                            rows="2"
+                                            class="w-full min-w-[12rem] rounded-md border-violet-200 text-xs"
+                                            placeholder="Fill-blank stem with ____"
+                                        />
+                                    </template>
+                                    <template v-else>
+                                        <div class="grid grid-cols-2 gap-x-2 gap-y-1 min-w-[14rem]">
+                                            <label
+                                                v-for="(opt, optIndex) in (item.mcq_options || []).slice(0, 8)"
+                                                :key="optIndex"
+                                                class="flex items-start gap-1 text-[11px] leading-tight"
+                                            >
+                                                <input
+                                                    v-model="opt.is_correct"
+                                                    type="radio"
+                                                    :name="`correct-${index}`"
+                                                    class="mt-0.5 shrink-0"
+                                                    @change="(item.mcq_options || []).forEach((o, i) => { if (i !== optIndex) o.is_correct = false; })"
+                                                >
+                                                <span class="font-mono text-gray-500">{{ optionLetter(optIndex) }}.</span>
+                                                <input
+                                                    v-model="opt.text"
+                                                    type="text"
+                                                    class="min-w-0 flex-1 rounded border-gray-200 px-1 py-0.5 text-[11px]"
+                                                >
+                                            </label>
+                                        </div>
+                                    </template>
+                                    <textarea v-model="item.explanation" rows="2" class="mt-2 w-full rounded-md border-gray-300 text-xs" placeholder="Explanation" />
                                 </td>
                             </tr>
                         </tbody>
@@ -910,6 +964,13 @@ const canChangeBook = computed(() =>
                     <InputError :message="draftForm.errors.items" class="px-4 py-2" />
                     <InputError :message="publishForm.errors.items" class="px-4 py-2" />
                 </div>
+
+                <TextbookChapterGeminiPanel
+                    v-if="canEdit && hasItems && !hideUploaderEditPanels"
+                    :staging-gemini="stagingGemini"
+                    :paste-route="chapterRoute('staging-gemini-paste')"
+                    :reset-route="chapterRoute('reset-staging-gemini')"
+                />
 
                 <div
                     v-if="!uploaderMode && chapter.status === 'published' && publishedSets.length"
@@ -1094,7 +1155,7 @@ const canChangeBook = computed(() =>
                     <strong>{{ publishedMcqSetCodes.join(', ') }}</strong>.
                 </div>
 
-                <div id="convert" v-if="hasItems && fillBlankConversion && !hideUploaderEditPanels" class="space-y-4 rounded-lg border-2 border-violet-300 bg-violet-50 p-6 shadow-sm">
+                <div id="convert" v-if="hasItems && fillBlankConversion && !hideUploaderEditPanels && showLegacyFillBlankStep" class="space-y-4 rounded-lg border-2 border-violet-300 bg-violet-50 p-6 shadow-sm">
                     <div>
                         <h3 class="font-semibold text-violet-950">Step 4 — Fill in blank &amp; written (from MCQs)</h3>
                         <p class="mt-1 text-sm text-violet-900">
@@ -1171,20 +1232,20 @@ const canChangeBook = computed(() =>
                 </div>
 
                 <div v-if="!hasItems" class="rounded-lg border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-950">
-                    <h3 class="font-semibold">Textbook MCQ workflow</h3>
+                    <h3 class="font-semibold">Mixed practice set workflow</h3>
                     <ol class="mt-2 list-decimal space-y-1 pl-5">
-                        <li>PDF is stored on the server (download link above — or upload the same PDF to Claude/Gemini).</li>
-                        <li>Copy the AI prompt → paste in Cursor, Claude, or Gemini with the chapter PDF. The prompt requires <strong>100% coverage</strong> — every example and every exercise item as an MCQ.</li>
-                        <li>Import MCQs — paste JSON <strong>or upload a .zip pack</strong> with <strong>questions.json</strong> + chart images.</li>
-                        <li>Edit the <strong>set plan matrix</strong> on the review page (one set for small chapters, split for large ones) → <strong>Publish</strong>.</li>
+                        <li>Upload the chapter PDF (stored on server — download link above).</li>
+                        <li>Copy the AI prompt → paste in Cursor, Claude, or Gemini with the PDF. Covers every example and exercise as fill-blank (numeric) or MCQ (8 options).</li>
+                        <li>Import — paste JSON or upload a .zip pack with questions.json + chart images.</li>
+                        <li>Review questions, upload figures, run <strong>Gemini check</strong>, then publish one mixed set.</li>
                     </ol>
                 </div>
 
                 <div v-if="showImportSteps" class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                            <h3 class="font-semibold text-gray-900">Step 2 — AI prompt</h3>
-                            <p class="mt-1 text-sm text-gray-600">Copy this into Claude/Cursor/Gemini along with the chapter PDF. It tells the AI to cover every example and exercise — do not accept a partial extract.</p>
+                            <h3 class="font-semibold text-gray-900">Step 2 — AI prompt (mixed fill-blank + MCQ)</h3>
+                            <p class="mt-1 text-sm text-gray-600">Copy into Claude/Cursor/Gemini with the chapter PDF. Numeric answers become fill-in-blank; others stay MCQ with 8 options.</p>
                         </div>
                         <SecondaryButton type="button" @click="copyPrompt">
                             {{ copied ? 'Copied!' : 'Copy prompt' }}
@@ -1235,7 +1296,7 @@ const canChangeBook = computed(() =>
 
                 <div v-if="showImportSteps" class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
                     <div>
-                        <h3 class="font-semibold text-gray-900">Step 3b — Or paste MCQ JSON</h3>
+                        <h3 class="font-semibold text-gray-900">Step 3b — Or paste JSON</h3>
                         <p class="mt-1 text-sm text-gray-600">
                             Paste AI output here (JSON with <strong>questions</strong> only). Text-only charts/tables — no images.
                             After import, split into sets using the matrix on this page.

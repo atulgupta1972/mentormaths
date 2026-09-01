@@ -30,12 +30,22 @@ class TextbookChapterMcqPromptService
         $sample = [
             'questions' => [
                 [
-                    'topic' => 'Explicit rule',
-                    'question' => 'Find the 5th term of the sequence tₙ = 3n − 4 (n ≥ 1).',
-                    'options' => ['8', '11', '14', '17'],
-                    'correct_index' => 1,
-                    'hint' => 'Substitute n = 5 into the explicit formula.',
-                    'explanation' => 't5 = 3(5) − 4 = 11. Answer: B',
+                    'topic' => 'Addition',
+                    'question' => 'Find the sum of 47 and 38.',
+                    'options' => ['75', '80', '85', '90', '95', '100', '105', '85'],
+                    'correct_index' => 2,
+                    'hint' => 'Add the ones, then the tens.',
+                    'explanation' => '47 + 38 = 85. Answer: C',
+                    'difficulty' => 'Easy',
+                    'needs_diagram' => false,
+                ],
+                [
+                    'topic' => 'Fractions',
+                    'question' => 'What is 2/3 of 15?',
+                    'options' => ['8', '9', '10', '11', '12', '13', '14', '15'],
+                    'correct_index' => 2,
+                    'hint' => 'Multiply 15 by 2/3.',
+                    'explanation' => '15 × 2/3 = 10. Answer: C',
                     'difficulty' => 'Easy',
                     'needs_diagram' => false,
                 ],
@@ -45,77 +55,58 @@ class TextbookChapterMcqPromptService
                     'needs_diagram' => true,
                     'diagram_file' => 'chart1.png',
                     'chart' => 'THIS QUESTION REQUIRES A FIGURE UPLOAD — bar graph of books sold by month.',
-                    'options' => ['January', 'February', 'March', 'April'],
+                    'options' => ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August'],
                     'correct_index' => 1,
                     'hint' => 'Compare the heights of the bars.',
                     'explanation' => 'February has the tallest bar. Answer: B',
                     'difficulty' => 'Easy',
-                ],
-                [
-                    'topic' => 'Reading a table',
-                    'question' => 'The table shows the number of books read by four students in March. Who read the most books?',
-                    'table' => [
-                        'headers' => ['Student', 'Books read'],
-                        'rows' => [
-                            ['Anya', '5'],
-                            ['Bhuvan', '8'],
-                            ['Chitra', '6'],
-                            ['Dev', '4'],
-                        ],
-                    ],
-                    'options' => ['Anya', 'Bhuvan', 'Chitra', 'Dev'],
-                    'correct_index' => 1,
-                    'hint' => 'Compare the values in the second column.',
-                    'explanation' => 'Bhuvan read 8 books, which is the greatest. Answer: B',
-                    'difficulty' => 'Easy',
-                    'needs_diagram' => false,
                 ],
             ],
         ];
 
         $sampleJson = json_encode($sample, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         $varyRule = McqGenerationPrompt::VARY_CORRECT_OPTION_RULE;
+        $eightOptionRule = McqGenerationPrompt::EIGHT_OPTION_RULE;
 
         $prompt = <<<PROMPT
-GOAL: 100% content coverage. Convert this entire textbook chapter PDF into MCQs. Do not stop early. Do not summarise. Do not sample.
+GOAL: 100% content coverage. Convert this entire textbook chapter PDF into a mixed practice set. Do not stop early. Do not summarise. Do not sample.
 
-Every solvable maths item in the PDF must become one MCQ — including worked examples. Missing even one example or exercise is a failed extraction. If you are unsure whether an item is a question, include it.
+Every solvable maths item in the PDF must become one question — including worked examples. Missing even one example or exercise is a failed extraction.
 
 Context:
 - Class: {$grade}{$ageLine}
 - Book: {$book} (code {$bookCode})
 - Chapter {$chapterNum}: {$title}
 
+MIXED SET RULES (important):
+- If the correct answer is a **whole number**, **decimal** (e.g. 3.14, 2.50), or **simple fraction** (e.g. 2/3, -5/8), the system will auto-convert it to **fill in the blank** after import.
+- All other answers (names, words, True/False, mixed fractions like 2 1/3, expressions) stay as **MCQ with exactly 8 options** (A–H).
+- Still provide 8 options in JSON for every question — fill-blank items use them only for validation; numeric answers become fill-blank automatically.
+
 MUST INCLUDE (do not skip any of these):
-- Worked examples ("Example 1", "Example 2", "Solved example", "Let us see", "Illustration", …) — turn the example into an MCQ that asks the same calculation/result
-- Try these / Let's do / Do this / Check your progress / Now try / Practice items in the chapter body
-- Inline "Exercise:" prompts and unnumbered questions mixed into the text
-- Every numbered question in Exercise sets, Try these, and End-of-chapter exercises (1, 2, 3… and 1(a), 1(b), 1(c) — each part is its own MCQ)
-- Starred (*) / challenge / higher-order questions — mark difficulty "Hard"
-- Questions that use a figure, graph, table, or diagram — still include them (flag needs_diagram)
+- Worked examples — turn each into a solvable question with the same calculation/result
+- Try these / Let's do / Do this / Check your progress / Practice items
+- Every numbered question and sub-part (1(a), 1(b), … — each part is its own question)
+- Starred (*) / challenge questions — mark difficulty "Hard"
+- Questions with figures, graphs, tables — still include them (flag needs_diagram)
 
 EXCLUDE only:
-- "Think and Reflect" / open discussion with no single maths answer
-- Theory-only paragraphs with no student calculation or answer
-- Graph-paper / blank practice pages with no printed question
-
-COVERAGE CHECK before you finish:
-- Walk the PDF page by page. Count examples + exercise items (including sub-parts).
-- Your JSON question count must match that total. If it does not, go back and add the missing ones.
-- Never write "and so on", "similarly for the rest", or skip "easy" examples because an exercise looks the same.
+- "Think and Reflect" with no single maths answer
+- Theory-only paragraphs with no student calculation
+- Blank graph-paper pages with no printed question
 
 Return ONLY valid JSON (no markdown fences) in this exact shape:
 
 {
   "questions": [
     {
-      "topic": "Short topic label (e.g. Explicit rule, AP, End-of-chapter)",
+      "topic": "Short topic label",
       "question": "Student-facing question text",
       "needs_diagram": true,
       "diagram_file": "chart1.png",
       "chart": "optional — full chart/graph description when the PDF uses a figure",
       "table": "optional — markdown table string OR {\"headers\": [...], \"rows\": [[...]]}",
-      "options": ["A text", "B text", "C text", "D text"],
+      "options": ["A", "B", "C", "D", "E", "F", "G", "H"],
       "correct_index": 2,
       "hint": "One-line method hint",
       "explanation": "Brief working + Answer: C",
@@ -126,11 +117,11 @@ Return ONLY valid JSON (no markdown fences) in this exact shape:
 
 Rules:
 - Return questions only — do NOT include set_plan or grouping metadata
-- correct_index is 0-based (0 = A, 1 = B, 2 = C, 3 = D)
+- correct_index is 0-based (0 = A, 1 = B, … 7 = H)
 {$varyRule}
-- Exactly 4 options per question when possible
+{$eightOptionRule}
 - Do not skip examples, try-these, or numbered exercises — extract ALL solvable items for 100% coverage
-- One PDF item = one MCQ. Split multi-part questions (a)(b)(c) into separate MCQs
+- One PDF item = one question. Split multi-part questions (a)(b)(c) into separate questions
 - Fix broken subscripts (t_n, u_n) in question text
 
 FIGURE / DIAGRAM FLAG (important for uploaders):
@@ -143,23 +134,15 @@ FIGURE / DIAGRAM FLAG (important for uploaders):
 - Uploaders use `needs_diagram: true` to know they must upload the correct figure while reviewing.
 
 Charts and tables:
-- For **zip import with images** (recommended for bar graphs, dot plots, geometry): put PNG/JPG files in the zip and set `"diagram_file": "chart1.png"` (or `"chart_file"`) plus `"needs_diagram": true` on each question that needs the image. Optional `"chart"` / `"table"` text is still merged into the question as backup.
-- For **paste JSON only** (no images yet): still set `"needs_diagram": true` and the REQUIRED FIGURE UPLOAD sentence in `"chart"` so the uploader knows to add the figure during review. Also flatten ALL readable data into `"chart"` and/or `"table"` as backup. Example:
-  "THIS QUESTION REQUIRES A FIGURE UPLOAD — Bar chart 'Books sold' (y-axis: number of books, 1 unit = 10 books). Jan: 30, Feb: 50, Mar: 40."
-  Do NOT put a grid inside "chart" — use sentences or comma-separated label: value pairs.
-  Include title, axis labels, scale/units, and every category value. Never say "see graph above".
-- Tables: use structured {"headers": [...], "rows": [[...]]} or a simple markdown table string in "table".
-  Include every column header and row with exact numbers. Never say "see the table above".
+- For **zip import with images** (recommended): put PNG/JPG files in the zip and set `"diagram_file"` plus `"needs_diagram": true`.
+- For **paste JSON only**: still set `"needs_diagram": true` and the REQUIRED FIGURE UPLOAD sentence in `"chart"`.
+- Tables: use structured {"headers": [...], "rows": [[...]]} or markdown table string.
 - Each question must be fully solvable from JSON alone when no diagram_file is used (or after the figure is uploaded).
-- Double-check table/chart numbers against the PDF; do not round or omit rows.
 
-Zip pack format (charts / pictures):
-- Zip contains `questions.json` plus image files (`chart1.png`, `q3.jpg`, …).
-- In JSON, set `"needs_diagram": true` and `"diagram_file": "chart1.png"` on questions that need that figure.
-- Multiple questions may share one image file. Filename matching is case-insensitive.
-- Upload the zip on the textbook chapter page (Step 3 — Import zip pack).
+Zip pack format:
+- Zip contains `questions.json` plus image files. Upload on Step 3.
 
-After import, the uploader reviews each question and can upload/replace missing figures.
+After import, the uploader reviews each question, uploads missing figures, and runs Gemini answer + figure check before admin publishes.
 
 Sample:
 {$sampleJson}

@@ -17,6 +17,7 @@ class TextbookChapterMcqImportService
         private McqImportService $mcqImport,
         private TextbookMcqSetPlanService $setPlanService,
         private QuestionZipImportService $zipImport,
+        private TextbookChapterAnswerClassificationService $classification,
     ) {}
 
     /**
@@ -491,7 +492,7 @@ class TextbookChapterMcqImportService
         $resolvedDiagramFile = $diagramFile ?? trim((string) ($row['diagram_file'] ?? $row['chart_file'] ?? ''));
         $hasDiagram = $diagramStagingPath !== null;
 
-        return [
+        $item = [
             'id' => 'mcq-'.($index + 1),
             'kind' => 'textbook_mcq',
             'label' => $label,
@@ -511,6 +512,8 @@ class TextbookChapterMcqImportService
             'approved' => true,
             'mcq_options' => $mcqOptions,
         ];
+
+        return $this->classification->applyMixedClassification($item);
     }
 
     /**

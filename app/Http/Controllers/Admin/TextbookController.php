@@ -20,6 +20,7 @@ use App\Services\TextbookChapterFillBlankImportService;
 use App\Services\TextbookChapterMcqImportService;
 use App\Services\TextbookChapterMcqPromptService;
 use App\Services\TextbookChapterPublishService;
+use App\Services\TextbookChapterStagingGeminiService;
 use App\Services\TextbookMcqSetPlanService;
 use App\Services\TextbookSetCodeService;
 use App\Support\UploadedFileDiagnostics;
@@ -44,6 +45,7 @@ class TextbookController extends Controller
         private SetAssignmentService $assignmentService,
         private TextbookChapterBookService $bookService,
         private GeminiFillBlankConversionService $geminiFillBlank,
+        private TextbookChapterStagingGeminiService $stagingGemini,
     ) {}
 
     public function index(Request $request): Response
@@ -294,6 +296,17 @@ class TextbookController extends Controller
         }
 
         $fillBlankReadyCount = $this->fillBlankImportService->fillBlankReadyCount($items);
+        $fillBlankCount = collect($items)->where('question_type', 'fill_blank')->count();
+        $mcqCount = collect($items)->where('question_type', 'mcq')->count();
+        $geminiVerifiedCount = collect($items)->where('gemini_verified', true)->count();
+        $geminiPendingCount = collect($items)
+            ->filter(fn (array $item) => ($item['approved'] ?? true)
+                && trim((string) ($item['question_text'] ?? '')) !== ''
+                && empty($item['gemini_verified']))
+            ->count();
+        $stagingGeminiPrompt = $itemCount > 0
+            ? $this->stagingGemini->buildPrompt($items, $this->stagingGemini->chapterLabel($textbookChapter))
+            : '';
         $storedPlan = is_array($textbookChapter->mcq_set_plan) ? $textbookChapter->mcq_set_plan : null;
         $mcqSetPlan = $storedPlan
             ?? ($itemCount > 0 ? $this->setPlanService->defaultPlan($textbookChapter, $itemCount) : []);
@@ -411,9 +424,19 @@ class TextbookController extends Controller
                 'fill_blank_set_code' => $textbookChapter->fillBlankWorksheet?->set_code
                     ?? ($fillBlankConversion['fill_blank_set_code'] ?? null),
                 'fill_blank_ready_count' => $fillBlankReadyCount,
+                'fill_blank_count' => $fillBlankCount,
+                'mcq_count' => $mcqCount,
+                'gemini_verified_count' => $geminiVerifiedCount,
+                'gemini_pending_count' => $geminiPendingCount,
             ],
             'mcqImport' => $aiPrompt,
             'fillBlankConversion' => $fillBlankConversion,
+            'stagingGemini' => [
+                'prompt' => $stagingGeminiPrompt,
+                'verified_count' => $geminiVerifiedCount,
+                'pending_count' => $geminiPendingCount,
+                'total_count' => $itemCount,
+            ],
             'publishedSets' => $publishedSets,
             'students' => $uploaderMode
                 ? []
@@ -536,7 +559,32 @@ class TextbookController extends Controller
         $count = count($chapter->extraction_items ?? []);
 
         return $this->redirectToChapterShow($chapter)
-            ->with('success', "{$count} MCQ(s) imported. Edit the set plan matrix below — small chapters: keep one row for all questions.");
+            ->with('success', "{$count} question(s) imported (fill-blank + MCQ mix). Review figures, run Gemini check, then publish.");
+    }
+
+    public function stagingGeminiPaste(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'gemini_paste' => ['required', 'string'],
+        ]);
+
+        try {
+            $result = $this->stagingGemini->applyPaste($textbookChapter, $validated['gemini_paste']);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return $this->redirectToChapterShow($textbookChapter->fresh())
+            ->with('staging_gemini_review', $result)
+            ->with('success', "Gemini review applied: {$result['approved']} verified, {$result['needs_attention']} need attention.");
+    }
+
+    public function resetStagingGeminiReview(TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $this->stagingGemini->resetGeminiReview($textbookChapter);
+
+        return $this->redirectToChapterShow($textbookChapter->fresh())
+            ->with('success', 'Gemini review reset — you can check all questions again.');
     }
 
     public function importMcqZip(Request $request, TextbookChapter $textbookChapter): RedirectResponse

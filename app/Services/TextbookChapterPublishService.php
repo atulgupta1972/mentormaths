@@ -86,11 +86,18 @@ class TextbookChapterPublishService
 
                 $approvedItems[] = $item;
 
-                if (($item['include_in_written'] ?? true) && ! filled($item['fill_blank_question_text'] ?? null)) {
+                if (($item['include_in_written'] ?? true) && ! $this->itemIsFillBlankReady($item)) {
                     $writtenQuestions[] = $this->createWrittenQuestion($topic, $item, $publisher->id, $position);
                 }
 
-                if ($item['include_in_mcq'] ?? true) {
+                if ($this->itemIsFillBlankReady($item)) {
+                    $mcqQuestionsByPosition[$position] = $this->createFillBlankQuestion(
+                        $topic,
+                        $item,
+                        $this->fillBlankFields($item),
+                        $publisher->id,
+                    );
+                } elseif ($item['include_in_mcq'] ?? true) {
                     $mcqQuestionsByPosition[$position] = $this->createMcqQuestion($topic, $item, $publisher->id, $position);
                 }
             }
@@ -714,7 +721,7 @@ class TextbookChapterPublishService
             'created_by' => $userId,
         ]);
 
-        $options = collect($item['mcq_options'] ?? [])->take(4)->values();
+        $options = collect($item['mcq_options'] ?? [])->take(8)->values();
         if ($options->isEmpty()) {
             $options = $this->fallbackMcqOptions($item);
         }

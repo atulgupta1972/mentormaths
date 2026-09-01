@@ -388,6 +388,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/upload-pdf', [TextbookController::class, 'uploadPdf'])->name('textbooks.upload-pdf');
     Route::post('/textbooks/chapters/{textbookChapter}/change-book', [TextbookController::class, 'changeBook'])->name('textbooks.change-book');
     Route::post('/textbooks/chapters/{textbookChapter}/change-syllabus', [TextbookController::class, 'changeSyllabusChapter'])->name('textbooks.change-syllabus');
+    Route::post('/textbooks/chapters/{textbookChapter}/staging-gemini-paste', [TextbookController::class, 'stagingGeminiPaste'])->name('textbooks.staging-gemini-paste');
+    Route::post('/textbooks/chapters/{textbookChapter}/reset-staging-gemini', [TextbookController::class, 'resetStagingGeminiReview'])->name('textbooks.reset-staging-gemini');
 
     Route::get('/formula-bank', [FormulaBankController::class, 'index'])->name('formula-bank.index');
     Route::get('/basics-drill', [BasicsDrillSettingsController::class, 'index'])->name('basics-drill.index');
@@ -566,6 +568,8 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
         Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');
         Route::post('/textbooks/chapters/{textbookChapter}/upload-pdf', [TextbookController::class, 'uploadPdf'])->name('textbooks.upload-pdf');
         Route::post('/textbooks/chapters/{textbookChapter}/change-book', [TextbookController::class, 'changeBook'])->name('textbooks.change-book');
+        Route::post('/textbooks/chapters/{textbookChapter}/staging-gemini-paste', [TextbookController::class, 'stagingGeminiPaste'])->name('textbooks.staging-gemini-paste');
+        Route::post('/textbooks/chapters/{textbookChapter}/reset-staging-gemini', [TextbookController::class, 'resetStagingGeminiReview'])->name('textbooks.reset-staging-gemini');
     });
 });
 
