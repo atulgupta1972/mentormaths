@@ -29,8 +29,10 @@ class RevisionAssignmentService
             return null;
         }
 
-        // Rebuild from attempts so older completions (pre-pool) unlock correctly.
-        $this->poolScore->rebuildFromAttempts($assignment);
+        if ($assignment->pool_metrics_updated_at === null) {
+            $this->poolScore->ensureScored($assignment);
+            $assignment->refresh();
+        }
 
         if (! $this->poolScore->isFullyCorrected($assignment)) {
             return null;
@@ -46,7 +48,10 @@ class RevisionAssignmentService
     {
         $root = $this->rootOriginal($fromAssignment);
 
-        $this->poolScore->rebuildFromAttempts($root);
+        if ($root->pool_metrics_updated_at === null) {
+            $this->poolScore->ensureScored($root);
+            $root->refresh();
+        }
 
         if (! $this->poolScore->isFullyCorrected($root)) {
             throw new \InvalidArgumentException('Finish and correct the original sheet before starting revision.');

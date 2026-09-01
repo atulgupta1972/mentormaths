@@ -22,6 +22,7 @@ class StudentChapterSummaryService
 {
     public function __construct(
         private ExamPlanService $examPlanService,
+        private AssignmentPoolScore $poolScore,
     ) {}
 
     /**
@@ -151,6 +152,8 @@ class StudentChapterSummaryService
             ->orderByDesc('id')
             ->get()
             ->groupBy('worksheet_id');
+
+        $this->poolScore->primeMetricsForAssignments($assignmentsByWorksheet->flatten(1));
 
         // Pending wrongs for badge/counts (also refined per-assignment via pool in buildSetItem).
         $correctionCountsByWorksheet = PracticeCorrectionItem::query()
