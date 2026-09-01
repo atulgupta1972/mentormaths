@@ -155,6 +155,7 @@ class ContentUploaderDashboardService
                 'id' => $chapter->id,
                 'chapter_number' => $chapter->displayChapterNumber(),
                 'title' => $chapter->displayTitle(),
+                'syllabus_label' => $chapter->displaySyllabusLabel(),
                 'chapter_head_name' => $chapter->displayChapterHeadName(),
                 'textbook_name' => $chapter->textbook?->name,
                 'textbook_code' => $chapter->textbook?->code,

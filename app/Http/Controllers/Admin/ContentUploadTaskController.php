@@ -28,6 +28,7 @@ use App\Services\FillBlankConversionService;
 use App\Services\QuestionResolutionService;
 use App\Services\TextbookMcqSetPlanService;
 use App\Services\TextbookChapterBookService;
+use App\Services\TextbookChapterMapService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -50,6 +51,7 @@ class ContentUploadTaskController extends Controller
         private ContentChapterQuestionService $chapterQuestions,
         private ContentUploaderChapterLibraryService $chapterLibrary,
         private TextbookChapterBookService $bookService,
+        private TextbookChapterMapService $chapterMapService,
         private FillBlankConversionService $fillBlankConversion,
     ) {}
 
@@ -277,6 +279,17 @@ class ContentUploadTaskController extends Controller
             ? $this->rateCardService->resolveClassDefaultRate($gradeLevel->id)
             : ['amount_inr' => 0, 'rate_basis' => ContentRateCard::BASIS_PER_QUESTION];
 
+        $bookChapterMapsByTextbook = [];
+        if ($gradeLevel && $textbooks !== []) {
+            foreach ($textbooks as $bookRow) {
+                $book = Textbook::query()->find($bookRow['id']);
+                if ($book) {
+                    $bookChapterMapsByTextbook[(int) $book->id] = $this->chapterMapService
+                        ->mapsForTextbookAdmin($book, $gradeLevel->id);
+                }
+            }
+        }
+
         return Inertia::render('Admin/ContentTasks/Create', [
             'uploaders' => $uploaders,
             'gradeLevel' => $gradeLevel?->only(['id', 'name']),
@@ -289,6 +302,7 @@ class ContentUploadTaskController extends Controller
             'selectedBoardId' => $selectedBoardId,
             'textbooks' => $textbooks,
             'syllabusChapters' => $syllabusChapters,
+            'bookChapterMapsByTextbook' => $bookChapterMapsByTextbook,
             'classDefaultRateInr' => $classDefault['amount_inr'],
             'classDefaultRateBasis' => $classDefault['rate_basis'],
         ]);
@@ -305,7 +319,12 @@ class ContentUploadTaskController extends Controller
             'textbook_id' => ['nullable', 'integer', Rule::exists('textbooks', 'id')],
             'book_name' => ['required_without:textbook_id', 'nullable', 'string', 'max:255'],
             'book_code' => ['required_without:textbook_id', 'nullable', 'string', 'max:32', 'alpha_dash'],
-            'syllabus_chapter_ids' => ['required', 'array', 'min:1'],
+            'chapter_maps' => ['nullable', 'array', 'min:1'],
+            'chapter_maps.*.book_chapter_number' => ['required_with:chapter_maps', 'string', 'max:32'],
+            'chapter_maps.*.book_chapter_title' => ['required_with:chapter_maps', 'string', 'max:255'],
+            'chapter_maps.*.syllabus_chapter_id' => ['required_with:chapter_maps', 'integer', 'exists:syllabus_chapters,id'],
+            'chapter_maps.*.assign' => ['nullable', 'boolean'],
+            'syllabus_chapter_ids' => ['required_without:chapter_maps', 'array', 'min:1'],
             'syllabus_chapter_ids.*' => ['integer', 'exists:syllabus_chapters,id'],
             'rate_basis' => ['required', Rule::in([
                 ContentRateCard::BASIS_PER_SET,
@@ -320,8 +339,24 @@ class ContentUploadTaskController extends Controller
             ? (int) $validated['board_id']
             : $this->gradeContext->resolveBoardId($request);
 
-        if (! $boardId) {
-            $firstChapterId = (int) ($validated['syllabus_chapter_ids'][0] ?? 0);
+        $usesChapterMaps = ! empty($validated['chapter_maps']);
+        $chapterMaps = collect($validated['chapter_maps'] ?? []);
+        $assignMaps = $usesChapterMaps
+            ? $chapterMaps->filter(fn (array $row) => (bool) ($row['assign'] ?? false))
+            : collect();
+
+        if ($usesChapterMaps && $assignMaps->isEmpty()) {
+            return back()
+                ->withInput()
+                ->withErrors(['chapter_maps' => 'Select at least one book chapter to assign to the uploader.']);
+        }
+
+        $syllabusIdsToAssign = $usesChapterMaps
+            ? $assignMaps->pluck('syllabus_chapter_id')->map(fn ($id) => (int) $id)->all()
+            : array_map('intval', $validated['syllabus_chapter_ids']);
+
+        if (! $boardId && $syllabusIdsToAssign !== []) {
+            $firstChapterId = (int) ($syllabusIdsToAssign[0] ?? 0);
             if ($firstChapterId > 0) {
                 $boardId = SyllabusChapter::query()
                     ->with('syllabusVersion:id,board_id')
@@ -348,7 +383,9 @@ class ContentUploadTaskController extends Controller
             : [];
 
         $unknownChapters = array_diff(
-            array_map('intval', $validated['syllabus_chapter_ids']),
+            $usesChapterMaps
+                ? $chapterMaps->pluck('syllabus_chapter_id')->map(fn ($id) => (int) $id)->all()
+                : $syllabusIdsToAssign,
             $allowedChapterIds,
         );
 
@@ -356,7 +393,7 @@ class ContentUploadTaskController extends Controller
             return back()
                 ->withInput()
                 ->withErrors([
-                    'syllabus_chapter_ids' => 'Select syllabus chapters from the chosen board.',
+                    $usesChapterMaps ? 'chapter_maps' : 'syllabus_chapter_ids' => 'Map book chapters to syllabus chapters from the chosen board.',
                 ]);
         }
 
@@ -386,7 +423,7 @@ class ContentUploadTaskController extends Controller
         if ($amountOverride === null || $amountOverride <= 0) {
             $missingRate = false;
 
-            foreach ($validated['syllabus_chapter_ids'] as $syllabusChapterId) {
+            foreach ($syllabusIdsToAssign as $syllabusChapterId) {
                 $syllabusChapter = SyllabusChapter::query()->find($syllabusChapterId);
                 if (! $syllabusChapter) {
                     continue;
@@ -438,39 +475,97 @@ class ContentUploadTaskController extends Controller
                 ? (int) $validated['offered_amount_inr']
                 : null;
 
-            $blocked = [];
-            foreach ($validated['syllabus_chapter_ids'] as $syllabusChapterId) {
-                $existing = TextbookChapter::query()
-                    ->where('textbook_id', $textbook->id)
-                    ->where('syllabus_chapter_id', $syllabusChapterId)
-                    ->first();
+            if ($usesChapterMaps) {
+                $maps = $this->chapterMapService->syncMaps(
+                    $textbook,
+                    $chapterMaps->values()->all(),
+                    $request->user()->id,
+                );
 
-                if (! $existing) {
-                    continue;
+                $assignSyllabusIds = $assignMaps
+                    ->pluck('syllabus_chapter_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+
+                $mapIdsToAssign = $maps
+                    ->filter(fn ($map) => in_array((int) $map->syllabus_chapter_id, $assignSyllabusIds, true))
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+
+                $blocked = [];
+                foreach ($mapIdsToAssign as $mapId) {
+                    $map = $maps->firstWhere('id', $mapId);
+                    if (! $map) {
+                        continue;
+                    }
+
+                    $existing = TextbookChapter::query()
+                        ->where('textbook_id', $textbook->id)
+                        ->where('syllabus_chapter_id', $map->syllabus_chapter_id)
+                        ->first();
+
+                    if (! $existing) {
+                        continue;
+                    }
+
+                    $guard = app(ContentDuplicateGuardService::class)->check($existing);
+                    if ($guard['blocked']) {
+                        $blocked[] = $map->bookLabel();
+                    }
                 }
 
-                $guard = app(ContentDuplicateGuardService::class)->check($existing);
-                if ($guard['blocked']) {
-                    $blocked[] = $existing->title ?: ('chapter #'.$syllabusChapterId);
+                if ($blocked !== []) {
+                    return back()
+                        ->withInput()
+                        ->with('error', 'Already uploaded / assigned — cannot re-select: '.implode(', ', $blocked));
                 }
-            }
 
-            if ($blocked !== []) {
-                return back()
-                    ->withInput()
-                    ->with('error', 'Already uploaded / assigned — cannot re-select: '.implode(', ', $blocked));
-            }
+                $result = $this->taskService->assignFromChapterMaps(
+                    $textbook,
+                    $mapIdsToAssign,
+                    $uploader,
+                    $request->user(),
+                    $amount,
+                    $amount !== null ? $rateBasis : null,
+                    $validated['duplicate_override_reason'] ?? null,
+                    $validated['admin_notes'] ?? null,
+                );
+            } else {
+                $blocked = [];
+                foreach ($validated['syllabus_chapter_ids'] as $syllabusChapterId) {
+                    $existing = TextbookChapter::query()
+                        ->where('textbook_id', $textbook->id)
+                        ->where('syllabus_chapter_id', $syllabusChapterId)
+                        ->first();
 
-            $result = $this->taskService->assignSyllabusChapters(
-                $textbook,
-                $validated['syllabus_chapter_ids'],
-                $uploader,
-                $request->user(),
-                $amount,
-                $amount !== null ? $rateBasis : null,
-                $validated['duplicate_override_reason'] ?? null,
-                $validated['admin_notes'] ?? null,
-            );
+                    if (! $existing) {
+                        continue;
+                    }
+
+                    $guard = app(ContentDuplicateGuardService::class)->check($existing);
+                    if ($guard['blocked']) {
+                        $blocked[] = $existing->title ?: ('chapter #'.$syllabusChapterId);
+                    }
+                }
+
+                if ($blocked !== []) {
+                    return back()
+                        ->withInput()
+                        ->with('error', 'Already uploaded / assigned — cannot re-select: '.implode(', ', $blocked));
+                }
+
+                $result = $this->taskService->assignSyllabusChapters(
+                    $textbook,
+                    $validated['syllabus_chapter_ids'],
+                    $uploader,
+                    $request->user(),
+                    $amount,
+                    $amount !== null ? $rateBasis : null,
+                    $validated['duplicate_override_reason'] ?? null,
+                    $validated['admin_notes'] ?? null,
+                );
+            }
         } catch (\InvalidArgumentException $e) {
             return back()
                 ->withInput()

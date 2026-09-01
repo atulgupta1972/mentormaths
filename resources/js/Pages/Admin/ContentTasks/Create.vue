@@ -16,6 +16,7 @@ const props = defineProps({
     selectedBoardId: { type: [Number, String, null], default: null },
     textbooks: { type: Array, default: () => [] },
     syllabusChapters: { type: Array, default: () => [] },
+    bookChapterMapsByTextbook: { type: Object, default: () => ({}) },
     classDefaultRateInr: { type: Number, default: 0 },
     classDefaultRateBasis: { type: String, default: 'per_question' },
 });
@@ -37,23 +38,57 @@ const form = useForm({
     textbook_id: '',
     book_name: 'Ganita Prakash Part I',
     book_code: 'GP',
-    syllabus_chapter_ids: [],
+    chapter_maps: [],
     rate_basis: props.classDefaultRateBasis || 'per_question',
     offered_amount_inr: '',
     duplicate_override_reason: '',
     admin_notes: '',
 });
 
+const blankMapRow = (overrides = {}) => ({
+    book_chapter_number: '',
+    book_chapter_title: '',
+    syllabus_chapter_id: '',
+    assign: false,
+    block_reason: '',
+    default_amount_inr: 0,
+    default_rate_basis: 'per_question',
+    ...overrides,
+});
+
+const loadChapterMapsForTextbook = (textbookId) => {
+    const saved = props.bookChapterMapsByTextbook?.[textbookId]
+        ?? props.bookChapterMapsByTextbook?.[String(textbookId)]
+        ?? [];
+
+    if (saved.length) {
+        form.chapter_maps = saved.map((row) => blankMapRow({
+            book_chapter_number: row.book_chapter_number,
+            book_chapter_title: row.book_chapter_title,
+            syllabus_chapter_id: row.syllabus_chapter_id,
+            assign: false,
+            block_reason: row.block_reason || '',
+            default_amount_inr: row.default_amount_inr,
+            default_rate_basis: row.default_rate_basis,
+        }));
+
+        return;
+    }
+
+    form.chapter_maps = [blankMapRow()];
+};
+
 watch(
     () => [props.selectedBoardId, props.textbooks],
     () => {
         form.board_id = props.selectedBoardId ?? '';
         const books = props.textbooks;
-        form.syllabus_chapter_ids = [];
 
         if (books.length === 0) {
             useNewBook.value = true;
             selectedTextbookId.value = '';
+            form.chapter_maps = [blankMapRow()];
+
             return;
         }
 
@@ -65,8 +100,76 @@ watch(
     },
 );
 
+watch(selectedTextbookId, () => {
+    if (useNewBook.value || !selectedTextbookId.value) {
+        return;
+    }
+
+    loadChapterMapsForTextbook(selectedTextbookId.value);
+}, { immediate: true });
+
+watch(useNewBook, (isNew) => {
+    if (isNew) {
+        form.chapter_maps = [blankMapRow()];
+
+        return;
+    }
+
+    if (selectedTextbookId.value) {
+        loadChapterMapsForTextbook(selectedTextbookId.value);
+    }
+});
+
 const isPerQuestion = computed(() => form.rate_basis === 'per_question');
 const minRateInr = computed(() => (isPerQuestion.value ? 1 : 100));
+
+const syllabusChapterById = computed(() => {
+    const map = {};
+    props.syllabusChapters.forEach((chapter) => {
+        map[chapter.id] = chapter;
+    });
+
+    return map;
+});
+
+const assignedMapRows = computed(() => form.chapter_maps.filter((row) => row.assign));
+
+const mapBlockReason = (row) => {
+    if (row.block_reason) {
+        return row.block_reason;
+    }
+
+    if (!row.syllabus_chapter_id) {
+        return '';
+    }
+
+    const syllabus = syllabusChapterById.value[row.syllabus_chapter_id];
+    if (!syllabus) {
+        return '';
+    }
+
+    return '';
+};
+
+const addMapRow = () => {
+    form.chapter_maps = [...form.chapter_maps, blankMapRow()];
+};
+
+const removeMapRow = (index) => {
+    form.chapter_maps = form.chapter_maps.filter((_, rowIndex) => rowIndex !== index);
+    if (!form.chapter_maps.length) {
+        form.chapter_maps = [blankMapRow()];
+    }
+};
+
+const toggleMapAssign = (index) => {
+    const row = form.chapter_maps[index];
+    if (!row || mapBlockReason(row)) {
+        return;
+    }
+
+    row.assign = !row.assign;
+};
 
 const formatChapterRate = (chapter) => {
     const amount = Number(chapter.default_amount_inr);
@@ -81,63 +184,34 @@ const formatChapterRate = (chapter) => {
     return formatInr(amount);
 };
 
-const toggleChapter = (chapterId) => {
-    if (chapterBlockReason(chapterId)) {
-        return;
-    }
-
-    const ids = new Set(form.syllabus_chapter_ids);
-    if (ids.has(chapterId)) {
-        ids.delete(chapterId);
-    } else {
-        ids.add(chapterId);
-    }
-    form.syllabus_chapter_ids = [...ids];
-};
-
-const chapterBlockReason = (chapterOrId) => {
-    const chapter = typeof chapterOrId === 'object'
-        ? chapterOrId
-        : props.syllabusChapters.find((row) => Number(row.id) === Number(chapterOrId));
-
-    if (!chapter) {
-        return '';
-    }
-
-    if (useNewBook.value || !selectedTextbookId.value) {
-        return '';
-    }
-
-    const textbookId = Number(selectedTextbookId.value);
-    const assignedIds = (chapter.assigned_for_textbooks || []).map(Number);
-    if (assignedIds.includes(textbookId)) {
-        return 'already assigned';
-    }
-
-    const uploadedIds = (chapter.uploaded_for_textbooks || []).map(Number);
-    if (uploadedIds.includes(textbookId)) {
-        return 'already uploaded';
-    }
-
-    return '';
-};
-
 const formatInr = (amount) => (amount > 0 ? `₹${Number(amount).toLocaleString('en-IN')}` : '—');
 
-watch(selectedTextbookId, () => {
-    form.syllabus_chapter_ids = form.syllabus_chapter_ids.filter((id) => !chapterBlockReason(id));
-});
-
-watch(useNewBook, (isNew) => {
-    if (isNew) {
-        return;
+const formatMapRate = (row) => {
+    if (!row.syllabus_chapter_id) {
+        return '—';
     }
 
-    form.syllabus_chapter_ids = form.syllabus_chapter_ids.filter((id) => !chapterBlockReason(id));
-});
+    const syllabus = syllabusChapterById.value[row.syllabus_chapter_id];
+    if (syllabus) {
+        return formatChapterRate(syllabus);
+    }
+
+    const amount = Number(row.default_amount_inr);
+    if (amount <= 0) {
+        return '—';
+    }
+
+    if (row.default_rate_basis === 'per_question') {
+        return `${formatInr(amount)}/Q`;
+    }
+
+    return formatInr(amount);
+};
 
 const selectedRatePreview = computed(() => {
-    const selected = props.syllabusChapters.filter((ch) => form.syllabus_chapter_ids.includes(ch.id));
+    const selected = assignedMapRows.value
+        .map((row) => syllabusChapterById.value[row.syllabus_chapter_id])
+        .filter(Boolean);
     if (!selected.length) {
         return null;
     }
@@ -154,12 +228,15 @@ const selectedRatePreview = computed(() => {
 });
 
 const hasMatrixRate = computed(() => {
-    const selected = props.syllabusChapters.filter((ch) => form.syllabus_chapter_ids.includes(ch.id));
-    if (!selected.length) {
+    if (!assignedMapRows.value.length) {
         return false;
     }
 
-    return selected.every((ch) => Number(ch.default_amount_inr) > 0);
+    return assignedMapRows.value.every((row) => {
+        const syllabus = syllabusChapterById.value[row.syllabus_chapter_id];
+
+        return syllabus ? Number(syllabus.default_amount_inr) > 0 : Number(row.default_amount_inr) > 0;
+    });
 });
 
 const hasValidOverride = computed(() => {
@@ -172,17 +249,17 @@ const hasValidOverride = computed(() => {
 
 const hasValidRate = computed(() => hasValidOverride.value || hasMatrixRate.value);
 
-const needsRateOverride = computed(() => form.syllabus_chapter_ids.length > 0 && !hasMatrixRate.value);
+const needsRateOverride = computed(() => assignedMapRows.value.length > 0 && !hasMatrixRate.value);
 
-const canSubmit = computed(() => Boolean(form.assigned_to_user_id) && form.syllabus_chapter_ids.length > 0);
+const canSubmit = computed(() => Boolean(form.assigned_to_user_id) && assignedMapRows.value.length > 0);
 
 const submitBlockedReason = computed(() => {
     if (!form.assigned_to_user_id) {
         return 'Select a content uploader.';
     }
 
-    if (form.syllabus_chapter_ids.length === 0) {
-        return 'Select at least one syllabus chapter.';
+    if (assignedMapRows.value.length === 0) {
+        return 'Map at least one book chapter to a syllabus chapter and tick Assign.';
     }
 
     if (!hasValidRate.value) {
@@ -219,6 +296,12 @@ const submit = () => {
         textbook_id: useNewBook.value ? null : selectedTextbookId.value,
         book_name: useNewBook.value ? data.book_name : null,
         book_code: useNewBook.value ? data.book_code : null,
+        chapter_maps: data.chapter_maps.map((row) => ({
+            book_chapter_number: row.book_chapter_number,
+            book_chapter_title: row.book_chapter_title,
+            syllabus_chapter_id: row.syllabus_chapter_id ? Number(row.syllabus_chapter_id) : null,
+            assign: Boolean(row.assign),
+        })),
         offered_amount_inr: data.offered_amount_inr === '' ? null : Number(data.offered_amount_inr),
     })).post(route('admin.content-tasks.store'));
 };
@@ -248,7 +331,7 @@ const applySuggestedRate = () => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Assign chapters to uploader</h2>
-                    <p class="text-sm text-gray-500">Class → board → textbook master → syllabus chapters. One uploader per chapter.</p>
+                    <p class="text-sm text-gray-500">Class → board → textbook master → map book chapters to syllabus → assign to uploader.</p>
                 </div>
                 <Link
                     :href="route('admin.content-rate-cards.index')"
@@ -348,35 +431,97 @@ const applySuggestedRate = () => {
                     </div>
 
                     <div v-if="syllabusChapters.length">
-                        <InputLabel value="Syllabus chapters" />
-                        <p class="mt-1 text-xs text-gray-500">This list is the current syllabus. After you save chapter numbers or names, reopen this page.</p>
-                        <div class="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
-                            <label
-                                v-for="chapter in syllabusChapters"
-                                :key="chapter.id"
-                                class="flex items-start justify-between gap-2 text-sm"
-                                :class="chapterBlockReason(chapter) ? 'cursor-not-allowed text-gray-400' : 'cursor-pointer text-gray-800'"
-                            >
-                                <span class="flex items-start gap-2">
-                                    <input
-                                        type="checkbox"
-                                        class="mt-1 rounded border-gray-300"
-                                        :disabled="Boolean(chapterBlockReason(chapter))"
-                                        :checked="form.syllabus_chapter_ids.includes(chapter.id)"
-                                        @change="toggleChapter(chapter.id)"
+                        <InputLabel value="Book chapter mapping" />
+                        <p class="mt-1 text-xs text-gray-500">
+                            Step 1: Enter each chapter name as it appears in the book. Step 2: Map it to the matching syllabus chapter.
+                            The uploader sees the <strong>book</strong> name; content is stored under the syllabus chapter.
+                        </p>
+                        <div class="mt-2 overflow-x-auto rounded-md border border-gray-200">
+                            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                                    <tr>
+                                        <th class="px-2 py-2 text-left">Assign</th>
+                                        <th class="px-2 py-2 text-left">Book ch no</th>
+                                        <th class="px-2 py-2 text-left">Book chapter name</th>
+                                        <th class="px-2 py-2 text-left">Maps to syllabus</th>
+                                        <th class="px-2 py-2 text-right">Rate</th>
+                                        <th class="px-2 py-2" />
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <tr
+                                        v-for="(row, index) in form.chapter_maps"
+                                        :key="index"
+                                        :class="mapBlockReason(row) ? 'bg-gray-50 text-gray-400' : ''"
                                     >
-                                    <span>
-                                        {{ chapter.label }}
-                                        <span v-if="chapterBlockReason(chapter)" class="text-xs font-medium text-amber-700">
-                                            — {{ chapterBlockReason(chapter) }}
-                                        </span>
-                                    </span>
-                                </span>
-                                <span class="shrink-0 text-xs text-gray-500">{{ formatChapterRate(chapter) }}</span>
-                            </label>
+                                        <td class="px-2 py-2 align-top">
+                                            <input
+                                                type="checkbox"
+                                                class="rounded border-gray-300"
+                                                :disabled="Boolean(mapBlockReason(row)) || !row.syllabus_chapter_id || !row.book_chapter_number || !row.book_chapter_title"
+                                                :checked="row.assign"
+                                                @change="toggleMapAssign(index)"
+                                            >
+                                        </td>
+                                        <td class="px-2 py-2 align-top">
+                                            <input
+                                                v-model="row.book_chapter_number"
+                                                type="text"
+                                                class="w-20 rounded-md border-gray-300 text-sm"
+                                                placeholder="1"
+                                            >
+                                        </td>
+                                        <td class="px-2 py-2 align-top">
+                                            <input
+                                                v-model="row.book_chapter_title"
+                                                type="text"
+                                                class="min-w-[10rem] rounded-md border-gray-300 text-sm"
+                                                placeholder="Chapter title in book"
+                                            >
+                                        </td>
+                                        <td class="px-2 py-2 align-top">
+                                            <select
+                                                v-model="row.syllabus_chapter_id"
+                                                class="min-w-[14rem] rounded-md border-gray-300 text-sm"
+                                            >
+                                                <option value="">Select syllabus chapter…</option>
+                                                <option
+                                                    v-for="chapter in syllabusChapters"
+                                                    :key="chapter.id"
+                                                    :value="chapter.id"
+                                                >
+                                                    {{ chapter.label }}
+                                                </option>
+                                            </select>
+                                            <p v-if="mapBlockReason(row)" class="mt-1 text-xs text-amber-700">
+                                                {{ mapBlockReason(row) }}
+                                            </p>
+                                        </td>
+                                        <td class="px-2 py-2 align-top text-right text-xs text-gray-500">
+                                            {{ formatMapRate(row) }}
+                                        </td>
+                                        <td class="px-2 py-2 align-top text-right">
+                                            <button
+                                                type="button"
+                                                class="text-xs text-rose-600 hover:underline"
+                                                @click="removeMapRow(index)"
+                                            >
+                                                Remove
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
+                        <button
+                            type="button"
+                            class="mt-2 text-sm font-medium text-indigo-600 hover:underline"
+                            @click="addMapRow"
+                        >
+                            + Add book chapter row
+                        </button>
                         <p v-if="selectedRatePreview" class="mt-2 text-xs text-gray-600">Matrix rate for selection: {{ selectedRatePreview }}</p>
-                        <InputError :message="form.errors.syllabus_chapter_ids" class="mt-1" />
+                        <InputError :message="form.errors.chapter_maps" class="mt-1" />
                     </div>
                     <div v-else class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
                         No syllabus chapters found for {{ gradeLevel.name }}{{ selectedBoard ? ` · ${selectedBoard.code || selectedBoard.name}` : '' }}. Check academic year, board, and syllabus setup.

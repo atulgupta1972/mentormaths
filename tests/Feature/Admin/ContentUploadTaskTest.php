@@ -95,6 +95,52 @@ class ContentUploadTaskTest extends TestCase
         $this->assertNotNull($task->agreed_at);
     }
 
+    public function test_admin_can_assign_using_book_chapter_mapping(): void
+    {
+        Mail::fake();
+
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        ContentRateCard::create([
+            'grade_level_id' => $grade->id,
+            'content_type' => ContentRateCard::TYPE_TEXTBOOK_CHAPTER_MCQ,
+            'default_amount_inr' => 6000,
+        ]);
+
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->post(route('admin.content-tasks.store'), [
+                'assigned_to_user_id' => $uploader->id,
+                'book_name' => 'NCERT Exemplar',
+                'book_code' => 'EXM',
+                'chapter_maps' => [
+                    [
+                        'book_chapter_number' => '3',
+                        'book_chapter_title' => 'Algebraic Expressions in Book',
+                        'syllabus_chapter_id' => $syllabusChapter->id,
+                        'assign' => true,
+                    ],
+                ],
+                'rate_basis' => ContentRateCard::BASIS_PER_SET,
+            ])
+            ->assertRedirect(route('admin.content-tasks.index'));
+
+        $textbookChapter = TextbookChapter::query()->firstOrFail();
+        $this->assertSame(3, (int) $textbookChapter->chapter_number);
+        $this->assertSame('Algebraic Expressions in Book', $textbookChapter->title);
+        $this->assertSame($syllabusChapter->id, $textbookChapter->syllabus_chapter_id);
+
+        $this->assertDatabaseHas('textbook_chapter_maps', [
+            'textbook_id' => $textbookChapter->textbook_id,
+            'book_chapter_number' => '3',
+            'book_chapter_title' => 'Algebraic Expressions in Book',
+            'syllabus_chapter_id' => $syllabusChapter->id,
+        ]);
+    }
+
     public function test_same_book_code_can_be_assigned_separately_for_cbse_and_icse(): void
     {
         Mail::fake();

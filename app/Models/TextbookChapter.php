@@ -194,16 +194,34 @@ class TextbookChapter extends Model
 
     public function displayChapterNumber(): string
     {
-        $fromSyllabus = trim((string) ($this->syllabusChapter?->chapter_number ?? ''));
+        $local = trim((string) ($this->chapter_number ?? ''));
+        if ($local !== '') {
+            return $local;
+        }
 
-        return $fromSyllabus !== '' ? $fromSyllabus : (string) ($this->chapter_number ?? '');
+        return trim((string) ($this->syllabusChapter?->chapter_number ?? ''));
     }
 
     public function displayTitle(): string
     {
-        $fromSyllabus = trim((string) ($this->syllabusChapter?->name ?? ''));
+        $local = trim((string) ($this->title ?? ''));
+        if ($local !== '') {
+            return $local;
+        }
 
-        return $fromSyllabus !== '' ? $fromSyllabus : (string) ($this->title ?? '');
+        return trim((string) ($this->syllabusChapter?->name ?? ''));
+    }
+
+    public function displaySyllabusLabel(): string
+    {
+        $syllabus = $this->syllabusChapter;
+        if (! $syllabus) {
+            return '';
+        }
+
+        $number = trim((string) ($syllabus->chapter_number ?? ''));
+
+        return $number !== '' ? $number.' — '.$syllabus->name : (string) $syllabus->name;
     }
 
     public function displayChapterHeadName(): ?string

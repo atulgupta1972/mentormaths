@@ -9,6 +9,7 @@ use App\Models\Question;
 use App\Models\SyllabusChapter;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
+use App\Models\TextbookChapterMap;
 use App\Models\User;
 use App\Support\ContentOperationsMailer;
 use Illuminate\Support\Collection;
@@ -129,6 +130,42 @@ class ContentUploadTaskService
             }
 
             $textbookChapterIds[] = $textbookChapter->id;
+        }
+
+        return $this->assignChapters(
+            $uploader,
+            $textbookChapterIds,
+            $admin,
+            $amountOverrideInr,
+            $rateBasisOverride,
+            $duplicateOverrideReason,
+            $adminNotes,
+        );
+    }
+
+    /**
+     * @param  list<int>  $mapIds
+     * @return array{tasks: list<ContentUploadTask>, email_sent: bool}
+     */
+    public function assignFromChapterMaps(
+        Textbook $textbook,
+        array $mapIds,
+        User $uploader,
+        User $admin,
+        ?int $amountOverrideInr = null,
+        ?string $rateBasisOverride = null,
+        ?string $duplicateOverrideReason = null,
+        ?string $adminNotes = null,
+    ): array {
+        $mapService = app(TextbookChapterMapService::class);
+        $textbookChapterIds = [];
+
+        foreach ($mapIds as $mapId) {
+            $map = TextbookChapterMap::query()
+                ->where('textbook_id', $textbook->id)
+                ->findOrFail($mapId);
+
+            $textbookChapterIds[] = $mapService->textbookChapterFromMap($map, $admin->id)->id;
         }
 
         return $this->assignChapters(

@@ -39,6 +39,11 @@ class Textbook extends Model
         return $this->hasMany(TextbookChapter::class)->orderBy('chapter_number');
     }
 
+    public function chapterMaps(): HasMany
+    {
+        return $this->hasMany(TextbookChapterMap::class)->orderBy('sort_order');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
