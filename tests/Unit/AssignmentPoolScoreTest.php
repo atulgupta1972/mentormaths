@@ -19,9 +19,12 @@ use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\Worksheet;
 use App\Services\AssignmentPoolScore;
+use App\Services\RevisionAssignmentService;
+use App\Support\AssignmentProgress;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AssignmentPoolScoreTest extends TestCase
@@ -115,7 +118,7 @@ class AssignmentPoolScoreTest extends TestCase
 
         // Fully corrected (even though score is 80%) → revision unlocks.
         $this->assertTrue(app(AssignmentPoolScore::class)->isFullyCorrected($assignment));
-        $revision = app(\App\Services\RevisionAssignmentService::class)
+        $revision = app(RevisionAssignmentService::class)
             ->ensureFirstRevisionIfReady($assignment->fresh());
         $this->assertNotNull($revision);
         $this->assertSame(1, (int) $revision->revision_number);
@@ -182,6 +185,186 @@ class AssignmentPoolScoreTest extends TestCase
             1,
             AssignmentSumInstance::query()->where('generation', 2)->where('status', 'pending')->count(),
         );
+    }
+
+    public function test_submit_persists_pool_metrics_snapshot_on_assignment(): void
+    {
+        [$assignment, $questions, $correctByQuestion, $wrongByQuestion] = $this->seedAssignmentWithQuestions(4);
+        $pool = app(AssignmentPoolScore::class);
+        $pool->ensureOriginals($assignment->fresh(['enrollment', 'practiceSet.questions']));
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'completed_at' => now(),
+            'score' => 3,
+            'max_score' => 4,
+        ]);
+
+        foreach ($questions as $index => $question) {
+            SetAttemptAnswer::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'selected_option_id' => $index < 3
+                    ? $correctByQuestion[$question->id]
+                    : $wrongByQuestion[$question->id],
+                'is_correct' => $index < 3,
+            ]);
+        }
+
+        $pool->syncFromBatchAttempt($attempt->fresh([
+            'answers',
+            'assignment.enrollment',
+            'assignment.practiceSet.questions',
+        ]));
+
+        $assignment->refresh();
+        $this->assertNotNull($assignment->pool_metrics_updated_at);
+        $this->assertSame(5, $assignment->pool_metrics['pool']);
+        $this->assertSame(4, $assignment->pool_metrics['attempted']);
+        $this->assertSame(3, $assignment->pool_metrics['correct']);
+        $this->assertSame(75, $assignment->pool_metrics['score_pct']);
+        $this->assertSame(80, $assignment->pool_metrics['completion_pct']);
+    }
+
+    public function test_dashboard_summary_reads_saved_metrics_without_rebuilding_pool(): void
+    {
+        [$assignment, $questions, $correctByQuestion, $wrongByQuestion] = $this->seedAssignmentWithQuestions(4);
+        $pool = app(AssignmentPoolScore::class);
+        $pool->ensureOriginals($assignment->fresh(['enrollment', 'practiceSet.questions']));
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'completed_at' => now(),
+            'score' => 3,
+            'max_score' => 4,
+        ]);
+
+        foreach ($questions as $index => $question) {
+            SetAttemptAnswer::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'selected_option_id' => $index < 3
+                    ? $correctByQuestion[$question->id]
+                    : $wrongByQuestion[$question->id],
+                'is_correct' => $index < 3,
+            ]);
+        }
+
+        $pool->syncFromBatchAttempt($attempt->fresh([
+            'answers',
+            'assignment.enrollment',
+            'assignment.practiceSet.questions',
+        ]));
+
+        $instanceIds = AssignmentSumInstance::query()->orderBy('id')->pluck('id')->all();
+        $this->assertNotEmpty($instanceIds);
+
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+
+        $summary = AssignmentProgress::formatStudentDashboardSummary(
+            $assignment->fresh(['practiceSet', 'attempts']),
+            $attempt->fresh(),
+        );
+
+        $queries = collect(DB::getQueryLog())->pluck('query')->implode(' ');
+        DB::disableQueryLog();
+
+        $this->assertSame($instanceIds, AssignmentSumInstance::query()->orderBy('id')->pluck('id')->all());
+        $this->assertStringNotContainsString('delete from', strtolower($queries));
+        $this->assertSame(5, $summary['pool_metrics']['pool']);
+        $this->assertSame(75, $summary['pool_metrics']['score_pct']);
+        $this->assertSame(75, $summary['latest_score_percent']);
+    }
+
+    public function test_prime_metrics_fills_missing_snapshots_from_existing_rows(): void
+    {
+        [$assignment, $questions, $correctByQuestion] = $this->seedAssignmentWithQuestions(2);
+        $pool = app(AssignmentPoolScore::class);
+        $pool->ensureOriginals($assignment->fresh(['enrollment', 'practiceSet.questions']));
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'completed_at' => now(),
+        ]);
+        foreach ($questions as $question) {
+            SetAttemptAnswer::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'selected_option_id' => $correctByQuestion[$question->id],
+                'is_correct' => true,
+            ]);
+        }
+        $pool->syncFromBatchAttempt($attempt->fresh([
+            'answers',
+            'assignment.enrollment',
+            'assignment.practiceSet.questions',
+        ]));
+
+        $assignment->forceFill([
+            'pool_metrics' => null,
+            'pool_metrics_updated_at' => null,
+        ])->save();
+
+        $pool->primeMetricsForAssignments(collect([$assignment->fresh()]));
+
+        $assignment->refresh();
+        $this->assertNotNull($assignment->pool_metrics_updated_at);
+        $this->assertSame(2, $assignment->pool_metrics['pool']);
+        $this->assertSame(100, $assignment->pool_metrics['score_pct']);
+    }
+
+    public function test_refresh_command_writes_snapshots_from_existing_pool_rows(): void
+    {
+        [$assignment, $questions, $correctByQuestion] = $this->seedAssignmentWithQuestions(2);
+        $pool = app(AssignmentPoolScore::class);
+        $pool->ensureOriginals($assignment->fresh(['enrollment', 'practiceSet.questions']));
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now(),
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'completed_at' => now(),
+        ]);
+        foreach ($questions as $question) {
+            SetAttemptAnswer::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'selected_option_id' => $correctByQuestion[$question->id],
+                'is_correct' => true,
+            ]);
+        }
+        $pool->syncFromBatchAttempt($attempt->fresh([
+            'answers',
+            'assignment.enrollment',
+            'assignment.practiceSet.questions',
+        ]));
+
+        $assignment->forceFill([
+            'pool_metrics' => null,
+            'pool_metrics_updated_at' => null,
+        ])->save();
+
+        $this->artisan('assignments:refresh-pool-metrics')->assertSuccessful();
+
+        $assignment->refresh();
+        $this->assertNotNull($assignment->pool_metrics_updated_at);
+        $this->assertSame(2, $assignment->pool_metrics['pool']);
+        $this->assertSame(100, $assignment->pool_metrics['score_pct']);
     }
 
     /**

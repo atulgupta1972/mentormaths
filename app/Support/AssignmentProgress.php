@@ -2,13 +2,12 @@
 
 namespace App\Support;
 
-use App\Models\AssignmentSumInstance;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\WrittenSubmission;
 use App\Services\AssignmentPoolScore;
-use App\Services\RevisionAssignmentService;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 
 class AssignmentProgress
 {
@@ -99,7 +98,7 @@ class AssignmentProgress
             'kind_label' => $assignment->practiceSet->isCatchUp()
                 ? 'Catch-up'
                 : ($assignment->practiceSet->isChapterTest() ? 'Test' : 'Practice'),
-                'question_count' => $practiceSet->questions_count ?? 0,
+            'question_count' => $practiceSet->questions_count ?? 0,
             'assignment_status' => $assignment->status,
             'target_date' => $assignment->due_date?->toDateString(),
             'assigned_at' => $assignment->assigned_at?->toDateTimeString(),
@@ -259,7 +258,7 @@ class AssignmentProgress
     /**
      * Student-facing summary for written homework assignments.
      */
-    public static function formatWrittenStudentDashboardSummary(SetAssignment $assignment, ?\App\Models\WrittenSubmission $submission): array
+    public static function formatWrittenStudentDashboardSummary(SetAssignment $assignment, ?WrittenSubmission $submission): array
     {
         $overdue = self::isOverdue($assignment);
         $practiceSet = $assignment->practiceSet;
@@ -269,18 +268,18 @@ class AssignmentProgress
         $latestMaxScore = null;
         $latestScoreLabel = null;
 
-        if ($submission?->status === \App\Models\WrittenSubmission::STATUS_GRADED) {
+        if ($submission?->status === WrittenSubmission::STATUS_GRADED) {
             $status = 'green';
             $latestScore = $submission->score;
             $latestMaxScore = $submission->max_score;
             $latestScoreLabel = ScoreLabel::format($submission->score, $submission->max_score);
-        } elseif ($submission?->status === \App\Models\WrittenSubmission::STATUS_FAILED) {
+        } elseif ($submission?->status === WrittenSubmission::STATUS_FAILED) {
             $status = 'overdue';
         } elseif ($overdue) {
             $status = 'overdue';
         } elseif ($submission && in_array($submission->status, [
-            \App\Models\WrittenSubmission::STATUS_UPLOADED,
-            \App\Models\WrittenSubmission::STATUS_PROCESSING,
+            WrittenSubmission::STATUS_UPLOADED,
+            WrittenSubmission::STATUS_PROCESSING,
         ], true)) {
             $status = 'checking';
         }
@@ -360,35 +359,19 @@ class AssignmentProgress
             $statusDetail = $partial['label'].($remaining > 0 ? " · {$remaining} left" : '');
         }
 
-        $poolMetrics = null;
+        $poolMetrics = app(AssignmentPoolScore::class)->metricsForRead($assignment);
         $completionPct = null;
         $scorePct = $summary['latest_score_percent'];
 
-        $hasSubmittedAttempts = $assignment->attempts()
-            ->where('status', SetAttempt::STATUS_SUBMITTED)
-            ->exists();
-        $hasPoolRows = AssignmentSumInstance::query()->where('set_assignment_id', $assignment->id)->exists();
-
-        if ($hasSubmittedAttempts || $hasPoolRows) {
-            $poolScore = app(AssignmentPoolScore::class);
-            $poolMetrics = $hasSubmittedAttempts
-                ? $poolScore->rebuildFromAttempts($assignment)
-                : $poolScore->metricsForAssignment($assignment);
-
-            if (($poolMetrics['pool'] ?? 0) > 0) {
-                $scorePct = $poolMetrics['score_pct'];
-                $completionPct = $poolMetrics['completion_pct'];
-                $summary['latest_score_percent'] = $scorePct;
-                if ($poolMetrics['pending'] > 0) {
-                    $left = ($poolMetrics['pending_remedial'] ?? 0) > 0
-                        ? $poolMetrics['pending_remedial'].' to correct'
-                        : $poolMetrics['pending'].' left';
-                    $statusDetail = "{$poolMetrics['attempted']}/{$poolMetrics['pool']} · {$left}";
-                }
-            }
-
-            if ($assignment->isOriginalLearning()) {
-                app(RevisionAssignmentService::class)->ensureFirstRevisionIfReady($assignment->fresh());
+        if ($poolMetrics && ($poolMetrics['pool'] ?? 0) > 0) {
+            $scorePct = $poolMetrics['score_pct'];
+            $completionPct = $poolMetrics['completion_pct'];
+            $summary['latest_score_percent'] = $scorePct;
+            if ($poolMetrics['pending'] > 0) {
+                $left = ($poolMetrics['pending_remedial'] ?? 0) > 0
+                    ? $poolMetrics['pending_remedial'].' to correct'
+                    : $poolMetrics['pending'].' left';
+                $statusDetail = "{$poolMetrics['attempted']}/{$poolMetrics['pool']} · {$left}";
             }
         }
 
@@ -452,7 +435,7 @@ class AssignmentProgress
     /**
      * Submitted scored attempts (full tests/practice), newest first — excludes correction-only runs.
      *
-     * @return \Illuminate\Support\Collection<int, SetAttempt>
+     * @return Collection<int, SetAttempt>
      */
     public static function scoredAttempts(SetAssignment $assignment)
     {
@@ -487,8 +470,8 @@ class AssignmentProgress
             $submission = $assignment->writtenSubmissions->first();
 
             if ($submission && in_array($submission->status, [
-                \App\Models\WrittenSubmission::STATUS_UPLOADED,
-                \App\Models\WrittenSubmission::STATUS_PROCESSING,
+                WrittenSubmission::STATUS_UPLOADED,
+                WrittenSubmission::STATUS_PROCESSING,
             ], true)) {
                 return [
                     'done' => $total,

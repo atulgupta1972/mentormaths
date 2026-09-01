@@ -7,15 +7,17 @@ use App\Models\Question;
 use App\Models\QuestionResolutionItem;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
+use App\Services\AssignmentPoolScore;
 use App\Services\GuidedPracticeService;
 use App\Services\QuestionIssueReportService;
 use App\Services\QuestionResolutionService;
+use App\Services\RevisionAssignmentService;
 use App\Services\SetAssignmentService;
 use App\Services\SetAttemptService;
+use App\Support\AssignmentProgress;
 use App\Support\AttemptIntegrity;
 use App\Support\AttemptResultSummary;
 use App\Support\AttemptTiming;
-use App\Support\AssignmentProgress;
 use App\Support\ScoreLabel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -56,13 +58,14 @@ class PracticeSetController extends Controller
         $isTest = $practiceSet->isChapterScope();
         $partial = $inProgress ? AssignmentProgress::partialProgress($assignment) : null;
 
-        $poolScore = app(\App\Services\AssignmentPoolScore::class);
-        $revisionService = app(\App\Services\RevisionAssignmentService::class);
+        $poolScore = app(AssignmentPoolScore::class);
+        $revisionService = app(RevisionAssignmentService::class);
         $poolMetrics = null;
         $revisionAssignment = null;
+        $hasSubmitted = $assignment->attempts->contains(fn ($a) => $a->status === SetAttempt::STATUS_SUBMITTED);
 
-        if ($assignment->attempts->contains(fn ($a) => $a->status === SetAttempt::STATUS_SUBMITTED)) {
-            $poolMetrics = $poolScore->rebuildFromAttempts($assignment);
+        if ($hasSubmitted || $assignment->pool_metrics_updated_at) {
+            $poolMetrics = $poolScore->ensureScored($assignment);
             if ($assignment->isOriginalLearning() && $poolScore->isFullyCorrected($assignment)) {
                 $revisionAssignment = $revisionService->ensureFirstRevisionIfReady($assignment->fresh());
             }

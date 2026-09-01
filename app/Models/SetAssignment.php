@@ -39,6 +39,8 @@ class SetAssignment extends Model
             'assigned_at' => 'datetime',
             'reassigned_at' => 'datetime',
             'due_date' => 'date',
+            'pool_metrics' => 'array',
+            'pool_metrics_updated_at' => 'datetime',
         ];
     }
 
