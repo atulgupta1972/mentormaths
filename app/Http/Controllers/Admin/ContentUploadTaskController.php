@@ -169,7 +169,11 @@ class ContentUploadTaskController extends Controller
                 ->all();
 
             if ($syllabus) {
-                $syllabus->load(['chapters' => fn ($q) => $q->orderBy('sort_order')]);
+                $syllabus->load([
+                    'chapters' => fn ($q) => $q->orderBy('sort_order')->with([
+                        'topics' => fn ($topics) => $topics->orderBy('sort_order'),
+                    ]),
+                ]);
 
                 $tasksForGrade = ContentUploadTask::query()
                     ->whereHas('textbookChapter.textbook', fn ($q) => $q->where('grade_level_id', $gradeLevel->id))
@@ -236,6 +240,17 @@ class ContentUploadTaskController extends Controller
                             'chapter_number' => $chapter->chapter_number,
                             'name' => $chapter->name,
                             'label' => self::chapterLabel($chapter),
+                            'topics' => $chapter->topics
+                                ->map(fn ($topic) => [
+                                    'id' => $topic->id,
+                                    'name' => $topic->name,
+                                ])
+                                ->values()
+                                ->all(),
+                            'topics_label' => $chapter->topics
+                                ->pluck('name')
+                                ->filter()
+                                ->implode(' · '),
                             'heading_key' => SyllabusChapter::headingKey($chapter->chapter_number, (string) $chapter->name),
                             'sort_key' => SyllabusChapter::orderKey($chapter->chapter_number),
                             'default_amount_inr' => $rate['amount_inr'],
@@ -264,6 +279,15 @@ class ContentUploadTaskController extends Controller
                         $preferred['label'] = trim((string) ($preferred['chapter_number'] ?? '')) !== ''
                             ? $preferred['chapter_number'].' — '.$preferred['name']
                             : $preferred['name'];
+                        $preferred['topics'] = $rows
+                            ->flatMap(fn (array $row) => $row['topics'] ?? [])
+                            ->unique('id')
+                            ->values()
+                            ->all();
+                        $preferred['topics_label'] = collect($preferred['topics'])
+                            ->pluck('name')
+                            ->filter()
+                            ->implode(' · ');
 
                         unset($preferred['heading_key'], $preferred['sort_key']);
 

@@ -186,6 +186,12 @@ const formatChapterRate = (chapter) => {
 
 const formatInr = (amount) => (amount > 0 ? `₹${Number(amount).toLocaleString('en-IN')}` : '—');
 
+const topicsLabelForChapter = (chapterId) => {
+    const chapter = syllabusChapterById.value[chapterId];
+
+    return chapter?.topics_label || '';
+};
+
 const formatMapRate = (row) => {
     if (!row.syllabus_chapter_id) {
         return '—';
@@ -433,9 +439,21 @@ const applySuggestedRate = () => {
                     <div v-if="syllabusChapters.length">
                         <InputLabel value="Book chapter mapping" />
                         <p class="mt-1 text-xs text-gray-500">
-                            Step 1: Enter each chapter name as it appears in the book. Step 2: Map it to the matching syllabus chapter.
+                            Step 1: Enter each chapter name as it appears in the book. Step 2: Map it to the matching syllabus chapter (check topics below).
                             The uploader sees the <strong>book</strong> name; content is stored under the syllabus chapter.
                         </p>
+
+                        <div class="mt-2 max-h-40 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                            <p class="font-semibold text-slate-900">Syllabus chapters & topics (reference)</p>
+                            <ul class="mt-1 space-y-1">
+                                <li v-for="chapter in syllabusChapters" :key="chapter.id">
+                                    <span class="font-medium text-slate-900">{{ chapter.label }}</span>
+                                    <span v-if="chapter.topics_label" class="text-slate-600"> — {{ chapter.topics_label }}</span>
+                                    <span v-else class="italic text-slate-400"> — no topics listed</span>
+                                </li>
+                            </ul>
+                        </div>
+
                         <div class="mt-2 overflow-x-auto rounded-md border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
                                 <thead class="bg-gray-50 text-xs uppercase text-gray-500">
@@ -444,6 +462,7 @@ const applySuggestedRate = () => {
                                         <th class="px-2 py-2 text-left">Book ch no</th>
                                         <th class="px-2 py-2 text-left">Book chapter name</th>
                                         <th class="px-2 py-2 text-left">Maps to syllabus</th>
+                                        <th class="px-2 py-2 text-left">Syllabus topics</th>
                                         <th class="px-2 py-2 text-right">Rate</th>
                                         <th class="px-2 py-2" />
                                     </tr>
@@ -490,12 +509,18 @@ const applySuggestedRate = () => {
                                                     :key="chapter.id"
                                                     :value="chapter.id"
                                                 >
-                                                    {{ chapter.label }}
+                                                    {{ chapter.label }}{{ chapter.topics_label ? ` · ${chapter.topics_label}` : '' }}
                                                 </option>
                                             </select>
                                             <p v-if="mapBlockReason(row)" class="mt-1 text-xs text-amber-700">
                                                 {{ mapBlockReason(row) }}
                                             </p>
+                                        </td>
+                                        <td class="max-w-[14rem] px-2 py-2 align-top text-xs text-gray-600">
+                                            <p v-if="topicsLabelForChapter(row.syllabus_chapter_id)" class="leading-snug">
+                                                {{ topicsLabelForChapter(row.syllabus_chapter_id) }}
+                                            </p>
+                                            <span v-else class="italic text-gray-400">—</span>
                                         </td>
                                         <td class="px-2 py-2 align-top text-right text-xs text-gray-500">
                                             {{ formatMapRate(row) }}

@@ -82,7 +82,7 @@ class TextbookChapterMapService
     {
         $maps = TextbookChapterMap::query()
             ->where('textbook_id', $textbook->id)
-            ->with(['syllabusChapter'])
+            ->with(['syllabusChapter.topics' => fn ($q) => $q->orderBy('sort_order')])
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
@@ -127,6 +127,9 @@ class TextbookChapterMapService
                 'syllabus_chapter_id' => $map->syllabus_chapter_id,
                 'syllabus_label' => $syllabus
                     ? trim((string) $syllabus->chapter_number).' — '.$syllabus->name
+                    : '',
+                'topics_label' => $syllabus
+                    ? $syllabus->topics->pluck('name')->filter()->implode(' · ')
                     : '',
                 'default_amount_inr' => $rate['amount_inr'],
                 'default_rate_basis' => $rate['rate_basis'],
