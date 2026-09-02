@@ -1,6 +1,5 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
 import StudentPendingWorkPanel from '@/Components/StudentPendingWorkPanel.vue';
 import StudentAssignmentGroupTable from '@/Components/StudentAssignmentGroupTable.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
@@ -14,7 +13,7 @@ import { formatScoreLabel } from '@/utils/scores';
 import { formatDate, formatDateTime } from '@/utils/dates';
 import { hasRoute, safeRoute } from '@/utils/routes';
 import { Head, Link, useForm, usePage, Deferred, router } from '@inertiajs/vue3';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 
 const page = usePage();
 
@@ -37,12 +36,7 @@ const props = defineProps({
     followUpItems: { type: Array, default: () => [] },
     activeYear: Object,
     selectedGrade: Object,
-    examPlans: {
-        type: Object,
-        default: () => ({ upcoming: [], past: [] }),
-    },
-    syllabusChapters: { type: Array, default: () => [] },
-    examTypeOptions: { type: Array, default: () => [] },
+    upcomingExams: { type: Array, default: () => [] },
     stats: {
         type: Object,
         default: () => ({}),
@@ -63,14 +57,12 @@ const props = defineProps({
     loadError: { type: String, default: null },
 });
 
-const showManageExams = ref(false);
 const showHelpRequests = ref(false);
 const showQuestionIssues = ref(false);
 const questionIssuesSection = ref(null);
 const helpRequestsSection = ref(null);
 const unlockingAttemptId = ref(null);
 const unlockForm = useForm({});
-const highlightedExamPlanId = ref(null);
 const returningTaskId = ref(null);
 const geminiQueueFilter = ref('pending');
 const returnForm = useForm({
@@ -211,29 +203,6 @@ const followUpActionLabel = (item) => {
     return 'Correct now';
 };
 
-const allExamPlans = computed(() => [
-    ...(props.examPlans.upcoming || []),
-    ...(props.examPlans.past || []),
-]);
-
-const openExamMarks = async (planId) => {
-    showManageExams.value = true;
-    highlightedExamPlanId.value = planId;
-
-    await nextTick();
-
-    document.getElementById(`exam-plan-${planId}`)?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-    });
-};
-
-onMounted(() => {
-    if (allExamPlans.value.some((plan) => !plan.has_marks)) {
-        showManageExams.value = true;
-    }
-});
-
 const sortByDateKey = (rows, key) => rows.slice().sort((a, b) => {
     const left = a[key] ?? '9999-12-31';
     const right = b[key] ?? '9999-12-31';
@@ -258,7 +227,9 @@ const pendingCatchUpAssignments = computed(() =>
     ),
 );
 
-const chapterOrder = computed(() => props.syllabusChapters.map((chapter) => chapter.name));
+const chapterOrder = computed(() =>
+    (props.classCoverage?.chapters || []).map((chapter) => chapter.name),
+);
 
 const sortChapterGroups = (groups) => groups.sort((left, right) => {
     const leftIndex = chapterOrder.value.indexOf(left.chapter_name);
@@ -310,94 +281,6 @@ const assignmentHref = (set) => (
 );
 
 const setLabel = (set) => set.set_code || `Set ${set.set_number}`;
-
-const daysUntilExam = (dateStr) => {
-    if (!dateStr) {
-        return null;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const target = new Date(`${dateStr}T00:00:00`);
-
-    return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
-};
-
-const daysUntil = (dateStr) => {
-    const diff = daysUntilExam(dateStr);
-
-    if (diff === null) {
-        return null;
-    }
-    if (diff < 0) {
-        return `${Math.abs(diff)}d ago`;
-    }
-    if (diff === 0) {
-        return 'Today';
-    }
-    if (diff === 1) {
-        return 'Tomorrow';
-    }
-
-    return `In ${diff} days`;
-};
-
-const upcomingExamCardClass = (plan) => {
-    const days = daysUntilExam(plan.exam_date);
-
-    if (days === null || days < 0) {
-        return 'border border-slate-300 border-l-4 border-l-slate-500 bg-white';
-    }
-    if (days <= 7) {
-        return 'border border-rose-200 border-l-4 border-l-rose-600 bg-rose-50';
-    }
-
-    return 'border border-sky-200 border-l-4 border-l-sky-600 bg-sky-50';
-};
-
-const upcomingExamBadgeClass = (plan) => {
-    const days = daysUntilExam(plan.exam_date);
-
-    if (days === null || days < 0) {
-        return 'bg-slate-200 text-slate-800';
-    }
-    if (days <= 7) {
-        return 'bg-rose-600 text-white';
-    }
-
-    return 'bg-sky-700 text-white';
-};
-
-const upcomingExamButtonClass = (plan) => {
-    const days = daysUntilExam(plan.exam_date);
-
-    if (days !== null && days <= 7) {
-        return 'bg-rose-700 text-white hover:bg-rose-800';
-    }
-
-    return 'bg-sky-800 text-white hover:bg-sky-900';
-};
-
-const chapterList = (plan) => plan.chapter_names?.join(' · ') || '—';
-
-const splitChapterDisplay = (label) => {
-    const text = String(label ?? '').trim();
-    const match = text.match(/^(ch(?:apter)?\.?\s*[\w.\-]+)\s*[—\-–]\s*(.+)$/i);
-
-    if (match) {
-        return { number: match[1].replace(/\s+/g, ' '), name: match[2].trim() };
-    }
-
-    return { number: '', name: text || '—' };
-};
-
-const prepProgressPercent = (plan) => {
-    if (!plan.prep_summary?.total) {
-        return 0;
-    }
-
-    return Math.round((plan.prep_summary.completed / plan.prep_summary.total) * 100);
-};
 
 const toggleHelpRequests = async () => {
     if (! props.helpRequests.length && ! (props.stats?.help_requests_count > 0)) {
@@ -1149,7 +1032,7 @@ const formatHelpDate = (value) => {
 
                         <ClassCoveragePanel
                             :class-coverage="classCoverage"
-                            :upcoming-exams="examPlans.upcoming || []"
+                            :upcoming-exams="upcomingExams"
                             @status-overrides="studyStatusOverrides = $event"
                         />
 
@@ -1175,7 +1058,14 @@ const formatHelpDate = (value) => {
                             <p class="hidden text-xs text-emerald-100 sm:inline">Use your study plan above for practice and exams</p>
                         </div>
                         <div class="flex flex-wrap items-center gap-2 text-xs">
-                            <span class="rounded-full bg-white/20 px-2.5 py-0.5">{{ stats.upcoming_exams || 0 }} exams</span>
+                            <Link
+                                v-if="route().has('student.exams.index')"
+                                :href="route('student.exams.index')"
+                                class="rounded-full bg-white/20 px-2.5 py-0.5 underline decoration-white/50 underline-offset-2 hover:bg-white/30"
+                            >
+                                {{ stats.upcoming_exams || 0 }} exams
+                            </Link>
+                            <span v-else class="rounded-full bg-white/20 px-2.5 py-0.5">{{ stats.upcoming_exams || 0 }} exams</span>
                             <span class="rounded-full bg-amber-300/40 px-2.5 py-0.5">{{ stats.sets_todo || 0 }} to do</span>
                             <span
                                 v-if="stats.sets_under_review"
@@ -1199,112 +1089,7 @@ const formatHelpDate = (value) => {
                         {{ page.props.flash.success }}
                     </div>
 
-                    <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
-                        <!-- Upcoming exams — summary + planner (set lists live in study plan) -->
-                        <section class="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-700">
-                                    Upcoming exams · {{ examPlans.upcoming?.length || 0 }}
-                                </h3>
-                                <button
-                                    type="button"
-                                    class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-sky-600 hover:text-sky-800"
-                                    @click="showManageExams = !showManageExams"
-                                >
-                                    {{ showManageExams ? 'Hide planner' : 'Add / edit exams' }}
-                                </button>
-                            </div>
-
-                            <div v-if="examPlans.upcoming?.length" class="space-y-3">
-                                <div
-                                    v-for="plan in examPlans.upcoming"
-                                    :key="plan.id"
-                                    class="overflow-hidden rounded-xl p-3.5 shadow-sm"
-                                    :class="upcomingExamCardClass(plan)"
-                                >
-                                    <div class="flex items-start justify-between gap-2">
-                                        <div class="min-w-0">
-                                            <p class="truncate text-base font-bold text-slate-900">{{ plan.title }}</p>
-                                            <p class="text-xs text-slate-600">{{ plan.exam_type_label }}</p>
-                                        </div>
-                                        <span
-                                            class="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                                            :class="upcomingExamBadgeClass(plan)"
-                                        >
-                                            {{ daysUntil(plan.exam_date) }}
-                                        </span>
-                                    </div>
-                                    <p class="mt-2 text-xl font-semibold text-slate-900">{{ formatDate(plan.exam_date) }}</p>
-                                    <div v-if="plan.chapter_names?.length" class="mt-2.5 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                        <div class="grid grid-cols-[4.5rem_1fr] gap-x-2 border-b border-slate-200 bg-slate-100 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
-                                            <span>Ch No</span>
-                                            <span>Chapter</span>
-                                        </div>
-                                        <ul class="divide-y divide-slate-100">
-                                            <li
-                                                v-for="(name, index) in plan.chapter_names"
-                                                :key="index"
-                                                class="grid grid-cols-[4.5rem_1fr] gap-x-2 px-2.5 py-1.5 text-sm text-slate-800"
-                                            >
-                                                <span class="font-semibold tabular-nums text-slate-700">
-                                                    {{ splitChapterDisplay(name).number || '—' }}
-                                                </span>
-                                                <span class="min-w-0 truncate" :title="splitChapterDisplay(name).name">
-                                                    {{ splitChapterDisplay(name).name }}
-                                                </span>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                    <p v-else class="mt-1 text-sm text-slate-500">No chapters selected yet.</p>
-                                    <div v-if="plan.prep_summary?.total" class="mt-3">
-                                        <div class="flex justify-between text-xs font-medium text-slate-600">
-                                            <span>Prep assigned</span>
-                                            <span>{{ plan.prep_summary.completed }}/{{ plan.prep_summary.total }} done</span>
-                                        </div>
-                                        <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-200">
-                                            <div
-                                                class="h-full rounded-full bg-emerald-500 transition-all"
-                                                :style="{ width: `${prepProgressPercent(plan)}%` }"
-                                            />
-                                        </div>
-                                    </div>
-                                    <p
-                                        v-if="plan.has_marks"
-                                        class="mt-2 text-sm font-semibold text-emerald-700"
-                                    >
-                                        Result: {{ plan.marks_score_label }}
-                                    </p>
-                                    <button
-                                        v-else
-                                        type="button"
-                                        class="mt-2.5 rounded-md px-3 py-1.5 text-xs font-semibold"
-                                        :class="upcomingExamButtonClass(plan)"
-                                        @click="openExamMarks(plan.id)"
-                                    >
-                                        Enter school test marks
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div v-else class="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-sm text-slate-600">
-                                No upcoming exams yet. Click <strong>Add / edit exams</strong> to add your test date.
-                            </div>
-
-                            <div v-if="showManageExams" class="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                                <ExamPlanPanel
-                                    :plans="allExamPlans"
-                                    :syllabus-chapters="syllabusChapters"
-                                    :exam-type-options="examTypeOptions"
-                                    :highlight-plan-id="highlightedExamPlanId"
-                                    :auto-open-create="!allExamPlans.length"
-                                    context="student"
-                                    compact
-                                />
-                            </div>
-                        </section>
-
-                        <!-- Help queue — rose zone -->
-                        <section
+                    <section
                             v-if="resolutionItems.length"
                             class="rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 via-orange-50 to-amber-50 p-4 shadow-sm"
                         >
@@ -1352,7 +1137,6 @@ const formatHelpDate = (value) => {
                                 </div>
                             </div>
                         </section>
-                    </div>
 
                     <Deferred data="assignments">
                         <template #fallback>
@@ -1409,38 +1193,6 @@ const formatHelpDate = (value) => {
                         />
                     </section>
                         </Deferred>
-
-                    <!-- Completed exams -->
-                    <section v-if="examPlans.past?.length">
-                        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                            Completed exams · {{ examPlans.past.length }}
-                        </h3>
-                        <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            <div
-                                v-for="plan in examPlans.past"
-                                :key="plan.id"
-                                class="rounded-lg border border-gray-200 bg-gradient-to-br from-gray-50 to-slate-100 p-3"
-                            >
-                                <p class="text-sm font-semibold text-gray-900">{{ plan.title }}</p>
-                                <p class="mt-0.5 text-xs text-gray-600">{{ formatDate(plan.exam_date) }}</p>
-                                <p
-                                    v-if="plan.has_marks || plan.marks_score_label"
-                                    class="mt-2 text-sm font-semibold text-emerald-700"
-                                >
-                                    {{ plan.marks_score_label }}
-                                </p>
-                                <button
-                                    v-else
-                                    type="button"
-                                    class="mt-2 text-xs font-semibold text-amber-800 underline decoration-amber-400 underline-offset-2 hover:text-amber-950"
-                                    @click="openExamMarks(plan.id)"
-                                >
-                                    Enter school test marks
-                                </button>
-                                <p class="mt-1 truncate text-[10px] text-gray-500">{{ chapterList(plan) }}</p>
-                            </div>
-                        </div>
-                    </section>
 
                 </template>
             </div>

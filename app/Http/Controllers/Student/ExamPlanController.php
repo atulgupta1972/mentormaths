@@ -29,7 +29,7 @@ class ExamPlanController extends Controller
             $validated['chapter_selections'],
         );
 
-        return back()->with('success', 'Exam plan saved.');
+        return redirect()->route('student.exams.index')->with('success', 'Exam saved.');
     }
 
     public function update(Request $request, ExamPlan $examPlan): RedirectResponse
@@ -44,7 +44,7 @@ class ExamPlanController extends Controller
             $validated['chapter_selections'],
         );
 
-        return back()->with('success', 'Exam plan updated.');
+        return redirect()->route('student.exams.index')->with('success', 'Exam updated.');
     }
 
     public function destroy(Request $request, ExamPlan $examPlan): RedirectResponse
@@ -53,7 +53,40 @@ class ExamPlanController extends Controller
 
         $examPlan->delete();
 
-        return back()->with('success', 'Exam plan removed.');
+        return redirect()->route('student.exams.index')->with('success', 'Exam removed.');
+    }
+
+    public function index(Request $request): \Inertia\Response
+    {
+        $enrollment = $request->user()->student?->currentEnrollment();
+        $enrollment?->loadMissing(['gradeLevel:id,name', 'board:id,name']);
+
+        $examPlans = ['upcoming' => [], 'past' => []];
+        $allPlans = [];
+        $syllabusChapters = [];
+        $examTypeOptions = $this->examPlanService->examTypeOptions();
+
+        if ($enrollment) {
+            $plans = $this->examPlanService->plansForEnrollment($enrollment);
+            $split = $this->examPlanService->splitPlansByTiming($plans);
+            $examPlans = [
+                'upcoming' => $split['upcoming']->values()->all(),
+                'past' => $split['past']->values()->all(),
+            ];
+            $allPlans = $plans->values()->all();
+            $syllabusChapters = $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all();
+        }
+
+        return \Inertia\Inertia::render('Student/Exams/Index', [
+            'examPlans' => $examPlans,
+            'allPlans' => $allPlans,
+            'syllabusChapters' => $syllabusChapters,
+            'examTypeOptions' => $examTypeOptions,
+            'studyPlanContext' => [
+                'grade_name' => $enrollment?->gradeLevel?->name,
+                'board_name' => $enrollment?->board?->name,
+            ],
+        ]);
     }
 
     private function authorizeStudentPlan(Request $request, ExamPlan $examPlan): void

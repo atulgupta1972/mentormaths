@@ -328,6 +328,14 @@ const navGroups = computed(() =>
                                 </NavLink>
 
                                 <NavLink
+                                    v-if="isStudent && !isAdmin && route().has('student.exams.index')"
+                                    :href="route('student.exams.index')"
+                                    :active="route().current('student.exams.*')"
+                                >
+                                    My Exams
+                                </NavLink>
+
+                                <NavLink
                                     v-if="isContentUploader && route().has('content.tasks.index')"
                                     :href="route('content.tasks.index')"
                                     :active="route().current('content.tasks.*')"
@@ -431,6 +439,14 @@ const navGroups = computed(() =>
                             :active="route().current('student.school-study-plan.*')"
                         >
                             My School Study Plan
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            v-if="isStudent && !isAdmin && route().has('student.exams.index')"
+                            :href="route('student.exams.index')"
+                            :active="route().current('student.exams.*')"
+                        >
+                            My Exams
                         </ResponsiveNavLink>
 
                         <ResponsiveNavLink

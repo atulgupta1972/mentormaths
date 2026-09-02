@@ -35,7 +35,6 @@ class DashboardService
         bool $includeAssignmentList = true,
     ): array {
         $examPlanMeta = ['upcoming' => [], 'past' => []];
-        $syllabusChapters = [];
         $assignments = [];
         $resolutionItems = [];
 
@@ -46,7 +45,6 @@ class DashboardService
                 'upcoming' => $split['upcoming']->values()->all(),
                 'past' => $split['past']->values()->all(),
             ];
-            $syllabusChapters = $this->examPlanService->chapterOptionsForEnrollment($enrollment)->values()->all();
             $assignments = $this->attemptService->dashboardForEnrollment($enrollment);
             $resolutionItems = $this->resolutionService->pendingForEnrollment($enrollment->id);
         }
@@ -59,9 +57,7 @@ class DashboardService
             'latestWorkGroups' => $pendingWork['latest'],
             'olderPendingGroups' => $pendingWork['older'],
             'followUpItems' => $this->followUpItemsFromAssignments($assignments),
-            'examPlans' => $examPlanMeta,
-            'syllabusChapters' => $syllabusChapters,
-            'examTypeOptions' => $this->examPlanService->examTypeOptions(),
+            'upcomingExams' => $examPlanMeta['upcoming'],
             'stats' => $this->studentStats($assignments, $examPlanMeta, count($resolutionItems)),
             'resolutionItems' => $resolutionItems,
             'resolutionCount' => count($resolutionItems),

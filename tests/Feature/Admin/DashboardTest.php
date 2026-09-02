@@ -239,9 +239,7 @@ class DashboardTest extends TestCase
         $emptyStudentPayload = [
             'resumeItems' => [],
             'followUpItems' => [],
-            'examPlans' => ['upcoming' => [], 'past' => []],
-            'syllabusChapters' => [],
-            'examTypeOptions' => [],
+            'upcomingExams' => [],
             'stats' => [
                 'upcoming_exams' => 0,
                 'past_exams' => 0,

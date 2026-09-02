@@ -478,6 +478,7 @@ Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->nam
 });
 
 Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix('student')->name('student.')->group(function () {
+    Route::get('/exams', [StudentExamPlanController::class, 'index'])->name('exams.index');
     Route::post('/exam-plans', [StudentExamPlanController::class, 'store'])->name('exam-plans.store');
     Route::put('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'update'])->name('exam-plans.update');
     Route::delete('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'destroy'])->name('exam-plans.destroy');
