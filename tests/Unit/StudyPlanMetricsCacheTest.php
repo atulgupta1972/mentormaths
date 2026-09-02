@@ -188,7 +188,8 @@ class StudyPlanMetricsCacheTest extends TestCase
         }
 
         $poolMock = Mockery::mock(AssignmentPoolScore::class);
-        $poolMock->shouldReceive('rebuildFromAttempts')
+        $poolMock->shouldNotReceive('rebuildFromAttempts');
+        $poolMock->shouldReceive('metricsForAssignment')
             ->once()
             ->andReturn([
                 'pool' => 4,
@@ -200,16 +201,6 @@ class StudyPlanMetricsCacheTest extends TestCase
                 'completion_pct' => 100,
                 'score_pct' => 100,
             ]);
-        $poolMock->shouldReceive('metricsForAssignment')->andReturn([
-            'pool' => 4,
-            'attempted' => 4,
-            'correct' => 4,
-            'pending' => 0,
-            'pending_remedial' => 0,
-            'wrong' => 0,
-            'completion_pct' => 100,
-            'score_pct' => 100,
-        ]);
         $this->app->instance(AssignmentPoolScore::class, $poolMock);
 
         $metrics = app(StudyPlanMetricsCacheService::class)->metricsForAssignmentRead($assignment->fresh());

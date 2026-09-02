@@ -84,7 +84,7 @@ class AssignmentPoolScore
      * Fixes historical attempts that finished before pool scoring existed,
      * and prevents correction-only sync from marking the wrong instances.
      */
-    public function rebuildFromAttempts(SetAssignment $assignment): array
+    public function rebuildFromAttempts(SetAssignment $assignment, bool $refreshChapterMetrics = true): array
     {
         $assignment->loadMissing([
             'enrollment:id,student_id',
@@ -120,14 +120,22 @@ class AssignmentPoolScore
         });
 
         $metrics = $this->metricsForAssignment($assignment);
-        $this->persistMetricsCache($assignment, $metrics);
+        $this->persistMetricsCache($assignment, $metrics, $refreshChapterMetrics);
 
         return $metrics;
     }
 
-    private function persistMetricsCache(SetAssignment $assignment, array $metrics): void
+    private function persistMetricsCache(SetAssignment $assignment, array $metrics, bool $refreshChapterMetrics = true): void
     {
-        app(StudyPlanMetricsCacheService::class)->persistAssignmentPoolMetrics($assignment->fresh(), $metrics);
+        $cache = app(StudyPlanMetricsCacheService::class);
+
+        if ($refreshChapterMetrics) {
+            $cache->persistAssignmentPoolMetrics($assignment->fresh(), $metrics);
+
+            return;
+        }
+
+        $cache->cacheAssignmentMetricsOnly($assignment, $metrics);
     }
 
     /**

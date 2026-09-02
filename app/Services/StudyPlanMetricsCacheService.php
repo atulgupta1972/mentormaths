@@ -93,8 +93,10 @@ class StudyPlanMetricsCacheService
             return null;
         }
 
+        $poolScore = app(AssignmentPoolScore::class);
+
         if (! $hasPoolRows) {
-            $metrics = app(AssignmentPoolScore::class)->rebuildFromAttempts($assignment);
+            $metrics = $poolScore->rebuildFromAttempts($assignment, refreshChapterMetrics: false);
 
             return (int) ($metrics['pool'] ?? 0) > 0 ? $metrics : null;
         }
@@ -106,10 +108,8 @@ class StudyPlanMetricsCacheService
             return $cached;
         }
 
-        $poolScore = app(AssignmentPoolScore::class);
-        $metrics = $needsRebuild
-            ? $poolScore->rebuildFromAttempts($assignment)
-            : $poolScore->metricsForAssignment($assignment);
+        // Pool rows already exist — recompute metrics only; never cascade chapter refreshes on read.
+        $metrics = $poolScore->metricsForAssignment($assignment);
 
         if ((int) ($metrics['pool'] ?? 0) <= 0) {
             return null;
