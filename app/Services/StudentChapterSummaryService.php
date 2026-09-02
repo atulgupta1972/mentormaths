@@ -1060,4 +1060,17 @@ class StudentChapterSummaryService
             ->sortByDesc('id')
             ->first();
     }
+
+    /**
+     * Raw item buckets for one chapter — used when refreshing stored chapter metrics after a set is done.
+     *
+     * @return array<string, mixed>
+     */
+    public function chapterItemBucketsForMetrics(StudentEnrollment $enrollment, int $syllabusChapterId): array
+    {
+        $summary = $this->forEnrollment($enrollment);
+        $chapter = collect($summary['chapters'] ?? [])->firstWhere('id', $syllabusChapterId);
+
+        return is_array($chapter) ? ($chapter['items'] ?? []) : [];
+    }
 }

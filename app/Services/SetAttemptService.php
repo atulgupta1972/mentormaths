@@ -16,6 +16,9 @@ use Illuminate\Support\Facades\DB;
 
 class SetAttemptService
 {
+    /** @var array<int, list<array<string, mixed>>> */
+    private array $dashboardCacheByEnrollmentId = [];
+
     public function __construct(
         private GuidedPracticeService $guidedPractice,
         private AnswerValidationService $answerValidation,
@@ -293,7 +296,16 @@ class SetAttemptService
 
     public function dashboardForEnrollment(StudentEnrollment $enrollment): array
     {
-        return $this->dashboardKeyedByEnrollmentId([$enrollment->id])[$enrollment->id] ?? [];
+        $enrollmentId = (int) $enrollment->id;
+
+        if (array_key_exists($enrollmentId, $this->dashboardCacheByEnrollmentId)) {
+            return $this->dashboardCacheByEnrollmentId[$enrollmentId];
+        }
+
+        $rows = $this->dashboardKeyedByEnrollmentId([$enrollmentId])[$enrollmentId] ?? [];
+        $this->dashboardCacheByEnrollmentId[$enrollmentId] = $rows;
+
+        return $rows;
     }
 
     /**

@@ -30,6 +30,8 @@ class SetAssignment extends Model
         'due_date',
         'status',
         'notes',
+        'cached_pool_metrics',
+        'cached_metrics_at',
     ];
 
     protected function casts(): array
@@ -39,6 +41,8 @@ class SetAssignment extends Model
             'assigned_at' => 'datetime',
             'reassigned_at' => 'datetime',
             'due_date' => 'date',
+            'cached_pool_metrics' => 'array',
+            'cached_metrics_at' => 'datetime',
         ];
     }
 

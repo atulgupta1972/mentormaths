@@ -8,6 +8,7 @@ use App\Models\WrittenSubmission;
 use App\Models\WrittenSubmissionItem;
 use App\Support\WrittenSubmissionMailer;
 use App\Support\WrittenSubmissionProgress;
+use App\Services\StudyPlanMetricsCacheService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
@@ -463,6 +464,17 @@ class WrittenGradingService
         $assignment->update([
             'status' => SetAssignment::STATUS_COMPLETED,
         ]);
+
+        $assignment->loadMissing('enrollment');
+        $enrollment = $assignment->enrollment;
+
+        if ($enrollment) {
+            $metricsCache = app(StudyPlanMetricsCacheService::class);
+
+            foreach ($metricsCache->syllabusChapterIdsForAssignment($assignment) as $chapterId) {
+                $metricsCache->refreshChapterMetrics($enrollment, $chapterId);
+            }
+        }
 
         $submission = $submission->fresh(['items']);
 

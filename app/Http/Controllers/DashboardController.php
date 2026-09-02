@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\GradeLevel;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
+use App\Models\User;
 use App\Services\AdminGradeContext;
 use App\Services\ClassCoverageService;
 use App\Services\ContentUploaderDashboardService;
@@ -17,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Inertia\DeferProp;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -128,11 +130,15 @@ class DashboardController extends Controller
 
         $enrollment = $user->student?->currentEnrollment();
         $enrollment?->loadMissing(['gradeLevel:id,name', 'board:id,name']);
+
+        if ($this->isStudentDashboardDeferredRequest($request)) {
+            return Inertia::render('Dashboard', $this->studentDeferredPayload($request, $enrollment, $user));
+        }
+
         $gradeLevelId = $request->integer('grade_level_id') ?: null;
         $boardId = $request->integer('board_id') ?: null;
 
         $loadError = null;
-        $studentData = $this->dashboardService->forStudent(null);
 
         try {
             $studentData = $this->dashboardService->forStudent(
@@ -148,23 +154,8 @@ class DashboardController extends Controller
                 'message' => $e->getMessage(),
             ]);
             $loadError = 'Some of your work could not be loaded. Please try again in a few minutes or tell your teacher.';
+            $studentData = $this->dashboardService->forStudent(null);
         }
-
-        $classCoverageDeferred = Inertia::defer(function () use ($enrollment, $user) {
-            try {
-                return $this->classCoverage->forEnrollment($enrollment);
-            } catch (Throwable $e) {
-                Log::error('Student dashboard failed to load study plan.', [
-                    'user_id' => $user->id,
-                    'enrollment_id' => $enrollment?->id,
-                    'message' => $e->getMessage(),
-                ]);
-
-                return array_merge(ClassCoverageService::emptyPayload(), [
-                    'load_error' => 'Your study plan could not be loaded. Please try again in a few minutes or tell your teacher.',
-                ]);
-            }
-        });
 
         $student = $user->student;
 
@@ -188,19 +179,13 @@ class DashboardController extends Controller
                 ? StudentWeeklyReportEmails::display($student->parent1_email, $student->parent2_email)
                 : '',
             'contentUploaderTasks' => $contentUploaderTasks,
-            'classCoverage' => $classCoverageDeferred,
+            'classCoverage' => $this->deferredClassCoverage($enrollment, $user),
             'studyPlanContext' => [
                 'grade_name' => $enrollment?->gradeLevel?->name,
                 'board_name' => $enrollment?->board?->name,
             ],
             'loadError' => $loadError,
-            'assignments' => Inertia::defer(function () use ($enrollment) {
-                if (! $enrollment) {
-                    return [];
-                }
-
-                return $this->attemptService->dashboardForEnrollment($enrollment);
-            }),
+            'assignments' => $this->deferredAssignments($enrollment),
             ...$studentData,
         ]);
     }
@@ -236,22 +221,99 @@ class DashboardController extends Controller
      */
     private function isAdminDashboardDeferredQueueRequest(Request $request): bool
     {
-        if (! $request->header('X-Inertia')
-            || $request->header('X-Inertia-Partial-Component') !== 'Dashboard') {
+        return $this->isDashboardDeferredRequest($request, ['contentPublishQueue', 'contentRecheckQueue']);
+    }
+
+    /**
+     * Inertia deferred loads for student study plan / set lists should not rerun the full dashboard query.
+     */
+    private function isStudentDashboardDeferredRequest(Request $request): bool
+    {
+        $user = $request->user();
+
+        if (! $user || $user->isAdmin() || ! $user->student) {
             return false;
         }
 
-        $only = array_values(array_filter(array_map(
-            trim(...),
-            explode(',', (string) $request->header('X-Inertia-Partial-Data', '')),
-        )));
+        return $this->isDashboardDeferredRequest($request, ['classCoverage', 'assignments']);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function studentDeferredPayload(Request $request, ?StudentEnrollment $enrollment, User $user): array
+    {
+        $payload = ['isAdmin' => false];
+
+        foreach ($this->dashboardPartialDataKeys($request) as $key) {
+            if ($key === 'classCoverage') {
+                $payload['classCoverage'] = $this->deferredClassCoverage($enrollment, $user);
+            }
+
+            if ($key === 'assignments') {
+                $payload['assignments'] = $this->deferredAssignments($enrollment);
+            }
+        }
+
+        return $payload;
+    }
+
+    private function deferredClassCoverage(?StudentEnrollment $enrollment, User $user): DeferProp
+    {
+        return Inertia::defer(function () use ($enrollment, $user) {
+            try {
+                return $this->classCoverage->forEnrollment($enrollment);
+            } catch (Throwable $e) {
+                Log::error('Student dashboard failed to load study plan.', [
+                    'user_id' => $user->id,
+                    'enrollment_id' => $enrollment?->id,
+                    'message' => $e->getMessage(),
+                ]);
+
+                return array_merge(ClassCoverageService::emptyPayload(), [
+                    'load_error' => 'Your study plan could not be loaded. Please try again in a few minutes or tell your teacher.',
+                ]);
+            }
+        });
+    }
+
+    private function deferredAssignments(?StudentEnrollment $enrollment): DeferProp
+    {
+        return Inertia::defer(function () use ($enrollment) {
+            if (! $enrollment) {
+                return [];
+            }
+
+            return $this->attemptService->dashboardForEnrollment($enrollment);
+        });
+    }
+
+    /**
+     * @param  list<string>  $allowed
+     */
+    private function isDashboardDeferredRequest(Request $request, array $allowed): bool
+    {
+        if ($request->header('X-Inertia-Partial-Component') !== 'Dashboard') {
+            return false;
+        }
+
+        $only = $this->dashboardPartialDataKeys($request);
 
         if ($only === []) {
             return false;
         }
 
-        $allowed = ['contentPublishQueue', 'contentRecheckQueue'];
-
         return array_diff($only, $allowed) === [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function dashboardPartialDataKeys(Request $request): array
+    {
+        return array_values(array_filter(array_map(
+            trim(...),
+            explode(',', (string) $request->header('X-Inertia-Partial-Data', '')),
+        )));
     }
 }

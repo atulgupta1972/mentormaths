@@ -727,6 +727,10 @@ const chapterPerformance = (dashboard) => {
 
 /** Always returns glance stats for the coverage table (— when no data). */
 const chapterRowStats = (chapter) => {
+    if (chapter.performance && typeof chapter.performance === 'object') {
+        return chapter.performance;
+    }
+
     let items = [];
 
     if (isTierDashboard(chapter)) {
@@ -804,6 +808,32 @@ const trackedStudyChapters = computed(() =>
 
 /** Aggregate performance for chapters ticked Studied / Under study — as on today. */
 const studyPlanPerformance = computed(() => {
+    const stored = props.classCoverage?.study_plan_performance;
+
+    if (stored) {
+        return {
+            total: stored.total ?? 0,
+            done: stored.done ?? 0,
+            correct: stored.correct ?? stored.scored_count ?? 0,
+            completionPct: stored.completionPct ?? stored.completion_pct ?? null,
+            scorePct: stored.scorePct ?? stored.score_pct ?? null,
+            scoredCount: stored.scoredCount ?? stored.scored_count ?? 0,
+            setTotal: stored.setTotal ?? stored.set_total ?? 0,
+            setDone: stored.setDone ?? stored.set_done ?? 0,
+            revisionTotal: stored.revisionTotal ?? stored.revision_total ?? 0,
+            revisionDone: stored.revisionDone ?? stored.revision_done ?? 0,
+            revisionCorrect: stored.revisionCorrect ?? stored.revision_correct ?? 0,
+            revisionCompletionPct: stored.revisionCompletionPct ?? stored.revision_completion_pct ?? null,
+            revisionScorePct: stored.revisionScorePct ?? stored.revision_score_pct ?? null,
+            revisionScoredCount: stored.revisionScoredCount ?? stored.revision_scored_count ?? 0,
+            correctionDone: stored.correctionDone ?? stored.correction_done ?? 0,
+            correctionPending: stored.correctionPending ?? stored.correction_pending ?? 0,
+            openWrongs: stored.openWrongs ?? stored.open_wrongs ?? 0,
+            chapterCount: stored.chapterCount ?? stored.chapter_count ?? 0,
+            chapterLabels: stored.chapterLabels ?? stored.chapter_labels ?? [],
+        };
+    }
+
     const tracked = trackedStudyChapters.value;
 
     if (! tracked.length) {

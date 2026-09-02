@@ -8,6 +8,7 @@ use App\Models\SetAttempt;
 use App\Models\WrittenSubmission;
 use App\Services\AssignmentPoolScore;
 use App\Services\RevisionAssignmentService;
+use App\Services\StudyPlanMetricsCacheService;
 use Carbon\Carbon;
 
 class AssignmentProgress
@@ -370,12 +371,13 @@ class AssignmentProgress
         $hasPoolRows = AssignmentSumInstance::query()->where('set_assignment_id', $assignment->id)->exists();
 
         if ($hasSubmittedAttempts || $hasPoolRows) {
-            $poolScore = app(AssignmentPoolScore::class);
-            $poolMetrics = $hasSubmittedAttempts
-                ? $poolScore->rebuildFromAttempts($assignment)
-                : $poolScore->metricsForAssignment($assignment);
+            $poolMetrics = app(StudyPlanMetricsCacheService::class)->metricsForAssignmentRead($assignment);
 
-            if (($poolMetrics['pool'] ?? 0) > 0) {
+            if ($poolMetrics === null && $hasPoolRows) {
+                $poolMetrics = app(AssignmentPoolScore::class)->metricsForAssignment($assignment);
+            }
+
+            if (is_array($poolMetrics) && ($poolMetrics['pool'] ?? 0) > 0) {
                 $scorePct = $poolMetrics['score_pct'];
                 $completionPct = $poolMetrics['completion_pct'];
                 $summary['latest_score_percent'] = $scorePct;

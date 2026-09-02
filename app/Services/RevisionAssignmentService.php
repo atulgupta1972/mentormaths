@@ -29,9 +29,6 @@ class RevisionAssignmentService
             return null;
         }
 
-        // Rebuild from attempts so older completions (pre-pool) unlock correctly.
-        $this->poolScore->rebuildFromAttempts($assignment);
-
         if (! $this->poolScore->isFullyCorrected($assignment)) {
             return null;
         }

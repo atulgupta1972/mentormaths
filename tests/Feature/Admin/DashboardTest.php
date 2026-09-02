@@ -20,6 +20,7 @@ use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Services\ClassCoverageService;
+use App\Services\DashboardService;
 use App\Services\QuestionResolutionService;
 use App\Services\UserGroupService;
 use App\Support\PracticeSetScope;
@@ -222,6 +223,51 @@ class DashboardTest extends TestCase
                 ->where('isAdmin', false)
                 ->loadDeferredProps('default', fn ($deferred) => $deferred
                     ->where('classCoverage.load_error', fn ($message) => str_contains($message, 'study plan'))));
+    }
+
+    public function test_student_deferred_load_skips_full_dashboard_query(): void
+    {
+        $this->withoutVite();
+        $this->withoutMiddleware([
+            EnsureFormulaDrillComplete::class,
+            EnsureBasicsDrillComplete::class,
+        ]);
+
+        [, $enrollment] = $this->seedAdminDashboard();
+        $user = $enrollment->student->user;
+
+        $emptyStudentPayload = [
+            'resumeItems' => [],
+            'examPlans' => ['upcoming' => [], 'past' => []],
+            'syllabusChapters' => [],
+            'examTypeOptions' => [],
+            'stats' => [
+                'upcoming_exams' => 0,
+                'past_exams' => 0,
+                'sets_todo' => 0,
+                'sets_under_review' => 0,
+                'sets_done' => 0,
+                'resolution_count' => 0,
+            ],
+            'resolutionItems' => [],
+            'resolutionCount' => 0,
+        ];
+
+        $this->mock(DashboardService::class, function ($mock) use ($emptyStudentPayload) {
+            $mock->shouldReceive('forStudent')
+                ->once()
+                ->andReturn($emptyStudentPayload);
+        });
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Dashboard')
+                ->where('isAdmin', false)
+                ->loadDeferredProps('default', fn ($deferred) => $deferred
+                    ->has('classCoverage')
+                    ->has('assignments')));
     }
 
     public function test_admin_dashboard_survives_grade_context_switch(): void

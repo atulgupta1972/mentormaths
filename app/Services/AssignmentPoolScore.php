@@ -7,6 +7,7 @@ use App\Models\GuidedAttemptQuestion;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\SetAttemptAnswer;
+use App\Services\StudyPlanMetricsCacheService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -118,7 +119,15 @@ class AssignmentPoolScore
             }
         });
 
-        return $this->metricsForAssignment($assignment);
+        $metrics = $this->metricsForAssignment($assignment);
+        $this->persistMetricsCache($assignment, $metrics);
+
+        return $metrics;
+    }
+
+    private function persistMetricsCache(SetAssignment $assignment, array $metrics): void
+    {
+        app(StudyPlanMetricsCacheService::class)->persistAssignmentPoolMetrics($assignment->fresh(), $metrics);
     }
 
     /**

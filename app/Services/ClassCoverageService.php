@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\SetAssignment;
 use App\Models\StudentChapterCoverage;
+use App\Models\StudentChapterMetric;
 use App\Models\StudentEnrollment;
 use App\Models\SyllabusChapter;
 use App\Models\TextbookChapter;
@@ -48,6 +49,12 @@ class ClassCoverageService
             ->get()
             ->keyBy('syllabus_chapter_id');
 
+        $chapterMetrics = StudentChapterMetric::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
+            ->get()
+            ->keyBy('syllabus_chapter_id');
+
         $summary = $this->chapterSummaryService->forEnrollment($enrollment);
         $summaryById = collect($summary['chapters'] ?? [])->keyBy('id');
         $availabilityColumns = $this->availabilityColumnsFor($summary['book_columns'] ?? []);
@@ -56,6 +63,7 @@ class ClassCoverageService
 
         $chapters = $chapterOptions->values()->map(function (array $chapter) use (
             $coverages,
+            $chapterMetrics,
             $summaryById,
             $availabilityColumns,
             &$underStudyId,
@@ -94,6 +102,7 @@ class ClassCoverageService
                 'under_study' => $isUnderStudy,
                 'availability' => $availability,
                 'items' => $this->formatDetailItems($rawItems),
+                'performance' => $chapterMetrics->get($chapter['id'])?->performance,
             ];
         })->sort(function (array $left, array $right) {
             $byNumber = strcmp(
@@ -126,6 +135,91 @@ class ClassCoverageService
             'availability_columns' => $availabilityColumns,
             'additional_groups' => $additionalGroups,
             'chapter_choices' => $chapterChoices,
+            'study_plan_performance' => $this->studyPlanPerformanceFromStoredChapterMetrics($chapters),
+        ];
+    }
+
+    /**
+     * Aggregate stored chapter metrics for marked Studied / Under study chapters (fast dashboard card).
+     *
+     * @param  list<array<string, mixed>>  $chapters
+     * @return array<string, mixed>|null
+     */
+    public function studyPlanPerformanceFromStoredChapterMetrics(array $chapters): ?array
+    {
+        $tracked = collect($chapters)->filter(
+            fn (array $chapter) => ($chapter['studied'] ?? false) || ($chapter['under_study'] ?? false),
+        );
+
+        if ($tracked->isEmpty()) {
+            return null;
+        }
+
+        $items = [];
+        $labels = [];
+
+        foreach ($tracked as $chapter) {
+            $performance = $chapter['performance'] ?? null;
+
+            if (! is_array($performance)) {
+                continue;
+            }
+
+            $items[] = [
+                'pool_metrics' => [
+                    'pool' => (int) ($performance['total'] ?? 0),
+                    'attempted' => (int) ($performance['done'] ?? 0),
+                    'correct' => (int) ($performance['correct'] ?? 0),
+                ],
+                'status' => ($performance['done'] ?? 0) > 0 ? 'done' : 'pending',
+            ];
+            $items[] = [
+                'pool_metrics' => [
+                    'pool' => (int) ($performance['revisionTotal'] ?? 0),
+                    'attempted' => (int) ($performance['revisionDone'] ?? 0),
+                    'correct' => (int) ($performance['revisionCorrect'] ?? 0),
+                ],
+                'is_revision' => true,
+                'status' => ($performance['revisionDone'] ?? 0) > 0 ? 'done' : 'pending',
+            ];
+
+            $number = trim((string) ($chapter['chapter_number'] ?? ''));
+            $labels[] = $number !== ''
+                ? (str_starts_with(strtolower($number), 'ch') ? $number : 'Ch '.$number)
+                : (string) ($chapter['name'] ?? 'Chapter');
+        }
+
+        if ($items === []) {
+            return null;
+        }
+
+        $main = array_values(array_filter($items, fn (array $item) => ! ($item['is_revision'] ?? false)));
+        $revisionItems = array_values(array_filter($items, fn (array $item) => (bool) ($item['is_revision'] ?? false)));
+        $mainAgg = \App\Support\SumPoolAggregate::fromItems($main);
+        $revisionAgg = \App\Support\SumPoolAggregate::fromItems($revisionItems);
+
+        $openWrongs = (int) $tracked->sum(fn (array $chapter) => (int) (($chapter['performance']['openWrongs'] ?? 0)));
+
+        return [
+            'total' => $mainAgg['pool'],
+            'done' => $mainAgg['attempted'],
+            'correct' => $mainAgg['correct'],
+            'completion_pct' => $mainAgg['completion_pct'],
+            'score_pct' => $mainAgg['score_pct'],
+            'scored_count' => $mainAgg['correct'],
+            'set_total' => $mainAgg['set_total'],
+            'set_done' => $mainAgg['set_done'],
+            'revision_total' => $revisionAgg['pool'],
+            'revision_done' => $revisionAgg['attempted'],
+            'revision_correct' => $revisionAgg['correct'],
+            'revision_completion_pct' => $revisionAgg['completion_pct'],
+            'revision_score_pct' => $revisionAgg['score_pct'],
+            'revision_scored_count' => $revisionAgg['correct'],
+            'correction_done' => 0,
+            'correction_pending' => 0,
+            'open_wrongs' => $openWrongs,
+            'chapter_count' => $tracked->count(),
+            'chapter_labels' => array_slice($labels, 0, 6),
         ];
     }
 
@@ -153,6 +247,7 @@ class ClassCoverageService
             ],
             'additional_groups' => [],
             'chapter_choices' => [],
+            'study_plan_performance' => null,
         ];
     }
 
