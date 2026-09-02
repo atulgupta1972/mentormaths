@@ -397,6 +397,7 @@ class AssignmentProgress
 
         return [
             'assignment_id' => $summary['assignment_id'],
+            'practice_set_id' => $summary['practice_set_id'] ?? $assignment->worksheet_id,
             'set_code' => $summary['set_code'],
             'set_number' => $summary['set_number'],
             'kind_label' => $summary['kind_label'],

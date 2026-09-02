@@ -12,7 +12,7 @@ import StudentWeeklyReportEmailsPanel from '@/Components/StudentWeeklyReportEmai
 import { formatScoreLabel } from '@/utils/scores';
 import { formatDate, formatDateTime } from '@/utils/dates';
 import { hasRoute, safeRoute } from '@/utils/routes';
-import { Head, Link, useForm, usePage, Deferred } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage, Deferred, router } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref } from 'vue';
 
 const page = usePage();
@@ -31,6 +31,7 @@ const props = defineProps({
     },
     assignments: { type: Array, default: () => [] },
     resumeItems: { type: Array, default: () => [] },
+    followUpItems: { type: Array, default: () => [] },
     activeYear: Object,
     selectedGrade: Object,
     examPlans: {
@@ -165,6 +166,9 @@ const studiedChapterRows = computed(() => coverageChapters.value.filter((c) => c
 const underStudyChapterRows = computed(() => coverageChapters.value.filter((c) => c.under_study));
 
 const resumeItems = computed(() => props.resumeItems || []);
+const followUpItems = computed(() => props.followUpItems || []);
+
+const correctingWorksheetId = ref(null);
 
 const resumeHref = (item) => {
     if (item.attempt_id && hasRoute('student.attempts.show')) {
@@ -178,6 +182,22 @@ const resumeHref = (item) => {
     return item.assignment_id
         ? route('student.assignments.show', item.assignment_id)
         : '#';
+};
+
+const startCorrectionPractice = (item) => {
+    if (! item.practice_set_id || correctingWorksheetId.value) {
+        return;
+    }
+
+    correctingWorksheetId.value = item.practice_set_id;
+
+    router.post(route('student.worksheets.correction-practice', item.practice_set_id), {
+        assignment_id: item.assignment_id || null,
+    }, {
+        onFinish: () => {
+            correctingWorksheetId.value = null;
+        },
+    });
 };
 
 const allExamPlans = computed(() => [
@@ -997,6 +1017,98 @@ const formatHelpDate = (value) => {
                                         Open
                                     </Link>
                                 </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Recently finished — correct wrongs or review latest score -->
+                    <section
+                        v-if="followUpItems.length"
+                        class="rounded-xl border-2 border-violet-400 bg-gradient-to-br from-violet-50 via-fuchsia-50 to-white p-4 shadow-md"
+                    >
+                        <h3 class="text-sm font-bold uppercase tracking-wide text-violet-950">
+                            Recent sets · {{ followUpItems.length }}
+                        </h3>
+                        <p class="mt-1 text-xs text-violet-900">
+                            Your latest finished work is here. Correct wrong sums to reach 100% — no need to open the chapter again.
+                        </p>
+                        <div class="mt-3 space-y-2">
+                            <div
+                                v-for="item in followUpItems"
+                                :key="`follow-up-${item.assignment_id}`"
+                                class="rounded-lg border border-violet-200 bg-white px-3 py-2.5 shadow-sm"
+                            >
+                                <p v-if="item.chapter_name" class="text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                                    {{ item.chapter_name }}
+                                    <span v-if="item.topic_name" class="font-medium normal-case tracking-normal text-slate-500">
+                                        · {{ item.topic_name }}
+                                    </span>
+                                </p>
+                                <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                                    <span class="font-mono text-sm font-bold text-slate-900">
+                                        {{ item.set_code || 'Set' }}
+                                    </span>
+                                    <span
+                                        v-if="item.score_label"
+                                        class="rounded bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-950"
+                                    >
+                                        {{ item.score_label }}
+                                    </span>
+                                    <span
+                                        v-if="item.under_review"
+                                        class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-900"
+                                    >
+                                        Under review
+                                    </span>
+                                    <span
+                                        v-else-if="item.needs_follow_up"
+                                        class="rounded bg-fuchsia-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-fuchsia-950"
+                                    >
+                                        Not 100% yet
+                                    </span>
+                                    <span
+                                        v-else
+                                        class="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-900"
+                                    >
+                                        Done
+                                    </span>
+                                    <span
+                                        v-if="item.detail"
+                                        class="text-xs text-slate-600"
+                                    >
+                                        {{ item.detail }}
+                                    </span>
+                                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                                        {{ item.kind_label }}
+                                    </span>
+                                    <div class="ml-auto flex flex-wrap items-center gap-2">
+                                        <button
+                                            v-if="item.can_correct"
+                                            type="button"
+                                            class="inline-flex rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+                                            :disabled="correctingWorksheetId === item.practice_set_id"
+                                            @click="startCorrectionPractice(item)"
+                                        >
+                                            {{ correctingWorksheetId === item.practice_set_id ? 'Starting…' : 'Correct now' }}
+                                        </button>
+                                        <Link
+                                            v-if="item.latest_attempt_id"
+                                            :href="route('student.attempts.result', item.latest_attempt_id)"
+                                            class="inline-flex rounded-md border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50"
+                                        >
+                                            Review
+                                        </Link>
+                                        <Link
+                                            :href="assignmentHref(item)"
+                                            class="inline-flex rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                        >
+                                            Open set
+                                        </Link>
+                                    </div>
+                                </div>
+                                <p v-if="item.submitted_at" class="mt-1 text-[10px] text-slate-500">
+                                    Finished {{ formatDateTime(item.submitted_at) }}
+                                </p>
                             </div>
                         </div>
                     </section>

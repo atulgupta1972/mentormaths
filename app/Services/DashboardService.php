@@ -53,6 +53,7 @@ class DashboardService
 
         $payload = [
             'resumeItems' => $this->resumeItemsFromAssignments($assignments),
+            'followUpItems' => $this->followUpItemsFromAssignments($assignments),
             'examPlans' => $examPlanMeta,
             'syllabusChapters' => $syllabusChapters,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
@@ -614,6 +615,102 @@ class DashboardService
         });
 
         return array_values($items);
+    }
+
+    /**
+     * Recently finished sets that still need correction or review — shown at the top of the dashboard.
+     *
+     * @param  list<array<string, mixed>>  $assignments
+     * @return list<array<string, mixed>>
+     */
+    private function followUpItemsFromAssignments(array $assignments): array
+    {
+        $items = [];
+        $now = now();
+
+        foreach ($assignments as $row) {
+            $submittedAt = $row['submitted_at'] ?? null;
+
+            if (! $submittedAt || ! empty($row['in_progress_attempt_id'])) {
+                continue;
+            }
+
+            $pool = is_array($row['pool_metrics'] ?? null) ? $row['pool_metrics'] : null;
+            $pendingRemedial = (int) ($pool['pending_remedial'] ?? 0);
+            $pending = (int) ($pool['pending'] ?? 0);
+            $scorePct = $pool['score_pct'] ?? $row['latest_score_percent'] ?? null;
+            $completionPct = $pool['completion_pct'] ?? $row['completion_pct'] ?? null;
+            $status = (string) ($row['status'] ?? '');
+
+            $needsCorrection = $pendingRemedial > 0;
+            $needsMoreWork = $pending > 0
+                || ($completionPct !== null && (int) $completionPct < 100);
+            $notPerfectScore = $scorePct !== null && (int) $scorePct < 100;
+            $underReview = $status === 'checking';
+            $submittedRecently = $now->diffInHours(\Carbon\Carbon::parse($submittedAt)) <= 72;
+
+            if (! $needsCorrection && ! $needsMoreWork && ! $notPerfectScore && ! $underReview && ! $submittedRecently) {
+                continue;
+            }
+
+            if (
+                $submittedRecently
+                && ! $needsCorrection
+                && ! $needsMoreWork
+                && ! $notPerfectScore
+                && ! $underReview
+                && (int) ($scorePct ?? 100) === 100
+                && (int) ($completionPct ?? 100) === 100
+                && $now->diffInHours(\Carbon\Carbon::parse($submittedAt)) > 24
+            ) {
+                continue;
+            }
+
+            $detail = (string) ($row['status_detail'] ?? '');
+
+            if ($detail === '' && $pool) {
+                $parts = [];
+
+                if ($needsCorrection) {
+                    $parts[] = $pendingRemedial.' to correct';
+                } elseif ($pending > 0) {
+                    $parts[] = $pending.' left';
+                }
+
+                if ($scorePct !== null) {
+                    $parts[] = 'score '.(int) $scorePct.'%';
+                }
+
+                if ($completionPct !== null) {
+                    $parts[] = 'completion '.(int) $completionPct.'%';
+                }
+
+                $detail = implode(' · ', $parts);
+            }
+
+            $items[] = [
+                'assignment_id' => $row['assignment_id'] ?? null,
+                'practice_set_id' => $row['practice_set_id'] ?? null,
+                'latest_attempt_id' => $row['latest_attempt_id'] ?? null,
+                'set_code' => $row['set_code'] ?? null,
+                'kind_label' => $row['kind_label'] ?? 'Practice',
+                'chapter_name' => $row['chapter_name'] ?? null,
+                'topic_name' => $row['topic_name'] ?? null,
+                'delivery_mode' => $row['delivery_mode'] ?? 'online',
+                'submitted_at' => $submittedAt,
+                'score_label' => $row['score_display'] ?? $row['latest_score_label'] ?? null,
+                'detail' => $detail,
+                'can_correct' => $needsCorrection,
+                'needs_follow_up' => $needsCorrection || $needsMoreWork || $notPerfectScore || $underReview,
+                'under_review' => $underReview,
+            ];
+        }
+
+        usort($items, static function (array $left, array $right): int {
+            return strcmp((string) ($right['submitted_at'] ?? ''), (string) ($left['submitted_at'] ?? ''));
+        });
+
+        return array_values(array_slice($items, 0, 5));
     }
 
     private function studentStats(array $assignments, array $examPlans, int $resolutionCount = 0): array

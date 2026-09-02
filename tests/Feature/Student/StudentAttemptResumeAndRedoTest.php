@@ -18,6 +18,7 @@ use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
+use App\Services\AssignmentPoolScore;
 use App\Support\AssignmentProgress;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
@@ -161,6 +162,53 @@ class StudentAttemptResumeAndRedoTest extends TestCase
                 ->where('resumeItems.0.remaining', 3)
                 ->where('resumeItems.0.total', 5)
                 ->where('resumeItems.0.chapter_name', 'Numbers')
+            );
+    }
+
+    public function test_dashboard_lists_recent_completed_set_in_follow_up_items(): void
+    {
+        $this->withoutVite();
+        $this->withoutMiddleware([
+            \App\Http\Middleware\EnsureFormulaDrillComplete::class,
+            \App\Http\Middleware\EnsureBasicsDrillComplete::class,
+        ]);
+
+        [$assignment, $questions, $user] = $this->seedChapterTestAssignment(questionCount: 5, withUser: true);
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subHour(),
+            'completed_at' => now(),
+            'score' => 3,
+            'max_score' => 5,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+        $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
+
+        foreach ($questions as $index => $question) {
+            $option = $question->options->firstWhere('is_correct', $index < 3);
+
+            SetAttemptAnswer::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'question_option_id' => $option->id,
+                'is_correct' => $index < 3,
+            ]);
+        }
+
+        app(AssignmentPoolScore::class)->rebuildFromAttempts($assignment->fresh());
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('followUpItems', 1)
+                ->where('followUpItems.0.set_code', 'T1')
+                ->where('followUpItems.0.can_correct', true)
+                ->where('followUpItems.0.chapter_name', 'Numbers')
             );
     }
 
