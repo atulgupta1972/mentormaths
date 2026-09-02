@@ -254,6 +254,7 @@ const prepLabel = (plan) => {
                         :exam-type-options="examTypeOptions"
                         context="student"
                         compact
+                        hide-plan-list
                         :auto-open-create="!allPlans.length"
                         :highlight-plan-id="highlightPlanId"
                     />

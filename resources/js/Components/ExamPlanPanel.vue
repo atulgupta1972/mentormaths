@@ -18,6 +18,7 @@ const props = defineProps({
     compact: { type: Boolean, default: false },
     autoOpenCreate: { type: Boolean, default: false },
     highlightPlanId: { type: [Number, String], default: null },
+    hidePlanList: { type: Boolean, default: false },
 });
 
 const isAdminContext = computed(() => props.context === 'admin');
@@ -526,7 +527,7 @@ onUnmounted(() => {
             </PrimaryButton>
         </div>
 
-        <div v-if="compact && canAddExam" class="flex flex-wrap items-center justify-between gap-3">
+        <div v-if="compact && canAddExam && !hidePlanList" class="flex flex-wrap items-center justify-between gap-3">
             <p class="text-sm text-gray-600">
                 {{ isAdminContext ? 'Edit exam or assign chapter practice / tests.' : 'Add your upcoming exam.' }}
             </p>
@@ -544,13 +545,13 @@ onUnmounted(() => {
             </template>
         </div>
 
-        <div v-if="showForm && canManage" class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-4">
+        <div v-if="showForm && canManage" class="rounded-lg border border-indigo-200 bg-indigo-50/40" :class="compact ? 'p-3' : 'p-4'">
             <h4 class="text-sm font-medium text-gray-900">
                 {{ editingPlan ? 'Edit exam plan' : 'Add exam plan' }}
             </h4>
 
-            <form class="mt-4 space-y-4" @submit.prevent="submit">
-                <div class="grid gap-4 sm:grid-cols-2">
+            <form class="mt-3 space-y-3" @submit.prevent="submit">
+                <div class="grid gap-3 sm:grid-cols-2">
                     <div>
                         <InputLabel value="Exam date" />
                         <TextInput v-model="form.exam_date" type="date" class="mt-1 block w-full" required />
@@ -572,65 +573,77 @@ onUnmounted(() => {
                     </div>
                     <div class="sm:col-span-2">
                         <InputLabel value="Chapters in this exam" />
-                        <div class="mt-2 max-h-80 space-y-2 overflow-y-auto rounded-md border border-gray-300 bg-white p-3">
-                            <div
-                                v-for="chapter in syllabusChapters"
-                                :key="chapter.id"
-                                class="rounded-lg border border-gray-100 p-3"
-                            >
-                                <div class="flex items-start gap-3">
-                                    <input
-                                        type="checkbox"
-                                        class="mt-1 rounded border-gray-300 text-indigo-600"
-                                        :checked="isChapterSelected(chapter.id)"
-                                        @change="toggleChapter(chapter.id)"
-                                    />
-                                    <div class="min-w-0 flex-1">
-                                        <label class="block text-sm font-medium text-gray-900">{{ chapter.label }}</label>
-                                        <p v-if="isChapterSelected(chapter.id)" class="mt-0.5 text-xs text-gray-500">
+                        <div
+                            class="mt-2 overflow-y-auto rounded-md border border-gray-300 bg-white"
+                            :class="compact ? 'max-h-96' : 'max-h-80'"
+                        >
+                            <ul class="divide-y divide-gray-100">
+                                <li
+                                    v-for="chapter in syllabusChapters"
+                                    :key="chapter.id"
+                                >
+                                    <div class="flex items-center gap-2 px-2 py-1.5">
+                                        <input
+                                            :id="`exam-chapter-${chapter.id}`"
+                                            type="checkbox"
+                                            class="shrink-0 rounded border-gray-300 text-indigo-600"
+                                            :checked="isChapterSelected(chapter.id)"
+                                            @change="toggleChapter(chapter.id)"
+                                        />
+                                        <label
+                                            :for="`exam-chapter-${chapter.id}`"
+                                            class="min-w-0 flex-1 cursor-pointer truncate text-sm text-gray-900"
+                                            :title="chapter.label"
+                                        >
+                                            {{ chapter.label }}
+                                        </label>
+                                        <span
+                                            v-if="isChapterSelected(chapter.id) && chapterSelections[chapter.id]?.topicIds !== null"
+                                            class="shrink-0 text-[10px] text-gray-500"
+                                        >
                                             {{ selectionSummary(chapter.id) }}
-                                        </p>
+                                        </span>
                                         <button
                                             v-if="isChapterSelected(chapter.id) && chapter.topics?.length"
                                             type="button"
-                                            class="mt-1 text-xs font-medium text-indigo-600 hover:underline"
+                                            class="shrink-0 text-[10px] font-medium text-indigo-600 hover:underline"
                                             @click="toggleTopicPanel(chapter.id)"
                                         >
-                                            {{ isTopicExpanded(chapter.id) ? 'Hide topics' : 'Select topics' }}
+                                            {{ isTopicExpanded(chapter.id) ? 'Hide' : 'Topics' }}
                                         </button>
                                     </div>
-                                </div>
 
-                                <div
-                                    v-if="isChapterSelected(chapter.id) && isTopicExpanded(chapter.id) && chapter.topics?.length"
-                                    class="mt-3 ml-7 space-y-1.5 border-l border-gray-200 pl-3"
-                                >
-                                    <label
-                                        v-for="topic in chapter.topics"
-                                        :key="topic.id"
-                                        class="flex cursor-pointer items-center gap-2 text-sm text-gray-700"
+                                    <div
+                                        v-if="isChapterSelected(chapter.id) && isTopicExpanded(chapter.id) && chapter.topics?.length"
+                                        class="border-t border-gray-100 bg-slate-50 px-2 py-1.5 pl-7"
                                     >
-                                        <input
-                                            type="checkbox"
-                                            class="rounded border-gray-300 text-indigo-600"
-                                            :checked="isTopicSelected(chapter.id, topic.id)"
-                                            @change="toggleTopic(chapter.id, topic.id)"
-                                        />
-                                        {{ topic.name }}
-                                    </label>
-                                    <p class="text-[11px] text-gray-400">
-                                        Leave all topics ticked for the full chapter, or untick topics to narrow the exam scope.
-                                    </p>
-                                </div>
-                            </div>
+                                        <label
+                                            v-for="topic in chapter.topics"
+                                            :key="topic.id"
+                                            class="flex cursor-pointer items-center gap-2 py-0.5 text-xs text-gray-700"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                class="rounded border-gray-300 text-indigo-600"
+                                                :checked="isTopicSelected(chapter.id, topic.id)"
+                                                @change="toggleTopic(chapter.id, topic.id)"
+                                            />
+                                            <span class="min-w-0 truncate" :title="topic.name">{{ topic.name }}</span>
+                                        </label>
+                                    </div>
+                                </li>
+                            </ul>
                         </div>
-                        <InputError class="mt-1" :message="form.errors.chapter_selections" />
+                        <p v-if="compact" class="mt-1 text-[11px] text-gray-500">
+                            Tick the chapters in this test. Use <strong>Topics</strong> only if the exam covers part of a chapter.
+                        </p>
+                        <InputError class="mt-1" :message="form.errors.chapter_selections || submitErrors.chapter_selections" />
                     </div>
                     <div class="sm:col-span-2">
                         <InputLabel value="Notes (optional)" />
                         <textarea
                             v-model="form.notes"
-                            rows="2"
+                            :rows="compact ? 2 : 2"
                             class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm"
                             placeholder="Anything your teacher should know"
                         />
@@ -678,7 +691,7 @@ onUnmounted(() => {
 
         <!-- Compact: one slim row (newest first) -->
         <div
-            v-else-if="plans.length && compact"
+            v-else-if="plans.length && compact && !hidePlanList"
             class="flex flex-wrap items-center gap-1.5"
         >
             <div
