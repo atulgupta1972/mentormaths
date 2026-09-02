@@ -4,7 +4,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { formatDate } from '@/utils/dates';
 import { Head, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 
 const props = defineProps({
     examPlans: {
@@ -21,8 +21,8 @@ const props = defineProps({
 });
 
 const page = usePage();
-const showPlanner = ref(false);
-const highlightPlanId = ref(null);
+const createFormOpen = ref(props.allPlans.length === 0);
+const editingPlanId = ref(null);
 
 const upcoming = computed(() => props.examPlans.upcoming || []);
 const past = computed(() => props.examPlans.past || []);
@@ -68,11 +68,6 @@ const daysUntil = (dateStr) => {
     return `In ${diff} days`;
 };
 
-const openPlanner = (planId = null) => {
-    highlightPlanId.value = planId;
-    showPlanner.value = true;
-};
-
 const prepLabel = (plan) => {
     if (!plan.prep_summary?.total) {
         return '—';
@@ -80,6 +75,34 @@ const prepLabel = (plan) => {
 
     return `${plan.prep_summary.completed}/${plan.prep_summary.total} done`;
 };
+
+const scrollToForm = (elementId) => {
+    nextTick(() => {
+        document.getElementById(elementId)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+        });
+    });
+};
+
+const openAddForm = () => {
+    editingPlanId.value = null;
+    createFormOpen.value = true;
+    scrollToForm('exam-form-add');
+};
+
+const openEditForm = (planId) => {
+    createFormOpen.value = false;
+    editingPlanId.value = planId;
+    scrollToForm(`exam-form-edit-${planId}`);
+};
+
+const closeForms = () => {
+    createFormOpen.value = false;
+    editingPlanId.value = null;
+};
+
+const isEditingRow = (planId) => String(editingPlanId.value) === String(planId);
 </script>
 
 <template>
@@ -107,9 +130,45 @@ const prepLabel = (plan) => {
                 </div>
 
                 <div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
-                    Add each school test here with its date and chapters. After the exam, enter your marks.
-                    Prep sets for exams are assigned from your study plan on the dashboard.
+                    Add each school test with its date and chapters. After the exam, enter your marks.
+                    Prep sets are assigned from your study plan on the dashboard.
                 </div>
+
+                <section
+                    v-if="createFormOpen"
+                    id="exam-form-add"
+                    class="rounded-xl border-2 border-indigo-300 bg-indigo-50/50 p-4 shadow-sm"
+                >
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-sm font-bold uppercase tracking-wide text-indigo-950">
+                                Add new exam
+                            </h3>
+                            <p class="mt-1 text-xs text-indigo-900/80">
+                                Enter the test date, type, title, and chapters.
+                            </p>
+                        </div>
+                        <button
+                            v-if="allPlans.length"
+                            type="button"
+                            class="text-xs font-semibold text-indigo-800 hover:underline"
+                            @click="closeForms"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                    <ExamPlanPanel
+                        :plans="allPlans"
+                        :syllabus-chapters="syllabusChapters"
+                        :exam-type-options="examTypeOptions"
+                        context="student"
+                        compact
+                        embedded
+                        hide-plan-list
+                        auto-open-create
+                        @closed="closeForms"
+                    />
+                </section>
 
                 <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -121,7 +180,12 @@ const prepLabel = (plan) => {
                                 Tests still to come — sorted by date.
                             </p>
                         </div>
-                        <PrimaryButton type="button" class="!py-2 !text-sm" @click="openPlanner()">
+                        <PrimaryButton
+                            v-if="!createFormOpen"
+                            type="button"
+                            class="!py-2 !text-sm"
+                            @click="openAddForm"
+                        >
                             Add exam
                         </PrimaryButton>
                     </div>
@@ -138,40 +202,88 @@ const prepLabel = (plan) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr
-                                    v-for="plan in upcoming"
-                                    :key="plan.id"
-                                    class="border-b border-slate-100 last:border-0"
-                                >
-                                    <td class="px-2 py-2.5 align-top whitespace-nowrap">
-                                        <p class="font-semibold text-slate-900">{{ formatDate(plan.exam_date) }}</p>
-                                        <p class="text-xs text-slate-500">{{ daysUntil(plan.exam_date) }}</p>
-                                    </td>
-                                    <td class="px-2 py-2.5 align-top">
-                                        <p class="font-semibold text-slate-900">{{ plan.title }}</p>
-                                        <p class="text-xs text-slate-500">{{ plan.exam_type_label }}</p>
-                                    </td>
-                                    <td class="max-w-[14rem] px-2 py-2.5 align-top text-xs text-slate-700">
-                                        {{ chapterSummary(plan) }}
-                                    </td>
-                                    <td class="px-2 py-2.5 align-top text-xs text-slate-700">
-                                        {{ prepLabel(plan) }}
-                                    </td>
-                                    <td class="px-2 py-2.5 align-top text-right">
-                                        <button
-                                            type="button"
-                                            class="text-xs font-semibold text-indigo-700 hover:underline"
-                                            @click="openPlanner(plan.id)"
-                                        >
-                                            Edit
-                                        </button>
-                                    </td>
-                                </tr>
+                                <template v-for="plan in upcoming" :key="plan.id">
+                                    <tr
+                                        class="border-b border-slate-100"
+                                        :class="isEditingRow(plan.id) ? 'bg-indigo-50/70' : 'last:border-0'"
+                                    >
+                                        <td class="px-2 py-2.5 align-top whitespace-nowrap">
+                                            <p class="font-semibold text-slate-900">{{ formatDate(plan.exam_date) }}</p>
+                                            <p class="text-xs text-slate-500">{{ daysUntil(plan.exam_date) }}</p>
+                                        </td>
+                                        <td class="px-2 py-2.5 align-top">
+                                            <p class="font-semibold text-slate-900">{{ plan.title }}</p>
+                                            <p class="text-xs text-slate-500">{{ plan.exam_type_label }}</p>
+                                        </td>
+                                        <td class="max-w-[14rem] px-2 py-2.5 align-top text-xs text-slate-700">
+                                            {{ chapterSummary(plan) }}
+                                        </td>
+                                        <td class="px-2 py-2.5 align-top text-xs text-slate-700">
+                                            {{ prepLabel(plan) }}
+                                        </td>
+                                        <td class="px-2 py-2.5 align-top text-right">
+                                            <button
+                                                v-if="!isEditingRow(plan.id)"
+                                                type="button"
+                                                class="text-xs font-semibold text-indigo-700 hover:underline"
+                                                @click="openEditForm(plan.id)"
+                                            >
+                                                Edit
+                                            </button>
+                                            <span v-else class="text-xs font-semibold text-indigo-900">Editing…</span>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="isEditingRow(plan.id)">
+                                        <td colspan="5" class="border-b border-indigo-200 bg-indigo-50/40 p-0">
+                                            <div
+                                                :id="`exam-form-edit-${plan.id}`"
+                                                class="border-t-2 border-indigo-300 p-4"
+                                            >
+                                                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                                    <div>
+                                                        <h3 class="text-sm font-bold uppercase tracking-wide text-indigo-950">
+                                                            Edit exam · {{ plan.title }}
+                                                        </h3>
+                                                        <p class="mt-1 text-xs text-indigo-900/80">
+                                                            {{ formatDate(plan.exam_date) }} · {{ plan.exam_type_label }}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        class="text-xs font-semibold text-indigo-800 hover:underline"
+                                                        @click="closeForms"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                                <ExamPlanPanel
+                                                    :plans="allPlans"
+                                                    :syllabus-chapters="syllabusChapters"
+                                                    :exam-type-options="examTypeOptions"
+                                                    context="student"
+                                                    compact
+                                                    embedded
+                                                    hide-plan-list
+                                                    :highlight-plan-id="plan.id"
+                                                    @closed="closeForms"
+                                                />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>
                     <p v-else class="mt-4 text-sm text-slate-500">
-                        No upcoming exams yet. Click <strong>Add exam</strong> to enter your next test date.
+                        No upcoming exams yet.
+                        <button
+                            v-if="!createFormOpen"
+                            type="button"
+                            class="font-semibold text-indigo-700 hover:underline"
+                            @click="openAddForm"
+                        >
+                            Add your first exam
+                        </button>
                     </p>
                 </section>
 
@@ -194,70 +306,83 @@ const prepLabel = (plan) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr
-                                    v-for="plan in past"
-                                    :key="plan.id"
-                                    class="border-b border-slate-100 last:border-0"
-                                >
-                                    <td class="px-2 py-2.5 align-top whitespace-nowrap font-semibold text-slate-900">
-                                        {{ formatDate(plan.exam_date) }}
-                                    </td>
-                                    <td class="px-2 py-2.5 align-top">
-                                        <p class="font-semibold text-slate-900">{{ plan.title }}</p>
-                                        <p class="text-xs text-slate-500">{{ plan.exam_type_label }}</p>
-                                    </td>
-                                    <td class="px-2 py-2.5 align-top">
-                                        <span
-                                            v-if="plan.has_marks || plan.marks_score_label"
-                                            class="font-semibold text-emerald-700"
-                                        >
-                                            {{ plan.marks_score_label }}
-                                        </span>
-                                        <span v-else class="text-xs font-medium text-amber-800">Not entered</span>
-                                    </td>
-                                    <td class="px-2 py-2.5 align-top text-right">
-                                        <button
-                                            type="button"
-                                            class="text-xs font-semibold text-indigo-700 hover:underline"
-                                            @click="openPlanner(plan.id)"
-                                        >
-                                            {{ plan.has_marks ? 'Edit marks' : 'Enter marks' }}
-                                        </button>
-                                    </td>
-                                </tr>
+                                <template v-for="plan in past" :key="plan.id">
+                                    <tr
+                                        class="border-b border-slate-100"
+                                        :class="isEditingRow(plan.id) ? 'bg-indigo-50/70' : 'last:border-0'"
+                                    >
+                                        <td class="px-2 py-2.5 align-top whitespace-nowrap font-semibold text-slate-900">
+                                            {{ formatDate(plan.exam_date) }}
+                                        </td>
+                                        <td class="px-2 py-2.5 align-top">
+                                            <p class="font-semibold text-slate-900">{{ plan.title }}</p>
+                                            <p class="text-xs text-slate-500">{{ plan.exam_type_label }}</p>
+                                        </td>
+                                        <td class="px-2 py-2.5 align-top">
+                                            <span
+                                                v-if="plan.has_marks || plan.marks_score_label"
+                                                class="font-semibold text-emerald-700"
+                                            >
+                                                {{ plan.marks_score_label }}
+                                            </span>
+                                            <span v-else class="text-xs font-medium text-amber-800">Not entered</span>
+                                        </td>
+                                        <td class="px-2 py-2.5 align-top text-right">
+                                            <button
+                                                v-if="!isEditingRow(plan.id)"
+                                                type="button"
+                                                class="text-xs font-semibold text-indigo-700 hover:underline"
+                                                @click="openEditForm(plan.id)"
+                                            >
+                                                {{ plan.has_marks ? 'Edit marks' : 'Enter marks' }}
+                                            </button>
+                                            <span v-else class="text-xs font-semibold text-indigo-900">Editing…</span>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="isEditingRow(plan.id)">
+                                        <td colspan="4" class="border-b border-indigo-200 bg-indigo-50/40 p-0">
+                                            <div
+                                                :id="`exam-form-edit-${plan.id}`"
+                                                class="border-t-2 border-indigo-300 p-4"
+                                            >
+                                                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                                    <div>
+                                                        <h3 class="text-sm font-bold uppercase tracking-wide text-indigo-950">
+                                                            Edit exam · {{ plan.title }}
+                                                        </h3>
+                                                        <p class="mt-1 text-xs text-indigo-900/80">
+                                                            {{ formatDate(plan.exam_date) }} · enter or update your school marks
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        class="text-xs font-semibold text-indigo-800 hover:underline"
+                                                        @click="closeForms"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                                <ExamPlanPanel
+                                                    :plans="allPlans"
+                                                    :syllabus-chapters="syllabusChapters"
+                                                    :exam-type-options="examTypeOptions"
+                                                    context="student"
+                                                    compact
+                                                    embedded
+                                                    hide-plan-list
+                                                    :highlight-plan-id="plan.id"
+                                                    @closed="closeForms"
+                                                />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>
                     <p v-else class="mt-4 text-sm text-slate-500">
                         No past exams yet.
                     </p>
-                </section>
-
-                <section v-if="showPlanner || !allPlans.length" class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 shadow-sm">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <h3 class="text-sm font-bold uppercase tracking-wide text-indigo-950">
-                            {{ allPlans.length ? 'Add or edit exam' : 'Add your first exam' }}
-                        </h3>
-                        <button
-                            v-if="showPlanner && allPlans.length"
-                            type="button"
-                            class="text-xs font-semibold text-indigo-800 hover:underline"
-                            @click="showPlanner = false"
-                        >
-                            Hide form
-                        </button>
-                    </div>
-                    <ExamPlanPanel
-                        class="mt-3"
-                        :plans="allPlans"
-                        :syllabus-chapters="syllabusChapters"
-                        :exam-type-options="examTypeOptions"
-                        context="student"
-                        compact
-                        hide-plan-list
-                        :auto-open-create="!allPlans.length"
-                        :highlight-plan-id="highlightPlanId"
-                    />
                 </section>
             </div>
         </div>

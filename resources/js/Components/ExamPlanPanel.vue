@@ -9,6 +9,8 @@ import { formatScoreLabel } from '@/utils/scores';
 import { useForm, router } from '@inertiajs/vue3';
 import { computed, onUnmounted, ref, watch } from 'vue';
 
+const emit = defineEmits(['closed']);
+
 const props = defineProps({
     plans: { type: Array, default: () => [] },
     syllabusChapters: { type: Array, default: () => [] },
@@ -19,6 +21,7 @@ const props = defineProps({
     autoOpenCreate: { type: Boolean, default: false },
     highlightPlanId: { type: [Number, String], default: null },
     hidePlanList: { type: Boolean, default: false },
+    embedded: { type: Boolean, default: false },
 });
 
 const isAdminContext = computed(() => props.context === 'admin');
@@ -391,11 +394,19 @@ const openEdit = (plan) => {
     showForm.value = true;
 };
 
-const cancelForm = () => {
+const closeForm = () => {
     showForm.value = false;
     editingPlan.value = null;
     form.reset();
     form.clearErrors();
+
+    if (props.embedded) {
+        emit('closed');
+    }
+};
+
+const cancelForm = () => {
+    closeForm();
 };
 
 const submit = () => {
@@ -426,7 +437,7 @@ const submit = () => {
 
     const options = {
         preserveScroll: true,
-        onSuccess: () => cancelForm(),
+        onSuccess: () => closeForm(),
         onError: (errors) => {
             submitErrors.value = errors;
         },
@@ -456,29 +467,25 @@ const removePlan = (plan) => {
     });
 };
 
-watch(
-    () => props.autoOpenCreate,
-    (shouldOpen) => {
-        if (shouldOpen && canAddExam.value && !showForm.value) {
-            openCreate();
-        }
-    },
-    { immediate: true },
-);
-
-watch(
-    () => props.highlightPlanId,
-    (planId) => {
-        if (!planId || showForm.value) {
-            return;
-        }
-
-        const plan = props.plans.find((row) => String(row.id) === String(planId));
+const syncRequestedForm = () => {
+    if (props.highlightPlanId) {
+        const plan = props.plans.find((row) => String(row.id) === String(props.highlightPlanId));
 
         if (plan) {
             openEdit(plan);
         }
-    },
+
+        return;
+    }
+
+    if (props.autoOpenCreate && canAddExam.value) {
+        openCreate();
+    }
+};
+
+watch(
+    () => [props.autoOpenCreate, props.highlightPlanId],
+    syncRequestedForm,
     { immediate: true },
 );
 
@@ -545,12 +552,15 @@ onUnmounted(() => {
             </template>
         </div>
 
-        <div v-if="showForm && canManage" class="rounded-lg border border-indigo-200 bg-indigo-50/40" :class="compact ? 'p-3' : 'p-4'">
-            <h4 class="text-sm font-medium text-gray-900">
+        <div
+            v-if="showForm && canManage"
+            :class="embedded ? undefined : ['rounded-lg', 'border', 'border-indigo-200', 'bg-indigo-50/40', compact ? 'p-3' : 'p-4']"
+        >
+            <h4 v-if="!embedded" class="text-sm font-medium text-gray-900">
                 {{ editingPlan ? 'Edit exam plan' : 'Add exam plan' }}
             </h4>
 
-            <form class="mt-3 space-y-3" @submit.prevent="submit">
+            <form :class="embedded ? 'space-y-3' : 'mt-3 space-y-3'" @submit.prevent="submit">
                 <div class="grid gap-3 sm:grid-cols-2">
                     <div>
                         <InputLabel value="Exam date" />
@@ -685,7 +695,7 @@ onUnmounted(() => {
             </form>
         </div>
 
-        <div v-if="plans.length === 0 && !showForm" class="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-500">
+        <div v-if="plans.length === 0 && !showForm && !embedded" class="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-500">
             No exam plans yet.
         </div>
 
