@@ -202,6 +202,27 @@ class PracticeSetController extends Controller
                 return redirect()->route('student.attempts.result', $attempt);
             }
 
+            if (($payload['finished'] ?? false) && $attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
+                $this->guidedPractice->repairUnopenableInProgressAttempt($attempt);
+                $attempt->refresh();
+
+                if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {
+                    return redirect()->route('student.attempts.result', $attempt);
+                }
+
+                $payload = $this->guidedPractice->buildPayload($attempt);
+                $attempt->refresh();
+
+                if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {
+                    return redirect()->route('student.attempts.result', $attempt);
+                }
+            }
+
+            if (($payload['finished'] ?? false) && $attempt->status === SetAttempt::STATUS_IN_PROGRESS) {
+                return redirect()->route('student.assignments.show', $assignment)
+                    ->with('error', 'We could not resume this practice session. Open the set again to continue.');
+            }
+
             return Inertia::render('Student/PracticeSets/GuidedAttempt', [
                 ...$payload,
                 'integrity' => AttemptIntegrity::payloadForAttempt($attempt, false),

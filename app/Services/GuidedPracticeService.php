@@ -261,13 +261,89 @@ class GuidedPracticeService
 
         $attempt->loadMissing('guidedQuestions');
 
-        if ($attempt->guidedQuestions->isEmpty()) {
+        $rows = $attempt->guidedQuestions->sortBy('sort_order')->values();
+
+        if ($this->findResolvableCurrentGuidedRow($rows) !== null) {
             return true;
         }
 
-        $rows = $attempt->guidedQuestions->sortBy('sort_order')->values();
+        return $this->hasUnsyncedWorksheetQuestions($attempt);
+    }
 
-        return $this->findResolvableCurrentGuidedRow($rows) !== null;
+    /**
+     * @return list<int>
+     */
+    public function expectedWorksheetQuestionIds(SetAttempt $attempt): array
+    {
+        $attempt->loadMissing('assignment.practiceSet');
+
+        return $this->orderedWorksheetQuestions($attempt->assignment->practiceSet)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    public function hasUnsyncedWorksheetQuestions(SetAttempt $attempt): bool
+    {
+        if ($attempt->is_correction_practice) {
+            return false;
+        }
+
+        $expectedIds = $this->expectedWorksheetQuestionIds($attempt);
+
+        if ($expectedIds === []) {
+            return false;
+        }
+
+        $attempt->loadMissing('guidedQuestions');
+        $existingIds = $attempt->guidedQuestions
+            ->pluck('question_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        return count(array_diff($expectedIds, $existingIds)) > 0;
+    }
+
+    /**
+     * Last-resort repair when an in-progress guided attempt has no resolvable question.
+     */
+    public function repairUnopenableInProgressAttempt(SetAttempt $attempt): void
+    {
+        if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS || ! $attempt->isGuided()) {
+            return;
+        }
+
+        $attempt->loadMissing('assignment.practiceSet');
+        $expectedIds = $this->expectedWorksheetQuestionIds($attempt);
+
+        if (! $attempt->is_correction_practice) {
+            $this->syncGuidedQueueWithWorksheet($attempt, $expectedIds);
+            $attempt->unsetRelation('guidedQuestions');
+        }
+
+        $attempt->loadMissing('guidedQuestions');
+
+        if ($attempt->guidedQuestions->isEmpty() && $expectedIds !== []) {
+            $this->createGuidedQuestions($attempt, $expectedIds);
+            $attempt->unsetRelation('guidedQuestions');
+            $attempt->load('guidedQuestions');
+        }
+
+        $rows = $this->renumberGuidedRowsIfNeeded($attempt);
+        $current = $this->findResolvableCurrentGuidedRow($rows, activatePending: true);
+
+        if ($current) {
+            if ((int) $attempt->current_question_index !== (int) $current->sort_order) {
+                $attempt->update(['current_question_index' => $current->sort_order]);
+            }
+
+            return;
+        }
+
+        if ($rows->isNotEmpty() && $rows->every(fn (GuidedAttemptQuestion $row) => $row->isFinished())) {
+            $this->finalize($attempt->fresh(['guidedQuestions', 'assignment']));
+        }
     }
 
     /**
@@ -307,6 +383,31 @@ class GuidedPracticeService
 
         if ($current && (int) $attempt->current_question_index !== (int) $current->sort_order) {
             $attempt->update(['current_question_index' => $current->sort_order]);
+        }
+
+        if (! $current) {
+            $this->repairUnopenableInProgressAttempt($attempt);
+            $attempt->refresh();
+            $attempt->loadMissing([
+                'assignment.practiceSet',
+                'guidedQuestions.question.options',
+                'guidedQuestions.question.blankAnswer',
+            ]);
+
+            if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {
+                return [
+                    'finished' => true,
+                    'summary' => $this->summary($attempt),
+                ];
+            }
+
+            $guidedRows = $attempt->guidedQuestions->sortBy('sort_order')->values();
+            $current = $guidedRows->firstWhere('sort_order', $attempt->current_question_index)
+                ?? $this->findResolvableCurrentGuidedRow($guidedRows, activatePending: true);
+
+            if ($current && (int) $attempt->current_question_index !== (int) $current->sort_order) {
+                $attempt->update(['current_question_index' => $current->sort_order]);
+            }
         }
 
         if (! $current) {

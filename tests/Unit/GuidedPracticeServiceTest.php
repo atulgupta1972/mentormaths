@@ -388,6 +388,81 @@ class GuidedPracticeServiceTest extends TestCase
         $this->assertSame(0, $attempt->fresh()->current_question_index);
     }
 
+    public function test_build_payload_rebuilds_missing_guided_queue_for_in_progress_attempt(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt(withGuidedInit: false);
+
+        $attempt->update(['mode' => SetAttempt::MODE_GUIDED]);
+
+        $payload = app(GuidedPracticeService::class)->buildPayload($attempt->fresh());
+
+        $this->assertFalse($payload['finished']);
+        $this->assertNotNull($payload['question']);
+        $this->assertSame(1, $attempt->fresh()->guidedQuestions()->count());
+    }
+
+    public function test_build_payload_resumes_after_worksheet_grows_mid_attempt(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt(withGuidedInit: true);
+        $assignment = $attempt->assignment()->with('practiceSet')->first();
+        $firstQuestion = $assignment->practiceSet->questions()->first();
+
+        $attempt->guidedQuestions()->update([
+            'phase' => GuidedAttemptQuestion::PHASE_DONE,
+            'first_try_correct' => true,
+            'final_is_correct' => true,
+        ]);
+
+        $secondQuestion = Question::query()->create([
+            'syllabus_topic_id' => $firstQuestion->syllabus_topic_id,
+            'question_text' => 'What is 3 + 3?',
+            'type' => Question::TYPE_MCQ,
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+
+        QuestionOption::query()->create([
+            'question_id' => $secondQuestion->id,
+            'option_text' => '6',
+            'is_correct' => true,
+            'sort_order' => 0,
+        ]);
+
+        $assignment->practiceSet->questions()->attach($secondQuestion->id, ['sort_order' => 2]);
+
+        $payload = app(GuidedPracticeService::class)->buildPayload($attempt->fresh());
+
+        $this->assertFalse($payload['finished']);
+        $this->assertSame(2, $payload['progress']['current']);
+        $this->assertSame(2, $attempt->fresh()->guidedQuestions()->count());
+    }
+
+    public function test_can_resume_when_worksheet_has_unsynced_questions(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt(withGuidedInit: true);
+        $assignment = $attempt->assignment()->with('practiceSet')->first();
+        $firstQuestion = $assignment->practiceSet->questions()->first();
+
+        $attempt->guidedQuestions()->update([
+            'phase' => GuidedAttemptQuestion::PHASE_DONE,
+            'first_try_correct' => true,
+            'final_is_correct' => true,
+        ]);
+
+        $secondQuestion = Question::query()->create([
+            'syllabus_topic_id' => $firstQuestion->syllabus_topic_id,
+            'question_text' => 'What is 3 + 3?',
+            'type' => Question::TYPE_MCQ,
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+
+        $assignment->practiceSet->questions()->attach($secondQuestion->id, ['sort_order' => 2]);
+
+        $service = app(GuidedPracticeService::class);
+
+        $this->assertTrue($service->canResume($attempt->fresh(['guidedQuestions'])));
+        $this->assertFalse($service->buildPayload($attempt->fresh())['finished']);
+    }
+
     public function test_stale_batch_attempt_on_topic_practice_upgrades_to_guided(): void
     {
         [$attempt] = $this->seedGuidedAttempt(withGuidedInit: false);
