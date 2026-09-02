@@ -59,9 +59,9 @@ class ContentTaskVerificationTest extends TestCase
             ->post(route('admin.content-tasks.verification-question', $task), [
                 'run_id' => $runId,
                 'question_id' => $questionId,
-                'question_text' => 'What is two plus two?',
-                'explanation' => 'Answer is C.',
-                'method_hint' => 'Add',
+                'question_text' => 'Who had the top score?',
+                'explanation' => 'Answer is Bhuvan.',
+                'method_hint' => 'Compare totals',
                 'difficulty' => 'Easy',
                 'options' => $options->map(fn (QuestionOption $option, int $index) => [
                     'id' => $option->id,
@@ -514,10 +514,83 @@ class ContentTaskVerificationTest extends TestCase
         $this->assertNotNull($question->diagram_url);
     }
 
+    public function test_uploader_can_verify_fill_in_blank_question_without_options(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedFillBlankTask();
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.mark-uploaded', $task))
+            ->assertRedirect();
+
+        $question = Worksheet::query()
+            ->findOrFail($chapter->mcqWorksheetIds()[0])
+            ->questions()
+            ->firstOrFail();
+
+        $this->assertSame('fill_in_blank', $question->type);
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('verification.questions.0.is_fill_in_blank', true)
+                ->where('verification.questions.0.correct_answer', '19'));
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $uploader->id)
+            ->value('id');
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.verification-question', $task), [
+                'run_id' => $runId,
+                'question_id' => $question->id,
+                'question_text' => 'What is 12 + 7? The answer is ____.',
+                'explanation' => '12 + 7 = 19',
+                'method_hint' => 'Add the numbers',
+                'difficulty' => 'Easy',
+                'correct_answer' => '19',
+                'answer_format' => 'integer',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $check = \App\Models\ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $runId)
+            ->where('question_id', $question->id)
+            ->firstOrFail();
+
+        $this->assertTrue($check->isCompleteFor($question->fresh('blankAnswer')));
+        $this->assertFalse($check->check_options);
+        $this->assertTrue($check->check_correct);
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask}
      */
-    private function seedPublishedTask(): array
+    private function seedPublishedFillBlankTask(): array
+    {
+        [$uploader, $chapter, $task] = $this->seedPublishedTaskWithJson(json_encode([
+            'questions' => [[
+                'topic' => 'Addition',
+                'question' => 'What is 12 + 7?',
+                'options' => ['18', '19', '20', '21', '22', '23', '24', '25'],
+                'correct_index' => 1,
+                'hint' => 'Add',
+                'explanation' => '12 + 7 = 19',
+                'difficulty' => 'Easy',
+            ]],
+        ], JSON_THROW_ON_ERROR));
+
+        return [$uploader, $chapter, $task];
+    }
+
+    /**
+     * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask}
+     */
+    private function seedPublishedTaskWithJson(string $json): array
     {
         $year = AcademicYear::query()->create([
             'name' => '2026-27',
@@ -581,18 +654,6 @@ class ContentTaskVerificationTest extends TestCase
             'agreed_at' => now(),
         ]);
 
-        $json = json_encode([
-            'questions' => [[
-                'topic' => 'Addition',
-                'question' => 'What is 2 + 2?',
-                'options' => ['3', '4', '5', '6'],
-                'correct_index' => 0,
-                'hint' => 'Add',
-                'explanation' => 'Wrong on purpose',
-                'difficulty' => 'Easy',
-            ]],
-        ], JSON_THROW_ON_ERROR);
-
         $this->actingAs($uploader)
             ->post(route('content.textbooks.import-mcq', $chapter), ['json' => $json]);
 
@@ -604,6 +665,24 @@ class ContentTaskVerificationTest extends TestCase
             ]);
 
         return [$uploader, $chapter->fresh(), $task->fresh()];
+    }
+
+    /**
+     * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask}
+     */
+    private function seedPublishedTask(): array
+    {
+        return $this->seedPublishedTaskWithJson(json_encode([
+            'questions' => [[
+                'topic' => 'Data',
+                'question' => 'Who scored the highest marks?',
+                'options' => ['Anya', 'Bhuvan', 'Cyra', 'Dev', 'Esha', 'Farid', 'Gita', 'Hari'],
+                'correct_index' => 1,
+                'hint' => 'Compare totals',
+                'explanation' => 'Bhuvan had the highest score',
+                'difficulty' => 'Easy',
+            ]],
+        ], JSON_THROW_ON_ERROR));
     }
 
     public function test_admin_can_apply_gemini_paste_to_auto_verify_correct_questions(): void

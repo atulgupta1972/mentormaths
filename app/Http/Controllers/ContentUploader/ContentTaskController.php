@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ContentQuestionCorrection;
 use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
+use App\Models\Question;
 use App\Models\QuestionBlankAnswer;
 use App\Services\ContentAiVerificationService;
 use App\Services\GeminiPasteVerificationService;
@@ -187,18 +188,8 @@ class ContentTaskController extends Controller
     {
         $this->authorizeTask($contentTask, $request);
 
-        $validated = $request->validate([
-            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
-            'question_id' => ['required', 'integer', 'exists:questions,id'],
-            'question_text' => ['required', 'string', 'max:5000'],
-            'explanation' => ['nullable', 'string', 'max:5000'],
-            'method_hint' => ['nullable', 'string', 'max:2000'],
-            'difficulty' => ['nullable', 'string', 'max:64'],
-            'options' => ['required', 'array', 'min:2', 'max:8'],
-            'options.*.id' => ['nullable', 'integer'],
-            'options.*.option_text' => ['required', 'string', 'max:2000'],
-            'options.*.is_correct' => ['required', 'boolean'],
-        ]);
+        $question = Question::query()->findOrFail((int) $request->input('question_id'));
+        $validated = $request->validate(ContentVerificationService::validationRulesForQuestion($question));
 
         $run = ContentVerificationRun::query()->findOrFail($validated['run_id']);
 

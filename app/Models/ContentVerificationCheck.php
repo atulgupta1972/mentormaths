@@ -66,6 +66,25 @@ class ContentVerificationCheck extends Model
         return $this->belongsTo(Question::class);
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function requiredFieldsFor(Question $question): array
+    {
+        if ($question->isFillInBlank()) {
+            return [
+                'check_text',
+                'check_correct',
+                'check_hint',
+                'check_explanation',
+                'check_difficulty',
+                'check_diagram',
+            ];
+        }
+
+        return self::CHECK_FIELDS;
+    }
+
     /** Verified for upload, or deliberately skipped (irrelevant — not paid). */
     public function isComplete(): bool
     {
@@ -74,6 +93,21 @@ class ContentVerificationCheck extends Model
         }
 
         foreach (self::CHECK_FIELDS as $field) {
+            if (! $this->{$field}) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public function isCompleteFor(Question $question): bool
+    {
+        if ($this->skipped) {
+            return true;
+        }
+
+        foreach (self::requiredFieldsFor($question) as $field) {
             if (! $this->{$field}) {
                 return false;
             }

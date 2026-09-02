@@ -99,19 +99,48 @@ const queueLabel = computed(() => {
     return `Now reviewing Q${currentPending.value.number} of ${total} · ${verified} verified · ${skipped} skipped · ${remaining} left`;
 });
 
-const buildForm = (row) => useForm({
-    run_id: props.verification.run_id,
-    question_id: row.question_id,
-    question_text: row.question_text ?? '',
-    explanation: row.explanation ?? '',
-    method_hint: row.method_hint ?? '',
-    difficulty: row.difficulty ?? 'Easy',
-    options: (row.options ?? []).map((option) => ({
-        id: option.id,
-        option_text: option.option_text ?? '',
-        is_correct: Boolean(option.is_correct),
-    })),
-});
+const buildForm = (row) => {
+    if (row.is_fill_in_blank || row.question_type === 'fill_in_blank') {
+        return useForm({
+            run_id: props.verification.run_id,
+            question_id: row.question_id,
+            question_text: row.question_text ?? '',
+            explanation: row.explanation ?? '',
+            method_hint: row.method_hint ?? '',
+            difficulty: row.difficulty ?? 'Easy',
+            correct_answer: row.correct_answer ?? '',
+            answer_format: row.answer_format ?? 'integer',
+            decimal_places: row.decimal_places ?? null,
+        });
+    }
+
+    return useForm({
+        run_id: props.verification.run_id,
+        question_id: row.question_id,
+        question_text: row.question_text ?? '',
+        explanation: row.explanation ?? '',
+        method_hint: row.method_hint ?? '',
+        difficulty: row.difficulty ?? 'Easy',
+        options: (row.options ?? []).map((option) => ({
+            id: option.id,
+            option_text: option.option_text ?? '',
+            is_correct: Boolean(option.is_correct),
+        })),
+    });
+};
+
+const isFillBlankRow = (row) => Boolean(row?.is_fill_in_blank || row?.question_type === 'fill_in_blank');
+
+const answerFormatLabel = (format) => {
+    const labels = {
+        integer: 'Whole number',
+        decimal: 'Decimal',
+        fraction: 'Fraction',
+        text: 'Text',
+    };
+
+    return labels[format] || format;
+};
 
 const syncQuestionForms = () => {
     if (!props.verification?.questions) {
@@ -121,12 +150,13 @@ const syncQuestionForms = () => {
     completeForm.run_id = props.verification.run_id;
 
     props.verification.questions.forEach((row) => {
-        if (!questionForms[row.question_id]) {
-            questionForms[row.question_id] = buildForm(row);
-            return;
-        }
+        const existing = questionForms[row.question_id];
+        const needsRebuild = !existing
+            || (row.is_verified && !existing.processing)
+            || (isFillBlankRow(row) && existing.options)
+            || (!isFillBlankRow(row) && existing.correct_answer !== undefined && !existing.options?.length);
 
-        if (row.is_verified && !questionForms[row.question_id].processing) {
+        if (needsRebuild) {
             questionForms[row.question_id] = buildForm(row);
         }
     });
@@ -297,7 +327,7 @@ const removeDiagram = (questionId) => {
         <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <p class="text-sm font-semibold text-gray-900">MCQ verification</p>
+                    <p class="text-sm font-semibold text-gray-900">Question verification</p>
                     <p class="mt-1 text-sm text-gray-600">{{ queueLabel }}</p>
                     <p class="mt-1 text-xs text-slate-500">
                         Skip irrelevant questions — they stay off the pay count for the uploader.
@@ -335,7 +365,7 @@ const removeDiagram = (questionId) => {
                 </div>
             </div>
             <p v-if="verificationSummary.total === 0" class="mt-2 text-sm text-amber-800">
-                No published MCQ questions found yet.
+                No published questions found yet.
             </p>
             <p v-else-if="filterMode.value === 'pending' && !currentPending && verificationSummary.unverified === 0" class="mt-2 text-sm text-emerald-800">
                 All questions reviewed (verified or skipped).
@@ -352,7 +382,13 @@ const removeDiagram = (questionId) => {
                 <p class="text-sm font-semibold text-gray-900">
                     Q{{ row.number }}
                     <span v-if="row.set_code" class="ml-2 text-xs font-normal text-gray-500">{{ row.set_code }}</span>
-                    <span v-if="row.correct_letter" class="ml-2 text-xs font-normal text-gray-500">Current answer: {{ row.correct_letter }}</span>
+                    <span
+                        v-if="isFillBlankRow(row)"
+                        class="ml-2 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-800"
+                    >
+                        Fill in blank
+                    </span>
+                    <span v-else-if="row.correct_letter" class="ml-2 text-xs font-normal text-gray-500">Current answer: {{ row.correct_letter }}</span>
                 </p>
                 <span
                     class="rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -405,7 +441,46 @@ const removeDiagram = (questionId) => {
                     <InputError :message="questionForms[row.question_id].errors.question_text" class="mt-1" />
                 </div>
 
-                <div>
+                <div v-if="isFillBlankRow(row)">
+                    <InputLabel value="Correct answer" />
+                    <input
+                        v-model="questionForms[row.question_id].correct_answer"
+                        type="text"
+                        class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                        :disabled="!canEditQuestions"
+                    >
+                    <InputError :message="questionForms[row.question_id].errors.correct_answer" class="mt-1" />
+                </div>
+
+                <div v-if="isFillBlankRow(row)" class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <InputLabel value="Answer format" />
+                        <select
+                            v-model="questionForms[row.question_id].answer_format"
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                            :disabled="!canEditQuestions"
+                        >
+                            <option value="integer">Whole number</option>
+                            <option value="decimal">Decimal</option>
+                            <option value="fraction">Fraction</option>
+                            <option value="text">Text</option>
+                        </select>
+                        <InputError :message="questionForms[row.question_id].errors.answer_format" class="mt-1" />
+                    </div>
+                    <div v-if="questionForms[row.question_id].answer_format === 'decimal'">
+                        <InputLabel value="Decimal places" />
+                        <input
+                            v-model.number="questionForms[row.question_id].decimal_places"
+                            type="number"
+                            min="0"
+                            max="6"
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                            :disabled="!canEditQuestions"
+                        >
+                    </div>
+                </div>
+
+                <div v-else>
                     <InputLabel value="Options (select the correct answer)" />
                     <div class="mt-2 space-y-2">
                         <label

@@ -107,19 +107,37 @@ const canEditQuestions = computed(() => {
     return Boolean(url) && url !== '#';
 });
 
-const buildQuestionForm = (row) => useForm({
-    run_id: props.verification.run_id,
-    question_id: row.question_id,
-    question_text: row.question_text ?? '',
-    explanation: row.explanation ?? '',
-    method_hint: row.method_hint ?? '',
-    difficulty: row.difficulty ?? 'Easy',
-    options: (row.options ?? []).map((option) => ({
-        id: option.id,
-        option_text: option.option_text ?? '',
-        is_correct: Boolean(option.is_correct),
-    })),
-});
+const isFillBlankRow = (row) => Boolean(row?.is_fill_in_blank || row?.question_type === 'fill_in_blank');
+
+const buildQuestionForm = (row) => {
+    if (isFillBlankRow(row)) {
+        return useForm({
+            run_id: props.verification.run_id,
+            question_id: row.question_id,
+            question_text: row.question_text ?? '',
+            explanation: row.explanation ?? '',
+            method_hint: row.method_hint ?? '',
+            difficulty: row.difficulty ?? 'Easy',
+            correct_answer: row.correct_answer ?? '',
+            answer_format: row.answer_format ?? 'integer',
+            decimal_places: row.decimal_places ?? null,
+        });
+    }
+
+    return useForm({
+        run_id: props.verification.run_id,
+        question_id: row.question_id,
+        question_text: row.question_text ?? '',
+        explanation: row.explanation ?? '',
+        method_hint: row.method_hint ?? '',
+        difficulty: row.difficulty ?? 'Easy',
+        options: (row.options ?? []).map((option) => ({
+            id: option.id,
+            option_text: option.option_text ?? '',
+            is_correct: Boolean(option.is_correct),
+        })),
+    });
+};
 
 const startEditing = (row) => {
     questionForms[row.question_id] = buildQuestionForm(row);
@@ -544,7 +562,40 @@ const optionLine = (row) =>
                                         />
                                         <InputError :message="questionForms[row.question_id].errors.question_text" class="mt-1" />
                                     </div>
-                                    <div>
+                                    <div v-if="isFillBlankRow(row)">
+                                        <InputLabel value="Correct answer" />
+                                        <input
+                                            v-model="questionForms[row.question_id].correct_answer"
+                                            type="text"
+                                            class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                        >
+                                        <InputError :message="questionForms[row.question_id].errors.correct_answer" class="mt-1" />
+                                    </div>
+                                    <div v-if="isFillBlankRow(row)" class="grid gap-3 sm:grid-cols-2">
+                                        <div>
+                                            <InputLabel value="Answer format" />
+                                            <select
+                                                v-model="questionForms[row.question_id].answer_format"
+                                                class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                            >
+                                                <option value="integer">Whole number</option>
+                                                <option value="decimal">Decimal</option>
+                                                <option value="fraction">Fraction</option>
+                                                <option value="text">Text</option>
+                                            </select>
+                                        </div>
+                                        <div v-if="questionForms[row.question_id].answer_format === 'decimal'">
+                                            <InputLabel value="Decimal places" />
+                                            <input
+                                                v-model.number="questionForms[row.question_id].decimal_places"
+                                                type="number"
+                                                min="0"
+                                                max="6"
+                                                class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                            >
+                                        </div>
+                                    </div>
+                                    <div v-else>
                                         <InputLabel value="Options (select the correct answer)" />
                                         <div class="mt-2 space-y-2">
                                             <label
@@ -631,7 +682,14 @@ const optionLine = (row) =>
                                         />
                                     </div>
                                     <div class="space-y-2">
-                                        <div>
+                                        <div v-if="isFillBlankRow(row)">
+                                            <p class="text-[10px] font-semibold uppercase text-gray-500">Fill in blank</p>
+                                            <p class="mt-1 font-semibold text-emerald-800">
+                                                Answer: {{ row.correct_answer || '—' }}
+                                                <span v-if="row.answer_format" class="font-normal text-gray-500">({{ row.answer_format }})</span>
+                                            </p>
+                                        </div>
+                                        <div v-else>
                                             <p class="text-[10px] font-semibold uppercase text-gray-500">Options</p>
                                             <ul class="mt-1 space-y-0.5">
                                                 <li

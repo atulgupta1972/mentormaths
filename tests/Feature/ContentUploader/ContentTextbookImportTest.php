@@ -106,12 +106,12 @@ class ContentTextbookImportTest extends TestCase
         $json = json_encode([
             'questions' => [
                 [
-                    'topic' => 'Addition',
-                    'question' => 'What is 2 + 2?',
-                    'options' => ['3', '4', '5', '6'],
+                    'topic' => 'Data',
+                    'question' => 'Who scored the highest marks?',
+                    'options' => ['Anya', 'Bhuvan', 'Cyra', 'Dev', 'Esha', 'Farid', 'Gita', 'Hari'],
                     'correct_index' => 1,
-                    'hint' => 'Add',
-                    'explanation' => '2+2=4',
+                    'hint' => 'Compare totals',
+                    'explanation' => 'Bhuvan had the highest score',
                     'difficulty' => 'Easy',
                 ],
             ],
@@ -142,8 +142,8 @@ class ContentTextbookImportTest extends TestCase
                 ->component('ContentUploader/Tasks/Show')
                 ->where('task.status', ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS)
                 ->has('verification.questions', 1)
-                ->where('verification.questions.0.question_text', 'What is 2 + 2?')
-                ->has('verification.questions.0.options', 4)
+                ->where('verification.questions.0.question_text', 'Who scored the highest marks?')
+                ->has('verification.questions.0.options', 8)
                 ->where('verification.questions.0.options.1.is_correct', true));
 
         $questionId = ContentUploadTask::query()->findOrFail($task->id)
@@ -157,15 +157,19 @@ class ContentTextbookImportTest extends TestCase
             ->post(route('content.tasks.verification-question', $task), [
                 'run_id' => \App\Models\ContentVerificationRun::query()->where('content_upload_task_id', $task->id)->value('id'),
                 'question_id' => $savedQuestionId,
-                'question_text' => 'What is two plus two?',
-                'explanation' => 'Adding gives four.',
-                'method_hint' => 'Use addition',
+                'question_text' => 'Who had the top score?',
+                'explanation' => 'Bhuvan scored highest.',
+                'method_hint' => 'Compare totals',
                 'difficulty' => 'Easy',
                 'options' => [
-                    ['id' => null, 'option_text' => '3', 'is_correct' => false],
-                    ['id' => null, 'option_text' => '4', 'is_correct' => true],
-                    ['id' => null, 'option_text' => '5', 'is_correct' => false],
-                    ['id' => null, 'option_text' => '6', 'is_correct' => false],
+                    ['id' => null, 'option_text' => 'Anya', 'is_correct' => false],
+                    ['id' => null, 'option_text' => 'Bhuvan', 'is_correct' => true],
+                    ['id' => null, 'option_text' => 'Cyra', 'is_correct' => false],
+                    ['id' => null, 'option_text' => 'Dev', 'is_correct' => false],
+                    ['id' => null, 'option_text' => 'Esha', 'is_correct' => false],
+                    ['id' => null, 'option_text' => 'Farid', 'is_correct' => false],
+                    ['id' => null, 'option_text' => 'Gita', 'is_correct' => false],
+                    ['id' => null, 'option_text' => 'Hari', 'is_correct' => false],
                 ],
             ])
             ->assertRedirect()
@@ -173,8 +177,8 @@ class ContentTextbookImportTest extends TestCase
 
         $this->assertDatabaseHas('questions', [
             'id' => $savedQuestionId,
-            'question_text' => 'What is two plus two?',
-            'explanation' => 'Adding gives four.',
+            'question_text' => 'Who had the top score?',
+            'explanation' => 'Bhuvan scored highest.',
         ]);
     }
 

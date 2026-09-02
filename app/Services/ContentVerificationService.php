@@ -6,10 +6,12 @@ use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationCheck;
 use App\Models\ContentVerificationRun;
 use App\Models\Question;
+use App\Models\QuestionBlankAnswer;
 use App\Models\QuestionOption;
 use App\Models\User;
 use App\Models\Worksheet;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class ContentVerificationService
 {
@@ -53,7 +55,10 @@ class ContentVerificationService
         $questions = $questionIds === []
             ? collect()
             : Question::query()
-                ->with(['options' => fn ($query) => $query->orderBy('sort_order')])
+                ->with([
+                    'options' => fn ($query) => $query->orderBy('sort_order'),
+                    'blankAnswer',
+                ])
                 ->whereIn('id', $questionIds)
                 ->get()
                 ->sortBy(fn (Question $question) => array_search($question->id, $questionIds, true))
@@ -63,21 +68,27 @@ class ContentVerificationService
             $check = $checks->get($question->id);
             $meta = $questionMeta[$question->id] ?? [];
             $correction = $correctionRemarks->get($question->id);
+            $isFillInBlank = $question->isFillInBlank();
 
             return [
                 'number' => $index + 1,
                 'question_id' => $question->id,
+                'question_type' => $question->type,
+                'is_fill_in_blank' => $isFillInBlank,
                 'set_code' => $meta['set_code'] ?? null,
                 'set_number' => $meta['set_number'] ?? null,
                 'question_text' => $question->question_text,
                 'explanation' => $question->explanation,
                 'method_hint' => $question->method_hint,
                 'difficulty' => $question->difficulty,
+                'correct_answer' => $question->blankAnswer?->correct_answer,
+                'answer_format' => $question->blankAnswer?->answer_format,
+                'decimal_places' => $question->blankAnswer?->decimal_places,
                 'diagram_url' => $question->diagram_url,
                 'has_diagram' => filled($question->diagram_path),
                 'needs_figure' => $this->questionNeedsFigure($question),
                 'correction_remark' => $correction?->remark,
-                'options' => $question->options->values()->map(function (QuestionOption $option, int $optionIndex) {
+                'options' => $isFillInBlank ? [] : $question->options->values()->map(function (QuestionOption $option, int $optionIndex) {
                     return [
                         'id' => $option->id,
                         'letter' => chr(65 + $optionIndex),
@@ -86,12 +97,14 @@ class ContentVerificationService
                         'sort_order' => (int) $option->sort_order,
                     ];
                 })->all(),
-                'correct_letter' => $question->options
-                    ->values()
-                    ->search(fn (QuestionOption $option) => $option->is_correct) !== false
-                    ? chr(65 + (int) $question->options->values()->search(fn (QuestionOption $option) => $option->is_correct))
-                    : null,
-                'is_verified' => $check?->isComplete() ?? false,
+                'correct_letter' => $isFillInBlank ? null : (
+                    $question->options
+                        ->values()
+                        ->search(fn (QuestionOption $option) => $option->is_correct) !== false
+                        ? chr(65 + (int) $question->options->values()->search(fn (QuestionOption $option) => $option->is_correct))
+                        : null
+                ),
+                'is_verified' => $check?->isCompleteFor($question) ?? false,
                 'is_skipped' => (bool) ($check?->skipped),
                 'skip_reason' => $check?->skip_reason,
                 'ai_verdict' => $check?->ai_verdict,
@@ -109,7 +122,7 @@ class ContentVerificationService
                     'diagram_note' => $check->diagram_note,
                     'skipped' => (bool) $check->skipped,
                     'skip_reason' => $check->skip_reason,
-                    'is_complete' => $check->isComplete(),
+                    'is_complete' => $check->isCompleteFor($question),
                 ] : null,
             ];
         })->values()->all();
@@ -133,6 +146,36 @@ class ContentVerificationService
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public static function validationRulesForQuestion(Question $question): array
+    {
+        $base = [
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+            'question_text' => ['required', 'string', 'max:5000'],
+            'explanation' => ['nullable', 'string', 'max:5000'],
+            'method_hint' => ['nullable', 'string', 'max:2000'],
+            'difficulty' => ['nullable', 'string', 'max:64'],
+        ];
+
+        if ($question->isFillInBlank()) {
+            return array_merge($base, [
+                'correct_answer' => ['required', 'string', 'max:500'],
+                'answer_format' => ['required', 'string', Rule::in(QuestionBlankAnswer::formats())],
+                'decimal_places' => ['nullable', 'integer', 'min:0', 'max:6'],
+            ]);
+        }
+
+        return array_merge($base, [
+            'options' => ['required', 'array', 'min:2', 'max:8'],
+            'options.*.id' => ['nullable', 'integer'],
+            'options.*.option_text' => ['required', 'string', 'max:2000'],
+            'options.*.is_correct' => ['required', 'boolean'],
+        ]);
+    }
+
+    /**
      * Save edited question content and mark it verified.
      *
      * @param  array<string, mixed>  $payload
@@ -145,19 +188,24 @@ class ContentVerificationService
     ): ContentVerificationCheck {
         $this->assertCanEditRun($run, $user);
 
-        $task = $run->task;
-        $allowedIds = $this->questionIdsForChapter($task);
+        $question = $this->questionForRun($run, $questionId);
 
-        if (! in_array($questionId, $allowedIds, true)) {
-            throw new \InvalidArgumentException('Question does not belong to this chapter task.');
+        if ($question->isFillInBlank()) {
+            return $this->saveFillBlankQuestion($run, $question, $payload, $user);
         }
 
-        $question = Question::query()->with('options')->findOrFail($questionId);
+        return $this->saveMcqQuestion($run, $question, $payload, $user);
+    }
 
-        if (! $question->isMcq()) {
-            throw new \InvalidArgumentException('Only MCQ questions can be edited here.');
-        }
-
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function saveMcqQuestion(
+        ContentVerificationRun $run,
+        Question $question,
+        array $payload,
+        User $user,
+    ): ContentVerificationCheck {
         $options = $payload['options'] ?? [];
         if (! is_array($options) || count($options) < 2) {
             throw new \InvalidArgumentException('Provide at least 2 options.');
@@ -210,61 +258,111 @@ class ContentVerificationService
                 ->whereNotIn('id', $keptIds)
                 ->delete();
 
-            $check = ContentVerificationCheck::query()
-                ->where('content_verification_run_id', $run->id)
-                ->where('question_id', $question->id)
-                ->firstOrFail();
+            return $this->finalizeVerifiedQuestion($run, $question, $user);
+        });
+    }
 
-            $task = $run->task;
-            $queueGeminiRecheck = $task->status === ContentUploadTask::STATUS_PUBLISHED
-                && in_array($check->ai_verdict, [
-                    ContentAiVerificationService::VERDICT_NEEDS_FIX,
-                    ContentAiVerificationService::VERDICT_NEEDS_DIAGRAM,
-                ], true);
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function saveFillBlankQuestion(
+        ContentVerificationRun $run,
+        Question $question,
+        array $payload,
+        User $user,
+    ): ContentVerificationCheck {
+        $correctAnswer = trim((string) ($payload['correct_answer'] ?? ''));
+        if ($correctAnswer === '') {
+            throw new \InvalidArgumentException('Provide the correct answer.');
+        }
 
-            if ($queueGeminiRecheck) {
-                $recheckPayload = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, false);
-                $recheckPayload['diagram_note'] = filled($question->fresh()->diagram_url)
-                    ? 'Diagram reviewed'
-                    : 'No diagram needed';
-                $recheckPayload['verified_at'] = null;
-                $recheckPayload['skipped'] = false;
-                $recheckPayload['skip_reason'] = null;
-                $recheckPayload['skipped_at'] = null;
-                $recheckPayload['ai_verdict'] = null;
-                $recheckPayload['ai_confidence'] = null;
-                $recheckPayload['ai_note'] = 'Fixed manually — pending Gemini recheck';
-                $recheckPayload['ai_reviewed_at'] = null;
+        $answerFormat = (string) ($payload['answer_format'] ?? QuestionBlankAnswer::FORMAT_INTEGER);
+        if (! in_array($answerFormat, QuestionBlankAnswer::formats(), true)) {
+            throw new \InvalidArgumentException('Invalid answer format.');
+        }
 
-                $check->update($recheckPayload);
-            } else {
-                $payloadChecks = [];
-                foreach (ContentVerificationCheck::CHECK_FIELDS as $field) {
-                    $payloadChecks[$field] = true;
-                }
-                $payloadChecks['diagram_note'] = filled($question->fresh()->diagram_url)
-                    ? 'Diagram reviewed'
-                    : 'No diagram needed';
-                $payloadChecks['verified_at'] = now();
-                $payloadChecks['skipped'] = false;
-                $payloadChecks['skip_reason'] = null;
-                $payloadChecks['skipped_at'] = null;
+        return DB::transaction(function () use ($run, $question, $payload, $user, $correctAnswer, $answerFormat) {
+            $question->update([
+                'question_text' => trim((string) $payload['question_text']),
+                'explanation' => trim((string) ($payload['explanation'] ?? '')) ?: null,
+                'method_hint' => trim((string) ($payload['method_hint'] ?? '')) ?: null,
+                'difficulty' => trim((string) ($payload['difficulty'] ?? '')) ?: null,
+            ]);
 
-                $check->update($payloadChecks);
-            }
-
-            $this->syncTaskStatus($run);
-
-            $fresh = $check->fresh();
-            $this->maybeCompleteRunIfAllVerified($run->fresh());
-            app(QuestionIssueReportService::class)->resolveAfterQuestionFixed(
-                (int) $question->id,
-                $user,
-                'Fixed during verification — please re-attempt',
+            $question->blankAnswer()->updateOrCreate(
+                ['question_id' => $question->id],
+                [
+                    'answer_format' => $answerFormat,
+                    'correct_answer' => $correctAnswer,
+                    'decimal_places' => $answerFormat === QuestionBlankAnswer::FORMAT_DECIMAL
+                        ? ($payload['decimal_places'] ?? null)
+                        : null,
+                ],
             );
 
-            return $fresh;
+            return $this->finalizeVerifiedQuestion($run, $question->fresh(['blankAnswer']), $user);
         });
+    }
+
+    private function finalizeVerifiedQuestion(
+        ContentVerificationRun $run,
+        Question $question,
+        User $user,
+    ): ContentVerificationCheck {
+        $check = ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $run->id)
+            ->where('question_id', $question->id)
+            ->firstOrFail();
+
+        $task = $run->task;
+        $queueGeminiRecheck = $task->status === ContentUploadTask::STATUS_PUBLISHED
+            && in_array($check->ai_verdict, [
+                ContentAiVerificationService::VERDICT_NEEDS_FIX,
+                ContentAiVerificationService::VERDICT_NEEDS_DIAGRAM,
+            ], true);
+
+        if ($queueGeminiRecheck) {
+            $recheckPayload = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, false);
+            $recheckPayload['diagram_note'] = filled($question->fresh()->diagram_url)
+                ? 'Diagram reviewed'
+                : 'No diagram needed';
+            $recheckPayload['verified_at'] = null;
+            $recheckPayload['skipped'] = false;
+            $recheckPayload['skip_reason'] = null;
+            $recheckPayload['skipped_at'] = null;
+            $recheckPayload['ai_verdict'] = null;
+            $recheckPayload['ai_confidence'] = null;
+            $recheckPayload['ai_note'] = 'Fixed manually — pending Gemini recheck';
+            $recheckPayload['ai_reviewed_at'] = null;
+
+            $check->update($recheckPayload);
+        } else {
+            $payloadChecks = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, false);
+            foreach (ContentVerificationCheck::requiredFieldsFor($question) as $field) {
+                $payloadChecks[$field] = true;
+            }
+            $payloadChecks['diagram_note'] = filled($question->fresh()->diagram_url)
+                ? 'Diagram reviewed'
+                : 'No diagram needed';
+            $payloadChecks['verified_at'] = now();
+            $payloadChecks['skipped'] = false;
+            $payloadChecks['skip_reason'] = null;
+            $payloadChecks['skipped_at'] = null;
+
+            $check->update($payloadChecks);
+        }
+
+        $this->syncTaskStatus($run);
+
+        $fresh = $check->fresh();
+        $this->maybeCompleteRunIfAllVerified($run->fresh());
+        app(QuestionIssueReportService::class)->resolveAfterQuestionFixed(
+            (int) $question->id,
+            $user,
+            'Fixed during verification — please re-attempt',
+        );
+
+        return $fresh;
     }
 
     public function attachDiagram(
@@ -361,7 +459,10 @@ class ContentVerificationService
                 );
 
                 $question = $questions->get($questionId);
-                $payload = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, true);
+                $payload = array_fill_keys(ContentVerificationCheck::CHECK_FIELDS, false);
+                foreach (ContentVerificationCheck::requiredFieldsFor($question ?? new Question(['type' => Question::TYPE_MCQ])) as $field) {
+                    $payload[$field] = true;
+                }
                 $payload['diagram_note'] = filled($question?->diagram_path)
                     ? 'Diagram reviewed'
                     : 'No diagram needed';
@@ -499,12 +600,19 @@ class ContentVerificationService
 
         $incomplete = ContentVerificationCheck::query()
             ->where('content_verification_run_id', $run->id)
+            ->get();
+
+        $questions = Question::query()
+            ->whereIn('id', $incomplete->pluck('question_id'))
             ->get()
-            ->filter(fn (ContentVerificationCheck $c) => ! $c->isComplete())
+            ->keyBy('id');
+
+        $incompleteCount = $incomplete
+            ->filter(fn (ContentVerificationCheck $c) => ! $c->isCompleteFor($questions->get($c->question_id) ?? new Question(['type' => Question::TYPE_MCQ])))
             ->count();
 
-        if ($incomplete > 0) {
-            throw new \InvalidArgumentException("{$incomplete} question(s) still need verification.");
+        if ($incompleteCount > 0) {
+            throw new \InvalidArgumentException("{$incompleteCount} question(s) still need verification.");
         }
 
         $this->markRunAndTaskVerified($run);
@@ -542,7 +650,14 @@ class ContentVerificationService
             return;
         }
 
-        if ($checks->contains(fn (ContentVerificationCheck $check) => ! $check->isComplete())) {
+        $questions = Question::query()
+            ->whereIn('id', $allowedIds)
+            ->get()
+            ->keyBy('id');
+
+        if ($checks->contains(fn (ContentVerificationCheck $check) => ! $check->isCompleteFor(
+            $questions->get($check->question_id) ?? new Question(['type' => Question::TYPE_MCQ]),
+        ))) {
             return;
         }
 
@@ -836,13 +951,7 @@ class ContentVerificationService
             throw new \InvalidArgumentException('Question does not belong to this chapter task.');
         }
 
-        $question = Question::query()->findOrFail($questionId);
-
-        if (! $question->isMcq()) {
-            throw new \InvalidArgumentException('Only MCQ questions support figure upload here.');
-        }
-
-        return $question;
+        return Question::query()->with(['options', 'blankAnswer'])->findOrFail($questionId);
     }
 
     private function questionNeedsFigure(Question $question): bool
