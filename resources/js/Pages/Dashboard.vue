@@ -1000,16 +1000,16 @@ const formatHelpDate = (value) => {
                         </div>
                     </section>
 
-                    <!-- Older pending — other chapters / not started yet -->
+                    <!-- Older in-progress — other chapters left mid-way -->
                     <section
                         v-if="olderPendingCount"
                         class="rounded-xl border border-slate-300 bg-slate-50 p-4 shadow-sm"
                     >
                         <h3 class="text-sm font-bold uppercase tracking-wide text-slate-800">
-                            Other pending work · {{ olderPendingCount }}
+                            Left mid-way earlier · {{ olderPendingCount }}
                         </h3>
                         <p class="mt-1 text-xs text-slate-600">
-                            Earlier chapters or sets not started — grouped by chapter.
+                            You started these in other chapters and closed before finishing — grouped by chapter.
                         </p>
                         <div class="mt-3">
                             <StudentPendingWorkPanel

@@ -52,7 +52,7 @@ class DashboardService
         }
 
         $resumeItems = $this->resumeItemsFromAssignments($assignments);
-        $pendingWork = $this->pendingWorkSectionsFromAssignments($assignments, $resumeItems);
+        $pendingWork = $this->pendingWorkSectionsFromResumeItems($resumeItems);
 
         $payload = [
             'resumeItems' => $resumeItems,
@@ -594,54 +594,24 @@ class DashboardService
     }
 
     /**
-     * Split in-progress and not-started work into latest (current chapter) vs older pending lists.
+     * Split in-progress work into latest (current chapter) vs older left-midway lists.
+     * Only includes sets the student started and did not finish — not full pending assignments.
      *
-     * @param  list<array<string, mixed>>  $assignments
      * @param  list<array<string, mixed>>  $resumeItems
      * @return array{latest: list<array{chapter_name: string, items: list<array<string, mixed>>}>, older: list<array{chapter_name: string, items: list<array<string, mixed>>}>}
      */
-    private function pendingWorkSectionsFromAssignments(array $assignments, array $resumeItems): array
+    private function pendingWorkSectionsFromResumeItems(array $resumeItems): array
     {
-        $resumeAssignmentIds = collect($resumeItems)
-            ->pluck('assignment_id')
-            ->filter()
-            ->map(fn ($id) => (int) $id)
-            ->all();
-
-        $notStarted = [];
-
-        foreach ($assignments as $row) {
-            if (in_array($row['status'] ?? '', ['green', 'green-late', 'checking'], true)) {
-                continue;
-            }
-
-            if ($row['is_catch_up'] ?? false) {
-                continue;
-            }
-
-            if (! empty($row['in_progress_attempt_id'])) {
-                continue;
-            }
-
-            $assignmentId = (int) ($row['assignment_id'] ?? 0);
-            if ($assignmentId > 0 && in_array($assignmentId, $resumeAssignmentIds, true)) {
-                continue;
-            }
-
-            $notStarted[] = $this->pendingItemFromAssignment($row);
-        }
-
         if ($resumeItems === []) {
             return [
                 'latest' => [],
-                'older' => $this->groupWorkItemsByChapter($notStarted),
+                'older' => [],
             ];
         }
 
         $latestChapter = (string) ($resumeItems[0]['chapter_name'] ?? 'Other');
         $latestItems = [];
         $olderResume = [];
-        $olderNotStarted = [];
 
         foreach ($resumeItems as $item) {
             if ((string) ($item['chapter_name'] ?? 'Other') === $latestChapter) {
@@ -651,17 +621,9 @@ class DashboardService
             }
         }
 
-        foreach ($notStarted as $item) {
-            if ((string) ($item['chapter_name'] ?? 'Other') === $latestChapter) {
-                $latestItems[] = $item;
-            } else {
-                $olderNotStarted[] = $item;
-            }
-        }
-
         return [
             'latest' => $this->groupWorkItemsByChapter($latestItems),
-            'older' => $this->groupWorkItemsByChapter(array_merge($olderResume, $olderNotStarted)),
+            'older' => $this->groupWorkItemsByChapter($olderResume),
         ];
     }
 
@@ -706,33 +668,6 @@ class DashboardService
             'progress_label' => (string) ($partial['label'] ?? "{$done}/{$total}"),
             'last_activity_at' => $row['last_activity_at'] ?? null,
             'status' => 'in_progress',
-        ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $row
-     * @return array<string, mixed>
-     */
-    private function pendingItemFromAssignment(array $row): array
-    {
-        $total = max(1, (int) ($row['question_count'] ?? 0));
-
-        return [
-            'assignment_id' => $row['assignment_id'] ?? null,
-            'attempt_id' => null,
-            'set_code' => $row['set_code'] ?? null,
-            'kind_label' => $row['kind_label'] ?? 'Practice',
-            'chapter_name' => $row['chapter_name'] ?? null,
-            'topic_name' => $row['topic_name'] ?? null,
-            'target_date' => $row['target_date'] ?? null,
-            'is_overdue' => (bool) ($row['is_overdue'] ?? false),
-            'delivery_mode' => $row['delivery_mode'] ?? 'online',
-            'done' => 0,
-            'total' => $total,
-            'remaining' => $total,
-            'progress_label' => '0/'.$total,
-            'last_activity_at' => null,
-            'status' => 'not_started',
         ];
     }
 
