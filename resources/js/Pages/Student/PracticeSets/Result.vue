@@ -3,8 +3,10 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AttemptReviewList from '@/Components/AttemptReviewList.vue';
 import WorksheetPdfViewer from '@/Components/WorksheetPdfViewer.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { formatScoreLabel } from '@/utils/scores';
+import { formatScoreLabel, scorePerformanceGrade, scorePerformanceGradeClasses } from '@/utils/scores';
+import SimilarPracticePanel from '@/Components/SimilarPracticePanel.vue';
 import { Head, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps({
     attempt: Object,
@@ -12,6 +14,7 @@ const props = defineProps({
     practiceSet: Object,
     questions: { type: Array, default: () => [] },
     referencePdfUrl: { type: String, default: null },
+    similarPractice: { type: Object, default: () => ({ wrong_count: 0, variants: [], can_generate: false }) },
 });
 
 const setLabel = () => props.practiceSet.set_code || `Set ${props.practiceSet.set_number}`;
@@ -24,6 +27,14 @@ const formatTime = (seconds) => {
 };
 
 const percent = (score, max) => formatScoreLabel(score, max);
+
+const performanceGrade = computed(() => scorePerformanceGrade(props.attempt?.score, props.attempt?.max_score));
+
+const gradeBadgeClass = computed(() => {
+    const tone = performanceGrade.value?.tone;
+
+    return tone ? scorePerformanceGradeClasses[tone] : '';
+});
 
 const correctCount = () => props.questions.filter((q) => q.attempts?.some((row) => row.is_correct)).length;
 </script>
@@ -46,6 +57,13 @@ const correctCount = () => props.questions.filter((q) => q.attempts?.some((row) 
             <div class="mx-auto max-w-3xl space-y-6 sm:px-6 lg:px-8">
                 <div class="rounded-lg bg-white p-6 text-center shadow-sm">
                     <p class="text-4xl font-bold text-indigo-600">{{ percent(attempt.score, attempt.max_score) }}</p>
+                    <p
+                        v-if="performanceGrade"
+                        class="mt-3 inline-flex rounded-full px-4 py-1.5 text-sm font-semibold ring-1 ring-inset"
+                        :class="gradeBadgeClass"
+                    >
+                        {{ performanceGrade.label }}
+                    </p>
                     <p class="mt-2 text-sm text-gray-500">
                         Time: {{ formatTime(attempt.time_seconds) }} · Attempt {{ attempt.attempt_number }}
                     </p>
@@ -81,6 +99,15 @@ const correctCount = () => props.questions.filter((q) => q.attempts?.some((row) 
                 </div>
 
                 <AttemptReviewList :questions="questions" :attempt-id="attempt.id" allow-practice-retry />
+
+                <SimilarPracticePanel
+                    :attempt-id="attempt.id"
+                    :wrong-count="similarPractice.wrong_count ?? 0"
+                    :initial-variants="similarPractice.variants ?? []"
+                    :can-generate="similarPractice.can_generate ?? false"
+                    :generate-route="route('student.attempts.similar-practice.generate', attempt.id)"
+                    :check-route="route('student.attempts.similar-practice.check', attempt.id)"
+                />
 
                 <WorksheetPdfViewer
                     v-if="referencePdfUrl"

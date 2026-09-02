@@ -12,6 +12,7 @@ use App\Services\QuestionIssueReportService;
 use App\Services\QuestionResolutionService;
 use App\Services\SetAssignmentService;
 use App\Services\SetAttemptService;
+use App\Services\SimilarPracticeService;
 use App\Support\AttemptIntegrity;
 use App\Support\AttemptResultSummary;
 use App\Support\AttemptTiming;
@@ -31,6 +32,7 @@ class PracticeSetController extends Controller
         private GuidedPracticeService $guidedPractice,
         private QuestionResolutionService $resolutionService,
         private QuestionIssueReportService $issueReports,
+        private SimilarPracticeService $similarPractice,
     ) {}
 
     public function showAssignment(Request $request, SetAssignment $assignment): Response|RedirectResponse
@@ -514,6 +516,7 @@ class PracticeSetController extends Controller
                     'kind_label' => 'Practice',
                 ],
                 'questions' => $review['questions'],
+                'similarPractice' => $this->similarPracticePayload($attempt),
             ]);
         }
 
@@ -539,7 +542,65 @@ class PracticeSetController extends Controller
             ],
             'referencePdfUrl' => $this->referencePdfUrlFor($assignment),
             'questions' => $review['questions'],
+            'similarPractice' => $this->similarPracticePayload($attempt),
         ]);
+    }
+
+    public function generateSimilarPractice(Request $request, SetAttempt $attempt): JsonResponse
+    {
+        $this->authorizeAssignment($request, $attempt->assignment);
+
+        if ($attempt->status !== SetAttempt::STATUS_SUBMITTED) {
+            return response()->json(['message' => 'Submit the set first.'], 422);
+        }
+
+        try {
+            $result = $this->similarPractice->generate($attempt);
+        } catch (\InvalidArgumentException|\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json($result);
+    }
+
+    public function checkSimilarPractice(Request $request, SetAttempt $attempt): JsonResponse
+    {
+        $this->authorizeAssignment($request, $attempt->assignment);
+
+        $validated = $request->validate([
+            'variant_index' => ['required', 'integer', 'min:0'],
+            'option_index' => ['nullable', 'integer', 'min:0'],
+            'answer_text' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        try {
+            $result = $this->similarPractice->checkAnswer(
+                $attempt,
+                (int) $validated['variant_index'],
+                isset($validated['option_index']) ? (int) $validated['option_index'] : null,
+                $validated['answer_text'] ?? null,
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json($result);
+    }
+
+    /**
+     * @return array{wrong_count: int, variants: list<array<string, mixed>>, can_generate: bool}
+     */
+    private function similarPracticePayload(SetAttempt $attempt): array
+    {
+        $wrongCount = count($this->similarPractice->wrongSourceItems($attempt));
+        $stored = $attempt->similar_practice_variants;
+        $variants = is_array($stored) ? $this->similarPractice->publicVariants($stored['variants'] ?? []) : [];
+
+        return [
+            'wrong_count' => $wrongCount,
+            'variants' => $variants,
+            'can_generate' => $wrongCount > 0 && (bool) config('services.openai.api_key'),
+        ];
     }
 
     public function practiceRetry(Request $request, SetAttempt $attempt): JsonResponse

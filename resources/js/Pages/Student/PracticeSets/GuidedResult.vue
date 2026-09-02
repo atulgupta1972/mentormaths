@@ -2,17 +2,31 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AttemptReviewList from '@/Components/AttemptReviewList.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { formatScoreLabel } from '@/utils/scores';
+import SimilarPracticePanel from '@/Components/SimilarPracticePanel.vue';
+import { formatScoreLabel, scorePerformanceGrade, scorePerformanceGradeClasses } from '@/utils/scores';
 import { Head, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps({
     attempt: Object,
     assignment: Object,
     practiceSet: Object,
     questions: { type: Array, default: () => [] },
+    similarPractice: { type: Object, default: () => ({ wrong_count: 0, variants: [], can_generate: false }) },
 });
 
 const setLabel = () => props.practiceSet?.set_code || 'Practice';
+
+const performanceGrade = computed(() => scorePerformanceGrade(
+    props.attempt?.first_try_correct,
+    props.attempt?.max_score,
+));
+
+const gradeBadgeClass = computed(() => {
+    const tone = performanceGrade.value?.tone;
+
+    return tone ? scorePerformanceGradeClasses[tone] : '';
+});
 
 const formatTime = (seconds) => {
     if (!seconds) {
@@ -47,6 +61,13 @@ const formatTime = (seconds) => {
                     <p class="text-4xl font-bold text-indigo-600">
                         {{ formatScoreLabel(attempt.first_try_correct, attempt.max_score) }}
                     </p>
+                    <p
+                        v-if="performanceGrade"
+                        class="mt-3 inline-flex rounded-full px-4 py-1.5 text-sm font-semibold ring-1 ring-inset"
+                        :class="gradeBadgeClass"
+                    >
+                        {{ performanceGrade.label }}
+                    </p>
                     <p class="mt-2 text-sm text-gray-600">Time: {{ formatTime(attempt.time_seconds) }}</p>
                 </div>
 
@@ -67,6 +88,15 @@ const formatTime = (seconds) => {
                 </div>
 
                 <AttemptReviewList :questions="questions" :attempt-id="attempt.id" allow-practice-retry />
+
+                <SimilarPracticePanel
+                    :attempt-id="attempt.id"
+                    :wrong-count="similarPractice.wrong_count ?? 0"
+                    :initial-variants="similarPractice.variants ?? []"
+                    :can-generate="similarPractice.can_generate ?? false"
+                    :generate-route="route('student.attempts.similar-practice.generate', attempt.id)"
+                    :check-route="route('student.attempts.similar-practice.check', attempt.id)"
+                />
 
                 <Link :href="route('dashboard')">
                     <PrimaryButton>Back to dashboard</PrimaryButton>

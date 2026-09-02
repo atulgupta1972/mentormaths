@@ -511,6 +511,8 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
     Route::post('/attempts/{attempt}/submit', [StudentPracticeSetController::class, 'submitAttempt'])->name('attempts.submit');
     Route::get('/attempts/{attempt}/result', [StudentPracticeSetController::class, 'result'])->name('attempts.result');
     Route::post('/attempts/{attempt}/practice-retry', [StudentPracticeSetController::class, 'practiceRetry'])->name('attempts.practice-retry');
+    Route::post('/attempts/{attempt}/similar-practice/generate', [StudentPracticeSetController::class, 'generateSimilarPractice'])->name('attempts.similar-practice.generate');
+    Route::post('/attempts/{attempt}/similar-practice/check', [StudentPracticeSetController::class, 'checkSimilarPractice'])->name('attempts.similar-practice.check');
     Route::get('/resolutions/history', [StudentPracticeSetController::class, 'resolutionHistory'])->name('resolutions.history');
     Route::get('/resolutions/clear-all', [StudentPracticeSetController::class, 'startClearAllQueue'])->name('resolutions.clear-all');
     Route::get('/resolutions/{item}', [StudentPracticeSetController::class, 'showResolution'])->name('resolutions.show');

@@ -25,17 +25,31 @@ class AnswerValidationService
 
     public function matchesBlankAnswer(QuestionBlankAnswer $blank, string $studentAnswer): bool
     {
+        return $this->matchesFormattedAnswer(
+            $blank->answer_format,
+            $blank->correct_answer,
+            $blank->decimal_places,
+            $studentAnswer,
+        );
+    }
+
+    public function matchesFormattedAnswer(
+        string $format,
+        string $correctAnswer,
+        mixed $decimalPlaces,
+        string $studentAnswer,
+    ): bool {
         $student = $this->normalizeInput($studentAnswer);
 
         if ($student === null) {
             return false;
         }
 
-        $formatMatch = match ($blank->answer_format) {
-            QuestionBlankAnswer::FORMAT_INTEGER => $this->matchesInteger($blank->correct_answer, $student),
-            QuestionBlankAnswer::FORMAT_DECIMAL => $this->matchesDecimal($blank->correct_answer, $student, $blank->decimal_places),
-            QuestionBlankAnswer::FORMAT_FRACTION => $this->matchesFraction($blank->correct_answer, $student),
-            QuestionBlankAnswer::FORMAT_TEXT => $this->matchesText($blank->correct_answer, $student),
+        $formatMatch = match ($format) {
+            QuestionBlankAnswer::FORMAT_INTEGER => $this->matchesInteger($correctAnswer, $student),
+            QuestionBlankAnswer::FORMAT_DECIMAL => $this->matchesDecimal($correctAnswer, $student, is_numeric($decimalPlaces) ? (int) $decimalPlaces : null),
+            QuestionBlankAnswer::FORMAT_FRACTION => $this->matchesFraction($correctAnswer, $student),
+            QuestionBlankAnswer::FORMAT_TEXT => $this->matchesText($correctAnswer, $student),
             default => false,
         };
 
@@ -43,7 +57,7 @@ class AnswerValidationService
             return true;
         }
 
-        return $this->matchesText($blank->correct_answer, $student);
+        return $this->matchesText($correctAnswer, $student);
     }
 
     public function formatLabel(?string $format): string

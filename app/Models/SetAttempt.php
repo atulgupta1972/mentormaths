@@ -39,6 +39,7 @@ class SetAttempt extends Model
         'time_seconds',
         'status',
         'submission_timing',
+        'similar_practice_variants',
     ];
 
     protected function casts(): array
@@ -48,6 +49,7 @@ class SetAttempt extends Model
             'active_session_started_at' => 'datetime',
             'completed_at' => 'datetime',
             'is_correction_practice' => 'boolean',
+            'similar_practice_variants' => 'array',
         ];
     }
 
