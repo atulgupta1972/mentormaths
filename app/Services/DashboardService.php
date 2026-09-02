@@ -626,7 +626,6 @@ class DashboardService
     private function followUpItemsFromAssignments(array $assignments): array
     {
         $items = [];
-        $now = now();
 
         foreach ($assignments as $row) {
             $submittedAt = $row['submitted_at'] ?? null;
@@ -642,27 +641,21 @@ class DashboardService
             $completionPct = $pool['completion_pct'] ?? $row['completion_pct'] ?? null;
             $status = (string) ($row['status'] ?? '');
 
-            $needsCorrection = $pendingRemedial > 0;
-            $needsMoreWork = $pending > 0
-                || ($completionPct !== null && (int) $completionPct < 100);
-            $notPerfectScore = $scorePct !== null && (int) $scorePct < 100;
             $underReview = $status === 'checking';
-            $submittedRecently = $now->diffInHours(\Carbon\Carbon::parse($submittedAt)) <= 72;
+            $hasPool = $pool && (int) ($pool['pool'] ?? 0) > 0;
+            $isFullyComplete = $hasPool
+                ? $pending === 0 && (int) ($completionPct ?? 0) === 100
+                : in_array($status, ['green', 'green-late'], true);
 
-            if (! $needsCorrection && ! $needsMoreWork && ! $notPerfectScore && ! $underReview && ! $submittedRecently) {
+            if ($isFullyComplete && ! $underReview) {
                 continue;
             }
 
-            if (
-                $submittedRecently
-                && ! $needsCorrection
-                && ! $needsMoreWork
-                && ! $notPerfectScore
-                && ! $underReview
-                && (int) ($scorePct ?? 100) === 100
-                && (int) ($completionPct ?? 100) === 100
-                && $now->diffInHours(\Carbon\Carbon::parse($submittedAt)) > 24
-            ) {
+            $needsCorrection = $pendingRemedial > 0;
+            $needsMoreWork = $pending > 0
+                || ($hasPool && $completionPct !== null && (int) $completionPct < 100);
+
+            if (! $needsCorrection && ! $needsMoreWork && ! $underReview) {
                 continue;
             }
 
@@ -681,7 +674,7 @@ class DashboardService
                     $parts[] = 'score '.(int) $scorePct.'%';
                 }
 
-                if ($completionPct !== null) {
+                if ($completionPct !== null && (int) $completionPct < 100) {
                     $parts[] = 'completion '.(int) $completionPct.'%';
                 }
 
@@ -701,7 +694,7 @@ class DashboardService
                 'score_label' => $row['score_display'] ?? $row['latest_score_label'] ?? null,
                 'detail' => $detail,
                 'can_correct' => $needsCorrection,
-                'needs_follow_up' => $needsCorrection || $needsMoreWork || $notPerfectScore || $underReview,
+                'needs_follow_up' => $needsCorrection || $needsMoreWork || $underReview,
                 'under_review' => $underReview,
             ];
         }

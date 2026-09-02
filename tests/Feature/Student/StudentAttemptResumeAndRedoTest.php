@@ -212,6 +212,55 @@ class StudentAttemptResumeAndRedoTest extends TestCase
             );
     }
 
+    public function test_dashboard_hides_fully_completed_set_from_follow_up_items(): void
+    {
+        $this->withoutVite();
+        $this->withoutMiddleware([
+            \App\Http\Middleware\EnsureFormulaDrillComplete::class,
+            \App\Http\Middleware\EnsureBasicsDrillComplete::class,
+        ]);
+
+        [$assignment, $questions, $user] = $this->seedChapterTestAssignment(questionCount: 5, withUser: true);
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_BATCH,
+            'started_at' => now()->subHour(),
+            'completed_at' => now(),
+            'score' => 5,
+            'max_score' => 5,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+        $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
+
+        foreach ($questions as $question) {
+            $option = $question->options->firstWhere('is_correct', true);
+
+            SetAttemptAnswer::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'question_option_id' => $option->id,
+                'is_correct' => true,
+            ]);
+        }
+
+        app(AssignmentPoolScore::class)->rebuildFromAttempts($assignment->fresh());
+
+        $metrics = app(AssignmentPoolScore::class)->metricsForAssignment($assignment->fresh());
+        $this->assertSame(0, $metrics['pending']);
+        $this->assertSame(100, $metrics['completion_pct']);
+        $this->assertSame(100, $metrics['score_pct']);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('followUpItems', 0)
+            );
+    }
+
     /**
      * @return array{0: SetAssignment, 1: \Illuminate\Support\Collection<int, Question>, 2?: User}
      */
