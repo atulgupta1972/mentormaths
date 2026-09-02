@@ -195,8 +195,15 @@ class PracticeSetController extends Controller
         }
 
         if ($attempt->isGuided()) {
+            $payload = $this->guidedPractice->buildPayload($attempt);
+            $attempt->refresh();
+
+            if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {
+                return redirect()->route('student.attempts.result', $attempt);
+            }
+
             return Inertia::render('Student/PracticeSets/GuidedAttempt', [
-                ...$this->guidedPractice->buildPayload($attempt),
+                ...$payload,
                 'integrity' => AttemptIntegrity::payloadForAttempt($attempt, false),
             ]);
         }

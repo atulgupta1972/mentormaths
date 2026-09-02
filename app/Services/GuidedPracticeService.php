@@ -178,35 +178,9 @@ class GuidedPracticeService
         }
 
         DB::transaction(function () use ($attempt) {
-            $rows = $attempt->guidedQuestions()->orderBy('sort_order')->get()->values();
-            $needsRenumber = $rows->first()->sort_order !== 0
-                || $rows->last()->sort_order !== ($rows->count() - 1);
+            $rows = $this->renumberGuidedRowsIfNeeded($attempt);
 
-            if ($needsRenumber) {
-                foreach ($rows as $index => $row) {
-                    if ((int) $row->sort_order !== $index) {
-                        $row->update(['sort_order' => $index]);
-                    }
-                }
-
-                $rows = $attempt->guidedQuestions()->orderBy('sort_order')->get()->values();
-            }
-
-            $activePhases = [
-                GuidedAttemptQuestion::PHASE_ANSWERING,
-                GuidedAttemptQuestion::PHASE_RETRY,
-                GuidedAttemptQuestion::PHASE_EXPLAINED,
-            ];
-
-            $current = $rows->first(fn (GuidedAttemptQuestion $row) => in_array($row->phase, $activePhases, true));
-
-            if (! $current) {
-                $current = $rows->firstWhere('phase', GuidedAttemptQuestion::PHASE_PENDING);
-
-                if ($current) {
-                    $current->update(['phase' => GuidedAttemptQuestion::PHASE_ANSWERING]);
-                }
-            }
+            $current = $this->findResolvableCurrentGuidedRow($rows, activatePending: true);
 
             if ($current) {
                 if ((int) $attempt->current_question_index !== (int) $current->sort_order) {
@@ -223,6 +197,80 @@ class GuidedPracticeService
     }
 
     /**
+     * @return \Illuminate\Support\Collection<int, GuidedAttemptQuestion>
+     */
+    private function renumberGuidedRowsIfNeeded(SetAttempt $attempt)
+    {
+        $rows = $attempt->guidedQuestions()->orderBy('sort_order')->get()->values();
+        $needsRenumber = $rows->isNotEmpty()
+            && ($rows->first()->sort_order !== 0
+                || $rows->last()->sort_order !== ($rows->count() - 1));
+
+        if ($needsRenumber) {
+            foreach ($rows as $index => $row) {
+                if ((int) $row->sort_order !== $index) {
+                    $row->update(['sort_order' => $index]);
+                }
+            }
+
+            $rows = $attempt->guidedQuestions()->orderBy('sort_order')->get()->values();
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, GuidedAttemptQuestion>  $rows
+     */
+    private function findResolvableCurrentGuidedRow($rows, bool $activatePending = false): ?GuidedAttemptQuestion
+    {
+        $activePhases = [
+            GuidedAttemptQuestion::PHASE_ANSWERING,
+            GuidedAttemptQuestion::PHASE_RETRY,
+            GuidedAttemptQuestion::PHASE_EXPLAINED,
+        ];
+
+        $current = $rows->first(fn (GuidedAttemptQuestion $row) => in_array($row->phase, $activePhases, true));
+
+        if ($current) {
+            return $current;
+        }
+
+        $pending = $rows->firstWhere('phase', GuidedAttemptQuestion::PHASE_PENDING);
+
+        if (! $pending) {
+            return null;
+        }
+
+        if ($activatePending) {
+            $pending->update(['phase' => GuidedAttemptQuestion::PHASE_ANSWERING]);
+        }
+
+        return $pending->fresh();
+    }
+
+    public function canResume(SetAttempt $attempt): bool
+    {
+        if ($attempt->status !== SetAttempt::STATUS_IN_PROGRESS) {
+            return false;
+        }
+
+        if (! $attempt->isGuided()) {
+            return true;
+        }
+
+        $attempt->loadMissing('guidedQuestions');
+
+        if ($attempt->guidedQuestions->isEmpty()) {
+            return true;
+        }
+
+        $rows = $attempt->guidedQuestions->sortBy('sort_order')->values();
+
+        return $this->findResolvableCurrentGuidedRow($rows) !== null;
+    }
+
+    /**
      * @return \Illuminate\Support\Collection<int, \App\Models\Question>
      */
     private function orderedWorksheetQuestions(Worksheet $worksheet)
@@ -235,14 +283,31 @@ class GuidedPracticeService
      */
     public function buildPayload(SetAttempt $attempt): array
     {
+        if ($attempt->status === SetAttempt::STATUS_IN_PROGRESS && $attempt->isGuided()) {
+            $this->ensureAttemptReady($attempt);
+            $attempt->refresh();
+        }
+
         $attempt->loadMissing([
             'assignment.practiceSet',
             'guidedQuestions.question.options',
             'guidedQuestions.question.blankAnswer',
         ]);
 
-        $guidedRows = $attempt->guidedQuestions;
-        $current = $guidedRows->firstWhere('sort_order', $attempt->current_question_index);
+        if ($attempt->status === SetAttempt::STATUS_SUBMITTED) {
+            return [
+                'finished' => true,
+                'summary' => $this->summary($attempt),
+            ];
+        }
+
+        $guidedRows = $attempt->guidedQuestions->sortBy('sort_order')->values();
+        $current = $guidedRows->firstWhere('sort_order', $attempt->current_question_index)
+            ?? $this->findResolvableCurrentGuidedRow($guidedRows);
+
+        if ($current && (int) $attempt->current_question_index !== (int) $current->sort_order) {
+            $attempt->update(['current_question_index' => $current->sort_order]);
+        }
 
         if (! $current) {
             return [

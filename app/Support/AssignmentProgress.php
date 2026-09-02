@@ -7,6 +7,7 @@ use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\WrittenSubmission;
 use App\Services\AssignmentPoolScore;
+use App\Services\GuidedPracticeService;
 use App\Services\RevisionAssignmentService;
 use App\Services\StudyPlanMetricsCacheService;
 use Carbon\Carbon;
@@ -427,6 +428,9 @@ class AssignmentProgress
             'assignment_status' => $assignmentStatus,
             'latest_attempt_id' => $latest?->status === SetAttempt::STATUS_SUBMITTED ? $latest->id : null,
             'in_progress_attempt_id' => $latest?->status === SetAttempt::STATUS_IN_PROGRESS ? $latest->id : null,
+            'can_resume_attempt' => $latest?->status === SetAttempt::STATUS_IN_PROGRESS
+                ? app(GuidedPracticeService::class)->canResume($latest)
+                : false,
             'written_submission_status' => null,
         ];
     }

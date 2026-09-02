@@ -575,6 +575,10 @@ class DashboardService
                 continue;
             }
 
+            if (($row['can_resume_attempt'] ?? true) === false) {
+                continue;
+            }
+
             $remaining = (int) ($partial['remaining'] ?? 0);
             if ($remaining <= 0) {
                 continue;

@@ -365,6 +365,29 @@ class GuidedPracticeServiceTest extends TestCase
         $this->assertNotNull($payload['question']);
     }
 
+    public function test_build_payload_repairs_stale_current_question_index(): void
+    {
+        [$attempt] = $this->seedGuidedAttempt(withGuidedInit: false);
+
+        GuidedAttemptQuestion::query()->create([
+            'set_attempt_id' => $attempt->id,
+            'question_id' => $attempt->assignment->practiceSet->questions()->first()->id,
+            'sort_order' => 0,
+            'phase' => GuidedAttemptQuestion::PHASE_ANSWERING,
+        ]);
+
+        $attempt->update([
+            'mode' => SetAttempt::MODE_GUIDED,
+            'current_question_index' => 3,
+        ]);
+
+        $payload = app(GuidedPracticeService::class)->buildPayload($attempt->fresh(['guidedQuestions.question.options']));
+
+        $this->assertFalse($payload['finished']);
+        $this->assertSame(1, $payload['progress']['current']);
+        $this->assertSame(0, $attempt->fresh()->current_question_index);
+    }
+
     public function test_stale_batch_attempt_on_topic_practice_upgrades_to_guided(): void
     {
         [$attempt] = $this->seedGuidedAttempt(withGuidedInit: false);
