@@ -5,15 +5,16 @@ namespace Tests\Feature\ContentUploader;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\ContentUploadTask;
+use App\Models\ContentVerificationRun;
 use App\Models\GradeLevel;
-use App\Models\Student;
-use App\Models\StudentEnrollment;
+use App\Models\Question;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\User;
+use App\Models\Worksheet;
 use App\Services\UserGroupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -142,38 +143,36 @@ class ContentTextbookImportTest extends TestCase
                 ->component('ContentUploader/Tasks/Show')
                 ->where('task.status', ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS)
                 ->has('verification.questions', 1)
-                ->where('verification.questions.0.question_text', 'What is 2 + 2?')
-                ->has('verification.questions.0.options', 4)
-                ->where('verification.questions.0.options.1.is_correct', true));
+                ->where('verification.questions.0.type', Question::TYPE_FILL_IN_BLANK)
+                ->where('verification.questions.0.blank_answer.correct_answer', '4')
+                ->where('verification.questions.0.correct_answer', '4'));
 
         $questionId = ContentUploadTask::query()->findOrFail($task->id)
             ->textbookChapter
             ->mcqWorksheetIds();
 
         $worksheetId = $questionId[0];
-        $savedQuestionId = \App\Models\Worksheet::query()->findOrFail($worksheetId)->questions()->firstOrFail()->id;
+        $savedQuestionId = Worksheet::query()->findOrFail($worksheetId)->questions()->firstOrFail()->id;
 
         $this->actingAs($uploader)
             ->post(route('content.tasks.verification-question', $task), [
-                'run_id' => \App\Models\ContentVerificationRun::query()->where('content_upload_task_id', $task->id)->value('id'),
+                'run_id' => ContentVerificationRun::query()->where('content_upload_task_id', $task->id)->value('id'),
                 'question_id' => $savedQuestionId,
-                'question_text' => 'What is two plus two?',
+                'type' => Question::TYPE_FILL_IN_BLANK,
+                'question_text' => 'What is two plus two? The answer is ____.',
                 'explanation' => 'Adding gives four.',
                 'method_hint' => 'Use addition',
                 'difficulty' => 'Easy',
-                'options' => [
-                    ['id' => null, 'option_text' => '3', 'is_correct' => false],
-                    ['id' => null, 'option_text' => '4', 'is_correct' => true],
-                    ['id' => null, 'option_text' => '5', 'is_correct' => false],
-                    ['id' => null, 'option_text' => '6', 'is_correct' => false],
-                ],
+                'correct_answer' => '4',
+                'answer_format' => 'integer',
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
 
         $this->assertDatabaseHas('questions', [
             'id' => $savedQuestionId,
-            'question_text' => 'What is two plus two?',
+            'type' => Question::TYPE_FILL_IN_BLANK,
+            'question_text' => 'What is two plus two? The answer is ____.',
             'explanation' => 'Adding gives four.',
         ]);
     }
@@ -232,8 +231,8 @@ class ContentTextbookImportTest extends TestCase
         $chapter->refresh();
         $this->assertSame(TextbookChapter::STATUS_PUBLISHED, $chapter->status);
         $this->assertCount(2, $chapter->mcqWorksheetIds());
-        $this->assertSame(45, \App\Models\Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->count());
-        $this->assertSame(45, \App\Models\Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[1])->questions()->count());
+        $this->assertSame(45, Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->count());
+        $this->assertSame(45, Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[1])->questions()->count());
     }
 
     public function test_content_uploader_without_student_profile_is_sent_to_tasks_from_dashboard(): void

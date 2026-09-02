@@ -18,6 +18,7 @@ use App\Services\TextbookChapterMcqImportService;
 use App\Services\UserGroupService;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ContentChapterLibraryTest extends TestCase
@@ -250,6 +251,11 @@ class ContentChapterLibraryTest extends TestCase
             'status' => TextbookChapter::STATUS_DRAFT,
             'created_by' => $admin->id,
         ]);
+
+        Storage::fake('public');
+        $pdfPath = 'textbooks/'.$textbook->id.'/chapters/'.$chapter->chapter_number.'/test.pdf';
+        Storage::disk('public')->put($pdfPath, '%PDF-1.4 test');
+        $chapter->update(['pdf_path' => $pdfPath]);
 
         $task = ContentUploadTask::query()->create([
             'textbook_chapter_id' => $chapter->id,

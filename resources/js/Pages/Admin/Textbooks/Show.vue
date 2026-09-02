@@ -108,6 +108,40 @@ const mcqItemCount = computed(() => items.value.filter((item) => item.question_t
 const showLegacyFillBlankStep = computed(() => fillBlankItemCount.value === 0 && hasItems.value);
 const optionLetter = (index) => String.fromCharCode(65 + index);
 const isFillBlankItem = (item) => item.question_type === 'fill_blank';
+
+const padMcqOptions = (item) => {
+    const options = [...(item.mcq_options || [])];
+    while (options.length < 8) {
+        options.push({ text: '', is_correct: false });
+    }
+    item.mcq_options = options.slice(0, 8);
+};
+
+const setItemType = (item, type) => {
+    if (type === 'fill_blank') {
+        item.question_type = 'fill_blank';
+        item.include_in_mcq = false;
+        item.include_in_fill_blank = true;
+        item.fill_blank_skipped = false;
+        const answer = String(item.fill_blank_correct_answer || item.correct_answer || '').trim();
+        item.fill_blank_correct_answer = answer;
+        let stem = String(item.fill_blank_question_text || item.question_text || '').trim();
+        if (stem && !stem.includes('____')) {
+            stem = `${stem.replace(/[.?\s]+$/, '')} The answer is ____.`;
+        }
+        item.fill_blank_question_text = stem;
+        if (!item.fill_blank_answer_format) {
+            item.fill_blank_answer_format = 'integer';
+        }
+        return;
+    }
+
+    item.question_type = 'mcq';
+    item.include_in_mcq = true;
+    item.include_in_fill_blank = false;
+    item.fill_blank_skipped = true;
+    padMcqOptions(item);
+};
 const diagramLinkedCount = computed(() => items.value.filter((item) => item.diagram_staging_path || item.diagram_preview_url).length);
 const replacingDiagramIndex = ref(null);
 
@@ -872,12 +906,15 @@ const canChangeBook = computed(() =>
                                     <p v-if="item.gemini_verified" class="mt-1 text-[10px] font-semibold text-emerald-700">✓ Gemini</p>
                                 </td>
                                 <td class="px-3 py-3 align-top">
-                                    <span
-                                        class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                                        :class="isFillBlankItem(item) ? 'bg-violet-100 text-violet-900' : 'bg-indigo-100 text-indigo-900'"
+                                    <select
+                                        class="rounded-md border-gray-300 text-[11px] font-semibold uppercase tracking-wide"
+                                        :class="isFillBlankItem(item) ? 'bg-violet-50 text-violet-900' : 'bg-indigo-50 text-indigo-900'"
+                                        :value="isFillBlankItem(item) ? 'fill_blank' : 'mcq'"
+                                        @change="setItemType(item, $event.target.value)"
                                     >
-                                        {{ isFillBlankItem(item) ? 'Fill blank' : 'MCQ ×8' }}
-                                    </span>
+                                        <option value="mcq">MCQ ×8</option>
+                                        <option value="fill_blank">Fill blank</option>
+                                    </select>
                                 </td>
                                 <td class="px-3 py-3 align-top font-medium text-gray-800">{{ item.label }}</td>
                                 <td class="px-3 py-3 align-top">

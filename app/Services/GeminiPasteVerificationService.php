@@ -23,10 +23,11 @@ class GeminiPasteVerificationService
         }
 
         $lines = [
-            'You are reviewing MCQ answers for an Indian school maths app (CBSE/ICSE).',
+            'You are reviewing mixed practice questions for an Indian school maths app (CBSE/ICSE).',
             'Chapter: '.$chapterLabel,
             '',
-            'For EACH question below, check whether the marked correct option is mathematically correct.',
+            'Each question is either an MCQ or a fill-in-the-blank (numeric / fraction answer).',
+            'For EACH question below, check whether the marked answer is mathematically correct.',
             'Use EXACTLY this format for every question (keep the numbering):',
             '',
             'Question N',
@@ -51,10 +52,19 @@ class GeminiPasteVerificationService
             if (! empty($row['set_code'])) {
                 $lines[] = 'Set: '.(string) $row['set_code'];
             }
+            $type = (string) ($row['type'] ?? 'mcq');
+            $isFillBlank = in_array($type, ['fill_in_blank', 'fill_blank'], true);
+            $lines[] = 'Type: '.($isFillBlank ? 'Fill in blank' : 'MCQ');
             $lines[] = 'Text: '.(string) ($row['question_text'] ?? '');
-            foreach ($row['options'] ?? [] as $option) {
-                $mark = ($option['is_correct'] ?? false) ? ' [CORRECT]' : '';
-                $lines[] = '  '.($option['letter'] ?? '?').'. '.($option['option_text'] ?? '').$mark;
+            if ($isFillBlank) {
+                $answer = (string) ($row['blank_answer']['correct_answer'] ?? $row['correct_answer'] ?? '');
+                $format = (string) ($row['blank_answer']['answer_format'] ?? '');
+                $lines[] = 'Fill-blank answer: '.$answer.($format !== '' ? ' ('.$format.')' : '');
+            } else {
+                foreach ($row['options'] ?? [] as $option) {
+                    $mark = ($option['is_correct'] ?? false) ? ' [CORRECT]' : '';
+                    $lines[] = '  '.($option['letter'] ?? '?').'. '.($option['option_text'] ?? '').$mark;
+                }
             }
             if (filled($row['method_hint'] ?? null)) {
                 $lines[] = 'Hint: '.(string) $row['method_hint'];

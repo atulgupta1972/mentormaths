@@ -134,7 +134,7 @@ onUnmounted(() => clearInterval(pingTimer));
 
                 <div v-else-if="verification" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <p class="text-sm text-gray-700">
-                        One question at a time: review details, edit if needed, then
+                        One question at a time: review details, edit if needed, switch MCQ / fill-in-blank when the type is wrong, then
                         <strong>Save &amp; mark verified → next</strong>.
                         Upload a figure when the question needs one.
                         Or use <strong>Gemini paste review</strong> to auto-verify the correct ones.

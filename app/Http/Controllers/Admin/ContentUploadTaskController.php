@@ -15,7 +15,6 @@ use App\Models\User;
 use App\Services\AdminGradeContext;
 use App\Services\ClassAssignmentService;
 use App\Services\ContentAiVerificationService;
-use App\Services\GeminiPasteVerificationService;
 use App\Services\ContentAllocationMatrixService;
 use App\Services\ContentChapterQuestionService;
 use App\Services\ContentDuplicateGuardService;
@@ -25,12 +24,14 @@ use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
 use App\Services\FillBlankConversionService;
+use App\Services\GeminiPasteVerificationService;
 use App\Services\QuestionResolutionService;
-use App\Services\TextbookMcqSetPlanService;
 use App\Services\TextbookChapterBookService;
 use App\Services\TextbookChapterMapService;
+use App\Services\TextbookMcqSetPlanService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -635,6 +636,7 @@ class ContentUploadTaskController extends Controller
             'textbookChapter.syllabusChapter.chapterHead',
             'textbookChapter.syllabusChapter.syllabusVersion.board',
         ]);
+
         return Inertia::render('Admin/ContentTasks/Show', [
             'task' => $this->serializeTask($contentTask, detailed: true),
             'verification' => $contentTask->isFillBlankConversion() ? null : $verification,
@@ -728,18 +730,7 @@ class ContentUploadTaskController extends Controller
 
     public function saveVerificationQuestion(Request $request, ContentUploadTask $contentTask): RedirectResponse
     {
-        $validated = $request->validate([
-            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
-            'question_id' => ['required', 'integer', 'exists:questions,id'],
-            'question_text' => ['required', 'string', 'max:5000'],
-            'explanation' => ['nullable', 'string', 'max:5000'],
-            'method_hint' => ['nullable', 'string', 'max:2000'],
-            'difficulty' => ['nullable', 'string', 'max:64'],
-            'options' => ['required', 'array', 'min:2', 'max:8'],
-            'options.*.id' => ['nullable', 'integer'],
-            'options.*.option_text' => ['required', 'string', 'max:2000'],
-            'options.*.is_correct' => ['required', 'boolean'],
-        ]);
+        $validated = $request->validate(ContentVerificationService::questionSaveValidationRules());
 
         $run = $this->authorizeVerificationRun($contentTask, (int) $validated['run_id']);
 
@@ -1327,7 +1318,7 @@ class ContentUploadTaskController extends Controller
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, array{id: int, name: string, email: string}>
+     * @return Collection<int, array{id: int, name: string, email: string}>
      */
     private function contentUploaders()
     {

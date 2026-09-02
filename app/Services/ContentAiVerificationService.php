@@ -141,9 +141,12 @@ class ContentAiVerificationService
             $questions[] = [
                 'question_id' => (int) $row['question_id'],
                 'number' => (int) $row['number'],
+                'type' => (string) ($row['type'] ?? 'mcq'),
                 'question_text' => (string) ($row['question_text'] ?? ''),
                 'options' => $options,
                 'correct_letter' => $row['correct_letter'] ?? null,
+                'correct_answer' => $row['blank_answer']['correct_answer'] ?? $row['correct_answer'] ?? null,
+                'answer_format' => $row['blank_answer']['answer_format'] ?? null,
                 'hint' => (string) ($row['method_hint'] ?? ''),
                 'explanation' => (string) ($row['explanation'] ?? ''),
                 'difficulty' => (string) ($row['difficulty'] ?? ''),
@@ -163,7 +166,7 @@ class ContentAiVerificationService
                 'messages' => [
                     [
                         'role' => 'system',
-                        'content' => 'You QA school maths MCQs for an Indian CBSE/ICSE learning app. Be strict about wrong answers. Return strict JSON only.',
+                        'content' => 'You QA school maths MCQ and fill-in-blank questions for an Indian CBSE/ICSE learning app. Be strict about wrong answers. Return strict JSON only.',
                     ],
                     [
                         'role' => 'user',
@@ -203,10 +206,10 @@ class ContentAiVerificationService
         $json = json_encode(['questions' => $questions], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
         return <<<PROMPT
-Review each MCQ for upload quality. For every question return one verdict.
+Review each question for upload quality. Questions may be MCQ or fill-in-blank. For every question return one verdict.
 
 Verdicts:
-- approve: clear stem, exactly one sensible correct option, maths answer is correct, options not broken, diagram OK if needed (has_diagram true OR no figure required).
+- approve: clear stem, maths answer is correct (one sensible correct option for MCQ, or the fill-blank answer), diagram OK if needed (has_diagram true OR no figure required).
 - skip: irrelevant / off-topic / not usable for this syllabus chapter (do not pay for these).
 - needs_fix: wrong answer, ambiguous stem, broken options, empty text, or poor quality that a human must edit.
 - needs_diagram: question clearly requires a figure/graph and has_diagram is false.
