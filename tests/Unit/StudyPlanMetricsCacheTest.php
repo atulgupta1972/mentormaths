@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Models\AssignmentSumInstance;
 use App\Models\SetAssignment;
 use App\Services\AssignmentPoolScore;
 use App\Services\StudyPlanMetricsCacheService;
@@ -16,27 +17,52 @@ class StudyPlanMetricsCacheTest extends TestCase
 
     public function test_metrics_for_assignment_read_returns_cached_without_pool_queries(): void
     {
-        $assignment = new SetAssignment([
+        [$enrollment, , $worksheet] = $this->seedMinimalChapterAssignment();
+
+        $question = \App\Models\Question::query()->create([
+            'syllabus_topic_id' => $worksheet->syllabus_topic_id,
+            'question_text' => 'Q1',
+            'type' => \App\Models\Question::TYPE_MCQ,
+            'source' => \App\Models\Question::SOURCE_MANUAL,
+        ]);
+
+        $assignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek(),
+            'status' => SetAssignment::STATUS_COMPLETED,
             'cached_pool_metrics' => [
-                'pool' => 10,
-                'attempted' => 8,
-                'correct' => 6,
-                'pending' => 2,
+                'pool' => 1,
+                'attempted' => 1,
+                'correct' => 1,
+                'pending' => 0,
                 'pending_remedial' => 0,
                 'wrong' => 0,
-                'completion_pct' => 80,
-                'score_pct' => 75,
+                'completion_pct' => 100,
+                'score_pct' => 100,
             ],
+            'cached_metrics_at' => now(),
+        ]);
+
+        AssignmentSumInstance::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'student_id' => $enrollment->student_id,
+            'worksheet_id' => $worksheet->id,
+            'question_id' => $question->id,
+            'generation' => 0,
+            'status' => AssignmentSumInstance::STATUS_CORRECT,
         ]);
 
         $poolMock = Mockery::mock(AssignmentPoolScore::class);
         $poolMock->shouldNotReceive('metricsForAssignment');
+        $poolMock->shouldNotReceive('rebuildFromAttempts');
         $this->app->instance(AssignmentPoolScore::class, $poolMock);
 
-        $metrics = app(StudyPlanMetricsCacheService::class)->metricsForAssignmentRead($assignment);
+        $metrics = app(StudyPlanMetricsCacheService::class)->metricsForAssignmentRead($assignment->fresh());
 
-        $this->assertSame(80, $metrics['completion_pct']);
-        $this->assertSame(75, $metrics['score_pct']);
+        $this->assertSame(100, $metrics['completion_pct']);
+        $this->assertSame(100, $metrics['score_pct']);
     }
 
     public function test_dashboard_summary_does_not_rebuild_pool_on_read(): void
@@ -66,14 +92,34 @@ class StudyPlanMetricsCacheTest extends TestCase
             'set_assignment_id' => $assignment->id,
             'attempt_number' => 1,
             'mode' => \App\Models\SetAttempt::MODE_BATCH,
-            'started_at' => now()->subHour(),
-            'completed_at' => now(),
+            'started_at' => now()->subHours(2),
+            'completed_at' => now()->subHours(2),
             'score' => 3,
             'max_score' => 4,
             'time_seconds' => 120,
             'status' => \App\Models\SetAttempt::STATUS_SUBMITTED,
             'submission_timing' => \App\Models\SetAttempt::TIMING_ON_TIME,
         ]);
+
+        foreach (range(1, 4) as $index) {
+            $question = \App\Models\Question::query()->create([
+                'syllabus_topic_id' => $practiceOne->syllabus_topic_id,
+                'question_text' => "Q{$index}",
+                'type' => \App\Models\Question::TYPE_MCQ,
+                'source' => \App\Models\Question::SOURCE_MANUAL,
+            ]);
+
+            AssignmentSumInstance::query()->create([
+                'set_assignment_id' => $assignment->id,
+                'student_id' => $enrollment->student_id,
+                'worksheet_id' => $practiceOne->id,
+                'question_id' => $question->id,
+                'generation' => 0,
+                'status' => $index <= 3
+                    ? AssignmentSumInstance::STATUS_CORRECT
+                    : AssignmentSumInstance::STATUS_WRONG,
+            ]);
+        }
 
         $poolMock = Mockery::mock(AssignmentPoolScore::class);
         $poolMock->shouldNotReceive('rebuildFromAttempts');
@@ -85,6 +131,91 @@ class StudyPlanMetricsCacheTest extends TestCase
 
         $this->assertSame(100, $summary['completion_pct']);
         $this->assertSame(75, $summary['latest_score_percent']);
+    }
+
+    public function test_metrics_for_assignment_read_rebuilds_when_cache_is_stale(): void
+    {
+        [$enrollment, , $practiceOne] = $this->seedMinimalChapterAssignment();
+
+        $assignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $practiceOne->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek(),
+            'status' => SetAssignment::STATUS_COMPLETED,
+            'cached_pool_metrics' => [
+                'pool' => 4,
+                'attempted' => 3,
+                'correct' => 2,
+                'pending' => 1,
+                'pending_remedial' => 0,
+                'wrong' => 0,
+                'completion_pct' => 75,
+                'score_pct' => 67,
+            ],
+            'cached_metrics_at' => now()->subHour(),
+        ]);
+
+        \App\Models\SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => \App\Models\SetAttempt::MODE_BATCH,
+            'started_at' => now()->subHour(),
+            'completed_at' => now(),
+            'score' => 4,
+            'max_score' => 4,
+            'time_seconds' => 120,
+            'status' => \App\Models\SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => \App\Models\SetAttempt::TIMING_ON_TIME,
+        ]);
+
+        foreach (range(1, 4) as $index) {
+            $question = \App\Models\Question::query()->create([
+                'syllabus_topic_id' => $practiceOne->syllabus_topic_id,
+                'question_text' => "Q{$index}",
+                'type' => \App\Models\Question::TYPE_MCQ,
+                'source' => \App\Models\Question::SOURCE_MANUAL,
+            ]);
+
+            AssignmentSumInstance::query()->create([
+                'set_assignment_id' => $assignment->id,
+                'student_id' => $enrollment->student_id,
+                'worksheet_id' => $practiceOne->id,
+                'question_id' => $question->id,
+                'generation' => 0,
+                'status' => AssignmentSumInstance::STATUS_CORRECT,
+            ]);
+        }
+
+        $poolMock = Mockery::mock(AssignmentPoolScore::class);
+        $poolMock->shouldReceive('rebuildFromAttempts')
+            ->once()
+            ->andReturn([
+                'pool' => 4,
+                'attempted' => 4,
+                'correct' => 4,
+                'pending' => 0,
+                'pending_remedial' => 0,
+                'wrong' => 0,
+                'completion_pct' => 100,
+                'score_pct' => 100,
+            ]);
+        $poolMock->shouldReceive('metricsForAssignment')->andReturn([
+            'pool' => 4,
+            'attempted' => 4,
+            'correct' => 4,
+            'pending' => 0,
+            'pending_remedial' => 0,
+            'wrong' => 0,
+            'completion_pct' => 100,
+            'score_pct' => 100,
+        ]);
+        $this->app->instance(AssignmentPoolScore::class, $poolMock);
+
+        $metrics = app(StudyPlanMetricsCacheService::class)->metricsForAssignmentRead($assignment->fresh());
+
+        $this->assertSame(100, $metrics['completion_pct']);
+        $this->assertSame(0, $metrics['pending']);
     }
 
     public function test_cache_assignment_metrics_only_writes_columns(): void

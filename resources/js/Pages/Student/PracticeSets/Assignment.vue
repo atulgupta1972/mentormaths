@@ -112,6 +112,36 @@ const requestCorrection = () => {
         assignment_id: props.assignment.id,
     });
 };
+
+const poolPendingCount = () =>
+    props.assignment.pool_pending
+    ?? props.assignment.pool_metrics?.pending
+    ?? 0;
+
+const poolPendingRemedialCount = () =>
+    props.assignment.pool_pending_remedial
+    ?? props.assignment.pool_metrics?.pending_remedial
+    ?? 0;
+
+const poolContinueLabel = () => {
+    const pending = poolPendingCount();
+    const remedial = poolPendingRemedialCount();
+
+    if (remedial > 0 && remedial === pending) {
+        return `Correct (${pending} left)`;
+    }
+
+    if (pending > 0) {
+        return `Continue (${pending} left)`;
+    }
+
+    return 'Continue';
+};
+
+const showPoolContinuePrimary = () =>
+    props.assignment.can_correct
+    && props.assignment.status === 'completed'
+    && ! props.assignment.in_progress_attempt_id;
 </script>
 
 <template>
@@ -190,6 +220,18 @@ const requestCorrection = () => {
                         <p class="mt-1 text-xs">Open Continue to finish the remaining questions. Your answers are saved.</p>
                     </div>
 
+                    <div
+                        v-if="showPoolContinuePrimary()"
+                        class="mt-4 rounded-lg border border-violet-300 bg-violet-50 px-4 py-3 text-sm text-violet-950"
+                    >
+                        <p class="font-semibold">
+                            {{ poolPendingCount() }} question{{ poolPendingCount() === 1 ? '' : 's' }} still to finish
+                        </p>
+                        <p class="mt-1 text-xs">
+                            Tap Continue to work through the remaining questions in guided practice.
+                        </p>
+                    </div>
+
                     <div v-if="assignment.attempts.length" class="mt-6">
                         <h3 class="text-sm font-semibold text-gray-800">Your attempts</h3>
                         <ul class="mt-2 space-y-2 text-sm">
@@ -222,6 +264,13 @@ const requestCorrection = () => {
 
                     <div class="mt-6 flex flex-wrap gap-3">
                         <PrimaryButton
+                            v-if="showPoolContinuePrimary()"
+                            type="button"
+                            @click="requestCorrection"
+                        >
+                            {{ poolContinueLabel() }}
+                        </PrimaryButton>
+                        <PrimaryButton
                             v-if="assignment.status !== 'completed' || assignment.in_progress_attempt_id"
                             :disabled="startForm.processing || starting"
                             @click="startOrContinue"
@@ -236,11 +285,11 @@ const requestCorrection = () => {
                             <PrimaryButton>Review results</PrimaryButton>
                         </Link>
                         <SecondaryButton
-                            v-if="assignment.can_correct"
+                            v-if="assignment.can_correct && assignment.status !== 'completed'"
                             type="button"
                             @click="requestCorrection"
                         >
-                            Correction
+                            {{ poolContinueLabel() }}
                         </SecondaryButton>
                         <Link
                             v-if="assignment.can_open_revision && assignment.revision_assignment_id"

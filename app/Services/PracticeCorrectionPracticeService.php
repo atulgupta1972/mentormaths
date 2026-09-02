@@ -39,7 +39,7 @@ class PracticeCorrectionPracticeService
         $questionIds = $this->pendingQuestionIds($student->id, $worksheet->id, $assignment);
 
         if ($questionIds === []) {
-            throw new \InvalidArgumentException('No wrong questions to correct for this set.');
+            throw new \InvalidArgumentException('No remaining questions to work on for this set.');
         }
 
         $dueDate = now()->addDays(3)->toDateString();
@@ -144,7 +144,8 @@ class PracticeCorrectionPracticeService
             $fromPool = AssignmentSumInstance::query()
                 ->where('set_assignment_id', $assignment->id)
                 ->where('status', AssignmentSumInstance::STATUS_PENDING)
-                ->where('generation', '>', 0)
+                ->orderBy('generation')
+                ->orderBy('id')
                 ->pluck('question_id')
                 ->map(fn ($id) => (int) $id)
                 ->unique()

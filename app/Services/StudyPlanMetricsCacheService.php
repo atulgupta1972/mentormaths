@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Models\AssignmentSumInstance;
 use App\Models\SetAssignment;
+use App\Models\SetAttempt;
 use App\Models\StudentChapterMetric;
 use App\Models\StudentEnrollment;
 use App\Support\SumPoolAggregate;
+use Carbon\Carbon;
 
 class StudyPlanMetricsCacheService
 {
@@ -78,19 +80,88 @@ class StudyPlanMetricsCacheService
      */
     public function metricsForAssignmentRead(SetAssignment $assignment): ?array
     {
-        $cached = $assignment->cached_pool_metrics;
+        $hasSubmittedAttempts = SetAttempt::query()
+            ->where('set_assignment_id', $assignment->id)
+            ->where('status', SetAttempt::STATUS_SUBMITTED)
+            ->exists();
 
-        if (is_array($cached) && (int) ($cached['pool'] ?? 0) > 0) {
-            return $cached;
-        }
+        $hasPoolRows = AssignmentSumInstance::query()
+            ->where('set_assignment_id', $assignment->id)
+            ->exists();
 
-        if (! AssignmentSumInstance::query()->where('set_assignment_id', $assignment->id)->exists()) {
+        if (! $hasSubmittedAttempts && ! $hasPoolRows) {
             return null;
         }
 
-        $metrics = app(AssignmentPoolScore::class)->metricsForAssignment($assignment);
+        if (! $hasPoolRows) {
+            $metrics = app(AssignmentPoolScore::class)->rebuildFromAttempts($assignment);
 
-        return (int) ($metrics['pool'] ?? 0) > 0 ? $metrics : null;
+            return (int) ($metrics['pool'] ?? 0) > 0 ? $metrics : null;
+        }
+
+        $cached = $assignment->cached_pool_metrics;
+        $needsRebuild = $this->shouldRebuildPoolMetrics($assignment, $cached);
+
+        if (is_array($cached) && (int) ($cached['pool'] ?? 0) > 0 && ! $needsRebuild) {
+            return $cached;
+        }
+
+        $poolScore = app(AssignmentPoolScore::class);
+        $metrics = $needsRebuild
+            ? $poolScore->rebuildFromAttempts($assignment)
+            : $poolScore->metricsForAssignment($assignment);
+
+        if ((int) ($metrics['pool'] ?? 0) <= 0) {
+            return null;
+        }
+
+        if (! is_array($cached) || $this->poolMetricsDiffer($cached, $metrics)) {
+            $this->cacheAssignmentMetricsOnly($assignment, $metrics);
+        }
+
+        return $metrics;
+    }
+
+    /**
+     * @param  array<string, mixed>  $left
+     * @param  array<string, mixed>  $right
+     */
+    private function poolMetricsDiffer(array $left, array $right): bool
+    {
+        foreach (['pool', 'attempted', 'correct', 'pending', 'pending_remedial', 'completion_pct', 'score_pct'] as $key) {
+            if ((int) ($left[$key] ?? 0) !== (int) ($right[$key] ?? 0)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $cached
+     */
+    private function shouldRebuildPoolMetrics(SetAssignment $assignment, ?array $cached): bool
+    {
+        if (! is_array($cached) || (int) ($cached['pool'] ?? 0) <= 0) {
+            return SetAttempt::query()
+                ->where('set_assignment_id', $assignment->id)
+                ->where('status', SetAttempt::STATUS_SUBMITTED)
+                ->exists();
+        }
+
+        $latestCompletedAt = SetAttempt::query()
+            ->where('set_assignment_id', $assignment->id)
+            ->where('status', SetAttempt::STATUS_SUBMITTED)
+            ->max('completed_at');
+
+        if ($latestCompletedAt && (
+            ! $assignment->cached_metrics_at
+            || Carbon::parse($latestCompletedAt)->gt($assignment->cached_metrics_at)
+        )) {
+            return true;
+        }
+
+        return false;
     }
 
     public function refreshChapterMetrics(StudentEnrollment $enrollment, int $syllabusChapterId): void

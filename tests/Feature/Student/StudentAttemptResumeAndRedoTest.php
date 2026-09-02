@@ -5,6 +5,7 @@ namespace Tests\Feature\Student;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
+use App\Models\GuidedAttemptQuestion;
 use App\Models\Question;
 use App\Models\QuestionOption;
 use App\Models\SetAssignment;
@@ -212,6 +213,81 @@ class StudentAttemptResumeAndRedoTest extends TestCase
             );
     }
 
+    public function test_completed_practice_with_unattempted_originals_offers_continue(): void
+    {
+        $this->withoutVite();
+        $this->withoutMiddleware([
+            \App\Http\Middleware\EnsureFormulaDrillComplete::class,
+            \App\Http\Middleware\EnsureBasicsDrillComplete::class,
+        ]);
+
+        [$assignment, $questions, $user] = $this->seedPracticeAssignment(questionCount: 5, withUser: true);
+
+        $attempt = SetAttempt::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'attempt_number' => 1,
+            'mode' => SetAttempt::MODE_GUIDED,
+            'started_at' => now()->subHour(),
+            'completed_at' => now(),
+            'score' => 3,
+            'max_score' => 3,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+            'submission_timing' => SetAttempt::TIMING_ON_TIME,
+        ]);
+
+        foreach ($questions->take(3) as $index => $question) {
+            GuidedAttemptQuestion::query()->create([
+                'set_attempt_id' => $attempt->id,
+                'question_id' => $question->id,
+                'sort_order' => $index,
+                'phase' => GuidedAttemptQuestion::PHASE_DONE,
+                'first_try_correct' => true,
+                'final_is_correct' => true,
+            ]);
+        }
+
+        $assignment->update(['status' => SetAssignment::STATUS_COMPLETED]);
+
+        $pool = app(AssignmentPoolScore::class);
+        $metrics = $pool->rebuildFromAttempts($assignment->fresh(['enrollment', 'practiceSet.questions']));
+
+        $this->assertSame(2, $metrics['pending']);
+        $this->assertSame(0, $metrics['pending_remedial']);
+
+        $this->actingAs($user)
+            ->get(route('student.assignments.show', $assignment))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('assignment.can_correct', true)
+                ->where('assignment.pool_pending', 2)
+                ->where('assignment.pool_pending_remedial', 0)
+            );
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('followUpItems', 1)
+                ->where('followUpItems.0.can_correct', true)
+                ->where('followUpItems.0.pending', 2)
+                ->where('followUpItems.0.pending_remedial', 0)
+            );
+
+        $this->actingAs($user)
+            ->post(route('student.worksheets.correction-practice', $assignment->worksheet_id), [
+                'assignment_id' => $assignment->id,
+            ])
+            ->assertRedirect();
+
+        $correctionAttempt = SetAttempt::query()
+            ->where('set_assignment_id', $assignment->id)
+            ->where('is_correction_practice', true)
+            ->first();
+
+        $this->assertNotNull($correctionAttempt);
+        $this->assertSame(2, GuidedAttemptQuestion::query()->where('set_attempt_id', $correctionAttempt->id)->count());
+    }
+
     public function test_dashboard_hides_fully_completed_set_from_follow_up_items(): void
     {
         $this->withoutVite();
@@ -320,6 +396,110 @@ class StudentAttemptResumeAndRedoTest extends TestCase
             'tier' => PracticeSetTier::STARTER,
             'set_number' => 1,
             'set_code' => 'T1',
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+
+        $questions = collect();
+        for ($i = 1; $i <= $questionCount; $i++) {
+            $question = Question::query()->create([
+                'type' => Question::TYPE_MCQ,
+                'syllabus_topic_id' => $topic->id,
+                'question_text' => "Q{$i}?",
+                'difficulty' => 'easy',
+                'created_by' => $admin->id,
+            ]);
+            QuestionOption::query()->create([
+                'question_id' => $question->id,
+                'option_text' => 'A',
+                'is_correct' => true,
+                'sort_order' => 0,
+            ]);
+            QuestionOption::query()->create([
+                'question_id' => $question->id,
+                'option_text' => 'B',
+                'is_correct' => false,
+                'sort_order' => 1,
+            ]);
+            $worksheet->questions()->attach($question->id, ['sort_order' => $i - 1]);
+            $questions->push($question->load('options'));
+        }
+
+        $assignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $admin->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek(),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        if ($withUser) {
+            return [$assignment, $questions, $studentUser];
+        }
+
+        return [$assignment, $questions];
+    }
+
+    /**
+     * @return array{0: SetAssignment, 1: \Illuminate\Support\Collection<int, Question>, 2?: User}
+     */
+    private function seedPracticeAssignment(int $questionCount = 5, bool $withUser = false): array
+    {
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+        $board = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
+        $grade = GradeLevel::query()->create(['name' => 'Class 6', 'sort_order' => 6, 'is_active' => true]);
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Mathematics']);
+        $syllabus = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+        ]);
+        $chapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabus->id,
+            'name' => 'Numbers',
+            'chapter_number' => '1',
+            'sort_order' => 1,
+        ]);
+        $topic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapter->id,
+            'name' => 'Place value',
+            'sort_order' => 1,
+        ]);
+
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $studentUser = User::factory()->create(['role' => User::ROLE_STUDENT]);
+        $student = Student::query()->create([
+            'user_id' => $studentUser->id,
+            'name' => 'Test Student',
+            'email' => $studentUser->email,
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543210',
+            'school_name' => 'School',
+        ]);
+        $enrollment = StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'school_name' => 'School',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        $worksheet = Worksheet::query()->create([
+            'title' => 'Topic practice',
+            'syllabus_chapter_id' => $chapter->id,
+            'syllabus_topic_id' => $topic->id,
+            'scope' => PracticeSetScope::TOPIC,
+            'tier' => PracticeSetTier::STARTER,
+            'set_number' => 1,
+            'set_code' => 'SF751',
             'status' => Worksheet::STATUS_PUBLISHED,
             'created_by' => $admin->id,
         ]);

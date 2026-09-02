@@ -652,7 +652,8 @@ class DashboardService
             }
 
             $needsCorrection = $pendingRemedial > 0;
-            $needsMoreWork = $pending > 0
+            $canContinuePool = $pending > 0;
+            $needsMoreWork = $canContinuePool
                 || ($hasPool && $completionPct !== null && (int) $completionPct < 100);
 
             if (! $needsCorrection && ! $needsMoreWork && ! $underReview) {
@@ -691,9 +692,11 @@ class DashboardService
                 'topic_name' => $row['topic_name'] ?? null,
                 'delivery_mode' => $row['delivery_mode'] ?? 'online',
                 'submitted_at' => $submittedAt,
-                'score_label' => $row['score_display'] ?? $row['latest_score_label'] ?? null,
+                'score_label' => $this->followUpScoreLabel($row, $pool),
                 'detail' => $detail,
-                'can_correct' => $needsCorrection,
+                'can_correct' => $canContinuePool,
+                'pending' => $pending,
+                'pending_remedial' => $pendingRemedial,
                 'needs_follow_up' => $needsCorrection || $needsMoreWork || $underReview,
                 'under_review' => $underReview,
             ];
@@ -704,6 +707,24 @@ class DashboardService
         });
 
         return array_values(array_slice($items, 0, 5));
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>|null  $pool
+     */
+    private function followUpScoreLabel(array $row, ?array $pool): ?string
+    {
+        if ($pool && (int) ($pool['pool'] ?? 0) > 0 && (int) ($pool['attempted'] ?? 0) > 0) {
+            return sprintf(
+                '%d%% (%d/%d first-try)',
+                (int) $pool['score_pct'],
+                (int) $pool['correct'],
+                (int) $pool['attempted'],
+            );
+        }
+
+        return $row['score_display'] ?? $row['latest_score_label'] ?? null;
     }
 
     private function studentStats(array $assignments, array $examPlans, int $resolutionCount = 0): array

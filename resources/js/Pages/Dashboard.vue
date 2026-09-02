@@ -200,6 +200,18 @@ const startCorrectionPractice = (item) => {
     });
 };
 
+const followUpActionLabel = (item) => {
+    if ((item.pending_remedial ?? 0) > 0 && (item.pending_remedial ?? 0) === (item.pending ?? 0)) {
+        return 'Correct now';
+    }
+
+    if ((item.pending ?? 0) > 0) {
+        return `Continue (${item.pending} left)`;
+    }
+
+    return 'Correct now';
+};
+
 const allExamPlans = computed(() => [
     ...(props.examPlans.upcoming || []),
     ...(props.examPlans.past || []),
@@ -1089,7 +1101,7 @@ const formatHelpDate = (value) => {
                                             :disabled="correctingWorksheetId === item.practice_set_id"
                                             @click="startCorrectionPractice(item)"
                                         >
-                                            {{ correctingWorksheetId === item.practice_set_id ? 'Starting…' : 'Correct now' }}
+                                            {{ correctingWorksheetId === item.practice_set_id ? 'Starting…' : followUpActionLabel(item) }}
                                         </button>
                                         <Link
                                             v-if="item.latest_attempt_id"
