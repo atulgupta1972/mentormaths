@@ -59,6 +59,50 @@ class TextbookChapterMixedImportTest extends TestCase
         $this->assertTrue($item['include_in_mcq']);
     }
 
+    public function test_answer_with_unit_becomes_fill_blank_with_bare_number(): void
+    {
+        $item = $this->classification->applyMixedClassification([
+            'question_text' => 'The vertical distance from the bridge to the river bottom is',
+            'correct_answer' => '55 m',
+            'mcq_options' => [
+                ['text' => '55 m', 'is_correct' => true],
+                ['text' => '35 m', 'is_correct' => false],
+            ],
+        ]);
+
+        $this->assertSame('fill_blank', $item['question_type']);
+        $this->assertSame('55', $item['fill_blank_correct_answer']);
+        $this->assertStringContainsString('____', $item['fill_blank_question_text']);
+        $this->assertStringContainsString('metres', $item['fill_blank_question_text']);
+    }
+
+    public function test_manual_convert_from_mcq(): void
+    {
+        $item = $this->classification->convertItemToFillBlank([
+            'question_text' => '[(–10) × (+9)] + (–10) is equal to',
+            'correct_answer' => '–100',
+            'mcq_options' => [
+                ['text' => '–100', 'is_correct' => true],
+                ['text' => '100', 'is_correct' => false],
+            ],
+        ]);
+
+        $this->assertSame('fill_blank', $item['question_type']);
+    }
+
+    public function test_manual_convert_rejects_word_answer(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->classification->convertItemToFillBlank([
+            'question_text' => 'Which month had the most sales?',
+            'correct_answer' => 'February',
+            'mcq_options' => [
+                ['text' => 'February', 'is_correct' => true],
+            ],
+        ]);
+    }
+
     public function test_staging_gemini_parses_figure_status(): void
     {
         $service = app(TextbookChapterStagingGeminiService::class);

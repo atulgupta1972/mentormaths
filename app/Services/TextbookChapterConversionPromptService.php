@@ -50,6 +50,7 @@ Answer rule (strict):
 - NEVER use English words (no "thirteen", "odd", "even", "true", "false", "greater than", option letters, or sentences).
 - NEVER use mixed fractions (no "1 1/2", "2 3/4") — SKIP those rows; they stay MCQ only.
 - NEVER use true/false or yes/no answers — SKIP those rows.
+- NEVER include units in correct_answer — put the unit in the question stem ("____ metres") and store only the number.
 - Allowed answer_format values ONLY: "integer", "decimal", "fraction" (never "text").
 
 Conversion rules:

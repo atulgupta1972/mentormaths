@@ -372,6 +372,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks', [TextbookController::class, 'store'])->name('textbooks.store');
     Route::get('/textbooks/chapters/{textbookChapter}', [TextbookController::class, 'show'])->name('textbooks.show');
     Route::post('/textbooks/chapters/{textbookChapter}/draft', [TextbookController::class, 'updateDraft'])->name('textbooks.draft');
+    Route::post('/textbooks/chapters/{textbookChapter}/reclassify-item', [TextbookController::class, 'reclassifyStagingItem'])->name('textbooks.reclassify-item');
     Route::post('/textbooks/chapters/{textbookChapter}/publish', [TextbookController::class, 'publish'])->name('textbooks.publish');
     Route::post('/textbooks/chapters/{textbookChapter}/import-mcq', [TextbookController::class, 'importMcq'])->name('textbooks.import-mcq');
     Route::post('/textbooks/chapters/{textbookChapter}/import-mcq-zip', [TextbookController::class, 'importMcqZip'])->name('textbooks.import-mcq-zip');
@@ -560,6 +561,7 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
         Route::post('/textbooks/chapters/{textbookChapter}/import-mcq', [TextbookController::class, 'importMcq'])->name('textbooks.import-mcq');
         Route::post('/textbooks/chapters/{textbookChapter}/import-mcq-zip', [TextbookController::class, 'importMcqZip'])->name('textbooks.import-mcq-zip');
         Route::post('/textbooks/chapters/{textbookChapter}/draft', [TextbookController::class, 'updateDraft'])->name('textbooks.draft');
+        Route::post('/textbooks/chapters/{textbookChapter}/reclassify-item', [TextbookController::class, 'reclassifyStagingItem'])->name('textbooks.reclassify-item');
         Route::post('/textbooks/chapters/{textbookChapter}/publish', [TextbookController::class, 'publish'])->name('textbooks.publish');
         Route::post('/textbooks/chapters/{textbookChapter}/import-fill-blank', [TextbookController::class, 'importFillBlank'])->name('textbooks.import-fill-blank');
         Route::post('/textbooks/chapters/{textbookChapter}/publish-fill-blank-written', [TextbookController::class, 'publishFillBlankAndWritten'])->name('textbooks.publish-fill-blank-written');

@@ -504,6 +504,7 @@ class TextbookChapterMcqImportService
             'explanation' => trim((string) ($row['explanation'] ?? '')),
             'method_hint' => trim((string) ($row['method_hint'] ?? $row['hint'] ?? '')),
             'difficulty' => trim((string) ($row['difficulty'] ?? '')),
+            'answer_unit' => trim((string) ($row['answer_unit'] ?? '')) ?: null,
             'needs_diagram' => $hasDiagram || filter_var($row['needs_diagram'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'diagram_file' => $resolvedDiagramFile !== '' ? $resolvedDiagramFile : null,
             'diagram_staging_path' => $diagramStagingPath,

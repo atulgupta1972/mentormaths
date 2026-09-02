@@ -74,7 +74,10 @@ class TextbookChapterMcqImportServiceTest extends TestCase
         $this->assertStringContainsString('do NOT default every question to option A', $payload['prompt']);
         $this->assertStringContainsString('100% content coverage', $payload['prompt']);
         $this->assertStringContainsString('Worked examples', $payload['prompt']);
-        $this->assertStringContainsString('each part is its own MCQ', $payload['prompt']);
-        $this->assertStringContainsString('Books read', $payload['sample_json']);
+        $this->assertStringContainsString('each part is its own question', $payload['prompt']);
+        $this->assertStringContainsString('FILL-IN-BLANK FIRST', $payload['prompt']);
+        $this->assertStringContainsString('Column matching', $payload['prompt']);
+        $this->assertStringContainsString('answer_unit', $payload['prompt']);
+        $this->assertStringContainsString('____ metres', $payload['sample_json']);
     }
 }

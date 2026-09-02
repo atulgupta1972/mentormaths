@@ -14,6 +14,7 @@ use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\GeminiFillBlankConversionService;
 use App\Services\SetAssignmentService;
+use App\Services\TextbookChapterAnswerClassificationService;
 use App\Services\TextbookChapterBookService;
 use App\Services\TextbookChapterConversionPromptService;
 use App\Services\TextbookChapterFillBlankImportService;
@@ -46,6 +47,7 @@ class TextbookController extends Controller
         private TextbookChapterBookService $bookService,
         private GeminiFillBlankConversionService $geminiFillBlank,
         private TextbookChapterStagingGeminiService $stagingGemini,
+        private TextbookChapterAnswerClassificationService $answerClassification,
     ) {}
 
     public function index(Request $request): Response
@@ -731,6 +733,44 @@ class TextbookController extends Controller
         return back()->with('success', $textbookChapter->status === TextbookChapter::STATUS_PUBLISHED
             ? 'Draft saved. Click Re-publish MCQ sets to apply the set plan split.'
             : 'Draft saved.');
+    }
+
+    public function reclassifyStagingItem(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        abort_unless(in_array($textbookChapter->status, [
+            TextbookChapter::STATUS_REVIEW,
+            TextbookChapter::STATUS_PUBLISHED,
+            TextbookChapter::STATUS_FAILED,
+        ], true), 422);
+
+        $validated = $request->validate([
+            'item_index' => ['required', 'integer', 'min:0'],
+            'target' => ['required', 'in:fill_blank,mcq'],
+        ]);
+
+        $items = $textbookChapter->extraction_items ?? [];
+        $index = (int) $validated['item_index'];
+
+        if (! isset($items[$index])) {
+            return back()->with('error', 'Question not found.');
+        }
+
+        try {
+            $items[$index] = $validated['target'] === 'fill_blank'
+                ? $this->answerClassification->convertItemToFillBlank($items[$index])
+                : $this->answerClassification->revertItemToMcq($items[$index]);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $textbookChapter->update(['extraction_items' => array_values($items)]);
+
+        return back()->with(
+            'success',
+            $validated['target'] === 'fill_blank'
+                ? 'Converted to fill-in-blank. Save draft when done reviewing.'
+                : 'Reverted to MCQ. Save draft when done reviewing.',
+        );
     }
 
     public function publish(Request $request, TextbookChapter $textbookChapter): RedirectResponse

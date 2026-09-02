@@ -49,6 +49,7 @@ const zipPackInput = ref(null);
 
 const draftForm = useForm({ items: items.value, mcq_set_plan: setPlan.value });
 const publishForm = useForm({ items: items.value, mcq_set_plan: setPlan.value });
+const reclassifyForm = useForm({ item_index: null, target: 'fill_blank' });
 const startReviewForm = useForm({});
 const pdfForm = useForm({ pdf: null });
 const changeBookForm = useForm({
@@ -141,6 +142,15 @@ const removeDiagram = (index) => {
     router.post(chapterRoute('remove-diagram'), {
         item_index: index,
     }, {
+        preserveScroll: true,
+        onSuccess: () => applyFromProps(),
+    });
+};
+
+const reclassifyItem = (index, target) => {
+    reclassifyForm.item_index = index;
+    reclassifyForm.target = target;
+    reclassifyForm.post(chapterRoute('reclassify-item'), {
         preserveScroll: true,
         onSuccess: () => applyFromProps(),
     });
@@ -878,6 +888,26 @@ const canChangeBook = computed(() =>
                                     >
                                         {{ isFillBlankItem(item) ? 'Fill blank' : 'MCQ ×8' }}
                                     </span>
+                                    <div class="mt-1 space-y-1">
+                                        <button
+                                            v-if="!isFillBlankItem(item)"
+                                            type="button"
+                                            class="block text-[10px] text-violet-700 hover:underline disabled:opacity-50"
+                                            :disabled="reclassifyForm.processing"
+                                            @click="reclassifyItem(index, 'fill_blank')"
+                                        >
+                                            → Fill blank
+                                        </button>
+                                        <button
+                                            v-else
+                                            type="button"
+                                            class="block text-[10px] text-indigo-700 hover:underline disabled:opacity-50"
+                                            :disabled="reclassifyForm.processing"
+                                            @click="reclassifyItem(index, 'mcq')"
+                                        >
+                                            → MCQ
+                                        </button>
+                                    </div>
                                 </td>
                                 <td class="px-3 py-3 align-top font-medium text-gray-800">{{ item.label }}</td>
                                 <td class="px-3 py-3 align-top">
