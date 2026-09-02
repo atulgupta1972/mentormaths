@@ -2,20 +2,26 @@
 
 namespace App\Services;
 
+use App\Models\ContentQuestionCorrection;
 use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationCheck;
 use App\Models\ContentVerificationRun;
 use App\Models\Question;
+use App\Models\QuestionBlankAnswer;
 use App\Models\QuestionOption;
 use App\Models\User;
 use App\Models\Worksheet;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class ContentVerificationService
 {
     public function __construct(
         private QuestionDiagramService $diagrams,
     ) {}
+
     /**
      * @return array{
      *     run: ContentVerificationRun,
@@ -44,35 +50,50 @@ class ContentVerificationService
             ->get()
             ->keyBy('question_id');
 
-        $correctionRemarks = \App\Models\ContentQuestionCorrection::query()
+        $correctionRemarks = ContentQuestionCorrection::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('status', \App\Models\ContentQuestionCorrection::STATUS_PENDING)
+            ->where('status', ContentQuestionCorrection::STATUS_PENDING)
             ->get()
             ->keyBy('question_id');
 
         $questions = $questionIds === []
             ? collect()
             : Question::query()
-                ->with(['options' => fn ($query) => $query->orderBy('sort_order')])
+                ->with([
+                    'blankAnswer',
+                    'options' => fn ($query) => $query->orderBy('sort_order'),
+                ])
                 ->whereIn('id', $questionIds)
                 ->get()
                 ->sortBy(fn (Question $question) => array_search($question->id, $questionIds, true))
                 ->values();
 
-        $rows = $questions->map(function (Question $question, int $index) use ($checks, $questionMeta, $correctionRemarks) {
+        $extractionItems = is_array($task->textbookChapter?->extraction_items)
+            ? array_values($task->textbookChapter->extraction_items)
+            : [];
+
+        $rows = $questions->map(function (Question $question, int $index) use ($checks, $questionMeta, $correctionRemarks, $extractionItems) {
             $check = $checks->get($question->id);
             $meta = $questionMeta[$question->id] ?? [];
             $correction = $correctionRemarks->get($question->id);
+            $sourceItem = is_array($extractionItems[$index] ?? null) ? $extractionItems[$index] : [];
 
             return [
                 'number' => $index + 1,
                 'question_id' => $question->id,
+                'type' => $question->type,
                 'set_code' => $meta['set_code'] ?? null,
                 'set_number' => $meta['set_number'] ?? null,
                 'question_text' => $question->question_text,
                 'explanation' => $question->explanation,
                 'method_hint' => $question->method_hint,
                 'difficulty' => $question->difficulty,
+                'blank_answer' => $question->blankAnswer ? [
+                    'correct_answer' => $question->blankAnswer->correct_answer,
+                    'answer_format' => $question->blankAnswer->answer_format,
+                    'decimal_places' => $question->blankAnswer->decimal_places,
+                ] : null,
+                'source_options' => $this->sourceOptionsFromItem($sourceItem),
                 'diagram_url' => $question->diagram_url,
                 'has_diagram' => filled($question->diagram_path),
                 'needs_figure' => $this->questionNeedsFigure($question),
@@ -86,11 +107,16 @@ class ContentVerificationService
                         'sort_order' => (int) $option->sort_order,
                     ];
                 })->all(),
-                'correct_letter' => $question->options
-                    ->values()
-                    ->search(fn (QuestionOption $option) => $option->is_correct) !== false
-                    ? chr(65 + (int) $question->options->values()->search(fn (QuestionOption $option) => $option->is_correct))
-                    : null,
+                'correct_letter' => $question->isFillInBlank()
+                    ? null
+                    : ($question->options
+                        ->values()
+                        ->search(fn (QuestionOption $option) => $option->is_correct) !== false
+                        ? chr(65 + (int) $question->options->values()->search(fn (QuestionOption $option) => $option->is_correct))
+                        : null),
+                'correct_answer' => $question->isFillInBlank()
+                    ? ($question->blankAnswer?->correct_answer)
+                    : ($question->options->firstWhere('is_correct', true)?->option_text),
                 'is_verified' => $check?->isComplete() ?? false,
                 'is_skipped' => (bool) ($check?->skipped),
                 'skip_reason' => $check?->skip_reason,
@@ -133,7 +159,31 @@ class ContentVerificationService
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public static function questionSaveValidationRules(): array
+    {
+        return [
+            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
+            'question_id' => ['required', 'integer', 'exists:questions,id'],
+            'question_text' => ['required', 'string', 'max:5000'],
+            'explanation' => ['nullable', 'string', 'max:5000'],
+            'method_hint' => ['nullable', 'string', 'max:2000'],
+            'difficulty' => ['nullable', 'string', 'max:64'],
+            'type' => ['nullable', 'string', Rule::in([Question::TYPE_MCQ, Question::TYPE_FILL_IN_BLANK, 'fill_blank'])],
+            'options' => ['nullable', 'array', 'max:8'],
+            'options.*.id' => ['nullable', 'integer'],
+            'options.*.option_text' => ['nullable', 'string', 'max:2000'],
+            'options.*.is_correct' => ['nullable', 'boolean'],
+            'correct_answer' => ['nullable', 'string', 'max:500'],
+            'answer_format' => ['nullable', 'string', Rule::in(QuestionBlankAnswer::formats())],
+            'decimal_places' => ['nullable', 'integer', 'min:0', 'max:8'],
+        ];
+    }
+
+    /**
      * Save edited question content and mark it verified.
+     * Supports MCQ, fill-in-blank, and switching type during verification.
      *
      * @param  array<string, mixed>  $payload
      */
@@ -152,63 +202,22 @@ class ContentVerificationService
             throw new \InvalidArgumentException('Question does not belong to this chapter task.');
         }
 
-        $question = Question::query()->with('options')->findOrFail($questionId);
+        $question = Question::query()->with(['options', 'blankAnswer'])->findOrFail($questionId);
 
-        if (! $question->isMcq()) {
-            throw new \InvalidArgumentException('Only MCQ questions can be edited here.');
+        if (! $question->isMcq() && ! $question->isFillInBlank()) {
+            throw new \InvalidArgumentException('Only MCQ and fill-in-blank questions can be edited here.');
         }
 
-        $options = $payload['options'] ?? [];
-        if (! is_array($options) || count($options) < 2) {
-            throw new \InvalidArgumentException('Provide at least 2 options.');
-        }
+        $requestedType = $this->resolveRequestedType($question, $payload);
 
-        $correctCount = collect($options)->filter(fn ($row) => (bool) ($row['is_correct'] ?? false))->count();
-        if ($correctCount !== 1) {
-            throw new \InvalidArgumentException('Mark exactly one option as the correct answer.');
-        }
-
-        return DB::transaction(function () use ($run, $question, $payload, $options, $user) {
-            $question->update([
-                'question_text' => trim((string) $payload['question_text']),
-                'explanation' => trim((string) ($payload['explanation'] ?? '')) ?: null,
-                'method_hint' => trim((string) ($payload['method_hint'] ?? '')) ?: null,
-                'difficulty' => trim((string) ($payload['difficulty'] ?? '')) ?: null,
-            ]);
-
-            $existing = $question->options->keyBy('id');
-            $keptIds = [];
-
-            foreach (array_values($options) as $index => $row) {
-                $optionId = isset($row['id']) ? (int) $row['id'] : 0;
-                $text = trim((string) ($row['option_text'] ?? ''));
-                $isCorrect = (bool) ($row['is_correct'] ?? false);
-
-                if ($text === '') {
-                    throw new \InvalidArgumentException('Option text cannot be empty.');
-                }
-
-                if ($optionId > 0 && $existing->has($optionId)) {
-                    $existing[$optionId]->update([
-                        'option_text' => $text,
-                        'is_correct' => $isCorrect,
-                        'sort_order' => $index + 1,
-                    ]);
-                    $keptIds[] = $optionId;
-                } else {
-                    $created = QuestionOption::query()->create([
-                        'question_id' => $question->id,
-                        'option_text' => $text,
-                        'is_correct' => $isCorrect,
-                        'sort_order' => $index + 1,
-                    ]);
-                    $keptIds[] = $created->id;
-                }
+        return DB::transaction(function () use ($run, $question, $payload, $user, $requestedType) {
+            if ($requestedType === Question::TYPE_FILL_IN_BLANK) {
+                $this->saveFillInBlankContent($question, $payload);
+            } else {
+                $this->saveMcqContent($question, $payload);
             }
 
-            $question->options()
-                ->whereNotIn('id', $keptIds)
-                ->delete();
+            $this->syncExtractionItemAfterSave($run->task, $question->fresh(['blankAnswer', 'options']), $requestedType);
 
             $check = ContentVerificationCheck::query()
                 ->where('content_verification_run_id', $run->id)
@@ -267,10 +276,215 @@ class ContentVerificationService
         });
     }
 
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveRequestedType(Question $question, array $payload): string
+    {
+        $type = strtolower(trim((string) ($payload['type'] ?? $question->type)));
+
+        if (in_array($type, [Question::TYPE_FILL_IN_BLANK, 'fill_blank'], true)) {
+            return Question::TYPE_FILL_IN_BLANK;
+        }
+
+        return Question::TYPE_MCQ;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function saveMcqContent(Question $question, array $payload): void
+    {
+        $options = array_values(array_filter(
+            is_array($payload['options'] ?? null) ? $payload['options'] : [],
+            fn ($row) => is_array($row) && trim((string) ($row['option_text'] ?? '')) !== '',
+        ));
+
+        if (count($options) < 2) {
+            throw new \InvalidArgumentException('Provide at least 2 options for an MCQ.');
+        }
+
+        $correctCount = collect($options)->filter(fn ($row) => (bool) ($row['is_correct'] ?? false))->count();
+        if ($correctCount !== 1) {
+            throw new \InvalidArgumentException('Mark exactly one option as the correct answer.');
+        }
+
+        $question->update([
+            'type' => Question::TYPE_MCQ,
+            'question_text' => trim((string) $payload['question_text']),
+            'explanation' => trim((string) ($payload['explanation'] ?? '')) ?: null,
+            'method_hint' => trim((string) ($payload['method_hint'] ?? '')) ?: null,
+            'difficulty' => trim((string) ($payload['difficulty'] ?? '')) ?: null,
+        ]);
+
+        $existing = $question->options->keyBy('id');
+        $keptIds = [];
+
+        foreach ($options as $index => $row) {
+            $optionId = isset($row['id']) ? (int) $row['id'] : 0;
+            $text = trim((string) ($row['option_text'] ?? ''));
+            $isCorrect = (bool) ($row['is_correct'] ?? false);
+
+            if ($optionId > 0 && $existing->has($optionId)) {
+                $existing[$optionId]->update([
+                    'option_text' => $text,
+                    'is_correct' => $isCorrect,
+                    'sort_order' => $index + 1,
+                ]);
+                $keptIds[] = $optionId;
+            } else {
+                $created = QuestionOption::query()->create([
+                    'question_id' => $question->id,
+                    'option_text' => $text,
+                    'is_correct' => $isCorrect,
+                    'sort_order' => $index + 1,
+                ]);
+                $keptIds[] = $created->id;
+            }
+        }
+
+        $question->options()
+            ->whereNotIn('id', $keptIds)
+            ->delete();
+
+        $question->blankAnswer()->delete();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function saveFillInBlankContent(Question $question, array $payload): void
+    {
+        $answer = trim((string) ($payload['correct_answer'] ?? ''));
+
+        if ($answer === '') {
+            $answer = trim((string) ($question->blankAnswer?->correct_answer ?? ''));
+        }
+
+        if ($answer === '') {
+            $answer = trim((string) ($question->options->firstWhere('is_correct', true)?->option_text ?? ''));
+        }
+
+        if ($answer === '') {
+            throw new \InvalidArgumentException('Enter the fill-in-blank answer.');
+        }
+
+        $stem = trim((string) $payload['question_text']);
+        if ($stem !== '' && ! str_contains($stem, '____')) {
+            $stem = rtrim($stem, " \t\n\r\0\x0B.?").' The answer is ____.';
+        }
+
+        $format = trim((string) ($payload['answer_format'] ?? $question->blankAnswer?->answer_format ?? ''));
+        if (! in_array($format, QuestionBlankAnswer::formats(), true)) {
+            $format = app(TextbookChapterAnswerClassificationService::class)->detectAnswerFormat($answer)
+                ?? QuestionBlankAnswer::FORMAT_TEXT;
+        }
+
+        $places = $payload['decimal_places'] ?? $question->blankAnswer?->decimal_places;
+
+        $question->update([
+            'type' => Question::TYPE_FILL_IN_BLANK,
+            'question_text' => $stem,
+            'explanation' => trim((string) ($payload['explanation'] ?? '')) ?: null,
+            'method_hint' => trim((string) ($payload['method_hint'] ?? '')) ?: null,
+            'difficulty' => trim((string) ($payload['difficulty'] ?? '')) ?: null,
+        ]);
+
+        $question->blankAnswer()->updateOrCreate(
+            ['question_id' => $question->id],
+            [
+                'answer_format' => $format,
+                'correct_answer' => $format === QuestionBlankAnswer::FORMAT_INTEGER
+                    ? str_replace(',', '', $answer)
+                    : $answer,
+                'decimal_places' => is_numeric($places) ? (int) $places : null,
+            ],
+        );
+
+        $question->options()->delete();
+    }
+
+    private function syncExtractionItemAfterSave(?ContentUploadTask $task, Question $question, string $type): void
+    {
+        $chapter = $task?->textbookChapter;
+        if (! $chapter) {
+            return;
+        }
+
+        $ids = $this->questionIdsForChapter($task);
+        $index = array_search($question->id, $ids, true);
+        if ($index === false) {
+            return;
+        }
+
+        $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
+        if (! isset($items[$index]) || ! is_array($items[$index])) {
+            return;
+        }
+
+        if ($type === Question::TYPE_FILL_IN_BLANK) {
+            $items[$index]['question_type'] = 'fill_blank';
+            $items[$index]['include_in_mcq'] = false;
+            $items[$index]['include_in_fill_blank'] = true;
+            $items[$index]['fill_blank_skipped'] = false;
+            $items[$index]['fill_blank_question_text'] = $question->question_text;
+            $items[$index]['fill_blank_correct_answer'] = $question->blankAnswer?->correct_answer;
+            $items[$index]['fill_blank_answer_format'] = $question->blankAnswer?->answer_format;
+            $items[$index]['fill_blank_decimal_places'] = $question->blankAnswer?->decimal_places;
+            $items[$index]['correct_answer'] = $question->blankAnswer?->correct_answer;
+        } else {
+            $items[$index]['question_type'] = 'mcq';
+            $items[$index]['include_in_mcq'] = true;
+            $items[$index]['include_in_fill_blank'] = false;
+            $items[$index]['fill_blank_skipped'] = true;
+            $correct = $question->options->firstWhere('is_correct', true);
+            $items[$index]['correct_answer'] = $correct?->option_text;
+            $items[$index]['mcq_options'] = $question->options->values()->map(fn (QuestionOption $option) => [
+                'text' => $option->option_text,
+                'is_correct' => (bool) $option->is_correct,
+            ])->all();
+        }
+
+        $items[$index]['question_text'] = $question->question_text;
+        $items[$index]['explanation'] = $question->explanation;
+        $items[$index]['method_hint'] = $question->method_hint;
+        $items[$index]['difficulty'] = $question->difficulty;
+
+        $chapter->update(['extraction_items' => $items]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return list<array{id: null, option_text: string, is_correct: bool}>
+     */
+    private function sourceOptionsFromItem(array $item): array
+    {
+        $options = [];
+
+        foreach (array_values($item['mcq_options'] ?? []) as $option) {
+            if (! is_array($option)) {
+                continue;
+            }
+
+            $text = trim((string) ($option['text'] ?? $option['option_text'] ?? ''));
+            if ($text === '') {
+                continue;
+            }
+
+            $options[] = [
+                'id' => null,
+                'option_text' => $text,
+                'is_correct' => (bool) ($option['is_correct'] ?? false),
+            ];
+        }
+
+        return $options;
+    }
+
     public function attachDiagram(
         ContentVerificationRun $run,
         int $questionId,
-        \Illuminate\Http\UploadedFile $file,
+        UploadedFile $file,
         User $user,
     ): Question {
         $this->assertCanEditRun($run, $user);
@@ -752,7 +966,7 @@ class ContentVerificationService
 
     /**
      * @param  list<int>  $questionIds
-     * @param  \Illuminate\Support\Collection<int, ContentVerificationCheck>  $checks
+     * @param  Collection<int, ContentVerificationCheck>  $checks
      * @return list<array{part: int, set_code: string, total: int, verified: int, pending: int}>
      */
     private function setProgressRows(ContentUploadTask $task, array $questionIds, $checks): array
@@ -838,8 +1052,8 @@ class ContentVerificationService
 
         $question = Question::query()->findOrFail($questionId);
 
-        if (! $question->isMcq()) {
-            throw new \InvalidArgumentException('Only MCQ questions support figure upload here.');
+        if (! $question->isMcq() && ! $question->isFillInBlank()) {
+            throw new \InvalidArgumentException('Only MCQ and fill-in-blank questions support figure upload here.');
         }
 
         return $question;

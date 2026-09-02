@@ -5,9 +5,12 @@ namespace Tests\Feature\Admin;
 use App\Mail\ContentTaskReturnedUploader;
 use App\Models\AcademicYear;
 use App\Models\Board;
+use App\Models\ContentRateCard;
 use App\Models\ContentUploadTask;
+use App\Models\ContentVerificationCheck;
 use App\Models\ContentVerificationRun;
 use App\Models\GradeLevel;
+use App\Models\Question;
 use App\Models\QuestionOption;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
@@ -17,7 +20,10 @@ use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Services\UserGroupService;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -89,7 +95,7 @@ class ContentTaskVerificationTest extends TestCase
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
         $task->update([
-            'rate_basis' => \App\Models\ContentRateCard::BASIS_PER_QUESTION,
+            'rate_basis' => ContentRateCard::BASIS_PER_QUESTION,
             'agreed_amount_inr' => 10,
             'offered_amount_inr' => 10,
             'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
@@ -119,7 +125,7 @@ class ContentTaskVerificationTest extends TestCase
             ->assertRedirect()
             ->assertSessionHas('success');
 
-        $check = \App\Models\ContentVerificationCheck::query()
+        $check = ContentVerificationCheck::query()
             ->where('content_verification_run_id', $runId)
             ->where('question_id', $questionId)
             ->firstOrFail();
@@ -151,8 +157,8 @@ class ContentTaskVerificationTest extends TestCase
 
         config(['services.openai.api_key' => 'test-key']);
 
-        \Illuminate\Support\Facades\Http::fake([
-            'api.openai.com/*' => \Illuminate\Support\Facades\Http::response([
+        Http::fake([
+            'api.openai.com/*' => Http::response([
                 'choices' => [[
                     'message' => [
                         'content' => json_encode([
@@ -185,7 +191,7 @@ class ContentTaskVerificationTest extends TestCase
             ->assertSessionHas('success')
             ->assertSessionHas('ai_review');
 
-        $check = \App\Models\ContentVerificationCheck::query()
+        $check = ContentVerificationCheck::query()
             ->where('content_verification_run_id', $runId)
             ->where('question_id', $questionId)
             ->firstOrFail();
@@ -262,7 +268,7 @@ class ContentTaskVerificationTest extends TestCase
     {
         Mail::fake();
         $this->withoutVite();
-        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class);
+        $this->withoutMiddleware(PreventRequestForgery::class);
 
         [$uploader, $chapter, $task] = $this->seedPublishedTask();
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
@@ -333,7 +339,7 @@ class ContentTaskVerificationTest extends TestCase
             ->assertRedirect()
             ->assertSessionHas('success');
 
-        $check = \App\Models\ContentVerificationCheck::query()
+        $check = ContentVerificationCheck::query()
             ->where('content_verification_run_id', $runId)
             ->where('question_id', $questionId)
             ->first();
@@ -432,13 +438,13 @@ class ContentTaskVerificationTest extends TestCase
                     'question_id' => $questionId,
                     'number' => 1,
                     'remark' => 'Needs figure upload',
-                    'question_text' => 'What is 2 + 2?',
+                    'question_text' => 'Who scored the highest?',
                 ]],
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
 
-        $check = \App\Models\ContentVerificationCheck::query()
+        $check = ContentVerificationCheck::query()
             ->where('content_verification_run_id', $runId)
             ->where('question_id', $questionId)
             ->first();
@@ -479,7 +485,7 @@ class ContentTaskVerificationTest extends TestCase
     public function test_uploader_can_upload_figure_during_verification_review(): void
     {
         $this->withoutVite();
-        \Illuminate\Support\Facades\Storage::fake('public');
+        Storage::fake('public');
 
         [$uploader, $chapter, $task] = $this->seedPublishedTask();
 
@@ -504,7 +510,7 @@ class ContentTaskVerificationTest extends TestCase
             ->post(route('content.tasks.verification-diagram', $task), [
                 'run_id' => $runId,
                 'question_id' => $question->id,
-                'diagram' => \Illuminate\Http\UploadedFile::fake()->image('figure.png', 120, 80),
+                'diagram' => UploadedFile::fake()->image('figure.png', 120, 80),
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -514,10 +520,155 @@ class ContentTaskVerificationTest extends TestCase
         $this->assertNotNull($question->diagram_url);
     }
 
+    public function test_uploader_can_verify_fill_in_blank_question(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask(numericFillBlank: true);
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.mark-uploaded', $task))
+            ->assertRedirect();
+
+        $question = Worksheet::query()->findOrFail($chapter->fresh()->mcqWorksheetIds()[0])->questions()->firstOrFail();
+        $this->assertTrue($question->isFillInBlank());
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('verification.questions.0.type', Question::TYPE_FILL_IN_BLANK)
+                ->where('verification.questions.0.blank_answer.correct_answer', '4'));
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $uploader->id)
+            ->value('id');
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.verification-question', $task), [
+                'run_id' => $runId,
+                'question_id' => $question->id,
+                'type' => Question::TYPE_FILL_IN_BLANK,
+                'question_text' => 'What is two plus two? The answer is ____.',
+                'explanation' => 'Adding gives four.',
+                'method_hint' => 'Use addition',
+                'difficulty' => 'Easy',
+                'correct_answer' => '4',
+                'answer_format' => 'integer',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $question->refresh();
+        $this->assertTrue($question->isFillInBlank());
+        $this->assertSame('What is two plus two? The answer is ____.', $question->question_text);
+        $this->assertSame('4', $question->blankAnswer?->correct_answer);
+
+        $this->assertTrue(
+            ContentVerificationCheck::query()
+                ->where('content_verification_run_id', $runId)
+                ->where('question_id', $question->id)
+                ->whereNotNull('verified_at')
+                ->exists()
+        );
+    }
+
+    public function test_uploader_can_change_fill_in_blank_to_mcq_during_verification(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask(numericFillBlank: true);
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.mark-uploaded', $task))
+            ->assertRedirect();
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk();
+
+        $question = Worksheet::query()->findOrFail($chapter->fresh()->mcqWorksheetIds()[0])->questions()->firstOrFail();
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $uploader->id)
+            ->value('id');
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.verification-question', $task), [
+                'run_id' => $runId,
+                'question_id' => $question->id,
+                'type' => Question::TYPE_MCQ,
+                'question_text' => 'What is 2 + 2?',
+                'explanation' => 'Adding gives four.',
+                'method_hint' => 'Use addition',
+                'difficulty' => 'Easy',
+                'options' => [
+                    ['option_text' => '3', 'is_correct' => false],
+                    ['option_text' => '4', 'is_correct' => true],
+                    ['option_text' => '5', 'is_correct' => false],
+                    ['option_text' => '6', 'is_correct' => false],
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $question->refresh();
+        $this->assertTrue($question->isMcq());
+        $this->assertNull($question->blankAnswer);
+        $this->assertSame(4, $question->options()->count());
+        $this->assertSame('4', $question->correctOption()?->option_text);
+        $this->assertSame('mcq', $chapter->fresh()->extraction_items[0]['question_type']);
+    }
+
+    public function test_uploader_can_change_mcq_to_fill_in_blank_during_verification(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.mark-uploaded', $task))
+            ->assertRedirect();
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk();
+
+        $question = Worksheet::query()->findOrFail($chapter->fresh()->mcqWorksheetIds()[0])->questions()->firstOrFail();
+        $this->assertTrue($question->isMcq());
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $uploader->id)
+            ->value('id');
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.verification-question', $task), [
+                'run_id' => $runId,
+                'question_id' => $question->id,
+                'type' => Question::TYPE_FILL_IN_BLANK,
+                'question_text' => 'Who scored the highest? The answer is ____.',
+                'explanation' => 'Ali had the highest score',
+                'method_hint' => 'Compare the names',
+                'difficulty' => 'Easy',
+                'correct_answer' => 'Ali',
+                'answer_format' => 'text',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $question->refresh();
+        $this->assertTrue($question->isFillInBlank());
+        $this->assertSame(0, $question->options()->count());
+        $this->assertSame('Ali', $question->blankAnswer?->correct_answer);
+        $this->assertSame('fill_blank', $chapter->fresh()->extraction_items[0]['question_type']);
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask}
      */
-    private function seedPublishedTask(): array
+    private function seedPublishedTask(bool $numericFillBlank = false): array
     {
         $year = AcademicYear::query()->create([
             'name' => '2026-27',
@@ -582,15 +733,25 @@ class ContentTaskVerificationTest extends TestCase
         ]);
 
         $json = json_encode([
-            'questions' => [[
-                'topic' => 'Addition',
-                'question' => 'What is 2 + 2?',
-                'options' => ['3', '4', '5', '6'],
-                'correct_index' => 0,
-                'hint' => 'Add',
-                'explanation' => 'Wrong on purpose',
-                'difficulty' => 'Easy',
-            ]],
+            'questions' => [$numericFillBlank
+                ? [
+                    'topic' => 'Addition',
+                    'question' => 'What is 2 + 2?',
+                    'options' => ['3', '4', '5', '6'],
+                    'correct_index' => 1,
+                    'hint' => 'Add',
+                    'explanation' => '2+2=4',
+                    'difficulty' => 'Easy',
+                ]
+                : [
+                    'topic' => 'Names',
+                    'question' => 'Who scored the highest?',
+                    'options' => ['Ali', 'Bo', 'Cy', 'Di'],
+                    'correct_index' => 0,
+                    'hint' => 'Compare the names',
+                    'explanation' => 'Ali had the highest score',
+                    'difficulty' => 'Easy',
+                ]],
         ], JSON_THROW_ON_ERROR);
 
         $this->actingAs($uploader)
@@ -635,7 +796,7 @@ class ContentTaskVerificationTest extends TestCase
         $paste = <<<'TEXT'
 Question 1 Analysis:
 Status: Correct
-Note: 2 + 2 equals 4.
+Note: Ali had the highest score.
 TEXT;
 
         $this->actingAs($admin)
@@ -648,7 +809,7 @@ TEXT;
             ->assertSessionHas('gemini_review.approved', 1);
 
         $this->assertTrue(
-            \App\Models\ContentVerificationCheck::query()
+            ContentVerificationCheck::query()
                 ->where('content_verification_run_id', $runId)
                 ->where('question_id', $questionId)
                 ->whereNotNull('verified_at')
@@ -692,7 +853,7 @@ TEXT;
             ->assertSessionHas('success');
 
         $this->assertFalse(
-            \App\Models\ContentVerificationCheck::query()
+            ContentVerificationCheck::query()
                 ->where('content_verification_run_id', $runId)
                 ->where('question_id', $questionId)
                 ->whereNotNull('verified_at')

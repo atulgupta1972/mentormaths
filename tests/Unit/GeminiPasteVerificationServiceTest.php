@@ -76,4 +76,23 @@ TEXT;
         $this->assertStringContainsString('B. 4 [CORRECT]', $prompt);
         $this->assertStringContainsString('Status: Correct', $prompt);
     }
+
+    public function test_build_prompt_includes_fill_in_blank_answer(): void
+    {
+        $prompt = $this->service->buildPrompt([
+            [
+                'number' => 2,
+                'type' => 'fill_in_blank',
+                'question_text' => 'What is 10 + 5? The answer is ____.',
+                'blank_answer' => [
+                    'correct_answer' => '15',
+                    'answer_format' => 'integer',
+                ],
+            ],
+        ], 'Class 7 · GP · Ch 1');
+
+        $this->assertStringContainsString('Type: Fill in blank', $prompt);
+        $this->assertStringContainsString('Fill-blank answer: 15 (integer)', $prompt);
+        $this->assertStringNotContainsString('[CORRECT]', $prompt);
+    }
 }

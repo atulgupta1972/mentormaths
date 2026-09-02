@@ -107,18 +107,30 @@ const canEditQuestions = computed(() => {
     return Boolean(url) && url !== '#';
 });
 
+const isFillInBlankRow = (row) => ['fill_in_blank', 'fill_blank'].includes(row?.type);
+
+const emptyMcqOptions = () => Array.from({ length: 8 }, (_, index) => ({
+    id: null,
+    option_text: '',
+    is_correct: index === 0,
+}));
+
 const buildQuestionForm = (row) => useForm({
     run_id: props.verification.run_id,
     question_id: row.question_id,
+    type: isFillInBlankRow(row) ? 'fill_in_blank' : 'mcq',
     question_text: row.question_text ?? '',
     explanation: row.explanation ?? '',
     method_hint: row.method_hint ?? '',
     difficulty: row.difficulty ?? 'Easy',
-    options: (row.options ?? []).map((option) => ({
-        id: option.id,
-        option_text: option.option_text ?? '',
+    options: (row.options?.length ? row.options : (row.source_options ?? [])).map((option) => ({
+        id: option.id ?? null,
+        option_text: option.option_text ?? option.text ?? '',
         is_correct: Boolean(option.is_correct),
     })),
+    correct_answer: row.blank_answer?.correct_answer ?? row.correct_answer ?? '',
+    answer_format: row.blank_answer?.answer_format || 'integer',
+    decimal_places: row.blank_answer?.decimal_places ?? '',
 });
 
 const startEditing = (row) => {
@@ -144,6 +156,37 @@ const setCorrectOption = (questionId, optionIndex) => {
         ...option,
         is_correct: index === optionIndex,
     }));
+};
+
+const setQuestionType = (row, type) => {
+    const form = questionForms[row.question_id];
+    if (!form) {
+        return;
+    }
+
+    form.type = type;
+
+    if (type === 'fill_in_blank') {
+        if (!form.correct_answer) {
+            const correct = (form.options || []).find((option) => option.is_correct);
+            form.correct_answer = correct?.option_text || row.correct_answer || '';
+        }
+        if (form.question_text && !String(form.question_text).includes('____')) {
+            form.question_text = `${String(form.question_text).replace(/[.?\s]+$/, '')} The answer is ____.`;
+        }
+        return;
+    }
+
+    if (!form.options?.length) {
+        const source = (row.source_options?.length ? row.source_options : row.options) || [];
+        form.options = source.length
+            ? source.map((option) => ({
+                id: option.id ?? null,
+                option_text: option.option_text ?? option.text ?? '',
+                is_correct: Boolean(option.is_correct),
+            }))
+            : emptyMcqOptions();
+    }
 };
 
 const saveQuestion = (row) => {
@@ -332,10 +375,18 @@ const removeDiagram = (questionId) => {
     });
 };
 
-const optionLine = (row) =>
-    (row.options || [])
+const optionLine = (row) => {
+    if (isFillInBlankRow(row)) {
+        const answer = row.blank_answer?.correct_answer || row.correct_answer || '—';
+        const format = row.blank_answer?.answer_format ? ` (${row.blank_answer.answer_format})` : '';
+
+        return `Fill blank: ${answer}${format}`;
+    }
+
+    return (row.options || [])
         .map((opt) => `${opt.letter}${opt.is_correct ? '✓' : ''}. ${opt.option_text}`)
         .join(' · ');
+};
 </script>
 
 <template>
@@ -346,7 +397,7 @@ const optionLine = (row) =>
                 <p class="text-xs text-indigo-900">{{ pageLabel }}</p>
                 <p class="mt-1 text-xs text-indigo-800">
                     Skip irrelevant questions — they do not count in uploader pay.
-                    Expand a row and use <strong>Edit</strong> to fix wrong answers, options, or explanations.
+                    Expand a row and use <strong>Edit</strong> to fix wrong answers, switch MCQ / fill-in-blank, or explanations.
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -402,7 +453,7 @@ const optionLine = (row) =>
                         <th class="px-2 py-2">OK</th>
                         <th class="px-2 py-2">#</th>
                         <th class="px-2 py-2 min-w-[12rem]">Question</th>
-                        <th class="px-2 py-2 min-w-[10rem]">Options</th>
+                        <th class="px-2 py-2 min-w-[10rem]">Answer / options</th>
                         <th class="px-2 py-2">Ans</th>
                         <th class="px-2 py-2 min-w-[7rem]">Hint</th>
                         <th class="px-2 py-2 min-w-[8rem]">Explanation</th>
@@ -451,7 +502,7 @@ const optionLine = (row) =>
                                 <p class="line-clamp-4">{{ optionLine(row) }}</p>
                             </td>
                             <td class="px-2 py-2 align-top font-semibold text-emerald-800">
-                                {{ row.correct_letter || '—' }}
+                                {{ row.correct_letter || row.correct_answer || '—' }}
                             </td>
                             <td class="px-2 py-2 align-top text-gray-700">
                                 <p class="line-clamp-3 whitespace-pre-wrap">{{ row.method_hint || '—' }}</p>
@@ -536,6 +587,17 @@ const optionLine = (row) =>
                                 <div v-if="editingId === row.question_id && questionForms[row.question_id]" class="space-y-3 text-sm">
                                     <p class="text-xs font-semibold text-emerald-900">Edit question — save marks it verified</p>
                                     <div>
+                                        <InputLabel value="Question type" />
+                                        <select
+                                            :value="questionForms[row.question_id].type"
+                                            class="mt-1 block w-full rounded-md border-gray-300 text-sm sm:max-w-xs"
+                                            @change="setQuestionType(row, $event.target.value)"
+                                        >
+                                            <option value="mcq">MCQ (options)</option>
+                                            <option value="fill_in_blank">Fill in the blank</option>
+                                        </select>
+                                    </div>
+                                    <div>
                                         <InputLabel value="Question text" />
                                         <textarea
                                             v-model="questionForms[row.question_id].question_text"
@@ -544,7 +606,29 @@ const optionLine = (row) =>
                                         />
                                         <InputError :message="questionForms[row.question_id].errors.question_text" class="mt-1" />
                                     </div>
-                                    <div>
+                                    <div v-if="questionForms[row.question_id].type === 'fill_in_blank'" class="grid gap-3 sm:grid-cols-2">
+                                        <div>
+                                            <InputLabel value="Correct answer" />
+                                            <input
+                                                v-model="questionForms[row.question_id].correct_answer"
+                                                type="text"
+                                                class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                            >
+                                        </div>
+                                        <div>
+                                            <InputLabel value="Answer format" />
+                                            <select
+                                                v-model="questionForms[row.question_id].answer_format"
+                                                class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                            >
+                                                <option value="integer">Whole number</option>
+                                                <option value="decimal">Decimal</option>
+                                                <option value="fraction">Fraction</option>
+                                                <option value="text">Text</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div v-else>
                                         <InputLabel value="Options (select the correct answer)" />
                                         <div class="mt-2 space-y-2">
                                             <label
@@ -632,8 +716,16 @@ const optionLine = (row) =>
                                     </div>
                                     <div class="space-y-2">
                                         <div>
-                                            <p class="text-[10px] font-semibold uppercase text-gray-500">Options</p>
-                                            <ul class="mt-1 space-y-0.5">
+                                            <p class="text-[10px] font-semibold uppercase text-gray-500">
+                                                {{ isFillInBlankRow(row) ? 'Fill-blank answer' : 'Options' }}
+                                            </p>
+                                            <p v-if="isFillInBlankRow(row)" class="mt-1 font-semibold text-emerald-800">
+                                                {{ row.blank_answer?.correct_answer || row.correct_answer || '—' }}
+                                                <span v-if="row.blank_answer?.answer_format" class="font-normal text-gray-500">
+                                                    ({{ row.blank_answer.answer_format }})
+                                                </span>
+                                            </p>
+                                            <ul v-else class="mt-1 space-y-0.5">
                                                 <li
                                                     v-for="opt in row.options"
                                                     :key="opt.id || opt.letter"

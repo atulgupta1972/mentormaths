@@ -8,13 +8,15 @@ use App\Models\ContentUploadTask;
 use App\Models\ContentVerificationRun;
 use App\Models\QuestionBlankAnswer;
 use App\Services\ContentAiVerificationService;
-use App\Services\GeminiPasteVerificationService;
 use App\Services\ContentUploaderDashboardService;
 use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
 use App\Services\FillBlankConversionService;
 use App\Services\GeminiFillBlankConversionService;
+use App\Services\GeminiPasteVerificationService;
+use App\Services\TextbookChapterBookService;
+use App\Support\AnswerValidationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -80,7 +82,7 @@ class ContentTaskController extends Controller
                 'needs_review' => $contentTask->uploaderBucket() === 'review_pending',
                 'textbook_chapter_id' => $contentTask->textbook_chapter_id,
                 'has_pdf' => $contentTask->textbookChapter
-                    ? app(\App\Services\TextbookChapterBookService::class)->hasStoredPdf($contentTask->textbookChapter)
+                    ? app(TextbookChapterBookService::class)->hasStoredPdf($contentTask->textbookChapter)
                     : false,
             ],
             'verification' => $verification ? [
@@ -187,18 +189,7 @@ class ContentTaskController extends Controller
     {
         $this->authorizeTask($contentTask, $request);
 
-        $validated = $request->validate([
-            'run_id' => ['required', 'integer', 'exists:content_verification_runs,id'],
-            'question_id' => ['required', 'integer', 'exists:questions,id'],
-            'question_text' => ['required', 'string', 'max:5000'],
-            'explanation' => ['nullable', 'string', 'max:5000'],
-            'method_hint' => ['nullable', 'string', 'max:2000'],
-            'difficulty' => ['nullable', 'string', 'max:64'],
-            'options' => ['required', 'array', 'min:2', 'max:8'],
-            'options.*.id' => ['nullable', 'integer'],
-            'options.*.option_text' => ['required', 'string', 'max:2000'],
-            'options.*.is_correct' => ['required', 'boolean'],
-        ]);
+        $validated = $request->validate(ContentVerificationService::questionSaveValidationRules());
 
         $run = ContentVerificationRun::query()->findOrFail($validated['run_id']);
 
@@ -503,7 +494,7 @@ class ContentTaskController extends Controller
                 QuestionBlankAnswer::FORMAT_FRACTION,
             ])->map(fn (string $format) => [
                 'value' => $format,
-                'label' => app(\App\Support\AnswerValidationService::class)->formatLabel($format),
+                'label' => app(AnswerValidationService::class)->formatLabel($format),
             ])->values()->all(),
             'activeSeconds' => $this->sessionService->totalActiveSeconds($contentTask),
         ]);

@@ -184,11 +184,19 @@ class TextbookChapterPublishService
             $created = 0;
 
             foreach ($approved as $item) {
-                if (! ($item['include_in_mcq'] ?? true)) {
+                if ($this->itemIsFillBlankReady($item)) {
+                    $question = $this->createFillBlankQuestion(
+                        $topic,
+                        $item,
+                        $this->fillBlankFields($item),
+                        $publisher->id,
+                    );
+                } elseif ($item['include_in_mcq'] ?? true) {
+                    $question = $this->createMcqQuestion($topic, $item, $publisher->id, $nextSort + $created + 1);
+                } else {
                     continue;
                 }
 
-                $question = $this->createMcqQuestion($topic, $item, $publisher->id, $nextSort + $created + 1);
                 $lastWorksheet->questions()->attach($question->id, ['sort_order' => $nextSort + $created + 1]);
                 $created++;
             }
