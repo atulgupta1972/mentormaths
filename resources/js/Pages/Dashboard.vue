@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ExamPlanPanel from '@/Components/ExamPlanPanel.vue';
+import StudentPendingWorkPanel from '@/Components/StudentPendingWorkPanel.vue';
 import StudentAssignmentGroupTable from '@/Components/StudentAssignmentGroupTable.vue';
 import PendingWorkEmailPanel from '@/Components/PendingWorkEmailPanel.vue';
 import ClassCoveragePanel from '@/Components/ClassCoveragePanel.vue';
@@ -31,6 +32,8 @@ const props = defineProps({
     },
     assignments: { type: Array, default: () => [] },
     resumeItems: { type: Array, default: () => [] },
+    latestWorkGroups: { type: Array, default: () => [] },
+    olderPendingGroups: { type: Array, default: () => [] },
     followUpItems: { type: Array, default: () => [] },
     activeYear: Object,
     selectedGrade: Object,
@@ -166,23 +169,19 @@ const studiedChapterRows = computed(() => coverageChapters.value.filter((c) => c
 const underStudyChapterRows = computed(() => coverageChapters.value.filter((c) => c.under_study));
 
 const resumeItems = computed(() => props.resumeItems || []);
+const latestWorkGroups = computed(() => props.latestWorkGroups || []);
+const olderPendingGroups = computed(() => props.olderPendingGroups || []);
 const followUpItems = computed(() => props.followUpItems || []);
 
+const latestWorkCount = computed(() =>
+    latestWorkGroups.value.reduce((count, group) => count + (group.items?.length ?? 0), 0),
+);
+
+const olderPendingCount = computed(() =>
+    olderPendingGroups.value.reduce((count, group) => count + (group.items?.length ?? 0), 0),
+);
+
 const correctingWorksheetId = ref(null);
-
-const resumeHref = (item) => {
-    if (item.attempt_id && hasRoute('student.attempts.show')) {
-        return route('student.attempts.show', item.attempt_id);
-    }
-
-    if (item.delivery_mode === 'written' && item.assignment_id) {
-        return route('student.written-assignments.show', item.assignment_id);
-    }
-
-    return item.assignment_id
-        ? route('student.assignments.show', item.assignment_id)
-        : '#';
-};
 
 const startCorrectionPractice = (item) => {
     if (! item.practice_set_id || correctingWorksheetId.value) {
@@ -981,55 +980,43 @@ const formatHelpDate = (value) => {
                         :gemini-done="contentUploaderTasks.geminiDone"
                     />
 
-                    <!-- Incomplete attempts left mid-way — finish these first -->
+                    <!-- Latest in-progress work — finish this first -->
                     <section
-                        v-if="resumeItems.length"
+                        v-if="latestWorkCount"
                         class="rounded-xl border-2 border-sky-400 bg-gradient-to-br from-sky-50 via-cyan-50 to-white p-4 shadow-md"
                     >
                         <h3 class="text-sm font-bold uppercase tracking-wide text-sky-950">
-                            Continue where you left off · {{ resumeItems.length }}
+                            Continue now · {{ latestWorkCount }}
                         </h3>
                         <p class="mt-1 text-xs text-sky-900">
-                            You started these and closed before finishing. Open to pick up from where you stopped.
+                            Your most recent chapter — pick up where you stopped.
                         </p>
-                        <div class="mt-3 space-y-2">
-                            <div
-                                v-for="item in resumeItems"
-                                :key="`resume-${item.attempt_id || item.assignment_id}`"
-                                class="rounded-lg border border-sky-200 bg-white px-3 py-2.5 shadow-sm"
-                            >
-                                <p v-if="item.chapter_name" class="text-[11px] font-bold uppercase tracking-wide text-slate-700">
-                                    {{ item.chapter_name }}
-                                    <span v-if="item.topic_name" class="font-medium normal-case tracking-normal text-slate-500">
-                                        · {{ item.topic_name }}
-                                    </span>
-                                </p>
-                                <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                                    <span class="font-mono text-sm font-bold text-slate-900">
-                                        {{ item.set_code || 'Set' }}
-                                        <span class="font-semibold text-slate-600">({{ item.total }})</span>
-                                    </span>
-                                    <span class="rounded bg-sky-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-sky-950">
-                                        In progress ({{ item.progress_label }} — {{ item.remaining }} left)
-                                    </span>
-                                    <span
-                                        v-if="item.target_date"
-                                        class="text-xs"
-                                        :class="item.is_overdue ? 'font-semibold text-rose-700' : 'text-slate-500'"
-                                    >
-                                        due {{ formatDate(item.target_date) }}
-                                    </span>
-                                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
-                                        {{ item.kind_label }}
-                                    </span>
-                                    <Link
-                                        :href="resumeHref(item)"
-                                        class="ml-auto inline-flex rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-                                    >
-                                        Open
-                                    </Link>
-                                </div>
-                            </div>
+                        <div class="mt-3">
+                            <StudentPendingWorkPanel
+                                :groups="latestWorkGroups"
+                                variant="latest"
+                                :chapter-order="chapterOrder"
+                            />
+                        </div>
+                    </section>
+
+                    <!-- Older pending — other chapters / not started yet -->
+                    <section
+                        v-if="olderPendingCount"
+                        class="rounded-xl border border-slate-300 bg-slate-50 p-4 shadow-sm"
+                    >
+                        <h3 class="text-sm font-bold uppercase tracking-wide text-slate-800">
+                            Other pending work · {{ olderPendingCount }}
+                        </h3>
+                        <p class="mt-1 text-xs text-slate-600">
+                            Earlier chapters or sets not started — grouped by chapter.
+                        </p>
+                        <div class="mt-3">
+                            <StudentPendingWorkPanel
+                                :groups="olderPendingGroups"
+                                variant="older"
+                                :chapter-order="chapterOrder"
+                            />
                         </div>
                     </section>
 

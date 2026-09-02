@@ -432,6 +432,9 @@ class AssignmentProgress
             'can_resume_attempt' => $latest?->status === SetAttempt::STATUS_IN_PROGRESS
                 ? app(GuidedPracticeService::class)->canResume($latest)
                 : false,
+            'last_activity_at' => $latest?->status === SetAttempt::STATUS_IN_PROGRESS
+                ? ($latest->updated_at ?? $latest->started_at)?->toIso8601String()
+                : null,
             'written_submission_status' => null,
         ];
     }

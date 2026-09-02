@@ -158,11 +158,16 @@ class StudentAttemptResumeAndRedoTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->has('resumeItems', 1)
+                ->has('latestWorkGroups', 1)
+                ->where('latestWorkGroups.0.chapter_name', 'Numbers')
+                ->has('latestWorkGroups.0.items', 1)
+                ->where('latestWorkGroups.0.items.0.attempt_id', $attempt->id)
                 ->where('resumeItems.0.attempt_id', $attempt->id)
                 ->where('resumeItems.0.done', 2)
                 ->where('resumeItems.0.remaining', 3)
                 ->where('resumeItems.0.total', 5)
                 ->where('resumeItems.0.chapter_name', 'Numbers')
+                ->has('olderPendingGroups', 0)
             );
     }
 

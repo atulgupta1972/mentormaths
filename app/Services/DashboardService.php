@@ -51,8 +51,13 @@ class DashboardService
             $resolutionItems = $this->resolutionService->pendingForEnrollment($enrollment->id);
         }
 
+        $resumeItems = $this->resumeItemsFromAssignments($assignments);
+        $pendingWork = $this->pendingWorkSectionsFromAssignments($assignments, $resumeItems);
+
         $payload = [
-            'resumeItems' => $this->resumeItemsFromAssignments($assignments),
+            'resumeItems' => $resumeItems,
+            'latestWorkGroups' => $pendingWork['latest'],
+            'olderPendingGroups' => $pendingWork['older'],
             'followUpItems' => $this->followUpItemsFromAssignments($assignments),
             'examPlans' => $examPlanMeta,
             'syllabusChapters' => $syllabusChapters,
@@ -569,52 +574,218 @@ class DashboardService
         $items = [];
 
         foreach ($assignments as $row) {
-            $attemptId = $row['in_progress_attempt_id'] ?? null;
-            $partial = $row['partial_progress'] ?? null;
+            $item = $this->resumeItemFromAssignment($row);
 
-            if (! $attemptId || ! is_array($partial)) {
-                continue;
+            if ($item !== null) {
+                $items[] = $item;
             }
-
-            if (($row['can_resume_attempt'] ?? true) === false) {
-                continue;
-            }
-
-            $remaining = (int) ($partial['remaining'] ?? 0);
-            if ($remaining <= 0) {
-                continue;
-            }
-
-            $done = (int) ($partial['done'] ?? 0);
-            $total = max(1, (int) ($partial['total'] ?? 0));
-
-            $items[] = [
-                'assignment_id' => $row['assignment_id'] ?? null,
-                'attempt_id' => $attemptId,
-                'set_code' => $row['set_code'] ?? null,
-                'kind_label' => $row['kind_label'] ?? 'Practice',
-                'chapter_name' => $row['chapter_name'] ?? null,
-                'topic_name' => $row['topic_name'] ?? null,
-                'target_date' => $row['target_date'] ?? null,
-                'is_overdue' => (bool) ($row['is_overdue'] ?? false),
-                'delivery_mode' => $row['delivery_mode'] ?? 'online',
-                'done' => $done,
-                'total' => $total,
-                'remaining' => $remaining,
-                'progress_label' => (string) ($partial['label'] ?? "{$done}/{$total}"),
-            ];
         }
 
         usort($items, static function (array $left, array $right): int {
-            $byRemaining = $left['remaining'] <=> $right['remaining'];
-            if ($byRemaining !== 0) {
-                return $byRemaining;
+            $byActivity = strcmp((string) ($right['last_activity_at'] ?? ''), (string) ($left['last_activity_at'] ?? ''));
+            if ($byActivity !== 0) {
+                return $byActivity;
             }
 
             return strcmp((string) ($left['target_date'] ?? '9999-12-31'), (string) ($right['target_date'] ?? '9999-12-31'));
         });
 
         return array_values($items);
+    }
+
+    /**
+     * Split in-progress and not-started work into latest (current chapter) vs older pending lists.
+     *
+     * @param  list<array<string, mixed>>  $assignments
+     * @param  list<array<string, mixed>>  $resumeItems
+     * @return array{latest: list<array{chapter_name: string, items: list<array<string, mixed>>}>, older: list<array{chapter_name: string, items: list<array<string, mixed>>}>}
+     */
+    private function pendingWorkSectionsFromAssignments(array $assignments, array $resumeItems): array
+    {
+        $resumeAssignmentIds = collect($resumeItems)
+            ->pluck('assignment_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $notStarted = [];
+
+        foreach ($assignments as $row) {
+            if (in_array($row['status'] ?? '', ['green', 'green-late', 'checking'], true)) {
+                continue;
+            }
+
+            if ($row['is_catch_up'] ?? false) {
+                continue;
+            }
+
+            if (! empty($row['in_progress_attempt_id'])) {
+                continue;
+            }
+
+            $assignmentId = (int) ($row['assignment_id'] ?? 0);
+            if ($assignmentId > 0 && in_array($assignmentId, $resumeAssignmentIds, true)) {
+                continue;
+            }
+
+            $notStarted[] = $this->pendingItemFromAssignment($row);
+        }
+
+        if ($resumeItems === []) {
+            return [
+                'latest' => [],
+                'older' => $this->groupWorkItemsByChapter($notStarted),
+            ];
+        }
+
+        $latestChapter = (string) ($resumeItems[0]['chapter_name'] ?? 'Other');
+        $latestItems = [];
+        $olderResume = [];
+        $olderNotStarted = [];
+
+        foreach ($resumeItems as $item) {
+            if ((string) ($item['chapter_name'] ?? 'Other') === $latestChapter) {
+                $latestItems[] = $item;
+            } else {
+                $olderResume[] = $item;
+            }
+        }
+
+        foreach ($notStarted as $item) {
+            if ((string) ($item['chapter_name'] ?? 'Other') === $latestChapter) {
+                $latestItems[] = $item;
+            } else {
+                $olderNotStarted[] = $item;
+            }
+        }
+
+        return [
+            'latest' => $this->groupWorkItemsByChapter($latestItems),
+            'older' => $this->groupWorkItemsByChapter(array_merge($olderResume, $olderNotStarted)),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>|null
+     */
+    private function resumeItemFromAssignment(array $row): ?array
+    {
+        $attemptId = $row['in_progress_attempt_id'] ?? null;
+        $partial = $row['partial_progress'] ?? null;
+
+        if (! $attemptId || ! is_array($partial)) {
+            return null;
+        }
+
+        if (($row['can_resume_attempt'] ?? true) === false) {
+            return null;
+        }
+
+        $remaining = (int) ($partial['remaining'] ?? 0);
+        if ($remaining <= 0) {
+            return null;
+        }
+
+        $done = (int) ($partial['done'] ?? 0);
+        $total = max(1, (int) ($partial['total'] ?? 0));
+
+        return [
+            'assignment_id' => $row['assignment_id'] ?? null,
+            'attempt_id' => $attemptId,
+            'set_code' => $row['set_code'] ?? null,
+            'kind_label' => $row['kind_label'] ?? 'Practice',
+            'chapter_name' => $row['chapter_name'] ?? null,
+            'topic_name' => $row['topic_name'] ?? null,
+            'target_date' => $row['target_date'] ?? null,
+            'is_overdue' => (bool) ($row['is_overdue'] ?? false),
+            'delivery_mode' => $row['delivery_mode'] ?? 'online',
+            'done' => $done,
+            'total' => $total,
+            'remaining' => $remaining,
+            'progress_label' => (string) ($partial['label'] ?? "{$done}/{$total}"),
+            'last_activity_at' => $row['last_activity_at'] ?? null,
+            'status' => 'in_progress',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function pendingItemFromAssignment(array $row): array
+    {
+        $total = max(1, (int) ($row['question_count'] ?? 0));
+
+        return [
+            'assignment_id' => $row['assignment_id'] ?? null,
+            'attempt_id' => null,
+            'set_code' => $row['set_code'] ?? null,
+            'kind_label' => $row['kind_label'] ?? 'Practice',
+            'chapter_name' => $row['chapter_name'] ?? null,
+            'topic_name' => $row['topic_name'] ?? null,
+            'target_date' => $row['target_date'] ?? null,
+            'is_overdue' => (bool) ($row['is_overdue'] ?? false),
+            'delivery_mode' => $row['delivery_mode'] ?? 'online',
+            'done' => 0,
+            'total' => $total,
+            'remaining' => $total,
+            'progress_label' => '0/'.$total,
+            'last_activity_at' => null,
+            'status' => 'not_started',
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array{chapter_name: string, items: list<array<string, mixed>>}>
+     */
+    private function groupWorkItemsByChapter(array $items): array
+    {
+        if ($items === []) {
+            return [];
+        }
+
+        $grouped = [];
+
+        foreach ($items as $item) {
+            $chapter = trim((string) ($item['chapter_name'] ?? 'Other'));
+            if ($chapter === '') {
+                $chapter = 'Other';
+            }
+
+            $grouped[$chapter][] = $item;
+        }
+
+        uksort($grouped, static function (string $left, string $right): int {
+            if ($left === 'Other') {
+                return 1;
+            }
+
+            if ($right === 'Other') {
+                return -1;
+            }
+
+            return strcasecmp($left, $right);
+        });
+
+        $groups = [];
+
+        foreach ($grouped as $chapterName => $chapterItems) {
+            usort($chapterItems, static function (array $left, array $right): int {
+                $leftDate = (string) ($left['target_date'] ?? '9999-12-31');
+                $rightDate = (string) ($right['target_date'] ?? '9999-12-31');
+
+                return strcmp($leftDate, $rightDate);
+            });
+
+            $groups[] = [
+                'chapter_name' => $chapterName,
+                'items' => array_values($chapterItems),
+            ];
+        }
+
+        return $groups;
     }
 
     /**
