@@ -14,7 +14,6 @@ import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
 import AttemptProtectionBadge from '@/Components/AttemptProtectionBadge.vue';
 import { useAttemptActiveTimer } from '@/composables/useAttemptActiveTimer';
 import { useAttemptContentProtection } from '@/composables/useAttemptContentProtection';
-import { optionLetter } from '@/utils/mcqDisplay';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
@@ -65,11 +64,10 @@ const canShowAttempt = computed(() => !needsFullscreenGate.value || fullscreenRe
 const answerForm = useForm({ option_id: null, answer_text: '' });
 const giveUpForm = useForm({});
 const hintForm = useForm({});
-const pendingMcqOption = ref(null);
+const selectedOptionId = ref(null);
 /** In-page confirm only — native confirm() exits fullscreen and falsely counts a leave. */
 const pendingActionConfirm = ref(null);
 
-const showMcqConfirm = computed(() => pendingMcqOption.value !== null);
 const showActionConfirm = computed(() => pendingActionConfirm.value !== null);
 
 const feedback = computed(() => page.props.flash?.guided_feedback ?? null);
@@ -112,44 +110,28 @@ const feedbackClass = computed(() => {
     }[feedback.value.type] || 'border-gray-200 bg-gray-50 text-gray-800';
 });
 
-const submitMcqAnswer = (optionId) => {
-    answerForm.option_id = optionId;
-    answerForm.answer_text = '';
-    answerForm.post(route('student.attempts.guided.answer', props.attempt.id), {
-        preserveScroll: true,
-        onFinish: () => {
-            pendingMcqOption.value = null;
-        },
-    });
-};
+const isWrongFeedback = (value) => value && ['retry', 'incorrect'].includes(value.type);
 
-const promptMcqAnswer = (option, optIndex) => {
+const selectMcqOption = (option) => {
     if (!canAnswer.value || answerForm.processing) {
         return;
     }
 
-    pendingMcqOption.value = {
-        id: option.id,
-        index: optIndex,
-        text: option.option_text,
-        letter: optionLetter(optIndex),
-    };
+    selectedOptionId.value = option.id;
 };
 
-const confirmMcqAnswer = () => {
-    if (!pendingMcqOption.value) {
-        return;
+const submitAnswer = () => {
+    if (isFillInBlank.value) {
+        answerForm.option_id = null;
+    } else {
+        if (!selectedOptionId.value) {
+            return;
+        }
+
+        answerForm.option_id = selectedOptionId.value;
+        answerForm.answer_text = '';
     }
 
-    submitMcqAnswer(pendingMcqOption.value.id);
-};
-
-const cancelMcqConfirm = () => {
-    pendingMcqOption.value = null;
-};
-
-const submitBlankAnswer = () => {
-    answerForm.option_id = null;
     answerForm.post(route('student.attempts.guided.answer', props.attempt.id), {
         preserveScroll: true,
     });
@@ -232,7 +214,33 @@ const hintAvailable = computed(() => {
     return props.can_show_hint || ['answering', 'retry'].includes(props.phase);
 });
 
-const helpAvailable = computed(() => props.can_give_up || hintAvailable.value);
+const helpAvailable = computed(() => props.can_give_up);
+
+const canSubmit = computed(() => {
+    if (!canAnswer.value || answerForm.processing) {
+        return false;
+    }
+
+    if (isFillInBlank.value) {
+        return Boolean(answerForm.answer_text.trim());
+    }
+
+    return selectedOptionId.value !== null;
+});
+
+const mcqOptionClass = (optionId) => {
+    const selected = selectedOptionId.value === optionId;
+
+    if (selected) {
+        return 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200';
+    }
+
+    if (canAnswer.value && !answerForm.processing) {
+        return 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50';
+    }
+
+    return 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70';
+};
 
 watch(
     () => props.question?.id,
@@ -241,10 +249,16 @@ watch(
             answerForm.answer_text = '';
             answerForm.option_id = null;
             answerForm.clearErrors();
-            pendingMcqOption.value = null;
+            selectedOptionId.value = null;
         }
     },
 );
+
+watch(feedback, (value) => {
+    if (isWrongFeedback(value) && isFillInBlank.value) {
+        answerForm.answer_text = '';
+    }
+});
 </script>
 
 <template>
@@ -312,41 +326,10 @@ watch(
 
                 <div v-if="feedback" class="rounded-lg border p-4 text-sm" :class="feedbackClass">
                     <p>{{ feedback.message }}</p>
-                    <div v-if="hintAvailable" class="mt-3 flex flex-wrap gap-2">
-                        <SecondaryButton type="button" :disabled="hintForm.processing" @click="requestHint">
-                            {{ hintForm.processing ? 'Loading…' : 'Show hint' }}
-                        </SecondaryButton>
-                    </div>
                 </div>
 
                 <div v-if="question" class="rounded-lg bg-white p-5 shadow-sm">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <p class="text-sm font-semibold text-indigo-600">Question {{ question.number }}</p>
-                        <div class="flex flex-wrap gap-2">
-                            <SecondaryButton
-                                v-if="hintAvailable"
-                                type="button"
-                                :disabled="hintForm.processing"
-                                @click="requestHint"
-                            >
-                                {{ hintForm.processing ? 'Loading…' : 'Show hint' }}
-                            </SecondaryButton>
-                            <SecondaryButton
-                                v-if="helpAvailable"
-                                type="button"
-                                class="!border-rose-200 !text-rose-800 hover:!bg-rose-50"
-                                :disabled="giveUpForm.processing"
-                                @click="requestHelp"
-                            >
-                                {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
-                            </SecondaryButton>
-                            <ReportQuestionIssueButton
-                                v-if="can_report_issue"
-                                :action="route('student.attempts.guided.report-issue', attempt.id)"
-                                :disabled="giveUpForm.processing || hintForm.processing || answerForm.processing"
-                            />
-                        </div>
-                    </div>
+                    <p class="text-sm font-semibold text-indigo-600">Question {{ question.number }}</p>
 
                     <div class="mt-3">
                         <QuestionBody
@@ -377,59 +360,63 @@ watch(
                             class="block w-full max-w-xs text-lg"
                             :placeholder="answerPlaceholder"
                             :disabled="!canAnswer || answerForm.processing"
-                            @keyup.enter="submitBlankAnswer"
+                            @keyup.enter="submitAnswer"
                         />
-                        <PrimaryButton
-                            type="button"
-                            :disabled="!canAnswer || answerForm.processing || !answerForm.answer_text.trim()"
-                            @click="submitBlankAnswer"
-                        >
-                            {{ answerForm.processing ? 'Checking…' : 'Submit answer' }}
-                        </PrimaryButton>
                     </div>
 
                     <div v-else class="mt-4 space-y-2">
-                        <p class="text-xs text-gray-500">Tap an option to check it before submitting.</p>
+                        <p class="text-xs text-gray-500">Select an option, then tap Submit.</p>
                         <button
                             v-for="(opt, optIndex) in question.options"
                             :key="opt.id"
                             type="button"
                             class="flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left text-sm transition"
-                            :class="pendingMcqOption?.id === opt.id
-                                ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200'
-                                : canAnswer && !answerForm.processing
-                                    ? 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'
-                                    : 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70'"
+                            :class="mcqOptionClass(opt.id)"
                             :disabled="!canAnswer || answerForm.processing"
-                            @click="promptMcqAnswer(opt, optIndex)"
+                            @click="selectMcqOption(opt)"
                         >
                             <McqOptionLine :index="optIndex" :text="opt.option_text" />
                         </button>
                     </div>
 
-                    <div v-if="hintAvailable || helpAvailable || can_report_issue" class="mt-4 flex flex-wrap gap-3 border-t pt-4">
-                        <SecondaryButton
-                            v-if="hintAvailable"
+                    <div class="mt-6 space-y-3 border-t pt-4">
+                        <PrimaryButton
                             type="button"
-                            :disabled="hintForm.processing"
-                            @click="requestHint"
+                            class="w-full sm:w-auto"
+                            :disabled="!canSubmit"
+                            @click="submitAnswer"
                         >
-                            {{ hintForm.processing ? 'Loading…' : 'Show hint (no first-try mark)' }}
-                        </SecondaryButton>
-                        <SecondaryButton
-                            v-if="helpAvailable"
-                            type="button"
-                            class="!border-rose-200 !text-rose-800 hover:!bg-rose-50"
-                            :disabled="giveUpForm.processing"
-                            @click="requestHelp"
+                            {{ answerForm.processing ? 'Checking…' : 'Submit' }}
+                        </PrimaryButton>
+
+                        <div
+                            v-if="hintAvailable || helpAvailable || can_report_issue"
+                            class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm"
                         >
-                            {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
-                        </SecondaryButton>
-                        <ReportQuestionIssueButton
-                            v-if="can_report_issue"
-                            :action="route('student.attempts.guided.report-issue', attempt.id)"
-                            :disabled="giveUpForm.processing || hintForm.processing || answerForm.processing"
-                        />
+                            <button
+                                v-if="hintAvailable"
+                                type="button"
+                                class="font-medium text-indigo-700 hover:text-indigo-900 disabled:opacity-50"
+                                :disabled="hintForm.processing"
+                                @click="requestHint"
+                            >
+                                {{ hintForm.processing ? 'Loading hint…' : 'Show hint (no first-try mark)' }}
+                            </button>
+                            <button
+                                v-if="helpAvailable"
+                                type="button"
+                                class="font-medium text-rose-700 hover:text-rose-900 disabled:opacity-50"
+                                :disabled="giveUpForm.processing"
+                                @click="requestHelp"
+                            >
+                                {{ giveUpForm.processing ? 'Sending…' : 'I need help' }}
+                            </button>
+                            <ReportQuestionIssueButton
+                                v-if="can_report_issue"
+                                :action="route('student.attempts.guided.report-issue', attempt.id)"
+                                :disabled="giveUpForm.processing || hintForm.processing || answerForm.processing"
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -445,29 +432,6 @@ watch(
                 </Link>
             </div>
         </div>
-
-        <Modal :show="showMcqConfirm" max-width="md" @close="cancelMcqConfirm">
-            <div class="p-6">
-                <h3 class="text-lg font-semibold text-gray-900">Submit this answer?</h3>
-                <p class="mt-2 text-sm text-gray-600">
-                    You selected option <strong>{{ pendingMcqOption?.letter }}</strong> for question {{ question?.number }}.
-                </p>
-                <div class="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-gray-900">
-                    <McqOptionLine :index="pendingMcqOption?.index ?? 0" :text="pendingMcqOption?.text ?? ''" />
-                </div>
-                <p class="mt-3 text-xs text-gray-500">
-                    Your answer will be checked immediately. Tap Cancel to pick a different option.
-                </p>
-                <div class="mt-6 flex flex-wrap justify-end gap-3">
-                    <SecondaryButton type="button" :disabled="answerForm.processing" @click="cancelMcqConfirm">
-                        Cancel
-                    </SecondaryButton>
-                    <PrimaryButton type="button" :disabled="answerForm.processing" @click="confirmMcqAnswer">
-                        {{ answerForm.processing ? 'Submitting…' : 'Submit answer' }}
-                    </PrimaryButton>
-                </div>
-            </div>
-        </Modal>
 
         <Modal :show="showActionConfirm" max-width="md" @close="cancelActionConfirm">
             <div class="p-6">
