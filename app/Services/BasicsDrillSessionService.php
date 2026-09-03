@@ -752,6 +752,8 @@ class BasicsDrillSessionService
     }
 
     /**
+     * Forward facts (6 × 7 = ____) then reverse factor blanks (42 is 6 × ____), each shuffled.
+     *
      * @return list<array{fact_type: string, fact_key: string, operand_a: int, operand_b: int, correct_answer: int}>
      */
     private function tableFacts(?int $tableNumber, array $settings): array
@@ -764,9 +766,11 @@ class BasicsDrillSessionService
             (int) $settings['multiplier_from'],
             (int) $settings['multiplier_to'],
         );
-        shuffle($multipliers);
 
-        return array_map(function (int $multiplier) use ($tableNumber) {
+        $forwardMultipliers = $multipliers;
+        shuffle($forwardMultipliers);
+
+        $forward = array_map(function (int $multiplier) use ($tableNumber) {
             return [
                 'fact_type' => BasicsDrillItem::TYPE_TABLE,
                 'fact_key' => "{$tableNumber}x{$multiplier}",
@@ -774,7 +778,22 @@ class BasicsDrillSessionService
                 'operand_b' => $multiplier,
                 'correct_answer' => $tableNumber * $multiplier,
             ];
-        }, $multipliers);
+        }, $forwardMultipliers);
+
+        $reverseMultipliers = $multipliers;
+        shuffle($reverseMultipliers);
+
+        $reverse = array_map(function (int $multiplier) use ($tableNumber) {
+            return [
+                'fact_type' => BasicsDrillItem::TYPE_TABLE,
+                'fact_key' => "{$tableNumber}x{$multiplier}_rev",
+                'operand_a' => $tableNumber,
+                'operand_b' => $multiplier,
+                'correct_answer' => $multiplier,
+            ];
+        }, $reverseMultipliers);
+
+        return array_values(array_merge($forward, $reverse));
     }
 
     /**
@@ -946,6 +965,7 @@ class BasicsDrillSessionService
             'round' => $item->round,
             'is_formula_mcq' => $item->isFormulaMcq(),
             'is_formula_fill_blank' => $item->isFormulaFillBlank(),
+            'is_table_reverse' => $item->isTableReverse(),
         ];
 
         if ($item->isFormulaMcq() || $item->isFormulaFillBlank()) {

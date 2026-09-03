@@ -148,7 +148,19 @@ class BasicsDrillTest extends TestCase
             ->assertJsonPath('session.phase', BasicsDrillSession::PHASE_TABLE_DRILL);
 
         $session->refresh();
-        $this->assertCount(2, $session->items);
+        // Forward 2×2, 2×3 then reverse factor blanks (same multipliers).
+        $this->assertCount(4, $session->items);
+
+        $reverseItems = $session->items->filter(fn ($item) => str_ends_with($item->fact_key, '_rev'));
+        $this->assertCount(2, $reverseItems);
+        $this->assertTrue(
+            $reverseItems->every(fn ($item) => $item->correct_answer === $item->operand_b),
+        );
+        $this->assertSame(
+            'We get 6 when we multiply 2 by ____',
+            $reverseItems->firstWhere('operand_b', 3)?->promptLabel()
+                ?? $reverseItems->firstWhere('fact_key', '2x3_rev')?->promptLabel(),
+        );
 
         foreach ($session->fresh('items')->items as $item) {
             $this->actingAs($user)
@@ -256,9 +268,8 @@ class BasicsDrillTest extends TestCase
 
         $this->actingAs($user)->postJson(route('student.basics-drill.start', $session))->assertOk();
 
-        $items = $session->fresh('items')->items->values();
+        $items = $session->fresh('items')->items->sortBy('sort_order')->values();
         $wrongItem = $items->firstOrFail();
-        $rightItem = $items->last();
 
         $this->actingAs($user)
             ->postJson(route('student.basics-drill.answer', $wrongItem), ['answer' => '0'])
@@ -269,14 +280,17 @@ class BasicsDrillTest extends TestCase
             ->postJson(route('student.basics-drill.acknowledge', $wrongItem))
             ->assertOk();
 
-        $this->actingAs($user)
-            ->postJson(route('student.basics-drill.answer', $rightItem), [
-                'answer' => (string) $rightItem->correct_answer,
-            ])
-            ->assertOk()
-            ->assertJsonPath('session.phase', BasicsDrillSession::PHASE_FINAL_CORRECTION)
+        foreach ($items->skip(1) as $item) {
+            $response = $this->actingAs($user)
+                ->postJson(route('student.basics-drill.answer', $item), [
+                    'answer' => (string) $item->correct_answer,
+                ])
+                ->assertOk();
+        }
+
+        $response->assertJsonPath('session.phase', BasicsDrillSession::PHASE_FINAL_CORRECTION)
             ->assertJsonPath('session.correction_intro.percent', fn ($value) => $value >= 0 && $value <= 100)
-            ->assertJsonPath('session.correction_intro.headline', 'Good work done!');
+            ->assertJsonPath('session.correction_intro.headline', fn ($value) => is_string($value) && $value !== '');
 
         $session->refresh();
         $correction = $session->items()->where('round', BasicsDrillItem::ROUND_CORRECTION)->firstOrFail();

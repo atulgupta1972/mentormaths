@@ -478,7 +478,10 @@ const mcqOptionClass = (optionId) => {
                 </div>
 
                 <div v-else-if="currentItem && !reveal && !isFormulaMcq && !isFormulaFillBlank" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
-                    <p class="text-center text-3xl font-bold text-gray-900">{{ currentItem.prompt }} = ?</p>
+                    <p class="text-center text-3xl font-bold text-gray-900">
+                        <template v-if="currentItem.is_table_reverse">{{ currentItem.prompt }}</template>
+                        <template v-else>{{ currentItem.prompt }} = ?</template>
+                    </p>
 
                     <div v-if="!isFinalCorrection" class="mt-4">
                         <div class="mb-1 flex justify-between text-xs text-gray-500">

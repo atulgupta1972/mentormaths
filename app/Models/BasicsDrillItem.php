@@ -81,11 +81,19 @@ class BasicsDrillItem extends Model
     public function promptLabel(): string
     {
         return match ($this->fact_type) {
-            self::TYPE_TABLE => "{$this->operand_a} × {$this->operand_b}",
+            self::TYPE_TABLE => $this->isTableReverse()
+                ? ('We get '.($this->operand_a * $this->operand_b).' when we multiply '.$this->operand_a.' by ____')
+                : "{$this->operand_a} × {$this->operand_b}",
             self::TYPE_SQUARE => "{$this->operand_a}²",
             self::TYPE_CUBE => "{$this->operand_a}³",
             self::TYPE_FORMULA => 'Formula',
             default => $this->fact_key,
         };
+    }
+
+    public function isTableReverse(): bool
+    {
+        return $this->fact_type === self::TYPE_TABLE
+            && str_ends_with((string) $this->fact_key, '_rev');
     }
 }

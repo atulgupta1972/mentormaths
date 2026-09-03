@@ -78,6 +78,10 @@ class BasicsDrillReportService
 
     private function factLabel(BasicsFactStat $stat): string
     {
+        if (preg_match('/^(\d+)x(\d+)_rev$/', $stat->fact_key, $matches)) {
+            return "{$matches[1]} × ? → ".((int) $matches[1] * (int) $matches[2]);
+        }
+
         if (preg_match('/^(\d+)x(\d+)$/', $stat->fact_key, $matches)) {
             return "{$matches[1]} × {$matches[2]}";
         }
