@@ -521,7 +521,7 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
     Route::post('/resolutions/{item}/answer', [StudentPracticeSetController::class, 'submitResolution'])->name('resolutions.answer');
 });
 
-Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->name('content.')->group(function () {
+Route::middleware(['auth', 'verified', 'content.uploader', 'content.uploader.gemini-check'])->prefix('content')->name('content.')->group(function () {
     Route::get('/chapters', [ChapterLibraryController::class, 'index'])->name('chapters.index');
     Route::get('/chapters/{textbookChapter}', [ChapterLibraryController::class, 'show'])->name('chapters.show');
     Route::post('/chapters/{textbookChapter}/append-mcq', [ChapterLibraryController::class, 'appendMcq'])->name('chapters.append-mcq');

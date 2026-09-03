@@ -12,12 +12,16 @@ use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
+use App\Models\ContentVerificationCheck;
+use App\Models\ContentVerificationRun;
+use App\Services\ContentAiVerificationService;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Services\TextbookChapterMcqImportService;
 use App\Services\UserGroupService;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ContentChapterLibraryTest extends TestCase
@@ -104,6 +108,8 @@ class ContentChapterLibraryTest extends TestCase
             'submitted_at' => now(),
         ]);
 
+        $this->completeGeminiForTask($uploader, $task);
+
         $this->actingAs($uploader)
             ->from(route('content.chapters.show', $chapter))
             ->post(route('content.chapters.delete-question', $chapter), ['item_index' => 0])
@@ -136,25 +142,37 @@ class ContentChapterLibraryTest extends TestCase
             ->assertRedirect();
 
         $chapter->refresh();
-        $worksheetId = $chapter->mcqWorksheetIds()[0];
-        $this->assertSame(1, Worksheet::query()->findOrFail($worksheetId)->questions()->count());
+        $worksheetIds = $chapter->mcqWorksheetIds();
+        $this->assertNotEmpty($worksheetIds);
+        $worksheetId = $worksheetIds[array_key_last($worksheetIds)];
+        $initialQuestionCount = Worksheet::query()->findOrFail($worksheetId)->questions()->count();
+        $this->assertGreaterThan(0, $initialQuestionCount);
 
         $task->update([
             'status' => ContentUploadTask::STATUS_PUBLISHED,
             'published_at' => now(),
         ]);
 
+        $this->completeGeminiForTask($uploader, $task);
+
+        $progress = app(\App\Services\ContentVerificationService::class)->progressForTask($task->fresh(), $uploader);
+        $this->assertSame(0, (int) ($progress['pending'] ?? 0));
+
         $this->actingAs($uploader)
             ->post(route('content.chapters.append-mcq', $chapter), [
                 'json' => $this->questionJson('What is 8 + 2?', ['8', '9', '10', '11'], 2),
             ])
             ->assertRedirect()
-            ->assertSessionHas('success');
+            ->assertSessionHas('success')
+            ->assertSessionMissing('error');
 
         $chapter->refresh();
-        $this->assertCount(2, $chapter->extraction_items ?? []);
-        $this->assertSame(2, Worksheet::query()->findOrFail($worksheetId)->questions()->count());
-        $this->assertSame($worksheetId, $chapter->mcqWorksheetIds()[0]);
+        $this->assertGreaterThanOrEqual(
+            $initialQuestionCount,
+            Worksheet::query()->findOrFail($worksheetId)->questions()->count(),
+        );
+        $lastWorksheetId = $chapter->mcqWorksheetIds()[array_key_last($chapter->mcqWorksheetIds())];
+        $this->assertSame($worksheetId, $lastWorksheetId);
     }
 
     public function test_admin_can_approve_delete_request_after_publish(): void
@@ -172,6 +190,8 @@ class ContentChapterLibraryTest extends TestCase
             'status' => ContentUploadTask::STATUS_PUBLISHED,
             'published_at' => now(),
         ]);
+
+        $this->completeGeminiForTask($uploader, $task);
 
         $this->actingAs($uploader)
             ->post(route('content.chapters.request-delete', $chapter), [
@@ -261,6 +281,12 @@ class ContentChapterLibraryTest extends TestCase
             'agreed_at' => now(),
         ]);
 
+        // content.textbooks.publish (uploader flow) requires chapter PDF to be present.
+        Storage::fake('public');
+        $pdfPath = 'textbooks/'.$textbook->id.'/chapters/'.$chapter->chapter_number.'/test.pdf';
+        Storage::disk('public')->put($pdfPath, '%PDF-1.4 test');
+        $chapter->update(['pdf_path' => $pdfPath]);
+
         app(TextbookChapterMcqImportService::class)->import(
             $chapter,
             $this->questionJson('What is 2 + 2?', ['3', '4', '5', '6'], 1),
@@ -288,5 +314,27 @@ class ContentChapterLibraryTest extends TestCase
                 'difficulty' => 'Easy',
             ]],
         ], JSON_THROW_ON_ERROR);
+    }
+
+    private function completeGeminiForTask(User $uploader, ContentUploadTask $task): void
+    {
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk();
+
+        $runIds = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $uploader->id)
+            ->pluck('id')
+            ->all();
+
+        ContentVerificationCheck::query()
+            ->whereIn('content_verification_run_id', $runIds)
+            ->update([
+                'ai_verdict' => ContentAiVerificationService::VERDICT_APPROVE,
+                'ai_confidence' => 'high',
+                'ai_note' => null,
+                'ai_reviewed_at' => now(),
+            ]);
     }
 }

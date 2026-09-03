@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Mail\ContentTaskGeminiPendingUploader;
 use App\Mail\ContentTaskAgreementAdmin;
 use App\Mail\ContentTaskAssignedUploader;
 use App\Mail\ContentTaskReturnedUploader;
@@ -68,6 +69,58 @@ class ContentOperationsMailer
                 'content_upload_task_id' => $task->id,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Email uploader reminder when Gemini MCQ review is pending.
+     *
+     * @param  array<int|string, mixed>|Collection<int, mixed>  $tasks  Serialized task arrays or objects with an `id`.
+     */
+    public static function notifyGeminiPendingUploader(User $uploader, array|\Illuminate\Support\Collection $tasks): bool
+    {
+        $tasks = collect($tasks);
+
+        if ($tasks->isEmpty() || ! str_contains((string) $uploader->email, '@')) {
+            return false;
+        }
+
+        $taskIds = $tasks
+            ->map(fn ($task) => is_array($task) ? ($task['id'] ?? null) : ($task->id ?? null))
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+
+        if ($taskIds === []) {
+            return false;
+        }
+
+        $loadedTasks = ContentUploadTask::query()
+            ->whereIn('id', $taskIds)
+            ->with([
+                'assignee',
+                'textbookChapter.textbook.gradeLevel',
+                'textbookChapter.syllabusChapter:id,name,chapter_number',
+            ])
+            ->get();
+
+        if ($loadedTasks->isEmpty()) {
+            return false;
+        }
+
+        try {
+            Mail::to($uploader->email)->send(new ContentTaskGeminiPendingUploader($uploader, $loadedTasks));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Failed to send Gemini pending reminder email.', [
+                'uploader_id' => $uploader->id,
+                'task_ids' => $taskIds,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
         }
     }
 

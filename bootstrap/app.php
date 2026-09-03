@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
             'content.uploader' => \App\Http\Middleware\EnsureContentUploader::class,
+            'content.uploader.gemini-check' => \App\Http\Middleware\EnsureUploaderGeminiCheckComplete::class,
             'content.chapter' => \App\Http\Middleware\EnsureTextbookChapterAccess::class,
             'formula.drill' => \App\Http\Middleware\EnsureFormulaDrillComplete::class,
             'basics.drill' => \App\Http\Middleware\EnsureBasicsDrillComplete::class,

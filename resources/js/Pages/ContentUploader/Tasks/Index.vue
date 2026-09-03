@@ -154,6 +154,13 @@ const geminiProgressLabel = (task) => {
                     </span>
                 </div>
 
+                <div
+                    v-if="summary.gemini_pending"
+                    class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900"
+                >
+                    Gemini check pending. Complete Gemini for your pending tasks before starting any new uploads.
+                </div>
+
                 <GeminiVerificationGuide v-if="summary.gemini_pending" />
 
                 <div v-if="correctionsPending.length" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-rose-200">

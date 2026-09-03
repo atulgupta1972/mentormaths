@@ -20,6 +20,7 @@ class ContentUploadTaskService
     public function __construct(
         private ContentRateCardService $rateCardService,
         private ContentDuplicateGuardService $duplicateGuard,
+        private ContentVerificationService $verificationService,
     ) {}
 
     /**
@@ -370,6 +371,17 @@ class ContentUploadTaskService
 
         if ($task->status !== ContentUploadTask::STATUS_VERIFIED) {
             throw new \InvalidArgumentException('Complete verification before submitting for publish.');
+        }
+
+        // Uploader must complete Gemini MCQ prompt verification before admin publishes.
+        // (Fill-in-blank conversion tasks do not use Gemini paste MCQ review.)
+        if (! $task->isFillBlankConversion()) {
+            $progress = $this->verificationService->progressForTask($task, $uploader);
+            if (($progress['can_gemini'] ?? false) && (int) ($progress['pending'] ?? 0) > 0) {
+                throw new \InvalidArgumentException(
+                    'Complete the Gemini check for all pending questions before submitting for admin publish.',
+                );
+            }
         }
 
         $this->assertChapterHasPdf($task->textbookChapter);

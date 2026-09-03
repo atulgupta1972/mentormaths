@@ -16,8 +16,10 @@ use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
 use App\Services\FillBlankConversionService;
 use App\Services\GeminiFillBlankConversionService;
+use App\Support\ContentOperationsMailer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,6 +41,17 @@ class ContentTaskController extends Controller
     {
         $user = $request->user();
         $dashboard = $this->uploaderDashboard->forUser($user);
+
+        $pendingCount = (int) ($dashboard['summary']['gemini_pending'] ?? 0);
+        if ($pendingCount > 0) {
+            $today = now()->toDateString();
+            $cacheKey = "content-uploader-gemini-pending-email-sent:{$user->id}:{$today}";
+
+            if (! Cache::has($cacheKey)) {
+                ContentOperationsMailer::notifyGeminiPendingUploader($user, $dashboard['geminiPending']);
+                Cache::put($cacheKey, true, now()->addDay());
+            }
+        }
 
         return Inertia::render('ContentUploader/Tasks/Index', $dashboard);
     }
