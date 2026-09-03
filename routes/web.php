@@ -553,6 +553,7 @@ Route::middleware(['auth', 'verified', 'content.uploader'])->prefix('content')->
     Route::post('/tasks/{contentTask}/convert-check', [ContentTaskController::class, 'checkConversionRow'])->name('tasks.convert-check');
     Route::post('/tasks/{contentTask}/convert-skip', [ContentTaskController::class, 'skipConversionRow'])->name('tasks.convert-skip');
     Route::post('/tasks/{contentTask}/convert-clear', [ContentTaskController::class, 'clearConversionRows'])->name('tasks.convert-clear');
+    Route::post('/tasks/{contentTask}/convert-clear-missing-diagrams', [ContentTaskController::class, 'clearMissingDiagramConversionRows'])->name('tasks.convert-clear-missing-diagrams');
     Route::post('/tasks/{contentTask}/convert-gemini-preview', [ContentTaskController::class, 'previewGeminiConversion'])->name('tasks.convert-gemini-preview');
     Route::post('/tasks/{contentTask}/convert-gemini-apply', [ContentTaskController::class, 'applyGeminiConversion'])->name('tasks.convert-gemini-apply');
     Route::post('/tasks/{contentTask}/ping-session', [ContentTaskController::class, 'pingSession'])->name('tasks.ping-session');

@@ -16,6 +16,7 @@ use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
+use App\Support\DiagramQuestionSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -91,12 +92,20 @@ class TextbookChapterPublishService
                 }
 
                 if ($this->itemIsFillBlankReady($item)) {
-                    $mcqQuestionsByPosition[$position] = $this->createFillBlankQuestion(
-                        $topic,
-                        $item,
-                        $this->fillBlankFields($item),
-                        $publisher->id,
-                    );
+                    if ($this->itemMissingRequiredDiagram($chapter, $index, $item)) {
+                        // Needs figure but none available — keep as MCQ if options exist.
+                        if ($item['include_in_mcq'] ?? true) {
+                            $mcqQuestionsByPosition[$position] = $this->createMcqQuestion($topic, $item, $publisher->id, $position);
+                        }
+                    } else {
+                        $item = $this->withPublishedMcqDiagram($chapter, $index, $item);
+                        $mcqQuestionsByPosition[$position] = $this->createFillBlankQuestion(
+                            $topic,
+                            $item,
+                            $this->fillBlankFields($item),
+                            $publisher->id,
+                        );
+                    }
                 } elseif ($item['include_in_mcq'] ?? true) {
                     $mcqQuestionsByPosition[$position] = $this->createMcqQuestion($topic, $item, $publisher->id, $position);
                 }
@@ -293,6 +302,11 @@ class TextbookChapterPublishService
                     continue;
                 }
 
+                if ($this->itemMissingRequiredDiagram($chapter, $index, $item)) {
+                    continue;
+                }
+
+                $item = $this->withPublishedMcqDiagram($chapter, $index, $item);
                 $fields = $this->fillBlankFields($item);
                 $sourceIndex = $index + 1;
                 $fillBlankByIndex[$sourceIndex] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
@@ -300,6 +314,12 @@ class TextbookChapterPublishService
                 if ($item['include_in_written'] ?? true) {
                     $writtenByIndex[$sourceIndex] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
                 }
+            }
+
+            if ($fillBlankByIndex === []) {
+                throw new InvalidArgumentException(
+                    'No fill-in-blank questions ready to publish. Remove rows that need a figure but have none, or upload the diagrams first.',
+                );
             }
 
             $fillBlankIds = $this->createFillBlankWorksheets(
@@ -623,6 +643,41 @@ class TextbookChapterPublishService
 
         return filled($item['fill_blank_question_text'] ?? null)
             && filled($item['fill_blank_correct_answer'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function itemMissingRequiredDiagram(TextbookChapter $chapter, int $index, array $item): bool
+    {
+        $item = $this->withPublishedMcqDiagram($chapter, $index, $item);
+        $needs = DiagramQuestionSupport::needsDiagram($item);
+        $path = trim((string) ($item['diagram_staging_path'] ?? ''));
+        $has = $path !== '' && Storage::disk('public')->exists($path);
+
+        return $needs && ! $has;
+    }
+
+    /**
+     * Prefer staging diagram; otherwise reuse the published MCQ figure for this source index.
+     *
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>
+     */
+    private function withPublishedMcqDiagram(TextbookChapter $chapter, int $index, array $item): array
+    {
+        $path = trim((string) ($item['diagram_staging_path'] ?? ''));
+        if ($path !== '' && Storage::disk('public')->exists($path)) {
+            return $item;
+        }
+
+        $published = $this->publishedQuestionForItemIndex($chapter, $index);
+        if ($published && filled($published->diagram_path) && Storage::disk('public')->exists($published->diagram_path)) {
+            $item['diagram_staging_path'] = $published->diagram_path;
+            $item['needs_diagram'] = true;
+        }
+
+        return $item;
     }
 
     /**

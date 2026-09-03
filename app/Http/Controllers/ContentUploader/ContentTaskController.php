@@ -486,6 +486,7 @@ class ContentTaskController extends Controller
                 'included' => $included->count(),
                 'checked' => $checked,
                 'skipped' => collect($rows)->where('skipped', true)->count(),
+                'missing_diagram' => collect($rows)->where('skipped', false)->where('missing_diagram', true)->count(),
             ],
             'gemini' => $gemini,
             'formats' => collect([
@@ -579,6 +580,26 @@ class ContentTaskController extends Controller
         return back()->with('success', $cleared === 1
             ? 'Deleted from conversion — stays MCQ only (answer was not a number).'
             : "Deleted {$cleared} questions from conversion (MCQs kept).");
+    }
+
+    public function clearMissingDiagramConversionRows(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+        abort_unless($contentTask->isFillBlankConversion(), 404);
+
+        try {
+            $cleared = $this->fillBlankConversion->removeMissingDiagramRows($contentTask);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($cleared === 0) {
+            return back()->with('success', 'No fill-in-blank rows were missing a required figure.');
+        }
+
+        return back()->with('success', $cleared === 1
+            ? 'Removed 1 question that needed a figure but had none (MCQ kept).'
+            : "Removed {$cleared} questions that needed a figure but had none (MCQs kept).");
     }
 
     public function previewGeminiConversion(Request $request, ContentUploadTask $contentTask): RedirectResponse

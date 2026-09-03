@@ -59,11 +59,32 @@ class DiagramQuestionSupport
             return true;
         }
 
-        $question = mb_strtolower(trim((string) ($item['question'] ?? $item['question_text'] ?? '')));
+        if (filled($item['diagram_file'] ?? null) || filled($item['diagram_staging_path'] ?? null)) {
+            return true;
+        }
 
-        return str_contains($question, 'in the figure')
-            || str_contains($question, 'in the diagram')
-            || str_contains($question, 'in fig.');
+        $question = mb_strtolower(trim((string) ($item['question'] ?? $item['question_text'] ?? '')));
+        $chart = mb_strtolower(trim((string) ($item['chart'] ?? '')));
+
+        foreach ([$question, $chart] as $haystack) {
+            if ($haystack === '') {
+                continue;
+            }
+
+            if (str_contains($haystack, 'in the figure')
+                || str_contains($haystack, 'in the diagram')
+                || str_contains($haystack, 'in fig.')
+                || str_contains($haystack, 'see fig')
+                || str_contains($haystack, 'fig.')
+                || str_contains($haystack, 'requires a figure upload')
+                || str_contains($haystack, 'number line')
+                || str_contains($haystack, 'bar graph')
+                || str_contains($haystack, 'pie chart')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

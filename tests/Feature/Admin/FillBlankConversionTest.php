@@ -187,6 +187,79 @@ class FillBlankConversionTest extends TestCase
         $this->assertCount(2, $chapter->extraction_items);
     }
 
+    public function test_uploader_can_remove_conversion_rows_missing_figures(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash',
+            'code' => 'GP',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $chapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 1,
+            'title' => 'Integers',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+            'extraction_items' => [
+                [
+                    'question_text' => 'Madhre stands on a bridge. Vertical distance is ____ metres.',
+                    'correct_answer' => '55',
+                    'needs_diagram' => true,
+                    'diagram_file' => 'chart1.png',
+                    'fill_blank_question_text' => 'Vertical distance is ____ metres.',
+                    'fill_blank_correct_answer' => '55',
+                    'fill_blank_answer_format' => 'integer',
+                ],
+                [
+                    'question_text' => '[(–10) × (+9)] + (–10) = ____',
+                    'correct_answer' => '–100',
+                    'needs_diagram' => false,
+                    'fill_blank_question_text' => '[(–10) × (+9)] + (–10) = ____',
+                    'fill_blank_correct_answer' => '–100',
+                    'fill_blank_answer_format' => 'integer',
+                ],
+            ],
+        ]);
+
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $task = ContentUploadTask::create([
+            'textbook_chapter_id' => $chapter->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_FILL_BLANK_CONVERSION,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 20,
+            'agreed_amount_inr' => 20,
+            'agreed_at' => now(),
+        ]);
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.convert', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('ContentUploader/Tasks/FillBlankConvert')
+                ->where('rows.0.missing_diagram', true)
+                ->where('rows.1.missing_diagram', false)
+                ->where('progress.missing_diagram', 1));
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.convert-clear-missing-diagrams', $task))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $chapter->refresh();
+        $this->assertTrue((bool) ($chapter->extraction_items[0]['fill_blank_skipped'] ?? false));
+        $this->assertFalse((bool) ($chapter->extraction_items[1]['fill_blank_skipped'] ?? false));
+    }
+
     public function test_admin_can_clear_partial_and_all_conversion_rows(): void
     {
         [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();

@@ -9,7 +9,9 @@ use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Support\AnswerValidationService;
 use App\Support\ContentOperationsMailer;
+use App\Support\DiagramQuestionSupport;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
 class FillBlankConversionService
@@ -90,6 +92,7 @@ class FillBlankConversionService
             $places = $item['fill_blank_decimal_places'] ?? $prefill['decimal_places'];
             $checked = filled($item['fill_blank_checked_at'] ?? null)
                 && ($item['fill_blank_checked_hash'] ?? null) === $this->checkHash($stem, $format, $answer, $places);
+            $diagram = $this->diagramMeta($chapter, $index, $item);
 
             $rows[] = [
                 'index' => $index,
@@ -106,6 +109,10 @@ class FillBlankConversionService
                 'include_in_written' => (bool) ($item['include_in_written'] ?? true),
                 'non_numeric_answer' => $this->looksLikeWordAnswer($answer)
                     || $this->looksLikeWordAnswer((string) ($item['correct_answer'] ?? '')),
+                'needs_diagram' => $diagram['needs_diagram'],
+                'has_diagram' => $diagram['has_diagram'],
+                'missing_diagram' => $diagram['missing_diagram'],
+                'diagram_preview_url' => $diagram['diagram_preview_url'],
             ];
         }
 
@@ -171,6 +178,10 @@ class FillBlankConversionService
             return 'Word or non-numeric MCQ answer — stays MCQ';
         }
 
+        if ($this->itemMissingRequiredDiagram($item, null, null)) {
+            return 'Needs a figure but none is uploaded — stays MCQ until a diagram is added';
+        }
+
         return 'Not converted — stays MCQ in this set';
     }
 
@@ -222,6 +233,11 @@ class FillBlankConversionService
 
             if ($this->looksLikeWordAnswer($answer) || $this->isMixedFraction($answer) || $this->isTrueFalseAnswer($answer)) {
                 throw new InvalidArgumentException("Question {$sourceIndex} has a non-convertible answer ({$answer}). Omit it from Gemini JSON.");
+            }
+
+            if ($this->itemMissingRequiredDiagram($items[$itemIndex], $chapter, $itemIndex)) {
+                // Needs a figure that was never uploaded — keep as MCQ-only.
+                continue;
             }
 
             $mismatch = app(\App\Support\FillBlankAnswerConsistency::class)->mismatch(
@@ -306,6 +322,12 @@ class FillBlankConversionService
 
         if (! empty($item['fill_blank_skipped'])) {
             throw new InvalidArgumentException('This row is skipped (MCQ only). Unskip to convert it.');
+        }
+
+        if ($this->itemMissingRequiredDiagram($item, $chapter, $index)) {
+            throw new InvalidArgumentException(
+                'This question needs a figure, but none is uploaded. Remove it from conversion (MCQ stays), or upload the figure on the MCQ chapter first.',
+            );
         }
 
         $stem = trim((string) ($item['fill_blank_question_text'] ?? ''));
@@ -407,6 +429,12 @@ class FillBlankConversionService
             }
 
             $included++;
+
+            if ($row['missing_diagram'] ?? false) {
+                throw new InvalidArgumentException(
+                    'Q'.($row['index'] + 1).' needs a figure but has none. Remove it from conversion (keeps MCQ), or upload the diagram on the chapter first.',
+                );
+            }
 
             if (! $row['checked']) {
                 throw new InvalidArgumentException(
@@ -521,6 +549,69 @@ class FillBlankConversionService
         $chapter->update(['extraction_items' => array_values($items)]);
 
         return $cleared;
+    }
+
+    /**
+     * Remove every conversion row that needs a figure but has none (MCQ stays).
+     */
+    public function removeMissingDiagramRows(ContentUploadTask $task): int
+    {
+        $this->assertWorkable($task);
+        $indexes = collect($this->rows($task->textbookChapter))
+            ->filter(fn (array $row) => ! ($row['skipped'] ?? false) && ($row['missing_diagram'] ?? false))
+            ->pluck('index')
+            ->map(fn ($index) => (int) $index)
+            ->all();
+
+        return $this->removeFromConversion($task, $indexes);
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array{needs_diagram: bool, has_diagram: bool, missing_diagram: bool, diagram_preview_url: ?string}
+     */
+    private function diagramMeta(TextbookChapter $chapter, int $index, array $item): array
+    {
+        $needs = DiagramQuestionSupport::needsDiagram($item);
+        $preview = null;
+
+        $staging = trim((string) ($item['diagram_staging_path'] ?? ''));
+        if ($staging !== '' && Storage::disk('public')->exists($staging)) {
+            $preview = Storage::disk('public')->url($staging);
+        }
+
+        if ($preview === null) {
+            $published = $this->publishService->publishedQuestionForItemIndex($chapter, $index);
+            if ($published && filled($published->diagram_path)) {
+                $preview = $published->diagram_url;
+                $needs = true;
+            }
+        }
+
+        $has = filled($preview);
+
+        return [
+            'needs_diagram' => $needs,
+            'has_diagram' => $has,
+            'missing_diagram' => $needs && ! $has,
+            'diagram_preview_url' => $preview,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function itemMissingRequiredDiagram(array $item, ?TextbookChapter $chapter = null, ?int $index = null): bool
+    {
+        if ($chapter !== null && $index !== null) {
+            return $this->diagramMeta($chapter, $index, $item)['missing_diagram'];
+        }
+
+        $needs = DiagramQuestionSupport::needsDiagram($item);
+        $staging = trim((string) ($item['diagram_staging_path'] ?? ''));
+        $has = $staging !== '' && Storage::disk('public')->exists($staging);
+
+        return $needs && ! $has;
     }
 
     /**

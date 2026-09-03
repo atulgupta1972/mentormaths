@@ -36,4 +36,24 @@ class DiagramQuestionSupportTest extends TestCase
 
         $this->assertTrue(DiagramQuestionSupport::needsDiagram($item));
     }
+
+    public function test_needs_diagram_from_diagram_file_flag(): void
+    {
+        $item = [
+            'question' => 'Read the number line value.',
+            'diagram_file' => 'chart2.png',
+        ];
+
+        $this->assertTrue(DiagramQuestionSupport::needsDiagram($item));
+    }
+
+    public function test_needs_diagram_from_figure_upload_chart_note(): void
+    {
+        $item = [
+            'question' => 'Find the height.',
+            'chart' => 'THIS QUESTION REQUIRES A FIGURE UPLOAD — bridge diagram.',
+        ];
+
+        $this->assertTrue(DiagramQuestionSupport::needsDiagram($item));
+    }
 }
