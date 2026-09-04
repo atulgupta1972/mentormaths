@@ -25,7 +25,21 @@ const uploadForm = useForm({
     files: [],
 });
 
-const setLabel = computed(() => props.assignment.practice_set.set_code || 'Written sheet');
+const setLabel = computed(() => {
+    const sheet = props.assignment.practice_set;
+    const number = Number(sheet.set_number || 0);
+    const code = sheet.set_code || '';
+
+    if (number > 0 && code) {
+        return `Sheet ${number} · ${code}`;
+    }
+
+    if (number > 0) {
+        return `Sheet ${number}`;
+    }
+
+    return code || 'Written sheet';
+});
 const submission = computed(() => props.assignment.submission);
 const uploadFiles = computed(() => submission.value?.upload_files || []);
 const canUpload = computed(() => {

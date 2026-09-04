@@ -250,10 +250,15 @@ class AdminChapterContentService
                                 continue;
                             }
 
-                            $item = $this->buildSetItem($worksheet, 'B');
+                            $item = $this->buildSetItem($worksheet, $kind === 'written' ? null : 'B');
                             $item['part'] = $part['part'];
                             $item['kind'] = $kind;
                             $item['kind_label'] = $kindLabel;
+                            if ($kind === 'written') {
+                                $sheetNo = max(1, (int) ($part['part'] ?? $worksheet->set_number ?: 1));
+                                $item['set_number'] = $sheetNo;
+                                $item['short_label'] = 'Sheet '.$sheetNo;
+                            }
                             $item['textbook_id'] = (int) $bookColumn['id'];
                             $item['textbook_name'] = (string) ($bookColumn['name'] ?? $bookColumn['label'] ?? 'Book');
                             $bookItems[] = $item;
@@ -394,7 +399,9 @@ class AdminChapterContentService
         };
 
         $setNumber = $worksheet->set_number ?: 1;
-        $shortLabel = "{$prefix}{$setNumber}";
+        $shortLabel = $worksheet->isWritten()
+            ? 'Sheet '.$setNumber
+            : "{$prefix}{$setNumber}";
         $published = $worksheet->status === Worksheet::STATUS_PUBLISHED;
 
         return [

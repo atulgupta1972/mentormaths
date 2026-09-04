@@ -111,6 +111,13 @@ const staffAssignLabel = computed(() => {
             {{ item.short_label }}<span class="font-bold text-slate-600">{{ questionSuffix }}</span>
         </span>
         <span
+            v-if="item.set_code && item.delivery_mode === 'written'"
+            class="rounded bg-slate-100 px-1.5 py-px text-[9px] font-bold text-slate-700"
+            :title="item.set_code"
+        >
+            {{ item.set_code }}
+        </span>
+        <span
             v-if="item.kind_label"
             class="rounded bg-slate-200 px-1.5 py-px text-[9px] font-extrabold uppercase text-slate-800"
         >

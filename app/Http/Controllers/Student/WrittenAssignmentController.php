@@ -83,6 +83,7 @@ class WrittenAssignmentController extends Controller
                 'is_overdue' => $assignment->isOverdue(),
                 'practice_set' => [
                     'set_code' => $worksheet->set_code,
+                    'set_number' => $worksheet->set_number ?: 1,
                     'kind_label' => $worksheet->isChapterTest() ? 'Written test' : 'Written practice',
                     'questions_count' => $worksheet->questions_count,
                     'download_url' => route('student.written-assignments.download', $assignment),

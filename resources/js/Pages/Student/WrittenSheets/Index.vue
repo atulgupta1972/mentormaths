@@ -8,7 +8,20 @@ defineProps({
     counts: { type: Object, required: true },
 });
 
-const setLabel = (set) => set.set_code || `Set ${set.set_number}`;
+const setLabel = (set) => {
+    const number = Number(set.set_number || 0);
+    const code = set.set_code || '';
+
+    if (number > 0 && code) {
+        return `Sheet ${number} · ${code}`;
+    }
+
+    if (number > 0) {
+        return `Sheet ${number}`;
+    }
+
+    return code || 'Written sheet';
+};
 
 const statusLabel = (set) => {
     if (set.status === 'checking') {

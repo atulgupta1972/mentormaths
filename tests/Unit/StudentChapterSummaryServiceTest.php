@@ -362,6 +362,10 @@ class StudentChapterSummaryServiceTest extends TestCase
         $this->assertTrue($bookItems->contains(fn (array $item) => $item['worksheet_id'] === $writtenOne->id));
         $this->assertTrue($bookItems->contains(fn (array $item) => $item['worksheet_id'] === $writtenTwo->id));
         $this->assertTrue($bookItems->every(fn (array $item) => ($item['kind'] ?? null) === 'written'));
+        $this->assertSame(
+            ['Sheet 1', 'Sheet 2'],
+            $bookItems->sortBy('set_number')->pluck('short_label')->values()->all(),
+        );
         // Textbook-linked written must not also appear in the Written tier row.
         $this->assertFalse(
             collect($row['items']['written'])->contains(fn (array $item) => in_array($item['worksheet_id'], [$writtenOne->id, $writtenTwo->id], true)),

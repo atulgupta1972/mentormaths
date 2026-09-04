@@ -241,12 +241,17 @@ class StudentChapterSummaryService
                             $item = $this->buildSetItem(
                                 $worksheet,
                                 $assignmentsByWorksheet,
-                                'B',
+                                $kind === 'written' ? null : 'B',
                                 (int) ($correctionCountsByWorksheet[$worksheet->id] ?? 0),
                             );
                             $item['part'] = $part['part'];
                             $item['kind'] = $kind;
                             $item['kind_label'] = $kindLabel;
+                            if ($kind === 'written') {
+                                $sheetNo = max(1, (int) ($part['part'] ?? $worksheet->set_number ?: 1));
+                                $item['set_number'] = $sheetNo;
+                                $item['short_label'] = 'Sheet '.$sheetNo;
+                            }
                             $item['textbook_id'] = (int) $bookColumn['id'];
                             $item['textbook_name'] = (string) ($bookColumn['name'] ?? $bookColumn['label'] ?? 'Book');
                             $bookItems[] = $item;
@@ -716,7 +721,10 @@ class StudentChapterSummaryService
         };
 
         $setNumber = $worksheet->set_number ?: 1;
-        $shortLabel = "{$prefix}{$setNumber}";
+        // Written homework: show clear sheet number (not a cryptic B1/W1 chip).
+        $shortLabel = $worksheet->isWritten()
+            ? 'Sheet '.$setNumber
+            : "{$prefix}{$setNumber}";
         $statusMeta = $this->statusMeta($progress, $assignment !== null);
 
         $poolPending = (int) ($progress['pool_metrics']['pending_remedial'] ?? 0);
