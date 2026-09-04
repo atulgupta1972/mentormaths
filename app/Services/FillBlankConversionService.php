@@ -240,6 +240,14 @@ class FillBlankConversionService
                 continue;
             }
 
+            // Keep the published MCQ figure path on the extraction item so fill-blank
+            // publish attaches the same diagram students already see on the MCQ.
+            $items[$itemIndex] = $this->publishService->withPublishedMcqDiagram(
+                $chapter,
+                $itemIndex,
+                $items[$itemIndex],
+            );
+
             $mismatch = app(\App\Support\FillBlankAnswerConsistency::class)->mismatch(
                 $answer,
                 $row['explanation'] ?? null,
@@ -572,12 +580,14 @@ class FillBlankConversionService
      */
     private function diagramMeta(TextbookChapter $chapter, int $index, array $item): array
     {
+        $item = $this->publishService->withPublishedMcqDiagram($chapter, $index, $item);
         $needs = DiagramQuestionSupport::needsDiagram($item);
         $preview = null;
 
         $staging = trim((string) ($item['diagram_staging_path'] ?? ''));
         if ($staging !== '' && Storage::disk('public')->exists($staging)) {
             $preview = Storage::disk('public')->url($staging);
+            $needs = true;
         }
 
         if ($preview === null) {

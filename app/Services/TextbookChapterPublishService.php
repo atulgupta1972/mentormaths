@@ -236,7 +236,7 @@ class TextbookChapterPublishService
         $setPlan = $chapter->mcq_set_plan ?? [];
         $worksheetIds = $chapter->mcqWorksheetIds();
 
-        if ($setPlan === [] || $worksheetIds === []) {
+        if ($worksheetIds === []) {
             return null;
         }
 
@@ -246,25 +246,38 @@ class TextbookChapterPublishService
             ->get()
             ->values();
 
-        foreach ($setPlan as $planIndex => $row) {
-            $qFrom = (int) ($row['q_from'] ?? 0);
-            $qTo = (int) ($row['q_to'] ?? 0);
+        if ($setPlan !== []) {
+            foreach ($setPlan as $planIndex => $row) {
+                $qFrom = (int) ($row['q_from'] ?? 0);
+                $qTo = (int) ($row['q_to'] ?? 0);
 
-            if ($position < $qFrom || $position > $qTo) {
-                continue;
+                if ($position < $qFrom || $position > $qTo) {
+                    continue;
+                }
+
+                $worksheet = $worksheets[$planIndex] ?? null;
+                if (! $worksheet) {
+                    return null;
+                }
+
+                $questions = $worksheet->questions()
+                    ->orderByPivot('sort_order')
+                    ->get()
+                    ->values();
+
+                return $questions->get($position - $qFrom);
             }
-
-            $worksheet = $worksheets[$planIndex] ?? null;
-            if (! $worksheet) {
-                return null;
-            }
-
-            $questions = $worksheet->questions()->orderByPivot('sort_order')->get();
-
-            return $questions[$position - $qFrom] ?? null;
         }
 
-        return null;
+        // Fallback when set plan is missing / out of sync: flat order across MCQ worksheets.
+        $flat = collect();
+        foreach ($worksheets as $worksheet) {
+            $flat = $flat->concat(
+                $worksheet->questions()->orderByPivot('sort_order')->get()->values()
+            );
+        }
+
+        return $flat->values()->get($itemIndex);
     }
 
     public function publishFillBlankAndWritten(TextbookChapter $chapter, User $publisher): TextbookChapter
@@ -302,11 +315,15 @@ class TextbookChapterPublishService
                     continue;
                 }
 
+                // Always pull the MCQ figure onto the item before the missing-diagram gate,
+                // so converted fill-in-blanks keep the same diagram students saw on the MCQ.
+                $item = $this->withPublishedMcqDiagram($chapter, $index, $item);
+                $items[$index] = $item;
+
                 if ($this->itemMissingRequiredDiagram($chapter, $index, $item)) {
                     continue;
                 }
 
-                $item = $this->withPublishedMcqDiagram($chapter, $index, $item);
                 $fields = $this->fillBlankFields($item);
                 $sourceIndex = $index + 1;
                 $fillBlankByIndex[$sourceIndex] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
@@ -315,6 +332,9 @@ class TextbookChapterPublishService
                     $writtenByIndex[$sourceIndex] = $this->createFillBlankQuestion($topic, $item, $fields, $publisher->id);
                 }
             }
+
+            // Persist resolved diagram paths so later re-publishes / admin views keep the link.
+            $chapter->update(['extraction_items' => array_values($items)]);
 
             if ($fillBlankByIndex === []) {
                 throw new InvalidArgumentException(
@@ -664,20 +684,62 @@ class TextbookChapterPublishService
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
-    private function withPublishedMcqDiagram(TextbookChapter $chapter, int $index, array $item): array
+    public function withPublishedMcqDiagram(TextbookChapter $chapter, int $index, array $item): array
     {
         $path = trim((string) ($item['diagram_staging_path'] ?? ''));
         if ($path !== '' && Storage::disk('public')->exists($path)) {
+            $item['needs_diagram'] = true;
+
             return $item;
         }
 
-        $published = $this->publishedQuestionForItemIndex($chapter, $index);
+        $published = $this->publishedMcqQuestionWithDiagram($chapter, $index, $item);
         if ($published && filled($published->diagram_path) && Storage::disk('public')->exists($published->diagram_path)) {
             $item['diagram_staging_path'] = $published->diagram_path;
             $item['needs_diagram'] = true;
         }
 
         return $item;
+    }
+
+    /**
+     * Find the published MCQ that owns the figure for this extraction row.
+     *
+     * @param  array<string, mixed>  $item
+     */
+    private function publishedMcqQuestionWithDiagram(TextbookChapter $chapter, int $index, array $item): ?Question
+    {
+        $byIndex = $this->publishedQuestionForItemIndex($chapter, $index);
+        if ($byIndex && filled($byIndex->diagram_path)) {
+            return $byIndex;
+        }
+
+        $needle = trim((string) ($item['question_text'] ?? ''));
+        if ($needle === '') {
+            return $byIndex;
+        }
+
+        foreach ($chapter->mcqWorksheetIds() as $worksheetId) {
+            $worksheet = Worksheet::query()
+                ->with(['questions' => fn ($q) => $q->orderByPivot('sort_order')])
+                ->find($worksheetId);
+
+            if (! $worksheet) {
+                continue;
+            }
+
+            foreach ($worksheet->questions as $question) {
+                if (trim((string) $question->question_text) !== $needle) {
+                    continue;
+                }
+
+                if (filled($question->diagram_path)) {
+                    return $question;
+                }
+            }
+        }
+
+        return $byIndex;
     }
 
     /**
@@ -834,6 +896,82 @@ class TextbookChapterPublishService
             ['text' => 'Cannot be determined', 'is_correct' => false],
             ['text' => '0', 'is_correct' => false],
         ]);
+    }
+
+    /**
+     * Copy missing figures from published MCQs onto already-published fill-in-blank questions.
+     *
+     * @return array{fixed: int, scanned: int}
+     */
+    public function backfillMissingFillBlankDiagrams(?TextbookChapter $onlyChapter = null): array
+    {
+        $query = TextbookChapter::query()
+            ->where(function ($q) {
+                $q->whereNotNull('fill_blank_worksheet_id')
+                    ->orWhereNotNull('fill_blank_worksheet_ids');
+            });
+
+        if ($onlyChapter) {
+            $query->whereKey($onlyChapter->id);
+        }
+
+        $fixed = 0;
+        $scanned = 0;
+
+        foreach ($query->get() as $chapter) {
+            $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
+            $targetWorksheetIds = array_values(array_unique([
+                ...$chapter->fillBlankWorksheetIds(),
+                ...$chapter->writtenWorksheetIds(),
+            ]));
+
+            if ($targetWorksheetIds === []) {
+                continue;
+            }
+
+            $targetsByStem = Question::query()
+                ->where('type', Question::TYPE_FILL_IN_BLANK)
+                ->whereHas('worksheets', fn ($q) => $q->whereIn('worksheets.id', $targetWorksheetIds))
+                ->get()
+                ->groupBy(fn (Question $question) => trim((string) $question->question_text));
+
+            foreach ($items as $index => $item) {
+                if (! is_array($item) || ! $this->itemIsFillBlankReady($item)) {
+                    continue;
+                }
+
+                $item = $this->withPublishedMcqDiagram($chapter, $index, $item);
+                $path = trim((string) ($item['diagram_staging_path'] ?? ''));
+                if ($path === '' || ! Storage::disk('public')->exists($path)) {
+                    continue;
+                }
+
+                $stem = trim((string) ($item['fill_blank_question_text'] ?? ''));
+                $matches = $targetsByStem->get($stem, collect());
+                if ($matches->isEmpty()) {
+                    continue;
+                }
+
+                $absolute = Storage::disk('public')->path($path);
+
+                foreach ($matches as $question) {
+                    $scanned++;
+
+                    if (filled($question->diagram_path) && Storage::disk('public')->exists($question->diagram_path)) {
+                        continue;
+                    }
+
+                    $this->diagramService->attachFromPath($question, $absolute);
+                    $fixed++;
+                }
+
+                $items[$index] = $item;
+            }
+
+            $chapter->update(['extraction_items' => array_values($items)]);
+        }
+
+        return ['fixed' => $fixed, 'scanned' => $scanned];
     }
 
     private function normalizeAnswerFormat(string $format): string

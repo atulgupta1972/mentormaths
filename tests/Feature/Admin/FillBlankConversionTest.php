@@ -7,15 +7,19 @@ use App\Models\ContentUploadTask;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
+use App\Models\Question;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\User;
+use App\Models\Worksheet;
+use App\Services\TextbookChapterPublishService;
 use App\Services\UserGroupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class FillBlankConversionTest extends TestCase
@@ -575,6 +579,85 @@ class FillBlankConversionTest extends TestCase
 
         $published->refresh();
         $this->assertTrue((bool) ($published->extraction_items[0]['fill_blank_gemini_ready'] ?? false));
+    }
+
+    public function test_fill_blank_publish_copies_figure_from_published_mcq(): void
+    {
+        Storage::fake('public');
+
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash',
+            'code' => 'GP',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $stagingPath = 'textbook-staging/diagrams/chart1.png';
+        Storage::disk('public')->put($stagingPath, 'fake-diagram-bytes');
+
+        $chapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 5,
+            'title' => 'Data handling',
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'created_by' => $admin->id,
+            'extraction_items' => [[
+                'question_text' => 'From the figure, how many students like cricket?',
+                'correct_answer' => '12',
+                'mcq_options' => [
+                    ['text' => '10', 'is_correct' => false],
+                    ['text' => '12', 'is_correct' => true],
+                    ['text' => '14', 'is_correct' => false],
+                    ['text' => '16', 'is_correct' => false],
+                ],
+                'needs_diagram' => true,
+                'diagram_file' => 'chart1.png',
+                'diagram_staging_path' => $stagingPath,
+                'include_in_mcq' => true,
+                'approved' => true,
+            ]],
+            'mcq_set_plan' => [[
+                'set_code' => 'GP-C5-P1',
+                'q_from' => 1,
+                'q_to' => 1,
+                'description' => 'Figure sum',
+            ]],
+        ]);
+
+        $publish = app(TextbookChapterPublishService::class);
+        $chapter = $publish->publish($chapter, $chapter->extraction_items, $admin, $chapter->mcq_set_plan);
+
+        $mcq = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail();
+        $this->assertNotNull($mcq->diagram_path);
+        $this->assertTrue(Storage::disk('public')->exists($mcq->diagram_path));
+
+        // Simulate Gemini conversion: fill-blank fields added, staging path cleared from JSON,
+        // but the live MCQ question still has the figure.
+        $items = $chapter->extraction_items;
+        unset($items[0]['diagram_staging_path'], $items[0]['diagram_file'], $items[0]['needs_diagram']);
+        $items[0]['fill_blank_question_text'] = 'How many students like cricket? ____';
+        $items[0]['fill_blank_correct_answer'] = '12';
+        $items[0]['fill_blank_answer_format'] = 'integer';
+        $items[0]['include_in_fill_blank'] = true;
+        $items[0]['include_in_written'] = true;
+        $items[0]['fill_blank_checked_at'] = now()->toIso8601String();
+        $chapter->update(['extraction_items' => $items]);
+
+        $chapter = $publish->publishFillBlankAndWritten($chapter->fresh(), $admin);
+
+        $fillBlank = Worksheet::query()
+            ->findOrFail($chapter->fillBlankWorksheetIds()[0])
+            ->questions()
+            ->firstOrFail();
+
+        $this->assertSame(Question::TYPE_FILL_IN_BLANK, $fillBlank->type);
+        $this->assertNotNull($fillBlank->diagram_path, 'Fill-in-blank must keep the MCQ figure for student drill.');
+        $this->assertTrue(Storage::disk('public')->exists($fillBlank->diagram_path));
+        $this->assertNotSame($mcq->diagram_path, $fillBlank->diagram_path);
     }
 
     /**
