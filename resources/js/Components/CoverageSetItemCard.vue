@@ -74,6 +74,10 @@ const itemHref = computed(() => {
         return route('student.attempts.show', props.item.latest_attempt_id);
     }
 
+    if (props.item.assignment_id && props.item.delivery_mode === 'written' && route().has('student.written-assignments.show')) {
+        return route('student.written-assignments.show', props.item.assignment_id);
+    }
+
     if (props.item.assignment_id && route().has('student.assignments.show')) {
         return route('student.assignments.show', props.item.assignment_id);
     }
@@ -105,6 +109,12 @@ const staffAssignLabel = computed(() => {
     >
         <span class="font-mono text-[11px] font-extrabold text-slate-950">
             {{ item.short_label }}<span class="font-bold text-slate-600">{{ questionSuffix }}</span>
+        </span>
+        <span
+            v-if="item.kind_label"
+            class="rounded bg-slate-200 px-1.5 py-px text-[9px] font-extrabold uppercase text-slate-800"
+        >
+            {{ item.kind_label }}
         </span>
         <span
             class="rounded px-1.5 py-px text-[10px] font-extrabold uppercase"

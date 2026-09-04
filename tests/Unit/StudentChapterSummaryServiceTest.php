@@ -299,6 +299,75 @@ class StudentChapterSummaryServiceTest extends TestCase
         $this->assertStringContainsString('Class 7', $summary['other_groups'][0]['label']);
     }
 
+    public function test_multipart_textbook_written_sheets_appear_under_books(): void
+    {
+        [$enrollment, $chapter] = $this->seedChapterContent();
+
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $grade = $enrollment->gradeLevel;
+        $board = $enrollment->board;
+
+        $textbook = \App\Models\Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'name' => 'NCERT Exemplar',
+            'code' => 'EX',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $writtenOne = Worksheet::query()->create([
+            'title' => 'Written part 1',
+            'set_number' => 1,
+            'set_code' => 'W701',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapter->id,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'written_status' => \App\Support\WrittenSheetStatus::VERIFIED,
+            'written_pdf_path' => 'written/w1.pdf',
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+        $writtenTwo = Worksheet::query()->create([
+            'title' => 'Written part 2',
+            'set_number' => 2,
+            'set_code' => 'W702',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapter->id,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'written_status' => \App\Support\WrittenSheetStatus::VERIFIED,
+            'written_pdf_path' => 'written/w2.pdf',
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+
+        \App\Models\TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $chapter->id,
+            'chapter_number' => 1,
+            'title' => 'Integers',
+            'status' => \App\Models\TextbookChapter::STATUS_PUBLISHED,
+            'written_worksheet_id' => $writtenOne->id,
+            'written_worksheet_ids' => [$writtenOne->id, $writtenTwo->id],
+            'created_by' => $admin->id,
+        ]);
+
+        $summary = app(StudentChapterSummaryService::class)->forEnrollment($enrollment);
+        $row = collect($summary['chapters'])->firstWhere('id', $chapter->id);
+        $bookItems = collect($row['items']['books'][(string) $textbook->id] ?? []);
+
+        $this->assertCount(2, $bookItems);
+        $this->assertTrue($bookItems->contains(fn (array $item) => $item['worksheet_id'] === $writtenOne->id));
+        $this->assertTrue($bookItems->contains(fn (array $item) => $item['worksheet_id'] === $writtenTwo->id));
+        $this->assertTrue($bookItems->every(fn (array $item) => ($item['kind'] ?? null) === 'written'));
+        // Textbook-linked written must not also appear in the Written tier row.
+        $this->assertFalse(
+            collect($row['items']['written'])->contains(fn (array $item) => in_array($item['worksheet_id'], [$writtenOne->id, $writtenTwo->id], true)),
+        );
+    }
+
     private function studentUserForEnrollment(StudentEnrollment $enrollment): User
     {
         $studentUser = User::factory()->create(['role' => User::ROLE_STUDENT]);

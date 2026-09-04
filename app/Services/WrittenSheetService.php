@@ -431,7 +431,12 @@ class WrittenSheetService
 
         $worksheet->update($updates);
 
-        return $worksheet->fresh();
+        $fresh = $worksheet->fresh();
+
+        // Same as MCQ publish: assign to students who already marked the chapter Studied / Under study.
+        app(ClassCoverageService::class)->assignNewWorksheetDueToday($fresh, $admin);
+
+        return $fresh;
     }
 
     public function reject(Worksheet $worksheet): Worksheet

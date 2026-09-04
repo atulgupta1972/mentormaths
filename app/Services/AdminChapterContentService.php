@@ -165,11 +165,7 @@ class AdminChapterContentService
         $textbookColumns = $this->textbookColumnsForGrade($gradeLevelId);
         $textbookChapters = $this->textbookChaptersForSyllabus($chapterIds, $textbookColumns);
         $textbookWorksheetIds = $textbookChapters
-            ->flatMap(fn (TextbookChapter $row) => array_merge(
-                $row->mcqWorksheetIds(),
-                $row->fill_blank_worksheet_id ? [(int) $row->fill_blank_worksheet_id] : [],
-                $row->written_worksheet_id ? [(int) $row->written_worksheet_id] : [],
-            ))
+            ->flatMap(fn (TextbookChapter $row) => $row->allWorksheetIds())
             ->unique()
             ->values();
 
@@ -180,6 +176,7 @@ class AdminChapterContentService
         if ($missingTextbookWorksheets->isNotEmpty()) {
             $worksheets = $worksheets->merge(
                 Worksheet::query()
+                    ->where('status', Worksheet::STATUS_PUBLISHED)
                     ->whereIn('id', $missingTextbookWorksheets)
                     ->with([
                         'topic:id,name,syllabus_chapter_id',
@@ -455,15 +452,7 @@ class AdminChapterContentService
     private function isTextbookWorksheet(Worksheet $worksheet, Collection $textbookChapters): bool
     {
         foreach ($textbookChapters as $textbookChapter) {
-            if (in_array($worksheet->id, $textbookChapter->mcqWorksheetIds(), true)) {
-                return true;
-            }
-
-            if ((int) $textbookChapter->fill_blank_worksheet_id === (int) $worksheet->id) {
-                return true;
-            }
-
-            if ((int) $textbookChapter->written_worksheet_id === (int) $worksheet->id) {
+            if (in_array($worksheet->id, $textbookChapter->allWorksheetIds(), true)) {
                 return true;
             }
         }

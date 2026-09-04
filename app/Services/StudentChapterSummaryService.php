@@ -114,11 +114,7 @@ class StudentChapterSummaryService
         $textbookColumns = $this->textbookColumnsForGrade($gradeLevelId);
         $textbookChapters = $this->textbookChaptersForSyllabus($chapterIds, $textbookColumns);
         $textbookWorksheetIds = $textbookChapters
-            ->flatMap(fn (TextbookChapter $row) => array_merge(
-                $row->mcqWorksheetIds(),
-                $row->fill_blank_worksheet_id ? [(int) $row->fill_blank_worksheet_id] : [],
-                $row->written_worksheet_id ? [(int) $row->written_worksheet_id] : [],
-            ))
+            ->flatMap(fn (TextbookChapter $row) => $row->allWorksheetIds())
             ->unique()
             ->values();
 
@@ -129,6 +125,7 @@ class StudentChapterSummaryService
         if ($missingTextbookWorksheets->isNotEmpty()) {
             $worksheets = $worksheets->merge(
                 Worksheet::query()
+                    ->where('status', Worksheet::STATUS_PUBLISHED)
                     ->whereIn('id', $missingTextbookWorksheets)
                     ->with([
                         'topic:id,name,syllabus_chapter_id',
@@ -638,22 +635,20 @@ class StudentChapterSummaryService
             })
             ->first();
 
-        if ($row?->textbook?->name) {
-            return (string) $row->textbook->name;
+        if (! $row) {
+            $row = TextbookChapter::query()
+                ->with('textbook:id,name')
+                ->where(function ($q) {
+                    $q->whereNotNull('mcq_worksheet_ids')
+                        ->orWhereNotNull('fill_blank_worksheet_ids')
+                        ->orWhereNotNull('written_worksheet_ids');
+                })
+                ->get()
+                ->first(fn (TextbookChapter $chapter) => in_array($worksheetId, $chapter->allWorksheetIds(), true));
         }
 
-        // Multi-part MCQ lists stored as JSON array.
-        $candidates = TextbookChapter::query()
-            ->with('textbook:id,name')
-            ->whereNotNull('mcq_worksheet_ids')
-            ->get(['id', 'textbook_id', 'mcq_worksheet_ids']);
-
-        foreach ($candidates as $candidate) {
-            if (in_array($worksheetId, $candidate->mcqWorksheetIds(), true)) {
-                return $candidate->textbook?->name
-                    ? (string) $candidate->textbook->name
-                    : null;
-            }
+        if ($row?->textbook?->name) {
+            return (string) $row->textbook->name;
         }
 
         return null;
@@ -1021,15 +1016,7 @@ class StudentChapterSummaryService
     private function isTextbookWorksheet(Worksheet $worksheet, Collection $textbookChapters): bool
     {
         foreach ($textbookChapters as $textbookChapter) {
-            if (in_array($worksheet->id, $textbookChapter->mcqWorksheetIds(), true)) {
-                return true;
-            }
-
-            if ((int) $textbookChapter->fill_blank_worksheet_id === (int) $worksheet->id) {
-                return true;
-            }
-
-            if ((int) $textbookChapter->written_worksheet_id === (int) $worksheet->id) {
+            if (in_array($worksheet->id, $textbookChapter->allWorksheetIds(), true)) {
                 return true;
             }
         }

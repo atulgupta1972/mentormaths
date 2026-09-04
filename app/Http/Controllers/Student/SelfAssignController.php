@@ -72,8 +72,21 @@ class SelfAssignController extends Controller
             'Self-assigned from chapter summary',
         );
 
+        $assignment = SetAssignment::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->where('worksheet_id', $worksheet->id)
+            ->whereNot('status', SetAssignment::STATUS_CANCELLED)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($worksheet->isWritten() && $assignment) {
+            return redirect()
+                ->route('student.written-assignments.show', $assignment)
+                ->with('success', "{$worksheet->set_code} is ready — download the sheet and upload your work.");
+        }
+
         return redirect()
             ->route('dashboard')
-            ->with('success', "{$worksheet->set_code} added to your work — open it from To do or the chapter summary.");
+            ->with('success', "{$worksheet->set_code} added to your work — open it from the study plan.");
     }
 }

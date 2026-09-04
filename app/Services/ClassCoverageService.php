@@ -1060,11 +1060,7 @@ class ClassCoverageService
         $textbookWorksheetIds = TextbookChapter::query()
             ->where('syllabus_chapter_id', $chapter->id)
             ->get()
-            ->flatMap(fn (TextbookChapter $row) => array_merge(
-                $row->mcqWorksheetIds(),
-                $row->fill_blank_worksheet_id ? [(int) $row->fill_blank_worksheet_id] : [],
-                $row->written_worksheet_id ? [(int) $row->written_worksheet_id] : [],
-            ))
+            ->flatMap(fn (TextbookChapter $row) => $row->allWorksheetIds())
             ->unique()
             ->values();
 
