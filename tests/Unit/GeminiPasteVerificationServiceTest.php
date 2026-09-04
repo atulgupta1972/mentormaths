@@ -71,9 +71,31 @@ TEXT;
             ],
         ], 'Class 7 · GP · Ch 12');
 
-        $this->assertStringContainsString('Question 1', $prompt);
+        $this->assertStringContainsString('Question 1 [MCQ]', $prompt);
         $this->assertStringContainsString('What is 2 + 2?', $prompt);
         $this->assertStringContainsString('B. 4 [CORRECT]', $prompt);
         $this->assertStringContainsString('Status: Correct', $prompt);
+    }
+
+    public function test_build_prompt_includes_fill_blank_answer(): void
+    {
+        $prompt = $this->service->buildPrompt([
+            [
+                'number' => 3,
+                'is_fill_in_blank' => true,
+                'question_type' => 'fill_in_blank',
+                'question_text' => '8 ÷ (-2) = ____',
+                'correct_answer' => '-4',
+                'answer_format' => 'integer',
+                'options' => [],
+                'method_hint' => 'Evaluate brackets first.',
+                'explanation' => '8÷(-2)=-4',
+            ],
+        ], 'Class 7 · Integers');
+
+        $this->assertStringContainsString('Question 3 [Fill in blank]', $prompt);
+        $this->assertStringContainsString('Fill-blank answer: -4 (format: integer)', $prompt);
+        $this->assertStringContainsString('8 ÷ (-2) = ____', $prompt);
+        $this->assertStringNotContainsString('reviewing MCQ answers', $prompt);
     }
 }

@@ -315,7 +315,11 @@ class ContentVerificationService
             ->firstOrFail();
 
         $task = $run->task;
-        $queueGeminiRecheck = $task->status === ContentUploadTask::STATUS_PUBLISHED
+        $isFillInBlank = $question->isFillInBlank();
+        // Fill-in-blanks: human verify after Gemini clears the Gemini gate (no second paste).
+        // MCQs on published tasks still queue a Gemini recheck when AI flagged them.
+        $queueGeminiRecheck = ! $isFillInBlank
+            && $task->status === ContentUploadTask::STATUS_PUBLISHED
             && in_array($check->ai_verdict, [
                 ContentAiVerificationService::VERDICT_NEEDS_FIX,
                 ContentAiVerificationService::VERDICT_NEEDS_DIAGRAM,
@@ -348,6 +352,18 @@ class ContentVerificationService
             $payloadChecks['skipped'] = false;
             $payloadChecks['skip_reason'] = null;
             $payloadChecks['skipped_at'] = null;
+
+            if ($isFillInBlank) {
+                $alreadyApproved = $check->ai_verdict === ContentAiVerificationService::VERDICT_APPROVE;
+                $payloadChecks['ai_verdict'] = ContentAiVerificationService::VERDICT_APPROVE;
+                $payloadChecks['ai_confidence'] = $check->ai_confidence ?: 'high';
+                $payloadChecks['ai_note'] = $alreadyApproved && filled($check->ai_note)
+                    ? $check->ai_note
+                    : (filled($check->ai_note)
+                        ? 'Fixed after Gemini — fill-in-blank verified'
+                        : 'Fill-in-blank verified');
+                $payloadChecks['ai_reviewed_at'] = $check->ai_reviewed_at ?? now();
+            }
 
             $check->update($payloadChecks);
         }

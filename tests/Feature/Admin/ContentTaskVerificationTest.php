@@ -565,6 +565,11 @@ class ContentTaskVerificationTest extends TestCase
         $this->assertTrue($check->isCompleteFor($question->fresh('blankAnswer')));
         $this->assertFalse($check->check_options);
         $this->assertTrue($check->check_correct);
+        $this->assertSame(
+            \App\Services\ContentAiVerificationService::VERDICT_APPROVE,
+            $check->ai_verdict,
+            'Human-verified fill-in-blanks must clear the Gemini review gate',
+        );
     }
 
     /**

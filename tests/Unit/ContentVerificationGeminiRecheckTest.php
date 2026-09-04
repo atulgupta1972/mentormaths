@@ -52,6 +52,39 @@ class ContentVerificationGeminiRecheckTest extends TestCase
         $this->assertSame(ContentAiVerificationService::VERDICT_APPROVE, $approvedRow['ai_verdict']);
     }
 
+    public function test_fixing_gemini_flagged_fill_blank_passes_gemini_without_recheck(): void
+    {
+        [$uploader, $task, $run, $approved, $flagged] = $this->seedPublishedGeminiRun();
+
+        $flagged->update([
+            'type' => Question::TYPE_FILL_IN_BLANK,
+            'question_text' => '8 ÷ (-2) = ____',
+        ]);
+        $flagged->blankAnswer()->create([
+            'answer_format' => 'integer',
+            'correct_answer' => '4',
+        ]);
+        $flagged->options()->delete();
+
+        $service = app(ContentVerificationService::class);
+
+        $service->saveQuestion($run->fresh(), (int) $flagged->id, [
+            'question_text' => '8 ÷ (-2) = ____',
+            'explanation' => '8÷(-2)=-4',
+            'method_hint' => 'Signs',
+            'difficulty' => 'Easy',
+            'correct_answer' => '-4',
+            'answer_format' => 'integer',
+        ], $uploader);
+
+        $payload = $service->forTask($task->fresh(), $uploader);
+        $flaggedRow = collect($payload['questions'])->firstWhere('question_id', $flagged->id);
+
+        $this->assertSame(ContentAiVerificationService::VERDICT_APPROVE, $flaggedRow['ai_verdict']);
+        $this->assertTrue($flaggedRow['is_verified']);
+        $this->assertSame(0, $service->countPendingGeminiQuestions($payload['questions']));
+    }
+
     /**
      * @return array{0: User, 1: ContentUploadTask, 2: ContentVerificationRun, 3: Question, 4: Question}
      */
