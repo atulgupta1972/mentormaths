@@ -1,4 +1,5 @@
 <script setup>
+import DiagramCropModal from '@/Components/DiagramCropModal.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -32,6 +33,7 @@ const sendBackCart = ref([]);
 const overallReason = ref('');
 const diagramUploading = ref({});
 const skippingId = ref(null);
+const cropTarget = ref(null);
 
 const batchForm = useForm({
     run_id: props.verification?.run_id ?? null,
@@ -303,8 +305,7 @@ const submitSendBack = () => {
     });
 };
 
-const uploadDiagram = (questionId, event) => {
-    const file = event.target?.files?.[0];
+const postDiagramFile = (questionId, file, onFinish = null) => {
     if (!file || !props.uploadDiagramRoute || diagramUploading.value[questionId]) {
         return;
     }
@@ -321,10 +322,47 @@ const uploadDiagram = (questionId, event) => {
         preserveScroll: true,
         onFinish: () => {
             diagramUploading.value = { ...diagramUploading.value, [questionId]: false };
-            if (event.target) {
-                event.target.value = '';
-            }
+            onFinish?.();
         },
+    });
+};
+
+const uploadDiagram = (questionId, event) => {
+    const file = event.target?.files?.[0];
+    postDiagramFile(questionId, file, () => {
+        if (event.target) {
+            event.target.value = '';
+        }
+    });
+};
+
+const openCropEditor = (row) => {
+    if (!row?.diagram_url || !canManageDiagram.value) {
+        return;
+    }
+
+    cropTarget.value = {
+        question_id: row.question_id,
+        diagram_url: row.diagram_url,
+    };
+};
+
+const closeCropEditor = () => {
+    if (cropTarget.value && diagramUploading.value[cropTarget.value.question_id]) {
+        return;
+    }
+
+    cropTarget.value = null;
+};
+
+const saveCroppedDiagram = (file) => {
+    if (!cropTarget.value) {
+        return;
+    }
+
+    const questionId = cropTarget.value.question_id;
+    postDiagramFile(questionId, file, () => {
+        cropTarget.value = null;
     });
 };
 
@@ -482,6 +520,15 @@ const optionLine = (row) =>
                                     <a :href="row.diagram_url" target="_blank" rel="noopener" class="block">
                                         <img :src="row.diagram_url" alt="Figure" class="h-12 w-auto rounded border border-gray-200 object-contain">
                                     </a>
+                                    <button
+                                        v-if="canManageDiagram"
+                                        type="button"
+                                        class="mr-2 text-[10px] text-indigo-700 hover:underline"
+                                        :disabled="diagramUploading[row.question_id]"
+                                        @click="openCropEditor(row)"
+                                    >
+                                        Crop
+                                    </button>
                                     <button
                                         v-if="canManageDiagram"
                                         type="button"
@@ -762,5 +809,13 @@ const optionLine = (row) =>
                 {{ returnForm.processing ? 'Sending…' : `Email uploader (${sendBackCart.length} flagged)` }}
             </SecondaryButton>
         </div>
+
+        <DiagramCropModal
+            :show="Boolean(cropTarget)"
+            :image-url="cropTarget?.diagram_url || ''"
+            :processing="Boolean(cropTarget && diagramUploading[cropTarget.question_id])"
+            @close="closeCropEditor"
+            @cropped="saveCroppedDiagram"
+        />
     </div>
 </template>

@@ -1,4 +1,5 @@
 <script setup>
+import DiagramCropModal from '@/Components/DiagramCropModal.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -39,6 +40,7 @@ const questionForms = reactive({});
 const filterMode = reactive({ value: 'pending' });
 const diagramUploading = ref({});
 const diagramFileInputs = ref({});
+const cropTarget = ref(null);
 
 const verificationSummary = computed(() => props.verification?.summary ?? {
     total: 0,
@@ -274,8 +276,7 @@ const canManageDiagram = computed(() => {
     return Boolean(url) && url !== '#' && canEditQuestions.value;
 });
 
-const uploadDiagram = (questionId, event) => {
-    const file = event.target?.files?.[0];
+const postDiagramFile = (questionId, file, onFinish = null) => {
     if (!file || !props.uploadDiagramRoute || diagramUploading.value[questionId]) {
         return;
     }
@@ -292,10 +293,47 @@ const uploadDiagram = (questionId, event) => {
         preserveScroll: true,
         onFinish: () => {
             diagramUploading.value = { ...diagramUploading.value, [questionId]: false };
-            if (event.target) {
-                event.target.value = '';
-            }
+            onFinish?.();
         },
+    });
+};
+
+const uploadDiagram = (questionId, event) => {
+    const file = event.target?.files?.[0];
+    postDiagramFile(questionId, file, () => {
+        if (event.target) {
+            event.target.value = '';
+        }
+    });
+};
+
+const openCropEditor = (row) => {
+    if (!row?.diagram_url || !canManageDiagram.value) {
+        return;
+    }
+
+    cropTarget.value = {
+        question_id: row.question_id,
+        diagram_url: row.diagram_url,
+    };
+};
+
+const closeCropEditor = () => {
+    if (cropTarget.value && diagramUploading.value[cropTarget.value.question_id]) {
+        return;
+    }
+
+    cropTarget.value = null;
+};
+
+const saveCroppedDiagram = (file) => {
+    if (!cropTarget.value) {
+        return;
+    }
+
+    const questionId = cropTarget.value.question_id;
+    postDiagramFile(questionId, file, () => {
+        cropTarget.value = null;
     });
 };
 
@@ -556,13 +594,22 @@ const removeDiagram = (questionId) => {
                                 This question requires a figure upload.
                             </p>
                             <p v-else-if="row.diagram_url" class="mt-1 text-sm text-slate-600">
-                                Figure attached — replace if the wrong image is linked.
+                                Figure attached — crop if a full book page was uploaded, or replace if wrong.
                             </p>
                             <p v-else class="mt-1 text-sm text-slate-600">
                                 Optional: upload a PNG/JPG if this question needs a textbook figure.
                             </p>
                         </div>
                         <div v-if="canManageDiagram" class="flex flex-wrap gap-2">
+                            <SecondaryButton
+                                v-if="row.diagram_url"
+                                type="button"
+                                class="!px-3 !py-1.5 !text-xs"
+                                :disabled="diagramUploading[row.question_id]"
+                                @click="openCropEditor(row)"
+                            >
+                                Edit / crop
+                            </SecondaryButton>
                             <SecondaryButton
                                 type="button"
                                 class="!px-3 !py-1.5 !text-xs"
@@ -654,5 +701,13 @@ const removeDiagram = (questionId) => {
                 Submit for admin publish
             </PrimaryButton>
         </div>
+
+        <DiagramCropModal
+            :show="Boolean(cropTarget)"
+            :image-url="cropTarget?.diagram_url || ''"
+            :processing="Boolean(cropTarget && diagramUploading[cropTarget.question_id])"
+            @close="closeCropEditor"
+            @cropped="saveCroppedDiagram"
+        />
     </div>
 </template>
