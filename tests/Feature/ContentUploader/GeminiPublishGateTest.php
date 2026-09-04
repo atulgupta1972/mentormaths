@@ -86,6 +86,85 @@ class GeminiPublishGateTest extends TestCase
         $this->assertSame(ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH, $task->fresh()->status);
     }
 
+    public function test_uploader_can_submit_when_remaining_rows_are_skipped(): void
+    {
+        Mail::fake();
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+
+        $task->update(['status' => ContentUploadTask::STATUS_VERIFIED]);
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk();
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $uploader->id)
+            ->orderByDesc('id')
+            ->value('id');
+
+        ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $runId)
+            ->update([
+                'skipped' => true,
+                'skip_reason' => 'Irrelevant',
+                'skipped_at' => now(),
+                'verified_at' => now(),
+                // Older skips may lack ai_verdict=skip — gate must still pass.
+                'ai_verdict' => null,
+            ]);
+
+        $this->actingAs($uploader)
+            ->from(route('content.tasks.show', $task))
+            ->post(route('content.tasks.submit-for-publish', $task))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH, $task->fresh()->status);
+    }
+
+    public function test_uploader_can_submit_after_human_fix_of_gemini_flagged_rows(): void
+    {
+        Mail::fake();
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+
+        $task->update(['status' => ContentUploadTask::STATUS_VERIFIED]);
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk();
+
+        $runId = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $uploader->id)
+            ->orderByDesc('id')
+            ->value('id');
+
+        ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $runId)
+            ->update([
+                'ai_verdict' => ContentAiVerificationService::VERDICT_NEEDS_FIX,
+                'ai_note' => 'Wrong answer',
+                'ai_reviewed_at' => now(),
+                'verified_at' => now(),
+                'check_text' => true,
+                'check_options' => true,
+                'check_correct' => true,
+                'check_hint' => true,
+                'check_explanation' => true,
+                'check_difficulty' => true,
+                'check_diagram' => true,
+            ]);
+
+        $this->actingAs($uploader)
+            ->from(route('content.tasks.show', $task))
+            ->post(route('content.tasks.submit-for-publish', $task))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH, $task->fresh()->status);
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask}
      */

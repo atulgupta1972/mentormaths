@@ -378,8 +378,9 @@ class ContentUploadTaskService
         if (! $task->isFillBlankConversion()) {
             $progress = $this->verificationService->progressForTask($task, $uploader);
             if (($progress['can_gemini'] ?? false) && (int) ($progress['pending'] ?? 0) > 0) {
+                $pending = (int) $progress['pending'];
                 throw new \InvalidArgumentException(
-                    'Complete the Gemini check for all pending questions before submitting for admin publish.',
+                    "Complete the Gemini check for all pending questions before submitting for admin publish ({$pending} still pending). Skipped questions count as done — use Apply Gemini review for any remaining Correct / Needs Verification rows.",
                 );
             }
         }

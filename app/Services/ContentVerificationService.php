@@ -353,15 +353,20 @@ class ContentVerificationService
             $payloadChecks['skip_reason'] = null;
             $payloadChecks['skipped_at'] = null;
 
-            if ($isFillInBlank) {
+            // Clear Gemini pending when human finishes a flagged row (or any fill-in-blank).
+            $flaggedByGemini = in_array($check->ai_verdict, [
+                ContentAiVerificationService::VERDICT_NEEDS_FIX,
+                ContentAiVerificationService::VERDICT_NEEDS_DIAGRAM,
+            ], true);
+            if ($isFillInBlank || $flaggedByGemini) {
                 $alreadyApproved = $check->ai_verdict === ContentAiVerificationService::VERDICT_APPROVE;
                 $payloadChecks['ai_verdict'] = ContentAiVerificationService::VERDICT_APPROVE;
                 $payloadChecks['ai_confidence'] = $check->ai_confidence ?: 'high';
                 $payloadChecks['ai_note'] = $alreadyApproved && filled($check->ai_note)
                     ? $check->ai_note
                     : (filled($check->ai_note)
-                        ? 'Fixed after Gemini — fill-in-blank verified'
-                        : 'Fill-in-blank verified');
+                        ? 'Fixed after Gemini — verified'
+                        : ($isFillInBlank ? 'Fill-in-blank verified' : 'Verified after Gemini flag'));
                 $payloadChecks['ai_reviewed_at'] = $check->ai_reviewed_at ?? now();
             }
 
@@ -524,6 +529,13 @@ class ContentVerificationService
             'skip_reason' => filled($reason) ? trim($reason) : 'Irrelevant — skipped during verification',
             'skipped_at' => now(),
             'verified_at' => now(),
+            // Skipped sums must clear the Gemini publish gate (same as Status: Skip).
+            'ai_verdict' => ContentAiVerificationService::VERDICT_SKIP,
+            'ai_confidence' => $check->ai_confidence ?: 'high',
+            'ai_note' => filled($check->ai_note)
+                ? $check->ai_note
+                : 'Skipped during verification',
+            'ai_reviewed_at' => $check->ai_reviewed_at ?? now(),
         ]);
 
         $this->syncTaskStatus($run);
@@ -553,11 +565,17 @@ class ContentVerificationService
             }
         }
 
+        $clearSkipVerdict = $check->ai_verdict === ContentAiVerificationService::VERDICT_SKIP;
+
         $check->update([
             'skipped' => false,
             'skip_reason' => null,
             'skipped_at' => null,
             'verified_at' => $allChecked ? ($check->verified_at ?? now()) : null,
+            'ai_verdict' => $clearSkipVerdict ? null : $check->ai_verdict,
+            'ai_note' => $clearSkipVerdict ? null : $check->ai_note,
+            'ai_confidence' => $clearSkipVerdict ? null : $check->ai_confidence,
+            'ai_reviewed_at' => $clearSkipVerdict ? null : $check->ai_reviewed_at,
         ]);
 
         $this->syncTaskStatus($run);
@@ -860,10 +878,10 @@ class ContentVerificationService
         foreach ($questionIds as $questionId) {
             $check = $checks->get($questionId);
 
-            if ($this->isGeminiApproved($check)) {
-                $verified++;
-            } elseif ($this->isGeminiSkipped($check)) {
+            if ($this->isGeminiSkipped($check)) {
                 $skipped++;
+            } elseif ($this->isGeminiApproved($check) || $this->isGeminiClearedByHumanFix($check)) {
+                $verified++;
             }
         }
 
@@ -906,7 +924,7 @@ class ContentVerificationService
             foreach ($sliceIds as $questionId) {
                 $check = $checks->get($questionId);
 
-                if ($this->isGeminiApproved($check)) {
+                if ($this->isGeminiApproved($check) || $this->isGeminiClearedByHumanFix($check)) {
                     $setVerified++;
                 }
             }
@@ -933,8 +951,27 @@ class ContentVerificationService
 
     public function isGeminiSkipped(?ContentVerificationCheck $check): bool
     {
+        if (! $check) {
+            return false;
+        }
+
+        // Manual Skip (Not paid) must count even if older rows lack ai_verdict=skip.
+        return $check->skipped
+            || $check->ai_verdict === ContentAiVerificationService::VERDICT_SKIP;
+    }
+
+    /**
+     * Human saved after Gemini flagged Needs Verification / Needs Diagram.
+     */
+    public function isGeminiClearedByHumanFix(?ContentVerificationCheck $check): bool
+    {
         return $check
-            && $check->ai_verdict === ContentAiVerificationService::VERDICT_SKIP;
+            && $check->verified_at !== null
+            && ! $check->skipped
+            && in_array($check->ai_verdict, [
+                ContentAiVerificationService::VERDICT_NEEDS_FIX,
+                ContentAiVerificationService::VERDICT_NEEDS_DIAGRAM,
+            ], true);
     }
 
     /**
@@ -952,10 +989,25 @@ class ContentVerificationService
      */
     public function isGeminiDoneRow(array $row): bool
     {
-        return in_array($row['ai_verdict'] ?? null, [
+        if (! empty($row['is_skipped'])) {
+            return true;
+        }
+
+        $verdict = $row['ai_verdict'] ?? null;
+
+        if (in_array($verdict, [
             ContentAiVerificationService::VERDICT_APPROVE,
             ContentAiVerificationService::VERDICT_SKIP,
-        ], true);
+        ], true)) {
+            return true;
+        }
+
+        // Already human-verified after a Gemini flag — do not block submit.
+        return ! empty($row['is_verified'])
+            && in_array($verdict, [
+                ContentAiVerificationService::VERDICT_NEEDS_FIX,
+                ContentAiVerificationService::VERDICT_NEEDS_DIAGRAM,
+            ], true);
     }
 
     private function questionForRun(ContentVerificationRun $run, int $questionId): Question
