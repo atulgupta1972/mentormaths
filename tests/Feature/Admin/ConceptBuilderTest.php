@@ -119,6 +119,61 @@ class ConceptBuilderTest extends TestCase
             );
     }
 
+    public function test_approved_concept_path_can_be_run_from_builder(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $grade, , $upload] = $this->seedConceptBuilder(withPdf: true);
+
+        $upload->update([
+            'concept_path_status' => 'approved',
+            'concept_path_items' => [
+                'chapter_title' => 'Integers',
+                'cards' => [
+                    [
+                        'step' => 1,
+                        'type' => 'teach',
+                        'title' => 'Integers',
+                        'body' => 'Whole numbers and negatives.',
+                        'approved' => true,
+                    ],
+                    [
+                        'step' => 2,
+                        'type' => 'check',
+                        'title' => 'Quick check',
+                        'approved' => true,
+                        'questions' => [
+                            [
+                                'question_type' => 'fill_blank',
+                                'question' => 'Opposite of 4 is ____',
+                                'correct_answer' => '-4',
+                                'answer_format' => 'integer',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession([AdminGradeContext::SESSION_KEY => $grade->id])
+            ->get(route('admin.concept-builder.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/ConceptBuilder/Index')
+                ->where('chapters.0.is_approved', true)
+                ->where('chapters.0.run_url', route('admin.textbooks.concept-path.play', $upload))
+            );
+
+        $this->actingAs($admin)
+            ->get(route('admin.textbooks.concept-path.play', $upload))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Textbooks/ConceptPathPlay')
+                ->has('path.cards', 2)
+            );
+    }
+
     public function test_textbooks_index_shows_syllabus_chapter_label(): void
     {
         $this->withoutVite();

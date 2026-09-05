@@ -961,6 +961,11 @@ class TextbookController extends Controller
                 'download_url' => $uploaderMode
                     ? route('content.textbooks.download', $textbookChapter)
                     : route('admin.textbooks.download', $textbookChapter),
+                'play_url' => $textbookChapter->concept_path_status === \App\Support\ConceptPathStatus::APPROVED
+                    ? ($uploaderMode
+                        ? route('content.textbooks.concept-path.play', $textbookChapter)
+                        : route('admin.textbooks.concept-path.play', $textbookChapter))
+                    : null,
             ],
             'conceptPath' => $conceptPathPayload,
             'routes' => [
@@ -1062,7 +1067,7 @@ class TextbookController extends Controller
         }
 
         return $this->redirectToChapterShow($textbookChapter)
-            ->with('success', 'Concept path approved. Student player can be wired next.');
+            ->with('success', 'Concept path approved. Use Run concepts on Concept builder to walk through the cards.');
     }
 
     public function resetConceptPath(TextbookChapter $textbookChapter): RedirectResponse
@@ -1070,6 +1075,71 @@ class TextbookController extends Controller
         $this->conceptPath->reset($textbookChapter);
 
         return back()->with('success', 'Concept path cleared. Generate a new Cursor prompt when ready.');
+    }
+
+    public function playConceptPath(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
+    {
+        $textbookChapter->load([
+            'textbook.gradeLevel:id,name',
+            'syllabusChapter:id,name,chapter_number',
+        ]);
+
+        $items = is_array($textbookChapter->concept_path_items) ? $textbookChapter->concept_path_items : [];
+        $allCards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
+        $cards = array_values(array_filter(
+            $allCards,
+            fn ($card) => is_array($card) && ($card['approved'] ?? true),
+        ));
+
+        if ($cards === []) {
+            return $this->redirectToConceptPath($request, $textbookChapter)
+                ->with('error', 'Approve a concept path with at least one included card before running it.');
+        }
+
+        if ($textbookChapter->concept_path_status !== \App\Support\ConceptPathStatus::APPROVED) {
+            return $this->redirectToConceptPath($request, $textbookChapter)
+                ->with('error', 'Approve the concept flow first, then Run concepts.');
+        }
+
+        $uploaderMode = $this->isContentUploaderContext($request);
+
+        return Inertia::render('Admin/Textbooks/ConceptPathPlay', [
+            'uploaderMode' => $uploaderMode,
+            'chapter' => [
+                'id' => $textbookChapter->id,
+                'label' => $textbookChapter->displaySyllabusLabel(),
+                'title' => $textbookChapter->displayTitle(),
+                'chapter_number' => $textbookChapter->displayChapterNumber(),
+                'book_name' => $textbookChapter->textbook?->name,
+                'book_code' => $textbookChapter->textbook?->code,
+                'grade_name' => $textbookChapter->textbook?->gradeLevel?->name,
+                'builder_url' => $uploaderMode
+                    ? route('content.concept-builder.index')
+                    : route('admin.concept-builder.index'),
+                'edit_url' => $uploaderMode
+                    ? route('content.textbooks.concept-path', $textbookChapter)
+                    : route('admin.textbooks.concept-path', $textbookChapter),
+            ],
+            'path' => [
+                'chapter_title' => $items['chapter_title'] ?? $textbookChapter->displayTitle(),
+                'status' => $textbookChapter->concept_path_status,
+                'status_label' => \App\Support\ConceptPathStatus::label($textbookChapter->concept_path_status),
+                'cards' => array_values(array_map(function (array $card, int $index) {
+                    $card['step'] = $index + 1;
+
+                    return $card;
+                }, $cards, array_keys($cards))),
+            ],
+        ]);
+    }
+
+    private function redirectToConceptPath(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        if ($this->isContentUploaderContext($request)) {
+            return redirect()->route('content.textbooks.concept-path', $textbookChapter);
+        }
+
+        return redirect()->route('admin.textbooks.concept-path', $textbookChapter);
     }
 
     public function convertGemini(TextbookChapter $textbookChapter): Response|RedirectResponse

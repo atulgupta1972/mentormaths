@@ -386,6 +386,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/convert-gemini-preview', [TextbookController::class, 'previewGeminiConversion'])->name('textbooks.convert-gemini-preview');
     Route::post('/textbooks/chapters/{textbookChapter}/convert-gemini-apply', [TextbookController::class, 'applyGeminiConversion'])->name('textbooks.convert-gemini-apply');
     Route::get('/textbooks/chapters/{textbookChapter}/concept-path', [TextbookController::class, 'conceptPath'])->name('textbooks.concept-path');
+    Route::get('/textbooks/chapters/{textbookChapter}/concept-path/play', [TextbookController::class, 'playConceptPath'])->name('textbooks.concept-path.play');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/preview', [TextbookController::class, 'previewConceptPath'])->name('textbooks.concept-path.preview');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/save', [TextbookController::class, 'saveConceptPath'])->name('textbooks.concept-path.save');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/approve', [TextbookController::class, 'approveConceptPath'])->name('textbooks.concept-path.approve');
@@ -588,6 +589,7 @@ Route::middleware(['auth', 'verified', 'content.uploader', 'content.uploader.gem
         Route::post('/textbooks/chapters/{textbookChapter}/staging-gemini-paste', [TextbookController::class, 'stagingGeminiPaste'])->name('textbooks.staging-gemini-paste');
         Route::post('/textbooks/chapters/{textbookChapter}/reset-staging-gemini', [TextbookController::class, 'resetStagingGeminiReview'])->name('textbooks.reset-staging-gemini');
         Route::get('/textbooks/chapters/{textbookChapter}/concept-path', [TextbookController::class, 'conceptPath'])->name('textbooks.concept-path');
+        Route::get('/textbooks/chapters/{textbookChapter}/concept-path/play', [TextbookController::class, 'playConceptPath'])->name('textbooks.concept-path.play');
         Route::post('/textbooks/chapters/{textbookChapter}/concept-path/preview', [TextbookController::class, 'previewConceptPath'])->name('textbooks.concept-path.preview');
         Route::post('/textbooks/chapters/{textbookChapter}/concept-path/save', [TextbookController::class, 'saveConceptPath'])->name('textbooks.concept-path.save');
         Route::post('/textbooks/chapters/{textbookChapter}/concept-path/approve', [TextbookController::class, 'approveConceptPath'])->name('textbooks.concept-path.approve');

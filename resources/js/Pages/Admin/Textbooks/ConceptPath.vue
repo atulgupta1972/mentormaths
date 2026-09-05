@@ -275,9 +275,18 @@ const optionLetter = (index) => String.fromCharCode(65 + index);
                         · {{ chapter.label || `Ch ${chapter.chapter_number} — ${chapter.title}` }}
                     </p>
                 </div>
-                <Link :href="chapter.show_url" class="text-sm text-indigo-600 hover:underline">
-                    ← Chapter
-                </Link>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Link :href="chapter.show_url" class="text-sm text-indigo-600 hover:underline">
+                        ← Chapter
+                    </Link>
+                    <Link
+                        v-if="chapter.play_url && isApproved"
+                        :href="chapter.play_url"
+                        class="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-800"
+                    >
+                        Run concepts
+                    </Link>
+                </div>
             </div>
         </template>
 

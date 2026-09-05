@@ -66,8 +66,7 @@ const groupedByBoard = computed(() => {
                 </div>
 
                 <div class="rounded-lg border border-violet-200 bg-violet-50/70 px-4 py-3 text-sm text-violet-950">
-                    PDF already uploaded for a chapter? Click <strong>Build concepts</strong> — no re-upload needed.
-                    Missing PDF? Upload once from Textbook content, then return here.
+                    PDF ready? Click <strong>Build concepts</strong>. After approve, click <strong>Run concepts</strong> to walk through the teach/check cards (admin / uploader preview).
                 </div>
 
                 <div v-if="!gradeLevel" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -124,11 +123,21 @@ const groupedByBoard = computed(() => {
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <Link
+                                    v-if="row.run_url"
+                                    :href="row.run_url"
+                                    class="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-800"
+                                >
+                                    Run concepts
+                                </Link>
+                                <Link
                                     v-if="row.has_pdf"
                                     :href="row.primary_action_url"
-                                    class="rounded-md bg-violet-700 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-violet-800"
+                                    class="rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-wide"
+                                    :class="row.run_url
+                                        ? 'border border-violet-300 bg-white text-violet-800 hover:bg-violet-50'
+                                        : 'bg-violet-700 text-white hover:bg-violet-800'"
                                 >
-                                    Build concepts
+                                    {{ row.run_url ? 'Edit concepts' : 'Build concepts' }}
                                 </Link>
                                 <Link
                                     v-else-if="row.uploads?.[0]?.upload_url || createUrl"

@@ -57,6 +57,13 @@ class ConceptBuilderController extends Controller
                     $uploads = ($textbookChapters->get($syllabusChapter->id) ?? collect())
                         ->map(function (TextbookChapter $upload) use ($uploaderMode) {
                             $hasPdf = filled($upload->pdf_path);
+                            $isApproved = $upload->concept_path_status === ConceptPathStatus::APPROVED;
+                            $cardCount = is_array($upload->concept_path_items['cards'] ?? null)
+                                ? count(array_filter(
+                                    $upload->concept_path_items['cards'],
+                                    fn ($card) => is_array($card) && ($card['approved'] ?? true),
+                                ))
+                                : 0;
 
                             return [
                                 'id' => $upload->id,
@@ -66,10 +73,17 @@ class ConceptBuilderController extends Controller
                                 'status_label' => $upload->statusLabel(),
                                 'concept_path_status' => $upload->concept_path_status,
                                 'concept_path_status_label' => ConceptPathStatus::label($upload->concept_path_status),
+                                'concept_path_card_count' => $cardCount,
+                                'is_approved' => $isApproved && $cardCount > 0,
                                 'concept_path_url' => $hasPdf
                                     ? ($uploaderMode
                                         ? route('content.textbooks.concept-path', $upload)
                                         : route('admin.textbooks.concept-path', $upload))
+                                    : null,
+                                'run_url' => ($isApproved && $cardCount > 0)
+                                    ? ($uploaderMode
+                                        ? route('content.textbooks.concept-path.play', $upload)
+                                        : route('admin.textbooks.concept-path.play', $upload))
                                     : null,
                                 'upload_url' => $uploaderMode
                                     ? route('content.textbooks.show', $upload)
@@ -80,6 +94,7 @@ class ConceptBuilderController extends Controller
                         ->all();
 
                     $readyUpload = collect($uploads)->firstWhere('has_pdf', true);
+                    $approvedUpload = collect($uploads)->firstWhere('is_approved', true);
                     $pendingUpload = collect($uploads)->firstWhere('has_pdf', false);
                     $createUrl = $uploaderMode ? null : route('admin.textbooks.create');
 
@@ -92,6 +107,8 @@ class ConceptBuilderController extends Controller
                         'name' => $syllabusChapter->name,
                         'uploads' => $uploads,
                         'has_pdf' => $readyUpload !== null,
+                        'is_approved' => $approvedUpload !== null,
+                        'run_url' => $approvedUpload['run_url'] ?? null,
                         'primary_action_url' => $readyUpload['concept_path_url']
                             ?? ($pendingUpload['upload_url'] ?? $createUrl),
                         'primary_action_label' => $readyUpload
