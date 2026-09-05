@@ -915,8 +915,14 @@ class QuestionController extends Controller
     {
         $question->load(['topic.chapter.syllabusVersion.gradeLevel', 'options']);
 
+        $setCode = $question->worksheets()
+            ->whereNotNull('set_code')
+            ->where('set_code', '!=', '')
+            ->value('set_code');
+
         return Inertia::render('Admin/Questions/Edit', [
             'question' => $question,
+            'set_code' => $setCode,
         ]);
     }
 
@@ -1009,13 +1015,16 @@ class QuestionController extends Controller
     public function destroy(Request $request, Question $question): RedirectResponse
     {
         $topicId = $question->syllabus_topic_id;
+        $questionId = (int) $question->id;
         $setCode = $question->worksheets()
             ->whereNotNull('set_code')
             ->where('set_code', '!=', '')
             ->value('set_code');
+        $previous = url()->previous();
+        $editUrl = route('admin.questions.edit', $question);
 
         app(QuestionIssueReportService::class)->dismissOpenForQuestion(
-            (int) $question->id,
+            $questionId,
             $request->user(),
             'Question removed as irrelevant or defective.',
         );
@@ -1030,7 +1039,39 @@ class QuestionController extends Controller
         }
 
         if ($returnTo === 'back') {
-            return back()->with('success', 'Question deleted.');
+            // Never return to this question's edit page — it 404s after delete.
+            $previousIsDeletedEdit = is_string($previous)
+                && (
+                    $previous === $editUrl
+                    || str_contains($previous, '/questions/'.$questionId.'/edit')
+                    || str_contains($previous, '/questions/'.$questionId.'?')
+                );
+
+            if (is_string($previous) && $previous !== '' && ! $previousIsDeletedEdit) {
+                return redirect()->to($previous)->with('success', 'Question deleted.');
+            }
+
+            if (filled($setCode)) {
+                return redirect()
+                    ->route('admin.questions.set-code', ['code' => $setCode])
+                    ->with('success', 'Question deleted.');
+            }
+
+            if ($topicId) {
+                return redirect()
+                    ->route('admin.questions.topics.show', $topicId)
+                    ->with('success', 'Question deleted.');
+            }
+
+            return redirect()
+                ->route('dashboard')
+                ->with('success', 'Question deleted.');
+        }
+
+        if (filled($setCode)) {
+            return redirect()
+                ->route('admin.questions.set-code', ['code' => $setCode])
+                ->with('success', 'Question deleted.');
         }
 
         return redirect()

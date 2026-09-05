@@ -9,6 +9,7 @@ import { nextTick, onMounted, ref } from 'vue';
 
 const props = defineProps({
     question: Object,
+    set_code: { type: String, default: null },
 });
 
 const diagramPreview = ref(props.question.diagram_url || null);
@@ -92,7 +93,10 @@ const destroyForm = useForm({});
 
 const destroy = () => {
     if (confirm('Delete this question? Use when it is irrelevant or too broken to fix.')) {
-        destroyForm.transform(() => ({ return_to: 'back' })).delete(route('admin.questions.destroy', props.question.id));
+        // Prefer set lookup / topic — never "back" to this edit URL (404 after delete).
+        destroyForm.transform(() => (
+            props.set_code ? { return_to: 'set-code' } : {}
+        )).delete(route('admin.questions.destroy', props.question.id));
     }
 };
 </script>

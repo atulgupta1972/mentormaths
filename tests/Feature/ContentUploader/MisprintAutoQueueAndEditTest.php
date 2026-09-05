@@ -290,6 +290,24 @@ class MisprintAutoQueueAndEditTest extends TestCase
         $this->assertDatabaseMissing('questions', ['id' => $question->id]);
     }
 
+    public function test_admin_delete_from_edit_does_not_404_on_deleted_question(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task, $question] = $this->seedPublishedFillBlankWithUploader();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        app(UserGroupService::class)->attachGroupByCode($admin, User::ROLE_ADMIN);
+
+        $editUrl = route('admin.questions.edit', $question);
+
+        $this->actingAs($admin)
+            ->from($editUrl)
+            ->delete(route('admin.questions.destroy', $question), ['return_to' => 'back'])
+            ->assertRedirect(route('admin.questions.set-code', ['code' => 'SF751']));
+
+        $this->assertDatabaseMissing('questions', ['id' => $question->id]);
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask, 3: Question}
      */
