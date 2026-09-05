@@ -626,6 +626,16 @@ const canChangeBook = computed(() =>
                                 >
                                     Download
                                 </a>
+                                <Link
+                                    v-if="chapter.has_pdf"
+                                    :href="chapterRoute('concept-path')"
+                                    class="ml-3 text-sm font-semibold text-violet-700 hover:underline"
+                                >
+                                    Concept path
+                                    <span v-if="chapter.concept_path_status_label" class="font-normal text-slate-500">
+                                        ({{ chapter.concept_path_status_label }})
+                                    </span>
+                                </Link>
                             </p>
                         </div>
                         <form class="flex flex-wrap items-end gap-2" @submit.prevent="submitPdf">

@@ -12,6 +12,7 @@ use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
+use App\Services\ConceptPathService;
 use App\Services\GeminiFillBlankConversionService;
 use App\Services\SetAssignmentService;
 use App\Services\TextbookChapterAnswerClassificationService;
@@ -48,6 +49,7 @@ class TextbookController extends Controller
         private GeminiFillBlankConversionService $geminiFillBlank,
         private TextbookChapterStagingGeminiService $stagingGemini,
         private TextbookChapterAnswerClassificationService $answerClassification,
+        private ConceptPathService $conceptPath,
     ) {}
 
     public function index(Request $request): Response
@@ -430,6 +432,11 @@ class TextbookController extends Controller
                 'mcq_count' => $mcqCount,
                 'gemini_verified_count' => $geminiVerifiedCount,
                 'gemini_pending_count' => $geminiPendingCount,
+                'concept_path_status' => $textbookChapter->concept_path_status,
+                'concept_path_status_label' => \App\Support\ConceptPathStatus::label($textbookChapter->concept_path_status),
+                'concept_path_card_count' => is_array($textbookChapter->concept_path_items['cards'] ?? null)
+                    ? count($textbookChapter->concept_path_items['cards'])
+                    : 0,
             ],
             'mcqImport' => $aiPrompt,
             'fillBlankConversion' => $fillBlankConversion,
@@ -884,6 +891,125 @@ class TextbookController extends Controller
 
         return $this->redirectToChapterShow($chapter)
             ->with('success', "Published online fill-blank {$codes['fill_blank']} and written {$codes['written']}. MCQ sets unchanged.");
+    }
+
+    public function conceptPath(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
+    {
+        if (! $textbookChapter->pdf_path) {
+            return $this->redirectToChapterShow($textbookChapter)
+                ->with('error', 'Upload the chapter PDF first, then build the concept path.');
+        }
+
+        $textbookChapter->load([
+            'textbook.gradeLevel:id,name',
+            'textbook.board:id,code,name',
+            'syllabusChapter:id,name,chapter_number',
+        ]);
+
+        $uploaderMode = $this->isContentUploaderContext($request);
+
+        return Inertia::render('Admin/Textbooks/ConceptPath', [
+            'uploaderMode' => $uploaderMode,
+            'chapter' => [
+                'id' => $textbookChapter->id,
+                'chapter_number' => $textbookChapter->chapter_number,
+                'title' => $textbookChapter->title,
+                'book_name' => $textbookChapter->textbook?->name,
+                'book_code' => $textbookChapter->textbook?->code,
+                'grade_name' => $textbookChapter->textbook?->gradeLevel?->name,
+                'has_pdf' => filled($textbookChapter->pdf_path),
+                'pdf_url' => $textbookChapter->pdfUrl(),
+                'show_url' => $uploaderMode
+                    ? route('content.textbooks.show', $textbookChapter)
+                    : route('admin.textbooks.show', $textbookChapter),
+                'download_url' => $uploaderMode
+                    ? route('content.textbooks.download', $textbookChapter)
+                    : route('admin.textbooks.download', $textbookChapter),
+            ],
+            'conceptPath' => $this->conceptPath->payload($textbookChapter),
+            'routes' => [
+                'preview' => $uploaderMode
+                    ? route('content.textbooks.concept-path.preview', $textbookChapter)
+                    : route('admin.textbooks.concept-path.preview', $textbookChapter),
+                'save' => $uploaderMode
+                    ? route('content.textbooks.concept-path.save', $textbookChapter)
+                    : route('admin.textbooks.concept-path.save', $textbookChapter),
+                'approve' => $uploaderMode
+                    ? route('content.textbooks.concept-path.approve', $textbookChapter)
+                    : route('admin.textbooks.concept-path.approve', $textbookChapter),
+                'reset' => $uploaderMode
+                    ? route('content.textbooks.concept-path.reset', $textbookChapter)
+                    : route('admin.textbooks.concept-path.reset', $textbookChapter),
+            ],
+        ]);
+    }
+
+    public function previewConceptPath(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'json' => ['required', 'string'],
+        ]);
+
+        $preview = $this->conceptPath->preview($validated['json']);
+
+        if ($preview['error']) {
+            return back()
+                ->withInput()
+                ->with('error', $preview['error']);
+        }
+
+        return back()
+            ->withInput()
+            ->with('concept_path_preview', $preview)
+            ->with('success', count($preview['cards']).' concept cards ready to review.');
+    }
+
+    public function saveConceptPath(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'chapter_title' => ['nullable', 'string', 'max:200'],
+            'cards' => ['required', 'array', 'min:1'],
+            'cards.*.step' => ['nullable', 'integer', 'min:1'],
+            'cards.*.type' => ['required', 'string', Rule::in(['teach', 'check'])],
+            'cards.*.title' => ['required', 'string', 'max:120'],
+            'cards.*.topic' => ['nullable', 'string', 'max:200'],
+            'cards.*.body' => ['nullable', 'string', 'max:2000'],
+            'cards.*.example' => ['nullable', 'string', 'max:800'],
+            'cards.*.common_mistake' => ['nullable', 'string', 'max:500'],
+            'cards.*.approved' => ['nullable', 'boolean'],
+            'cards.*.questions' => ['nullable', 'array'],
+        ]);
+
+        try {
+            $this->conceptPath->saveDraft(
+                $textbookChapter,
+                $validated['cards'],
+                $validated['chapter_title'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Concept path saved as draft. Review cards, then approve when the flow looks good.');
+    }
+
+    public function approveConceptPath(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        try {
+            $this->conceptPath->approve($textbookChapter, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return $this->redirectToChapterShow($textbookChapter)
+            ->with('success', 'Concept path approved. Student player can be wired next.');
+    }
+
+    public function resetConceptPath(TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $this->conceptPath->reset($textbookChapter);
+
+        return back()->with('success', 'Concept path cleared. Generate a new Cursor prompt when ready.');
     }
 
     public function convertGemini(TextbookChapter $textbookChapter): Response|RedirectResponse
