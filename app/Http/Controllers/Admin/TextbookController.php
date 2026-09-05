@@ -923,6 +923,26 @@ class TextbookController extends Controller
 
         $uploaderMode = $this->isContentUploaderContext($request);
 
+        try {
+            $conceptPathPayload = $this->conceptPath->payload($textbookChapter);
+        } catch (\Throwable $e) {
+            report($e);
+            $conceptPathPayload = [
+                'status' => $textbookChapter->concept_path_status,
+                'status_label' => \App\Support\ConceptPathStatus::label($textbookChapter->concept_path_status),
+                'chapter_title' => $textbookChapter->title,
+                'cards' => is_array($textbookChapter->concept_path_items['cards'] ?? null)
+                    ? $textbookChapter->concept_path_items['cards']
+                    : [],
+                'teach_count' => 0,
+                'check_count' => 0,
+                'question_count' => 0,
+                'approved_at' => null,
+                'has_pdf' => filled($textbookChapter->pdf_path),
+                'prompt' => '',
+            ];
+        }
+
         return Inertia::render('Admin/Textbooks/ConceptPath', [
             'uploaderMode' => $uploaderMode,
             'chapter' => [
@@ -942,7 +962,7 @@ class TextbookController extends Controller
                     ? route('content.textbooks.download', $textbookChapter)
                     : route('admin.textbooks.download', $textbookChapter),
             ],
-            'conceptPath' => $this->conceptPath->payload($textbookChapter),
+            'conceptPath' => $conceptPathPayload,
             'routes' => [
                 'preview' => $uploaderMode
                     ? route('content.textbooks.concept-path.preview', $textbookChapter)
@@ -962,6 +982,7 @@ class TextbookController extends Controller
 
     public function previewConceptPath(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
+        // Kept for compatibility; UI now previews in-browser to avoid huge POST/session failures.
         $validated = $request->validate([
             'json' => ['required', 'string'],
         ]);
@@ -969,24 +990,26 @@ class TextbookController extends Controller
         $preview = $this->conceptPath->preview($validated['json']);
 
         if ($preview['error']) {
-            // Do not withInput() — chapter JSON is large and can blow the session payload.
             return back()->with('error', $preview['error']);
         }
 
         try {
-            // Persist as draft so the page can reload cards without a huge session flash.
             $this->conceptPath->saveDraft(
                 $textbookChapter,
                 $preview['cards'],
                 $preview['chapter_title'] !== '' ? $preview['chapter_title'] : null,
             );
-        } catch (\InvalidArgumentException $e) {
-            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', $e instanceof \InvalidArgumentException
+                ? $e->getMessage()
+                : 'Could not save concept path draft. Try Preview in the browser, then Save draft.');
         }
 
         return back()->with(
             'success',
-            count($preview['cards']).' concept cards ready to review (saved as draft). Untick weak cards, then Save draft or Approve.',
+            count($preview['cards']).' concept cards saved as draft.',
         );
     }
 
@@ -994,26 +1017,33 @@ class TextbookController extends Controller
     {
         $validated = $request->validate([
             'chapter_title' => ['nullable', 'string', 'max:200'],
-            'cards' => ['required', 'array', 'min:1'],
-            'cards.*.step' => ['nullable', 'integer', 'min:1'],
-            'cards.*.type' => ['required', 'string', Rule::in(['teach', 'check'])],
-            'cards.*.title' => ['required', 'string', 'max:120'],
-            'cards.*.topic' => ['nullable', 'string', 'max:200'],
-            'cards.*.body' => ['nullable', 'string', 'max:2000'],
-            'cards.*.example' => ['nullable', 'string', 'max:800'],
-            'cards.*.common_mistake' => ['nullable', 'string', 'max:500'],
-            'cards.*.approved' => ['nullable', 'boolean'],
-            'cards.*.questions' => ['nullable', 'array'],
+            // Single JSON string avoids PHP max_input_vars limits on large card decks.
+            'payload_json' => ['required', 'string'],
         ]);
 
         try {
-            $this->conceptPath->saveDraft(
-                $textbookChapter,
-                $validated['cards'],
-                $validated['chapter_title'] ?? null,
-            );
+            $decoded = json_decode($validated['payload_json'], true, 512, JSON_THROW_ON_ERROR);
+            if (! is_array($decoded)) {
+                throw new \InvalidArgumentException('Save payload must be a JSON object.');
+            }
+
+            $cards = $decoded['cards'] ?? null;
+            if (! is_array($cards) || $cards === []) {
+                throw new \InvalidArgumentException('Nothing to save — preview cards first.');
+            }
+
+            $title = $validated['chapter_title']
+                ?? (is_string($decoded['chapter_title'] ?? null) ? $decoded['chapter_title'] : null);
+
+            $this->conceptPath->saveDraft($textbookChapter, $cards, $title);
+        } catch (\JsonException $e) {
+            return back()->with('error', 'Save payload JSON is invalid.');
         } catch (\InvalidArgumentException $e) {
-            return back()->withInput()->with('error', $e->getMessage());
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not save concept path. Check the JSON and try again.');
         }
 
         return back()->with('success', 'Concept path saved as draft. Review cards, then approve when the flow looks good.');
@@ -1025,6 +1055,10 @@ class TextbookController extends Controller
             $this->conceptPath->approve($textbookChapter, $request->user());
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not approve concept path.');
         }
 
         return $this->redirectToChapterShow($textbookChapter)

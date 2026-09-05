@@ -17,17 +17,16 @@ const page = usePage();
 const promptBox = ref(null);
 const copied = ref(false);
 const cards = ref([]);
+const rawJson = ref('');
+const previewError = ref('');
+const previewNote = ref('');
 
 const statusLabel = computed(() => props.conceptPath?.status_label || 'Not started');
 const isApproved = computed(() => props.conceptPath?.status === 'approved');
 
-const previewForm = useForm({
-    json: '',
-});
-
 const saveForm = useForm({
     chapter_title: props.conceptPath?.chapter_title || props.chapter.title,
-    cards: [],
+    payload_json: '',
 });
 
 const approveForm = useForm({});
@@ -77,11 +76,154 @@ const copyPrompt = async () => {
     }
 };
 
+const stripFences = (text) => {
+    let value = String(text || '').trim();
+    if (value.startsWith('```')) {
+        value = value.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    }
+    return value.trim();
+};
+
+const normalizeQuestion = (q, fallbackType = 'mcq') => {
+    let questionType = String(q?.question_type || q?.type || fallbackType).toLowerCase();
+    if (questionType === 'fill_in_blank') {
+        questionType = 'fill_blank';
+    }
+    if (!['mcq', 'fill_blank'].includes(questionType)) {
+        questionType = 'mcq';
+    }
+
+    const question = String(q?.question || q?.question_text || '').trim();
+    const explanation = q?.explanation ? String(q.explanation).trim() : null;
+
+    if (questionType === 'fill_blank') {
+        return {
+            question_type: 'fill_blank',
+            question,
+            options: [],
+            correct_index: null,
+            correct_answer: String(q?.correct_answer ?? '').trim(),
+            answer_format: String(q?.answer_format || 'integer').trim() || 'integer',
+            explanation,
+        };
+    }
+
+    const options = Array.isArray(q?.options)
+        ? q.options.map((opt) => String(opt ?? '').trim()).filter(Boolean).slice(0, 4)
+        : [];
+    while (options.length < 4) {
+        options.push('—');
+    }
+
+    let correctIndex = Number.isFinite(Number(q?.correct_index)) ? Number(q.correct_index) : 0;
+    if (correctIndex < 0 || correctIndex > 3) {
+        correctIndex = 0;
+    }
+
+    return {
+        question_type: 'mcq',
+        question,
+        options,
+        correct_index: correctIndex,
+        correct_answer: null,
+        answer_format: null,
+        explanation,
+    };
+};
+
+const normalizeCard = (row, index) => {
+    const type = String(row?.type || '').toLowerCase();
+    if (!['teach', 'check'].includes(type)) {
+        return null;
+    }
+
+    const title = String(row?.title || '').trim();
+    if (!title) {
+        return null;
+    }
+
+    const card = {
+        step: Number(row?.step) > 0 ? Number(row.step) : index + 1,
+        type,
+        title,
+        topic: row?.topic ? String(row.topic).trim() : null,
+        approved: row?.approved !== false,
+    };
+
+    if (type === 'teach') {
+        const body = String(row?.body || '').trim();
+        if (!body) {
+            return null;
+        }
+        card.body = body;
+        card.example = row?.example ? String(row.example).trim() : null;
+        card.common_mistake = row?.common_mistake ? String(row.common_mistake).trim() : null;
+        return card;
+    }
+
+    const questionsIn = Array.isArray(row?.questions) ? row.questions : [];
+    const questions = questionsIn
+        .map((q) => normalizeQuestion(q))
+        .filter((q) => q.question)
+        .slice(0, 3);
+
+    if (!questions.length) {
+        return null;
+    }
+
+    card.questions = questions;
+    return card;
+};
+
 const runPreview = () => {
-    previewForm.post(props.routes.preview, {
-        preserveScroll: true,
-        resetOnSuccess: false,
-    });
+    previewError.value = '';
+    previewNote.value = '';
+
+    const raw = stripFences(rawJson.value);
+    if (!raw) {
+        previewError.value = 'Paste the concept-path JSON first.';
+        return;
+    }
+
+    let decoded;
+    try {
+        decoded = JSON.parse(raw);
+    } catch (e) {
+        previewError.value = `JSON is not valid: ${e?.message || 'parse error'}`;
+        return;
+    }
+
+    const cardsIn = decoded?.cards || decoded?.steps;
+    if (!Array.isArray(cardsIn) || !cardsIn.length) {
+        previewError.value = 'JSON must include a non-empty "cards" array.';
+        return;
+    }
+
+    const normalized = cardsIn
+        .map((row, index) => normalizeCard(row, index))
+        .filter(Boolean);
+
+    const teach = normalized.filter((c) => c.type === 'teach').length;
+    const check = normalized.filter((c) => c.type === 'check').length;
+
+    if (!normalized.length) {
+        previewError.value = 'No usable teach/check cards found in JSON.';
+        return;
+    }
+    if (!teach) {
+        previewError.value = 'Include at least one teach card.';
+        return;
+    }
+    if (!check) {
+        previewError.value = 'Include at least one check card with practice questions.';
+        return;
+    }
+
+    cards.value = normalized;
+    if (decoded?.chapter_title) {
+        saveForm.chapter_title = String(decoded.chapter_title);
+    }
+    previewNote.value = `${normalized.length} cards ready — review below, then Save draft.`;
 };
 
 const saveDraft = () => {
@@ -90,7 +232,10 @@ const saveDraft = () => {
         return;
     }
 
-    saveForm.cards = cards.value;
+    saveForm.payload_json = JSON.stringify({
+        chapter_title: saveForm.chapter_title || props.chapter.title,
+        cards: cards.value,
+    });
     saveForm.post(props.routes.save, { preserveScroll: true });
 };
 
@@ -153,7 +298,7 @@ const optionLetter = (index) => String.fromCharCode(65 + index);
                             and open it in Cursor / Claude / Gemini.
                         </li>
                         <li>Copy the concept-path prompt below and paste it with the PDF.</li>
-                        <li>Paste the JSON reply here → Preview (saves draft) → untick weak cards → Save draft again if you changed anything.</li>
+                        <li>Paste the JSON reply here → <strong>Preview cards</strong> (in browser) → untick weak cards → <strong>Save draft</strong>.</li>
                         <li>When the flow looks right, click <strong>Approve concept flow</strong>.</li>
                     </ol>
                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -178,20 +323,24 @@ const optionLetter = (index) => String.fromCharCode(65 + index);
                         readonly
                         :value="conceptPath.prompt"
                     />
+                    <p v-if="!conceptPath.prompt" class="mt-2 text-xs text-amber-800">
+                        Prompt could not be generated for this chapter. You can still paste JSON below if you already have it.
+                    </p>
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <p class="text-sm font-semibold text-slate-900">Paste AI JSON</p>
                     <textarea
-                        v-model="previewForm.json"
+                        v-model="rawJson"
                         rows="10"
                         class="mt-2 w-full rounded-md border-slate-300 font-mono text-xs"
                         placeholder='{ "chapter_title": "...", "cards": [ ... ] }'
                     />
-                    <InputError class="mt-1" :message="previewForm.errors.json" />
+                    <InputError class="mt-1" :message="previewError || saveForm.errors.payload_json" />
+                    <p v-if="previewNote" class="mt-1 text-xs font-medium text-emerald-800">{{ previewNote }}</p>
                     <div class="mt-3 flex flex-wrap gap-2">
-                        <PrimaryButton type="button" :disabled="previewForm.processing || !previewForm.json.trim()" @click="runPreview">
-                            {{ previewForm.processing ? 'Checking…' : 'Preview cards' }}
+                        <PrimaryButton type="button" :disabled="!rawJson.trim()" @click="runPreview">
+                            Preview cards
                         </PrimaryButton>
                         <SecondaryButton
                             v-if="conceptPath.status"

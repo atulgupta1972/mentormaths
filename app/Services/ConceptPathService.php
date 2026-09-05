@@ -371,6 +371,16 @@ PROMPT;
         $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
         $status = $chapter->concept_path_status;
 
+        $prompt = '';
+        if (filled($chapter->pdf_path)) {
+            try {
+                $prompt = $this->cursorPrompt($chapter);
+            } catch (\Throwable $e) {
+                report($e);
+                $prompt = '';
+            }
+        }
+
         return [
             'status' => $status,
             'status_label' => ConceptPathStatus::label($status),
@@ -383,7 +393,7 @@ PROMPT;
                 ->sum(fn ($c) => count($c['questions'] ?? []))),
             'approved_at' => $chapter->concept_path_approved_at?->toIso8601String(),
             'has_pdf' => filled($chapter->pdf_path),
-            'prompt' => filled($chapter->pdf_path) ? $this->cursorPrompt($chapter) : '',
+            'prompt' => $prompt,
         ];
     }
 

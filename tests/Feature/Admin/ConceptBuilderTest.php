@@ -98,13 +98,12 @@ class ConceptBuilderTest extends TestCase
 
         $this->actingAs($admin)
             ->from(route('admin.textbooks.concept-path', $upload))
-            ->post(route('admin.textbooks.concept-path.preview', $upload), [
-                'json' => $json,
+            ->post(route('admin.textbooks.concept-path.save', $upload), [
+                'chapter_title' => 'Integers',
+                'payload_json' => $json,
             ])
             ->assertRedirect(route('admin.textbooks.concept-path', $upload))
-            ->assertSessionHas('success')
-            ->assertSessionMissing('concept_path_preview')
-            ->assertSessionMissing('_old_input');
+            ->assertSessionHas('success');
 
         $upload->refresh();
         $this->assertSame('draft', $upload->concept_path_status);
