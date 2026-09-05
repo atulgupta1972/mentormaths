@@ -976,6 +976,7 @@ class BasicsDrillSessionService
                 'id' => $question->id,
                 'type' => $question->type,
                 'question_text' => $question->question_text,
+                'diagram_url' => $question->diagram_url,
                 'explanation' => $question->explanation,
             ];
 

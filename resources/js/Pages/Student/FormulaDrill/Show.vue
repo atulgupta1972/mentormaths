@@ -317,7 +317,11 @@ const optionClass = (optionId) => {
                         Revision correction
                     </p>
 
-                    <QuestionBody :question-text="question.question_text" />
+                    <QuestionBody
+                        :question-text="question.question_text"
+                        :diagram-url="question.diagram_url"
+                        enlarge-diagram
+                    />
 
                     <div v-if="isFillInBlank" class="mt-5 space-y-3">
                         <p v-if="question.answer_format_label" class="text-xs font-medium uppercase tracking-wide text-gray-500">

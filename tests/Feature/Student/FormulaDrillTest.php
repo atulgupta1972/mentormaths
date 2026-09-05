@@ -734,6 +734,24 @@ class FormulaDrillTest extends TestCase
             ->assertJsonPath('session_complete', true);
     }
 
+    public function test_formula_drill_includes_question_diagram_url(): void
+    {
+        ['student' => $student, 'user' => $user, 'formulaQuestion' => $formulaQuestion] = $this->seedStudentWithCompletedChapter();
+
+        $formulaQuestion->update(['diagram_path' => 'question-diagrams/demo.png']);
+
+        config(['formula_drill.daily_question_count' => 1, 'formula_drill.daily_correction_count' => 0]);
+
+        $this->actingAs($user)
+            ->get(route('student.formula-drill.show'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Student/FormulaDrill/Show')
+                ->where('current.question.id', $formulaQuestion->id)
+                ->where('current.question.diagram_url', $formulaQuestion->fresh()->diagram_url)
+            );
+    }
+
     public function test_formula_drill_practice_correction_can_request_teacher_help_and_skip(): void
     {
         ['student' => $student, 'user' => $user, 'topic' => $topic] = $this->seedStudentWithCompletedChapter();

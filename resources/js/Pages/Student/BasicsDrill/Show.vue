@@ -423,7 +423,11 @@ const mcqOptionClass = (optionId) => {
                 </div>
 
                 <div v-else-if="currentItem && isFormulaFillBlank && !reveal" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
-                    <QuestionBody :question-text="currentItem.question.question_text" />
+                    <QuestionBody
+                        :question-text="currentItem.question.question_text"
+                        :diagram-url="currentItem.question.diagram_url"
+                        enlarge-diagram
+                    />
 
                     <div class="mt-5 space-y-3">
                         <p v-if="currentItem.question.answer_format_label" class="text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -452,7 +456,11 @@ const mcqOptionClass = (optionId) => {
                 </div>
 
                 <div v-else-if="currentItem && isFormulaMcq && !reveal" class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
-                    <QuestionBody :question-text="currentItem.question.question_text" />
+                    <QuestionBody
+                        :question-text="currentItem.question.question_text"
+                        :diagram-url="currentItem.question.diagram_url"
+                        enlarge-diagram
+                    />
 
                     <div class="mt-5 space-y-2">
                         <button
