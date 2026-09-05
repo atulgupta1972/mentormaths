@@ -85,7 +85,11 @@ const copyPrompt = async () => {
 };
 
 const runPreview = () => {
-    previewForm.post(props.routes.preview, { preserveScroll: true });
+    previewForm.post(props.routes.preview, {
+        preserveScroll: true,
+        preserveState: true,
+        resetOnSuccess: false,
+    });
 };
 
 const saveDraft = () => {

@@ -63,6 +63,65 @@ class ConceptBuilderTest extends TestCase
             );
     }
 
+    public function test_concept_path_preview_is_shared_to_inertia_flash(): void
+    {
+        $this->withoutVite();
+
+        [$admin, , , $upload] = $this->seedConceptBuilder(withPdf: true);
+
+        $json = json_encode([
+            'chapter_title' => 'Integers',
+            'cards' => [
+                [
+                    'step' => 1,
+                    'type' => 'teach',
+                    'title' => 'What is an integer?',
+                    'body' => 'Integers are whole numbers and their negatives.',
+                    'example' => '-3, 0, 5',
+                ],
+                [
+                    'step' => 2,
+                    'type' => 'check',
+                    'title' => 'Quick check',
+                    'questions' => [
+                        [
+                            'question_type' => 'fill_blank',
+                            'question' => 'The opposite of 3 is ____',
+                            'correct_answer' => '-3',
+                            'answer_format' => 'integer',
+                            'explanation' => 'Opposites sum to zero.',
+                        ],
+                    ],
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->actingAs($admin)
+            ->from(route('admin.textbooks.concept-path', $upload))
+            ->post(route('admin.textbooks.concept-path.preview', $upload), [
+                'json' => $json,
+            ])
+            ->assertRedirect(route('admin.textbooks.concept-path', $upload))
+            ->assertSessionHas('concept_path_preview.cards')
+            ->assertSessionHas('success');
+
+        $this->actingAs($admin)
+            ->withSession([
+                'concept_path_preview' => [
+                    'chapter_title' => 'Integers',
+                    'cards' => [['step' => 1, 'type' => 'teach', 'title' => 'Demo', 'body' => 'x', 'approved' => true]],
+                    'error' => null,
+                ],
+            ])
+            ->get(route('admin.textbooks.concept-path', $upload))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Textbooks/ConceptPath')
+                ->where('flash.concept_path_preview.chapter_title', 'Integers')
+                ->has('flash.concept_path_preview.cards', 1)
+            );
+    }
+
     public function test_textbooks_index_shows_syllabus_chapter_label(): void
     {
         $this->withoutVite();
