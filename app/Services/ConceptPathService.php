@@ -148,6 +148,12 @@ PROMPT;
                 'cards' => [],
                 'error' => $e->getMessage(),
             ];
+        } catch (\Throwable $e) {
+            return [
+                'chapter_title' => '',
+                'cards' => [],
+                'error' => 'Could not read that JSON. Check it is valid concept-path JSON (cards with teach/check).',
+            ];
         }
 
         return [

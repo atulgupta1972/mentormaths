@@ -969,15 +969,25 @@ class TextbookController extends Controller
         $preview = $this->conceptPath->preview($validated['json']);
 
         if ($preview['error']) {
-            return back()
-                ->withInput()
-                ->with('error', $preview['error']);
+            // Do not withInput() — chapter JSON is large and can blow the session payload.
+            return back()->with('error', $preview['error']);
         }
 
-        return back()
-            ->withInput()
-            ->with('concept_path_preview', $preview)
-            ->with('success', count($preview['cards']).' concept cards ready to review.');
+        try {
+            // Persist as draft so the page can reload cards without a huge session flash.
+            $this->conceptPath->saveDraft(
+                $textbookChapter,
+                $preview['cards'],
+                $preview['chapter_title'] !== '' ? $preview['chapter_title'] : null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with(
+            'success',
+            count($preview['cards']).' concept cards ready to review (saved as draft). Untick weak cards, then Save draft or Approve.',
+        );
     }
 
     public function saveConceptPath(Request $request, TextbookChapter $textbookChapter): RedirectResponse

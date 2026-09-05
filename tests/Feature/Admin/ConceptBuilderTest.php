@@ -63,7 +63,7 @@ class ConceptBuilderTest extends TestCase
             );
     }
 
-    public function test_concept_path_preview_is_shared_to_inertia_flash(): void
+    public function test_concept_path_preview_saves_draft_without_huge_session_flash(): void
     {
         $this->withoutVite();
 
@@ -102,23 +102,21 @@ class ConceptBuilderTest extends TestCase
                 'json' => $json,
             ])
             ->assertRedirect(route('admin.textbooks.concept-path', $upload))
-            ->assertSessionHas('concept_path_preview.cards')
-            ->assertSessionHas('success');
+            ->assertSessionHas('success')
+            ->assertSessionMissing('concept_path_preview')
+            ->assertSessionMissing('_old_input');
+
+        $upload->refresh();
+        $this->assertSame('draft', $upload->concept_path_status);
+        $this->assertCount(2, $upload->concept_path_items['cards'] ?? []);
 
         $this->actingAs($admin)
-            ->withSession([
-                'concept_path_preview' => [
-                    'chapter_title' => 'Integers',
-                    'cards' => [['step' => 1, 'type' => 'teach', 'title' => 'Demo', 'body' => 'x', 'approved' => true]],
-                    'error' => null,
-                ],
-            ])
             ->get(route('admin.textbooks.concept-path', $upload))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/Textbooks/ConceptPath')
-                ->where('flash.concept_path_preview.chapter_title', 'Integers')
-                ->has('flash.concept_path_preview.cards', 1)
+                ->where('conceptPath.status', 'draft')
+                ->has('conceptPath.cards', 2)
             );
     }
 

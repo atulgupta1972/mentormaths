@@ -18,7 +18,6 @@ const promptBox = ref(null);
 const copied = ref(false);
 const cards = ref([]);
 
-const flashPreview = computed(() => page.props.flash?.concept_path_preview ?? null);
 const statusLabel = computed(() => props.conceptPath?.status_label || 'Not started');
 const isApproved = computed(() => props.conceptPath?.status === 'approved');
 
@@ -34,33 +33,27 @@ const saveForm = useForm({
 const approveForm = useForm({});
 const resetForm = useForm({});
 
-watch(
-    flashPreview,
-    (preview) => {
-        if (preview?.cards?.length) {
-            cards.value = preview.cards.map((card) => ({
-                ...card,
-                approved: card.approved !== false,
-            }));
-            if (preview.chapter_title) {
-                saveForm.chapter_title = preview.chapter_title;
-            }
-        }
-    },
-    { immediate: true },
-);
+const syncCardsFromProps = (saved) => {
+    if (!saved?.length) {
+        return;
+    }
+
+    cards.value = saved.map((card) => ({
+        ...card,
+        approved: card.approved !== false,
+    }));
+
+    if (props.conceptPath?.chapter_title) {
+        saveForm.chapter_title = props.conceptPath.chapter_title;
+    }
+};
 
 watch(
     () => props.conceptPath?.cards,
     (saved) => {
-        if ((!cards.value || cards.value.length === 0) && saved?.length) {
-            cards.value = saved.map((card) => ({
-                ...card,
-                approved: card.approved !== false,
-            }));
-        }
+        syncCardsFromProps(saved);
     },
-    { immediate: true },
+    { immediate: true, deep: true },
 );
 
 const includedCount = computed(() => cards.value.filter((c) => c.approved !== false).length);
@@ -87,7 +80,6 @@ const copyPrompt = async () => {
 const runPreview = () => {
     previewForm.post(props.routes.preview, {
         preserveScroll: true,
-        preserveState: true,
         resetOnSuccess: false,
     });
 };
@@ -161,7 +153,7 @@ const optionLetter = (index) => String.fromCharCode(65 + index);
                             and open it in Cursor / Claude / Gemini.
                         </li>
                         <li>Copy the concept-path prompt below and paste it with the PDF.</li>
-                        <li>Paste the JSON reply here → Preview → untick weak cards → Save draft.</li>
+                        <li>Paste the JSON reply here → Preview (saves draft) → untick weak cards → Save draft again if you changed anything.</li>
                         <li>When the flow looks right, click <strong>Approve concept flow</strong>.</li>
                     </ol>
                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
