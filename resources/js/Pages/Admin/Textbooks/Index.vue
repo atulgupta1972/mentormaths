@@ -128,8 +128,11 @@ const setBookFilter = (event) => {
                                         <div class="text-xs text-gray-500">{{ row.book_code }} · {{ row.grade_name }}</div>
                                     </td>
                                     <td class="px-4 py-3">
-                                        <div class="font-medium">Ch {{ row.chapter_number }} — {{ row.title }}</div>
+                                        <div class="font-medium">{{ row.label || `Ch ${row.chapter_number} — ${row.title}` }}</div>
                                         <div class="text-xs text-gray-500">{{ row.items_count }} question(s) extracted</div>
+                                        <div v-if="row.concept_path_status_label" class="mt-0.5 text-[11px] text-violet-800">
+                                            Concepts: {{ row.concept_path_status_label }}
+                                        </div>
                                     </td>
                                     <td class="px-4 py-3">
                                         <span
@@ -161,6 +164,13 @@ const setBookFilter = (event) => {
                                         <div class="flex flex-col items-end gap-1">
                                             <Link :href="route('admin.textbooks.show', row.id)" class="text-indigo-600 hover:underline">
                                                 Open
+                                            </Link>
+                                            <Link
+                                                v-if="row.has_pdf"
+                                                :href="route('admin.textbooks.concept-path', row.id)"
+                                                class="text-xs font-semibold text-violet-700 hover:underline"
+                                            >
+                                                Concept path
                                             </Link>
                                             <Link
                                                 v-if="row.can_convert_fill_blank"

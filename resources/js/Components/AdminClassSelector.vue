@@ -11,7 +11,12 @@ const onChange = (event) => {
 
     // Cancel deferred dashboard loads so a stale partial response cannot 500 the page.
     router.cancel();
-    router.post(route('admin.grade-context.update'), { grade_level_id: gradeLevelId }, {
+    const gradeRoute = page.props.auth?.isContentUploader && !page.props.auth?.isAdmin
+        && route().has('content.grade-context.update')
+        ? 'content.grade-context.update'
+        : 'admin.grade-context.update';
+
+    router.post(route(gradeRoute), { grade_level_id: gradeLevelId }, {
         preserveScroll: true,
         preserveState: false,
     });

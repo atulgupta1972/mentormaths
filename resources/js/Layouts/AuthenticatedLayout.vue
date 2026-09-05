@@ -70,6 +70,7 @@ const teachingGroup = computed(() => ({
         || route().current('admin.written-sheets.*')
         || route().current('admin.written-review.*')
         || route().current('admin.textbooks.*')
+        || route().current('admin.concept-builder.*')
         || route().current('admin.formula-bank.*')
         || route().current('admin.basics-drill.*')
         || route().current('admin.content-tasks.*')
@@ -134,6 +135,12 @@ const teachingGroup = computed(() => ({
             href: route('admin.textbooks.index'),
             active: route().current('admin.textbooks.*'),
             show: isAdmin.value,
+        },
+        {
+            label: 'Concept builder',
+            href: route('admin.concept-builder.index'),
+            active: route().current('admin.concept-builder.*'),
+            show: isAdmin.value && route().has('admin.concept-builder.index'),
         },
         {
             label: 'Content upload tasks',
@@ -352,6 +359,14 @@ const navGroups = computed(() =>
                                 </NavLink>
 
                                 <NavLink
+                                    v-if="isContentUploader && route().has('content.concept-builder.index')"
+                                    :href="route('content.concept-builder.index')"
+                                    :active="route().current('content.concept-builder.*')"
+                                >
+                                    Concept builder
+                                </NavLink>
+
+                                <NavLink
                                     v-if="isMentor && !isAdmin && route().has('admin.school-study-plan.index')"
                                     :href="route('admin.school-study-plan.index')"
                                     :active="route().current('admin.school-study-plan.*')"
@@ -370,7 +385,7 @@ const navGroups = computed(() =>
                         </div>
 
                         <div class="hidden shrink-0 items-center gap-2 sm:flex sm:gap-3">
-                            <AdminClassSelector v-if="isAdmin || isMentor" />
+                            <AdminClassSelector v-if="isAdmin || isMentor || isContentUploader" />
                             <span class="hidden max-w-[7rem] truncate text-sm text-gray-500 lg:inline">
                                 {{ $page.props.auth.user.name }}
                             </span>
@@ -392,7 +407,7 @@ const navGroups = computed(() =>
 
                         <!-- Mobile toggle -->
                         <div class="flex shrink-0 items-center gap-2 sm:hidden">
-                            <AdminClassSelector v-if="isAdmin || isMentor" />
+                            <AdminClassSelector v-if="isAdmin || isMentor || isContentUploader" />
                             <button
                                 type="button"
                                 class="inline-flex items-center justify-center rounded-md p-2 text-gray-500 hover:bg-gray-100"
@@ -463,6 +478,14 @@ const navGroups = computed(() =>
                             :active="route().current('content.chapters.*')"
                         >
                             My chapters
+                        </ResponsiveNavLink>
+
+                        <ResponsiveNavLink
+                            v-if="isContentUploader && route().has('content.concept-builder.index')"
+                            :href="route('content.concept-builder.index')"
+                            :active="route().current('content.concept-builder.*')"
+                        >
+                            Concept builder
                         </ResponsiveNavLink>
 
                         <ResponsiveNavLink

@@ -558,7 +558,7 @@ const canChangeBook = computed(() =>
                         {{ chapter.book?.grade_name || 'Class' }} · {{ chapter.book?.name || 'Textbook' }}
                     </h2>
                     <p class="text-sm text-gray-500">
-                        Ch {{ chapter.chapter_number }} — {{ chapter.title }}
+                        {{ chapter.label || `Ch ${chapter.chapter_number} — ${chapter.title}` }}
                         · {{ chapter.status_label }}
                         · MCQ {{ mcqPublishSummary }}
                     </p>

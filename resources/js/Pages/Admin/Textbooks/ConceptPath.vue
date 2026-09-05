@@ -131,7 +131,7 @@ const optionLetter = (index) => String.fromCharCode(65 + index);
                     <h2 class="text-xl font-semibold text-gray-800">Concept path</h2>
                     <p class="text-sm text-gray-500">
                         {{ chapter.grade_name }} · {{ chapter.book_name }} ({{ chapter.book_code }})
-                        · Ch {{ chapter.chapter_number }} — {{ chapter.title }}
+                        · {{ chapter.label || `Ch ${chapter.chapter_number} — ${chapter.title}` }}
                     </p>
                 </div>
                 <Link :href="chapter.show_url" class="text-sm text-indigo-600 hover:underline">

@@ -200,34 +200,75 @@ class TextbookChapter extends Model
 
     public function displayChapterNumber(): string
     {
-        $local = trim((string) ($this->chapter_number ?? ''));
-        if ($local !== '') {
-            return $local;
+        // Prefer live syllabus numbering after syllabus revisions.
+        $syllabus = trim((string) ($this->syllabusChapter?->chapter_number ?? ''));
+        if ($syllabus !== '') {
+            return preg_replace('/^Ch\s*/i', '', $syllabus) ?: $syllabus;
         }
 
-        return trim((string) ($this->syllabusChapter?->chapter_number ?? ''));
+        return trim((string) ($this->chapter_number ?? ''));
     }
 
     public function displayTitle(): string
     {
-        $local = trim((string) ($this->title ?? ''));
-        if ($local !== '') {
-            return $local;
+        // Prefer live syllabus chapter name after syllabus revisions.
+        $syllabus = trim((string) ($this->syllabusChapter?->name ?? ''));
+        if ($syllabus !== '') {
+            return $syllabus;
         }
 
-        return trim((string) ($this->syllabusChapter?->name ?? ''));
+        return trim((string) ($this->title ?? ''));
     }
 
     public function displaySyllabusLabel(): string
     {
         $syllabus = $this->syllabusChapter;
         if (! $syllabus) {
-            return '';
+            $number = $this->displayChapterNumber();
+            $title = $this->displayTitle();
+
+            return $number !== '' ? "Ch {$number} — {$title}" : $title;
         }
 
-        $number = trim((string) ($syllabus->chapter_number ?? ''));
+        $name = trim((string) $syllabus->name);
+        if (preg_match('/^Ch\s*\d+/i', $name)) {
+            return $name;
+        }
 
-        return $number !== '' ? $number.' — '.$syllabus->name : (string) $syllabus->name;
+        $number = preg_replace('/^Ch\s*/i', '', trim((string) ($syllabus->chapter_number ?? '')));
+        $number = ltrim((string) $number, '0') ?: $number;
+
+        return $number !== '' ? "Ch {$number} — {$name}" : $name;
+    }
+
+    /**
+     * Keep stored book-chapter title/number aligned with the linked syllabus chapter.
+     */
+    public function syncDisplayFromSyllabus(): bool
+    {
+        $syllabus = $this->syllabusChapter;
+        if (! $syllabus) {
+            return false;
+        }
+
+        $updates = [];
+        $name = trim((string) $syllabus->name);
+        if ($name !== '' && $this->title !== $name) {
+            $updates['title'] = $name;
+        }
+
+        $number = $syllabus->numericChapterNumber();
+        if ($number > 0 && (int) $this->chapter_number !== $number) {
+            $updates['chapter_number'] = $number;
+        }
+
+        if ($updates === []) {
+            return false;
+        }
+
+        $this->update($updates);
+
+        return true;
     }
 
     public function displayChapterHeadName(): ?string

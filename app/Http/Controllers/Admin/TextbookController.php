@@ -89,17 +89,20 @@ class TextbookController extends Controller
             ->orderBy('textbook_chapters.chapter_number')
             ->select('textbook_chapters.*')
             ->get()
+            ->each(fn (TextbookChapter $chapter) => $chapter->syncDisplayFromSyllabus())
             ->map(fn (TextbookChapter $chapter) => [
                 'id' => $chapter->id,
                 'textbook_id' => $chapter->textbook_id,
                 'book_name' => $chapter->textbook?->name,
                 'book_code' => $chapter->textbook?->code,
                 'grade_name' => $chapter->textbook?->gradeLevel?->name,
-                'chapter_number' => $chapter->chapter_number,
-                'title' => $chapter->title,
+                'chapter_number' => $chapter->displayChapterNumber(),
+                'title' => $chapter->displayTitle(),
+                'label' => $chapter->displaySyllabusLabel(),
                 'status' => $chapter->status,
                 'status_label' => $chapter->statusLabel(),
                 'items_count' => count($chapter->extraction_items ?? []),
+                'has_pdf' => filled($chapter->pdf_path),
                 'mcq_set_code' => $chapter->mcqWorksheet?->set_code,
                 'mcq_set_codes' => $this->publishedMcqSetCodes($chapter),
                 'fill_blank_set_code' => $chapter->fillBlankWorksheet?->set_code,
@@ -109,6 +112,8 @@ class TextbookController extends Controller
                 ),
                 'can_convert_fill_blank' => $chapter->status === TextbookChapter::STATUS_PUBLISHED
                     && count($chapter->extraction_items ?? []) > 0,
+                'concept_path_status' => $chapter->concept_path_status,
+                'concept_path_status_label' => \App\Support\ConceptPathStatus::label($chapter->concept_path_status),
                 'published_at' => $chapter->published_at?->toDateTimeString(),
             ])
             ->values()
@@ -260,6 +265,15 @@ class TextbookController extends Controller
             'fillBlankWorksheet',
         ]);
 
+        $textbookChapter->syncDisplayFromSyllabus();
+        $textbookChapter->refresh()->load([
+            'textbook.gradeLevel',
+            'syllabusChapter',
+            'mcqWorksheet',
+            'writtenWorksheet',
+            'fillBlankWorksheet',
+        ]);
+
         $gradeLevel = $textbookChapter->textbook?->gradeLevel;
         if ($gradeLevel) {
             $this->gradeContext->persist($request, $gradeLevel->id);
@@ -399,8 +413,9 @@ class TextbookController extends Controller
                 'id' => $textbookChapter->id,
                 'status' => $textbookChapter->status,
                 'status_label' => $textbookChapter->statusLabel(),
-                'chapter_number' => $textbookChapter->chapter_number,
-                'title' => $textbookChapter->title,
+                'chapter_number' => $textbookChapter->displayChapterNumber(),
+                'title' => $textbookChapter->displayTitle(),
+                'label' => $textbookChapter->displaySyllabusLabel(),
                 'pdf_url' => $pdfUrl,
                 'has_pdf' => $hasPdf,
                 'extraction_error' => $textbookChapter->extraction_error,
@@ -912,8 +927,9 @@ class TextbookController extends Controller
             'uploaderMode' => $uploaderMode,
             'chapter' => [
                 'id' => $textbookChapter->id,
-                'chapter_number' => $textbookChapter->chapter_number,
-                'title' => $textbookChapter->title,
+                'chapter_number' => $textbookChapter->displayChapterNumber(),
+                'title' => $textbookChapter->displayTitle(),
+                'label' => $textbookChapter->displaySyllabusLabel(),
                 'book_name' => $textbookChapter->textbook?->name,
                 'book_code' => $textbookChapter->textbook?->code,
                 'grade_name' => $textbookChapter->textbook?->gradeLevel?->name,

@@ -32,6 +32,7 @@ use App\Http\Controllers\Admin\StudentController;
 use App\Http\Controllers\Admin\StudentWorkReportController;
 use App\Http\Controllers\Admin\SyllabusVersionController;
 use App\Http\Controllers\Admin\TeacherRegistrationRequestController as AdminTeacherRegistrationRequestController;
+use App\Http\Controllers\Admin\ConceptBuilderController;
 use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WrittenSheetController;
@@ -367,6 +368,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/written-assignments/{assignment}/retry-ai', [WrittenSheetController::class, 'retryAiGrading'])->name('written-assignments.retry-ai');
     Route::post('/written-assignments/{assignment}/retry-ai-question', [WrittenSheetController::class, 'retryAiQuestion'])->name('written-assignments.retry-ai-question');
 
+    Route::get('/concept-builder', [ConceptBuilderController::class, 'index'])->name('concept-builder.index');
+
     Route::get('/textbooks', [TextbookController::class, 'index'])->name('textbooks.index');
     Route::get('/textbooks/create', [TextbookController::class, 'create'])->name('textbooks.create');
     Route::post('/textbooks', [TextbookController::class, 'store'])->name('textbooks.store');
@@ -533,6 +536,9 @@ Route::middleware(['auth', 'verified', 'content.uploader', 'content.uploader.gem
     Route::post('/chapters/{textbookChapter}/append-mcq-zip', [ChapterLibraryController::class, 'appendMcqZip'])->name('chapters.append-mcq-zip');
     Route::post('/chapters/{textbookChapter}/delete-question', [ChapterLibraryController::class, 'destroyQuestion'])->name('chapters.delete-question');
     Route::post('/chapters/{textbookChapter}/request-delete', [ChapterLibraryController::class, 'requestDelete'])->name('chapters.request-delete');
+
+    Route::get('/concept-builder', [ConceptBuilderController::class, 'index'])->name('concept-builder.index');
+    Route::post('/grade-context', [GradeContextController::class, 'update'])->name('grade-context.update');
 
     Route::get('/tasks', [ContentTaskController::class, 'index'])->name('tasks.index');
     Route::get('/tasks/{contentTask}', [ContentTaskController::class, 'show'])->name('tasks.show');

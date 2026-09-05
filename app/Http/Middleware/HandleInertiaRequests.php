@@ -44,7 +44,7 @@ class HandleInertiaRequests extends Middleware
                 'isMentor' => $user?->isMentor() ?? false,
             ],
             'gradeContext' => function () use ($user, $request) {
-                if (! ($user?->isAdmin() || $user?->isMentor())) {
+                if (! ($user?->isAdmin() || $user?->isMentor() || $user?->isContentUploader())) {
                     return null;
                 }
 
