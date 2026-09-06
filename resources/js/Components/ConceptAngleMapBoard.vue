@@ -15,32 +15,102 @@ const emit = defineEmits(['select']);
  * Standard Fig 5.14 numbering:
  * Top intersection on l: 1 NW, 2 NE, 3 SE, 4 SW
  * Bottom intersection on m: 5 NW, 6 NE, 7 SE, 8 SW
+ *
+ * Drawn like a textbook: circular arcs + labels (not filled triangles).
  */
-const regions = [
-    { id: 1, d: 'M 160 120 L 70 50 L 70 120 Z', label: { x: 105, y: 100 } },
-    { id: 2, d: 'M 160 120 L 250 50 L 250 120 Z', label: { x: 210, y: 100 } },
-    { id: 3, d: 'M 160 120 L 250 120 L 250 190 Z', label: { x: 210, y: 155 } },
-    { id: 4, d: 'M 160 120 L 70 120 L 70 190 Z', label: { x: 105, y: 155 } },
-    { id: 5, d: 'M 160 280 L 70 210 L 70 280 Z', label: { x: 105, y: 260 } },
-    { id: 6, d: 'M 160 280 L 250 210 L 250 280 Z', label: { x: 210, y: 260 } },
-    { id: 7, d: 'M 160 280 L 250 280 L 250 350 Z', label: { x: 210, y: 315 } },
-    { id: 8, d: 'M 160 280 L 70 280 L 70 350 Z', label: { x: 105, y: 315 } },
+const ARC_R = 34;
+const HIT_R = 52;
+const LABEL_R = 22;
+
+const intersections = {
+    top: { x: 160, y: 120 },
+    bottom: { x: 160, y: 280 },
+};
+
+/** Quadrant: start/end unit vectors (screen coords: +x right, +y down). */
+const quadrants = {
+    NW: { ax: -1, ay: 0, bx: 0, by: -1 },
+    NE: { ax: 1, ay: 0, bx: 0, by: -1 },
+    SE: { ax: 1, ay: 0, bx: 0, by: 1 },
+    SW: { ax: -1, ay: 0, bx: 0, by: 1 },
+};
+
+const angleDefs = [
+    { id: 1, vertex: 'top', q: 'NW' },
+    { id: 2, vertex: 'top', q: 'NE' },
+    { id: 3, vertex: 'top', q: 'SE' },
+    { id: 4, vertex: 'top', q: 'SW' },
+    { id: 5, vertex: 'bottom', q: 'NW' },
+    { id: 6, vertex: 'bottom', q: 'NE' },
+    { id: 7, vertex: 'bottom', q: 'SE' },
+    { id: 8, vertex: 'bottom', q: 'SW' },
 ];
+
+/**
+ * SVG arc from arm A to arm B (90°). sweep=0 = CCW in SVG y-down space
+ * when going NE from east→north; for SE we need clockwise (sweep=1).
+ */
+const arcPath = (cx, cy, r, q) => {
+    const { ax, ay, bx, by } = quadrants[q];
+    const x1 = cx + ax * r;
+    const y1 = cy + ay * r;
+    const x2 = cx + bx * r;
+    const y2 = cy + by * r;
+    // SVG y-down: sweep 0 = CCW, 1 = CW. Short 90° arcs:
+    // NE east→north CCW; NW west→north CW; SE east→south CW; SW west→south CCW.
+    const sweep = (q === 'NE' || q === 'SW') ? 0 : 1;
+
+    return `M ${x1} ${y1} A ${r} ${r} 0 0 ${sweep} ${x2} ${y2}`;
+};
+
+const sectorHitPath = (cx, cy, r, q) => {
+    const { ax, ay, bx, by } = quadrants[q];
+    const x1 = cx + ax * r;
+    const y1 = cy + ay * r;
+    const x2 = cx + bx * r;
+    const y2 = cy + by * r;
+    const sweep = (q === 'NE' || q === 'SW') ? 0 : 1;
+
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 0 ${sweep} ${x2} ${y2} Z`;
+};
+
+const labelPoint = (cx, cy, q) => {
+    const { ax, ay, bx, by } = quadrants[q];
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    const len = Math.hypot(mx, my) || 1;
+
+    return {
+        x: cx + (mx / len) * LABEL_R,
+        y: cy + (my / len) * LABEL_R,
+    };
+};
+
+const regions = angleDefs.map((def) => {
+    const v = intersections[def.vertex];
+
+    return {
+        id: def.id,
+        arc: arcPath(v.x, v.y, ARC_R, def.q),
+        hit: sectorHitPath(v.x, v.y, HIT_R, def.q),
+        label: labelPoint(v.x, v.y, def.q),
+    };
+});
 
 const fillFor = (id) => {
     if (props.revealed && id === props.correct) {
-        return '#bbf7d0';
+        return 'rgba(187, 247, 208, 0.55)';
     }
     if (props.revealed && id === props.selected && id !== props.correct) {
-        return '#fecaca';
+        return 'rgba(254, 202, 202, 0.55)';
     }
     if (!props.revealed && id === props.selected) {
-        return '#c7d2fe';
+        return 'rgba(199, 210, 254, 0.45)';
     }
     if (id === props.highlight) {
-        return '#fde68a';
+        return 'rgba(253, 230, 138, 0.5)';
     }
-    return '#f8fafc';
+    return 'transparent';
 };
 
 const strokeFor = (id) => {
@@ -56,7 +126,14 @@ const strokeFor = (id) => {
     if (!props.revealed && id === props.selected) {
         return '#4f46e5';
     }
-    return '#94a3b8';
+    return '#0f172a';
+};
+
+const strokeWidthFor = (id) => {
+    if (id === props.highlight || id === props.selected || (props.revealed && id === props.correct)) {
+        return 3.5;
+    }
+    return 2;
 };
 
 const onSelect = (id) => {
@@ -80,18 +157,6 @@ const hint = computed(() => {
             {{ hint }}
         </p>
         <svg viewBox="0 0 320 400" class="mx-auto h-auto w-full max-w-sm select-none" role="img" aria-label="Two lines cut by a transversal with angles 1 to 8">
-            <path
-                v-for="region in regions"
-                :key="region.id"
-                :d="region.d"
-                :fill="fillFor(region.id)"
-                :stroke="strokeFor(region.id)"
-                stroke-width="2"
-                class="cursor-pointer transition-colors"
-                :class="{ 'pointer-events-none': disabled || revealed }"
-                @click="onSelect(region.id)"
-            />
-
             <!-- Line l -->
             <line x1="40" y1="120" x2="280" y2="120" stroke="#0f172a" stroke-width="3" />
             <!-- Line m -->
@@ -99,9 +164,43 @@ const hint = computed(() => {
             <!-- Transversal t -->
             <line x1="160" y1="30" x2="160" y2="370" stroke="#0f172a" stroke-width="3" />
 
-            <text x="20" y="116" font-size="14" font-weight="700" fill="#334155">l</text>
-            <text x="20" y="276" font-size="14" font-weight="700" fill="#334155">m</text>
-            <text x="168" y="28" font-size="14" font-weight="700" fill="#334155">t</text>
+            <text x="20" y="116" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">l</text>
+            <text x="20" y="276" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">m</text>
+            <text x="168" y="28" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">t</text>
+
+            <!-- Soft highlight under arc only when selected / highlighted / revealed -->
+            <path
+                v-for="region in regions"
+                :key="`fill-${region.id}`"
+                :d="region.hit"
+                :fill="fillFor(region.id)"
+                stroke="none"
+                class="pointer-events-none"
+            />
+
+            <!-- Textbook-style angle arcs -->
+            <path
+                v-for="region in regions"
+                :key="`arc-${region.id}`"
+                :d="region.arc"
+                fill="none"
+                :stroke="strokeFor(region.id)"
+                :stroke-width="strokeWidthFor(region.id)"
+                stroke-linecap="round"
+                class="pointer-events-none"
+            />
+
+            <!-- Invisible tap targets -->
+            <path
+                v-for="region in regions"
+                :key="`hit-${region.id}`"
+                :d="region.hit"
+                fill="transparent"
+                stroke="transparent"
+                class="cursor-pointer"
+                :class="{ 'pointer-events-none': disabled || revealed }"
+                @click="onSelect(region.id)"
+            />
 
             <text
                 v-for="region in regions"
@@ -109,9 +208,11 @@ const hint = computed(() => {
                 :x="region.label.x"
                 :y="region.label.y"
                 text-anchor="middle"
-                font-size="16"
+                dominant-baseline="middle"
+                font-size="15"
                 font-weight="700"
                 fill="#0f172a"
+                font-family="Georgia, 'Times New Roman', serif"
                 class="pointer-events-none"
             >
                 {{ region.id }}
