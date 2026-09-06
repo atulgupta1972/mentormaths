@@ -68,6 +68,9 @@ interleaved with tiny checks, so a student can learn the chapter foundations bef
 Card types:
 1) "teach" — short concept flash (title + body + one worked example). Optional common_mistake.
 2) "check" — 1 to 3 very easy questions to confirm that concept (MCQ with 4 options OR fill_blank).
+3) "angle_map" — OPTIONAL last card for Parallel Lines / transversal chapters only.
+   Same fixed figure with angles 1–8. Each prompt highlights one angle; the student taps the matching angle on the figure.
+   Mentormaths renders an interactive SVG board (do not invent ASCII art). Set figure_page to null.
 
 Pedagogy rules:
 - Cover the WHOLE chapter concept flow in teaching order (definitions → notation → building blocks → common traps → simple use).
@@ -81,6 +84,7 @@ Pedagogy rules:
 - If no figure is needed, set "figure_page": null.
 - Aim for 12–28 cards total (teach + check). Do not exceed 36.
 - Do NOT create long word problems, exam-level sums, or written-sheet style questions.
+- For Parallel and Intersecting Lines chapters: AFTER the teach/check flow, add ONE final "angle_map" card with 10–16 easy tap prompts covering corresponding, vertically opposite, adjacent/linear pair, alternate interior, alternate exterior, and co-interior.
 
 JSON format:
 {
@@ -151,6 +155,30 @@ JSON format:
       "common_mistake": "Students confuse the transversal with one of the two lines being crossed.",
       "topic": "Pairs of Lines",
       "figure_page": 14
+    },
+    {
+      "step": 24,
+      "type": "angle_map",
+      "title": "Tap the matching angle",
+      "body": "Same figure stays on screen. An angle is highlighted — tap the matching angle.",
+      "topic": "Parallel Lines & Transversal",
+      "figure_page": null,
+      "prompts": [
+        {
+          "relation": "corresponding",
+          "prompt": "Corresponding angle of ∠1 is…",
+          "highlight": 1,
+          "correct": 5,
+          "explanation": "∠1 and ∠5 sit in matching positions — corresponding angles."
+        },
+        {
+          "relation": "vertically_opposite",
+          "prompt": "Vertically opposite angle of ∠1 is…",
+          "highlight": 1,
+          "correct": 3,
+          "explanation": "Vertically opposite angles face each other across the intersection."
+        }
+      ]
     }
   ]
 }
@@ -218,6 +246,7 @@ PROMPT;
         $cards = [];
         $teachCount = 0;
         $checkCount = 0;
+        $angleMapCount = 0;
         $questionCount = 0;
 
         foreach (array_values($cardsIn) as $index => $row) {
@@ -226,8 +255,8 @@ PROMPT;
             }
 
             $type = strtolower(trim((string) ($row['type'] ?? '')));
-            if (! in_array($type, ['teach', 'check'], true)) {
-                throw new InvalidArgumentException('Card #'.($index + 1).' must have type "teach" or "check".');
+            if (! in_array($type, ['teach', 'check', 'angle_map'], true)) {
+                throw new InvalidArgumentException('Card #'.($index + 1).' must have type "teach", "check", or "angle_map".');
             }
 
             $title = trim((string) ($row['title'] ?? ''));
@@ -255,6 +284,14 @@ PROMPT;
                     ? Str::limit(trim((string) $row['common_mistake']), 500, '')
                     : null;
                 $teachCount++;
+            } elseif ($type === 'angle_map') {
+                $body = trim((string) ($row['body'] ?? 'Same figure stays on screen. Tap the matching angle.'));
+                $card['body'] = Str::limit($body !== '' ? $body : 'Same figure stays on screen. Tap the matching angle.', 800, '');
+                $card['figure_page'] = null;
+                $prompts = $this->normalizeAngleMapPrompts($row['prompts'] ?? [], $title);
+                $card['prompts'] = $prompts;
+                $questionCount += count($prompts);
+                $angleMapCount++;
             } else {
                 $questionsIn = $row['questions'] ?? [];
                 if (! is_array($questionsIn) || $questionsIn === []) {
@@ -292,8 +329,8 @@ PROMPT;
             throw new InvalidArgumentException('Include at least one teach card.');
         }
 
-        if ($checkCount === 0) {
-            throw new InvalidArgumentException('Include at least one check card with practice questions.');
+        if ($checkCount === 0 && $angleMapCount === 0) {
+            throw new InvalidArgumentException('Include at least one check card or angle_map practice card.');
         }
 
         return [
@@ -301,6 +338,7 @@ PROMPT;
             'cards' => $cards,
             'teach_count' => $teachCount,
             'check_count' => $checkCount,
+            'angle_map_count' => $angleMapCount,
             'question_count' => $questionCount,
         ];
     }
@@ -339,6 +377,7 @@ PROMPT;
                 'cards' => $normalized['cards'],
                 'teach_count' => $normalized['teach_count'],
                 'check_count' => $normalized['check_count'],
+                'angle_map_count' => $normalized['angle_map_count'] ?? 0,
                 'question_count' => $normalized['question_count'],
                 'saved_at' => now()->toIso8601String(),
             ],
@@ -708,13 +747,147 @@ PROMPT;
             'cards' => $cards,
             'teach_count' => (int) ($items['teach_count'] ?? collect($cards)->where('type', 'teach')->count()),
             'check_count' => (int) ($items['check_count'] ?? collect($cards)->where('type', 'check')->count()),
-            'question_count' => (int) ($items['question_count'] ?? collect($cards)
-                ->where('type', 'check')
-                ->sum(fn ($c) => count($c['questions'] ?? []))),
+            'angle_map_count' => (int) ($items['angle_map_count'] ?? collect($cards)->where('type', 'angle_map')->count()),
+            'question_count' => (int) ($items['question_count'] ?? (
+                collect($cards)->where('type', 'check')->sum(fn ($c) => count($c['questions'] ?? []))
+                + collect($cards)->where('type', 'angle_map')->sum(fn ($c) => count($c['prompts'] ?? []))
+            )),
+            'has_angle_map' => collect($cards)->contains(fn ($c) => is_array($c) && ($c['type'] ?? '') === 'angle_map'),
             'approved_at' => $chapter->concept_path_approved_at?->toIso8601String(),
             'has_pdf' => filled($chapter->pdf_path),
             'prompt' => $prompt,
         ];
+    }
+
+    /**
+     * Append the interactive 1–8 angle-map practice card at the end of the draft path.
+     */
+    public function appendAngleMapPractice(TextbookChapter $chapter): TextbookChapter
+    {
+        $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+        $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
+
+        if ($cards === []) {
+            throw new InvalidArgumentException('Save or preview teach/check cards first, then add the angle-map practice at the end.');
+        }
+
+        $already = collect($cards)->contains(fn ($card) => is_array($card) && ($card['type'] ?? '') === 'angle_map');
+        if ($already) {
+            throw new InvalidArgumentException('This concept path already has an angle-map practice card.');
+        }
+
+        $cards[] = $this->defaultAngleMapCard(count($cards) + 1);
+
+        return $this->saveDraft(
+            $chapter,
+            $cards,
+            is_string($items['chapter_title'] ?? null) ? $items['chapter_title'] : $chapter->title,
+        );
+    }
+
+    /**
+     * Fixed Fig-5.14 style board: angles 1–8 for transversal practice.
+     *
+     * @return array<string, mixed>
+     */
+    public function defaultAngleMapCard(int $step = 1): array
+    {
+        return [
+            'step' => $step,
+            'type' => 'angle_map',
+            'title' => 'Tap the matching angle',
+            'body' => 'Same figure stays on screen. One angle is highlighted — tap the angle that matches the prompt.',
+            'topic' => 'Parallel Lines & Transversal',
+            'figure_page' => null,
+            'approved' => true,
+            'prompts' => [
+                ['relation' => 'corresponding', 'prompt' => 'Corresponding angle of ∠1 is…', 'highlight' => 1, 'correct' => 5, 'explanation' => '∠1 and ∠5 are in matching positions — corresponding angles.'],
+                ['relation' => 'vertically_opposite', 'prompt' => 'Vertically opposite angle of ∠1 is…', 'highlight' => 1, 'correct' => 3, 'explanation' => 'Vertically opposite angles face each other across the crossing.'],
+                ['relation' => 'adjacent', 'prompt' => 'An adjacent angle that forms a linear pair with ∠1 is…', 'highlight' => 1, 'correct' => 2, 'explanation' => '∠1 and ∠2 are adjacent on a straight line — a linear pair (sum 180°).'],
+                ['relation' => 'corresponding', 'prompt' => 'Corresponding angle of ∠2 is…', 'highlight' => 2, 'correct' => 6, 'explanation' => '∠2 and ∠6 are corresponding.'],
+                ['relation' => 'vertically_opposite', 'prompt' => 'Vertically opposite angle of ∠2 is…', 'highlight' => 2, 'correct' => 4, 'explanation' => '∠2 and ∠4 are vertically opposite.'],
+                ['relation' => 'alternate_interior', 'prompt' => 'Alternate interior angle of ∠3 is…', 'highlight' => 3, 'correct' => 5, 'explanation' => '∠3 and ∠5 are on opposite sides of the transversal, between the two lines.'],
+                ['relation' => 'alternate_interior', 'prompt' => 'Alternate interior angle of ∠4 is…', 'highlight' => 4, 'correct' => 6, 'explanation' => '∠4 and ∠6 are alternate interior angles.'],
+                ['relation' => 'co_interior', 'prompt' => 'Co-interior (same-side interior) angle of ∠3 is…', 'highlight' => 3, 'correct' => 6, 'explanation' => '∠3 and ∠6 are interior angles on the same side of the transversal — they add to 180° when lines are parallel.'],
+                ['relation' => 'co_interior', 'prompt' => 'Co-interior (same-side interior) angle of ∠4 is…', 'highlight' => 4, 'correct' => 5, 'explanation' => '∠4 and ∠5 are co-interior angles.'],
+                ['relation' => 'alternate_exterior', 'prompt' => 'Alternate exterior angle of ∠1 is…', 'highlight' => 1, 'correct' => 7, 'explanation' => '∠1 and ∠7 are on opposite sides of the transversal, outside the two lines.'],
+                ['relation' => 'alternate_exterior', 'prompt' => 'Alternate exterior angle of ∠2 is…', 'highlight' => 2, 'correct' => 8, 'explanation' => '∠2 and ∠8 are alternate exterior angles.'],
+                ['relation' => 'corresponding', 'prompt' => 'Corresponding angle of ∠4 is…', 'highlight' => 4, 'correct' => 8, 'explanation' => '∠4 and ∠8 are corresponding.'],
+                ['relation' => 'adjacent', 'prompt' => 'An adjacent linear-pair angle of ∠6 is…', 'highlight' => 6, 'correct' => 5, 'explanation' => '∠5 and ∠6 form a linear pair on line m.'],
+                ['relation' => 'vertically_opposite', 'prompt' => 'Vertically opposite angle of ∠6 is…', 'highlight' => 6, 'correct' => 8, 'explanation' => '∠6 and ∠8 are vertically opposite.'],
+            ],
+        ];
+    }
+
+    /**
+     * @param  mixed  $promptsIn
+     * @return list<array{relation: string, prompt: string, highlight: int, correct: int, explanation: ?string}>
+     */
+    private function normalizeAngleMapPrompts(mixed $promptsIn, string $cardTitle): array
+    {
+        if (! is_array($promptsIn) || $promptsIn === []) {
+            throw new InvalidArgumentException('Angle-map card "'.$cardTitle.'" needs a non-empty prompts array.');
+        }
+
+        $allowedRelations = [
+            'corresponding',
+            'vertically_opposite',
+            'adjacent',
+            'linear_pair',
+            'alternate_interior',
+            'alternate_exterior',
+            'co_interior',
+        ];
+
+        $prompts = [];
+        foreach (array_values($promptsIn) as $index => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $promptText = trim((string) ($row['prompt'] ?? $row['question'] ?? ''));
+            if ($promptText === '') {
+                throw new InvalidArgumentException('Angle-map "'.$cardTitle.'" prompt #'.($index + 1).' needs prompt text.');
+            }
+
+            $highlight = (int) ($row['highlight'] ?? $row['from'] ?? 0);
+            $correct = (int) ($row['correct'] ?? $row['answer'] ?? $row['to'] ?? 0);
+            if ($highlight < 1 || $highlight > 8 || $correct < 1 || $correct > 8) {
+                throw new InvalidArgumentException('Angle-map "'.$cardTitle.'" prompt #'.($index + 1).' needs highlight and correct as integers 1–8.');
+            }
+            if ($highlight === $correct) {
+                throw new InvalidArgumentException('Angle-map "'.$cardTitle.'" prompt #'.($index + 1).' cannot have the same highlight and correct angle.');
+            }
+
+            $relation = strtolower(trim((string) ($row['relation'] ?? 'corresponding')));
+            $relation = str_replace([' ', '-'], '_', $relation);
+            if ($relation === 'linear_pair') {
+                $relation = 'adjacent';
+            }
+            if (! in_array($relation, $allowedRelations, true)) {
+                $relation = 'corresponding';
+            }
+
+            $prompts[] = [
+                'relation' => $relation,
+                'prompt' => Str::limit($promptText, 200, ''),
+                'highlight' => $highlight,
+                'correct' => $correct,
+                'explanation' => filled($row['explanation'] ?? null)
+                    ? Str::limit(trim((string) $row['explanation']), 400, '')
+                    : null,
+            ];
+        }
+
+        if ($prompts === []) {
+            throw new InvalidArgumentException('Angle-map card "'.$cardTitle.'" has no usable prompts.');
+        }
+
+        if (count($prompts) > 24) {
+            $prompts = array_slice($prompts, 0, 24);
+        }
+
+        return $prompts;
     }
 
     /**

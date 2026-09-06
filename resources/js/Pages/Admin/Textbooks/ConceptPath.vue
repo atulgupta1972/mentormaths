@@ -68,6 +68,17 @@ watch(
 const includedCount = computed(() => cards.value.filter((c) => c.approved !== false).length);
 const teachCount = computed(() => cards.value.filter((c) => c.type === 'teach' && c.approved !== false).length);
 const checkCount = computed(() => cards.value.filter((c) => c.type === 'check' && c.approved !== false).length);
+const angleMapCount = computed(() => cards.value.filter((c) => c.type === 'angle_map' && c.approved !== false).length);
+const hasAngleMap = computed(() => cards.value.some((c) => c.type === 'angle_map'));
+
+const appendAngleMapForm = useForm({});
+
+const appendAngleMap = () => {
+    if (!props.routes?.append_angle_map) {
+        return;
+    }
+    appendAngleMapForm.post(props.routes.append_angle_map, { preserveScroll: true });
+};
 
 const copyPrompt = async () => {
     const text = props.conceptPath?.prompt || '';
@@ -143,7 +154,7 @@ const normalizeQuestion = (q, fallbackType = 'mcq') => {
 
 const normalizeCard = (row, index) => {
     const type = String(row?.type || '').toLowerCase();
-    if (!['teach', 'check'].includes(type)) {
+    if (!['teach', 'check', 'angle_map'].includes(type)) {
         return null;
     }
 
@@ -171,6 +182,35 @@ const normalizeCard = (row, index) => {
         card.body = body;
         card.example = row?.example ? String(row.example).trim() : null;
         card.common_mistake = row?.common_mistake ? String(row.common_mistake).trim() : null;
+        return card;
+    }
+
+    if (type === 'angle_map') {
+        card.body = String(row?.body || 'Same figure stays on screen. Tap the matching angle.').trim();
+        card.figure_page = null;
+        const promptsIn = Array.isArray(row?.prompts) ? row.prompts : [];
+        const prompts = promptsIn
+            .map((p) => {
+                const prompt = String(p?.prompt || p?.question || '').trim();
+                const highlight = Number(p?.highlight ?? p?.from);
+                const correct = Number(p?.correct ?? p?.answer ?? p?.to);
+                if (!prompt || highlight < 1 || highlight > 8 || correct < 1 || correct > 8 || highlight === correct) {
+                    return null;
+                }
+                return {
+                    relation: String(p?.relation || 'corresponding'),
+                    prompt,
+                    highlight,
+                    correct,
+                    explanation: p?.explanation ? String(p.explanation).trim() : null,
+                };
+            })
+            .filter(Boolean)
+            .slice(0, 24);
+        if (!prompts.length) {
+            return null;
+        }
+        card.prompts = prompts;
         return card;
     }
 
@@ -227,17 +267,18 @@ const runPreview = () => {
 
     const teach = normalized.filter((c) => c.type === 'teach').length;
     const check = normalized.filter((c) => c.type === 'check').length;
+    const angleMap = normalized.filter((c) => c.type === 'angle_map').length;
 
     if (!normalized.length) {
-        previewError.value = 'No usable teach/check cards found in JSON.';
+        previewError.value = 'No usable teach/check/angle_map cards found in JSON.';
         return;
     }
     if (!teach) {
         previewError.value = 'Include at least one teach card.';
         return;
     }
-    if (!check) {
-        previewError.value = 'Include at least one check card with practice questions.';
+    if (!check && !angleMap) {
+        previewError.value = 'Include at least one check card or angle_map practice card.';
         return;
     }
 
@@ -517,8 +558,9 @@ const togglePagePicker = (index) => {
                     </ol>
                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Status: {{ statusLabel }}
-                        <span v-if="conceptPath.teach_count || conceptPath.check_count" class="ml-2 font-normal normal-case text-slate-600">
+                        <span v-if="conceptPath.teach_count || conceptPath.check_count || conceptPath.angle_map_count" class="ml-2 font-normal normal-case text-slate-600">
                             · {{ conceptPath.teach_count }} teach · {{ conceptPath.check_count }} check
+                            <span v-if="conceptPath.angle_map_count"> · {{ conceptPath.angle_map_count }} angle-map</span>
                             · {{ conceptPath.question_count }} mini-questions
                         </span>
                     </p>
@@ -574,9 +616,19 @@ const togglePagePicker = (index) => {
                             <p class="text-sm font-semibold text-slate-900">Review concept flow</p>
                             <p class="text-xs text-slate-600">
                                 {{ includedCount }} included · {{ teachCount }} teach · {{ checkCount }} check
+                                <span v-if="angleMapCount"> · {{ angleMapCount }} angle-map</span>
                             </p>
                         </div>
                         <div class="flex flex-wrap gap-2">
+                            <SecondaryButton
+                                v-if="!hasAngleMap"
+                                type="button"
+                                class="!border-violet-300 !text-violet-900"
+                                :disabled="appendAngleMapForm.processing || !cards.length || !routes.append_angle_map"
+                                @click="appendAngleMap"
+                            >
+                                {{ appendAngleMapForm.processing ? 'Adding…' : 'Add angle-map practice at end' }}
+                            </SecondaryButton>
                             <PrimaryButton
                                 type="button"
                                 class="!bg-violet-700 hover:!bg-violet-800"
@@ -611,12 +663,14 @@ const togglePagePicker = (index) => {
                         v-for="(card, index) in cards"
                         :key="`${card.step}-${card.title}-${index}`"
                         class="rounded-lg border bg-white p-4 shadow-sm"
-                        :class="card.approved === false ? 'border-slate-200 opacity-60' : (card.type === 'teach' ? 'border-sky-200' : 'border-amber-200')"
+                        :class="card.approved === false
+                            ? 'border-slate-200 opacity-60'
+                            : (card.type === 'teach' ? 'border-sky-200' : (card.type === 'angle_map' ? 'border-violet-200' : 'border-amber-200'))"
                     >
                         <div class="flex flex-wrap items-start justify-between gap-2">
                             <div>
                                 <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                                    Step {{ card.step }} · {{ card.type === 'teach' ? 'Teach' : 'Check' }}
+                                    Step {{ card.step }} · {{ card.type === 'teach' ? 'Teach' : (card.type === 'angle_map' ? 'Angle map' : 'Check') }}
                                     <span v-if="card.topic" class="font-medium normal-case text-slate-600"> · {{ card.topic }}</span>
                                 </p>
                                 <h3 class="mt-1 text-base font-semibold text-slate-900">{{ card.title }}</h3>
@@ -639,6 +693,27 @@ const togglePagePicker = (index) => {
                             </p>
                             <p v-if="card.common_mistake" class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
                                 <span class="font-semibold">Common mistake:</span> {{ card.common_mistake }}
+                            </p>
+                        </template>
+
+                        <template v-else-if="card.type === 'angle_map'">
+                            <p class="mt-3 text-sm text-slate-800">{{ card.body }}</p>
+                            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-violet-800">
+                                {{ (card.prompts || []).length }} tap prompts on fixed angles 1–8
+                            </p>
+                            <div class="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border border-violet-100 bg-violet-50/40 p-2">
+                                <p
+                                    v-for="(p, pIndex) in (card.prompts || [])"
+                                    :key="pIndex"
+                                    class="text-xs text-slate-800"
+                                >
+                                    <span class="font-semibold">{{ pIndex + 1 }}.</span>
+                                    {{ p.prompt }}
+                                    <span class="text-violet-800">(∠{{ p.highlight }} → ∠{{ p.correct }})</span>
+                                </p>
+                            </div>
+                            <p class="mt-2 text-xs text-slate-600">
+                                Interactive SVG board is used in Run concepts — no PDF figure needed for this card.
                             </p>
                         </template>
 
@@ -671,6 +746,7 @@ const togglePagePicker = (index) => {
                         </template>
 
                         <div
+                            v-if="card.type !== 'angle_map'"
                             class="mt-3 rounded-md border p-3"
                             :class="card.diagram_url ? 'border-slate-200 bg-slate-50' : 'border-violet-200 bg-violet-50/70'"
                         >

@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ConceptAngleMapBoard from '@/Components/ConceptAngleMapBoard.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link } from '@inertiajs/vue3';
@@ -16,6 +17,7 @@ const index = ref(0);
 const finished = ref(false);
 const selectedOption = ref(null);
 const typedAnswer = ref('');
+const selectedAngle = ref(null);
 const revealed = ref(false);
 const questionIndex = ref(0);
 
@@ -28,15 +30,32 @@ const progressPct = computed(() => {
     if (finished.value) {
         return 100;
     }
-    return Math.round(((index.value) / total.value) * 100);
+    return Math.round((index.value / total.value) * 100);
 });
 
 const currentQuestions = computed(() => (Array.isArray(current.value?.questions) ? current.value.questions : []));
+const currentPrompts = computed(() => (Array.isArray(current.value?.prompts) ? current.value.prompts : []));
 const currentQuestion = computed(() => currentQuestions.value[questionIndex.value] || null);
+const currentPrompt = computed(() => currentPrompts.value[questionIndex.value] || null);
+
+const isAngleMap = computed(() => current.value?.type === 'angle_map');
+const isTeach = computed(() => current.value?.type === 'teach');
+const isCheck = computed(() => current.value?.type === 'check');
+
+const typeLabel = computed(() => {
+    if (isAngleMap.value) {
+        return 'Angle map';
+    }
+    if (isTeach.value) {
+        return 'Teach';
+    }
+    return 'Check';
+});
 
 const resetAnswerState = () => {
     selectedOption.value = null;
     typedAnswer.value = '';
+    selectedAngle.value = null;
     revealed.value = false;
     questionIndex.value = 0;
 };
@@ -53,6 +72,9 @@ const normalizeAnswer = (value) => String(value ?? '')
     .replace(/\s+/g, '');
 
 const isCurrentCorrect = computed(() => {
+    if (isAngleMap.value) {
+        return selectedAngle.value === currentPrompt.value?.correct;
+    }
     const q = currentQuestion.value;
     if (!q) {
         return false;
@@ -64,6 +86,13 @@ const isCurrentCorrect = computed(() => {
 });
 
 const checkAnswer = () => {
+    if (isAngleMap.value) {
+        if (selectedAngle.value === null) {
+            return;
+        }
+        revealed.value = true;
+        return;
+    }
     if (!currentQuestion.value) {
         return;
     }
@@ -76,8 +105,22 @@ const checkAnswer = () => {
     revealed.value = true;
 };
 
+const onAngleSelect = (id) => {
+    if (revealed.value) {
+        return;
+    }
+    selectedAngle.value = id;
+};
+
 const goNext = () => {
-    if (current.value?.type === 'check' && currentQuestions.value.length > 1 && questionIndex.value < currentQuestions.value.length - 1) {
+    if (isAngleMap.value && currentPrompts.value.length > 1 && questionIndex.value < currentPrompts.value.length - 1) {
+        questionIndex.value += 1;
+        selectedAngle.value = null;
+        revealed.value = false;
+        return;
+    }
+
+    if (isCheck.value && currentQuestions.value.length > 1 && questionIndex.value < currentQuestions.value.length - 1) {
         questionIndex.value += 1;
         selectedOption.value = null;
         typedAnswer.value = '';
@@ -98,6 +141,16 @@ const restart = () => {
     finished.value = false;
     resetAnswerState();
 };
+
+const cardBorderClass = computed(() => {
+    if (isTeach.value) {
+        return 'border-sky-200';
+    }
+    if (isAngleMap.value) {
+        return 'border-violet-200';
+    }
+    return 'border-amber-200';
+});
 </script>
 
 <template>
@@ -148,15 +201,15 @@ const restart = () => {
                 <div
                     v-else-if="current"
                     class="rounded-xl border bg-white p-5 shadow-sm"
-                    :class="current.type === 'teach' ? 'border-sky-200' : 'border-amber-200'"
+                    :class="cardBorderClass"
                 >
                     <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                        Step {{ current.step }} · {{ current.type === 'teach' ? 'Teach' : 'Check' }}
+                        Step {{ current.step }} · {{ typeLabel }}
                         <span v-if="current.topic" class="font-medium normal-case text-slate-600"> · {{ current.topic }}</span>
                     </p>
                     <h3 class="mt-2 text-xl font-semibold text-slate-900">{{ current.title }}</h3>
 
-                    <template v-if="current.type === 'teach'">
+                    <template v-if="isTeach">
                         <p class="mt-4 whitespace-pre-wrap text-base leading-relaxed text-slate-800">{{ current.body }}</p>
                         <img
                             v-if="current.diagram_url"
@@ -174,6 +227,50 @@ const restart = () => {
                             <PrimaryButton type="button" @click="goNext">
                                 {{ index >= total - 1 ? 'Finish' : 'Next' }}
                             </PrimaryButton>
+                        </div>
+                    </template>
+
+                    <template v-else-if="isAngleMap">
+                        <p v-if="current.body" class="mt-3 text-sm text-slate-700">{{ current.body }}</p>
+                        <div class="mt-4 space-y-3">
+                            <p v-if="currentPrompts.length > 1" class="text-xs font-semibold uppercase tracking-wide text-violet-800">
+                                Prompt {{ questionIndex + 1 }} of {{ currentPrompts.length }}
+                            </p>
+                            <p class="text-base font-semibold text-slate-900">
+                                {{ currentPrompt?.prompt || 'Tap the matching angle.' }}
+                            </p>
+
+                            <ConceptAngleMapBoard
+                                :highlight="currentPrompt?.highlight ?? null"
+                                :selected="selectedAngle"
+                                :correct="currentPrompt?.correct ?? null"
+                                :revealed="revealed"
+                                @select="onAngleSelect"
+                            />
+
+                            <p
+                                v-if="revealed"
+                                class="rounded-md px-3 py-2 text-sm"
+                                :class="isCurrentCorrect ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'"
+                            >
+                                <span class="font-semibold">{{ isCurrentCorrect ? 'Correct' : 'Not quite' }}.</span>
+                                <span v-if="currentPrompt?.explanation"> {{ currentPrompt.explanation }}</span>
+                                <span v-else-if="!isCurrentCorrect"> Try ∠{{ currentPrompt?.correct }}.</span>
+                            </p>
+
+                            <div class="flex flex-wrap gap-2 pt-1">
+                                <PrimaryButton
+                                    v-if="!revealed"
+                                    type="button"
+                                    :disabled="selectedAngle === null"
+                                    @click="checkAnswer"
+                                >
+                                    Check
+                                </PrimaryButton>
+                                <PrimaryButton v-else type="button" @click="goNext">
+                                    {{ index >= total - 1 && questionIndex >= currentPrompts.length - 1 ? 'Finish' : 'Next' }}
+                                </PrimaryButton>
+                            </div>
                         </div>
                     </template>
 

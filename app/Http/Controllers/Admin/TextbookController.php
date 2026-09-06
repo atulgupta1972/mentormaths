@@ -1002,8 +1002,22 @@ class TextbookController extends Controller
                 'pull_pdf_figures' => $uploaderMode
                     ? route('content.textbooks.concept-path.pull-pdf-figures', $textbookChapter)
                     : route('admin.textbooks.concept-path.pull-pdf-figures', $textbookChapter),
+                'append_angle_map' => $uploaderMode
+                    ? route('content.textbooks.concept-path.append-angle-map', $textbookChapter)
+                    : route('admin.textbooks.concept-path.append-angle-map', $textbookChapter),
             ],
         ]);
+    }
+
+    public function appendConceptPathAngleMap(TextbookChapter $textbookChapter): RedirectResponse
+    {
+        try {
+            $this->conceptPath->appendAngleMapPractice($textbookChapter);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', 'Angle-map practice added at the end. Save/approve when ready, then Run concepts to try the tap-on-figure drills.');
     }
 
     public function previewConceptPath(Request $request, TextbookChapter $textbookChapter): RedirectResponse

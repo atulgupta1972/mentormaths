@@ -39,6 +39,7 @@ class ConceptPathServiceTest extends TestCase
         $this->assertStringContainsString('CONCEPT PATH', $prompt);
         $this->assertStringContainsString('"type": "teach"', $prompt);
         $this->assertStringContainsString('"type": "check"', $prompt);
+        $this->assertStringContainsString('"type": "angle_map"', $prompt);
         $this->assertStringContainsString('Algebraic Expressions', $prompt);
         $this->assertStringContainsString('Variables', $prompt);
     }
@@ -91,6 +92,67 @@ class ConceptPathServiceTest extends TestCase
         $chapter->refresh();
         $this->assertSame(ConceptPathStatus::APPROVED, $chapter->concept_path_status);
         $this->assertCount(2, $chapter->concept_path_items['cards']);
+    }
+
+    public function test_parse_accepts_angle_map_card_and_append_helper(): void
+    {
+        Storage::fake('public');
+        $chapter = $this->seedChapter(withPdf: true);
+        $service = app(ConceptPathService::class);
+
+        $json = json_encode([
+            'chapter_title' => 'Parallel and Intersecting Lines',
+            'cards' => [
+                [
+                    'step' => 1,
+                    'type' => 'teach',
+                    'title' => 'Transversal',
+                    'body' => 'A transversal crosses two lines.',
+                    'topic' => 'Pairs of Lines',
+                ],
+                [
+                    'step' => 2,
+                    'type' => 'check',
+                    'title' => 'Quick check',
+                    'questions' => [
+                        [
+                            'question_type' => 'fill_blank',
+                            'question' => 'A transversal forms ____ angles.',
+                            'correct_answer' => '8',
+                            'answer_format' => 'integer',
+                        ],
+                    ],
+                ],
+                [
+                    'step' => 3,
+                    'type' => 'angle_map',
+                    'title' => 'Tap the matching angle',
+                    'body' => 'Tap on the figure.',
+                    'topic' => 'Parallel Lines & Transversal',
+                    'prompts' => [
+                        [
+                            'relation' => 'corresponding',
+                            'prompt' => 'Corresponding of 1',
+                            'highlight' => 1,
+                            'correct' => 5,
+                            'explanation' => 'Matching positions.',
+                        ],
+                    ],
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $parsed = $service->parse($json);
+        $this->assertSame(1, $parsed['angle_map_count']);
+        $this->assertSame(2, $parsed['question_count']);
+
+        $service->saveDraft($chapter, array_slice($parsed['cards'], 0, 2), $parsed['chapter_title']);
+        $service->appendAngleMapPractice($chapter->fresh());
+        $chapter->refresh();
+
+        $types = collect($chapter->concept_path_items['cards'])->pluck('type')->all();
+        $this->assertContains('angle_map', $types);
+        $this->assertSame('angle_map', end($types));
     }
 
     private function seedChapter(bool $withPdf): TextbookChapter
