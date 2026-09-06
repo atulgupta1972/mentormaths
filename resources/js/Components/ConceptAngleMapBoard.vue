@@ -42,7 +42,7 @@ const intersections = {
     bottom: { x: bottomX, y: yM },
 };
 
-// atan2 screen angles (y down). / rays: up-right = -30°, down-left = 150°.
+// atan2 screen angles (y down). / rays: up-right = -45°, down-left = 135°.
 const aEast = 0;
 const aTUp = -tAngle;
 const aWest = Math.PI;
