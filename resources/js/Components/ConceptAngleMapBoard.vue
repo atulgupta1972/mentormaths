@@ -12,23 +12,19 @@ const props = defineProps({
 const emit = defineEmits(['select']);
 
 /**
- * Standard Fig 5.14 numbering:
- * Top intersection on l: 1 NW, 2 NE, 3 SE, 4 SW
- * Bottom intersection on m: 5 NW, 6 NE, 7 SE, 8 SW
- *
- * Parallel lines l || m; transversal t meets them at 30° (not perpendicular).
+ * Parallel lines l || m; transversal t at 30° to them.
+ * Acute angles (2,4,6,8) = 30°; obtuse (1,3,5,7) = 150°.
+ * Numbers sit on white discs so they stay crisp over lines/arcs.
  */
-const ARC_R = 36;
-const HIT_R = 56;
-const LABEL_R = 24;
+const HIT_R = 64;
 const TRANSVERSAL_DEG = 30;
 const DEG = Math.PI / 180;
+const ACUTE_IDS = new Set([2, 4, 6, 8]);
 
-const yL = 130;
-const yM = 270;
-const topX = 100;
+const yL = 120;
+const yM = 260;
+const topX = 95;
 const tAngle = TRANSVERSAL_DEG * DEG;
-// Screen coords: +x right, +y down. Transversal slopes down-right at 30° to horizontal.
 const tdx = Math.cos(tAngle);
 const tdy = Math.sin(tAngle);
 const bottomX = topX + (yM - yL) * (tdx / tdy);
@@ -38,16 +34,11 @@ const intersections = {
     bottom: { x: bottomX, y: yM },
 };
 
-// Ray angles via atan2(y, x). Increasing angle = clockwise in SVG y-down space.
 const aEast = 0;
-const aTUp = -tAngle; // up-right along t
+const aTUp = -tAngle;
 const aWest = Math.PI;
-const aTDown = Math.PI - tAngle; // down-left along t
+const aTDown = Math.PI - tAngle;
 
-/**
- * Wedge from start→end going clockwise (increasing atan2), matching angle regions:
- * 2 NE acute, 3 SE obtuse, 4 SW acute, 1 NW obtuse.
- */
 const wedges = {
     2: { a0: aTUp, a1: aEast },
     3: { a0: aEast, a1: aTDown },
@@ -87,14 +78,13 @@ const normalizeDelta = (a0, a1) => {
     return delta;
 };
 
-/** Clockwise arc (SVG sweep=1) from a0 to a1. */
 const arcPath = (cx, cy, r, a0, a1) => {
     const delta = normalizeDelta(a0, a1);
     const large = delta > Math.PI ? 1 : 0;
     const p0 = polar(cx, cy, r, a0);
     const p1 = polar(cx, cy, r, a1);
 
-    return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`;
+    return `M ${p0.x.toFixed(1)} ${p0.y.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`;
 };
 
 const sectorHitPath = (cx, cy, r, a0, a1) => {
@@ -103,28 +93,29 @@ const sectorHitPath = (cx, cy, r, a0, a1) => {
     const p0 = polar(cx, cy, r, a0);
     const p1 = polar(cx, cy, r, a1);
 
-    return `M ${cx.toFixed(2)} ${cy.toFixed(2)} L ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} Z`;
+    return `M ${cx.toFixed(1)} ${cy.toFixed(1)} L ${p0.x.toFixed(1)} ${p0.y.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(1)} ${p1.y.toFixed(1)} Z`;
 };
 
-const labelPoint = (cx, cy, a0, a1) => {
-    const mid = a0 + normalizeDelta(a0, a1) / 2;
-
-    return polar(cx, cy, LABEL_R, mid);
-};
+const arcRadiusFor = (id) => (ACUTE_IDS.has(id) ? 28 : 46);
+/** Acute: number sits just outside the small arc. Obtuse: inside near the arc. */
+const labelRadiusFor = (id) => (ACUTE_IDS.has(id) ? 48 : 30);
 
 const regions = angleDefs.map((def) => {
     const v = intersections[def.vertex];
     const { a0, a1 } = wedges[def.id];
+    const mid = a0 + normalizeDelta(a0, a1) / 2;
+    const label = polar(v.x, v.y, labelRadiusFor(def.id), mid);
 
     return {
         id: def.id,
-        arc: arcPath(v.x, v.y, ARC_R, a0, a1),
+        acute: ACUTE_IDS.has(def.id),
+        arc: arcPath(v.x, v.y, arcRadiusFor(def.id), a0, a1),
         hit: sectorHitPath(v.x, v.y, HIT_R, a0, a1),
-        label: labelPoint(v.x, v.y, a0, a1),
+        label,
     };
 });
 
-const linePad = 70;
+const linePad = 55;
 const tStart = {
     x: intersections.top.x - tdx * linePad,
     y: intersections.top.y - tdy * linePad,
@@ -134,8 +125,9 @@ const tEnd = {
     y: intersections.bottom.y + tdy * linePad,
 };
 
-const viewWidth = Math.max(420, Math.ceil(bottomX + 90));
-const viewBox = `0 0 ${viewWidth} 400`;
+const viewWidth = Math.ceil(Math.max(bottomX + 80, 400));
+const viewHeight = 360;
+const viewBox = `0 0 ${viewWidth} ${viewHeight}`;
 
 const fillFor = (id) => {
     if (props.revealed && id === props.correct) {
@@ -145,35 +137,51 @@ const fillFor = (id) => {
         return 'rgba(254, 202, 202, 0.55)';
     }
     if (!props.revealed && id === props.selected) {
-        return 'rgba(199, 210, 254, 0.45)';
+        return 'rgba(199, 210, 254, 0.5)';
     }
     if (id === props.highlight) {
-        return 'rgba(253, 230, 138, 0.5)';
+        return 'rgba(253, 230, 138, 0.55)';
     }
     return 'transparent';
 };
 
 const strokeFor = (id) => {
     if (props.revealed && id === props.correct) {
-        return '#059669';
+        return '#047857';
     }
     if (props.revealed && id === props.selected && id !== props.correct) {
-        return '#e11d48';
+        return '#be123c';
     }
     if (id === props.highlight) {
-        return '#d97706';
+        return '#b45309';
     }
     if (!props.revealed && id === props.selected) {
-        return '#4f46e5';
+        return '#4338ca';
     }
     return '#0f172a';
 };
 
 const strokeWidthFor = (id) => {
     if (id === props.highlight || id === props.selected || (props.revealed && id === props.correct)) {
-        return 3.5;
+        return 3.25;
     }
-    return 2;
+    return 2.25;
+};
+
+const badgeStrokeFor = (id) => {
+    if (props.revealed && id === props.correct) {
+        return '#047857';
+    }
+    if (props.revealed && id === props.selected && id !== props.correct) {
+        return '#be123c';
+    }
+    if (id === props.highlight) {
+        return '#b45309';
+    }
+    if (!props.revealed && id === props.selected) {
+        return '#4338ca';
+    }
+    return '#334155';
 };
 
 const onSelect = (id) => {
@@ -198,35 +206,13 @@ const hint = computed(() => {
         </p>
         <svg
             :viewBox="viewBox"
-            class="mx-auto h-auto w-full max-w-md select-none"
+            class="mx-auto h-auto w-full max-w-lg select-none"
             role="img"
             aria-label="Two parallel lines cut by a transversal at 30 degrees with angles 1 to 8"
+            text-rendering="geometricPrecision"
+            shape-rendering="geometricPrecision"
         >
-            <!-- Line l -->
-            <line x1="40" :y1="yL" :x2="viewWidth - 40" :y2="yL" stroke="#0f172a" stroke-width="3" />
-            <!-- Line m -->
-            <line x1="40" :y1="yM" :x2="viewWidth - 40" :y2="yM" stroke="#0f172a" stroke-width="3" />
-            <!-- Transversal t at 30° -->
-            <line
-                :x1="tStart.x"
-                :y1="tStart.y"
-                :x2="tEnd.x"
-                :y2="tEnd.y"
-                stroke="#0f172a"
-                stroke-width="3"
-            />
-
-            <text x="22" :y="yL - 8" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">l</text>
-            <text x="22" :y="yM - 8" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">m</text>
-            <text
-                :x="tStart.x + 10"
-                :y="tStart.y - 4"
-                font-size="14"
-                font-weight="700"
-                fill="#334155"
-                font-family="Georgia, 'Times New Roman', serif"
-            >t</text>
-
+            <!-- Soft highlight wedges (behind lines) -->
             <path
                 v-for="region in regions"
                 :key="`fill-${region.id}`"
@@ -236,6 +222,61 @@ const hint = computed(() => {
                 class="pointer-events-none"
             />
 
+            <!-- Parallel lines + transversal -->
+            <line
+                x1="36"
+                :y1="yL"
+                :x2="viewWidth - 36"
+                :y2="yL"
+                stroke="#0f172a"
+                stroke-width="3"
+                stroke-linecap="square"
+            />
+            <line
+                x1="36"
+                :y1="yM"
+                :x2="viewWidth - 36"
+                :y2="yM"
+                stroke="#0f172a"
+                stroke-width="3"
+                stroke-linecap="square"
+            />
+            <line
+                :x1="tStart.x"
+                :y1="tStart.y"
+                :x2="tEnd.x"
+                :y2="tEnd.y"
+                stroke="#0f172a"
+                stroke-width="3"
+                stroke-linecap="square"
+            />
+
+            <text
+                x="20"
+                :y="yL - 10"
+                font-size="16"
+                font-weight="700"
+                fill="#0f172a"
+                font-family="ui-sans-serif, system-ui, sans-serif"
+            >l</text>
+            <text
+                x="20"
+                :y="yM - 10"
+                font-size="16"
+                font-weight="700"
+                fill="#0f172a"
+                font-family="ui-sans-serif, system-ui, sans-serif"
+            >m</text>
+            <text
+                :x="tStart.x + 8"
+                :y="tStart.y - 6"
+                font-size="16"
+                font-weight="700"
+                fill="#0f172a"
+                font-family="ui-sans-serif, system-ui, sans-serif"
+            >t</text>
+
+            <!-- Angle arcs -->
             <path
                 v-for="region in regions"
                 :key="`arc-${region.id}`"
@@ -247,6 +288,7 @@ const hint = computed(() => {
                 class="pointer-events-none"
             />
 
+            <!-- Tap targets -->
             <path
                 v-for="region in regions"
                 :key="`hit-${region.id}`"
@@ -258,21 +300,29 @@ const hint = computed(() => {
                 @click="onSelect(region.id)"
             />
 
-            <text
-                v-for="region in regions"
-                :key="`label-${region.id}`"
-                :x="region.label.x"
-                :y="region.label.y"
-                text-anchor="middle"
-                dominant-baseline="middle"
-                font-size="15"
-                font-weight="700"
-                fill="#0f172a"
-                font-family="Georgia, 'Times New Roman', serif"
-                class="pointer-events-none"
-            >
-                {{ region.id }}
-            </text>
+            <!-- Crisp number badges -->
+            <g v-for="region in regions" :key="`label-${region.id}`" class="pointer-events-none">
+                <circle
+                    :cx="region.label.x"
+                    :cy="region.label.y"
+                    r="12"
+                    fill="#ffffff"
+                    :stroke="badgeStrokeFor(region.id)"
+                    stroke-width="1.75"
+                />
+                <text
+                    :x="region.label.x"
+                    :y="region.label.y"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                    font-size="15"
+                    font-weight="800"
+                    fill="#0f172a"
+                    font-family="ui-sans-serif, system-ui, sans-serif"
+                >
+                    {{ region.id }}
+                </text>
+            </g>
         </svg>
         <p class="mt-1 px-1 text-center text-[11px] text-slate-500">
             Angles 1–4 at line <strong>l</strong>, angles 5–8 at line <strong>m</strong>, transversal <strong>t</strong> at 30°.
