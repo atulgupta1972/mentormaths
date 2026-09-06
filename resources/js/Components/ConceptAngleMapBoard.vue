@@ -12,34 +12,44 @@ const props = defineProps({
 const emit = defineEmits(['select']);
 
 /**
- * Parallel lines l || m; transversal t at 30° to them.
- * Acute angles (2,4,6,8) = 30°; obtuse (1,3,5,7) = 150°.
- * Numbers sit on white discs so they stay crisp over lines/arcs.
+ * Textbook style (NCERT Fig. 5.27):
+ * - parallel l, m with arrowheads
+ * - transversal t as / at 30° to the horizontals
+ * - small circular arcs only (no big discs / triangle wedges)
+ * - crisp serif numbers beside the arcs
+ *
+ * Numbering (Fig 5.14): 1 NW, 2 NE, 3 SE, 4 SW on l; 5–8 same on m.
  */
-const HIT_R = 64;
+const ARC_R = 22;
+const HIGHLIGHT_R = 26;
+const HIT_R = 58;
+const LABEL_R = 34;
 const TRANSVERSAL_DEG = 30;
 const DEG = Math.PI / 180;
-const ACUTE_IDS = new Set([2, 4, 6, 8]);
 
-const yL = 120;
-const yM = 260;
-const topX = 95;
+const yL = 115;
+const yM = 265;
+const topX = 250;
 const tAngle = TRANSVERSAL_DEG * DEG;
+
+// / transversal: down-left / up-right. From top → bottom: x decreases.
 const tdx = Math.cos(tAngle);
 const tdy = Math.sin(tAngle);
-const bottomX = topX + (yM - yL) * (tdx / tdy);
+const bottomX = topX - (yM - yL) * (tdx / tdy);
 
 const intersections = {
     top: { x: topX, y: yL },
     bottom: { x: bottomX, y: yM },
 };
 
+// atan2 screen angles (y down). / rays: up-right = -30°, down-left = 150°.
 const aEast = 0;
 const aTUp = -tAngle;
 const aWest = Math.PI;
 const aTDown = Math.PI - tAngle;
 
 const wedges = {
+    // clockwise wedges: 2 NE acute, 3 SE obtuse, 4 SW acute, 1 NW obtuse
     2: { a0: aTUp, a1: aEast },
     3: { a0: aEast, a1: aTDown },
     4: { a0: aTDown, a1: aWest },
@@ -50,16 +60,10 @@ const wedges = {
     5: { a0: aWest, a1: aTUp + 2 * Math.PI },
 };
 
-const angleDefs = [
-    { id: 1, vertex: 'top' },
-    { id: 2, vertex: 'top' },
-    { id: 3, vertex: 'top' },
-    { id: 4, vertex: 'top' },
-    { id: 5, vertex: 'bottom' },
-    { id: 6, vertex: 'bottom' },
-    { id: 7, vertex: 'bottom' },
-    { id: 8, vertex: 'bottom' },
-];
+const angleDefs = [1, 2, 3, 4, 5, 6, 7, 8].map((id) => ({
+    id,
+    vertex: id <= 4 ? 'top' : 'bottom',
+}));
 
 const polar = (cx, cy, r, angle) => ({
     x: cx + r * Math.cos(angle),
@@ -87,7 +91,7 @@ const arcPath = (cx, cy, r, a0, a1) => {
     return `M ${p0.x.toFixed(1)} ${p0.y.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`;
 };
 
-const sectorHitPath = (cx, cy, r, a0, a1) => {
+const sectorPath = (cx, cy, r, a0, a1) => {
     const delta = normalizeDelta(a0, a1);
     const large = delta > Math.PI ? 1 : 0;
     const p0 = polar(cx, cy, r, a0);
@@ -96,53 +100,55 @@ const sectorHitPath = (cx, cy, r, a0, a1) => {
     return `M ${cx.toFixed(1)} ${cy.toFixed(1)} L ${p0.x.toFixed(1)} ${p0.y.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(1)} ${p1.y.toFixed(1)} Z`;
 };
 
-const arcRadiusFor = (id) => (ACUTE_IDS.has(id) ? 28 : 46);
-/** Acute: number sits just outside the small arc. Obtuse: inside near the arc. */
-const labelRadiusFor = (id) => (ACUTE_IDS.has(id) ? 48 : 30);
-
 const regions = angleDefs.map((def) => {
     const v = intersections[def.vertex];
     const { a0, a1 } = wedges[def.id];
     const mid = a0 + normalizeDelta(a0, a1) / 2;
-    const label = polar(v.x, v.y, labelRadiusFor(def.id), mid);
 
     return {
         id: def.id,
-        acute: ACUTE_IDS.has(def.id),
-        arc: arcPath(v.x, v.y, arcRadiusFor(def.id), a0, a1),
-        hit: sectorHitPath(v.x, v.y, HIT_R, a0, a1),
-        label,
+        arc: arcPath(v.x, v.y, ARC_R, a0, a1),
+        highlightArc: arcPath(v.x, v.y, HIGHLIGHT_R, a0, a1),
+        highlightFill: sectorPath(v.x, v.y, HIGHLIGHT_R, a0, a1),
+        hit: sectorPath(v.x, v.y, HIT_R, a0, a1),
+        label: polar(v.x, v.y, LABEL_R, mid),
     };
 });
 
-const linePad = 55;
+const extend = 48;
 const tStart = {
-    x: intersections.top.x - tdx * linePad,
-    y: intersections.top.y - tdy * linePad,
+    x: intersections.bottom.x - tdx * extend,
+    y: intersections.bottom.y + tdy * extend,
 };
 const tEnd = {
-    x: intersections.bottom.x + tdx * linePad,
-    y: intersections.bottom.y + tdy * linePad,
+    x: intersections.top.x + tdx * extend,
+    y: intersections.top.y - tdy * extend,
 };
 
-const viewWidth = Math.ceil(Math.max(bottomX + 80, 400));
+const viewWidth = 420;
 const viewHeight = 360;
 const viewBox = `0 0 ${viewWidth} ${viewHeight}`;
+const lineLeft = 50;
+const lineRight = viewWidth - 50;
+
+const isActive = (id) => id === props.highlight
+    || id === props.selected
+    || (props.revealed && id === props.correct);
 
 const fillFor = (id) => {
     if (props.revealed && id === props.correct) {
-        return 'rgba(187, 247, 208, 0.55)';
+        return 'rgba(167, 243, 208, 0.45)';
     }
     if (props.revealed && id === props.selected && id !== props.correct) {
-        return 'rgba(254, 202, 202, 0.55)';
+        return 'rgba(254, 202, 202, 0.45)';
     }
     if (!props.revealed && id === props.selected) {
-        return 'rgba(199, 210, 254, 0.5)';
+        return 'rgba(199, 210, 254, 0.4)';
     }
     if (id === props.highlight) {
-        return 'rgba(253, 230, 138, 0.55)';
+        return 'rgba(253, 230, 138, 0.4)';
     }
-    return 'transparent';
+    return 'none';
 };
 
 const strokeFor = (id) => {
@@ -158,30 +164,7 @@ const strokeFor = (id) => {
     if (!props.revealed && id === props.selected) {
         return '#4338ca';
     }
-    return '#0f172a';
-};
-
-const strokeWidthFor = (id) => {
-    if (id === props.highlight || id === props.selected || (props.revealed && id === props.correct)) {
-        return 3.25;
-    }
-    return 2.25;
-};
-
-const badgeStrokeFor = (id) => {
-    if (props.revealed && id === props.correct) {
-        return '#047857';
-    }
-    if (props.revealed && id === props.selected && id !== props.correct) {
-        return '#be123c';
-    }
-    if (id === props.highlight) {
-        return '#b45309';
-    }
-    if (!props.revealed && id === props.selected) {
-        return '#4338ca';
-    }
-    return '#334155';
+    return '#111827';
 };
 
 const onSelect = (id) => {
@@ -200,132 +183,142 @@ const hint = computed(() => {
 </script>
 
 <template>
-    <div class="rounded-lg border border-slate-200 bg-white p-2">
-        <p class="mb-1 px-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+    <div class="rounded-lg border border-slate-200 bg-white p-3">
+        <p class="mb-2 px-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {{ hint }}
         </p>
         <svg
             :viewBox="viewBox"
             class="mx-auto h-auto w-full max-w-lg select-none"
             role="img"
-            aria-label="Two parallel lines cut by a transversal at 30 degrees with angles 1 to 8"
+            aria-label="Parallel lines cut by a transversal with angles 1 to 8"
             text-rendering="geometricPrecision"
             shape-rendering="geometricPrecision"
         >
-            <!-- Soft highlight wedges (behind lines) -->
-            <path
-                v-for="region in regions"
-                :key="`fill-${region.id}`"
-                :d="region.hit"
-                :fill="fillFor(region.id)"
-                stroke="none"
-                class="pointer-events-none"
-            />
+            <defs>
+                <marker id="arrow-end" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L6,3 L0,6 Z" fill="#111827" />
+                </marker>
+                <marker id="arrow-start" markerWidth="8" markerHeight="8" refX="2" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M6,0 L0,3 L6,6 Z" fill="#111827" />
+                </marker>
+            </defs>
 
-            <!-- Parallel lines + transversal -->
+            <!-- Lines first (textbook look) -->
             <line
-                x1="36"
+                :x1="lineLeft"
                 :y1="yL"
-                :x2="viewWidth - 36"
+                :x2="lineRight"
                 :y2="yL"
-                stroke="#0f172a"
-                stroke-width="3"
-                stroke-linecap="square"
+                stroke="#111827"
+                stroke-width="2.5"
+                marker-start="url(#arrow-start)"
+                marker-end="url(#arrow-end)"
             />
             <line
-                x1="36"
+                :x1="lineLeft"
                 :y1="yM"
-                :x2="viewWidth - 36"
+                :x2="lineRight"
                 :y2="yM"
-                stroke="#0f172a"
-                stroke-width="3"
-                stroke-linecap="square"
+                stroke="#111827"
+                stroke-width="2.5"
+                marker-start="url(#arrow-start)"
+                marker-end="url(#arrow-end)"
             />
             <line
                 :x1="tStart.x"
                 :y1="tStart.y"
                 :x2="tEnd.x"
                 :y2="tEnd.y"
-                stroke="#0f172a"
-                stroke-width="3"
-                stroke-linecap="square"
+                stroke="#111827"
+                stroke-width="2.5"
+                marker-start="url(#arrow-start)"
+                marker-end="url(#arrow-end)"
             />
 
             <text
-                x="20"
-                :y="yL - 10"
-                font-size="16"
+                :x="lineLeft - 18"
+                :y="yL + 5"
+                font-size="18"
+                font-style="italic"
                 font-weight="700"
-                fill="#0f172a"
-                font-family="ui-sans-serif, system-ui, sans-serif"
+                fill="#111827"
+                font-family="Georgia, 'Times New Roman', Times, serif"
             >l</text>
             <text
-                x="20"
-                :y="yM - 10"
-                font-size="16"
+                :x="lineLeft - 18"
+                :y="yM + 5"
+                font-size="18"
+                font-style="italic"
                 font-weight="700"
-                fill="#0f172a"
-                font-family="ui-sans-serif, system-ui, sans-serif"
+                fill="#111827"
+                font-family="Georgia, 'Times New Roman', Times, serif"
             >m</text>
             <text
-                :x="tStart.x + 8"
-                :y="tStart.y - 6"
-                font-size="16"
+                :x="tEnd.x + 8"
+                :y="tEnd.y + 6"
+                font-size="18"
+                font-style="italic"
                 font-weight="700"
-                fill="#0f172a"
-                font-family="ui-sans-serif, system-ui, sans-serif"
+                fill="#111827"
+                font-family="Georgia, 'Times New Roman', Times, serif"
             >t</text>
 
-            <!-- Angle arcs -->
+            <!-- Soft highlight only for active angle (tight to arc, textbook size) -->
+            <path
+                v-for="region in regions.filter((r) => isActive(r.id))"
+                :key="`fill-${region.id}`"
+                :d="region.highlightFill"
+                :fill="fillFor(region.id)"
+                stroke="none"
+                class="pointer-events-none"
+            />
+
+            <!-- Default thin black arcs (all 8) -->
             <path
                 v-for="region in regions"
                 :key="`arc-${region.id}`"
-                :d="region.arc"
+                :d="isActive(region.id) ? region.highlightArc : region.arc"
                 fill="none"
                 :stroke="strokeFor(region.id)"
-                :stroke-width="strokeWidthFor(region.id)"
+                :stroke-width="isActive(region.id) ? 3 : 1.75"
                 stroke-linecap="round"
                 class="pointer-events-none"
             />
 
-            <!-- Tap targets -->
+            <!-- Invisible tap wedges -->
             <path
                 v-for="region in regions"
                 :key="`hit-${region.id}`"
                 :d="region.hit"
                 fill="transparent"
-                stroke="transparent"
                 class="cursor-pointer"
                 :class="{ 'pointer-events-none': disabled || revealed }"
                 @click="onSelect(region.id)"
             />
 
-            <!-- Crisp number badges -->
-            <g v-for="region in regions" :key="`label-${region.id}`" class="pointer-events-none">
-                <circle
-                    :cx="region.label.x"
-                    :cy="region.label.y"
-                    r="12"
-                    fill="#ffffff"
-                    :stroke="badgeStrokeFor(region.id)"
-                    stroke-width="1.75"
-                />
-                <text
-                    :x="region.label.x"
-                    :y="region.label.y"
-                    text-anchor="middle"
-                    dominant-baseline="central"
-                    font-size="15"
-                    font-weight="800"
-                    fill="#0f172a"
-                    font-family="ui-sans-serif, system-ui, sans-serif"
-                >
-                    {{ region.id }}
-                </text>
-            </g>
+            <!-- Crisp serif numbers with white halo (no badge circles) -->
+            <text
+                v-for="region in regions"
+                :key="`label-${region.id}`"
+                :x="region.label.x"
+                :y="region.label.y"
+                text-anchor="middle"
+                dominant-baseline="central"
+                font-size="17"
+                font-weight="700"
+                fill="#111827"
+                stroke="#ffffff"
+                stroke-width="4"
+                paint-order="stroke fill"
+                font-family="Georgia, 'Times New Roman', Times, serif"
+                class="pointer-events-none"
+            >
+                {{ region.id }}
+            </text>
         </svg>
-        <p class="mt-1 px-1 text-center text-[11px] text-slate-500">
-            Angles 1–4 at line <strong>l</strong>, angles 5–8 at line <strong>m</strong>, transversal <strong>t</strong> at 30°.
+        <p class="mt-2 px-1 text-center text-[11px] text-slate-500">
+            Angles 1–4 at line <em>l</em>, angles 5–8 at line <em>m</em>, transversal <em>t</em> at 30°.
         </p>
     </div>
 </template>
