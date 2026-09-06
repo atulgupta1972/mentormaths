@@ -17,8 +17,8 @@ const props = defineProps({
     removeDiagramRoute: { type: String, default: '' },
     editableStatuses: {
         type: Array,
-        // Stay editable until admin publishes — locking verification must not freeze the form.
-        default: () => ['uploaded', 'verification_in_progress', 'verified', 'submitted_for_publish'],
+        // Stay editable through publish so uploaders can finish Gemini on published chapters.
+        default: () => ['uploaded', 'verification_in_progress', 'verified', 'submitted_for_publish', 'published'],
     },
     showCompleteActions: { type: Boolean, default: true },
     completeVerificationRoute: { type: String, default: '' },
@@ -51,6 +51,16 @@ const verificationSummary = computed(() => props.verification?.summary ?? {
 const canEditQuestions = computed(() => props.editableStatuses.includes(props.task.status));
 const canSkip = computed(() => Boolean(props.skipRoute) && props.skipRoute !== '#' && canEditQuestions.value);
 const canUnskip = computed(() => Boolean(props.unskipRoute) && props.unskipRoute !== '#' && canEditQuestions.value);
+const geminiPendingCount = computed(() =>
+    Number(
+        props.verification?.gemini_pending_count
+        ?? props.verification?.progress?.pending
+        ?? 0,
+    ),
+);
+const geminiBlocksSubmit = computed(() =>
+    Boolean(props.verification?.progress?.can_gemini) && geminiPendingCount.value > 0,
+);
 
 const pendingQuestions = computed(() =>
     (props.verification?.questions ?? []).filter((row) => !row.is_verified),
@@ -687,7 +697,7 @@ const removeDiagram = (questionId) => {
             <PrimaryButton
                 v-if="completeVerificationRoute"
                 type="button"
-                :disabled="completeForm.processing || verificationSummary.unverified > 0"
+                :disabled="completeForm.processing || verificationSummary.unverified > 0 || geminiBlocksSubmit"
                 @click="completeForm.post(completeVerificationRoute)"
             >
                 All verified — ready for publish
@@ -695,11 +705,14 @@ const removeDiagram = (questionId) => {
             <PrimaryButton
                 v-if="submitForPublishRoute && task.status === 'verified'"
                 type="button"
-                :disabled="submitForm.processing"
+                :disabled="submitForm.processing || geminiBlocksSubmit"
                 @click="submitForm.post(submitForPublishRoute)"
             >
                 Submit for admin publish
             </PrimaryButton>
+            <p v-if="geminiBlocksSubmit" class="w-full text-sm text-amber-800">
+                Finish Gemini review ({{ geminiPendingCount }} pending) before this chapter can be sent for publish.
+            </p>
         </div>
 
         <DiagramCropModal

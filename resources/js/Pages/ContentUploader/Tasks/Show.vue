@@ -139,6 +139,9 @@ onUnmounted(() => clearInterval(pingTimer));
                         Upload a figure when the question needs one.
                         Or use <strong>Gemini paste review</strong> to auto-verify the correct ones.
                     </p>
+                    <p v-if="task.status === 'published'" class="mt-2 text-sm text-indigo-900">
+                        This chapter is published — you can still complete Gemini review for any pending questions.
+                    </p>
                     <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline">
                         Open textbook chapter →
                     </a>
@@ -146,8 +149,13 @@ onUnmounted(() => clearInterval(pingTimer));
 
                 <GeminiVerificationGuide v-if="showGeminiGuide" />
 
-                <div v-else-if="task.status === 'published' && !verification" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
-                    <p class="text-sm text-gray-700">This chapter is published. Gemini verification is not available for this task yet.</p>
+                <div
+                    v-else-if="task.status === 'published' && !verification"
+                    class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200"
+                >
+                    <p class="text-sm text-gray-700">
+                        This chapter is published. Open review once MCQ sets are saved so Gemini verification can load.
+                    </p>
                 </div>
 
                 <GeminiPasteReviewPanel

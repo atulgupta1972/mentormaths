@@ -158,7 +158,8 @@ const geminiProgressLabel = (task) => {
                     v-if="summary.gemini_pending"
                     class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900"
                 >
-                    Gemini check pending. Complete Gemini for your pending tasks before starting any new uploads.
+                    Gemini check pending on {{ summary.gemini_pending }} chapter(s) — including published ones.
+                    Complete Gemini before starting new uploads. Chapters cannot be submitted for publish until Gemini is done.
                 </div>
 
                 <GeminiVerificationGuide v-if="summary.gemini_pending" />

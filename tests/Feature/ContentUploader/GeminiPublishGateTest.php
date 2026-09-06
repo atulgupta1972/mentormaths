@@ -49,6 +49,69 @@ class GeminiPublishGateTest extends TestCase
         $this->assertSame(ContentUploadTask::STATUS_VERIFIED, $task->fresh()->status);
     }
 
+    public function test_uploader_can_open_gemini_review_on_published_task(): void
+    {
+        Mail::fake();
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'published_at' => now(),
+        ]);
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('ContentUploader/Tasks/Show')
+                ->where('task.status', ContentUploadTask::STATUS_PUBLISHED)
+                ->has('verification.run_id')
+                ->has('verification.questions')
+                ->where('verification.gemini_pending_count', 1));
+    }
+
+    public function test_uploader_cannot_complete_verification_until_gemini_is_complete(): void
+    {
+        Mail::fake();
+        [$uploader, $chapter, $task] = $this->seedPublishedTask();
+
+        $task->update(['status' => ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS]);
+
+        $this->actingAs($uploader)
+            ->get(route('content.tasks.show', $task))
+            ->assertOk();
+
+        $run = ContentVerificationRun::query()
+            ->where('content_upload_task_id', $task->id)
+            ->where('user_id', $uploader->id)
+            ->orderByDesc('id')
+            ->first();
+
+        $this->assertNotNull($run);
+
+        ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $run->id)
+            ->update([
+                'verified_at' => now(),
+                'check_text' => true,
+                'check_options' => true,
+                'check_correct' => true,
+                'check_hint' => true,
+                'check_explanation' => true,
+                'check_difficulty' => true,
+                'check_diagram' => true,
+                'ai_verdict' => null,
+            ]);
+
+        $this->actingAs($uploader)
+            ->from(route('content.tasks.show', $task))
+            ->post(route('content.tasks.complete-verification', $task), ['run_id' => $run->id])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame(ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS, $task->fresh()->status);
+    }
+
     public function test_uploader_can_submit_for_publish_after_gemini_approve(): void
     {
         Mail::fake();

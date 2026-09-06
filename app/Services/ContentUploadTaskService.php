@@ -375,15 +375,7 @@ class ContentUploadTaskService
 
         // Uploader must complete Gemini MCQ prompt verification before admin publishes.
         // (Fill-in-blank conversion tasks do not use Gemini paste MCQ review.)
-        if (! $task->isFillBlankConversion()) {
-            $progress = $this->verificationService->progressForTask($task, $uploader);
-            if (($progress['can_gemini'] ?? false) && (int) ($progress['pending'] ?? 0) > 0) {
-                $pending = (int) $progress['pending'];
-                throw new \InvalidArgumentException(
-                    "Complete the Gemini check for all pending questions before submitting for admin publish ({$pending} still pending). Skipped questions count as done — use Apply Gemini review for any remaining Correct / Needs Verification rows.",
-                );
-            }
-        }
+        $this->verificationService->assertGeminiReadyForPublish($task, $uploader);
 
         $this->assertChapterHasPdf($task->textbookChapter);
 

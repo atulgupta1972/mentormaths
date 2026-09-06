@@ -649,9 +649,40 @@ class ContentVerificationService
             throw new \InvalidArgumentException("{$incompleteCount} question(s) still need verification.");
         }
 
+        $task = $run->task;
+        if ($task) {
+            $this->assertGeminiReadyForPublish($task, $user);
+        }
+
         $this->markRunAndTaskVerified($run);
 
         return $run->fresh();
+    }
+
+    /**
+     * Uploader must finish Gemini paste review (or skip / human-clear flagged rows)
+     * before a chapter can be marked verified or submitted for admin publish.
+     */
+    public function assertGeminiReadyForPublish(ContentUploadTask $task, User $user): void
+    {
+        if ($task->isFillBlankConversion()) {
+            return;
+        }
+
+        $progress = $this->progressForTask($task, $user);
+
+        if (! ($progress['can_gemini'] ?? false)) {
+            return;
+        }
+
+        $pending = (int) ($progress['pending'] ?? 0);
+        if ($pending <= 0) {
+            return;
+        }
+
+        throw new \InvalidArgumentException(
+            "Complete the Gemini check for all pending questions before submitting for admin publish ({$pending} still pending). Skipped questions count as done — use Apply Gemini review for any remaining Correct / Needs Verification rows.",
+        );
     }
 
     /**
@@ -695,7 +726,27 @@ class ContentVerificationService
             return;
         }
 
+        // Do not auto-advance to verified until Gemini review is finished.
+        $assignee = $run->user_id
+            ? User::query()->find($run->user_id)
+            : null;
+        if ($assignee && $this->geminiStillPending($task, $assignee)) {
+            return;
+        }
+
         $this->markRunAndTaskVerified($run);
+    }
+
+    public function geminiStillPending(ContentUploadTask $task, User $user): bool
+    {
+        if ($task->isFillBlankConversion()) {
+            return false;
+        }
+
+        $progress = $this->progressForTask($task, $user);
+
+        return (bool) ($progress['can_gemini'] ?? false)
+            && (int) ($progress['pending'] ?? 0) > 0;
     }
 
     private function markRunAndTaskVerified(ContentVerificationRun $run): void
