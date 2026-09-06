@@ -24,6 +24,7 @@ class ClassCoverageService
         private StudentChapterSummaryService $chapterSummaryService,
         private FormulaBankService $formulaBank,
         private SetAssignmentService $assignmentService,
+        private StudentConceptPathService $conceptPathLearn,
     ) {}
 
     /**
@@ -61,11 +62,22 @@ class ClassCoverageService
         $otherGroups = $summary['other_groups'] ?? [];
         $underStudyId = null;
 
+        $enrollment->loadMissing(['student.user']);
+        $learner = $enrollment->student?->user;
+        $conceptLearnByChapter = $learner
+            ? $this->conceptPathLearn->learnCtasForSyllabusChapters(
+                $learner,
+                $enrollment,
+                $chapterOptions->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            )
+            : [];
+
         $chapters = $chapterOptions->values()->map(function (array $chapter) use (
             $coverages,
             $chapterMetrics,
             $summaryById,
             $availabilityColumns,
+            $conceptLearnByChapter,
             &$underStudyId,
         ) {
             $coverage = $coverages->get($chapter['id']);
@@ -103,6 +115,7 @@ class ClassCoverageService
                 'availability' => $availability,
                 'items' => $this->formatDetailItems($rawItems),
                 'performance' => $chapterMetrics->get($chapter['id'])?->performance,
+                'concept_learn' => $conceptLearnByChapter[(int) $chapter['id']] ?? null,
             ];
         })->sort(function (array $left, array $right) {
             $byNumber = strcmp(

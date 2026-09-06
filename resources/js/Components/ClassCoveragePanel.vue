@@ -1157,6 +1157,32 @@ const startRevision = (item) => {
                         >
                             <td :colspan="columnCount" class="border-b border-slate-200 border-t border-slate-300 px-3 py-3">
                                 <div
+                                    v-if="isStudentView && chapter.concept_learn?.learn_url"
+                                    class="mb-4 flex justify-center"
+                                >
+                                    <Link
+                                        :href="chapter.concept_learn.learn_url"
+                                        class="inline-flex min-w-[240px] flex-col items-center justify-center rounded-xl bg-indigo-700 px-6 py-4 text-center shadow-md ring-2 ring-indigo-300 transition hover:bg-indigo-800"
+                                    >
+                                        <span class="text-sm font-extrabold uppercase tracking-[0.14em] text-white">
+                                            Let me learn concepts
+                                        </span>
+                                        <span class="mt-1 text-[11px] font-medium text-indigo-100">
+                                            <template v-if="chapter.concept_learn.status === 'completed'">
+                                                Completed · Learn again
+                                            </template>
+                                            <template v-else-if="chapter.concept_learn.status === 'in_progress'">
+                                                Continue · {{ chapter.concept_learn.cards_completed }}/{{ chapter.concept_learn.cards_total }} cards
+                                            </template>
+                                            <template v-else>
+                                                {{ chapter.concept_learn.cards_total }} concept cards
+                                                <span v-if="chapter.concept_learn.book_name"> · {{ chapter.concept_learn.book_name }}</span>
+                                            </template>
+                                        </span>
+                                    </Link>
+                                </div>
+
+                                <div
                                     v-if="isTierDashboard(chapter) && !hasDashboardContent(chapterDashboard(chapter))"
                                     class="text-[11px] text-slate-500"
                                 >

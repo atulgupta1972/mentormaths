@@ -507,6 +507,13 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix
     Route::get('/school-study-plan', [ClassCoverageController::class, 'show'])
         ->name('school-study-plan.show');
 
+    Route::get('/concept-path/{textbookChapter}', [\App\Http\Controllers\Student\ConceptPathController::class, 'show'])
+        ->name('concept-path.show');
+    Route::post('/concept-path/{textbookChapter}/record-card', [\App\Http\Controllers\Student\ConceptPathController::class, 'recordCard'])
+        ->name('concept-path.record-card');
+    Route::post('/concept-path/{textbookChapter}/complete', [\App\Http\Controllers\Student\ConceptPathController::class, 'complete'])
+        ->name('concept-path.complete');
+
     Route::post('/worksheets/{worksheet}/self-assign', [SelfAssignController::class, 'store'])->name('worksheets.self-assign');
     Route::post('/worksheets/{worksheet}/correction-practice', [PracticeCorrectionController::class, 'store'])->name('worksheets.correction-practice');
     Route::get('/assignments/{assignment}', [StudentPracticeSetController::class, 'showAssignment'])->name('assignments.show');
