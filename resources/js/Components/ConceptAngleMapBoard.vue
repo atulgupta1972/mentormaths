@@ -14,7 +14,7 @@ const emit = defineEmits(['select']);
 /**
  * Textbook style (NCERT Fig. 5.27):
  * - parallel l, m with arrowheads
- * - transversal t as / at 30° to the horizontals
+ * - transversal t as / at 45° to the horizontals
  * - small circular arcs only (no big discs / triangle wedges)
  * - crisp serif numbers beside the arcs
  *
@@ -24,7 +24,7 @@ const ARC_R = 22;
 const HIGHLIGHT_R = 26;
 const HIT_R = 58;
 const LABEL_R = 34;
-const TRANSVERSAL_DEG = 30;
+const TRANSVERSAL_DEG = 45;
 const DEG = Math.PI / 180;
 
 const yL = 115;
@@ -318,7 +318,7 @@ const hint = computed(() => {
             </text>
         </svg>
         <p class="mt-2 px-1 text-center text-[11px] text-slate-500">
-            Angles 1–4 at line <em>l</em>, angles 5–8 at line <em>m</em>, transversal <em>t</em> at 30°.
+            Angles 1–4 at line <em>l</em>, angles 5–8 at line <em>m</em>, transversal <em>t</em> at 45°.
         </p>
     </div>
 </template>
