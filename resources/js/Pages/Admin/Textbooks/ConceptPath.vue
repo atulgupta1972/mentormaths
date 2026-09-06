@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import DiagramCropModal from '@/Components/DiagramCropModal.vue';
+import ConceptMathText from '@/Components/ConceptMathText.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -709,17 +710,23 @@ const togglePagePicker = (index) => {
                         </div>
 
                         <template v-if="card.type === 'teach'">
-                            <p class="mt-3 whitespace-pre-wrap text-sm text-slate-800">{{ card.body }}</p>
+                            <p class="mt-3 text-sm text-slate-800">
+                                <ConceptMathText :text="card.body" />
+                            </p>
                             <p v-if="card.example" class="mt-2 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-950">
-                                <span class="font-semibold">Example:</span> {{ card.example }}
+                                <span class="font-semibold">Example:</span>
+                                <ConceptMathText :text="card.example" />
                             </p>
                             <p v-if="card.common_mistake" class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                                <span class="font-semibold">Common mistake:</span> {{ card.common_mistake }}
+                                <span class="font-semibold">Common mistake:</span>
+                                <ConceptMathText :text="card.common_mistake" />
                             </p>
                         </template>
 
                         <template v-else-if="card.type === 'angle_map'">
-                            <p class="mt-3 text-sm text-slate-800">{{ card.body }}</p>
+                            <p class="mt-3 text-sm text-slate-800">
+                                <ConceptMathText :text="card.body" />
+                            </p>
                             <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-violet-800">
                                 {{ (card.prompts || []).length }} tap prompts on fixed angles 1–8
                             </p>
@@ -746,7 +753,7 @@ const togglePagePicker = (index) => {
                                 class="mt-3 rounded-md border border-amber-100 bg-amber-50/50 px-3 py-2"
                             >
                                 <p class="text-sm font-medium text-slate-900">
-                                    Q{{ qIndex + 1 }}. {{ q.question }}
+                                    Q{{ qIndex + 1 }}. <ConceptMathText :text="q.question" />
                                     <span class="ml-1 text-[10px] font-bold uppercase text-amber-800">{{ q.question_type }}</span>
                                 </p>
                                 <ul v-if="q.question_type === 'mcq'" class="mt-1 space-y-0.5 text-sm text-slate-700">
@@ -755,15 +762,17 @@ const togglePagePicker = (index) => {
                                         :key="optIndex"
                                         :class="optIndex === q.correct_index ? 'font-semibold text-emerald-800' : ''"
                                     >
-                                        {{ optionLetter(optIndex) }}. {{ opt }}
+                                        {{ optionLetter(optIndex) }}. <ConceptMathText :text="opt" />
                                         <span v-if="optIndex === q.correct_index" class="text-[10px] uppercase">✓</span>
                                     </li>
                                 </ul>
                                 <p v-else class="mt-1 text-sm text-emerald-800">
-                                    Answer: <strong>{{ q.correct_answer }}</strong>
+                                    Answer: <strong><ConceptMathText :text="q.correct_answer" /></strong>
                                     <span v-if="q.answer_format" class="text-xs text-slate-600">({{ q.answer_format }})</span>
                                 </p>
-                                <p v-if="q.explanation" class="mt-1 text-xs text-slate-600">{{ q.explanation }}</p>
+                                <p v-if="q.explanation" class="mt-1 text-xs text-slate-600">
+                                    <ConceptMathText :text="q.explanation" />
+                                </p>
                             </div>
                         </template>
 

@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ConceptAngleMapBoard from '@/Components/ConceptAngleMapBoard.vue';
+import ConceptMathText from '@/Components/ConceptMathText.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -256,7 +257,9 @@ const cardBorderClass = computed(() => {
                     <h3 class="mt-2 text-xl font-semibold text-slate-900">{{ current.title }}</h3>
 
                     <template v-if="isTeach">
-                        <p class="mt-4 whitespace-pre-wrap text-base leading-relaxed text-slate-800">{{ current.body }}</p>
+                        <p class="mt-4 text-base leading-relaxed text-slate-800">
+                            <ConceptMathText :text="current.body" />
+                        </p>
                         <img
                             v-if="current.diagram_url"
                             :src="current.diagram_url"
@@ -264,10 +267,12 @@ const cardBorderClass = computed(() => {
                             class="mt-4 max-h-72 w-full rounded-md border border-slate-200 bg-white object-contain"
                         >
                         <p v-if="current.example" class="mt-3 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-950">
-                            <span class="font-semibold">Example:</span> {{ current.example }}
+                            <span class="font-semibold">Example:</span>
+                            <ConceptMathText :text="current.example" />
                         </p>
                         <p v-if="current.common_mistake" class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                            <span class="font-semibold">Common mistake:</span> {{ current.common_mistake }}
+                            <span class="font-semibold">Common mistake:</span>
+                            <ConceptMathText :text="current.common_mistake" />
                         </p>
                         <div class="mt-5">
                             <PrimaryButton type="button" @click="goNext">
@@ -277,7 +282,9 @@ const cardBorderClass = computed(() => {
                     </template>
 
                     <template v-else-if="isAngleMap">
-                        <p v-if="current.body" class="mt-3 text-sm text-slate-700">{{ current.body }}</p>
+                        <p v-if="current.body" class="mt-3 text-sm text-slate-700">
+                            <ConceptMathText :text="current.body" />
+                        </p>
                         <div class="mt-4 space-y-3">
                             <p v-if="currentPrompts.length > 1" class="text-xs font-semibold uppercase tracking-wide text-violet-800">
                                 Prompt {{ questionIndex + 1 }} of {{ currentPrompts.length }}
@@ -300,7 +307,9 @@ const cardBorderClass = computed(() => {
                                 :class="isCurrentCorrect ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'"
                             >
                                 <span class="font-semibold">{{ isCurrentCorrect ? 'Correct' : 'Not quite' }}.</span>
-                                <span v-if="currentPrompt?.explanation"> {{ currentPrompt.explanation }}</span>
+                                <span v-if="currentPrompt?.explanation">
+                                    <ConceptMathText :text="currentPrompt.explanation" />
+                                </span>
                                 <span v-else-if="!isCurrentCorrect"> Try ∠{{ currentPrompt?.correct }}.</span>
                             </p>
 
@@ -331,7 +340,9 @@ const cardBorderClass = computed(() => {
                             <p v-if="currentQuestions.length > 1" class="text-xs font-semibold uppercase tracking-wide text-amber-800">
                                 Question {{ questionIndex + 1 }} of {{ currentQuestions.length }}
                             </p>
-                            <p class="text-base font-medium text-slate-900">{{ currentQuestion.question }}</p>
+                            <p class="text-base font-medium text-slate-900">
+                                <ConceptMathText :text="currentQuestion.question" />
+                            </p>
 
                             <div v-if="currentQuestion.question_type === 'mcq'" class="space-y-2">
                                 <button
@@ -349,7 +360,7 @@ const cardBorderClass = computed(() => {
                                     @click="selectedOption = optIndex"
                                 >
                                     <span class="font-semibold text-slate-500">{{ optionLetter(optIndex) }}.</span>
-                                    <span>{{ opt }}</span>
+                                    <ConceptMathText :text="opt" />
                                 </button>
                             </div>
 
@@ -370,9 +381,11 @@ const cardBorderClass = computed(() => {
                                 :class="isCurrentCorrect ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'"
                             >
                                 <span class="font-semibold">{{ isCurrentCorrect ? 'Correct' : 'Not quite' }}.</span>
-                                <span v-if="currentQuestion.explanation"> {{ currentQuestion.explanation }}</span>
+                                <span v-if="currentQuestion.explanation">
+                                    <ConceptMathText :text="currentQuestion.explanation" />
+                                </span>
                                 <span v-else-if="currentQuestion.question_type === 'fill_blank'">
-                                    Answer: {{ currentQuestion.correct_answer }}
+                                    Answer: <ConceptMathText :text="currentQuestion.correct_answer" />
                                 </span>
                             </p>
 
