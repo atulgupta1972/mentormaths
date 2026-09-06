@@ -391,6 +391,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/save', [TextbookController::class, 'saveConceptPath'])->name('textbooks.concept-path.save');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/approve', [TextbookController::class, 'approveConceptPath'])->name('textbooks.concept-path.approve');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/reset', [TextbookController::class, 'resetConceptPath'])->name('textbooks.concept-path.reset');
+    Route::post('/textbooks/chapters/{textbookChapter}/concept-path/replace-diagram', [TextbookController::class, 'replaceConceptPathDiagram'])->name('textbooks.concept-path.replace-diagram');
+    Route::post('/textbooks/chapters/{textbookChapter}/concept-path/remove-diagram', [TextbookController::class, 'removeConceptPathDiagram'])->name('textbooks.concept-path.remove-diagram');
     Route::post('/textbooks/chapters/{textbookChapter}/publish-fill-blank-written', [TextbookController::class, 'publishFillBlankAndWritten'])->name('textbooks.publish-fill-blank-written');
     Route::get('/textbooks/chapters/{textbookChapter}/mcq-reference', [TextbookController::class, 'downloadMcqReference'])->name('textbooks.mcq-reference');
     Route::post('/textbooks/chapters/{textbookChapter}/reset-import', [TextbookController::class, 'resetImport'])->name('textbooks.reset-import');
@@ -594,6 +596,8 @@ Route::middleware(['auth', 'verified', 'content.uploader', 'content.uploader.gem
         Route::post('/textbooks/chapters/{textbookChapter}/concept-path/save', [TextbookController::class, 'saveConceptPath'])->name('textbooks.concept-path.save');
         Route::post('/textbooks/chapters/{textbookChapter}/concept-path/approve', [TextbookController::class, 'approveConceptPath'])->name('textbooks.concept-path.approve');
         Route::post('/textbooks/chapters/{textbookChapter}/concept-path/reset', [TextbookController::class, 'resetConceptPath'])->name('textbooks.concept-path.reset');
+        Route::post('/textbooks/chapters/{textbookChapter}/concept-path/replace-diagram', [TextbookController::class, 'replaceConceptPathDiagram'])->name('textbooks.concept-path.replace-diagram');
+        Route::post('/textbooks/chapters/{textbookChapter}/concept-path/remove-diagram', [TextbookController::class, 'removeConceptPathDiagram'])->name('textbooks.concept-path.remove-diagram');
     });
 });
 

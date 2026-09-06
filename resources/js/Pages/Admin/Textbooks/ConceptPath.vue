@@ -1,9 +1,10 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import DiagramCropModal from '@/Components/DiagramCropModal.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -20,9 +21,13 @@ const cards = ref([]);
 const rawJson = ref('');
 const previewError = ref('');
 const previewNote = ref('');
+const diagramFileInputs = ref({});
+const diagramUploading = ref({});
+const cropTarget = ref(null);
 
 const statusLabel = computed(() => props.conceptPath?.status_label || 'Not started');
 const isApproved = computed(() => props.conceptPath?.status === 'approved');
+const figuresSavedOnServer = computed(() => Boolean(props.conceptPath?.status));
 
 const saveForm = useForm({
     chapter_title: props.conceptPath?.chapter_title || props.chapter.title,
@@ -148,6 +153,8 @@ const normalizeCard = (row, index) => {
         title,
         topic: row?.topic ? String(row.topic).trim() : null,
         approved: row?.approved !== false,
+        diagram_path: row?.diagram_path || null,
+        diagram_url: row?.diagram_url || null,
     };
 
     if (type === 'teach') {
@@ -199,9 +206,18 @@ const runPreview = () => {
         return;
     }
 
+    const previous = cards.value;
     const normalized = cardsIn
         .map((row, index) => normalizeCard(row, index))
-        .filter(Boolean);
+        .filter(Boolean)
+        .map((card, index) => {
+            const prev = previous[index];
+            if (prev?.diagram_path && prev.title === card.title) {
+                card.diagram_path = prev.diagram_path;
+                card.diagram_url = prev.diagram_url;
+            }
+            return card;
+        });
 
     const teach = normalized.filter((c) => c.type === 'teach').length;
     const check = normalized.filter((c) => c.type === 'check').length;
@@ -223,7 +239,7 @@ const runPreview = () => {
     if (decoded?.chapter_title) {
         saveForm.chapter_title = String(decoded.chapter_title);
     }
-    previewNote.value = `${normalized.length} cards ready — review below, then Save draft.`;
+    previewNote.value = `${normalized.length} cards ready — Save draft, then upload figures where needed.`;
 };
 
 const saveDraft = () => {
@@ -260,6 +276,102 @@ const removeCard = (index) => {
 };
 
 const optionLetter = (index) => String.fromCharCode(65 + index);
+
+const ensureSavedForFigures = () => {
+    if (figuresSavedOnServer.value) {
+        return true;
+    }
+
+    window.alert('Save draft first, then upload / crop figures. That keeps the figure linked to the right card.');
+    return false;
+};
+
+const postDiagramFile = (cardIndex, file, onFinish) => {
+    if (!file || !props.routes.replace_diagram || diagramUploading.value[cardIndex]) {
+        return;
+    }
+    if (!ensureSavedForFigures()) {
+        onFinish?.();
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('card_index', String(cardIndex));
+    formData.append('diagram', file);
+
+    diagramUploading.value = { ...diagramUploading.value, [cardIndex]: true };
+
+    router.post(props.routes.replace_diagram, formData, {
+        forceFormData: true,
+        preserveScroll: true,
+        onFinish: () => {
+            diagramUploading.value = { ...diagramUploading.value, [cardIndex]: false };
+            onFinish?.();
+        },
+    });
+};
+
+const uploadDiagram = (cardIndex, event) => {
+    const file = event.target?.files?.[0];
+    postDiagramFile(cardIndex, file, () => {
+        if (event.target) {
+            event.target.value = '';
+        }
+    });
+};
+
+const openCropEditor = (card, cardIndex) => {
+    if (!card?.diagram_url || !ensureSavedForFigures()) {
+        return;
+    }
+
+    cropTarget.value = {
+        card_index: cardIndex,
+        diagram_url: card.diagram_url,
+    };
+};
+
+const closeCropEditor = () => {
+    if (cropTarget.value && diagramUploading.value[cropTarget.value.card_index]) {
+        return;
+    }
+
+    cropTarget.value = null;
+};
+
+const saveCroppedDiagram = (file) => {
+    if (!cropTarget.value) {
+        return;
+    }
+
+    const cardIndex = cropTarget.value.card_index;
+    postDiagramFile(cardIndex, file, () => {
+        cropTarget.value = null;
+    });
+};
+
+const removeDiagram = (cardIndex) => {
+    if (!props.routes.remove_diagram || diagramUploading.value[cardIndex]) {
+        return;
+    }
+    if (!ensureSavedForFigures()) {
+        return;
+    }
+    if (!window.confirm('Remove this figure from the concept card?')) {
+        return;
+    }
+
+    diagramUploading.value = { ...diagramUploading.value, [cardIndex]: true };
+
+    router.post(props.routes.remove_diagram, {
+        card_index: cardIndex,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            diagramUploading.value = { ...diagramUploading.value, [cardIndex]: false };
+        },
+    });
+};
 </script>
 
 <template>
@@ -307,7 +419,7 @@ const optionLetter = (index) => String.fromCharCode(65 + index);
                             and open it in Cursor / Claude / Gemini.
                         </li>
                         <li>Copy the concept-path prompt below and paste it with the PDF.</li>
-                        <li>Paste the JSON reply here → <strong>Preview cards</strong> (in browser) → untick weak cards → <strong>Save draft</strong>.</li>
+                        <li>Paste the JSON reply here → <strong>Preview cards</strong> → <strong>Save draft</strong> → upload/crop figures where the card mentions a Fig → Approve.</li>
                         <li>When the flow looks right, click <strong>Approve concept flow</strong>.</li>
                     </ol>
                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -448,8 +560,79 @@ const optionLetter = (index) => String.fromCharCode(65 + index);
                                 <p v-if="q.explanation" class="mt-1 text-xs text-slate-600">{{ q.explanation }}</p>
                             </div>
                         </template>
+
+                        <div
+                            class="mt-3 rounded-md border p-3"
+                            :class="card.diagram_url ? 'border-slate-200 bg-slate-50' : 'border-amber-200 bg-amber-50/60'"
+                        >
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                    <p class="text-xs font-medium uppercase tracking-wide text-slate-600">Figure / diagram</p>
+                                    <p v-if="card.diagram_url" class="mt-1 text-sm text-slate-600">
+                                        Figure attached — crop if you uploaded a full book page.
+                                    </p>
+                                    <p v-else class="mt-1 text-sm text-amber-950">
+                                        Optional: upload the textbook figure (e.g. Fig mentioned in the card), then crop.
+                                    </p>
+                                    <p v-if="!figuresSavedOnServer" class="mt-1 text-xs font-medium text-rose-700">
+                                        Save draft first before uploading figures.
+                                    </p>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <SecondaryButton
+                                        v-if="card.diagram_url"
+                                        type="button"
+                                        class="!px-3 !py-1.5 !text-xs"
+                                        :disabled="diagramUploading[index]"
+                                        @click="openCropEditor(card, index)"
+                                    >
+                                        Edit / crop
+                                    </SecondaryButton>
+                                    <SecondaryButton
+                                        type="button"
+                                        class="!px-3 !py-1.5 !text-xs"
+                                        :disabled="diagramUploading[index]"
+                                        @click="diagramFileInputs[index]?.click()"
+                                    >
+                                        {{ diagramUploading[index]
+                                            ? 'Uploading…'
+                                            : (card.diagram_url ? 'Replace figure' : 'Upload figure') }}
+                                    </SecondaryButton>
+                                    <SecondaryButton
+                                        v-if="card.diagram_url"
+                                        type="button"
+                                        class="!px-3 !py-1.5 !text-xs"
+                                        :disabled="diagramUploading[index]"
+                                        @click="removeDiagram(index)"
+                                    >
+                                        Remove
+                                    </SecondaryButton>
+                                    <input
+                                        :ref="(el) => { if (el) diagramFileInputs[index] = el; }"
+                                        type="file"
+                                        accept="image/*"
+                                        class="hidden"
+                                        @change="uploadDiagram(index, $event)"
+                                    >
+                                </div>
+                            </div>
+                            <img
+                                v-if="card.diagram_url"
+                                :src="card.diagram_url"
+                                :alt="`Figure for ${card.title}`"
+                                class="mt-3 max-h-56 rounded border border-slate-200 bg-white object-contain"
+                            >
+                        </div>
                     </div>
                 </div>
+
+                <DiagramCropModal
+                    :show="Boolean(cropTarget)"
+                    :image-url="cropTarget?.diagram_url || ''"
+                    :processing="Boolean(cropTarget && diagramUploading[cropTarget.card_index])"
+                    @close="closeCropEditor"
+                    @cropped="saveCroppedDiagram"
+                />
             </div>
         </div>
     </AuthenticatedLayout>

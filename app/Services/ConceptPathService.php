@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Support\ConceptPathStatus;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -71,6 +73,7 @@ Pedagogy rules:
 - Check questions must be EASY — prove understanding, not assess the chapter.
 - Prefer fill_blank for simple numeric answers; MCQ for definitions / choose-the-correct.
 - Use "topic" matching a syllabus topic name when possible.
+- When a textbook figure is essential, mention it by name in example/body (e.g. "See Fig 5.14"). Do NOT invent ASCII art of figures — Mentormaths uploaders will attach the cropped figure later.
 - Aim for 12–28 cards total (teach + check). Do not exceed 36.
 - Do NOT create long word problems, exam-level sums, or written-sheet style questions.
 
@@ -298,6 +301,14 @@ PROMPT;
         ];
         $normalized = $this->parse(json_encode($payload, JSON_THROW_ON_ERROR));
 
+        // Keep uploaded figures that the browser/client still references.
+        foreach ($normalized['cards'] as $index => $card) {
+            $incomingPath = $cards[$index]['diagram_path'] ?? null;
+            if (is_string($incomingPath) && $this->isOwnedDiagramPath($chapter, $incomingPath)) {
+                $normalized['cards'][$index]['diagram_path'] = $incomingPath;
+            }
+        }
+
         $chapter->update([
             'concept_path_items' => [
                 'chapter_title' => $normalized['chapter_title'] ?: $chapter->title,
@@ -352,6 +363,8 @@ PROMPT;
 
     public function reset(TextbookChapter $chapter): TextbookChapter
     {
+        $this->deleteAllDiagrams($chapter);
+
         $chapter->update([
             'concept_path_items' => null,
             'concept_path_status' => null,
@@ -360,6 +373,101 @@ PROMPT;
         ]);
 
         return $chapter->fresh();
+    }
+
+    public function replaceCardDiagram(TextbookChapter $chapter, int $cardIndex, UploadedFile $image): TextbookChapter
+    {
+        $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+        $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
+
+        if (! isset($cards[$cardIndex]) || ! is_array($cards[$cardIndex])) {
+            throw new InvalidArgumentException('Concept card not found.');
+        }
+
+        $this->deleteDiagramPath($cards[$cardIndex]['diagram_path'] ?? null);
+
+        $extension = strtolower($image->getClientOriginalExtension() ?: 'png');
+        if (! in_array($extension, ['png', 'jpg', 'jpeg', 'webp', 'gif'], true)) {
+            $extension = 'png';
+        }
+
+        $path = $image->storeAs(
+            $this->diagramDirectory($chapter),
+            Str::uuid()->toString().'.'.$extension,
+            'public',
+        );
+
+        $cards[$cardIndex]['diagram_path'] = $path;
+        $items['cards'] = $cards;
+
+        $chapter->update(['concept_path_items' => $items]);
+
+        return $chapter->fresh();
+    }
+
+    public function removeCardDiagram(TextbookChapter $chapter, int $cardIndex): TextbookChapter
+    {
+        $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+        $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
+
+        if (! isset($cards[$cardIndex]) || ! is_array($cards[$cardIndex])) {
+            throw new InvalidArgumentException('Concept card not found.');
+        }
+
+        $this->deleteDiagramPath($cards[$cardIndex]['diagram_path'] ?? null);
+        unset($cards[$cardIndex]['diagram_path'], $cards[$cardIndex]['diagram_url']);
+        $items['cards'] = $cards;
+
+        $chapter->update(['concept_path_items' => $items]);
+
+        return $chapter->fresh();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $cards
+     * @return list<array<string, mixed>>
+     */
+    public function withDiagramUrls(array $cards): array
+    {
+        return array_values(array_map(function ($card) {
+            if (! is_array($card)) {
+                return $card;
+            }
+
+            $path = $card['diagram_path'] ?? null;
+            $card['diagram_url'] = (is_string($path) && $path !== '' && Storage::disk('public')->exists($path))
+                ? Storage::disk('public')->url($path)
+                : null;
+
+            return $card;
+        }, $cards));
+    }
+
+    private function diagramDirectory(TextbookChapter $chapter): string
+    {
+        return 'concept-path-diagrams/'.$chapter->id;
+    }
+
+    private function isOwnedDiagramPath(TextbookChapter $chapter, string $path): bool
+    {
+        $path = ltrim(str_replace('\\', '/', $path), '/');
+
+        return str_starts_with($path, $this->diagramDirectory($chapter).'/')
+            && ! str_contains($path, '..');
+    }
+
+    private function deleteDiagramPath(?string $path): void
+    {
+        if (! is_string($path) || $path === '') {
+            return;
+        }
+
+        Storage::disk('public')->delete($path);
+    }
+
+    private function deleteAllDiagrams(TextbookChapter $chapter): void
+    {
+        Storage::disk('public')->deleteDirectory($this->diagramDirectory($chapter));
     }
 
     /**
@@ -380,6 +488,8 @@ PROMPT;
                 $prompt = '';
             }
         }
+
+        $cards = $this->withDiagramUrls($cards);
 
         return [
             'status' => $status,

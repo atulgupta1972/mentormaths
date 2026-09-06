@@ -158,6 +158,12 @@ const restart = () => {
 
                     <template v-if="current.type === 'teach'">
                         <p class="mt-4 whitespace-pre-wrap text-base leading-relaxed text-slate-800">{{ current.body }}</p>
+                        <img
+                            v-if="current.diagram_url"
+                            :src="current.diagram_url"
+                            :alt="current.title"
+                            class="mt-4 max-h-72 w-full rounded-md border border-slate-200 bg-white object-contain"
+                        >
                         <p v-if="current.example" class="mt-3 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-950">
                             <span class="font-semibold">Example:</span> {{ current.example }}
                         </p>
@@ -172,6 +178,12 @@ const restart = () => {
                     </template>
 
                     <template v-else>
+                        <img
+                            v-if="current.diagram_url"
+                            :src="current.diagram_url"
+                            :alt="current.title"
+                            class="mt-4 max-h-64 w-full rounded-md border border-slate-200 bg-white object-contain"
+                        >
                         <div v-if="currentQuestion" class="mt-4 space-y-3">
                             <p v-if="currentQuestions.length > 1" class="text-xs font-semibold uppercase tracking-wide text-amber-800">
                                 Question {{ questionIndex + 1 }} of {{ currentQuestions.length }}

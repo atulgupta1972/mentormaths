@@ -14,6 +14,8 @@ use App\Models\User;
 use App\Services\AdminGradeContext;
 use App\Services\UserGroupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -172,6 +174,69 @@ class ConceptBuilderTest extends TestCase
                 ->component('Admin/Textbooks/ConceptPathPlay')
                 ->has('path.cards', 2)
             );
+    }
+
+    public function test_concept_path_card_diagram_can_be_uploaded_and_removed(): void
+    {
+        $this->withoutVite();
+        Storage::fake('public');
+
+        [$admin, , , $upload] = $this->seedConceptBuilder(withPdf: true);
+
+        $upload->update([
+            'concept_path_status' => 'draft',
+            'concept_path_items' => [
+                'chapter_title' => 'Integers',
+                'cards' => [
+                    [
+                        'step' => 1,
+                        'type' => 'teach',
+                        'title' => 'Number line',
+                        'body' => 'See Fig 1.2 on the number line.',
+                        'example' => 'Fig 1.2',
+                        'approved' => true,
+                    ],
+                    [
+                        'step' => 2,
+                        'type' => 'check',
+                        'title' => 'Quick check',
+                        'approved' => true,
+                        'questions' => [
+                            [
+                                'question_type' => 'fill_blank',
+                                'question' => 'Opposite of 2 is ____',
+                                'correct_answer' => '-2',
+                                'answer_format' => 'integer',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->from(route('admin.textbooks.concept-path', $upload))
+            ->post(route('admin.textbooks.concept-path.replace-diagram', $upload), [
+                'card_index' => 0,
+                'diagram' => UploadedFile::fake()->image('fig.png', 400, 300),
+            ])
+            ->assertRedirect(route('admin.textbooks.concept-path', $upload))
+            ->assertSessionHas('success');
+
+        $upload->refresh();
+        $path = $upload->concept_path_items['cards'][0]['diagram_path'] ?? null;
+        $this->assertNotEmpty($path);
+        Storage::disk('public')->assertExists($path);
+
+        $this->actingAs($admin)
+            ->from(route('admin.textbooks.concept-path', $upload))
+            ->post(route('admin.textbooks.concept-path.remove-diagram', $upload), [
+                'card_index' => 0,
+            ])
+            ->assertRedirect(route('admin.textbooks.concept-path', $upload));
+
+        $upload->refresh();
+        $this->assertArrayNotHasKey('diagram_path', $upload->concept_path_items['cards'][0]);
     }
 
     public function test_textbooks_index_shows_syllabus_chapter_label(): void

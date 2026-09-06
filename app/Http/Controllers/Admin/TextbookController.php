@@ -981,6 +981,12 @@ class TextbookController extends Controller
                 'reset' => $uploaderMode
                     ? route('content.textbooks.concept-path.reset', $textbookChapter)
                     : route('admin.textbooks.concept-path.reset', $textbookChapter),
+                'replace_diagram' => $uploaderMode
+                    ? route('content.textbooks.concept-path.replace-diagram', $textbookChapter)
+                    : route('admin.textbooks.concept-path.replace-diagram', $textbookChapter),
+                'remove_diagram' => $uploaderMode
+                    ? route('content.textbooks.concept-path.remove-diagram', $textbookChapter)
+                    : route('admin.textbooks.concept-path.remove-diagram', $textbookChapter),
             ],
         ]);
     }
@@ -1077,6 +1083,53 @@ class TextbookController extends Controller
         return back()->with('success', 'Concept path cleared. Generate a new Cursor prompt when ready.');
     }
 
+    public function replaceConceptPathDiagram(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $uploaded = $request->file('diagram');
+        if ($uploaded) {
+            UploadedFileDiagnostics::assertValid($uploaded, 'diagram');
+        }
+
+        $validated = $request->validate([
+            'card_index' => ['required', 'integer', 'min:0'],
+            'diagram' => ['required', 'image', 'max:5120'],
+        ], [
+            'diagram.required' => 'Choose a PNG or JPG figure.',
+            'diagram.max' => 'Figure must be under 5 MB.',
+        ]);
+
+        try {
+            $this->conceptPath->replaceCardDiagram(
+                $textbookChapter,
+                (int) $validated['card_index'],
+                $uploaded,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not upload the figure. Try a smaller PNG/JPG.');
+        }
+
+        return back()->with('success', 'Figure uploaded for this concept card. Use Edit / crop if you uploaded a full page.');
+    }
+
+    public function removeConceptPathDiagram(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'card_index' => ['required', 'integer', 'min:0'],
+        ]);
+
+        try {
+            $this->conceptPath->removeCardDiagram($textbookChapter, (int) $validated['card_index']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Figure removed from this concept card.');
+    }
+
     public function playConceptPath(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
     {
         $textbookChapter->load([
@@ -1102,6 +1155,7 @@ class TextbookController extends Controller
         }
 
         $uploaderMode = $this->isContentUploaderContext($request);
+        $cards = $this->conceptPath->withDiagramUrls($cards);
 
         return Inertia::render('Admin/Textbooks/ConceptPathPlay', [
             'uploaderMode' => $uploaderMode,
