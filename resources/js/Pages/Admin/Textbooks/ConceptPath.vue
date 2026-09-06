@@ -12,6 +12,8 @@ const props = defineProps({
     chapter: { type: Object, required: true },
     conceptPath: { type: Object, required: true },
     routes: { type: Object, required: true },
+    pdfPages: { type: Array, default: () => [] },
+    pdfPagesAvailable: { type: Boolean, default: false },
 });
 
 const page = usePage();
@@ -24,10 +26,13 @@ const previewNote = ref('');
 const diagramFileInputs = ref({});
 const diagramUploading = ref({});
 const cropTarget = ref(null);
+const pagePickerCard = ref(null);
+const pagesBusy = ref(false);
 
 const statusLabel = computed(() => props.conceptPath?.status_label || 'Not started');
 const isApproved = computed(() => props.conceptPath?.status === 'approved');
 const figuresSavedOnServer = computed(() => Boolean(props.conceptPath?.status));
+const pdfPageCount = computed(() => props.pdfPages?.length || 0);
 
 const saveForm = useForm({
     chapter_title: props.conceptPath?.chapter_title || props.chapter.title,
@@ -155,6 +160,7 @@ const normalizeCard = (row, index) => {
         approved: row?.approved !== false,
         diagram_path: row?.diagram_path || null,
         diagram_url: row?.diagram_url || null,
+        figure_page: Number(row?.figure_page) > 0 ? Number(row.figure_page) : null,
     };
 
     if (type === 'teach') {
@@ -372,6 +378,59 @@ const removeDiagram = (cardIndex) => {
         },
     });
 };
+
+const loadPdfPages = (force = false) => {
+    if (!props.routes.load_pages || pagesBusy.value) {
+        return;
+    }
+
+    pagesBusy.value = true;
+    router.post(props.routes.load_pages, { force: force ? 1 : 0 }, {
+        preserveScroll: true,
+        onFinish: () => {
+            pagesBusy.value = false;
+        },
+    });
+};
+
+const autoAttachPages = () => {
+    if (!props.routes.auto_attach_pages || pagesBusy.value) {
+        return;
+    }
+    if (!ensureSavedForFigures()) {
+        return;
+    }
+
+    pagesBusy.value = true;
+    router.post(props.routes.auto_attach_pages, {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            pagesBusy.value = false;
+        },
+    });
+};
+
+const attachPdfPage = (cardIndex, page) => {
+    if (!props.routes.attach_page || diagramUploading.value[cardIndex]) {
+        return;
+    }
+    if (!ensureSavedForFigures()) {
+        return;
+    }
+
+    diagramUploading.value = { ...diagramUploading.value, [cardIndex]: true };
+
+    router.post(props.routes.attach_page, {
+        card_index: cardIndex,
+        page,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            diagramUploading.value = { ...diagramUploading.value, [cardIndex]: false };
+            pagePickerCard.value = null;
+        },
+    });
+};
 </script>
 
 <template>
@@ -419,8 +478,8 @@ const removeDiagram = (cardIndex) => {
                             and open it in Cursor / Claude / Gemini.
                         </li>
                         <li>Copy the concept-path prompt below and paste it with the PDF.</li>
-                        <li>Paste the JSON reply here → <strong>Preview cards</strong> → <strong>Save draft</strong> → upload/crop figures where the card mentions a Fig → Approve.</li>
-                        <li>When the flow looks right, click <strong>Approve concept flow</strong>.</li>
+                        <li>Paste the JSON reply here → <strong>Preview cards</strong> → <strong>Save draft</strong> (PDF pages with <code>figure_page</code> auto-attach) → <strong>Edit / crop</strong> → Approve.</li>
+                        <li>Or click <strong>Load PDF pages</strong>, pick a page on a card (full page attaches like MCQ), then crop.</li>
                     </ol>
                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Status: {{ statusLabel }}
@@ -484,6 +543,24 @@ const removeDiagram = (cardIndex) => {
                             </p>
                         </div>
                         <div class="flex flex-wrap gap-2">
+                            <SecondaryButton
+                                v-if="pdfPagesAvailable"
+                                type="button"
+                                class="!text-xs"
+                                :disabled="pagesBusy"
+                                @click="loadPdfPages(false)"
+                            >
+                                {{ pagesBusy ? 'Loading pages…' : (pdfPageCount ? `PDF pages (${pdfPageCount})` : 'Load PDF pages') }}
+                            </SecondaryButton>
+                            <SecondaryButton
+                                v-if="figuresSavedOnServer"
+                                type="button"
+                                class="!text-xs"
+                                :disabled="pagesBusy"
+                                @click="autoAttachPages"
+                            >
+                                Auto-attach figure pages
+                            </SecondaryButton>
                             <PrimaryButton type="button" :disabled="saveForm.processing || !cards.length" @click="saveDraft">
                                 {{ saveForm.processing ? 'Saving…' : 'Save draft' }}
                             </PrimaryButton>
@@ -569,16 +646,26 @@ const removeDiagram = (cardIndex) => {
                                 <div>
                                     <p class="text-xs font-medium uppercase tracking-wide text-slate-600">Figure / diagram</p>
                                     <p v-if="card.diagram_url" class="mt-1 text-sm text-slate-600">
-                                        Figure attached — crop if you uploaded a full book page.
+                                        Page attached — crop to keep only the figure (same as MCQ).
                                     </p>
                                     <p v-else class="mt-1 text-sm text-amber-950">
-                                        Optional: upload the textbook figure (e.g. Fig mentioned in the card), then crop.
+                                        <template v-if="card.figure_page">Suggested PDF page {{ card.figure_page }} — Save draft / Auto-attach, then crop.</template>
+                                        <template v-else>Load PDF pages and pick the page with the figure, then crop.</template>
                                     </p>
                                     <p v-if="!figuresSavedOnServer" class="mt-1 text-xs font-medium text-rose-700">
-                                        Save draft first before uploading figures.
+                                        Save draft first before attaching figures.
                                     </p>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
+                                    <SecondaryButton
+                                        v-if="pdfPageCount"
+                                        type="button"
+                                        class="!px-3 !py-1.5 !text-xs"
+                                        :disabled="diagramUploading[index]"
+                                        @click="pagePickerCard = pagePickerCard === index ? null : index"
+                                    >
+                                        {{ pagePickerCard === index ? 'Hide pages' : 'Pick PDF page' }}
+                                    </SecondaryButton>
                                     <SecondaryButton
                                         v-if="card.diagram_url"
                                         type="button"
@@ -596,7 +683,7 @@ const removeDiagram = (cardIndex) => {
                                     >
                                         {{ diagramUploading[index]
                                             ? 'Uploading…'
-                                            : (card.diagram_url ? 'Replace figure' : 'Upload figure') }}
+                                            : (card.diagram_url ? 'Replace file' : 'Upload file') }}
                                     </SecondaryButton>
                                     <SecondaryButton
                                         v-if="card.diagram_url"
@@ -616,6 +703,22 @@ const removeDiagram = (cardIndex) => {
                                     >
                                 </div>
                             </div>
+
+                            <div v-if="pagePickerCard === index && pdfPageCount" class="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                                <button
+                                    v-for="page in pdfPages"
+                                    :key="page.page"
+                                    type="button"
+                                    class="overflow-hidden rounded border bg-white text-left hover:border-indigo-400"
+                                    :class="card.figure_page === page.page ? 'border-indigo-500 ring-1 ring-indigo-300' : 'border-slate-200'"
+                                    :disabled="diagramUploading[index]"
+                                    @click="attachPdfPage(index, page.page)"
+                                >
+                                    <img :src="page.url" :alt="`Page ${page.page}`" class="h-24 w-full object-cover object-top">
+                                    <span class="block px-1 py-0.5 text-center text-[10px] font-semibold text-slate-600">p.{{ page.page }}</span>
+                                </button>
+                            </div>
+
                             <img
                                 v-if="card.diagram_url"
                                 :src="card.diagram_url"

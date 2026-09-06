@@ -12,6 +12,10 @@ use InvalidArgumentException;
 
 class ConceptPathService
 {
+    public function __construct(
+        private PdfPageImageService $pageImageService,
+    ) {}
+
     public function cursorPrompt(TextbookChapter $chapter): string
     {
         $chapter->loadMissing([
@@ -73,7 +77,8 @@ Pedagogy rules:
 - Check questions must be EASY — prove understanding, not assess the chapter.
 - Prefer fill_blank for simple numeric answers; MCQ for definitions / choose-the-correct.
 - Use "topic" matching a syllabus topic name when possible.
-- When a textbook figure is essential, mention it by name in example/body (e.g. "See Fig 5.14"). Do NOT invent ASCII art of figures — Mentormaths uploaders will attach the cropped figure later.
+- When a textbook figure is essential, mention it by name in example/body (e.g. "See Fig 5.14") AND set "figure_page" to the 1-based PDF page number where that figure appears. Do NOT invent ASCII art — Mentormaths will auto-attach that PDF page for cropping.
+- If no figure is needed, set "figure_page": null.
 - Aim for 12–28 cards total (teach + check). Do not exceed 36.
 - Do NOT create long word problems, exam-level sums, or written-sheet style questions.
 
@@ -88,13 +93,15 @@ JSON format:
       "body": "In algebra, letters stand for numbers. We call these letters variables.",
       "example": "In 2a + 3, a is a variable.",
       "common_mistake": null,
-      "topic": "Exact topic name or null"
+      "topic": "Exact topic name or null",
+      "figure_page": null
     },
     {
       "step": 2,
       "type": "check",
       "title": "Quick check — variables",
       "topic": "Exact topic name or null",
+      "figure_page": null,
       "questions": [
         {
           "question_type": "mcq",
@@ -114,13 +121,15 @@ JSON format:
       "body": "3² means 3 × 3, not 3 × 2.",
       "example": "4² = 4 × 4 = 16.",
       "common_mistake": "Students sometimes compute n² as n × 2.",
-      "topic": "Exact topic name or null"
+      "topic": "Exact topic name or null",
+      "figure_page": null
     },
     {
       "step": 4,
       "type": "check",
       "title": "Quick check — square",
       "topic": "Exact topic name or null",
+      "figure_page": null,
       "questions": [
         {
           "question_type": "fill_blank",
@@ -132,6 +141,16 @@ JSON format:
           "explanation": "5² = 5 × 5 = 25."
         }
       ]
+    },
+    {
+      "step": 5,
+      "type": "teach",
+      "title": "Transversal",
+      "body": "A line that crosses two other lines at different points is a transversal.",
+      "example": "See Fig 5.14 — line t crosses lines l and m.",
+      "common_mistake": "Students confuse the transversal with one of the two lines being crossed.",
+      "topic": "Pairs of Lines",
+      "figure_page": 14
     }
   ]
 }
@@ -222,6 +241,7 @@ PROMPT;
                 'title' => Str::limit($title, 120, ''),
                 'topic' => filled($row['topic'] ?? null) ? trim((string) $row['topic']) : null,
                 'approved' => true,
+                'figure_page' => $this->normalizeFigurePage($row['figure_page'] ?? null),
             ];
 
             if ($type === 'teach') {
@@ -307,6 +327,10 @@ PROMPT;
             if (is_string($incomingPath) && $this->isOwnedDiagramPath($chapter, $incomingPath)) {
                 $normalized['cards'][$index]['diagram_path'] = $incomingPath;
             }
+            $incomingPage = $this->normalizeFigurePage($cards[$index]['figure_page'] ?? $card['figure_page'] ?? null);
+            if ($incomingPage !== null) {
+                $normalized['cards'][$index]['figure_page'] = $incomingPage;
+            }
         }
 
         $chapter->update([
@@ -322,6 +346,15 @@ PROMPT;
             'concept_path_approved_at' => null,
             'concept_path_approved_by' => null,
         ]);
+
+        $chapter = $chapter->fresh();
+
+        // Like MCQ zip pages: auto-attach the textbook PDF page named by figure_page.
+        try {
+            $this->autoAttachFigurePages($chapter);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return $chapter->fresh();
     }
@@ -403,6 +436,183 @@ PROMPT;
         $chapter->update(['concept_path_items' => $items]);
 
         return $chapter->fresh();
+    }
+
+    public function attachPdfPageAsDiagram(TextbookChapter $chapter, int $cardIndex, int $pageNumber): TextbookChapter
+    {
+        $pages = $this->chapterPdfPages($chapter);
+        $match = collect($pages)->firstWhere('page', $pageNumber);
+        if (! $match) {
+            throw new InvalidArgumentException("PDF page {$pageNumber} is not available for this chapter.");
+        }
+
+        $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+        $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
+        if (! isset($cards[$cardIndex]) || ! is_array($cards[$cardIndex])) {
+            throw new InvalidArgumentException('Concept card not found.');
+        }
+
+        $source = Storage::disk('public')->path($match['path']);
+        if (! is_file($source)) {
+            throw new InvalidArgumentException("PDF page {$pageNumber} file is missing. Try Refresh PDF pages.");
+        }
+
+        $this->deleteDiagramPath($cards[$cardIndex]['diagram_path'] ?? null);
+
+        $destination = $this->diagramDirectory($chapter).'/'.Str::uuid()->toString().'.png';
+        Storage::disk('public')->put($destination, file_get_contents($source));
+
+        $cards[$cardIndex]['diagram_path'] = $destination;
+        $cards[$cardIndex]['figure_page'] = $pageNumber;
+        $items['cards'] = $cards;
+        $chapter->update(['concept_path_items' => $items]);
+
+        return $chapter->fresh();
+    }
+
+    /**
+     * Auto-attach chapter PDF pages for cards that declare figure_page and still lack a diagram.
+     *
+     * @return int Number of cards that received a page image
+     */
+    public function autoAttachFigurePages(TextbookChapter $chapter): int
+    {
+        $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+        $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
+        if ($cards === []) {
+            return 0;
+        }
+
+        $attached = 0;
+        foreach ($cards as $index => $card) {
+            if (! is_array($card)) {
+                continue;
+            }
+            if (filled($card['diagram_path'] ?? null)) {
+                continue;
+            }
+            $page = $this->normalizeFigurePage($card['figure_page'] ?? null);
+            if ($page === null) {
+                continue;
+            }
+
+            try {
+                $chapter = $this->attachPdfPageAsDiagram($chapter, $index, $page);
+                $attached++;
+                $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+                $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $attached;
+    }
+
+    /**
+     * @return list<array{page: int, path: string, url: string}>
+     */
+    public function chapterPdfPages(TextbookChapter $chapter, bool $forceRefresh = false): array
+    {
+        if (! filled($chapter->pdf_path) || ! Storage::disk('public')->exists($chapter->pdf_path)) {
+            return [];
+        }
+
+        $directory = $this->pageCacheDirectory($chapter);
+        if ($forceRefresh) {
+            Storage::disk('public')->deleteDirectory($directory);
+        }
+
+        $existing = $this->listCachedPages($directory);
+        if ($existing === []) {
+            if (! $this->pageImageService->isAvailable()) {
+                return [];
+            }
+            $existing = $this->pageImageService->renderPages($chapter->pdf_path, $directory);
+        }
+
+        return collect($existing)
+            ->values()
+            ->map(function (string $path, int $index) {
+                $page = $index + 1;
+                if (preg_match('/page-(\d+)\.png$/i', $path, $m)) {
+                    $page = (int) $m[1];
+                }
+
+                return [
+                    'page' => $page,
+                    'path' => $path,
+                    'url' => Storage::disk('public')->url($path),
+                ];
+            })
+            ->sortBy('page')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Fast: return already-rendered chapter PDF page thumbnails without re-rendering.
+     *
+     * @return list<array{page: int, path: string, url: string}>
+     */
+    public function cachedChapterPdfPages(TextbookChapter $chapter): array
+    {
+        $directory = $this->pageCacheDirectory($chapter);
+        $existing = $this->listCachedPages($directory);
+
+        return collect($existing)
+            ->values()
+            ->map(function (string $path, int $index) {
+                $page = $index + 1;
+                if (preg_match('/page-(\d+)\.png$/i', $path, $m)) {
+                    $page = (int) $m[1];
+                }
+
+                return [
+                    'page' => $page,
+                    'path' => $path,
+                    'url' => Storage::disk('public')->url($path),
+                ];
+            })
+            ->sortBy('page')
+            ->values()
+            ->all();
+    }
+
+    public function clearChapterPageCache(TextbookChapter $chapter): void
+    {
+        Storage::disk('public')->deleteDirectory($this->pageCacheDirectory($chapter));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function listCachedPages(string $directory): array
+    {
+        if (! Storage::disk('public')->exists($directory)) {
+            return [];
+        }
+
+        return collect(Storage::disk('public')->files($directory))
+            ->filter(fn (string $file) => (bool) preg_match('/page-\d+\.png$/i', $file))
+            ->sort(SORT_NATURAL)
+            ->values()
+            ->all();
+    }
+
+    private function pageCacheDirectory(TextbookChapter $chapter): string
+    {
+        return 'textbook-chapter-pages/'.$chapter->id;
+    }
+
+    private function normalizeFigurePage(mixed $value): ?int
+    {
+        if ($value === null || $value === '' || $value === false) {
+            return null;
+        }
+        $page = (int) $value;
+
+        return $page > 0 ? $page : null;
     }
 
     public function removeCardDiagram(TextbookChapter $chapter, int $cardIndex): TextbookChapter

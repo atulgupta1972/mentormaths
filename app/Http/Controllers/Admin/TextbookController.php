@@ -506,6 +506,7 @@ class TextbookController extends Controller
                 $request->user(),
                 $this->isContentUploaderContext($request),
             );
+            $this->conceptPath->clearChapterPageCache($textbookChapter);
         } catch (\InvalidArgumentException $exception) {
             return back()->with('error', $exception->getMessage());
         }
@@ -968,6 +969,8 @@ class TextbookController extends Controller
                     : null,
             ],
             'conceptPath' => $conceptPathPayload,
+            'pdfPages' => $this->conceptPath->cachedChapterPdfPages($textbookChapter),
+            'pdfPagesAvailable' => app(\App\Services\PdfPageImageService::class)->isAvailable(),
             'routes' => [
                 'preview' => $uploaderMode
                     ? route('content.textbooks.concept-path.preview', $textbookChapter)
@@ -987,6 +990,15 @@ class TextbookController extends Controller
                 'remove_diagram' => $uploaderMode
                     ? route('content.textbooks.concept-path.remove-diagram', $textbookChapter)
                     : route('admin.textbooks.concept-path.remove-diagram', $textbookChapter),
+                'load_pages' => $uploaderMode
+                    ? route('content.textbooks.concept-path.load-pages', $textbookChapter)
+                    : route('admin.textbooks.concept-path.load-pages', $textbookChapter),
+                'attach_page' => $uploaderMode
+                    ? route('content.textbooks.concept-path.attach-page', $textbookChapter)
+                    : route('admin.textbooks.concept-path.attach-page', $textbookChapter),
+                'auto_attach_pages' => $uploaderMode
+                    ? route('content.textbooks.concept-path.auto-attach-pages', $textbookChapter)
+                    : route('admin.textbooks.concept-path.auto-attach-pages', $textbookChapter),
             ],
         ]);
     }
@@ -1128,6 +1140,68 @@ class TextbookController extends Controller
         }
 
         return back()->with('success', 'Figure removed from this concept card.');
+    }
+
+    public function loadConceptPathPages(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $force = $request->boolean('force');
+
+        try {
+            $pages = $this->conceptPath->chapterPdfPages($textbookChapter, $force);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', $e instanceof \InvalidArgumentException
+                ? $e->getMessage()
+                : 'Could not render chapter PDF pages. Install Ghostscript/pdftoppm on the server, or upload figures manually.');
+        }
+
+        if ($pages === []) {
+            return back()->with('error', 'No PDF pages available. Check the chapter PDF is uploaded and page rendering is installed on the server.');
+        }
+
+        return back()->with('success', count($pages).' PDF page(s) ready. Pick a page on any card, then crop.');
+    }
+
+    public function attachConceptPathPage(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'card_index' => ['required', 'integer', 'min:0'],
+            'page' => ['required', 'integer', 'min:1'],
+        ]);
+
+        try {
+            $this->conceptPath->attachPdfPageAsDiagram(
+                $textbookChapter,
+                (int) $validated['card_index'],
+                (int) $validated['page'],
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not attach that PDF page. Try Load PDF pages first.');
+        }
+
+        return back()->with('success', 'PDF page attached. Use Edit / crop to keep only the figure.');
+    }
+
+    public function autoAttachConceptPathPages(TextbookChapter $textbookChapter): RedirectResponse
+    {
+        try {
+            $count = $this->conceptPath->autoAttachFigurePages($textbookChapter);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not auto-attach PDF pages. Try Load PDF pages, then pick pages manually.');
+        }
+
+        if ($count === 0) {
+            return back()->with('warning', 'No new pages attached. Cards need figure_page in the JSON (or pick a page manually).');
+        }
+
+        return back()->with('success', "Auto-attached {$count} PDF page(s). Crop each figure next.");
     }
 
     public function playConceptPath(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
