@@ -13,10 +13,15 @@ const props = defineProps({
     books: { type: Array, default: () => [] },
 });
 
+const params = new URLSearchParams(window.location.search);
+const presetChapterId = params.get('syllabus_chapter_id') || '';
+
 const form = useForm({
+    mode: props.books?.length ? 'existing' : 'new',
+    textbook_id: props.books?.[0] ? String(props.books[0].id) : '',
     book_name: props.books[0]?.name || 'Ganita Prakash Part I',
     book_code: props.books[0]?.code || 'GP',
-    syllabus_chapter_id: '',
+    syllabus_chapter_id: presetChapterId,
     pdf: null,
 });
 
@@ -27,6 +32,22 @@ const selectedChapter = computed(() =>
 );
 
 const formatMb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+const onModeChange = () => {
+    if (form.mode === 'existing' && props.books?.[0]) {
+        form.textbook_id = String(props.books[0].id);
+        form.book_name = props.books[0].name;
+        form.book_code = props.books[0].code;
+    }
+};
+
+const onBookSelect = () => {
+    const book = props.books.find((row) => String(row.id) === String(form.textbook_id));
+    if (book) {
+        form.book_name = book.name;
+        form.book_code = book.code;
+    }
+};
 
 const onPdfChange = (event) => {
     uploadError.value = '';
@@ -45,8 +66,26 @@ const onPdfChange = (event) => {
 };
 
 const submit = () => {
-    form.post(route('admin.textbooks.store'), {
+    form.transform((data) => {
+        if (data.mode === 'existing') {
+            const book = props.books.find((row) => String(row.id) === String(data.textbook_id));
+            return {
+                book_name: book?.name || data.book_name,
+                book_code: book?.code || data.book_code,
+                syllabus_chapter_id: data.syllabus_chapter_id,
+                pdf: data.pdf,
+            };
+        }
+
+        return {
+            book_name: data.book_name,
+            book_code: data.book_code,
+            syllabus_chapter_id: data.syllabus_chapter_id,
+            pdf: data.pdf,
+        };
+    }).post(route('admin.textbooks.store'), {
         forceFormData: true,
+        onFinish: () => form.transform((data) => data),
     });
 };
 </script>
@@ -81,18 +120,48 @@ const submit = () => {
                         Step 1: store the chapter PDF here. Step 2: use the AI prompt on the next page with Claude/Cursor/Gemini.
                     </div>
 
-                    <div>
-                        <InputLabel for="book_name" value="Book name" />
-                        <TextInput id="book_name" v-model="form.book_name" class="mt-1 block w-full" required />
-                        <InputError :message="form.errors.book_name" class="mt-1" />
+                    <div class="flex flex-wrap gap-4 text-sm text-slate-800">
+                        <label class="inline-flex items-center gap-1.5">
+                            <input v-model="form.mode" type="radio" value="existing" :disabled="!books?.length" @change="onModeChange">
+                            Existing book
+                        </label>
+                        <label class="inline-flex items-center gap-1.5">
+                            <input v-model="form.mode" type="radio" value="new" @change="onModeChange">
+                            New book
+                        </label>
                     </div>
 
-                    <div>
-                        <InputLabel for="book_code" value="Book code" />
-                        <TextInput id="book_code" v-model="form.book_code" class="mt-1 block w-full" required />
-                        <p class="mt-1 text-xs text-gray-500">Short book code for set names — e.g. <strong>GP</strong> (Ganita Prakash) → set <strong>C9-GP-CH08-M</strong>.</p>
-                        <InputError :message="form.errors.book_code" class="mt-1" />
+                    <div v-if="form.mode === 'existing'">
+                        <InputLabel for="textbook_id" value="Book" />
+                        <select
+                            id="textbook_id"
+                            v-model="form.textbook_id"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                            required
+                            @change="onBookSelect"
+                        >
+                            <option value="" disabled>Choose book…</option>
+                            <option v-for="book in books" :key="book.id" :value="String(book.id)">
+                                {{ book.name }} ({{ book.code }})
+                            </option>
+                        </select>
+                        <InputError :message="form.errors.book_name || form.errors.book_code" class="mt-1" />
                     </div>
+
+                    <template v-else>
+                        <div>
+                            <InputLabel for="book_name" value="Book name" />
+                            <TextInput id="book_name" v-model="form.book_name" class="mt-1 block w-full" required />
+                            <InputError :message="form.errors.book_name" class="mt-1" />
+                        </div>
+
+                        <div>
+                            <InputLabel for="book_code" value="Book code" />
+                            <TextInput id="book_code" v-model="form.book_code" class="mt-1 block w-full" required />
+                            <p class="mt-1 text-xs text-gray-500">Short book code for set names — e.g. <strong>GP</strong> (Ganita Prakash) → set <strong>C9-GP-CH08-M</strong>.</p>
+                            <InputError :message="form.errors.book_code" class="mt-1" />
+                        </div>
+                    </template>
 
                     <div>
                         <InputLabel for="syllabus_chapter_id" value="Chapter" />

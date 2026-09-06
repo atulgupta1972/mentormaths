@@ -143,6 +143,114 @@ class TextbookChapterBookService
         return $chapter->fresh(['textbook.gradeLevel']);
     }
 
+    /**
+     * Create or attach a syllabus chapter PDF under a chosen book (concept-builder upload-first flow).
+     */
+    public function ensureChapterPdfForSyllabus(
+        SyllabusChapter $syllabusChapter,
+        int $gradeLevelId,
+        User $user,
+        UploadedFile $pdf,
+        ?int $textbookId = null,
+        ?string $bookName = null,
+        ?string $bookCode = null,
+        bool $ensureUploaderTask = false,
+    ): TextbookChapter {
+        $syllabusChapter->loadMissing('syllabusVersion');
+        $boardId = (int) ($syllabusChapter->syllabusVersion?->board_id ?? 0);
+
+        if ($boardId <= 0) {
+            throw new \InvalidArgumentException('This syllabus chapter has no board. Fix the syllabus link first.');
+        }
+
+        if ($textbookId) {
+            $textbook = Textbook::query()->findOrFail($textbookId);
+
+            if ((int) $textbook->grade_level_id !== $gradeLevelId) {
+                throw new \InvalidArgumentException('Selected book is not for this class.');
+            }
+
+            if ($textbook->board_id !== null && (int) $textbook->board_id !== $boardId) {
+                throw new \InvalidArgumentException('Selected book belongs to a different board.');
+            }
+
+            if ($textbook->board_id === null) {
+                $textbook->update(['board_id' => $boardId]);
+            }
+        } else {
+            $textbook = $this->resolveTextbookForBoard(
+                $gradeLevelId,
+                $boardId,
+                (string) $bookName,
+                (string) $bookCode,
+                $user->id,
+            );
+        }
+
+        $chapterNumber = $syllabusChapter->numericChapterNumber();
+
+        $chapter = TextbookChapter::query()
+            ->where('textbook_id', $textbook->id)
+            ->where('syllabus_chapter_id', $syllabusChapter->id)
+            ->first();
+
+        if (! $chapter) {
+            $chapter = TextbookChapter::query()->create([
+                'textbook_id' => $textbook->id,
+                'syllabus_chapter_id' => $syllabusChapter->id,
+                'chapter_number' => $chapterNumber,
+                'title' => $syllabusChapter->name,
+                'pdf_path' => null,
+                'status' => TextbookChapter::STATUS_DRAFT,
+                'created_by' => $user->id,
+            ]);
+        }
+
+        $directory = 'textbooks/'.$textbook->id.'/chapters/'.$chapterNumber;
+
+        if ($chapter->pdf_path && Storage::disk('public')->exists($chapter->pdf_path)) {
+            Storage::disk('public')->delete($chapter->pdf_path);
+        }
+
+        $pdfPath = $pdf->store($directory, 'public');
+        $chapter->update([
+            'pdf_path' => $pdfPath,
+            'title' => $syllabusChapter->name,
+            'chapter_number' => $chapterNumber,
+        ]);
+
+        if ($ensureUploaderTask) {
+            $this->ensureConceptBuilderUploaderTask($chapter, $user);
+        }
+
+        return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter']);
+    }
+
+    private function ensureConceptBuilderUploaderTask(TextbookChapter $chapter, User $user): void
+    {
+        $existing = ContentUploadTask::query()
+            ->where('textbook_chapter_id', $chapter->id)
+            ->where('assigned_to_user_id', $user->id)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->exists();
+
+        if ($existing) {
+            return;
+        }
+
+        ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $chapter->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
+            'assigned_to_user_id' => $user->id,
+            'assigned_by_user_id' => $user->id,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 0,
+            'agreed_amount_inr' => 0,
+            'agreed_at' => now(),
+            'admin_notes' => 'Auto-assigned for concept-path PDF upload.',
+        ]);
+    }
+
     public function changeBook(
         TextbookChapter $chapter,
         User $user,

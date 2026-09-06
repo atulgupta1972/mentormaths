@@ -7,10 +7,15 @@ use App\Models\AcademicYear;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
+use App\Models\Textbook;
 use App\Models\TextbookChapter;
 use App\Services\AdminGradeContext;
+use App\Services\TextbookChapterBookService;
 use App\Support\ConceptPathStatus;
+use App\Support\UploadedFileDiagnostics;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,6 +23,7 @@ class ConceptBuilderController extends Controller
 {
     public function __construct(
         private AdminGradeContext $gradeContext,
+        private TextbookChapterBookService $bookService,
     ) {}
 
     public function index(Request $request): Response
@@ -28,8 +34,23 @@ class ConceptBuilderController extends Controller
         $maths = Subject::query()->where('code', 'MATHS')->first();
 
         $chapters = [];
+        $books = [];
 
         if ($gradeLevel && $activeYear && $maths) {
+            $books = Textbook::query()
+                ->where('grade_level_id', $gradeLevel->id)
+                ->orderBy('name')
+                ->get(['id', 'name', 'code', 'board_id'])
+                ->map(fn (Textbook $book) => [
+                    'id' => $book->id,
+                    'name' => $book->name,
+                    'code' => $book->code,
+                    'board_id' => $book->board_id,
+                    'label' => "{$book->name} ({$book->code})",
+                ])
+                ->values()
+                ->all();
+
             $versions = SyllabusVersion::query()
                 ->with([
                     'board:id,code,name',
@@ -69,6 +90,7 @@ class ConceptBuilderController extends Controller
                                 'id' => $upload->id,
                                 'book_name' => $upload->textbook?->name,
                                 'book_code' => $upload->textbook?->code,
+                                'textbook_id' => $upload->textbook_id,
                                 'has_pdf' => $hasPdf,
                                 'status_label' => $upload->statusLabel(),
                                 'concept_path_status' => $upload->concept_path_status,
@@ -93,28 +115,24 @@ class ConceptBuilderController extends Controller
                         ->values()
                         ->all();
 
-                    $readyUpload = collect($uploads)->firstWhere('has_pdf', true);
+                    $readyUploads = collect($uploads)->where('has_pdf', true)->values();
                     $approvedUpload = collect($uploads)->firstWhere('is_approved', true);
-                    $pendingUpload = collect($uploads)->firstWhere('has_pdf', false);
-                    $createUrl = $uploaderMode ? null : route('admin.textbooks.create');
+                    $linkedTextbookIds = collect($uploads)->pluck('textbook_id')->filter()->values()->all();
 
                     $chapters[] = [
                         'syllabus_chapter_id' => $syllabusChapter->id,
+                        'board_id' => $version->board_id,
                         'board_code' => $version->board?->code,
                         'board_name' => $version->board?->name,
                         'label' => $this->chapterLabel($syllabusChapter),
                         'chapter_number' => $syllabusChapter->chapter_number,
                         'name' => $syllabusChapter->name,
                         'uploads' => $uploads,
-                        'has_pdf' => $readyUpload !== null,
+                        'has_pdf' => $readyUploads->isNotEmpty(),
                         'is_approved' => $approvedUpload !== null,
                         'run_url' => $approvedUpload['run_url'] ?? null,
-                        'primary_action_url' => $readyUpload['concept_path_url']
-                            ?? ($pendingUpload['upload_url'] ?? $createUrl),
-                        'primary_action_label' => $readyUpload
-                            ? 'Build concepts'
-                            : ($pendingUpload ? 'Open chapter · upload PDF' : 'Upload chapter PDF first'),
-                        'needs_upload' => $readyUpload === null,
+                        'linked_textbook_ids' => $linkedTextbookIds,
+                        'needs_upload' => $readyUploads->isEmpty(),
                     ];
                 }
             }
@@ -124,8 +142,70 @@ class ConceptBuilderController extends Controller
             'uploaderMode' => $uploaderMode,
             'gradeLevel' => $gradeLevel?->only(['id', 'name']),
             'chapters' => $chapters,
+            'books' => $books,
+            'storeUrl' => $uploaderMode
+                ? route('content.concept-builder.store')
+                : route('admin.concept-builder.store'),
             'createUrl' => $uploaderMode ? null : route('admin.textbooks.create'),
         ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $gradeLevel = $this->gradeContext->resolve($request);
+        abort_unless($gradeLevel, 422, 'Select a class from the top bar first.');
+
+        $uploaderMode = $request->routeIs('content.*');
+        $uploadedPdf = $request->file('pdf');
+        if ($uploadedPdf) {
+            UploadedFileDiagnostics::assertValid($uploadedPdf, 'pdf');
+        }
+
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'integer', Rule::exists('syllabus_chapters', 'id')],
+            'textbook_id' => ['nullable', 'integer', Rule::exists('textbooks', 'id')],
+            'book_name' => ['required_without:textbook_id', 'nullable', 'string', 'max:255'],
+            'book_code' => ['required_without:textbook_id', 'nullable', 'string', 'max:32', 'alpha_dash'],
+            'pdf' => ['required', 'file', 'mimes:pdf', 'max:51200'],
+        ], [
+            'pdf.required' => 'Choose a chapter PDF file.',
+            'pdf.mimes' => 'Only PDF files are allowed.',
+            'pdf.max' => 'Each chapter PDF must be under 50 MB.',
+            'pdf.uploaded' => 'The PDF is too large for the server upload limit. Set PHP upload_max_filesize and post_max_size to at least 20M on the server.',
+            'book_name.required_without' => 'Pick an existing book or enter a new book name.',
+            'book_code.required_without' => 'Pick an existing book or enter a new book code.',
+        ]);
+
+        $syllabusChapter = SyllabusChapter::query()
+            ->with('syllabusVersion')
+            ->findOrFail($validated['syllabus_chapter_id']);
+
+        if ((int) ($syllabusChapter->syllabusVersion?->grade_level_id ?? 0) !== (int) $gradeLevel->id) {
+            return back()->with('error', 'That chapter is not for the selected class.');
+        }
+
+        try {
+            $chapter = $this->bookService->ensureChapterPdfForSyllabus(
+                $syllabusChapter,
+                (int) $gradeLevel->id,
+                $request->user(),
+                $uploadedPdf,
+                isset($validated['textbook_id']) ? (int) $validated['textbook_id'] : null,
+                $validated['book_name'] ?? null,
+                $validated['book_code'] ?? null,
+                $uploaderMode,
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $conceptPathUrl = $uploaderMode
+            ? route('content.textbooks.concept-path', $chapter)
+            : route('admin.textbooks.concept-path', $chapter);
+
+        return redirect()
+            ->to($conceptPathUrl)
+            ->with('success', 'Chapter PDF saved for '.($chapter->textbook?->name ?? 'book').'. Continue with concept cards.');
     }
 
     private function chapterLabel(SyllabusChapter $chapter): string

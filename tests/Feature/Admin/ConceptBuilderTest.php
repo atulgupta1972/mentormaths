@@ -37,10 +37,11 @@ class ConceptBuilderTest extends TestCase
                 ->component('Admin/ConceptBuilder/Index')
                 ->where('gradeLevel.id', $grade->id)
                 ->has('chapters', 1)
+                ->has('books', 1)
                 ->where('chapters.0.label', 'Ch 1 — Integers')
                 ->where('chapters.0.has_pdf', true)
-                ->where('chapters.0.primary_action_label', 'Build concepts')
-                ->where('chapters.0.primary_action_url', route('admin.textbooks.concept-path', $upload))
+                ->where('chapters.0.uploads.0.concept_path_url', route('admin.textbooks.concept-path', $upload))
+                ->where('storeUrl', route('admin.concept-builder.store'))
             );
     }
 
@@ -61,8 +62,43 @@ class ConceptBuilderTest extends TestCase
                 ->component('Admin/ConceptBuilder/Index')
                 ->where('uploaderMode', true)
                 ->where('chapters.0.has_pdf', false)
-                ->where('chapters.0.primary_action_url', route('content.textbooks.show', $upload))
+                ->where('chapters.0.uploads.0.upload_url', route('content.textbooks.show', $upload))
+                ->where('storeUrl', route('content.concept-builder.store'))
             );
+    }
+
+    public function test_concept_builder_can_upload_pdf_for_another_book(): void
+    {
+        $this->withoutVite();
+        Storage::fake('public');
+
+        [$admin, $grade, $syllabusChapter] = $this->seedConceptBuilder(withPdf: true);
+
+        $rds = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'code' => 'rds',
+            'name' => 'RD Sharma',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->withSession([AdminGradeContext::SESSION_KEY => $grade->id])
+            ->post(route('admin.concept-builder.store'), [
+                'syllabus_chapter_id' => $syllabusChapter->id,
+                'textbook_id' => $rds->id,
+                'pdf' => UploadedFile::fake()->create('ch5.pdf', 200, 'application/pdf'),
+            ]);
+
+        $newChapter = TextbookChapter::query()
+            ->where('textbook_id', $rds->id)
+            ->where('syllabus_chapter_id', $syllabusChapter->id)
+            ->first();
+
+        $this->assertNotNull($newChapter);
+        $this->assertNotEmpty($newChapter->pdf_path);
+        Storage::disk('public')->assertExists($newChapter->pdf_path);
+        $response->assertRedirect(route('admin.textbooks.concept-path', $newChapter));
     }
 
     public function test_concept_path_preview_saves_draft_without_huge_session_flash(): void

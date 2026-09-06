@@ -369,6 +369,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/written-assignments/{assignment}/retry-ai-question', [WrittenSheetController::class, 'retryAiQuestion'])->name('written-assignments.retry-ai-question');
 
     Route::get('/concept-builder', [ConceptBuilderController::class, 'index'])->name('concept-builder.index');
+    Route::post('/concept-builder', [ConceptBuilderController::class, 'store'])->name('concept-builder.store');
 
     Route::get('/textbooks', [TextbookController::class, 'index'])->name('textbooks.index');
     Route::get('/textbooks/create', [TextbookController::class, 'create'])->name('textbooks.create');
@@ -545,6 +546,7 @@ Route::middleware(['auth', 'verified', 'content.uploader', 'content.uploader.gem
     Route::post('/chapters/{textbookChapter}/request-delete', [ChapterLibraryController::class, 'requestDelete'])->name('chapters.request-delete');
 
     Route::get('/concept-builder', [ConceptBuilderController::class, 'index'])->name('concept-builder.index');
+    Route::post('/concept-builder', [ConceptBuilderController::class, 'store'])->name('concept-builder.store');
     Route::post('/grade-context', [GradeContextController::class, 'update'])->name('grade-context.update');
 
     Route::get('/tasks', [ContentTaskController::class, 'index'])->name('tasks.index');
