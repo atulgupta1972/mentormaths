@@ -16,86 +16,126 @@ const emit = defineEmits(['select']);
  * Top intersection on l: 1 NW, 2 NE, 3 SE, 4 SW
  * Bottom intersection on m: 5 NW, 6 NE, 7 SE, 8 SW
  *
- * Drawn like a textbook: circular arcs + labels (not filled triangles).
+ * Parallel lines l || m; transversal t meets them at 30° (not perpendicular).
  */
-const ARC_R = 34;
-const HIT_R = 52;
-const LABEL_R = 22;
+const ARC_R = 36;
+const HIT_R = 56;
+const LABEL_R = 24;
+const TRANSVERSAL_DEG = 30;
+const DEG = Math.PI / 180;
+
+const yL = 130;
+const yM = 270;
+const topX = 100;
+const tAngle = TRANSVERSAL_DEG * DEG;
+// Screen coords: +x right, +y down. Transversal slopes down-right at 30° to horizontal.
+const tdx = Math.cos(tAngle);
+const tdy = Math.sin(tAngle);
+const bottomX = topX + (yM - yL) * (tdx / tdy);
 
 const intersections = {
-    top: { x: 160, y: 120 },
-    bottom: { x: 160, y: 280 },
+    top: { x: topX, y: yL },
+    bottom: { x: bottomX, y: yM },
 };
 
-/** Quadrant: start/end unit vectors (screen coords: +x right, +y down). */
-const quadrants = {
-    NW: { ax: -1, ay: 0, bx: 0, by: -1 },
-    NE: { ax: 1, ay: 0, bx: 0, by: -1 },
-    SE: { ax: 1, ay: 0, bx: 0, by: 1 },
-    SW: { ax: -1, ay: 0, bx: 0, by: 1 },
+// Ray angles via atan2(y, x). Increasing angle = clockwise in SVG y-down space.
+const aEast = 0;
+const aTUp = -tAngle; // up-right along t
+const aWest = Math.PI;
+const aTDown = Math.PI - tAngle; // down-left along t
+
+/**
+ * Wedge from start→end going clockwise (increasing atan2), matching angle regions:
+ * 2 NE acute, 3 SE obtuse, 4 SW acute, 1 NW obtuse.
+ */
+const wedges = {
+    2: { a0: aTUp, a1: aEast },
+    3: { a0: aEast, a1: aTDown },
+    4: { a0: aTDown, a1: aWest },
+    1: { a0: aWest, a1: aTUp + 2 * Math.PI },
+    6: { a0: aTUp, a1: aEast },
+    7: { a0: aEast, a1: aTDown },
+    8: { a0: aTDown, a1: aWest },
+    5: { a0: aWest, a1: aTUp + 2 * Math.PI },
 };
 
 const angleDefs = [
-    { id: 1, vertex: 'top', q: 'NW' },
-    { id: 2, vertex: 'top', q: 'NE' },
-    { id: 3, vertex: 'top', q: 'SE' },
-    { id: 4, vertex: 'top', q: 'SW' },
-    { id: 5, vertex: 'bottom', q: 'NW' },
-    { id: 6, vertex: 'bottom', q: 'NE' },
-    { id: 7, vertex: 'bottom', q: 'SE' },
-    { id: 8, vertex: 'bottom', q: 'SW' },
+    { id: 1, vertex: 'top' },
+    { id: 2, vertex: 'top' },
+    { id: 3, vertex: 'top' },
+    { id: 4, vertex: 'top' },
+    { id: 5, vertex: 'bottom' },
+    { id: 6, vertex: 'bottom' },
+    { id: 7, vertex: 'bottom' },
+    { id: 8, vertex: 'bottom' },
 ];
 
-/**
- * SVG arc from arm A to arm B (90°). sweep=0 = CCW in SVG y-down space
- * when going NE from east→north; for SE we need clockwise (sweep=1).
- */
-const arcPath = (cx, cy, r, q) => {
-    const { ax, ay, bx, by } = quadrants[q];
-    const x1 = cx + ax * r;
-    const y1 = cy + ay * r;
-    const x2 = cx + bx * r;
-    const y2 = cy + by * r;
-    // SVG y-down: sweep 0 = CCW, 1 = CW. Short 90° arcs:
-    // NE east→north CCW; NW west→north CW; SE east→south CW; SW west→south CCW.
-    const sweep = (q === 'NE' || q === 'SW') ? 0 : 1;
+const polar = (cx, cy, r, angle) => ({
+    x: cx + r * Math.cos(angle),
+    y: cy + r * Math.sin(angle),
+});
 
-    return `M ${x1} ${y1} A ${r} ${r} 0 0 ${sweep} ${x2} ${y2}`;
+const normalizeDelta = (a0, a1) => {
+    let delta = a1 - a0;
+    while (delta < 0) {
+        delta += 2 * Math.PI;
+    }
+    while (delta >= 2 * Math.PI) {
+        delta -= 2 * Math.PI;
+    }
+
+    return delta;
 };
 
-const sectorHitPath = (cx, cy, r, q) => {
-    const { ax, ay, bx, by } = quadrants[q];
-    const x1 = cx + ax * r;
-    const y1 = cy + ay * r;
-    const x2 = cx + bx * r;
-    const y2 = cy + by * r;
-    const sweep = (q === 'NE' || q === 'SW') ? 0 : 1;
+/** Clockwise arc (SVG sweep=1) from a0 to a1. */
+const arcPath = (cx, cy, r, a0, a1) => {
+    const delta = normalizeDelta(a0, a1);
+    const large = delta > Math.PI ? 1 : 0;
+    const p0 = polar(cx, cy, r, a0);
+    const p1 = polar(cx, cy, r, a1);
 
-    return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 0 ${sweep} ${x2} ${y2} Z`;
+    return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`;
 };
 
-const labelPoint = (cx, cy, q) => {
-    const { ax, ay, bx, by } = quadrants[q];
-    const mx = (ax + bx) / 2;
-    const my = (ay + by) / 2;
-    const len = Math.hypot(mx, my) || 1;
+const sectorHitPath = (cx, cy, r, a0, a1) => {
+    const delta = normalizeDelta(a0, a1);
+    const large = delta > Math.PI ? 1 : 0;
+    const p0 = polar(cx, cy, r, a0);
+    const p1 = polar(cx, cy, r, a1);
 
-    return {
-        x: cx + (mx / len) * LABEL_R,
-        y: cy + (my / len) * LABEL_R,
-    };
+    return `M ${cx.toFixed(2)} ${cy.toFixed(2)} L ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} Z`;
+};
+
+const labelPoint = (cx, cy, a0, a1) => {
+    const mid = a0 + normalizeDelta(a0, a1) / 2;
+
+    return polar(cx, cy, LABEL_R, mid);
 };
 
 const regions = angleDefs.map((def) => {
     const v = intersections[def.vertex];
+    const { a0, a1 } = wedges[def.id];
 
     return {
         id: def.id,
-        arc: arcPath(v.x, v.y, ARC_R, def.q),
-        hit: sectorHitPath(v.x, v.y, HIT_R, def.q),
-        label: labelPoint(v.x, v.y, def.q),
+        arc: arcPath(v.x, v.y, ARC_R, a0, a1),
+        hit: sectorHitPath(v.x, v.y, HIT_R, a0, a1),
+        label: labelPoint(v.x, v.y, a0, a1),
     };
 });
+
+const linePad = 70;
+const tStart = {
+    x: intersections.top.x - tdx * linePad,
+    y: intersections.top.y - tdy * linePad,
+};
+const tEnd = {
+    x: intersections.bottom.x + tdx * linePad,
+    y: intersections.bottom.y + tdy * linePad,
+};
+
+const viewWidth = Math.max(420, Math.ceil(bottomX + 90));
+const viewBox = `0 0 ${viewWidth} 400`;
 
 const fillFor = (id) => {
     if (props.revealed && id === props.correct) {
@@ -156,19 +196,37 @@ const hint = computed(() => {
         <p class="mb-1 px-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {{ hint }}
         </p>
-        <svg viewBox="0 0 320 400" class="mx-auto h-auto w-full max-w-sm select-none" role="img" aria-label="Two lines cut by a transversal with angles 1 to 8">
+        <svg
+            :viewBox="viewBox"
+            class="mx-auto h-auto w-full max-w-md select-none"
+            role="img"
+            aria-label="Two parallel lines cut by a transversal at 30 degrees with angles 1 to 8"
+        >
             <!-- Line l -->
-            <line x1="40" y1="120" x2="280" y2="120" stroke="#0f172a" stroke-width="3" />
+            <line x1="40" :y1="yL" :x2="viewWidth - 40" :y2="yL" stroke="#0f172a" stroke-width="3" />
             <!-- Line m -->
-            <line x1="40" y1="280" x2="280" y2="280" stroke="#0f172a" stroke-width="3" />
-            <!-- Transversal t -->
-            <line x1="160" y1="30" x2="160" y2="370" stroke="#0f172a" stroke-width="3" />
+            <line x1="40" :y1="yM" :x2="viewWidth - 40" :y2="yM" stroke="#0f172a" stroke-width="3" />
+            <!-- Transversal t at 30° -->
+            <line
+                :x1="tStart.x"
+                :y1="tStart.y"
+                :x2="tEnd.x"
+                :y2="tEnd.y"
+                stroke="#0f172a"
+                stroke-width="3"
+            />
 
-            <text x="20" y="116" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">l</text>
-            <text x="20" y="276" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">m</text>
-            <text x="168" y="28" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">t</text>
+            <text x="22" :y="yL - 8" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">l</text>
+            <text x="22" :y="yM - 8" font-size="14" font-weight="700" fill="#334155" font-family="Georgia, 'Times New Roman', serif">m</text>
+            <text
+                :x="tStart.x + 10"
+                :y="tStart.y - 4"
+                font-size="14"
+                font-weight="700"
+                fill="#334155"
+                font-family="Georgia, 'Times New Roman', serif"
+            >t</text>
 
-            <!-- Soft highlight under arc only when selected / highlighted / revealed -->
             <path
                 v-for="region in regions"
                 :key="`fill-${region.id}`"
@@ -178,7 +236,6 @@ const hint = computed(() => {
                 class="pointer-events-none"
             />
 
-            <!-- Textbook-style angle arcs -->
             <path
                 v-for="region in regions"
                 :key="`arc-${region.id}`"
@@ -190,7 +247,6 @@ const hint = computed(() => {
                 class="pointer-events-none"
             />
 
-            <!-- Invisible tap targets -->
             <path
                 v-for="region in regions"
                 :key="`hit-${region.id}`"
@@ -219,7 +275,7 @@ const hint = computed(() => {
             </text>
         </svg>
         <p class="mt-1 px-1 text-center text-[11px] text-slate-500">
-            Angles 1–4 at line <strong>l</strong>, angles 5–8 at line <strong>m</strong>, transversal <strong>t</strong>.
+            Angles 1–4 at line <strong>l</strong>, angles 5–8 at line <strong>m</strong>, transversal <strong>t</strong> at 30°.
         </p>
     </div>
 </template>
