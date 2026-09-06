@@ -999,6 +999,9 @@ class TextbookController extends Controller
                 'auto_attach_pages' => $uploaderMode
                     ? route('content.textbooks.concept-path.auto-attach-pages', $textbookChapter)
                     : route('admin.textbooks.concept-path.auto-attach-pages', $textbookChapter),
+                'pull_pdf_figures' => $uploaderMode
+                    ? route('content.textbooks.concept-path.pull-pdf-figures', $textbookChapter)
+                    : route('admin.textbooks.concept-path.pull-pdf-figures', $textbookChapter),
             ],
         ]);
     }
@@ -1202,6 +1205,106 @@ class TextbookController extends Controller
         }
 
         return back()->with('success', "Auto-attached {$count} PDF page(s). Crop each figure next.");
+    }
+
+    /**
+     * Save current cards (if sent) and pull figure pages from the chapter PDF automatically.
+     */
+    public function pullConceptPathPdfFigures(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        if (! filled($textbookChapter->pdf_path)) {
+            return back()->with('error', 'Upload the chapter PDF first, then pull figures from it.');
+        }
+
+        if ($request->filled('payload_json')) {
+            $validated = $request->validate([
+                'chapter_title' => ['nullable', 'string', 'max:200'],
+                'payload_json' => ['required', 'string'],
+            ]);
+
+            try {
+                $decoded = json_decode($validated['payload_json'], true, 512, JSON_THROW_ON_ERROR);
+                if (! is_array($decoded)) {
+                    throw new \InvalidArgumentException('Save payload must be a JSON object.');
+                }
+                $cards = $decoded['cards'] ?? null;
+                if (! is_array($cards) || $cards === []) {
+                    throw new \InvalidArgumentException('Preview cards first, then pull figures.');
+                }
+                $title = $validated['chapter_title']
+                    ?? (is_string($decoded['chapter_title'] ?? null) ? $decoded['chapter_title'] : null);
+                $this->conceptPath->saveDraft($textbookChapter, $cards, $title);
+                $textbookChapter = $textbookChapter->fresh();
+            } catch (\JsonException $e) {
+                return back()->with('error', 'Card JSON is invalid — preview again, then pull figures.');
+            } catch (\InvalidArgumentException $e) {
+                return back()->with('error', $e->getMessage());
+            } catch (\Throwable $e) {
+                report($e);
+
+                return back()->with('error', 'Could not save cards before pulling PDF figures.');
+            }
+        }
+
+        try {
+            $pages = $this->conceptPath->chapterPdfPages($textbookChapter);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with(
+                'error',
+                $e instanceof \InvalidArgumentException
+                    ? $e->getMessage()
+                    : 'Could not turn the chapter PDF into page images. Install Ghostscript (gs) or pdftoppm on the server.',
+            );
+        }
+
+        if ($pages === []) {
+            return back()->with(
+                'error',
+                'No PDF pages could be rendered from this chapter. Install Ghostscript (gs) or pdftoppm on the server, then try again.',
+            );
+        }
+
+        $cardIndex = $request->filled('card_index') ? $request->integer('card_index') : null;
+        $page = $request->filled('page') ? $request->integer('page') : null;
+
+        try {
+            if ($cardIndex !== null && $page !== null) {
+                $this->conceptPath->attachPdfPageAsDiagram($textbookChapter->fresh(), $cardIndex, $page);
+
+                return back()->with('success', "Chapter PDF page {$page} attached. Use Edit / crop to keep only the figure.");
+            }
+
+            $chapter = $textbookChapter->fresh();
+            $count = $this->conceptPath->autoAttachFigurePages($chapter);
+            $chapter = $chapter->fresh();
+            $cards = is_array($chapter->concept_path_items['cards'] ?? null) ? $chapter->concept_path_items['cards'] : [];
+            $withDiagrams = count(array_filter(
+                $cards,
+                fn ($card) => is_array($card) && filled($card['diagram_path'] ?? null),
+            ));
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not attach PDF pages to concept cards.');
+        }
+
+        if ($withDiagrams > 0) {
+            return back()->with(
+                'success',
+                $count > 0
+                    ? "Pulled {$count} figure page(s) from the chapter PDF. Crop each one to keep only the diagram."
+                    : "{$withDiagrams} figure page(s) are ready from the chapter PDF. Crop each one to keep only the diagram.",
+            );
+        }
+
+        return back()->with(
+            'warning',
+            count($pages).' PDF page(s) are ready. No card had figure_page set — use Pick PDF page on a card, then crop.',
+        );
     }
 
     public function playConceptPath(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse

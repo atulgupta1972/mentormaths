@@ -245,8 +245,20 @@ const runPreview = () => {
     if (decoded?.chapter_title) {
         saveForm.chapter_title = String(decoded.chapter_title);
     }
-    previewNote.value = `${normalized.length} cards ready — Save draft, then upload figures where needed.`;
+
+    const withFigures = normalized.filter((c) => c.figure_page).length;
+    if (withFigures > 0) {
+        previewNote.value = `${normalized.length} cards ready — pulling ${withFigures} figure page(s) from the chapter PDF…`;
+        pullFiguresFromChapterPdf();
+    } else {
+        previewNote.value = `${normalized.length} cards ready — use Pull figures from chapter PDF, or Pick PDF page on a card.`;
+    }
 };
+
+const buildPayloadJson = () => JSON.stringify({
+    chapter_title: saveForm.chapter_title || props.chapter.title,
+    cards: cards.value,
+});
 
 const saveDraft = () => {
     if (!cards.value.length) {
@@ -254,11 +266,35 @@ const saveDraft = () => {
         return;
     }
 
-    saveForm.payload_json = JSON.stringify({
-        chapter_title: saveForm.chapter_title || props.chapter.title,
-        cards: cards.value,
-    });
+    saveForm.payload_json = buildPayloadJson();
     saveForm.post(props.routes.save, { preserveScroll: true });
+};
+
+const pullFiguresFromChapterPdf = (options = {}) => {
+    if (!cards.value.length) {
+        window.alert('Preview JSON first so cards appear here.');
+        return;
+    }
+    if (!props.routes.pull_pdf_figures || pagesBusy.value) {
+        return;
+    }
+
+    pagesBusy.value = true;
+    const body = {
+        chapter_title: saveForm.chapter_title || props.chapter.title,
+        payload_json: buildPayloadJson(),
+    };
+    if (options.cardIndex !== undefined && options.page) {
+        body.card_index = options.cardIndex;
+        body.page = options.page;
+    }
+
+    router.post(props.routes.pull_pdf_figures, body, {
+        preserveScroll: true,
+        onFinish: () => {
+            pagesBusy.value = false;
+        },
+    });
 };
 
 const approve = () => {
@@ -283,21 +319,21 @@ const removeCard = (index) => {
 
 const optionLetter = (index) => String.fromCharCode(65 + index);
 
-const ensureSavedForFigures = () => {
-    if (figuresSavedOnServer.value) {
-        return true;
-    }
-
-    window.alert('Save draft first, then upload / crop figures. That keeps the figure linked to the right card.');
-    return false;
-};
+const ensureSavedForFigures = () => true;
 
 const postDiagramFile = (cardIndex, file, onFinish) => {
     if (!file || !props.routes.replace_diagram || diagramUploading.value[cardIndex]) {
         return;
     }
-    if (!ensureSavedForFigures()) {
+
+    // Manual file upload still needs cards on the server — pull/save first if needed.
+    if (!figuresSavedOnServer.value) {
+        pullFiguresFromChapterPdf();
+        window.setTimeout(() => {
+            // After pull redirects back, user can replace; for same-turn upload, save then attach file.
+        }, 0);
         onFinish?.();
+        window.alert('Pulled/saving from chapter PDF first. When the page reloads, use Edit/crop — or click Upload file again if you still want a custom image.');
         return;
     }
 
@@ -327,7 +363,7 @@ const uploadDiagram = (cardIndex, event) => {
 };
 
 const openCropEditor = (card, cardIndex) => {
-    if (!card?.diagram_url || !ensureSavedForFigures()) {
+    if (!card?.diagram_url) {
         return;
     }
 
@@ -360,7 +396,8 @@ const removeDiagram = (cardIndex) => {
     if (!props.routes.remove_diagram || diagramUploading.value[cardIndex]) {
         return;
     }
-    if (!ensureSavedForFigures()) {
+    if (!figuresSavedOnServer.value) {
+        window.alert('Nothing saved on the server yet.');
         return;
     }
     if (!window.confirm('Remove this figure from the concept card?')) {
@@ -384,6 +421,12 @@ const loadPdfPages = (force = false) => {
         return;
     }
 
+    // Ensure cards exist on server so picking a page can attach immediately after.
+    if (!figuresSavedOnServer.value && cards.value.length) {
+        pullFiguresFromChapterPdf();
+        return;
+    }
+
     pagesBusy.value = true;
     router.post(props.routes.load_pages, { force: force ? 1 : 0 }, {
         preserveScroll: true,
@@ -394,42 +437,30 @@ const loadPdfPages = (force = false) => {
 };
 
 const autoAttachPages = () => {
-    if (!props.routes.auto_attach_pages || pagesBusy.value) {
-        return;
-    }
-    if (!ensureSavedForFigures()) {
-        return;
-    }
-
-    pagesBusy.value = true;
-    router.post(props.routes.auto_attach_pages, {}, {
-        preserveScroll: true,
-        onFinish: () => {
-            pagesBusy.value = false;
-        },
-    });
+    pullFiguresFromChapterPdf();
 };
 
 const attachPdfPage = (cardIndex, page) => {
-    if (!props.routes.attach_page || diagramUploading.value[cardIndex]) {
-        return;
-    }
-    if (!ensureSavedForFigures()) {
+    if (diagramUploading.value[cardIndex]) {
         return;
     }
 
-    diagramUploading.value = { ...diagramUploading.value, [cardIndex]: true };
+    pullFiguresFromChapterPdf({ cardIndex, page });
+};
 
-    router.post(props.routes.attach_page, {
-        card_index: cardIndex,
-        page,
-    }, {
-        preserveScroll: true,
-        onFinish: () => {
-            diagramUploading.value = { ...diagramUploading.value, [cardIndex]: false };
-            pagePickerCard.value = null;
-        },
-    });
+const pullSuggestedPage = (cardIndex, page) => {
+    pullFiguresFromChapterPdf({ cardIndex, page });
+};
+
+const togglePagePicker = (index) => {
+    if (pagePickerCard.value === index) {
+        pagePickerCard.value = null;
+        return;
+    }
+    pagePickerCard.value = index;
+    if (!pdfPageCount.value) {
+        loadPdfPages(false);
+    }
 };
 </script>
 
@@ -469,6 +500,9 @@ const attachPdfPage = (cardIndex, page) => {
                 <div v-if="page.props.flash?.error" class="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950">
                     {{ page.props.flash.error }}
                 </div>
+                <div v-if="page.props.flash?.warning" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                    {{ page.props.flash.warning }}
+                </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm">
                     <p class="font-semibold text-slate-900">How this works</p>
@@ -478,8 +512,8 @@ const attachPdfPage = (cardIndex, page) => {
                             and open it in Cursor / Claude / Gemini.
                         </li>
                         <li>Copy the concept-path prompt below and paste it with the PDF.</li>
-                        <li>Paste the JSON reply here → <strong>Preview cards</strong> → <strong>Save draft</strong> (PDF pages with <code>figure_page</code> auto-attach) → <strong>Edit / crop</strong> → Approve.</li>
-                        <li>Or click <strong>Load PDF pages</strong>, pick a page on a card (full page attaches like MCQ), then crop.</li>
+                        <li>Paste JSON → <strong>Preview cards</strong> — the app pulls figure pages from the chapter PDF automatically when <code>figure_page</code> is set.</li>
+                        <li>Then <strong>Edit / crop</strong> each page to keep only the diagram. Approve when ready.</li>
                     </ol>
                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Status: {{ statusLabel }}
@@ -543,23 +577,21 @@ const attachPdfPage = (cardIndex, page) => {
                             </p>
                         </div>
                         <div class="flex flex-wrap gap-2">
+                            <PrimaryButton
+                                type="button"
+                                class="!bg-violet-700 hover:!bg-violet-800"
+                                :disabled="pagesBusy || !cards.length"
+                                @click="pullFiguresFromChapterPdf()"
+                            >
+                                {{ pagesBusy ? 'Pulling PDF pages…' : 'Pull figures from chapter PDF' }}
+                            </PrimaryButton>
                             <SecondaryButton
-                                v-if="pdfPagesAvailable"
                                 type="button"
                                 class="!text-xs"
                                 :disabled="pagesBusy"
                                 @click="loadPdfPages(false)"
                             >
-                                {{ pagesBusy ? 'Loading pages…' : (pdfPageCount ? `PDF pages (${pdfPageCount})` : 'Load PDF pages') }}
-                            </SecondaryButton>
-                            <SecondaryButton
-                                v-if="figuresSavedOnServer"
-                                type="button"
-                                class="!text-xs"
-                                :disabled="pagesBusy"
-                                @click="autoAttachPages"
-                            >
-                                Auto-attach figure pages
+                                {{ pdfPageCount ? `Show pages (${pdfPageCount})` : 'Load PDF page picker' }}
                             </SecondaryButton>
                             <PrimaryButton type="button" :disabled="saveForm.processing || !cards.length" @click="saveDraft">
                                 {{ saveForm.processing ? 'Saving…' : 'Save draft' }}
@@ -640,29 +672,45 @@ const attachPdfPage = (cardIndex, page) => {
 
                         <div
                             class="mt-3 rounded-md border p-3"
-                            :class="card.diagram_url ? 'border-slate-200 bg-slate-50' : 'border-amber-200 bg-amber-50/60'"
+                            :class="card.diagram_url ? 'border-slate-200 bg-slate-50' : 'border-violet-200 bg-violet-50/70'"
                         >
                             <div class="flex flex-wrap items-start justify-between gap-2">
                                 <div>
-                                    <p class="text-xs font-medium uppercase tracking-wide text-slate-600">Figure / diagram</p>
+                                    <p class="text-xs font-medium uppercase tracking-wide text-slate-600">Figure from chapter PDF</p>
                                     <p v-if="card.diagram_url" class="mt-1 text-sm text-slate-600">
-                                        Page attached — crop to keep only the figure (same as MCQ).
+                                        Page attached from the chapter PDF — crop to keep only the figure.
                                     </p>
-                                    <p v-else class="mt-1 text-sm text-amber-950">
-                                        <template v-if="card.figure_page">Suggested PDF page {{ card.figure_page }} — Save draft / Auto-attach, then crop.</template>
-                                        <template v-else>Load PDF pages and pick the page with the figure, then crop.</template>
+                                    <p v-else-if="card.figure_page" class="mt-1 text-sm text-violet-950">
+                                        Will use <strong>PDF page {{ card.figure_page }}</strong> from this chapter (already uploaded).
                                     </p>
-                                    <p v-if="!figuresSavedOnServer" class="mt-1 text-xs font-medium text-rose-700">
-                                        Save draft first before attaching figures.
+                                    <p v-else class="mt-1 text-sm text-slate-700">
+                                        No page number on this card — pick a PDF page below.
                                     </p>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
+                                    <PrimaryButton
+                                        v-if="!card.diagram_url && card.figure_page"
+                                        type="button"
+                                        class="!bg-violet-700 hover:!bg-violet-800 !px-3 !py-1.5 !text-xs"
+                                        :disabled="pagesBusy || diagramUploading[index]"
+                                        @click="pullSuggestedPage(index, card.figure_page)"
+                                    >
+                                        {{ pagesBusy ? 'Pulling…' : `Use PDF page ${card.figure_page}` }}
+                                    </PrimaryButton>
+                                    <PrimaryButton
+                                        v-else-if="!card.diagram_url"
+                                        type="button"
+                                        class="!bg-violet-700 hover:!bg-violet-800 !px-3 !py-1.5 !text-xs"
+                                        :disabled="pagesBusy || diagramUploading[index]"
+                                        @click="pullFiguresFromChapterPdf()"
+                                    >
+                                        Pull from chapter PDF
+                                    </PrimaryButton>
                                     <SecondaryButton
-                                        v-if="pdfPageCount"
                                         type="button"
                                         class="!px-3 !py-1.5 !text-xs"
-                                        :disabled="diagramUploading[index]"
-                                        @click="pagePickerCard = pagePickerCard === index ? null : index"
+                                        :disabled="pagesBusy || diagramUploading[index]"
+                                        @click="togglePagePicker(index)"
                                     >
                                         {{ pagePickerCard === index ? 'Hide pages' : 'Pick PDF page' }}
                                     </SecondaryButton>
@@ -676,16 +724,6 @@ const attachPdfPage = (cardIndex, page) => {
                                         Edit / crop
                                     </SecondaryButton>
                                     <SecondaryButton
-                                        type="button"
-                                        class="!px-3 !py-1.5 !text-xs"
-                                        :disabled="diagramUploading[index]"
-                                        @click="diagramFileInputs[index]?.click()"
-                                    >
-                                        {{ diagramUploading[index]
-                                            ? 'Uploading…'
-                                            : (card.diagram_url ? 'Replace file' : 'Upload file') }}
-                                    </SecondaryButton>
-                                    <SecondaryButton
                                         v-if="card.diagram_url"
                                         type="button"
                                         class="!px-3 !py-1.5 !text-xs"
@@ -694,6 +732,14 @@ const attachPdfPage = (cardIndex, page) => {
                                     >
                                         Remove
                                     </SecondaryButton>
+                                    <button
+                                        type="button"
+                                        class="text-[11px] font-medium text-slate-500 underline hover:text-slate-800"
+                                        :disabled="diagramUploading[index]"
+                                        @click="diagramFileInputs[index]?.click()"
+                                    >
+                                        {{ diagramUploading[index] ? 'Uploading…' : 'Or upload your own file' }}
+                                    </button>
                                     <input
                                         :ref="(el) => { if (el) diagramFileInputs[index] = el; }"
                                         type="file"
@@ -704,19 +750,24 @@ const attachPdfPage = (cardIndex, page) => {
                                 </div>
                             </div>
 
-                            <div v-if="pagePickerCard === index && pdfPageCount" class="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                                <button
-                                    v-for="page in pdfPages"
-                                    :key="page.page"
-                                    type="button"
-                                    class="overflow-hidden rounded border bg-white text-left hover:border-indigo-400"
-                                    :class="card.figure_page === page.page ? 'border-indigo-500 ring-1 ring-indigo-300' : 'border-slate-200'"
-                                    :disabled="diagramUploading[index]"
-                                    @click="attachPdfPage(index, page.page)"
-                                >
-                                    <img :src="page.url" :alt="`Page ${page.page}`" class="h-24 w-full object-cover object-top">
-                                    <span class="block px-1 py-0.5 text-center text-[10px] font-semibold text-slate-600">p.{{ page.page }}</span>
-                                </button>
+                            <div v-if="pagePickerCard === index" class="mt-3">
+                                <p v-if="!pdfPageCount" class="text-xs text-slate-600">
+                                    {{ pagesBusy ? 'Loading chapter PDF pages…' : 'Loading page thumbnails…' }}
+                                </p>
+                                <div v-else class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                                    <button
+                                        v-for="page in pdfPages"
+                                        :key="page.page"
+                                        type="button"
+                                        class="overflow-hidden rounded border bg-white text-left hover:border-indigo-400"
+                                        :class="card.figure_page === page.page ? 'border-indigo-500 ring-1 ring-indigo-300' : 'border-slate-200'"
+                                        :disabled="diagramUploading[index] || pagesBusy"
+                                        @click="attachPdfPage(index, page.page)"
+                                    >
+                                        <img :src="page.url" :alt="`Page ${page.page}`" class="h-24 w-full object-cover object-top">
+                                        <span class="block px-1 py-0.5 text-center text-[10px] font-semibold text-slate-600">p.{{ page.page }}</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <img

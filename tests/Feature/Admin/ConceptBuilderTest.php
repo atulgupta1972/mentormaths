@@ -292,6 +292,56 @@ class ConceptBuilderTest extends TestCase
         Storage::disk('public')->assertExists($upload->concept_path_items['cards'][0]['diagram_path']);
     }
 
+    public function test_pull_pdf_figures_saves_and_attaches_without_manual_upload(): void
+    {
+        $this->withoutVite();
+        Storage::fake('public');
+
+        [$admin, , , $upload] = $this->seedConceptBuilder(withPdf: true);
+        Storage::disk('public')->put($upload->pdf_path, '%PDF-1.4');
+        Storage::disk('public')->put('textbook-chapter-pages/'.$upload->id.'/page-2.png', 'fake-png-bytes');
+
+        $payload = [
+            'chapter_title' => 'Lines',
+            'cards' => [
+                [
+                    'step' => 1,
+                    'type' => 'teach',
+                    'title' => 'Linear pair',
+                    'body' => 'Two angles on a straight line.',
+                    'example' => 'Fig 5.2',
+                    'figure_page' => 2,
+                ],
+                [
+                    'step' => 2,
+                    'type' => 'check',
+                    'title' => 'Check',
+                    'questions' => [
+                        [
+                            'question_type' => 'fill_blank',
+                            'question' => 'Linear pair sums to ____',
+                            'correct_answer' => '180',
+                            'answer_format' => 'integer',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $this->actingAs($admin)
+            ->from(route('admin.textbooks.concept-path', $upload))
+            ->post(route('admin.textbooks.concept-path.pull-pdf-figures', $upload), [
+                'chapter_title' => 'Lines',
+                'payload_json' => json_encode($payload, JSON_THROW_ON_ERROR),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $upload->refresh();
+        $this->assertSame('draft', $upload->concept_path_status);
+        $this->assertNotEmpty($upload->concept_path_items['cards'][0]['diagram_path'] ?? null);
+    }
+
     public function test_textbooks_index_shows_syllabus_chapter_label(): void
     {
         $this->withoutVite();

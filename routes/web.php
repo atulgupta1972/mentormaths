@@ -396,6 +396,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/load-pages', [TextbookController::class, 'loadConceptPathPages'])->name('textbooks.concept-path.load-pages');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/attach-page', [TextbookController::class, 'attachConceptPathPage'])->name('textbooks.concept-path.attach-page');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/auto-attach-pages', [TextbookController::class, 'autoAttachConceptPathPages'])->name('textbooks.concept-path.auto-attach-pages');
+    Route::post('/textbooks/chapters/{textbookChapter}/concept-path/pull-pdf-figures', [TextbookController::class, 'pullConceptPathPdfFigures'])->name('textbooks.concept-path.pull-pdf-figures');
     Route::post('/textbooks/chapters/{textbookChapter}/publish-fill-blank-written', [TextbookController::class, 'publishFillBlankAndWritten'])->name('textbooks.publish-fill-blank-written');
     Route::get('/textbooks/chapters/{textbookChapter}/mcq-reference', [TextbookController::class, 'downloadMcqReference'])->name('textbooks.mcq-reference');
     Route::post('/textbooks/chapters/{textbookChapter}/reset-import', [TextbookController::class, 'resetImport'])->name('textbooks.reset-import');
@@ -604,6 +605,7 @@ Route::middleware(['auth', 'verified', 'content.uploader', 'content.uploader.gem
         Route::post('/textbooks/chapters/{textbookChapter}/concept-path/load-pages', [TextbookController::class, 'loadConceptPathPages'])->name('textbooks.concept-path.load-pages');
         Route::post('/textbooks/chapters/{textbookChapter}/concept-path/attach-page', [TextbookController::class, 'attachConceptPathPage'])->name('textbooks.concept-path.attach-page');
         Route::post('/textbooks/chapters/{textbookChapter}/concept-path/auto-attach-pages', [TextbookController::class, 'autoAttachConceptPathPages'])->name('textbooks.concept-path.auto-attach-pages');
+        Route::post('/textbooks/chapters/{textbookChapter}/concept-path/pull-pdf-figures', [TextbookController::class, 'pullConceptPathPdfFigures'])->name('textbooks.concept-path.pull-pdf-figures');
     });
 });
 
