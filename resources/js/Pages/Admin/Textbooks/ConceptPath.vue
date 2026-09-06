@@ -34,6 +34,21 @@ const isApproved = computed(() => props.conceptPath?.status === 'approved');
 const figuresSavedOnServer = computed(() => Boolean(props.conceptPath?.status));
 const pdfPageCount = computed(() => props.pdfPages?.length || 0);
 
+const cardPlayUrl = (card) => {
+    if (!props.chapter?.play_url || card?.approved === false) {
+        return null;
+    }
+
+    const step = Number(card?.step);
+    if (!Number.isFinite(step) || step < 1) {
+        return null;
+    }
+
+    const joiner = props.chapter.play_url.includes('?') ? '&' : '?';
+
+    return `${props.chapter.play_url}${joiner}card=${step}`;
+};
+
 const saveForm = useForm({
     chapter_title: props.conceptPath?.chapter_title || props.chapter.title,
     payload_json: '',
@@ -523,11 +538,11 @@ const togglePagePicker = (index) => {
                         ← Chapter
                     </Link>
                     <Link
-                        v-if="chapter.play_url && isApproved"
+                        v-if="chapter.play_url && chapter.can_run_full"
                         :href="chapter.play_url"
                         class="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-800"
                     >
-                        Run concepts
+                        Run all concepts
                     </Link>
                 </div>
             </div>
@@ -676,6 +691,13 @@ const togglePagePicker = (index) => {
                                 <h3 class="mt-1 text-base font-semibold text-slate-900">{{ card.title }}</h3>
                             </div>
                             <div class="flex items-center gap-3">
+                                <Link
+                                    v-if="cardPlayUrl(card)"
+                                    :href="cardPlayUrl(card)"
+                                    class="rounded-md bg-violet-700 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-violet-800"
+                                >
+                                    Run this card
+                                </Link>
                                 <label class="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                                     <input v-model="card.approved" type="checkbox" class="rounded border-slate-300 text-indigo-600">
                                     Include

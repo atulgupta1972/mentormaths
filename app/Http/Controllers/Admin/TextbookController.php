@@ -962,11 +962,10 @@ class TextbookController extends Controller
                 'download_url' => $uploaderMode
                     ? route('content.textbooks.download', $textbookChapter)
                     : route('admin.textbooks.download', $textbookChapter),
-                'play_url' => $textbookChapter->concept_path_status === \App\Support\ConceptPathStatus::APPROVED
-                    ? ($uploaderMode
-                        ? route('content.textbooks.concept-path.play', $textbookChapter)
-                        : route('admin.textbooks.concept-path.play', $textbookChapter))
-                    : null,
+                'play_url' => $uploaderMode
+                    ? route('content.textbooks.concept-path.play', $textbookChapter)
+                    : route('admin.textbooks.concept-path.play', $textbookChapter),
+                'can_run_full' => $textbookChapter->concept_path_status === \App\Support\ConceptPathStatus::APPROVED,
             ],
             'conceptPath' => $conceptPathPayload,
             'pdfPages' => $this->conceptPath->cachedChapterPdfPages($textbookChapter),
@@ -1330,26 +1329,52 @@ class TextbookController extends Controller
 
         $items = is_array($textbookChapter->concept_path_items) ? $textbookChapter->concept_path_items : [];
         $allCards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
-        $cards = array_values(array_filter(
+        $includedCards = array_values(array_filter(
             $allCards,
             fn ($card) => is_array($card) && ($card['approved'] ?? true),
         ));
 
-        if ($cards === []) {
-            return $this->redirectToConceptPath($request, $textbookChapter)
-                ->with('error', 'Approve a concept path with at least one included card before running it.');
-        }
+        $onlyStep = max(0, (int) $request->query('card', 0));
+        $singleCard = $onlyStep > 0;
 
-        if ($textbookChapter->concept_path_status !== \App\Support\ConceptPathStatus::APPROVED) {
-            return $this->redirectToConceptPath($request, $textbookChapter)
-                ->with('error', 'Approve the concept flow first, then Run concepts.');
+        if ($singleCard) {
+            $cards = array_values(array_filter(
+                $includedCards,
+                fn (array $card) => (int) ($card['step'] ?? 0) === $onlyStep,
+            ));
+
+            // Fallback: treat ?card=N as 1-based position among included cards.
+            if ($cards === [] && isset($includedCards[$onlyStep - 1])) {
+                $cards = [$includedCards[$onlyStep - 1]];
+            }
+
+            if ($cards === []) {
+                return $this->redirectToConceptPath($request, $textbookChapter)
+                    ->with('error', "No included card found for step {$onlyStep}.");
+            }
+        } else {
+            $cards = $includedCards;
+
+            if ($cards === []) {
+                return $this->redirectToConceptPath($request, $textbookChapter)
+                    ->with('error', 'Approve a concept path with at least one included card before running it.');
+            }
+
+            if ($textbookChapter->concept_path_status !== \App\Support\ConceptPathStatus::APPROVED) {
+                return $this->redirectToConceptPath($request, $textbookChapter)
+                    ->with('error', 'Approve the concept flow first, then Run concepts — or use Run this card on one card.');
+            }
         }
 
         $uploaderMode = $this->isContentUploaderContext($request);
         $cards = $this->conceptPath->withDiagramUrls($cards);
+        $playBase = $uploaderMode
+            ? route('content.textbooks.concept-path.play', $textbookChapter)
+            : route('admin.textbooks.concept-path.play', $textbookChapter);
 
         return Inertia::render('Admin/Textbooks/ConceptPathPlay', [
             'uploaderMode' => $uploaderMode,
+            'singleCard' => $singleCard,
             'chapter' => [
                 'id' => $textbookChapter->id,
                 'label' => $textbookChapter->displaySyllabusLabel(),
@@ -1364,13 +1389,20 @@ class TextbookController extends Controller
                 'edit_url' => $uploaderMode
                     ? route('content.textbooks.concept-path', $textbookChapter)
                     : route('admin.textbooks.concept-path', $textbookChapter),
+                'play_url' => $playBase,
+                'can_run_full' => $textbookChapter->concept_path_status === \App\Support\ConceptPathStatus::APPROVED,
             ],
             'path' => [
                 'chapter_title' => $items['chapter_title'] ?? $textbookChapter->displayTitle(),
                 'status' => $textbookChapter->concept_path_status,
                 'status_label' => \App\Support\ConceptPathStatus::label($textbookChapter->concept_path_status),
-                'cards' => array_values(array_map(function (array $card, int $index) {
-                    $card['step'] = $index + 1;
+                'cards' => array_values(array_map(function (array $card, int $index) use ($singleCard) {
+                    // Keep original step when previewing one card; renumber for full runs.
+                    if (! $singleCard) {
+                        $card['step'] = $index + 1;
+                    } elseif (! isset($card['step'])) {
+                        $card['step'] = $index + 1;
+                    }
 
                     return $card;
                 }, $cards, array_keys($cards))),

@@ -209,6 +209,64 @@ class ConceptBuilderTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/Textbooks/ConceptPathPlay')
                 ->has('path.cards', 2)
+                ->where('singleCard', false)
+            );
+    }
+
+    public function test_can_run_a_single_concept_card_even_when_draft(): void
+    {
+        $this->withoutVite();
+
+        [$admin, , , $upload] = $this->seedConceptBuilder(withPdf: true);
+
+        $upload->update([
+            'concept_path_status' => 'draft',
+            'concept_path_items' => [
+                'chapter_title' => 'Integers',
+                'cards' => [
+                    [
+                        'step' => 1,
+                        'type' => 'teach',
+                        'title' => 'Integers',
+                        'body' => 'Whole numbers and negatives.',
+                        'approved' => true,
+                    ],
+                    [
+                        'step' => 2,
+                        'type' => 'check',
+                        'title' => 'Quick check',
+                        'approved' => true,
+                        'questions' => [
+                            [
+                                'question_type' => 'fill_blank',
+                                'question' => 'Opposite of 4 is ____',
+                                'correct_answer' => '-4',
+                                'answer_format' => 'integer',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.textbooks.concept-path.play', ['textbookChapter' => $upload, 'card' => 2]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Textbooks/ConceptPathPlay')
+                ->where('singleCard', true)
+                ->has('path.cards', 1)
+                ->where('path.cards.0.step', 2)
+                ->where('path.cards.0.title', 'Quick check')
+            );
+
+        $this->actingAs($admin)
+            ->get(route('admin.textbooks.concept-path', $upload))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Textbooks/ConceptPath')
+                ->where('chapter.play_url', route('admin.textbooks.concept-path.play', $upload))
+                ->where('chapter.can_run_full', false)
             );
     }
 

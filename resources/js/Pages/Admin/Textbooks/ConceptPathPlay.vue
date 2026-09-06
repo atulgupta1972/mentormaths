@@ -8,6 +8,7 @@ import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     uploaderMode: { type: Boolean, default: false },
+    singleCard: { type: Boolean, default: false },
     chapter: { type: Object, required: true },
     path: { type: Object, required: true },
 });
@@ -154,13 +155,15 @@ const cardBorderClass = computed(() => {
 </script>
 
 <template>
-    <Head :title="`Run concepts · ${chapter.label}`" />
+    <Head :title="`${singleCard ? 'Run card' : 'Run concepts'} · ${chapter.label}`" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-gray-800">Run concepts</h2>
+                    <h2 class="text-xl font-semibold text-gray-800">
+                        {{ singleCard ? 'Run this card' : 'Run concepts' }}
+                    </h2>
                     <p class="text-sm text-gray-500">
                         {{ chapter.grade_name }} · {{ chapter.book_name }} ({{ chapter.book_code }})
                         · {{ chapter.label }}
@@ -168,6 +171,13 @@ const cardBorderClass = computed(() => {
                 </div>
                 <div class="flex flex-wrap gap-3 text-sm">
                     <Link :href="chapter.edit_url" class="text-indigo-600 hover:underline">Edit path</Link>
+                    <Link
+                        v-if="singleCard && chapter.can_run_full && chapter.play_url"
+                        :href="chapter.play_url"
+                        class="font-semibold text-emerald-700 hover:underline"
+                    >
+                        Run all concepts
+                    </Link>
                     <Link :href="chapter.builder_url" class="text-indigo-600 hover:underline">Concept builder</Link>
                 </div>
             </div>
@@ -186,14 +196,27 @@ const cardBorderClass = computed(() => {
                 </div>
 
                 <div v-if="finished" class="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm">
-                    <p class="text-lg font-semibold text-emerald-950">Concept path complete</p>
+                    <p class="text-lg font-semibold text-emerald-950">
+                        {{ singleCard ? 'Card complete' : 'Concept path complete' }}
+                    </p>
                     <p class="mt-1 text-sm text-emerald-900">
-                        You walked through {{ total }} cards for {{ chapter.label }}.
+                        <template v-if="singleCard">
+                            You finished step {{ cards[0]?.step || 1 }} for {{ chapter.label }}.
+                        </template>
+                        <template v-else>
+                            You walked through {{ total }} cards for {{ chapter.label }}.
+                        </template>
                     </p>
                     <div class="mt-4 flex flex-wrap justify-center gap-2">
                         <PrimaryButton type="button" @click="restart">Run again</PrimaryButton>
-                        <Link :href="chapter.builder_url">
-                            <SecondaryButton type="button">Back to builder</SecondaryButton>
+                        <Link
+                            v-if="singleCard && chapter.can_run_full && chapter.play_url"
+                            :href="chapter.play_url"
+                        >
+                            <SecondaryButton type="button">Run all concepts</SecondaryButton>
+                        </Link>
+                        <Link :href="chapter.edit_url">
+                            <SecondaryButton type="button">Back to cards</SecondaryButton>
                         </Link>
                     </div>
                 </div>
