@@ -8,7 +8,6 @@ use App\Models\BasicsDrillSession;
 use App\Models\Student;
 use App\Services\BasicsDrillSessionService;
 use App\Services\FormulaDrillSessionService;
-use App\Support\AttemptIntegrity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -43,7 +42,6 @@ class BasicsDrillController extends Controller
 
         return Inertia::render('Student/BasicsDrill/Show', [
             'session' => $this->sessionService->formatSession($session),
-            'integrity' => AttemptIntegrity::configForDrill(),
         ]);
     }
 

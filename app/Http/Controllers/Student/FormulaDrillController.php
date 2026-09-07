@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Student;
 use App\Http\Controllers\Controller;
 use App\Models\FormulaDrillItem;
 use App\Services\FormulaDrillSessionService;
-use App\Support\AttemptIntegrity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,10 +41,7 @@ class FormulaDrillController extends Controller
             return redirect()->route('dashboard');
         }
 
-        return Inertia::render('Student/FormulaDrill/Show', [
-            ...$this->sessionService->sessionPayload($session),
-            'integrity' => AttemptIntegrity::configForDrill(),
-        ]);
+        return Inertia::render('Student/FormulaDrill/Show', $this->sessionService->sessionPayload($session));
     }
 
     public function submitAnswer(Request $request, FormulaDrillItem $item): JsonResponse

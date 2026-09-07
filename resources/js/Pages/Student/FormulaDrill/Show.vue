@@ -1,7 +1,4 @@
 <script setup>
-import AttemptFullscreenGate from '@/Components/AttemptFullscreenGate.vue';
-import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
-import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -9,7 +6,6 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { useAttemptContentProtection } from '@/composables/useAttemptContentProtection';
 import { Head, router } from '@inertiajs/vue3';
 import axios from 'axios';
 import { computed, ref, watch } from 'vue';
@@ -31,22 +27,6 @@ const props = defineProps({
         type: Object,
         default: null,
     },
-    integrity: {
-        type: Object,
-        default: () => ({ mode: 'off', enabled: false, require_fullscreen: false }),
-    },
-});
-
-const needsFullscreenGate = computed(() => props.integrity?.require_fullscreen ?? false);
-const fullscreenReady = ref(!needsFullscreenGate.value);
-const canShowAttempt = computed(() => !needsFullscreenGate.value || fullscreenReady.value);
-
-const protectionMode = computed(() => props.integrity?.mode ?? 'off');
-const { contentHidden, enabled: protectionEnabled } = useAttemptContentProtection({
-    mode: protectionMode.value,
-    trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
-    locksOnTabLeaves: false,
-    requireFullscreen: needsFullscreenGate.value,
 });
 
 const poolNote = computed(() => {
@@ -304,15 +284,6 @@ const optionClass = (optionId) => {
     <Head title="Daily formula drill" />
 
     <AuthenticatedLayout>
-        <AttemptFullscreenGate
-            v-if="needsFullscreenGate"
-            title="Enter fullscreen for today’s formula drill"
-            message="Stay in fullscreen so only Mentor Maths is on screen while you finish today’s formulas."
-            @ready="fullscreenReady = true"
-            @lost="fullscreenReady = false"
-        />
-        <AttemptHiddenOverlay v-if="protectionEnabled && contentHidden && canShowAttempt" />
-
         <template #header>
             <div>
                 <h2 class="text-xl font-semibold text-gray-800">Daily formula drill</h2>
@@ -331,10 +302,8 @@ const optionClass = (optionId) => {
             </div>
         </template>
 
-        <div v-if="canShowAttempt" class="py-8">
+        <div class="py-8">
             <div class="mx-auto max-w-2xl sm:px-6 lg:px-8">
-                <AttemptIntegrityNotice class="mb-4" :mode="protectionMode" />
-
                 <div class="mb-4 flex items-center justify-between rounded-lg bg-indigo-600 px-4 py-3 text-white shadow">
                     <p class="text-sm font-semibold">Progress</p>
                     <p class="font-mono text-lg font-bold">{{ progressLabel }}</p>

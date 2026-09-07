@@ -30,7 +30,6 @@ const submit = () => {
             Students must stay in fullscreen. Tests lock after too many leaves.
             Unlock from Dashboard → Locked students (or the assignment page).
             Practice tracks leaves for the teacher but does not lock (so “I need help” always works).
-            Daily drills (basics + formulas) always run in fullscreen.
         </p>
 
         <form class="mt-4 space-y-3" @submit.prevent="submit">
