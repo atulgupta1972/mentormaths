@@ -256,9 +256,12 @@ const normalizeCard = (row, index) => {
                     if (!correctAnswer) {
                         return null;
                     }
+                    const turnFromDeg = { 90: '1/4', 180: '1/2', 270: '3/4', 360: '1' };
                     return {
                         kind: 'fill_degrees',
                         prompt,
+                        start: [12, 3, 6, 9].includes(Number(p?.start)) ? Number(p.start) : 12,
+                        turn: p?.turn ? String(p.turn).trim() : (turnFromDeg[correctAnswer] || null),
                         correct_answer: correctAnswer,
                         answer_format: 'integer',
                         explanation: p?.explanation ? String(p.explanation).trim() : null,
@@ -269,11 +272,22 @@ const normalizeCard = (row, index) => {
                     while (options.length < 4) {
                         options.push('—');
                     }
+                    const correctIndex = Number(p?.correct_index ?? 0);
+                    let turn = p?.turn ? String(p.turn).trim() : null;
+                    if (!turn) {
+                        const chosen = String(options[correctIndex] || '').toLowerCase();
+                        if (chosen.includes('1/4') || chosen.includes('quarter')) turn = '1/4';
+                        else if (chosen.includes('1/2') || chosen.includes('half')) turn = '1/2';
+                        else if (chosen.includes('3/4')) turn = '3/4';
+                        else if (chosen.includes('full')) turn = '1';
+                    }
                     return {
                         kind: 'mcq_turn',
                         prompt,
+                        start: [12, 3, 6, 9].includes(Number(p?.start)) ? Number(p.start) : 12,
+                        turn,
                         options,
-                        correct_index: Number(p?.correct_index ?? 0),
+                        correct_index: correctIndex,
                         explanation: p?.explanation ? String(p.explanation).trim() : null,
                     };
                 }

@@ -7,6 +7,12 @@ const props = defineProps({
     correct: { type: Number, default: null },
     revealed: { type: Boolean, default: false },
     interactive: { type: Boolean, default: true },
+    /** Force a demo turn on the clock: '1/4' | '1/2' | '3/4' | '1' | 'full' */
+    demoTurn: { type: String, default: null },
+    /** When false, show Angle: ? (for fill-degrees questions). */
+    showDegrees: { type: Boolean, default: true },
+    /** When false, show Turn: ? (for angle→turn MCQs). */
+    showTurnLabel: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(['select']);
@@ -15,6 +21,7 @@ const cx = 160;
 const cy = 160;
 const r = 118;
 const faceOrder = [12, 3, 6, 9];
+const arcRadius = r - 42;
 
 const faces = [
     { id: 12, label: '12', angle: -90 },
@@ -37,7 +44,6 @@ const pointOn = (deg, radius) => ({
 const faceAngle = (id) => (faces.find((f) => f.id === id) || faces[0]).angle;
 
 const nearestFace = (deg) => {
-    // Normalize to [-180, 180)
     let d = ((deg + 180) % 360) - 180;
     if (d < -180) {
         d += 360;
@@ -57,27 +63,24 @@ const nearestFace = (deg) => {
     return best.id;
 };
 
-const activeFace = computed(() => {
-    if (props.revealed && props.correct) {
-        return props.correct;
-    }
-    if (props.selected != null) {
-        return props.selected;
-    }
-    return props.start ?? 12;
-});
+const quartersFromTurn = (turn) => {
+    const key = String(turn || '').trim().toLowerCase().replace(/\s+/g, '');
+    const map = {
+        '1/4': 1,
+        '¼': 1,
+        quarter: 1,
+        '1/2': 2,
+        '½': 2,
+        half: 2,
+        '3/4': 3,
+        '¾': 3,
+        '1': 4,
+        full: 4,
+        'fullturn': 4,
+    };
+    return map[key] ?? null;
+};
 
-const handDeg = computed(() => {
-    if (dragging.value && dragDeg.value != null) {
-        return dragDeg.value;
-    }
-    return faceAngle(activeFace.value);
-});
-
-const handTip = computed(() => pointOn(handDeg.value, r - 26));
-const startTip = computed(() => pointOn(faceAngle(props.start ?? 12), r - 26));
-
-/** Clockwise quarter-steps from start to selected (0–3). Full turn prompts use correct===start → treat as 4 when selected. */
 const clockwiseQuarters = (from, to, treatSameAsFull = false) => {
     const a = faceOrder.indexOf(from);
     const b = faceOrder.indexOf(to);
@@ -91,27 +94,75 @@ const clockwiseQuarters = (from, to, treatSameAsFull = false) => {
     return steps;
 };
 
+const faceAfterQuarters = (from, quarters) => {
+    const a = faceOrder.indexOf(from);
+    if (a < 0) {
+        return from;
+    }
+    return faceOrder[(a + (quarters % 4)) % 4];
+};
+
+const demoQuarters = computed(() => quartersFromTurn(props.demoTurn));
+const isDemo = computed(() => demoQuarters.value != null && demoQuarters.value > 0);
+
+const activeFace = computed(() => {
+    if (isDemo.value) {
+        return faceAfterQuarters(props.start ?? 12, demoQuarters.value);
+    }
+    if (props.revealed && props.correct) {
+        return props.correct;
+    }
+    if (props.selected != null) {
+        return props.selected;
+    }
+    return props.start ?? 12;
+});
+
+const handDeg = computed(() => {
+    if (dragging.value && dragDeg.value != null) {
+        return dragDeg.value;
+    }
+    if (isDemo.value && demoQuarters.value === 4) {
+        // Full turn: hand back at start, arc still shows almost-full circle.
+        return faceAngle(props.start ?? 12);
+    }
+    return faceAngle(activeFace.value);
+});
+
+const handTip = computed(() => pointOn(handDeg.value, r - 26));
+const startTip = computed(() => pointOn(faceAngle(props.start ?? 12), r - 26));
+
 const turnReadout = computed(() => {
+    if (isDemo.value) {
+        const map = {
+            1: { turn: '1/4', degrees: 90 },
+            2: { turn: '1/2', degrees: 180 },
+            3: { turn: '3/4', degrees: 270 },
+            4: { turn: '1', degrees: 360 },
+        };
+        return map[demoQuarters.value] || map[1];
+    }
     const from = props.start ?? 12;
     const to = activeFace.value;
     const wantFull = props.correct === from;
     const q = clockwiseQuarters(from, to, wantFull && props.selected === from);
     const map = {
-        0: { turn: '0', degrees: 0, label: 'no turn yet' },
-        1: { turn: '1/4', degrees: 90, label: '¼ turn' },
-        2: { turn: '1/2', degrees: 180, label: '½ turn' },
-        3: { turn: '3/4', degrees: 270, label: '¾ turn' },
-        4: { turn: '1', degrees: 360, label: 'full turn' },
+        0: { turn: '0', degrees: 0 },
+        1: { turn: '1/4', degrees: 90 },
+        2: { turn: '1/2', degrees: 180 },
+        3: { turn: '3/4', degrees: 270 },
+        4: { turn: '1', degrees: 360 },
     };
     return map[q] || map[0];
 });
 
-/** SVG arc path for clockwise sweep from start to current hand. */
-const sweepArc = computed(() => {
+/** Clockwise sweep degrees from start to current hand (or demo). */
+const sweepDelta = computed(() => {
+    if (isDemo.value) {
+        return demoQuarters.value * 90;
+    }
     const from = faceAngle(props.start ?? 12);
-    let to = handDeg.value;
-    // Clockwise in screen coords (y-down) means increasing atan2 angle.
-    let delta = to - from;
+    let delta = handDeg.value - from;
     while (delta < 0) {
         delta += 360;
     }
@@ -119,19 +170,67 @@ const sweepArc = computed(() => {
         delta -= 360;
     }
     if (delta < 8 && turnReadout.value.degrees === 360) {
-        delta = 359;
+        return 359;
     }
+    return delta;
+});
+
+const showSweep = computed(() => sweepDelta.value >= 8);
+
+const sweepGeometry = computed(() => {
+    const from = faceAngle(props.start ?? 12);
+    const delta = sweepDelta.value;
     if (delta < 8) {
-        return '';
+        return null;
     }
-    const radius = r - 48;
-    const start = pointOn(from, radius);
-    const end = pointOn(from + delta, radius);
+    const endDeg = from + delta;
+    const start = pointOn(from, arcRadius);
+    const end = pointOn(endDeg, arcRadius);
     const large = delta > 180 ? 1 : 0;
-    return `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} A ${radius} ${radius} 0 ${large} 1 ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+    const arcPath = `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} A ${arcRadius} ${arcRadius} 0 ${large} 1 ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+
+    // Soft wedge so kids see the “slice” of the turn.
+    const mid = pointOn(from + delta / 2, arcRadius * 0.55);
+    const wedgePath = `M ${cx} ${cy} L ${start.x.toFixed(1)} ${start.y.toFixed(1)} A ${arcRadius} ${arcRadius} 0 ${large} 1 ${end.x.toFixed(1)} ${end.y.toFixed(1)} Z`;
+
+    // Arrowhead pointing clockwise at arc end.
+    const tip = end;
+    const tangentDeg = endDeg + 90; // direction of travel for increasing angle
+    const size = 16;
+    const backX = tip.x - size * Math.cos(toRad(tangentDeg));
+    const backY = tip.y - size * Math.sin(toRad(tangentDeg));
+    const wing = size * 0.55;
+    const left = {
+        x: backX + wing * Math.cos(toRad(tangentDeg + 90)),
+        y: backY + wing * Math.sin(toRad(tangentDeg + 90)),
+    };
+    const right = {
+        x: backX + wing * Math.cos(toRad(tangentDeg - 90)),
+        y: backY + wing * Math.sin(toRad(tangentDeg - 90)),
+    };
+    const arrowPath = `M ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} L ${left.x.toFixed(1)} ${left.y.toFixed(1)} L ${right.x.toFixed(1)} ${right.y.toFixed(1)} Z`;
+
+    return { arcPath, wedgePath, arrowPath, mid, endDeg };
+});
+
+const turnDisplay = computed(() => {
+    if (! props.showTurnLabel) {
+        return '?';
+    }
+    return turnReadout.value.turn === '1' ? 'full' : turnReadout.value.turn;
+});
+
+const degreesDisplay = computed(() => {
+    if (! props.showDegrees) {
+        return '?';
+    }
+    return `${turnReadout.value.degrees}`;
 });
 
 const fillFor = (id) => {
+    if (isDemo.value && id === activeFace.value && demoQuarters.value < 4) {
+        return '#bbf7d0';
+    }
     if (props.revealed && id === props.correct) {
         return '#bbf7d0';
     }
@@ -148,6 +247,9 @@ const fillFor = (id) => {
 };
 
 const strokeFor = (id) => {
+    if (isDemo.value && id === activeFace.value && demoQuarters.value < 4) {
+        return '#059669';
+    }
     if (props.revealed && id === props.correct) {
         return '#059669';
     }
@@ -230,19 +332,16 @@ onBeforeUnmount(() => {
 <template>
     <div class="rounded-lg border border-slate-200 bg-white p-2">
         <p class="mb-1 px-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            <span v-if="interactive">Drag the hand (or tap 12 · 3 · 6 · 9). Yellow = start.</span>
-            <span v-else>Clock shows the turn.</span>
+            <span v-if="interactive">Drag the hand (or tap 12 · 3 · 6 · 9). Yellow = start. Curved arrow = turn.</span>
+            <span v-else>Curved arrow shows the turn on the clock.</span>
         </p>
 
-        <div
-            v-if="interactive || selected != null || revealed"
-            class="mb-2 flex flex-wrap items-center justify-center gap-3 text-center text-sm"
-        >
+        <div class="mb-2 flex flex-wrap items-center justify-center gap-3 text-center text-sm">
             <span class="rounded-md bg-teal-50 px-2.5 py-1 font-semibold text-teal-900 ring-1 ring-teal-200">
-                Turn: <span class="font-serif">{{ turnReadout.turn === '1' ? 'full' : turnReadout.turn }}</span>
+                Turn: <span class="font-serif">{{ turnDisplay }}</span>
             </span>
             <span class="rounded-md bg-indigo-50 px-2.5 py-1 font-semibold text-indigo-900 ring-1 ring-indigo-200">
-                Angle: {{ turnReadout.degrees }}°
+                Angle: {{ degreesDisplay }}<template v-if="showDegrees">°</template>
             </span>
         </div>
 
@@ -251,23 +350,23 @@ onBeforeUnmount(() => {
             viewBox="0 0 320 340"
             class="mx-auto h-auto w-full max-w-sm select-none touch-none"
             role="img"
-            aria-label="Clock — rotate the hand for turns"
+            aria-label="Clock showing a turn with a curved arrow"
             @pointerup="onPointerUp"
             @pointercancel="stopDrag"
         >
             <circle :cx="cx" :cy="cy" :r="r" fill="#fff" stroke="#0f172a" stroke-width="3" />
 
-            <!-- quarter turn guide wedges (faint) -->
-            <path
-                v-if="sweepArc"
-                :d="sweepArc"
-                fill="none"
-                stroke="#99f6e4"
-                stroke-width="18"
-                stroke-linecap="round"
-                opacity="0.85"
-                class="pointer-events-none"
-            />
+            <g v-if="showSweep && sweepGeometry" class="pointer-events-none">
+                <path :d="sweepGeometry.wedgePath" fill="#99f6e4" opacity="0.45" />
+                <path
+                    :d="sweepGeometry.arcPath"
+                    fill="none"
+                    stroke="#0d9488"
+                    stroke-width="5"
+                    stroke-linecap="round"
+                />
+                <path :d="sweepGeometry.arrowPath" fill="#0f766e" stroke="#0f766e" stroke-width="1" />
+            </g>
 
             <!-- ticks -->
             <g v-for="n in 12" :key="`tick-${n}`">
@@ -309,7 +408,7 @@ onBeforeUnmount(() => {
 
             <!-- start ghost -->
             <line
-                v-if="selected != null || revealed || dragging"
+                v-if="showSweep || selected != null || revealed || dragging || isDemo"
                 :x1="cx"
                 :y1="cy"
                 :x2="startTip.x"
@@ -317,11 +416,11 @@ onBeforeUnmount(() => {
                 stroke="#f59e0b"
                 stroke-width="3"
                 stroke-dasharray="5 4"
-                opacity="0.75"
+                opacity="0.85"
                 class="pointer-events-none"
             />
 
-            <!-- rotatable hand -->
+            <!-- rotatable / demo hand -->
             <g
                 :class="interactive && !revealed ? 'cursor-grab' : ''"
                 @pointerdown="onPointerDown"
@@ -338,8 +437,8 @@ onBeforeUnmount(() => {
                 />
                 <circle :cx="cx" :cy="cy" r="10" fill="#4f46e5" />
                 <circle :cx="handTip.x" :cy="handTip.y" r="8" fill="#312e81" />
-                <!-- fat hit area for dragging -->
                 <line
+                    v-if="interactive"
                     :x1="cx"
                     :y1="cy"
                     :x2="handTip.x"
@@ -350,8 +449,11 @@ onBeforeUnmount(() => {
                 />
             </g>
 
-            <text :x="cx" y="318" text-anchor="middle" font-size="12" fill="#64748b">
+            <text v-if="showDegrees" :x="cx" y="318" text-anchor="middle" font-size="12" fill="#64748b">
                 ¼ → 90° · ½ → 180° · ¾ → 270° · full → 360°
+            </text>
+            <text v-else :x="cx" y="318" text-anchor="middle" font-size="12" fill="#64748b">
+                Follow the curved arrow — how many degrees is this turn?
             </text>
         </svg>
     </div>

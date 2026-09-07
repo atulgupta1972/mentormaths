@@ -245,6 +245,33 @@ const turnCheckDisabled = computed(() => {
     }
     return selectedOption.value === null;
 });
+
+const inferDemoTurn = (prompt) => {
+    if (!prompt) {
+        return null;
+    }
+    if (prompt.turn) {
+        return String(prompt.turn);
+    }
+    const fromDeg = { 90: '1/4', 180: '1/2', 270: '3/4', 360: '1' };
+    if (prompt.correct_answer != null && fromDeg[String(prompt.correct_answer)]) {
+        return fromDeg[String(prompt.correct_answer)];
+    }
+    const opts = Array.isArray(prompt.options) ? prompt.options : [];
+    const chosen = String(opts[prompt.correct_index] || '').toLowerCase();
+    if (chosen.includes('1/4') || chosen.includes('quarter')) return '1/4';
+    if (chosen.includes('1/2') || chosen.includes('half')) return '1/2';
+    if (chosen.includes('3/4')) return '3/4';
+    if (chosen.includes('full')) return '1';
+    return null;
+};
+
+const clockDemoTurn = computed(() => {
+    if (turnKind.value === 'tap_face') {
+        return null;
+    }
+    return inferDemoTurn(currentPrompt.value);
+});
 </script>
 
 <template>
@@ -396,10 +423,13 @@ const turnCheckDisabled = computed(() => {
 
                             <ConceptTurnClockBoard
                                 :start="currentPrompt?.start ?? 12"
-                                :selected="turnKind === 'tap_face' ? selectedFace : (currentPrompt?.correct ?? currentPrompt?.start ?? 12)"
+                                :selected="turnKind === 'tap_face' ? selectedFace : null"
                                 :correct="turnKind === 'tap_face' ? (currentPrompt?.correct ?? null) : null"
                                 :revealed="turnKind === 'tap_face' ? revealed : false"
                                 :interactive="turnKind === 'tap_face'"
+                                :demo-turn="clockDemoTurn"
+                                :show-degrees="turnKind !== 'fill_degrees' || revealed"
+                                :show-turn-label="turnKind !== 'mcq_turn' || revealed"
                                 @select="onFaceSelect"
                             />
 

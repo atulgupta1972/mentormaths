@@ -846,20 +846,20 @@ PROMPT;
             'approved' => true,
             'prompts' => [
                 ['kind' => 'tap_face', 'prompt' => 'Start at 12. Rotate to show a 1/4 turn clockwise. Where does the hand point?', 'start' => 12, 'turn' => '1/4', 'correct' => 3, 'explanation' => 'A quarter turn clockwise from 12 lands on 3 — that is 90°.'],
-                ['kind' => 'fill_degrees', 'prompt' => 'A 1/4 turn makes ____ degrees.', 'correct_answer' => '90', 'answer_format' => 'integer', 'explanation' => '1/4 of 360° = 90°. That is a right angle.'],
+                ['kind' => 'fill_degrees', 'prompt' => 'A 1/4 turn makes ____ degrees.', 'start' => 12, 'turn' => '1/4', 'correct_answer' => '90', 'answer_format' => 'integer', 'explanation' => '1/4 of 360° = 90°. That is a right angle.'],
                 ['kind' => 'tap_face', 'prompt' => 'Start at 12. Rotate to show a 1/2 turn. Where does the hand point?', 'start' => 12, 'turn' => '1/2', 'correct' => 6, 'explanation' => 'A half turn from 12 lands on 6 — opposite direction, 180°.'],
-                ['kind' => 'fill_degrees', 'prompt' => 'A 1/2 turn makes ____ degrees.', 'correct_answer' => '180', 'answer_format' => 'integer', 'explanation' => '1/2 of 360° = 180°. That is a straight angle.'],
+                ['kind' => 'fill_degrees', 'prompt' => 'A 1/2 turn makes ____ degrees.', 'start' => 12, 'turn' => '1/2', 'correct_answer' => '180', 'answer_format' => 'integer', 'explanation' => '1/2 of 360° = 180°. That is a straight angle.'],
                 ['kind' => 'tap_face', 'prompt' => 'Start at 12. Rotate to show a 3/4 turn clockwise. Where does the hand point?', 'start' => 12, 'turn' => '3/4', 'correct' => 9, 'explanation' => 'Three-quarter turns from 12 land on 9 — that is 270°.'],
-                ['kind' => 'fill_degrees', 'prompt' => 'A 3/4 turn makes ____ degrees.', 'correct_answer' => '270', 'answer_format' => 'integer', 'explanation' => '3/4 of 360° = 270°.'],
+                ['kind' => 'fill_degrees', 'prompt' => 'A 3/4 turn makes ____ degrees.', 'start' => 12, 'turn' => '3/4', 'correct_answer' => '270', 'answer_format' => 'integer', 'explanation' => '3/4 of 360° = 270°.'],
                 ['kind' => 'tap_face', 'prompt' => 'Start at 12. Rotate through a full turn. Where does the hand point?', 'start' => 12, 'turn' => '1', 'correct' => 12, 'explanation' => 'A full turn brings you back to 12 — that is 360°.'],
-                ['kind' => 'fill_degrees', 'prompt' => 'A full turn makes ____ degrees.', 'correct_answer' => '360', 'answer_format' => 'integer', 'explanation' => 'One full turn = 360°.'],
-                ['kind' => 'mcq_turn', 'prompt' => '90° is the same as which turn?', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 0, 'explanation' => '90° = 1/4 of a full turn.'],
-                ['kind' => 'mcq_turn', 'prompt' => '180° is the same as which turn?', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 1, 'explanation' => '180° = 1/2 turn.'],
-                ['kind' => 'mcq_turn', 'prompt' => '270° is the same as which turn?', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 2, 'explanation' => '270° = 3/4 turn.'],
-                ['kind' => 'mcq_turn', 'prompt' => '360° is the same as which turn?', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 3, 'explanation' => '360° = one full turn.'],
+                ['kind' => 'fill_degrees', 'prompt' => 'A full turn makes ____ degrees.', 'start' => 12, 'turn' => '1', 'correct_answer' => '360', 'answer_format' => 'integer', 'explanation' => 'One full turn = 360°.'],
+                ['kind' => 'mcq_turn', 'prompt' => '90° is the same as which turn?', 'start' => 12, 'turn' => '1/4', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 0, 'explanation' => '90° = 1/4 of a full turn.'],
+                ['kind' => 'mcq_turn', 'prompt' => '180° is the same as which turn?', 'start' => 12, 'turn' => '1/2', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 1, 'explanation' => '180° = 1/2 turn.'],
+                ['kind' => 'mcq_turn', 'prompt' => '270° is the same as which turn?', 'start' => 12, 'turn' => '3/4', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 2, 'explanation' => '270° = 3/4 turn.'],
+                ['kind' => 'mcq_turn', 'prompt' => '360° is the same as which turn?', 'start' => 12, 'turn' => '1', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 3, 'explanation' => '360° = one full turn.'],
                 ['kind' => 'tap_face', 'prompt' => 'Start at 3. Rotate a 1/4 turn clockwise. Where does the hand point?', 'start' => 3, 'turn' => '1/4', 'correct' => 6, 'explanation' => 'From 3, a quarter turn clockwise goes to 6 (still 90°).'],
-                ['kind' => 'mcq_turn', 'prompt' => 'A right angle is the same as…', 'options' => ['1/4 turn', '1/2 turn', 'full turn', 'no turn'], 'correct_index' => 0, 'explanation' => 'A right angle = 90° = 1/4 turn.'],
-                ['kind' => 'mcq_turn', 'prompt' => 'A straight angle is the same as…', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 1, 'explanation' => 'A straight angle = 180° = 1/2 turn.'],
+                ['kind' => 'mcq_turn', 'prompt' => 'A right angle is the same as…', 'start' => 12, 'turn' => '1/4', 'options' => ['1/4 turn', '1/2 turn', 'full turn', 'no turn'], 'correct_index' => 0, 'explanation' => 'A right angle = 90° = 1/4 turn.'],
+                ['kind' => 'mcq_turn', 'prompt' => 'A straight angle is the same as…', 'start' => 12, 'turn' => '1/2', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 1, 'explanation' => 'A straight angle = 180° = 1/2 turn.'],
             ],
         ];
     }
@@ -955,9 +955,26 @@ PROMPT;
                     throw new InvalidArgumentException('Turn-clock "'.$cardTitle.'" prompt #'.($index + 1).' needs a numeric correct_answer.');
                 }
 
+                $start = (int) ($row['start'] ?? 12);
+                if (! in_array($start, $allowedFaces, true)) {
+                    $start = 12;
+                }
+                $turn = filled($row['turn'] ?? null) ? trim((string) $row['turn']) : null;
+                if ($turn === null) {
+                    $turn = match ($answer) {
+                        '90' => '1/4',
+                        '180' => '1/2',
+                        '270' => '3/4',
+                        '360' => '1',
+                        default => null,
+                    };
+                }
+
                 $prompts[] = [
                     'kind' => 'fill_degrees',
                     'prompt' => Str::limit($promptText, 200, ''),
+                    'start' => $start,
+                    'turn' => $turn,
                     'correct_answer' => $answer,
                     'answer_format' => 'integer',
                     'explanation' => $explanation,
@@ -981,9 +998,29 @@ PROMPT;
                 $correctIndex = 0;
             }
 
+            $start = (int) ($row['start'] ?? 12);
+            if (! in_array($start, $allowedFaces, true)) {
+                $start = 12;
+            }
+            $turn = filled($row['turn'] ?? null) ? trim((string) $row['turn']) : null;
+            if ($turn === null) {
+                $chosen = strtolower($options[$correctIndex] ?? '');
+                if (str_contains($chosen, '1/4') || str_contains($chosen, 'quarter')) {
+                    $turn = '1/4';
+                } elseif (str_contains($chosen, '1/2') || str_contains($chosen, 'half')) {
+                    $turn = '1/2';
+                } elseif (str_contains($chosen, '3/4')) {
+                    $turn = '3/4';
+                } elseif (str_contains($chosen, 'full')) {
+                    $turn = '1';
+                }
+            }
+
             $prompts[] = [
                 'kind' => 'mcq_turn',
                 'prompt' => Str::limit($promptText, 200, ''),
+                'start' => $start,
+                'turn' => $turn,
                 'options' => $options,
                 'correct_index' => $correctIndex,
                 'explanation' => $explanation,
