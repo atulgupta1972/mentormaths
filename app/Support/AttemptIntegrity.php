@@ -54,6 +54,31 @@ class AttemptIntegrity
         ];
     }
 
+    /**
+     * Daily basics / formula drills always run fullscreen (light protection, no lock).
+     *
+     * @return array{
+     *     enabled: bool,
+     *     mode: 'light',
+     *     require_fullscreen: bool,
+     *     track_tab_leaves: bool,
+     *     locks_on_tab_leaves: bool,
+     *     tab_leave_lock_limit: int
+     * }
+     */
+    public static function configForDrill(): array
+    {
+        return [
+            'enabled' => true,
+            'mode' => 'light',
+            'require_fullscreen' => true,
+            // No SetAttempt to record leaves against — still hide content on leave in the UI.
+            'track_tab_leaves' => false,
+            'locks_on_tab_leaves' => false,
+            'tab_leave_lock_limit' => self::TAB_LEAVE_LOCK_LIMIT,
+        ];
+    }
+
     public static function isLocked(SetAttempt $attempt, ?array $config = null): bool
     {
         if ($config === null) {

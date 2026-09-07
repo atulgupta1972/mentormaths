@@ -1,15 +1,24 @@
 <script setup>
+import AttemptFullscreenGate from '@/Components/AttemptFullscreenGate.vue';
+import AttemptHiddenOverlay from '@/Components/AttemptHiddenOverlay.vue';
+import AttemptIntegrityNotice from '@/Components/AttemptIntegrityNotice.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { useAttemptContentProtection } from '@/composables/useAttemptContentProtection';
+import { requestAttemptFullscreen } from '@/utils/attemptFullscreen';
 import { Head, router } from '@inertiajs/vue3';
 import axios from 'axios';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
     session: { type: Object, required: true },
+    integrity: {
+        type: Object,
+        default: () => ({ mode: 'off', enabled: false, require_fullscreen: false }),
+    },
 });
 
 const sessionState = ref({ ...props.session });
@@ -22,6 +31,31 @@ const secondsLeft = ref(0);
 const answerInputRef = ref(null);
 const selectedOptionId = ref(null);
 let timerId = null;
+
+const needsFullscreenGate = computed(() => {
+    if (! (props.integrity?.require_fullscreen ?? false)) {
+        return false;
+    }
+    // Allow leaving fullscreen on the completion celebration screen.
+    return ! completionSummary.value && ! sessionState.value.is_complete;
+});
+
+const fullscreenReady = ref(!needsFullscreenGate.value);
+const canShowAttempt = computed(() => ! needsFullscreenGate.value || fullscreenReady.value);
+
+const protectionMode = computed(() => props.integrity?.mode ?? 'off');
+const { contentHidden, enabled: protectionEnabled } = useAttemptContentProtection({
+    mode: protectionMode.value,
+    trackTabLeaves: props.integrity?.track_tab_leaves ?? false,
+    locksOnTabLeaves: false,
+    requireFullscreen: props.integrity?.require_fullscreen ?? false,
+});
+
+watch(needsFullscreenGate, (needed) => {
+    if (! needed) {
+        fullscreenReady.value = true;
+    }
+});
 
 const isShowPhase = computed(() => sessionState.value.is_show_phase);
 const isFinalCorrection = computed(() => sessionState.value.is_final_correction);
@@ -167,6 +201,15 @@ const startDrill = async () => {
     submitting.value = true;
 
     try {
+        if (needsFullscreenGate.value) {
+            const ok = await requestAttemptFullscreen();
+            if (! ok) {
+                fullscreenReady.value = false;
+                return;
+            }
+            fullscreenReady.value = true;
+        }
+
         const payload = await postJson(route('student.basics-drill.start', sessionState.value.id));
         if (handleAdvancePayload(payload)) {
             return;
@@ -328,6 +371,15 @@ const mcqOptionClass = (optionId) => {
     <Head title="Tables & powers" />
 
     <AuthenticatedLayout>
+        <AttemptFullscreenGate
+            v-if="needsFullscreenGate"
+            title="Enter fullscreen for today’s drill"
+            message="Stay in fullscreen so only Mentor Maths is on screen while you finish tables, squares, and cubes."
+            @ready="fullscreenReady = true"
+            @lost="fullscreenReady = false"
+        />
+        <AttemptHiddenOverlay v-if="protectionEnabled && contentHidden && canShowAttempt" />
+
         <template #header>
             <div>
                 <h2 class="text-xl font-semibold text-gray-800">{{ phaseTitle }}</h2>
@@ -343,10 +395,15 @@ const mcqOptionClass = (optionId) => {
                     </template>
                     <span v-if="sessionState.progress_label"> · {{ sessionState.progress_label }}</span>
                 </p>
+                <AttemptIntegrityNotice
+                    v-if="needsFullscreenGate && canShowAttempt"
+                    class="mt-2"
+                    :mode="protectionMode"
+                />
             </div>
         </template>
 
-        <div class="py-8">
+        <div v-if="canShowAttempt" class="py-8">
             <div class="mx-auto max-w-2xl space-y-6 px-4 sm:px-6">
                 <div
                     v-if="showCorrectionIntro"
@@ -418,7 +475,7 @@ const mcqOptionClass = (optionId) => {
                         </div>
                     </div>
                     <PrimaryButton class="mt-6" :disabled="submitting" @click="startDrill">
-                        Start
+                        {{ needsFullscreenGate ? 'Start (fullscreen)' : 'Start' }}
                     </PrimaryButton>
                 </div>
 

@@ -72,6 +72,16 @@ class AttemptIntegrityTest extends TestCase
         $this->assertSame('off', AttemptIntegrity::configFor($enrollment, false)['mode']);
     }
 
+    public function test_drills_always_require_fullscreen(): void
+    {
+        $config = AttemptIntegrity::configForDrill();
+
+        $this->assertTrue($config['enabled']);
+        $this->assertSame('light', $config['mode']);
+        $this->assertTrue($config['require_fullscreen']);
+        $this->assertFalse($config['locks_on_tab_leaves']);
+    }
+
     public function test_record_tab_leave_increments_attempt_counter(): void
     {
         [$enrollment, $assignment] = $this->seedEnrollmentWithAssignment();
