@@ -1141,12 +1141,36 @@ PROMPT;
                 $format = 'integer';
             }
 
+            // Word answers like "half" should not stay marked as integer.
+            if ($format === 'integer' && ! preg_match('/^-?\d+(\.\d+)?$/', $answer)) {
+                $format = preg_match('/^\d+\s*\/\s*\d+$/', $answer) ? 'fraction' : 'text';
+            }
+
+            $accepted = [];
+            if (is_array($q['accepted_answers'] ?? null)) {
+                foreach ($q['accepted_answers'] as $alt) {
+                    $alt = trim((string) $alt);
+                    if ($alt !== '' && strcasecmp($alt, $answer) !== 0) {
+                        $accepted[] = Str::limit($alt, 80, '');
+                    }
+                }
+            } elseif (is_string($q['accepted_answers'] ?? null) && trim((string) $q['accepted_answers']) !== '') {
+                foreach (explode(',', (string) $q['accepted_answers']) as $alt) {
+                    $alt = trim($alt);
+                    if ($alt !== '' && strcasecmp($alt, $answer) !== 0) {
+                        $accepted[] = Str::limit($alt, 80, '');
+                    }
+                }
+            }
+            $accepted = array_values(array_unique(array_slice($accepted, 0, 12)));
+
             return [
                 'question_type' => 'fill_blank',
                 'question' => Str::limit($stem, 500, ''),
                 'options' => [],
                 'correct_index' => null,
                 'correct_answer' => Str::limit($answer, 80, ''),
+                'accepted_answers' => $accepted,
                 'answer_format' => $format,
                 'explanation' => $explanation,
             ];
@@ -1177,6 +1201,7 @@ PROMPT;
             'options' => $options,
             'correct_index' => $correctIndex,
             'correct_answer' => null,
+            'accepted_answers' => [],
             'answer_format' => null,
             'explanation' => $explanation,
         ];

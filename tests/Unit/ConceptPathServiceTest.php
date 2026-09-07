@@ -135,6 +135,45 @@ class ConceptPathServiceTest extends TestCase
         $this->assertGreaterThanOrEqual(8, count($last['prompts']));
     }
 
+    public function test_fill_blank_preserves_accepted_answers_and_fixes_word_format(): void
+    {
+        $service = app(ConceptPathService::class);
+
+        $json = json_encode([
+            'chapter_title' => 'Turns',
+            'cards' => [
+                [
+                    'step' => 1,
+                    'type' => 'teach',
+                    'title' => 'Half',
+                    'body' => 'A half turn is opposite.',
+                ],
+                [
+                    'step' => 2,
+                    'type' => 'check',
+                    'title' => 'Name the turn',
+                    'questions' => [
+                        [
+                            'question_type' => 'fill_blank',
+                            'question' => 'Two quarter turns make a ____ turn.',
+                            'correct_answer' => 'half',
+                            'answer_format' => 'integer',
+                            'accepted_answers' => ['1/2', 'half turn'],
+                        ],
+                    ],
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $parsed = $service->parse($json);
+        $q = $parsed['cards'][1]['questions'][0];
+
+        $this->assertSame('fill_blank', $q['question_type']);
+        $this->assertSame('half', $q['correct_answer']);
+        $this->assertSame('text', $q['answer_format']);
+        $this->assertSame(['1/2', 'half turn'], $q['accepted_answers']);
+    }
+
     public function test_parse_accepts_angle_map_card_and_append_helper(): void
     {
         Storage::fake('public');

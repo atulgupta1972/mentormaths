@@ -5,6 +5,7 @@ import ConceptMathText from '@/Components/ConceptMathText.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { acceptedAnswersToText, parseAcceptedAnswersText } from '@/utils/conceptAnswerMatch';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
@@ -29,6 +30,7 @@ const diagramUploading = ref({});
 const cropTarget = ref(null);
 const pagePickerCard = ref(null);
 const pagesBusy = ref(false);
+const editingCardIndex = ref(null);
 
 const statusLabel = computed(() => props.conceptPath?.status_label || 'Not started');
 const isApproved = computed(() => props.conceptPath?.status === 'approved');
@@ -144,13 +146,27 @@ const normalizeQuestion = (q, fallbackType = 'mcq') => {
     const explanation = q?.explanation ? String(q.explanation).trim() : null;
 
     if (questionType === 'fill_blank') {
+        let format = String(q?.answer_format || 'integer').trim() || 'integer';
+        const correctAnswer = String(q?.correct_answer ?? '').trim();
+        if (format === 'integer' && correctAnswer && !/^-?\d+(\.\d+)?$/.test(correctAnswer)) {
+            format = /^\d+\s*\/\s*\d+$/.test(correctAnswer) ? 'fraction' : 'text';
+        }
+        let accepted = [];
+        if (Array.isArray(q?.accepted_answers)) {
+            accepted = q.accepted_answers.map((a) => String(a).trim()).filter(Boolean);
+        } else if (typeof q?.accepted_answers === 'string' && q.accepted_answers.trim()) {
+            accepted = parseAcceptedAnswersText(q.accepted_answers);
+        }
+        accepted = [...new Set(accepted.filter((a) => a.toLowerCase() !== correctAnswer.toLowerCase()))].slice(0, 12);
+
         return {
             question_type: 'fill_blank',
             question,
             options: [],
             correct_index: null,
-            correct_answer: String(q?.correct_answer ?? '').trim(),
-            answer_format: String(q?.answer_format || 'integer').trim() || 'integer',
+            correct_answer: correctAnswer,
+            accepted_answers: accepted,
+            answer_format: format,
             explanation,
         };
     }
@@ -173,6 +189,7 @@ const normalizeQuestion = (q, fallbackType = 'mcq') => {
         options,
         correct_index: correctIndex,
         correct_answer: null,
+        accepted_answers: [],
         answer_format: null,
         explanation,
     };
@@ -457,6 +474,43 @@ const resetPath = () => {
 
 const removeCard = (index) => {
     cards.value = cards.value.filter((_, i) => i !== index);
+    if (editingCardIndex.value === index) {
+        editingCardIndex.value = null;
+    } else if (editingCardIndex.value != null && editingCardIndex.value > index) {
+        editingCardIndex.value -= 1;
+    }
+};
+
+const toggleEditCard = (index) => {
+    if (editingCardIndex.value === index) {
+        editingCardIndex.value = null;
+        return;
+    }
+    const card = cards.value[index];
+    (card?.questions || []).forEach((q) => {
+        if (q.question_type === 'mcq') {
+            ensureQuestionOptions(q);
+        }
+        if (! Array.isArray(q.accepted_answers)) {
+            q.accepted_answers = [];
+        }
+    });
+    editingCardIndex.value = index;
+};
+
+const acceptedTextFor = (q) => acceptedAnswersToText(q?.accepted_answers);
+
+const setAcceptedTextFor = (q, text) => {
+    q.accepted_answers = parseAcceptedAnswersText(text);
+};
+
+const ensureQuestionOptions = (q) => {
+    if (!Array.isArray(q.options)) {
+        q.options = ['', '', '', ''];
+    }
+    while (q.options.length < 4) {
+        q.options.push('');
+    }
 };
 
 const optionLetter = (index) => String.fromCharCode(65 + index);
@@ -809,14 +863,39 @@ const togglePagePicker = (index) => {
                                     : (card.type === 'turn_clock' ? 'border-teal-200' : 'border-amber-200')))"
                     >
                         <div class="flex flex-wrap items-start justify-between gap-2">
-                            <div>
+                            <div class="min-w-0 flex-1">
                                 <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
                                     Step {{ card.step }} · {{ card.type === 'teach' ? 'Teach' : (card.type === 'angle_map' ? 'Angle map' : (card.type === 'turn_clock' ? 'Turn clock' : 'Check')) }}
-                                    <span v-if="card.topic" class="font-medium normal-case text-slate-600"> · {{ card.topic }}</span>
+                                    <span v-if="card.topic && editingCardIndex !== index" class="font-medium normal-case text-slate-600"> · {{ card.topic }}</span>
                                 </p>
-                                <h3 class="mt-1 text-base font-semibold text-slate-900">{{ card.title }}</h3>
+                                <template v-if="editingCardIndex === index">
+                                    <label class="mt-1 block text-[10px] font-semibold uppercase text-slate-500">Title</label>
+                                    <input
+                                        v-model="card.title"
+                                        type="text"
+                                        class="mt-0.5 w-full rounded-md border-slate-300 text-sm font-semibold shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    >
+                                    <label class="mt-2 block text-[10px] font-semibold uppercase text-slate-500">Topic (optional)</label>
+                                    <input
+                                        v-model="card.topic"
+                                        type="text"
+                                        class="mt-0.5 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        placeholder="e.g. Angles as Turns"
+                                    >
+                                </template>
+                                <h3 v-else class="mt-1 text-base font-semibold text-slate-900">{{ card.title }}</h3>
                             </div>
                             <div class="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    class="rounded-md px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
+                                    :class="editingCardIndex === index
+                                        ? 'bg-emerald-700 text-white hover:bg-emerald-800'
+                                        : 'bg-slate-100 text-slate-800 hover:bg-slate-200'"
+                                    @click="toggleEditCard(index)"
+                                >
+                                    {{ editingCardIndex === index ? 'Done editing' : 'Edit text' }}
+                                </button>
                                 <Link
                                     v-if="cardPlayUrl(card)"
                                     :href="cardPlayUrl(card)"
@@ -834,94 +913,248 @@ const togglePagePicker = (index) => {
                             </div>
                         </div>
 
+                        <p v-if="editingCardIndex === index" class="mt-2 rounded-md bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-950">
+                            Edit fields below, then click <strong>Save draft</strong> at the top so students get the updated wording and answers.
+                        </p>
+
                         <template v-if="card.type === 'teach'">
-                            <p class="mt-3 text-sm text-slate-800">
-                                <ConceptMathText :text="card.body" />
-                            </p>
-                            <p v-if="card.example" class="mt-2 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-950">
-                                <span class="font-semibold">Example:</span>
-                                <ConceptMathText :text="card.example" />
-                            </p>
-                            <p v-if="card.common_mistake" class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                                <span class="font-semibold">Common mistake:</span>
-                                <ConceptMathText :text="card.common_mistake" />
-                            </p>
+                            <template v-if="editingCardIndex === index">
+                                <label class="mt-3 block text-[10px] font-semibold uppercase text-slate-500">Body</label>
+                                <textarea v-model="card.body" rows="3" class="mt-0.5 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                                <label class="mt-2 block text-[10px] font-semibold uppercase text-slate-500">Example</label>
+                                <textarea v-model="card.example" rows="2" class="mt-0.5 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                                <label class="mt-2 block text-[10px] font-semibold uppercase text-slate-500">Common mistake</label>
+                                <textarea v-model="card.common_mistake" rows="2" class="mt-0.5 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                            </template>
+                            <template v-else>
+                                <p class="mt-3 text-sm text-slate-800">
+                                    <ConceptMathText :text="card.body" />
+                                </p>
+                                <p v-if="card.example" class="mt-2 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-950">
+                                    <span class="font-semibold">Example:</span>
+                                    <ConceptMathText :text="card.example" />
+                                </p>
+                                <p v-if="card.common_mistake" class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                                    <span class="font-semibold">Common mistake:</span>
+                                    <ConceptMathText :text="card.common_mistake" />
+                                </p>
+                            </template>
                         </template>
 
                         <template v-else-if="card.type === 'angle_map'">
-                            <p class="mt-3 text-sm text-slate-800">
-                                <ConceptMathText :text="card.body" />
-                            </p>
-                            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-violet-800">
-                                {{ (card.prompts || []).length }} tap prompts on fixed angles 1–8
-                            </p>
-                            <div class="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border border-violet-100 bg-violet-50/40 p-2">
-                                <p
-                                    v-for="(p, pIndex) in (card.prompts || [])"
-                                    :key="pIndex"
-                                    class="text-xs text-slate-800"
-                                >
-                                    <span class="font-semibold">{{ pIndex + 1 }}.</span>
-                                    {{ p.prompt }}
-                                    <span class="text-violet-800">(∠{{ p.highlight }} → ∠{{ p.correct }})</span>
+                            <template v-if="editingCardIndex === index">
+                                <label class="mt-3 block text-[10px] font-semibold uppercase text-slate-500">Body</label>
+                                <textarea v-model="card.body" rows="2" class="mt-0.5 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                                <div class="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-md border border-violet-100 bg-violet-50/40 p-2">
+                                    <div v-for="(p, pIndex) in (card.prompts || [])" :key="pIndex" class="rounded border border-violet-100 bg-white p-2">
+                                        <p class="text-[10px] font-bold uppercase text-violet-800">Prompt {{ pIndex + 1 }}</p>
+                                        <textarea v-model="p.prompt" rows="2" class="mt-1 w-full rounded-md border-slate-300 text-xs shadow-sm" />
+                                        <div class="mt-1 grid grid-cols-2 gap-2">
+                                            <label class="text-[10px] text-slate-600">Highlight ∠
+                                                <input v-model.number="p.highlight" type="number" min="1" max="8" class="mt-0.5 w-full rounded-md border-slate-300 text-xs">
+                                            </label>
+                                            <label class="text-[10px] text-slate-600">Correct ∠
+                                                <input v-model.number="p.correct" type="number" min="1" max="8" class="mt-0.5 w-full rounded-md border-slate-300 text-xs">
+                                            </label>
+                                        </div>
+                                        <textarea v-model="p.explanation" rows="2" class="mt-1 w-full rounded-md border-slate-300 text-xs shadow-sm" placeholder="Explanation" />
+                                    </div>
+                                </div>
+                            </template>
+                            <template v-else>
+                                <p class="mt-3 text-sm text-slate-800">
+                                    <ConceptMathText :text="card.body" />
                                 </p>
-                            </div>
-                            <p class="mt-2 text-xs text-slate-600">
-                                Interactive SVG board is used in Run concepts — no PDF figure needed for this card.
-                            </p>
+                                <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-violet-800">
+                                    {{ (card.prompts || []).length }} tap prompts on fixed angles 1–8
+                                </p>
+                                <div class="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border border-violet-100 bg-violet-50/40 p-2">
+                                    <p
+                                        v-for="(p, pIndex) in (card.prompts || [])"
+                                        :key="pIndex"
+                                        class="text-xs text-slate-800"
+                                    >
+                                        <span class="font-semibold">{{ pIndex + 1 }}.</span>
+                                        {{ p.prompt }}
+                                        <span class="text-violet-800">(∠{{ p.highlight }} → ∠{{ p.correct }})</span>
+                                    </p>
+                                </div>
+                                <p class="mt-2 text-xs text-slate-600">
+                                    Interactive SVG board is used in Run concepts — no PDF figure needed for this card.
+                                </p>
+                            </template>
                         </template>
 
                         <template v-else-if="card.type === 'turn_clock'">
-                            <p class="mt-3 text-sm text-slate-800">
-                                <ConceptMathText :text="card.body" />
-                            </p>
-                            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-teal-800">
-                                {{ (card.prompts || []).length }} rotate / turn ↔ angle prompts on the clock
-                            </p>
-                            <div class="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border border-teal-100 bg-teal-50/40 p-2">
-                                <p
-                                    v-for="(p, pIndex) in (card.prompts || [])"
-                                    :key="pIndex"
-                                    class="text-xs text-slate-800"
-                                >
-                                    <span class="font-semibold">{{ pIndex + 1 }}.</span>
-                                    {{ p.prompt }}
-                                    <span class="text-teal-800">({{ turnPromptAnswer(p) }})</span>
+                            <template v-if="editingCardIndex === index">
+                                <label class="mt-3 block text-[10px] font-semibold uppercase text-slate-500">Body</label>
+                                <textarea v-model="card.body" rows="2" class="mt-0.5 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                                <div class="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-md border border-teal-100 bg-teal-50/40 p-2">
+                                    <div v-for="(p, pIndex) in (card.prompts || [])" :key="pIndex" class="rounded border border-teal-100 bg-white p-2">
+                                        <p class="text-[10px] font-bold uppercase text-teal-800">
+                                            Prompt {{ pIndex + 1 }} · {{ p.kind }}
+                                        </p>
+                                        <textarea v-model="p.prompt" rows="2" class="mt-1 w-full rounded-md border-slate-300 text-xs shadow-sm" />
+                                        <div v-if="p.kind === 'tap_face'" class="mt-1 grid grid-cols-3 gap-2">
+                                            <label class="text-[10px] text-slate-600">Start
+                                                <select v-model.number="p.start" class="mt-0.5 w-full rounded-md border-slate-300 text-xs">
+                                                    <option :value="12">12</option>
+                                                    <option :value="3">3</option>
+                                                    <option :value="6">6</option>
+                                                    <option :value="9">9</option>
+                                                </select>
+                                            </label>
+                                            <label class="text-[10px] text-slate-600">Correct
+                                                <select v-model.number="p.correct" class="mt-0.5 w-full rounded-md border-slate-300 text-xs">
+                                                    <option :value="12">12</option>
+                                                    <option :value="3">3</option>
+                                                    <option :value="6">6</option>
+                                                    <option :value="9">9</option>
+                                                </select>
+                                            </label>
+                                            <label class="text-[10px] text-slate-600">Turn
+                                                <input v-model="p.turn" type="text" class="mt-0.5 w-full rounded-md border-slate-300 text-xs" placeholder="1/4">
+                                            </label>
+                                        </div>
+                                        <div v-else-if="p.kind === 'fill_degrees'" class="mt-1 grid grid-cols-2 gap-2">
+                                            <label class="text-[10px] text-slate-600">Turn shown
+                                                <input v-model="p.turn" type="text" class="mt-0.5 w-full rounded-md border-slate-300 text-xs" placeholder="1/2">
+                                            </label>
+                                            <label class="text-[10px] text-slate-600">Degrees answer
+                                                <input v-model="p.correct_answer" type="text" class="mt-0.5 w-full rounded-md border-slate-300 text-xs" placeholder="180">
+                                            </label>
+                                        </div>
+                                        <div v-else-if="p.kind === 'mcq_turn'" class="mt-1 space-y-1">
+                                            <label
+                                                v-for="(opt, optIndex) in (p.options || [])"
+                                                :key="optIndex"
+                                                class="flex items-center gap-2 text-xs text-slate-700"
+                                            >
+                                                <input v-model.number="p.correct_index" type="radio" :value="optIndex" class="text-teal-600">
+                                                <input v-model="p.options[optIndex]" type="text" class="flex-1 rounded-md border-slate-300 text-xs">
+                                            </label>
+                                        </div>
+                                        <textarea v-model="p.explanation" rows="2" class="mt-1 w-full rounded-md border-slate-300 text-xs shadow-sm" placeholder="Explanation" />
+                                    </div>
+                                </div>
+                            </template>
+                            <template v-else>
+                                <p class="mt-3 text-sm text-slate-800">
+                                    <ConceptMathText :text="card.body" />
                                 </p>
-                            </div>
-                            <p class="mt-2 text-xs text-slate-600">
-                                Interactive clock in Run concepts — rotate the hand for 1/4 · 1/2 · 3/4 · full, then match angles (and reverse). No PDF figure needed.
-                            </p>
+                                <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-teal-800">
+                                    {{ (card.prompts || []).length }} rotate / turn ↔ angle prompts on the clock
+                                </p>
+                                <div class="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border border-teal-100 bg-teal-50/40 p-2">
+                                    <p
+                                        v-for="(p, pIndex) in (card.prompts || [])"
+                                        :key="pIndex"
+                                        class="text-xs text-slate-800"
+                                    >
+                                        <span class="font-semibold">{{ pIndex + 1 }}.</span>
+                                        {{ p.prompt }}
+                                        <span class="text-teal-800">({{ turnPromptAnswer(p) }})</span>
+                                    </p>
+                                </div>
+                                <p class="mt-2 text-xs text-slate-600">
+                                    Interactive clock in Run concepts — rotate the hand for 1/4 · 1/2 · 3/4 · full, then match angles (and reverse). No PDF figure needed.
+                                </p>
+                            </template>
                         </template>
 
                         <template v-else>
-                            <div
-                                v-for="(q, qIndex) in (card.questions || [])"
-                                :key="qIndex"
-                                class="mt-3 rounded-md border border-amber-100 bg-amber-50/50 px-3 py-2"
-                            >
-                                <p class="text-sm font-medium text-slate-900">
-                                    Q{{ qIndex + 1 }}. <ConceptMathText :text="q.question" />
-                                    <span class="ml-1 text-[10px] font-bold uppercase text-amber-800">{{ q.question_type }}</span>
-                                </p>
-                                <ul v-if="q.question_type === 'mcq'" class="mt-1 space-y-0.5 text-sm text-slate-700">
-                                    <li
-                                        v-for="(opt, optIndex) in (q.options || [])"
-                                        :key="optIndex"
-                                        :class="optIndex === q.correct_index ? 'font-semibold text-emerald-800' : ''"
-                                    >
-                                        {{ optionLetter(optIndex) }}. <ConceptMathText :text="opt" />
-                                        <span v-if="optIndex === q.correct_index" class="text-[10px] uppercase">✓</span>
-                                    </li>
-                                </ul>
-                                <p v-else class="mt-1 text-sm text-emerald-800">
-                                    Answer: <strong><ConceptMathText :text="q.correct_answer" /></strong>
-                                    <span v-if="q.answer_format" class="text-xs text-slate-600">({{ q.answer_format }})</span>
-                                </p>
-                                <p v-if="q.explanation" class="mt-1 text-xs text-slate-600">
-                                    <ConceptMathText :text="q.explanation" />
-                                </p>
-                            </div>
+                            <template v-if="editingCardIndex === index">
+                                <div
+                                    v-for="(q, qIndex) in (card.questions || [])"
+                                    :key="qIndex"
+                                    class="mt-3 rounded-md border border-amber-200 bg-amber-50/40 px-3 py-2"
+                                >
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <p class="text-[10px] font-bold uppercase text-amber-900">Question {{ qIndex + 1 }}</p>
+                                        <select v-model="q.question_type" class="rounded-md border-slate-300 text-xs" @change="q.question_type === 'mcq' && ensureQuestionOptions(q)">
+                                            <option value="mcq">MCQ</option>
+                                            <option value="fill_blank">Fill blank</option>
+                                        </select>
+                                    </div>
+                                    <label class="mt-1 block text-[10px] font-semibold uppercase text-slate-500">Question text</label>
+                                    <textarea v-model="q.question" rows="2" class="mt-0.5 w-full rounded-md border-slate-300 text-sm shadow-sm" />
+
+                                    <div v-if="q.question_type === 'mcq'" class="mt-2 space-y-1">
+                                        <p class="text-[10px] font-semibold uppercase text-slate-500">Options (tick the correct one)</p>
+                                        <label
+                                            v-for="(opt, optIndex) in (q.options || [])"
+                                            :key="optIndex"
+                                            class="flex items-center gap-2 text-sm"
+                                        >
+                                            <input v-model.number="q.correct_index" type="radio" :value="optIndex" class="text-emerald-600">
+                                            <span class="w-4 font-semibold text-slate-500">{{ optionLetter(optIndex) }}.</span>
+                                            <input v-model="q.options[optIndex]" type="text" class="flex-1 rounded-md border-slate-300 text-sm">
+                                        </label>
+                                    </div>
+
+                                    <div v-else class="mt-2 grid gap-2 sm:grid-cols-2">
+                                        <label class="block text-[10px] font-semibold uppercase text-slate-500">Main accepted answer
+                                            <input v-model="q.correct_answer" type="text" class="mt-0.5 w-full rounded-md border-slate-300 text-sm" placeholder="e.g. 1/2">
+                                        </label>
+                                        <label class="block text-[10px] font-semibold uppercase text-slate-500">Answer format
+                                            <select v-model="q.answer_format" class="mt-0.5 w-full rounded-md border-slate-300 text-sm">
+                                                <option value="text">text (half, full…)</option>
+                                                <option value="fraction">fraction (1/2)</option>
+                                                <option value="integer">integer (90)</option>
+                                                <option value="decimal">decimal</option>
+                                            </select>
+                                        </label>
+                                        <label class="block text-[10px] font-semibold uppercase text-slate-500 sm:col-span-2">
+                                            Also accept (comma-separated)
+                                            <input
+                                                :value="acceptedTextFor(q)"
+                                                type="text"
+                                                class="mt-0.5 w-full rounded-md border-slate-300 text-sm"
+                                                placeholder="half, 1/2, half turn"
+                                                @input="setAcceptedTextFor(q, $event.target.value)"
+                                            >
+                                        </label>
+                                        <p class="text-[11px] text-slate-600 sm:col-span-2">
+                                            Tip: for turns use format <strong>text</strong> or <strong>fraction</strong>, main answer <strong>1/2</strong>, also accept <strong>half, half turn</strong>. Students matching any of these (or synonyms) count as correct.
+                                        </p>
+                                    </div>
+
+                                    <label class="mt-2 block text-[10px] font-semibold uppercase text-slate-500">Explanation</label>
+                                    <textarea v-model="q.explanation" rows="2" class="mt-0.5 w-full rounded-md border-slate-300 text-sm shadow-sm" />
+                                </div>
+                            </template>
+                            <template v-else>
+                                <div
+                                    v-for="(q, qIndex) in (card.questions || [])"
+                                    :key="qIndex"
+                                    class="mt-3 rounded-md border border-amber-100 bg-amber-50/50 px-3 py-2"
+                                >
+                                    <p class="text-sm font-medium text-slate-900">
+                                        Q{{ qIndex + 1 }}. <ConceptMathText :text="q.question" />
+                                        <span class="ml-1 text-[10px] font-bold uppercase text-amber-800">{{ q.question_type }}</span>
+                                    </p>
+                                    <ul v-if="q.question_type === 'mcq'" class="mt-1 space-y-0.5 text-sm text-slate-700">
+                                        <li
+                                            v-for="(opt, optIndex) in (q.options || [])"
+                                            :key="optIndex"
+                                            :class="optIndex === q.correct_index ? 'font-semibold text-emerald-800' : ''"
+                                        >
+                                            {{ optionLetter(optIndex) }}. <ConceptMathText :text="opt" />
+                                            <span v-if="optIndex === q.correct_index" class="text-[10px] uppercase">✓</span>
+                                        </li>
+                                    </ul>
+                                    <p v-else class="mt-1 text-sm text-emerald-800">
+                                        Answer: <strong><ConceptMathText :text="q.correct_answer" /></strong>
+                                        <span v-if="q.answer_format" class="text-xs text-slate-600">({{ q.answer_format }})</span>
+                                        <span v-if="(q.accepted_answers || []).length" class="block text-xs text-slate-600">
+                                            Also: {{ (q.accepted_answers || []).join(', ') }}
+                                        </span>
+                                    </p>
+                                    <p v-if="q.explanation" class="mt-1 text-xs text-slate-600">
+                                        <ConceptMathText :text="q.explanation" />
+                                    </p>
+                                </div>
+                            </template>
                         </template>
 
                         <div

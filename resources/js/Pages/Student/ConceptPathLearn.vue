@@ -5,6 +5,7 @@ import ConceptTurnClockBoard from '@/Components/ConceptTurnClockBoard.vue';
 import ConceptMathText from '@/Components/ConceptMathText.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { conceptAnswersMatch } from '@/utils/conceptAnswerMatch';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
@@ -80,11 +81,6 @@ watch(index, () => {
 
 const optionLetter = (i) => String.fromCharCode(65 + i);
 
-const normalizeAnswer = (value) => String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '');
-
 const isCurrentCorrect = computed(() => {
     if (isAngleMap.value) {
         return selectedAngle.value === currentPrompt.value?.correct;
@@ -94,7 +90,7 @@ const isCurrentCorrect = computed(() => {
             return selectedFace.value === currentPrompt.value?.correct;
         }
         if (turnKind.value === 'fill_degrees') {
-            return normalizeAnswer(typedAnswer.value) === normalizeAnswer(currentPrompt.value?.correct_answer);
+            return conceptAnswersMatch(typedAnswer.value, currentPrompt.value?.correct_answer);
         }
         return selectedOption.value === currentPrompt.value?.correct_index;
     }
@@ -105,7 +101,7 @@ const isCurrentCorrect = computed(() => {
     if (q.question_type === 'mcq') {
         return selectedOption.value === q.correct_index;
     }
-    return normalizeAnswer(typedAnswer.value) === normalizeAnswer(q.correct_answer);
+    return conceptAnswersMatch(typedAnswer.value, q.correct_answer, q.accepted_answers);
 });
 
 const recordQuiet = (payload) => {
