@@ -447,6 +447,31 @@ const removeCard = (index) => {
 
 const optionLetter = (index) => String.fromCharCode(65 + index);
 
+const turnDegreesFor = (turn) => {
+    const map = { '1/4': '90°', '1/2': '180°', '3/4': '270°', '1': '360°', full: '360°' };
+    return map[String(turn || '').trim()] || null;
+};
+
+const turnPromptAnswer = (p) => {
+    if (!p) {
+        return '';
+    }
+    if (p.kind === 'tap_face') {
+        const deg = turnDegreesFor(p.turn);
+        return deg
+            ? `${p.start} → ${p.correct} · ${p.turn} · ${deg}`
+            : `${p.start} → ${p.correct}`;
+    }
+    if (p.kind === 'fill_degrees') {
+        return `${p.correct_answer}°`;
+    }
+    if (p.kind === 'mcq_turn') {
+        const opts = Array.isArray(p.options) ? p.options : [];
+        return opts[p.correct_index] || 'mcq';
+    }
+    return p.kind || '';
+};
+
 const ensureSavedForFigures = () => true;
 
 const postDiagramFile = (cardIndex, file, onFinish) => {
@@ -833,9 +858,11 @@ const togglePagePicker = (index) => {
                         </template>
 
                         <template v-else-if="card.type === 'turn_clock'">
-                            <p class="mt-3 text-sm text-slate-800">{{ card.body }}</p>
+                            <p class="mt-3 text-sm text-slate-800">
+                                <ConceptMathText :text="card.body" />
+                            </p>
                             <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-teal-800">
-                                {{ (card.prompts || []).length }} turn ↔ angle prompts on the clock
+                                {{ (card.prompts || []).length }} rotate / turn ↔ angle prompts on the clock
                             </p>
                             <div class="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border border-teal-100 bg-teal-50/40 p-2">
                                 <p
@@ -845,11 +872,11 @@ const togglePagePicker = (index) => {
                                 >
                                     <span class="font-semibold">{{ pIndex + 1 }}.</span>
                                     {{ p.prompt }}
-                                    <span class="text-teal-800">({{ p.kind }})</span>
+                                    <span class="text-teal-800">({{ turnPromptAnswer(p) }})</span>
                                 </p>
                             </div>
                             <p class="mt-2 text-xs text-slate-600">
-                                Interactive clock board in Run concepts — pairs turns with degrees for Class 5.
+                                Interactive clock in Run concepts — rotate the hand for 1/4 · 1/2 · 3/4 · full, then match angles (and reverse). No PDF figure needed.
                             </p>
                         </template>
 
