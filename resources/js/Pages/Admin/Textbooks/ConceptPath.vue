@@ -85,15 +85,25 @@ const includedCount = computed(() => cards.value.filter((c) => c.approved !== fa
 const teachCount = computed(() => cards.value.filter((c) => c.type === 'teach' && c.approved !== false).length);
 const checkCount = computed(() => cards.value.filter((c) => c.type === 'check' && c.approved !== false).length);
 const angleMapCount = computed(() => cards.value.filter((c) => c.type === 'angle_map' && c.approved !== false).length);
+const turnClockCount = computed(() => cards.value.filter((c) => c.type === 'turn_clock' && c.approved !== false).length);
 const hasAngleMap = computed(() => cards.value.some((c) => c.type === 'angle_map'));
+const hasTurnClock = computed(() => cards.value.some((c) => c.type === 'turn_clock'));
 
 const appendAngleMapForm = useForm({});
+const appendTurnClockForm = useForm({});
 
 const appendAngleMap = () => {
-    if (!props.routes?.append_angle_map) {
+    if (! props.routes?.append_angle_map) {
         return;
     }
     appendAngleMapForm.post(props.routes.append_angle_map, { preserveScroll: true });
+};
+
+const appendTurnClock = () => {
+    if (! props.routes?.append_turn_clock) {
+        return;
+    }
+    appendTurnClockForm.post(props.routes.append_turn_clock, { preserveScroll: true });
 };
 
 const copyPrompt = async () => {
@@ -170,7 +180,7 @@ const normalizeQuestion = (q, fallbackType = 'mcq') => {
 
 const normalizeCard = (row, index) => {
     const type = String(row?.type || '').toLowerCase();
-    if (!['teach', 'check', 'angle_map'].includes(type)) {
+    if (!['teach', 'check', 'angle_map', 'turn_clock'].includes(type)) {
         return null;
     }
 
@@ -217,6 +227,66 @@ const normalizeCard = (row, index) => {
                     relation: String(p?.relation || 'corresponding'),
                     prompt,
                     highlight,
+                    correct,
+                    explanation: p?.explanation ? String(p.explanation).trim() : null,
+                };
+            })
+            .filter(Boolean)
+            .slice(0, 24);
+        if (!prompts.length) {
+            return null;
+        }
+        card.prompts = prompts;
+        return card;
+    }
+
+    if (type === 'turn_clock') {
+        card.body = String(row?.body || 'Watch the clock hand. Make the turn, then name the angle.').trim();
+        card.figure_page = null;
+        const promptsIn = Array.isArray(row?.prompts) ? row.prompts : [];
+        const prompts = promptsIn
+            .map((p) => {
+                const kind = String(p?.kind || p?.prompt_type || 'tap_face').toLowerCase().replace(/[\s-]+/g, '_');
+                const prompt = String(p?.prompt || p?.question || '').trim();
+                if (!prompt) {
+                    return null;
+                }
+                if (kind === 'fill_degrees') {
+                    const correctAnswer = String(p?.correct_answer ?? p?.correct ?? '').trim();
+                    if (!correctAnswer) {
+                        return null;
+                    }
+                    return {
+                        kind: 'fill_degrees',
+                        prompt,
+                        correct_answer: correctAnswer,
+                        answer_format: 'integer',
+                        explanation: p?.explanation ? String(p.explanation).trim() : null,
+                    };
+                }
+                if (kind === 'mcq_turn') {
+                    const options = (Array.isArray(p?.options) ? p.options : []).map((o) => String(o)).filter(Boolean).slice(0, 4);
+                    while (options.length < 4) {
+                        options.push('—');
+                    }
+                    return {
+                        kind: 'mcq_turn',
+                        prompt,
+                        options,
+                        correct_index: Number(p?.correct_index ?? 0),
+                        explanation: p?.explanation ? String(p.explanation).trim() : null,
+                    };
+                }
+                const start = Number(p?.start ?? 12);
+                const correct = Number(p?.correct ?? p?.answer);
+                if (![12, 3, 6, 9].includes(start) || ![12, 3, 6, 9].includes(correct)) {
+                    return null;
+                }
+                return {
+                    kind: 'tap_face',
+                    prompt,
+                    start,
+                    turn: p?.turn ? String(p.turn) : null,
                     correct,
                     explanation: p?.explanation ? String(p.explanation).trim() : null,
                 };
@@ -284,17 +354,18 @@ const runPreview = () => {
     const teach = normalized.filter((c) => c.type === 'teach').length;
     const check = normalized.filter((c) => c.type === 'check').length;
     const angleMap = normalized.filter((c) => c.type === 'angle_map').length;
+    const turnClock = normalized.filter((c) => c.type === 'turn_clock').length;
 
     if (!normalized.length) {
-        previewError.value = 'No usable teach/check/angle_map cards found in JSON.';
+        previewError.value = 'No usable teach/check/angle_map/turn_clock cards found in JSON.';
         return;
     }
     if (!teach) {
         previewError.value = 'Include at least one teach card.';
         return;
     }
-    if (!check && !angleMap) {
-        previewError.value = 'Include at least one check card or angle_map practice card.';
+    if (!check && !angleMap && !turnClock) {
+        previewError.value = 'Include at least one check, angle_map, or turn_clock practice card.';
         return;
     }
 
@@ -574,9 +645,10 @@ const togglePagePicker = (index) => {
                     </ol>
                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Status: {{ statusLabel }}
-                        <span v-if="conceptPath.teach_count || conceptPath.check_count || conceptPath.angle_map_count" class="ml-2 font-normal normal-case text-slate-600">
+                        <span v-if="conceptPath.teach_count || conceptPath.check_count || conceptPath.angle_map_count || conceptPath.turn_clock_count" class="ml-2 font-normal normal-case text-slate-600">
                             · {{ conceptPath.teach_count }} teach · {{ conceptPath.check_count }} check
                             <span v-if="conceptPath.angle_map_count"> · {{ conceptPath.angle_map_count }} angle-map</span>
+                            <span v-if="conceptPath.turn_clock_count"> · {{ conceptPath.turn_clock_count }} turn-clock</span>
                             · {{ conceptPath.question_count }} mini-questions
                         </span>
                     </p>
@@ -633,6 +705,7 @@ const togglePagePicker = (index) => {
                             <p class="text-xs text-slate-600">
                                 {{ includedCount }} included · {{ teachCount }} teach · {{ checkCount }} check
                                 <span v-if="angleMapCount"> · {{ angleMapCount }} angle-map</span>
+                                <span v-if="turnClockCount"> · {{ turnClockCount }} turn-clock</span>
                             </p>
                         </div>
                         <div class="flex flex-wrap gap-2">
@@ -644,6 +717,15 @@ const togglePagePicker = (index) => {
                                 @click="appendAngleMap"
                             >
                                 {{ appendAngleMapForm.processing ? 'Adding…' : 'Add angle-map practice at end' }}
+                            </SecondaryButton>
+                            <SecondaryButton
+                                v-if="!hasTurnClock"
+                                type="button"
+                                class="!border-teal-300 !text-teal-900"
+                                :disabled="appendTurnClockForm.processing || !cards.length || !routes.append_turn_clock"
+                                @click="appendTurnClock"
+                            >
+                                {{ appendTurnClockForm.processing ? 'Adding…' : 'Add turn-clock practice at end' }}
                             </SecondaryButton>
                             <PrimaryButton
                                 type="button"
@@ -681,12 +763,16 @@ const togglePagePicker = (index) => {
                         class="rounded-lg border bg-white p-4 shadow-sm"
                         :class="card.approved === false
                             ? 'border-slate-200 opacity-60'
-                            : (card.type === 'teach' ? 'border-sky-200' : (card.type === 'angle_map' ? 'border-violet-200' : 'border-amber-200'))"
+                            : (card.type === 'teach'
+                                ? 'border-sky-200'
+                                : (card.type === 'angle_map'
+                                    ? 'border-violet-200'
+                                    : (card.type === 'turn_clock' ? 'border-teal-200' : 'border-amber-200')))"
                     >
                         <div class="flex flex-wrap items-start justify-between gap-2">
                             <div>
                                 <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                                    Step {{ card.step }} · {{ card.type === 'teach' ? 'Teach' : (card.type === 'angle_map' ? 'Angle map' : 'Check') }}
+                                    Step {{ card.step }} · {{ card.type === 'teach' ? 'Teach' : (card.type === 'angle_map' ? 'Angle map' : (card.type === 'turn_clock' ? 'Turn clock' : 'Check')) }}
                                     <span v-if="card.topic" class="font-medium normal-case text-slate-600"> · {{ card.topic }}</span>
                                 </p>
                                 <h3 class="mt-1 text-base font-semibold text-slate-900">{{ card.title }}</h3>
@@ -746,6 +832,27 @@ const togglePagePicker = (index) => {
                             </p>
                         </template>
 
+                        <template v-else-if="card.type === 'turn_clock'">
+                            <p class="mt-3 text-sm text-slate-800">{{ card.body }}</p>
+                            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-teal-800">
+                                {{ (card.prompts || []).length }} turn ↔ angle prompts on the clock
+                            </p>
+                            <div class="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border border-teal-100 bg-teal-50/40 p-2">
+                                <p
+                                    v-for="(p, pIndex) in (card.prompts || [])"
+                                    :key="pIndex"
+                                    class="text-xs text-slate-800"
+                                >
+                                    <span class="font-semibold">{{ pIndex + 1 }}.</span>
+                                    {{ p.prompt }}
+                                    <span class="text-teal-800">({{ p.kind }})</span>
+                                </p>
+                            </div>
+                            <p class="mt-2 text-xs text-slate-600">
+                                Interactive clock board in Run concepts — pairs turns with degrees for Class 5.
+                            </p>
+                        </template>
+
                         <template v-else>
                             <div
                                 v-for="(q, qIndex) in (card.questions || [])"
@@ -777,7 +884,7 @@ const togglePagePicker = (index) => {
                         </template>
 
                         <div
-                            v-if="card.type !== 'angle_map'"
+                            v-if="card.type !== 'angle_map' && card.type !== 'turn_clock'"
                             class="mt-3 rounded-md border p-3"
                             :class="card.diagram_url ? 'border-slate-200 bg-slate-50' : 'border-violet-200 bg-violet-50/70'"
                         >

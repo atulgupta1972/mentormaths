@@ -94,6 +94,47 @@ class ConceptPathServiceTest extends TestCase
         $this->assertCount(2, $chapter->concept_path_items['cards']);
     }
 
+    public function test_parse_accepts_turn_clock_card_and_append_helper(): void
+    {
+        Storage::fake('public');
+        $chapter = $this->seedChapter(withPdf: true);
+        $service = app(ConceptPathService::class);
+
+        $json = json_encode([
+            'chapter_title' => 'Angles as Turns',
+            'cards' => [
+                [
+                    'step' => 1,
+                    'type' => 'teach',
+                    'title' => 'Quarter turn',
+                    'body' => 'A quarter turn is 1/4 of a full turn.',
+                ],
+                [
+                    'step' => 2,
+                    'type' => 'check',
+                    'title' => 'Quick check',
+                    'questions' => [
+                        [
+                            'question_type' => 'fill_blank',
+                            'question' => '1/4 turn = ____ degrees',
+                            'correct_answer' => '90',
+                            'answer_format' => 'integer',
+                        ],
+                    ],
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $parsed = $service->parse($json);
+        $service->saveDraft($chapter, $parsed['cards'], $parsed['chapter_title']);
+        $service->appendTurnClockPractice($chapter->fresh());
+        $chapter->refresh();
+
+        $last = collect($chapter->concept_path_items['cards'])->last();
+        $this->assertSame('turn_clock', $last['type']);
+        $this->assertGreaterThanOrEqual(8, count($last['prompts']));
+    }
+
     public function test_parse_accepts_angle_map_card_and_append_helper(): void
     {
         Storage::fake('public');

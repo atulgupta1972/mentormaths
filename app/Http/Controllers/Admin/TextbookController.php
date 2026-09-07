@@ -1004,6 +1004,9 @@ class TextbookController extends Controller
                 'append_angle_map' => $uploaderMode
                     ? route('content.textbooks.concept-path.append-angle-map', $textbookChapter)
                     : route('admin.textbooks.concept-path.append-angle-map', $textbookChapter),
+                'append_turn_clock' => $uploaderMode
+                    ? route('content.textbooks.concept-path.append-turn-clock', $textbookChapter)
+                    : route('admin.textbooks.concept-path.append-turn-clock', $textbookChapter),
             ],
         ]);
     }
@@ -1017,6 +1020,17 @@ class TextbookController extends Controller
         }
 
         return back()->with('success', 'Angle-map practice added at the end. Save/approve when ready, then Run concepts to try the tap-on-figure drills.');
+    }
+
+    public function appendConceptPathTurnClock(TextbookChapter $textbookChapter): RedirectResponse
+    {
+        try {
+            $this->conceptPath->appendTurnClockPractice($textbookChapter);
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', 'Turn-clock practice added at the end. Approve, then Run concepts — student makes turns on the clock and names the angles.');
     }
 
     public function previewConceptPath(Request $request, TextbookChapter $textbookChapter): RedirectResponse

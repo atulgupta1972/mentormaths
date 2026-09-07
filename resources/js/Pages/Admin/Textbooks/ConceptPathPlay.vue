@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ConceptAngleMapBoard from '@/Components/ConceptAngleMapBoard.vue';
+import ConceptTurnClockBoard from '@/Components/ConceptTurnClockBoard.vue';
 import ConceptMathText from '@/Components/ConceptMathText.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -20,6 +21,7 @@ const finished = ref(false);
 const selectedOption = ref(null);
 const typedAnswer = ref('');
 const selectedAngle = ref(null);
+const selectedFace = ref(null);
 const revealed = ref(false);
 const questionIndex = ref(0);
 
@@ -41,12 +43,17 @@ const currentQuestion = computed(() => currentQuestions.value[questionIndex.valu
 const currentPrompt = computed(() => currentPrompts.value[questionIndex.value] || null);
 
 const isAngleMap = computed(() => current.value?.type === 'angle_map');
+const isTurnClock = computed(() => current.value?.type === 'turn_clock');
 const isTeach = computed(() => current.value?.type === 'teach');
 const isCheck = computed(() => current.value?.type === 'check');
+const turnKind = computed(() => currentPrompt.value?.kind || 'tap_face');
 
 const typeLabel = computed(() => {
     if (isAngleMap.value) {
         return 'Angle map';
+    }
+    if (isTurnClock.value) {
+        return 'Turn clock';
     }
     if (isTeach.value) {
         return 'Teach';
@@ -58,6 +65,7 @@ const resetAnswerState = () => {
     selectedOption.value = null;
     typedAnswer.value = '';
     selectedAngle.value = null;
+    selectedFace.value = null;
     revealed.value = false;
     questionIndex.value = 0;
 };
@@ -77,6 +85,15 @@ const isCurrentCorrect = computed(() => {
     if (isAngleMap.value) {
         return selectedAngle.value === currentPrompt.value?.correct;
     }
+    if (isTurnClock.value) {
+        if (turnKind.value === 'tap_face') {
+            return selectedFace.value === currentPrompt.value?.correct;
+        }
+        if (turnKind.value === 'fill_degrees') {
+            return normalizeAnswer(typedAnswer.value) === normalizeAnswer(currentPrompt.value?.correct_answer);
+        }
+        return selectedOption.value === currentPrompt.value?.correct_index;
+    }
     const q = currentQuestion.value;
     if (!q) {
         return false;
@@ -90,6 +107,19 @@ const isCurrentCorrect = computed(() => {
 const checkAnswer = () => {
     if (isAngleMap.value) {
         if (selectedAngle.value === null) {
+            return;
+        }
+        revealed.value = true;
+        return;
+    }
+    if (isTurnClock.value) {
+        if (turnKind.value === 'tap_face' && selectedFace.value === null) {
+            return;
+        }
+        if (turnKind.value === 'fill_degrees' && !typedAnswer.value.trim()) {
+            return;
+        }
+        if (turnKind.value === 'mcq_turn' && selectedOption.value === null) {
             return;
         }
         revealed.value = true;
@@ -114,10 +144,20 @@ const onAngleSelect = (id) => {
     selectedAngle.value = id;
 };
 
+const onFaceSelect = (id) => {
+    if (revealed.value) {
+        return;
+    }
+    selectedFace.value = id;
+};
+
 const goNext = () => {
-    if (isAngleMap.value && currentPrompts.value.length > 1 && questionIndex.value < currentPrompts.value.length - 1) {
+    if ((isAngleMap.value || isTurnClock.value) && currentPrompts.value.length > 1 && questionIndex.value < currentPrompts.value.length - 1) {
         questionIndex.value += 1;
         selectedAngle.value = null;
+        selectedFace.value = null;
+        selectedOption.value = null;
+        typedAnswer.value = '';
         revealed.value = false;
         return;
     }
@@ -151,7 +191,20 @@ const cardBorderClass = computed(() => {
     if (isAngleMap.value) {
         return 'border-violet-200';
     }
+    if (isTurnClock.value) {
+        return 'border-teal-200';
+    }
     return 'border-amber-200';
+});
+
+const turnCheckDisabled = computed(() => {
+    if (turnKind.value === 'tap_face') {
+        return selectedFace.value === null;
+    }
+    if (turnKind.value === 'fill_degrees') {
+        return !typedAnswer.value.trim();
+    }
+    return selectedOption.value === null;
 });
 </script>
 
@@ -295,6 +348,88 @@ const cardBorderClass = computed(() => {
                                     v-if="!revealed"
                                     type="button"
                                     :disabled="selectedAngle === null"
+                                    @click="checkAnswer"
+                                >
+                                    Check
+                                </PrimaryButton>
+                                <PrimaryButton v-else type="button" @click="goNext">
+                                    {{ index >= total - 1 && questionIndex >= currentPrompts.length - 1 ? 'Finish' : 'Next' }}
+                                </PrimaryButton>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template v-else-if="isTurnClock">
+                        <p v-if="current.body" class="mt-3 text-sm text-slate-700">
+                            <ConceptMathText :text="current.body" />
+                        </p>
+                        <div class="mt-4 space-y-3">
+                            <p v-if="currentPrompts.length > 1" class="text-xs font-semibold uppercase tracking-wide text-teal-800">
+                                Prompt {{ questionIndex + 1 }} of {{ currentPrompts.length }}
+                            </p>
+                            <p class="text-base font-semibold text-slate-900">
+                                {{ currentPrompt?.prompt || 'Make the turn on the clock.' }}
+                            </p>
+
+                            <ConceptTurnClockBoard
+                                :start="currentPrompt?.start ?? 12"
+                                :selected="turnKind === 'tap_face' ? selectedFace : (currentPrompt?.correct ?? currentPrompt?.start ?? 12)"
+                                :correct="turnKind === 'tap_face' ? (currentPrompt?.correct ?? null) : null"
+                                :revealed="turnKind === 'tap_face' ? revealed : false"
+                                :interactive="turnKind === 'tap_face'"
+                                @select="onFaceSelect"
+                            />
+
+                            <div v-if="turnKind === 'fill_degrees'">
+                                <input
+                                    v-model="typedAnswer"
+                                    type="text"
+                                    inputmode="numeric"
+                                    class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500"
+                                    :disabled="revealed"
+                                    placeholder="Type degrees, e.g. 90"
+                                    @keyup.enter="!revealed && checkAnswer()"
+                                >
+                            </div>
+
+                            <div v-else-if="turnKind === 'mcq_turn'" class="space-y-2">
+                                <button
+                                    v-for="(opt, optIndex) in (currentPrompt?.options || [])"
+                                    :key="optIndex"
+                                    type="button"
+                                    class="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm"
+                                    :class="{
+                                        'border-teal-400 bg-teal-50': selectedOption === optIndex && !revealed,
+                                        'border-emerald-500 bg-emerald-50': revealed && optIndex === currentPrompt.correct_index,
+                                        'border-rose-400 bg-rose-50': revealed && selectedOption === optIndex && optIndex !== currentPrompt.correct_index,
+                                        'border-slate-200 bg-white hover:bg-slate-50': selectedOption !== optIndex && !(revealed && optIndex === currentPrompt.correct_index),
+                                    }"
+                                    :disabled="revealed"
+                                    @click="selectedOption = optIndex"
+                                >
+                                    <span class="font-semibold text-slate-500">{{ optionLetter(optIndex) }}.</span>
+                                    <span>{{ opt }}</span>
+                                </button>
+                            </div>
+
+                            <p
+                                v-if="revealed"
+                                class="rounded-md px-3 py-2 text-sm"
+                                :class="isCurrentCorrect ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'"
+                            >
+                                <span class="font-semibold">{{ isCurrentCorrect ? 'Correct' : 'Not quite' }}.</span>
+                                <span v-if="currentPrompt?.explanation">
+                                    <ConceptMathText :text="currentPrompt.explanation" />
+                                </span>
+                                <span v-else-if="!isCurrentCorrect && turnKind === 'tap_face'"> Try {{ currentPrompt?.correct }}.</span>
+                                <span v-else-if="!isCurrentCorrect && turnKind === 'fill_degrees'"> Answer: {{ currentPrompt?.correct_answer }}°.</span>
+                            </p>
+
+                            <div class="flex flex-wrap gap-2 pt-1">
+                                <PrimaryButton
+                                    v-if="!revealed"
+                                    type="button"
+                                    :disabled="turnCheckDisabled"
                                     @click="checkAnswer"
                                 >
                                     Check

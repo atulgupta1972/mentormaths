@@ -71,6 +71,9 @@ Card types:
 3) "angle_map" — OPTIONAL last card for Parallel Lines / transversal chapters only.
    Same fixed figure with angles 1–8. Each prompt highlights one angle; the student taps the matching angle on the figure.
    Mentormaths renders an interactive SVG board (do not invent ASCII art). Set figure_page to null.
+4) "turn_clock" — OPTIONAL last card for Angles as Turns / clock-turn chapters only.
+   Same clock face (12·3·6·9). Student taps where the hand faces after a turn, then names the angle in degrees (and reverse: angle → turn).
+   Mentormaths renders an interactive clock board. Set figure_page to null.
 
 Pedagogy rules:
 - Cover the WHOLE chapter concept flow in teaching order (definitions → notation → building blocks → common traps → simple use).
@@ -85,6 +88,7 @@ Pedagogy rules:
 - Aim for 12–28 cards total (teach + check). Do not exceed 36.
 - Do NOT create long word problems, exam-level sums, or written-sheet style questions.
 - For Parallel and Intersecting Lines chapters: AFTER the teach/check flow, add ONE final "angle_map" card with 10–16 easy tap prompts covering corresponding, vertically opposite, adjacent/linear pair, alternate interior, alternate exterior, and co-interior.
+- For Angles as Turns chapters: AFTER the teach/check flow, add ONE final "turn_clock" card pairing turn ↔ angle (1/4↔90°, 1/2↔180°, 3/4↔270°, full↔360°).
 
 JSON format:
 {
@@ -247,6 +251,7 @@ PROMPT;
         $teachCount = 0;
         $checkCount = 0;
         $angleMapCount = 0;
+        $turnClockCount = 0;
         $questionCount = 0;
 
         foreach (array_values($cardsIn) as $index => $row) {
@@ -255,8 +260,8 @@ PROMPT;
             }
 
             $type = strtolower(trim((string) ($row['type'] ?? '')));
-            if (! in_array($type, ['teach', 'check', 'angle_map'], true)) {
-                throw new InvalidArgumentException('Card #'.($index + 1).' must have type "teach", "check", or "angle_map".');
+            if (! in_array($type, ['teach', 'check', 'angle_map', 'turn_clock'], true)) {
+                throw new InvalidArgumentException('Card #'.($index + 1).' must have type "teach", "check", "angle_map", or "turn_clock".');
             }
 
             $title = trim((string) ($row['title'] ?? ''));
@@ -292,6 +297,14 @@ PROMPT;
                 $card['prompts'] = $prompts;
                 $questionCount += count($prompts);
                 $angleMapCount++;
+            } elseif ($type === 'turn_clock') {
+                $body = trim((string) ($row['body'] ?? 'Watch the clock hand. Make the turn, then name the angle.'));
+                $card['body'] = Str::limit($body !== '' ? $body : 'Watch the clock hand. Make the turn, then name the angle.', 800, '');
+                $card['figure_page'] = null;
+                $prompts = $this->normalizeTurnClockPrompts($row['prompts'] ?? [], $title);
+                $card['prompts'] = $prompts;
+                $questionCount += count($prompts);
+                $turnClockCount++;
             } else {
                 $questionsIn = $row['questions'] ?? [];
                 if (! is_array($questionsIn) || $questionsIn === []) {
@@ -329,8 +342,8 @@ PROMPT;
             throw new InvalidArgumentException('Include at least one teach card.');
         }
 
-        if ($checkCount === 0 && $angleMapCount === 0) {
-            throw new InvalidArgumentException('Include at least one check card or angle_map practice card.');
+        if ($checkCount === 0 && $angleMapCount === 0 && $turnClockCount === 0) {
+            throw new InvalidArgumentException('Include at least one check, angle_map, or turn_clock practice card.');
         }
 
         return [
@@ -339,6 +352,7 @@ PROMPT;
             'teach_count' => $teachCount,
             'check_count' => $checkCount,
             'angle_map_count' => $angleMapCount,
+            'turn_clock_count' => $turnClockCount,
             'question_count' => $questionCount,
         ];
     }
@@ -378,6 +392,7 @@ PROMPT;
                 'teach_count' => $normalized['teach_count'],
                 'check_count' => $normalized['check_count'],
                 'angle_map_count' => $normalized['angle_map_count'] ?? 0,
+                'turn_clock_count' => $normalized['turn_clock_count'] ?? 0,
                 'question_count' => $normalized['question_count'],
                 'saved_at' => now()->toIso8601String(),
             ],
@@ -748,11 +763,14 @@ PROMPT;
             'teach_count' => (int) ($items['teach_count'] ?? collect($cards)->where('type', 'teach')->count()),
             'check_count' => (int) ($items['check_count'] ?? collect($cards)->where('type', 'check')->count()),
             'angle_map_count' => (int) ($items['angle_map_count'] ?? collect($cards)->where('type', 'angle_map')->count()),
+            'turn_clock_count' => (int) ($items['turn_clock_count'] ?? collect($cards)->where('type', 'turn_clock')->count()),
             'question_count' => (int) ($items['question_count'] ?? (
                 collect($cards)->where('type', 'check')->sum(fn ($c) => count($c['questions'] ?? []))
                 + collect($cards)->where('type', 'angle_map')->sum(fn ($c) => count($c['prompts'] ?? []))
+                + collect($cards)->where('type', 'turn_clock')->sum(fn ($c) => count($c['prompts'] ?? []))
             )),
             'has_angle_map' => collect($cards)->contains(fn ($c) => is_array($c) && ($c['type'] ?? '') === 'angle_map'),
+            'has_turn_clock' => collect($cards)->contains(fn ($c) => is_array($c) && ($c['type'] ?? '') === 'turn_clock'),
             'approved_at' => $chapter->concept_path_approved_at?->toIso8601String(),
             'has_pdf' => filled($chapter->pdf_path),
             'prompt' => $prompt,
@@ -783,6 +801,66 @@ PROMPT;
             $cards,
             is_string($items['chapter_title'] ?? null) ? $items['chapter_title'] : $chapter->title,
         );
+    }
+
+    /**
+     * Append interactive clock-turn practice (Class 5 Angles as Turns style) at the end.
+     */
+    public function appendTurnClockPractice(TextbookChapter $chapter): TextbookChapter
+    {
+        $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+        $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
+
+        if ($cards === []) {
+            throw new InvalidArgumentException('Save or preview teach/check cards first, then add the turn-clock practice at the end.');
+        }
+
+        $already = collect($cards)->contains(fn ($card) => is_array($card) && ($card['type'] ?? '') === 'turn_clock');
+        if ($already) {
+            throw new InvalidArgumentException('This concept path already has a turn-clock practice card.');
+        }
+
+        $cards[] = $this->defaultTurnClockCard(count($cards) + 1);
+
+        return $this->saveDraft(
+            $chapter,
+            $cards,
+            is_string($items['chapter_title'] ?? null) ? $items['chapter_title'] : $chapter->title,
+        );
+    }
+
+    /**
+     * Clock face with 12·3·6·9 — turns ↔ angles for Class 5.
+     *
+     * @return array<string, mixed>
+     */
+    public function defaultTurnClockCard(int $step = 1): array
+    {
+        return [
+            'step' => $step,
+            'type' => 'turn_clock',
+            'title' => 'Turns on the clock',
+            'body' => 'Same clock stays on screen. First make the turn by tapping where the hand points. Then write the angle in degrees.',
+            'topic' => 'Angles as Turns',
+            'figure_page' => null,
+            'approved' => true,
+            'prompts' => [
+                ['kind' => 'tap_face', 'prompt' => 'Start at 12. Make a 1/4 turn clockwise. Where do you face?', 'start' => 12, 'turn' => '1/4', 'correct' => 3, 'explanation' => 'A quarter turn clockwise from 12 lands on 3.'],
+                ['kind' => 'fill_degrees', 'prompt' => 'A 1/4 turn makes ____ degrees.', 'correct_answer' => '90', 'answer_format' => 'integer', 'explanation' => '1/4 of 360° = 90°. That is a right angle.'],
+                ['kind' => 'tap_face', 'prompt' => 'Start at 12. Make a 1/2 turn. Where do you face?', 'start' => 12, 'turn' => '1/2', 'correct' => 6, 'explanation' => 'A half turn from 12 lands on 6 — opposite direction.'],
+                ['kind' => 'fill_degrees', 'prompt' => 'A 1/2 turn makes ____ degrees.', 'correct_answer' => '180', 'answer_format' => 'integer', 'explanation' => '1/2 of 360° = 180°. That is a straight angle.'],
+                ['kind' => 'tap_face', 'prompt' => 'Start at 12. Make a 3/4 turn clockwise. Where do you face?', 'start' => 12, 'turn' => '3/4', 'correct' => 9, 'explanation' => 'Three quarter turns from 12 land on 9.'],
+                ['kind' => 'fill_degrees', 'prompt' => 'A 3/4 turn makes ____ degrees.', 'correct_answer' => '270', 'answer_format' => 'integer', 'explanation' => '3/4 of 360° = 270°.'],
+                ['kind' => 'tap_face', 'prompt' => 'Start at 12. Make a full turn. Where do you face?', 'start' => 12, 'turn' => '1', 'correct' => 12, 'explanation' => 'A full turn brings you back to where you started — 12 again.'],
+                ['kind' => 'fill_degrees', 'prompt' => 'A full turn makes ____ degrees.', 'correct_answer' => '360', 'answer_format' => 'integer', 'explanation' => 'One full turn = 360°.'],
+                ['kind' => 'mcq_turn', 'prompt' => '90° is the same as which turn?', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 0, 'explanation' => '90° = 1/4 of a full turn.'],
+                ['kind' => 'mcq_turn', 'prompt' => '180° is the same as which turn?', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 1, 'explanation' => '180° = 1/2 turn.'],
+                ['kind' => 'mcq_turn', 'prompt' => '360° is the same as which turn?', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 3, 'explanation' => '360° = one full turn.'],
+                ['kind' => 'tap_face', 'prompt' => 'Start at 3. Make a 1/4 turn clockwise. Where do you face?', 'start' => 3, 'turn' => '1/4', 'correct' => 6, 'explanation' => 'From 3, a quarter turn clockwise goes to 6.'],
+                ['kind' => 'mcq_turn', 'prompt' => 'A right angle is the same as…', 'options' => ['1/4 turn', '1/2 turn', 'full turn', 'no turn'], 'correct_index' => 0, 'explanation' => 'A right angle = 90° = 1/4 turn.'],
+                ['kind' => 'mcq_turn', 'prompt' => 'A straight angle is the same as…', 'options' => ['1/4 turn', '1/2 turn', '3/4 turn', 'full turn'], 'correct_index' => 1, 'explanation' => 'A straight angle = 180° = 1/2 turn.'],
+            ],
+        ];
     }
 
     /**
@@ -817,6 +895,109 @@ PROMPT;
                 ['relation' => 'vertically_opposite', 'prompt' => 'Vertically opposite angle of ∠6 is…', 'highlight' => 6, 'correct' => 8, 'explanation' => '∠6 and ∠8 are vertically opposite.'],
             ],
         ];
+    }
+
+    /**
+     * @param  mixed  $promptsIn
+     * @return list<array<string, mixed>>
+     */
+    private function normalizeTurnClockPrompts(mixed $promptsIn, string $cardTitle): array
+    {
+        if (! is_array($promptsIn) || $promptsIn === []) {
+            throw new InvalidArgumentException('Turn-clock card "'.$cardTitle.'" needs a non-empty prompts array.');
+        }
+
+        $allowedFaces = [12, 3, 6, 9];
+        $prompts = [];
+
+        foreach (array_values($promptsIn) as $index => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $kind = strtolower(trim((string) ($row['kind'] ?? $row['prompt_type'] ?? 'tap_face')));
+            $kind = str_replace([' ', '-'], '_', $kind);
+            if (! in_array($kind, ['tap_face', 'fill_degrees', 'mcq_turn'], true)) {
+                $kind = 'tap_face';
+            }
+
+            $promptText = trim((string) ($row['prompt'] ?? $row['question'] ?? ''));
+            if ($promptText === '') {
+                throw new InvalidArgumentException('Turn-clock "'.$cardTitle.'" prompt #'.($index + 1).' needs prompt text.');
+            }
+
+            $explanation = filled($row['explanation'] ?? null)
+                ? Str::limit(trim((string) $row['explanation']), 400, '')
+                : null;
+
+            if ($kind === 'tap_face') {
+                $start = (int) ($row['start'] ?? 12);
+                $correct = (int) ($row['correct'] ?? $row['answer'] ?? 0);
+                if (! in_array($start, $allowedFaces, true) || ! in_array($correct, $allowedFaces, true)) {
+                    throw new InvalidArgumentException('Turn-clock "'.$cardTitle.'" prompt #'.($index + 1).' needs start/correct as 12, 3, 6, or 9.');
+                }
+
+                $prompts[] = [
+                    'kind' => 'tap_face',
+                    'prompt' => Str::limit($promptText, 200, ''),
+                    'start' => $start,
+                    'turn' => filled($row['turn'] ?? null) ? trim((string) $row['turn']) : null,
+                    'correct' => $correct,
+                    'explanation' => $explanation,
+                ];
+                continue;
+            }
+
+            if ($kind === 'fill_degrees') {
+                $answer = trim((string) ($row['correct_answer'] ?? $row['correct'] ?? ''));
+                if ($answer === '' || ! preg_match('/^\d+(\.\d+)?$/', $answer)) {
+                    throw new InvalidArgumentException('Turn-clock "'.$cardTitle.'" prompt #'.($index + 1).' needs a numeric correct_answer.');
+                }
+
+                $prompts[] = [
+                    'kind' => 'fill_degrees',
+                    'prompt' => Str::limit($promptText, 200, ''),
+                    'correct_answer' => $answer,
+                    'answer_format' => 'integer',
+                    'explanation' => $explanation,
+                ];
+                continue;
+            }
+
+            $options = array_values(array_filter(
+                array_map(fn ($opt) => trim((string) $opt), is_array($row['options'] ?? null) ? $row['options'] : []),
+                fn (string $opt) => $opt !== '',
+            ));
+            if (count($options) < 2) {
+                throw new InvalidArgumentException('Turn-clock "'.$cardTitle.'" prompt #'.($index + 1).' needs MCQ options.');
+            }
+            $options = array_slice($options, 0, 4);
+            while (count($options) < 4) {
+                $options[] = '—';
+            }
+            $correctIndex = (int) ($row['correct_index'] ?? 0);
+            if ($correctIndex < 0 || $correctIndex > 3) {
+                $correctIndex = 0;
+            }
+
+            $prompts[] = [
+                'kind' => 'mcq_turn',
+                'prompt' => Str::limit($promptText, 200, ''),
+                'options' => $options,
+                'correct_index' => $correctIndex,
+                'explanation' => $explanation,
+            ];
+        }
+
+        if ($prompts === []) {
+            throw new InvalidArgumentException('Turn-clock card "'.$cardTitle.'" has no usable prompts.');
+        }
+
+        if (count($prompts) > 24) {
+            $prompts = array_slice($prompts, 0, 24);
+        }
+
+        return $prompts;
     }
 
     /**
