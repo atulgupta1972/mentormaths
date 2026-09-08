@@ -6,6 +6,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 defineProps({
     canResetPassword: {
@@ -22,10 +23,11 @@ const form = useForm({
     remember: false,
 });
 
+const showPassword = ref(false);
+
 const submit = () => {
-    form.post(route('login'), {
-        onFinish: () => form.reset('password'),
-    });
+    // Keep password on failed login so the user can reveal it and check for typos.
+    form.post(route('login'));
 };
 </script>
 
@@ -62,14 +64,29 @@ const submit = () => {
             <div class="mt-4">
                 <InputLabel for="password" value="Password / tcode" />
 
-                <TextInput
-                    id="password"
-                    type="password"
-                    class="mt-1 block w-full"
-                    v-model="form.password"
-                    autocomplete="current-password"
-                    placeholder="Leave blank if email field is your tcode"
-                />
+                <div class="relative mt-1">
+                    <TextInput
+                        id="password"
+                        :type="showPassword ? 'text' : 'password'"
+                        class="block w-full pe-12"
+                        v-model="form.password"
+                        autocomplete="current-password"
+                        placeholder="Leave blank if email field is your tcode"
+                    />
+                    <button
+                        type="button"
+                        class="absolute inset-y-0 end-0 flex items-center px-3 text-xs font-semibold text-indigo-700 hover:text-indigo-900"
+                        :aria-pressed="showPassword"
+                        :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                        @click="showPassword = !showPassword"
+                    >
+                        {{ showPassword ? 'Hide' : 'Show' }}
+                    </button>
+                </div>
+
+                <p class="mt-1 text-xs text-gray-500">
+                    Tip: tap <strong>Show</strong> to check for typing mistakes (caps lock, extra spaces).
+                </p>
 
                 <InputError class="mt-2" :message="form.errors.password" />
             </div>
