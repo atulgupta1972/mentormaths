@@ -68,7 +68,9 @@ class ContentTaskController extends Controller
 
         $verification = null;
         $progress = null;
-        if (in_array($contentTask->status, [
+        $hasPublishedSets = $contentTask->textbookChapter?->mcqWorksheetIds() !== [];
+        if ($hasPublishedSets && in_array($contentTask->status, [
+            ContentUploadTask::STATUS_IN_PROGRESS,
             ContentUploadTask::STATUS_UPLOADED,
             ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
             ContentUploadTask::STATUS_VERIFIED,

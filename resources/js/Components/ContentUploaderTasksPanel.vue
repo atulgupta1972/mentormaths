@@ -2,7 +2,9 @@
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import GeminiVerificationGuide from '@/Components/GeminiVerificationGuide.vue';
+import GeminiCheckRequiredBanner from '@/Components/GeminiCheckRequiredBanner.vue';
 import { Link, router } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps({
     summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, corrections_pending: 0, gemini_pending: 0, gemini_done: 0, total_active: 0 }) },
@@ -40,6 +42,8 @@ const geminiProgressLabel = (task) => {
 
     return `${progress.verified}/${progress.total}`;
 };
+
+const geminiBlocked = computed(() => Number(props.summary.gemini_pending || 0) > 0 || props.geminiPending.length > 0);
 </script>
 
 <template>
@@ -78,6 +82,14 @@ const geminiProgressLabel = (task) => {
                 To correct: {{ summary.corrections_pending }}
             </span>
         </div>
+
+        <GeminiCheckRequiredBanner
+            v-if="geminiBlocked"
+            class="mt-4"
+            compact
+            :pending-count="summary.gemini_pending"
+            :pending-tasks="geminiPending"
+        />
 
         <GeminiVerificationGuide v-if="geminiPending.length && !compact" class="mt-4" compact />
 
@@ -159,7 +171,13 @@ const geminiProgressLabel = (task) => {
                     </p>
                     <p class="text-xs text-gray-500">{{ task.status_label }} · {{ formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</p>
                 </div>
-                <Link :href="chapterHref(task)">
+                <span
+                    v-if="geminiBlocked"
+                    class="rounded-md bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-900"
+                >
+                    Finish Gemini first
+                </span>
+                <Link v-else :href="chapterHref(task)">
                     <SecondaryButton type="button" class="!py-2 !text-xs">
                         {{ task.status === 'pending_agreement' ? 'Agree & upload →' : 'Upload chapter →' }}
                     </SecondaryButton>
