@@ -30,6 +30,7 @@ class GeminiPublishGateTest extends TestCase
     {
         parent::setUp();
 
+        $this->withoutVite();
         $this->withoutMiddleware(PreventRequestForgery::class);
     }
 
