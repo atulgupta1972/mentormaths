@@ -69,13 +69,6 @@ const teachingGroup = computed(() => ({
         || route().current('admin.catch-up.*')
         || route().current('admin.written-sheets.*')
         || route().current('admin.written-review.*')
-        || route().current('admin.textbooks.*')
-        || route().current('admin.concept-builder.*')
-        || route().current('admin.formula-bank.*')
-        || route().current('admin.basics-drill.*')
-        || route().current('admin.mensuration-match.*')
-        || route().current('admin.content-tasks.*')
-        || route().current('admin.content-rate-cards.*')
         || route().current('admin.student-work-report.*')
         || route().current('admin.school-study-plan.*'),
     items: [
@@ -132,6 +125,74 @@ const teachingGroup = computed(() => ({
             show: isAdmin.value && route().has('admin.written-review.index'),
         },
         {
+            label: 'Student work report',
+            href: route('admin.student-work-report.index'),
+            active: route().current('admin.student-work-report.*'),
+            show: isAdmin.value && route().has('admin.student-work-report.index'),
+        },
+        {
+            label: 'School study plans',
+            href: route('admin.school-study-plan.index'),
+            active: route().current('admin.school-study-plan.*'),
+            show: isAdmin.value && route().has('admin.school-study-plan.index'),
+        },
+    ],
+}));
+
+const contentGroup = computed(() => ({
+    label: 'Question bank',
+    active:
+        route().current('admin.questions.*')
+        || route().current('admin.question-audit.*')
+        || route().current('admin.chapter-heads.*')
+        || route().current('admin.syllabus.*')
+        || route().current('admin.textbooks.*')
+        || route().current('admin.concept-builder.*')
+        || route().current('admin.content-tasks.*')
+        || route().current('admin.content-rate-cards.*')
+        || route().current('admin.formula-bank.*')
+        || route().current('admin.basics-drill.*')
+        || route().current('admin.mensuration-match.*'),
+    items: [
+        {
+            label: 'Content coverage',
+            href: route('admin.questions.coverage'),
+            active: route().current('admin.questions.coverage'),
+            show: isAdmin.value || isMentor.value,
+        },
+        {
+            label: 'Look up set code',
+            href: route('admin.questions.set-code'),
+            active: route().current('admin.questions.set-code'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Answer audit',
+            href: route('admin.question-audit.index'),
+            active: route().current('admin.question-audit.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Questions',
+            href: route('admin.questions.index'),
+            active: route().current('admin.questions.*')
+                && !route().current('admin.questions.coverage')
+                && !route().current('admin.questions.set-code'),
+            show: true,
+        },
+        {
+            label: 'Chapter heads',
+            href: route('admin.chapter-heads.index'),
+            active: route().current('admin.chapter-heads.*'),
+            show: isAdmin.value && route().has('admin.chapter-heads.index'),
+        },
+        {
+            label: 'Syllabus',
+            href: route('admin.syllabus.index'),
+            active: route().current('admin.syllabus.*'),
+            show: isAdmin.value,
+        },
+        {
             label: 'Textbook content',
             href: route('admin.textbooks.index'),
             active: route().current('admin.textbooks.*'),
@@ -156,18 +217,6 @@ const teachingGroup = computed(() => ({
             show: isAdmin.value && route().has('admin.content-rate-cards.index'),
         },
         {
-            label: 'Student work report',
-            href: route('admin.student-work-report.index'),
-            active: route().current('admin.student-work-report.*'),
-            show: isAdmin.value && route().has('admin.student-work-report.index'),
-        },
-        {
-            label: 'School study plans',
-            href: route('admin.school-study-plan.index'),
-            active: route().current('admin.school-study-plan.*'),
-            show: isAdmin.value && route().has('admin.school-study-plan.index'),
-        },
-        {
             label: 'Formula bank',
             href: route('admin.formula-bank.index'),
             active: route().current('admin.formula-bank.*'),
@@ -184,53 +233,6 @@ const teachingGroup = computed(() => ({
             href: safeRoute('admin.mensuration-match.index', undefined, '/admin/mensuration-match'),
             active: route().current('admin.mensuration-match.*'),
             show: isAdmin.value && route().has('admin.mensuration-match.index'),
-        },
-    ],
-}));
-
-const contentGroup = computed(() => ({
-    label: 'Question bank',
-    active:
-        route().current('admin.questions.*')
-        || route().current('admin.question-audit.*')
-        || route().current('admin.chapter-heads.*')
-        || route().current('admin.syllabus.*'),
-    items: [
-        {
-            label: 'Content coverage',
-            href: route('admin.questions.coverage'),
-            active: route().current('admin.questions.coverage'),
-            show: isAdmin.value || isMentor.value,
-        },
-        {
-            label: 'Look up set code',
-            href: route('admin.questions.set-code'),
-            active: route().current('admin.questions.set-code'),
-            show: isAdmin.value,
-        },
-        {
-            label: 'Answer audit',
-            href: route('admin.question-audit.index'),
-            active: route().current('admin.question-audit.*'),
-            show: isAdmin.value,
-        },
-        {
-            label: 'Questions',
-            href: route('admin.questions.index'),
-            active: route().current('admin.questions.*'),
-            show: true,
-        },
-        {
-            label: 'Chapter heads',
-            href: route('admin.chapter-heads.index'),
-            active: route().current('admin.chapter-heads.*'),
-            show: isAdmin.value && route().has('admin.chapter-heads.index'),
-        },
-        {
-            label: 'Syllabus',
-            href: route('admin.syllabus.index'),
-            active: route().current('admin.syllabus.*'),
-            show: isAdmin.value,
         },
     ],
 }));
