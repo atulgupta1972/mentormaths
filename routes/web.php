@@ -100,7 +100,7 @@ Route::post('/teachers/register/profile/{token}', [TeacherRegistrationRequestCon
     ->name('teacher-registration.profile.update');
 
 Route::get('/dashboard', DashboardController::class)
-    ->middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])
+    ->middleware(['auth', 'verified', 'formula.drill', 'mensuration.drill', 'basics.drill'])
     ->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->prefix('mentor')->name('mentor.')->group(function () {
@@ -495,11 +495,6 @@ Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->nam
     Route::post('/formula-drill/items/{item}/answer', [FormulaDrillController::class, 'submitAnswer'])->name('formula-drill.answer');
     Route::post('/formula-drill/items/{item}/request-help', [FormulaDrillController::class, 'requestTeacherHelp'])->name('formula-drill.request-help');
     Route::post('/formula-drill/items/{item}/report-issue', [FormulaDrillController::class, 'reportIssue'])->name('formula-drill.report-issue');
-    Route::get('/basics-drill', [BasicsDrillController::class, 'show'])->name('basics-drill.show');
-    Route::post('/basics-drill/sessions/{session}/start', [BasicsDrillController::class, 'start'])->name('basics-drill.start');
-    Route::post('/basics-drill/items/{item}/answer', [BasicsDrillController::class, 'submitAnswer'])->name('basics-drill.answer');
-    Route::post('/basics-drill/items/{item}/mcq-answer', [BasicsDrillController::class, 'submitMcqAnswer'])->name('basics-drill.mcq-answer');
-    Route::post('/basics-drill/items/{item}/acknowledge', [BasicsDrillController::class, 'acknowledge'])->name('basics-drill.acknowledge');
 
     Route::get('/mensuration-match', [MensurationMatchController::class, 'show'])->name('mensuration-match.show');
     Route::post('/mensuration-match/start', [MensurationMatchController::class, 'start'])->name('mensuration-match.start');
@@ -507,7 +502,15 @@ Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->nam
     Route::post('/mensuration-match/sessions/{session}/answer', [MensurationMatchController::class, 'answer'])->name('mensuration-match.answer');
 });
 
-Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix('student')->name('student.')->group(function () {
+Route::middleware(['auth', 'verified', 'formula.drill', 'mensuration.drill'])->prefix('student')->name('student.')->group(function () {
+    Route::get('/basics-drill', [BasicsDrillController::class, 'show'])->name('basics-drill.show');
+    Route::post('/basics-drill/sessions/{session}/start', [BasicsDrillController::class, 'start'])->name('basics-drill.start');
+    Route::post('/basics-drill/items/{item}/answer', [BasicsDrillController::class, 'submitAnswer'])->name('basics-drill.answer');
+    Route::post('/basics-drill/items/{item}/mcq-answer', [BasicsDrillController::class, 'submitMcqAnswer'])->name('basics-drill.mcq-answer');
+    Route::post('/basics-drill/items/{item}/acknowledge', [BasicsDrillController::class, 'acknowledge'])->name('basics-drill.acknowledge');
+});
+
+Route::middleware(['auth', 'verified', 'formula.drill', 'mensuration.drill', 'basics.drill'])->prefix('student')->name('student.')->group(function () {
     Route::get('/exams', [StudentExamPlanController::class, 'index'])->name('exams.index');
     Route::post('/exam-plans', [StudentExamPlanController::class, 'store'])->name('exam-plans.store');
     Route::put('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'update'])->name('exam-plans.update');

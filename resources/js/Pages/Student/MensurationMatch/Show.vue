@@ -9,6 +9,10 @@ const props = defineProps({
     grade_name: { type: String, default: null },
     boards: { type: Array, default: () => [] },
     play: { type: Object, default: null },
+    required_today: { type: Boolean, default: false },
+    all_done: { type: Boolean, default: false },
+    next_url: { type: String, default: null },
+    next_label: { type: String, default: 'Continue' },
 });
 
 const page = usePage();
@@ -84,12 +88,33 @@ function backToBoards() {
 
                 <!-- Board picker / tick to start -->
                 <div v-if="!play" class="space-y-5">
+                    <div
+                        v-if="required_today"
+                        class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900"
+                    >
+                        Daily series · after your formula drill · finish Mensuration Match to continue.
+                    </div>
+
                     <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                         <h3 class="text-lg font-semibold text-slate-900">Match FIND cards to formulas</h3>
                         <p class="mt-1 text-sm text-slate-600">
                             <span v-if="grade_name">Class {{ grade_name }} · </span>
                             Tick “I’m ready”, then start a board. Tap a formula, then tap the FIND card — the blank fills only when correct.
                         </p>
+                    </div>
+
+                    <div
+                        v-if="all_done && next_url"
+                        class="rounded-xl border border-emerald-200 bg-emerald-50 p-5"
+                    >
+                        <p class="text-sm font-semibold text-emerald-900">All Mensuration boards done for today.</p>
+                        <button
+                            type="button"
+                            class="mt-3 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600"
+                            @click="router.visit(next_url)"
+                        >
+                            {{ next_label }}
+                        </button>
                     </div>
 
                     <div
@@ -164,6 +189,14 @@ function backToBoards() {
                                 <span v-else>Tap formula → tap FIND</span>
                             </p>
                         </div>
+                        <button
+                            v-if="play.status === 'completed' && all_done && next_url"
+                            type="button"
+                            class="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-600"
+                            @click="router.visit(next_url)"
+                        >
+                            {{ next_label }}
+                        </button>
                         <button
                             type="button"
                             class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"

@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Services\BasicsDrillSessionService;
 use App\Services\FormulaDrillSessionService;
 use App\Services\MensurationMatchService;
 use Closure;
@@ -10,12 +9,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\Response;
 
-class EnsureBasicsDrillComplete
+class EnsureMensurationMatchComplete
 {
     public function __construct(
-        private BasicsDrillSessionService $basicsService,
-        private FormulaDrillSessionService $formulaService,
         private MensurationMatchService $mensuration,
+        private FormulaDrillSessionService $formulaService,
     ) {}
 
     public function handle(Request $request, Closure $next): Response
@@ -26,7 +24,7 @@ class EnsureBasicsDrillComplete
             return $next($request);
         }
 
-        if (! Schema::hasTable('basics_drill_sessions')) {
+        if (! Schema::hasTable('mensuration_match_sessions')) {
             return $next($request);
         }
 
@@ -40,23 +38,20 @@ class EnsureBasicsDrillComplete
             return $next($request);
         }
 
+        // Formula gate runs first; if formulas are still open, let that middleware redirect.
         if (! $this->formulaService->gatePassed($student)) {
             return $next($request);
         }
 
-        if (! $this->mensuration->gatePassed($student)) {
+        if ($this->mensuration->gatePassed($student)) {
             return $next($request);
         }
 
-        if ($this->basicsService->gatePassed($student)) {
+        if ($request->routeIs('student.mensuration-match.*')) {
             return $next($request);
         }
 
-        if ($request->routeIs('student.basics-drill.*')) {
-            return $next($request);
-        }
-
-        return redirect()->route('student.basics-drill.show');
+        return redirect()->route('student.mensuration-match.show');
     }
 
     private function isExemptRoute(Request $request): bool
@@ -64,7 +59,6 @@ class EnsureBasicsDrillComplete
         return $request->routeIs(
             'student.formula-drill.*',
             'student.mensuration-match.*',
-            'student.basics-drill.*',
             'student.school-study-plan.*',
             'logout',
             'verification.*',

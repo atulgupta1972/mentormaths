@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Student;
 use App\Http\Controllers\Controller;
 use App\Models\FormulaDrillItem;
 use App\Services\FormulaDrillSessionService;
+use App\Services\MensurationMatchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,7 @@ class FormulaDrillController extends Controller
 {
     public function __construct(
         private FormulaDrillSessionService $sessionService,
+        private MensurationMatchService $mensuration,
     ) {}
 
     public function show(Request $request): Response|RedirectResponse
@@ -38,6 +40,10 @@ class FormulaDrillController extends Controller
         $session = $this->sessionService->getOrCreateTodaysSession($student);
 
         if ($session->isComplete()) {
+            if (! $this->mensuration->gatePassed($student)) {
+                return redirect()->route('student.mensuration-match.show');
+            }
+
             return redirect()->route('dashboard');
         }
 

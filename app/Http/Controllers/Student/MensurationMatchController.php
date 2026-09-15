@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
 use App\Models\MensurationMatchSession;
+use App\Services\BasicsDrillSessionService;
 use App\Services\MensurationMatchService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,17 +15,23 @@ class MensurationMatchController extends Controller
 {
     public function __construct(
         private MensurationMatchService $mensuration,
+        private BasicsDrillSessionService $basics,
     ) {}
 
     public function show(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
         $student = $user?->student;
-        $enrollment = $student?->enrollments()->with('gradeLevel')->latest('id')->first();
+        $enrollment = $student?->currentEnrollment()
+            ?? $student?->enrollments()->with('gradeLevel')->latest('id')->first();
+        $enrollment?->loadMissing('gradeLevel');
 
         if (! $student || ! $enrollment) {
             return redirect()->route('dashboard')->with('error', 'Student enrollment required for Mensuration Match.');
         }
+
+        $boards = $this->mensuration->boardsForEnrollment($enrollment);
+        $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
 
         $settings = $enrollment->gradeLevel
             ? $this->mensuration->settingsForGrade($enrollment->gradeLevel)
@@ -33,8 +40,12 @@ class MensurationMatchController extends Controller
         return Inertia::render('Student/MensurationMatch/Show', [
             'enabled' => (bool) ($settings?->enabled),
             'grade_name' => $enrollment->gradeLevel?->name,
-            'boards' => $this->mensuration->boardsForEnrollment($enrollment),
+            'boards' => $boards,
             'play' => null,
+            'required_today' => $this->mensuration->isRequiredToday($student),
+            'all_done' => $allDone,
+            'next_url' => route($this->nextAfterMensuration($student)),
+            'next_label' => $this->basics->gatePassed($student) ? 'Continue to dashboard' : 'Continue to basics drill',
         ]);
     }
 
@@ -49,7 +60,9 @@ class MensurationMatchController extends Controller
 
         $user = $request->user();
         $student = $user?->student;
-        $enrollment = $student?->enrollments()->with('gradeLevel')->latest('id')->first();
+        $enrollment = $student?->currentEnrollment()
+            ?? $student?->enrollments()->with('gradeLevel')->latest('id')->first();
+        $enrollment?->loadMissing('gradeLevel');
 
         if (! $student || ! $enrollment) {
             return back()->with('error', 'Student enrollment required.');
@@ -70,16 +83,25 @@ class MensurationMatchController extends Controller
         $student = $user?->student;
         abort_unless($student && (int) $session->student_id === (int) $student->id, 403);
 
-        $enrollment = $student->enrollments()->with('gradeLevel')->latest('id')->first();
+        $enrollment = $student->currentEnrollment()
+            ?? $student->enrollments()->with('gradeLevel')->latest('id')->first();
+        $enrollment?->loadMissing('gradeLevel');
         if (! $enrollment) {
             return redirect()->route('student.mensuration-match.show')->with('error', 'Enrollment missing.');
         }
 
+        $boards = $this->mensuration->boardsForEnrollment($enrollment);
+        $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
+
         return Inertia::render('Student/MensurationMatch/Show', [
             'enabled' => true,
             'grade_name' => $enrollment->gradeLevel?->name,
-            'boards' => $this->mensuration->boardsForEnrollment($enrollment),
+            'boards' => $boards,
             'play' => $this->mensuration->playPayload($session, $enrollment),
+            'required_today' => $this->mensuration->isRequiredToday($student),
+            'all_done' => $allDone,
+            'next_url' => route($this->nextAfterMensuration($student)),
+            'next_label' => $this->basics->gatePassed($student) ? 'Continue to dashboard' : 'Continue to basics drill',
         ]);
     }
 
@@ -104,5 +126,14 @@ class MensurationMatchController extends Controller
             'success' => $result['correct'] ? 'Correct — '.$result['explanation'] : null,
             'mensuration_flash' => $result,
         ]);
+    }
+
+    private function nextAfterMensuration($student): string
+    {
+        if (! $this->basics->gatePassed($student)) {
+            return 'student.basics-drill.show';
+        }
+
+        return 'dashboard';
     }
 }

@@ -9,6 +9,7 @@ use App\Models\MensurationMatchSetting;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
 class MensurationMatchService
@@ -16,9 +17,75 @@ class MensurationMatchService
     /** @var array<string, list<int>>|null */
     private ?array $itemClassOverrideCache = null;
 
+    public function __construct(
+        private FormulaDrillSessionService $formulaService,
+    ) {}
+
     public function catalog(): array
     {
         return array_values(config('mensuration_match.items', []));
+    }
+
+    /**
+     * Daily series gate: after the 5 formulas, before basics — when class has match enabled.
+     */
+    public function gatePassed(Student $student): bool
+    {
+        if (! Schema::hasTable('mensuration_match_sessions')) {
+            return true;
+        }
+
+        if (! $this->formulaService->drillsUnlocked($student)) {
+            return true;
+        }
+
+        $enrollment = $student->currentEnrollment();
+        if (! $enrollment) {
+            $enrollment = $student->enrollments()->with('gradeLevel')->latest('id')->first();
+        } else {
+            $enrollment->loadMissing('gradeLevel');
+        }
+
+        if (! $enrollment?->gradeLevel) {
+            return true;
+        }
+
+        $boards = $this->boardsForEnrollment($enrollment);
+        if ($boards === []) {
+            return true;
+        }
+
+        foreach ($boards as $board) {
+            if (empty($board['completed_today'])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public function isRequiredToday(Student $student): bool
+    {
+        if (! Schema::hasTable('mensuration_match_sessions')) {
+            return false;
+        }
+
+        if (! $this->formulaService->drillsUnlocked($student)) {
+            return false;
+        }
+
+        $enrollment = $student->currentEnrollment();
+        if (! $enrollment) {
+            $enrollment = $student->enrollments()->with('gradeLevel')->latest('id')->first();
+        } else {
+            $enrollment->loadMissing('gradeLevel');
+        }
+
+        if (! $enrollment?->gradeLevel) {
+            return false;
+        }
+
+        return $this->boardsForEnrollment($enrollment) !== [];
     }
 
     public function classNumber(GradeLevel $grade): int

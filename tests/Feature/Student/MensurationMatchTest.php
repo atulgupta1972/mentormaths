@@ -9,7 +9,11 @@ use App\Models\GradeLevel;
 use App\Models\MensurationMatchSession;
 use App\Models\MensurationMatchSetting;
 use App\Models\Student;
+use App\Models\StudentChapterCoverage;
 use App\Models\StudentEnrollment;
+use App\Models\Subject;
+use App\Models\SyllabusChapter;
+use App\Models\SyllabusVersion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -54,6 +58,30 @@ class MensurationMatchTest extends TestCase
             'grade_level_id' => $grade->id,
             'school_name' => 'Demo',
             'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        $yesterday = now()->subDay();
+        $user->forceFill(['created_at' => $yesterday])->save();
+        $student->forceFill(['created_at' => $yesterday])->save();
+
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
+        $syllabus = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+            'status' => SyllabusVersion::STATUS_PUBLISHED,
+        ]);
+        $chapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabus->id,
+            'chapter_number' => 1,
+            'name' => 'Integers',
+            'sort_order' => 1,
+        ]);
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => StudentChapterCoverage::STATUS_STUDIED,
         ]);
 
         FormulaDrillSession::query()->create([
@@ -322,5 +350,33 @@ class MensurationMatchTest extends TestCase
         $this->assertTrue(collect($pa)->contains(fn ($i) => $i['key'] === 'perim_circle'));
         $this->assertFalse(collect($pa)->contains(fn ($i) => $i['key'] === 'area_circle'));
         $this->assertSame([], $service->itemsForBoard('volume', $classNumber));
+    }
+
+    public function test_dashboard_redirects_to_mensuration_after_formula_when_enabled(): void
+    {
+        ['user' => $user, 'student' => $student, 'grade' => $grade] = $this->seedStudent();
+
+        MensurationMatchSetting::query()->create([
+            'grade_level_id' => $grade->id,
+            'enabled' => true,
+            'perimeter_area_enabled' => true,
+            'volume_enabled' => false,
+        ]);
+
+        app(\App\Services\MensurationMatchService::class)->saveItemClasses([
+            'perim_circle' => [7],
+            'perim_rectangle' => [7],
+            'perim_triangle' => [7],
+        ]);
+
+        $this->assertFalse(app(\App\Services\MensurationMatchService::class)->gatePassed($student));
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertRedirect(route('student.mensuration-match.show'));
+
+        $this->actingAs($user)
+            ->get(route('student.basics-drill.show'))
+            ->assertRedirect(route('student.mensuration-match.show'));
     }
 }
