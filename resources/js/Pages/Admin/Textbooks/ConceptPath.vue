@@ -621,8 +621,19 @@ const removeDiagram = (cardIndex) => {
         window.alert('Nothing saved on the server yet.');
         return;
     }
-    if (!window.confirm('Remove this figure from the concept card?')) {
+    if (!window.confirm('Remove this figure from the concept card? It will stay removed after Save (unless you pick a PDF page again).')) {
         return;
+    }
+
+    // Optimistic local clear so Save draft cannot revive a stale figure_page.
+    if (cards.value[cardIndex]) {
+        cards.value[cardIndex] = {
+            ...cards.value[cardIndex],
+            diagram_path: null,
+            diagram_url: null,
+            figure_page: null,
+            figure_cleared: true,
+        };
     }
 
     diagramUploading.value = { ...diagramUploading.value, [cardIndex]: true };

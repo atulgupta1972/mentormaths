@@ -373,15 +373,25 @@ PROMPT;
         ];
         $normalized = $this->parse(json_encode($payload, JSON_THROW_ON_ERROR));
 
-        // Keep uploaded figures that the browser/client still references.
+        // Keep uploaded figures / cleared-figure intent that the browser still references.
         foreach ($normalized['cards'] as $index => $card) {
-            $incomingPath = $cards[$index]['diagram_path'] ?? null;
+            $incoming = is_array($cards[$index] ?? null) ? $cards[$index] : [];
+            $incomingPath = $incoming['diagram_path'] ?? null;
             if (is_string($incomingPath) && $this->isOwnedDiagramPath($chapter, $incomingPath)) {
                 $normalized['cards'][$index]['diagram_path'] = $incomingPath;
             }
-            $incomingPage = $this->normalizeFigurePage($cards[$index]['figure_page'] ?? $card['figure_page'] ?? null);
-            if ($incomingPage !== null) {
-                $normalized['cards'][$index]['figure_page'] = $incomingPage;
+
+            // Explicit null from client means "no PDF figure" — do not revive from parse defaults.
+            if (array_key_exists('figure_page', $incoming)) {
+                $normalized['cards'][$index]['figure_page'] = $this->normalizeFigurePage($incoming['figure_page']);
+            }
+
+            if (! empty($incoming['figure_cleared'])) {
+                $normalized['cards'][$index]['figure_cleared'] = true;
+                $normalized['cards'][$index]['figure_page'] = null;
+                unset($normalized['cards'][$index]['diagram_path']);
+            } elseif (array_key_exists('figure_cleared', $incoming) && ! $incoming['figure_cleared']) {
+                unset($normalized['cards'][$index]['figure_cleared']);
             }
         }
 
@@ -403,7 +413,7 @@ PROMPT;
 
         $chapter = $chapter->fresh();
 
-        // Like MCQ zip pages: auto-attach the textbook PDF page named by figure_page.
+        // Auto-attach only for cards that still want a figure_page and were not cleared by the user.
         try {
             $this->autoAttachFigurePages($chapter);
         } catch (\Throwable $e) {
@@ -485,6 +495,7 @@ PROMPT;
         );
 
         $cards[$cardIndex]['diagram_path'] = $path;
+        unset($cards[$cardIndex]['figure_cleared']);
         $items['cards'] = $cards;
 
         $chapter->update(['concept_path_items' => $items]);
@@ -518,6 +529,7 @@ PROMPT;
 
         $cards[$cardIndex]['diagram_path'] = $destination;
         $cards[$cardIndex]['figure_page'] = $pageNumber;
+        unset($cards[$cardIndex]['figure_cleared']);
         $items['cards'] = $cards;
         $chapter->update(['concept_path_items' => $items]);
 
@@ -543,6 +555,9 @@ PROMPT;
                 continue;
             }
             if (filled($card['diagram_path'] ?? null)) {
+                continue;
+            }
+            if (! empty($card['figure_cleared'])) {
                 continue;
             }
             $page = $this->normalizeFigurePage($card['figure_page'] ?? null);
@@ -680,6 +695,9 @@ PROMPT;
 
         $this->deleteDiagramPath($cards[$cardIndex]['diagram_path'] ?? null);
         unset($cards[$cardIndex]['diagram_path'], $cards[$cardIndex]['diagram_url']);
+        // Stop saveDraft / auto-attach from pulling the same PDF page back.
+        $cards[$cardIndex]['figure_page'] = null;
+        $cards[$cardIndex]['figure_cleared'] = true;
         $items['cards'] = $cards;
 
         $chapter->update(['concept_path_items' => $items]);

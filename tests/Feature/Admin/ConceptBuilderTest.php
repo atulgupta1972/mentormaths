@@ -322,6 +322,11 @@ class ConceptBuilderTest extends TestCase
         $this->assertNotEmpty($path);
         Storage::disk('public')->assertExists($path);
 
+        // Simulate a card that also had an auto figure_page (common after AI JSON).
+        $items = $upload->concept_path_items;
+        $items['cards'][0]['figure_page'] = 2;
+        $upload->update(['concept_path_items' => $items]);
+
         $this->actingAs($admin)
             ->from(route('admin.textbooks.concept-path', $upload))
             ->post(route('admin.textbooks.concept-path.remove-diagram', $upload), [
@@ -331,6 +336,27 @@ class ConceptBuilderTest extends TestCase
 
         $upload->refresh();
         $this->assertArrayNotHasKey('diagram_path', $upload->concept_path_items['cards'][0]);
+        $this->assertNull($upload->concept_path_items['cards'][0]['figure_page'] ?? null);
+        $this->assertTrue((bool) ($upload->concept_path_items['cards'][0]['figure_cleared'] ?? false));
+
+        Storage::disk('public')->put('textbook-chapter-pages/'.$upload->id.'/page-2.png', 'fake-png-bytes');
+
+        $cards = $upload->concept_path_items['cards'];
+        $this->actingAs($admin)
+            ->from(route('admin.textbooks.concept-path', $upload))
+            ->post(route('admin.textbooks.concept-path.save', $upload), [
+                'chapter_title' => 'Integers',
+                'payload_json' => json_encode([
+                    'chapter_title' => 'Integers',
+                    'cards' => $cards,
+                ], JSON_THROW_ON_ERROR),
+            ])
+            ->assertRedirect(route('admin.textbooks.concept-path', $upload));
+
+        $upload->refresh();
+        $this->assertArrayNotHasKey('diagram_path', $upload->concept_path_items['cards'][0]);
+        $this->assertNull($upload->concept_path_items['cards'][0]['figure_page'] ?? null);
+        $this->assertTrue((bool) ($upload->concept_path_items['cards'][0]['figure_cleared'] ?? false));
     }
 
     public function test_concept_path_attaches_pdf_page_from_figure_page(): void
