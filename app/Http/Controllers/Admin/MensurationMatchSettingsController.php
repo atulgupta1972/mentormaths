@@ -23,7 +23,6 @@ class MensurationMatchSettingsController extends Controller
         $sheet = $this->mensuration->adminFormulaSheet();
 
         return Inertia::render('Admin/MensurationMatch/Index', [
-            'rows' => $this->mensuration->adminRows(),
             'sheet' => $sheet,
             'catalog_summary' => [
                 'perimeter' => collect($this->mensuration->catalog())->where('measure', 'perimeter')->count(),

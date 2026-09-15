@@ -299,7 +299,8 @@ class MensurationMatchTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/MensurationMatch/Index')
                 ->has('sheet.rows')
-                ->has('sheet.class_numbers'));
+                ->has('sheet.class_numbers')
+                ->has('sheet.class_columns'));
 
         $this->actingAs($admin)
             ->from(route('admin.mensuration-match.index'))

@@ -108,11 +108,43 @@ class MensurationMatchService
     /**
      * Formula sheet for admin: measure / figure / question / answer / class ticks.
      *
-     * @return array{class_numbers: list<int>, rows: list<array<string, mixed>>}
+     * @return array{class_numbers: list<int>, class_columns: list<array<string, mixed>>, rows: list<array<string, mixed>>}
      */
     public function adminFormulaSheet(): array
     {
-        $classNumbers = $this->availableClassNumbers();
+        $grades = GradeLevel::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get();
+
+        $classColumns = $grades
+            ->map(function (GradeLevel $grade) {
+                $classNumber = $this->classNumber($grade);
+                if ($classNumber <= 0) {
+                    return null;
+                }
+
+                $available = collect($this->catalog())
+                    ->filter(fn (array $item) => $this->itemAppliesToClass($item, $classNumber))
+                    ->groupBy('board')
+                    ->map->count();
+
+                $settings = $this->settingsForGrade($grade);
+
+                return [
+                    'class_number' => $classNumber,
+                    'grade_level_id' => $grade->id,
+                    'grade_name' => $grade->name,
+                    'enabled' => (bool) $settings->enabled,
+                    'perimeter_area_count' => (int) ($available['perimeter_area'] ?? 0),
+                    'volume_count' => (int) ($available['volume'] ?? 0),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+
+        $classNumbers = collect($classColumns)->pluck('class_number')->unique()->sort()->values()->all();
         if ($classNumbers === []) {
             $classNumbers = [4, 5, 6, 7, 8, 9];
         }
@@ -148,6 +180,7 @@ class MensurationMatchService
 
         return [
             'class_numbers' => $classNumbers,
+            'class_columns' => $classColumns,
             'rows' => $rows,
         ];
     }
@@ -180,6 +213,36 @@ class MensurationMatchService
         }
 
         $this->itemClassOverrideCache = null;
+        $this->syncOfferSettingsFromTicks();
+    }
+
+    /**
+     * Offer / board flags follow formula ticks so the bottom class table is not needed.
+     */
+    public function syncOfferSettingsFromTicks(): void
+    {
+        GradeLevel::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get()
+            ->each(function (GradeLevel $grade) {
+                $classNumber = $this->classNumber($grade);
+                if ($classNumber <= 0) {
+                    return;
+                }
+
+                $items = collect($this->catalog())
+                    ->filter(fn (array $item) => $this->itemAppliesToClass($item, $classNumber));
+
+                $hasPa = $items->contains(fn (array $item) => ($item['board'] ?? '') === 'perimeter_area');
+                $hasVol = $items->contains(fn (array $item) => ($item['board'] ?? '') === 'volume');
+
+                $this->upsertForGrade($grade, [
+                    'enabled' => $hasPa || $hasVol,
+                    'perimeter_area_enabled' => $hasPa,
+                    'volume_enabled' => $hasVol,
+                ]);
+            });
     }
 
     public function settingsForGrade(GradeLevel $grade): MensurationMatchSetting

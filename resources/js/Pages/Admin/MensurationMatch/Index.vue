@@ -7,14 +7,13 @@ const props = defineProps({
     rows: { type: Array, default: () => [] },
     sheet: {
         type: Object,
-        default: () => ({ class_numbers: [], rows: [] }),
+        default: () => ({ class_numbers: [], class_columns: [], rows: [] }),
     },
     catalog_summary: { type: Object, default: () => ({}) },
 });
 
 const page = usePage();
 const flash = computed(() => page.props.flash || {});
-const savingId = ref(null);
 const savingSheet = ref(false);
 const measureFilter = ref('all');
 
@@ -31,7 +30,12 @@ watch(
     { immediate: true, deep: true },
 );
 
-const classNumbers = computed(() => props.sheet?.class_numbers || []);
+const classColumns = computed(() => props.sheet?.class_columns || []);
+const classNumbers = computed(() =>
+    classColumns.value.length
+        ? classColumns.value.map((c) => c.class_number)
+        : (props.sheet?.class_numbers || []),
+);
 
 const filteredSheetRows = computed(() => {
     if (measureFilter.value === 'all') {
@@ -39,24 +43,6 @@ const filteredSheetRows = computed(() => {
     }
     return sheetRows.value.filter((row) => row.measure === measureFilter.value);
 });
-
-function saveOffer(row) {
-    savingId.value = row.grade_level_id;
-    router.put(
-        route('admin.mensuration-match.update', row.grade_level_id),
-        {
-            enabled: !!row.enabled,
-            perimeter_area_enabled: !!row.perimeter_area_enabled,
-            volume_enabled: !!row.volume_enabled,
-        },
-        {
-            preserveScroll: true,
-            onFinish: () => {
-                savingId.value = null;
-            },
-        },
-    );
-}
 
 function saveSheet() {
     savingSheet.value = true;
@@ -82,11 +68,18 @@ function toggleClass(row, classNumber) {
     row.classes[key] = !row.classes[key];
 }
 
-function tryUrl(row, board) {
+function tryUrl(gradeLevelId, board) {
     return route('admin.mensuration-match.preview', {
-        gradeLevel: row.grade_level_id,
+        gradeLevel: gradeLevelId,
         board,
     });
+}
+
+/** Count ticked formulas for a class in the current (unsaved) sheet. */
+function liveCount(classNumber, board) {
+    return sheetRows.value.filter(
+        (row) => row.board === board && !!row.classes[String(classNumber)],
+    ).length;
 }
 
 function measureBadge(measure) {
@@ -114,13 +107,13 @@ function measureBadge(measure) {
                     {{ flash.error }}
                 </p>
 
-                <!-- Formula sheet -->
                 <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h3 class="text-lg font-semibold text-slate-900">Formula sheet</h3>
                             <p class="mt-1 text-sm text-slate-600">
-                                Tick which classes see each formula. Filter by perimeter / area / volume.
+                                Tick which classes see each formula. Use <span class="font-medium text-slate-800">Try</span> above a class to check that class’s board.
+                                Saving ticks also turns the class offer on/off automatically.
                                 Catalog: {{ catalog_summary.perimeter || 0 }} perimeter ·
                                 {{ catalog_summary.area || 0 }} area ·
                                 {{ catalog_summary.volume || 0 }} volume.
@@ -169,19 +162,59 @@ function measureBadge(measure) {
                                 <th class="px-3 py-3">Answer</th>
                                 <th
                                     class="px-2 py-2 text-center"
-                                    :colspan="classNumbers.length"
+                                    :colspan="classColumns.length || classNumbers.length"
                                 >
                                     Class applicable
+                                </th>
+                            </tr>
+                            <tr class="border-t border-slate-200 bg-slate-50/90">
+                                <th colspan="4" class="px-3 py-2 text-right text-[10px] font-semibold normal-case tracking-normal text-slate-500">
+                                    Try board
+                                </th>
+                                <th
+                                    v-for="col in classColumns"
+                                    :key="`try-${col.grade_level_id}`"
+                                    class="px-1 py-2 text-center align-bottom"
+                                >
+                                    <div class="flex min-w-[4.5rem] flex-col items-center gap-1">
+                                        <Link
+                                            v-if="liveCount(col.class_number, 'perimeter_area') > 0"
+                                            :href="tryUrl(col.grade_level_id, 'perimeter_area')"
+                                            class="rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-indigo-800 hover:bg-indigo-100"
+                                        >
+                                            Try P&amp;A
+                                        </Link>
+                                        <span
+                                            v-else
+                                            class="px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-slate-300"
+                                        >
+                                            —
+                                        </span>
+                                        <Link
+                                            v-if="liveCount(col.class_number, 'volume') > 0"
+                                            :href="tryUrl(col.grade_level_id, 'volume')"
+                                            class="rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-violet-800 hover:bg-violet-100"
+                                        >
+                                            Try vol
+                                        </Link>
+                                        <span
+                                            v-else
+                                            class="px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-slate-300"
+                                        >
+                                            —
+                                        </span>
+                                    </div>
                                 </th>
                             </tr>
                             <tr class="border-t border-slate-200 bg-slate-50/80">
                                 <th colspan="4" />
                                 <th
-                                    v-for="n in classNumbers"
-                                    :key="n"
+                                    v-for="col in classColumns"
+                                    :key="`cls-${col.grade_level_id}`"
                                     class="px-2 py-2 text-center font-semibold text-slate-700"
+                                    :title="col.grade_name"
                                 >
-                                    {{ n }}
+                                    {{ col.class_number }}
                                 </th>
                             </tr>
                         </thead>
@@ -209,15 +242,15 @@ function measureBadge(measure) {
                                     {{ row.answer }}
                                 </td>
                                 <td
-                                    v-for="n in classNumbers"
-                                    :key="`${row.key}-${n}`"
+                                    v-for="col in classColumns"
+                                    :key="`${row.key}-${col.class_number}`"
                                     class="px-2 py-3 text-center"
                                 >
                                     <input
                                         type="checkbox"
                                         class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        :checked="!!row.classes[String(n)]"
-                                        @change="toggleClass(row, n)"
+                                        :checked="!!row.classes[String(col.class_number)]"
+                                        @change="toggleClass(row, col.class_number)"
                                     />
                                 </td>
                             </tr>
@@ -239,79 +272,6 @@ function measureBadge(measure) {
                     >
                         {{ savingSheet ? 'Saving…' : 'Save formula ticks' }}
                     </button>
-                </div>
-
-                <!-- Offer / try -->
-                <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <h3 class="text-lg font-semibold text-slate-900">Offer to class &amp; try</h3>
-                    <p class="mt-1 text-sm text-slate-600">
-                        Turn on Mensuration Match for a class, choose boards, then Try to check the student view.
-                    </p>
-                </div>
-
-                <div class="overflow-x-auto overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <table class="min-w-full divide-y divide-slate-200 text-sm">
-                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            <tr>
-                                <th class="px-4 py-3">Class</th>
-                                <th class="px-4 py-3 text-center">Offer match</th>
-                                <th class="px-4 py-3 text-center">Perimeter &amp; area</th>
-                                <th class="px-4 py-3 text-center">Volume</th>
-                                <th class="px-4 py-3">Try board</th>
-                                <th class="px-4 py-3 text-right">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            <tr v-for="row in rows" :key="row.grade_level_id" class="hover:bg-slate-50/80">
-                                <td class="px-4 py-3 font-medium text-slate-900">{{ row.grade_name }}</td>
-                                <td class="px-4 py-3 text-center">
-                                    <input
-                                        v-model="row.enabled"
-                                        type="checkbox"
-                                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        @change="saveOffer(row)"
-                                    />
-                                </td>
-                                <td class="px-4 py-3 text-center">
-                                    <input
-                                        v-model="row.perimeter_area_enabled"
-                                        type="checkbox"
-                                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        @change="saveOffer(row)"
-                                    />
-                                </td>
-                                <td class="px-4 py-3 text-center">
-                                    <input
-                                        v-model="row.volume_enabled"
-                                        type="checkbox"
-                                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        @change="saveOffer(row)"
-                                    />
-                                </td>
-                                <td class="px-4 py-3">
-                                    <div class="flex flex-wrap gap-1.5">
-                                        <Link
-                                            v-if="row.perimeter_area_item_count > 0"
-                                            :href="tryUrl(row, 'perimeter_area')"
-                                            class="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-800 hover:bg-indigo-100"
-                                        >
-                                            Try P&amp;A
-                                        </Link>
-                                        <Link
-                                            v-if="row.volume_item_count > 0"
-                                            :href="tryUrl(row, 'volume')"
-                                            class="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-800 hover:bg-violet-100"
-                                        >
-                                            Try volume
-                                        </Link>
-                                    </div>
-                                </td>
-                                <td class="px-4 py-3 text-right text-xs text-slate-500">
-                                    {{ savingId === row.grade_level_id ? 'Saving…' : '' }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
                 </div>
             </div>
         </div>
