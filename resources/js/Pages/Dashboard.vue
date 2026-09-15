@@ -402,6 +402,13 @@ const formatHelpDate = (value) => {
                                 >
                                     Nightly drills
                                 </Link>
+                                <Link
+                                    v-if="hasRoute('admin.mensuration-match.index')"
+                                    :href="safeRoute('admin.mensuration-match.index')"
+                                    class="rounded-md bg-white/15 px-2.5 py-1 font-medium hover:bg-white/25"
+                                >
+                                    Mensuration
+                                </Link>
                             </div>
                         </div>
                     </div>

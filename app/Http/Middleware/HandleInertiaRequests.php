@@ -79,6 +79,7 @@ class HandleInertiaRequests extends Middleware
                 'conversion_gemini_preview' => fn () => $request->session()->get('conversion_gemini_preview'),
                 'conversion_gemini_json' => fn () => $request->session()->get('conversion_gemini_json'),
                 'concept_path_preview' => fn () => $request->session()->get('concept_path_preview'),
+                'mensuration_flash' => fn () => $request->session()->get('mensuration_flash'),
             ],
             'contentUploaderGuideUrl' => '/guides/content-uploader-guide.html',
             'appTimezone' => config('app.timezone'),

@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AccessCodeController;
 use App\Http\Controllers\Admin\CoachingClassController;
 use App\Http\Controllers\Admin\AcademicYearController;
 use App\Http\Controllers\Admin\BasicsDrillSettingsController;
+use App\Http\Controllers\Admin\MensurationMatchSettingsController;
 use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ChapterHeadController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
@@ -46,6 +47,7 @@ use App\Http\Controllers\Mentor\ClassHubController as MentorClassHubController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
 use App\Http\Controllers\Student\BasicsDrillController;
+use App\Http\Controllers\Student\MensurationMatchController;
 use App\Http\Controllers\Student\ClassCoverageController;
 use App\Http\Controllers\Student\ExamPlanController as StudentExamPlanController;
 use App\Http\Controllers\Student\FormulaDrillController;
@@ -414,6 +416,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/basics-drill', [BasicsDrillSettingsController::class, 'index'])->name('basics-drill.index');
     Route::put('/basics-drill/globals', [BasicsDrillSettingsController::class, 'updateGlobals'])->name('basics-drill.globals.update');
     Route::put('/basics-drill/classes/{gradeLevel}', [BasicsDrillSettingsController::class, 'update'])->name('basics-drill.update');
+    Route::get('/mensuration-match', [MensurationMatchSettingsController::class, 'index'])->name('mensuration-match.index');
+    Route::put('/mensuration-match/classes/{gradeLevel}', [MensurationMatchSettingsController::class, 'update'])->name('mensuration-match.update');
     Route::get('/formula-bank/classes/{grade}', [FormulaBankController::class, 'classShow'])->name('formula-bank.classes.show');
     Route::get('/formula-bank/topics/{topic}', [FormulaBankController::class, 'topicShow'])->name('formula-bank.topics.show');
     Route::post('/formula-bank/topics/{topic}/prompt', [FormulaBankController::class, 'topicPrompt'])->name('formula-bank.topics.prompt');
@@ -493,6 +497,11 @@ Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->nam
     Route::post('/basics-drill/items/{item}/answer', [BasicsDrillController::class, 'submitAnswer'])->name('basics-drill.answer');
     Route::post('/basics-drill/items/{item}/mcq-answer', [BasicsDrillController::class, 'submitMcqAnswer'])->name('basics-drill.mcq-answer');
     Route::post('/basics-drill/items/{item}/acknowledge', [BasicsDrillController::class, 'acknowledge'])->name('basics-drill.acknowledge');
+
+    Route::get('/mensuration-match', [MensurationMatchController::class, 'show'])->name('mensuration-match.show');
+    Route::post('/mensuration-match/start', [MensurationMatchController::class, 'start'])->name('mensuration-match.start');
+    Route::get('/mensuration-match/sessions/{session}', [MensurationMatchController::class, 'play'])->name('mensuration-match.play');
+    Route::post('/mensuration-match/sessions/{session}/answer', [MensurationMatchController::class, 'answer'])->name('mensuration-match.answer');
 });
 
 Route::middleware(['auth', 'verified', 'formula.drill', 'basics.drill'])->prefix('student')->name('student.')->group(function () {

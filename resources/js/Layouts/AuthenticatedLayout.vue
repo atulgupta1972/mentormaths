@@ -73,6 +73,7 @@ const teachingGroup = computed(() => ({
         || route().current('admin.concept-builder.*')
         || route().current('admin.formula-bank.*')
         || route().current('admin.basics-drill.*')
+        || route().current('admin.mensuration-match.*')
         || route().current('admin.content-tasks.*')
         || route().current('admin.content-rate-cards.*')
         || route().current('admin.student-work-report.*')
@@ -178,6 +179,12 @@ const teachingGroup = computed(() => ({
             active: route().current('admin.basics-drill.*'),
             show: isAdmin.value,
         },
+        {
+            label: 'Mensuration match',
+            href: safeRoute('admin.mensuration-match.index', undefined, '/admin/mensuration-match'),
+            active: route().current('admin.mensuration-match.*'),
+            show: isAdmin.value && route().has('admin.mensuration-match.index'),
+        },
     ],
 }));
 
@@ -273,7 +280,9 @@ const accountsGroup = computed(() => ({
 
 const resourcesGroup = computed(() => ({
     label: 'Resources',
-    active: route().current('student.resources.*') || route().current('student.written-assignments.*'),
+    active: route().current('student.resources.*')
+        || route().current('student.written-assignments.*')
+        || route().current('student.mensuration-match.*'),
     items: [
         {
             label: 'Formulas',
@@ -282,6 +291,14 @@ const resourcesGroup = computed(() => ({
                 : '/student/resources/formulas',
             active: route().current('student.resources.formulas.*'),
             show: isStudent.value && route().has('student.resources.formulas.index'),
+        },
+        {
+            label: 'Mensuration match',
+            href: route().has('student.mensuration-match.show')
+                ? route('student.mensuration-match.show')
+                : '/student/mensuration-match',
+            active: route().current('student.mensuration-match.*'),
+            show: isStudent.value && route().has('student.mensuration-match.show'),
         },
         {
             label: 'Written tests',

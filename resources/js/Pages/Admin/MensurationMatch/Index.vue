@@ -1,0 +1,111 @@
+<script setup>
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { Head, router, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+
+const props = defineProps({
+    rows: { type: Array, default: () => [] },
+    catalog_summary: { type: Object, default: () => ({}) },
+});
+
+const page = usePage();
+const flash = computed(() => page.props.flash || {});
+const savingId = ref(null);
+
+function saveRow(row) {
+    savingId.value = row.grade_level_id;
+    router.put(
+        route('admin.mensuration-match.update', row.grade_level_id),
+        {
+            enabled: row.enabled,
+            perimeter_area_enabled: row.perimeter_area_enabled,
+            volume_enabled: row.volume_enabled,
+        },
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                savingId.value = null;
+            },
+        },
+    );
+}
+</script>
+
+<template>
+    <Head title="Mensuration Match — Classes" />
+
+    <AuthenticatedLayout>
+        <template #header>
+            <h2 class="text-xl font-semibold leading-tight text-gray-800">Mensuration Match</h2>
+        </template>
+
+        <div class="py-8">
+            <div class="mx-auto max-w-4xl space-y-6 px-4 sm:px-6 lg:px-8">
+                <p v-if="flash.success" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    {{ flash.success }}
+                </p>
+
+                <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <h3 class="text-lg font-semibold text-slate-900">Class mapping</h3>
+                    <p class="mt-1 text-sm text-slate-600">
+                        Tick a class to offer Mensuration Match, then choose which boards students can start.
+                        Catalog: {{ catalog_summary.perimeter_area || 0 }} perimeter/area cards ·
+                        {{ catalog_summary.volume || 0 }} volume cards.
+                    </p>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="px-4 py-3">Class</th>
+                                <th class="px-4 py-3 text-center">Offer match</th>
+                                <th class="px-4 py-3 text-center">Perimeter &amp; area</th>
+                                <th class="px-4 py-3 text-center">Volume</th>
+                                <th class="px-4 py-3"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <tr v-for="row in rows" :key="row.grade_level_id" class="hover:bg-slate-50/80">
+                                <td class="px-4 py-3 font-medium text-slate-900">{{ row.grade_name }}</td>
+                                <td class="px-4 py-3 text-center">
+                                    <input
+                                        v-model="row.enabled"
+                                        type="checkbox"
+                                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    <input
+                                        v-model="row.perimeter_area_enabled"
+                                        type="checkbox"
+                                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                        :disabled="!row.enabled"
+                                    />
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    <input
+                                        v-model="row.volume_enabled"
+                                        type="checkbox"
+                                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                        :disabled="!row.enabled"
+                                    />
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <button
+                                        type="button"
+                                        class="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                                        :disabled="savingId === row.grade_level_id"
+                                        @click="saveRow(row)"
+                                    >
+                                        {{ savingId === row.grade_level_id ? 'Saving…' : 'Save' }}
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </AuthenticatedLayout>
+</template>
