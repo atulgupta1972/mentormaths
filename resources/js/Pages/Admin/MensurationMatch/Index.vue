@@ -38,7 +38,6 @@ function tryUrl(row, board) {
     return route('admin.mensuration-match.preview', {
         gradeLevel: row.grade_level_id,
         board,
-        restart: 1,
     });
 }
 </script>

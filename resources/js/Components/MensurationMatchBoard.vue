@@ -14,6 +14,7 @@ const emit = defineEmits(['answer']);
 
 const selectedFormula = ref(null);
 const lastTap = ref(null);
+const lastItemKey = ref(null);
 
 const matchedFormulas = computed(() => {
     const set = new Set();
@@ -66,11 +67,23 @@ function pickFormula(formula) {
     if (matchedFormulas.value.has(formula)) return;
     selectedFormula.value = formula;
     lastTap.value = { type: 'formula', value: formula };
+
+    // Allow either order: tap FIND/story first, then formula.
+    const pendingItem = (props.play.items || []).find(
+        (item) => !item.matched && lastItemKey.value === item.key,
+    );
+    if (pendingItem) {
+        emit('answer', {
+            item_key: pendingItem.key,
+            formula,
+        });
+    }
 }
 
 function pickItem(item) {
     if (props.play.status === 'completed' || props.submitting) return;
     if (item.matched) return;
+    lastItemKey.value = item.key;
     lastTap.value = { type: 'item', value: item.key };
     if (!selectedFormula.value) return;
 
@@ -82,6 +95,7 @@ function pickItem(item) {
 
 function clearSelection() {
     selectedFormula.value = null;
+    lastItemKey.value = null;
 }
 
 defineExpose({ clearSelection });

@@ -218,6 +218,16 @@ class MensurationMatchTest extends TestCase
                 'board' => 'perimeter_area',
                 'restart' => 1,
             ]))
+            ->assertRedirect(route('admin.mensuration-match.preview', [
+                'gradeLevel' => $grade->id,
+                'board' => 'perimeter_area',
+            ]));
+
+        $this->actingAs($admin)
+            ->get(route('admin.mensuration-match.preview', [
+                'gradeLevel' => $grade->id,
+                'board' => 'perimeter_area',
+            ]))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/MensurationMatch/Play')
@@ -239,7 +249,26 @@ class MensurationMatchTest extends TestCase
                 'item_key' => $itemKey,
                 'formula' => $expected,
             ])
-            ->assertRedirect();
+            ->assertRedirect(route('admin.mensuration-match.preview', [
+                'gradeLevel' => $grade->id,
+                'board' => 'perimeter_area',
+            ]));
+
+        $this->actingAs($admin)
+            ->get(route('admin.mensuration-match.preview', [
+                'gradeLevel' => $grade->id,
+                'board' => 'perimeter_area',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('play.score', fn ($score) => str_starts_with((string) $score, '1/'))
+                ->where('play.items', function ($items) use ($itemKey, $expected) {
+                    $match = collect($items)->firstWhere('key', $itemKey);
+
+                    return $match
+                        && ($match['matched'] ?? false) === true
+                        && ($match['matched_formula'] ?? null) === $expected;
+                }));
 
         $this->assertDatabaseCount('mensuration_match_sessions', 0);
     }

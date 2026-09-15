@@ -49,11 +49,29 @@ class MensurationMatchSettingsController extends Controller
             'restart' => ['sometimes', 'boolean'],
         ]);
 
+        // restart=1 must only apply once, then redirect to a clean URL.
+        // Otherwise every answer `back()` would wipe the board.
+        if ($request->boolean('restart')) {
+            try {
+                $fresh = $this->mensuration->startAdminPreview($gradeLevel, $validated['board']);
+            } catch (\InvalidArgumentException $e) {
+                return redirect()
+                    ->route('admin.mensuration-match.index')
+                    ->with('error', $e->getMessage());
+            }
+
+            $request->session()->put(self::PREVIEW_SESSION_KEY, $fresh);
+
+            return redirect()->route('admin.mensuration-match.preview', [
+                'gradeLevel' => $gradeLevel->id,
+                'board' => $validated['board'],
+            ]);
+        }
+
         $existing = $request->session()->get(self::PREVIEW_SESSION_KEY);
         $reuse = is_array($existing)
             && (int) ($existing['grade_level_id'] ?? 0) === (int) $gradeLevel->id
-            && ($existing['board'] ?? null) === $validated['board']
-            && ! ($validated['restart'] ?? false);
+            && ($existing['board'] ?? null) === $validated['board'];
 
         try {
             $state = $reuse
