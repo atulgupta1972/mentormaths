@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
@@ -29,6 +29,14 @@ function saveRow(row) {
         },
     );
 }
+
+function tryUrl(row, board) {
+    return route('admin.mensuration-match.preview', {
+        gradeLevel: row.grade_level_id,
+        board,
+        restart: 1,
+    });
+}
 </script>
 
 <template>
@@ -40,21 +48,25 @@ function saveRow(row) {
         </template>
 
         <div class="py-8">
-            <div class="mx-auto max-w-4xl space-y-6 px-4 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-5xl space-y-6 px-4 sm:px-6 lg:px-8">
                 <p v-if="flash.success" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                     {{ flash.success }}
+                </p>
+                <p v-if="flash.error" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                    {{ flash.error }}
                 </p>
 
                 <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h3 class="text-lg font-semibold text-slate-900">Class mapping</h3>
                     <p class="mt-1 text-sm text-slate-600">
                         Tick a class to offer Mensuration Match, then choose which boards students can start.
+                        Use <span class="font-medium text-slate-800">Try</span> to run the board yourself (not saved to any student).
                         Catalog: {{ catalog_summary.perimeter_area || 0 }} perimeter/area cards ·
                         {{ catalog_summary.volume || 0 }} volume cards.
                     </p>
                 </div>
 
-                <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div class="overflow-x-auto overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                     <table class="min-w-full divide-y divide-slate-200 text-sm">
                         <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <tr>
@@ -62,6 +74,7 @@ function saveRow(row) {
                                 <th class="px-4 py-3 text-center">Offer match</th>
                                 <th class="px-4 py-3 text-center">Perimeter &amp; area</th>
                                 <th class="px-4 py-3 text-center">Volume</th>
+                                <th class="px-4 py-3">Try board</th>
                                 <th class="px-4 py-3"></th>
                             </tr>
                         </thead>
@@ -90,6 +103,30 @@ function saveRow(row) {
                                         class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                                         :disabled="!row.enabled"
                                     />
+                                </td>
+                                <td class="px-4 py-3">
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <Link
+                                            v-if="row.perimeter_area_item_count > 0"
+                                            :href="tryUrl(row, 'perimeter_area')"
+                                            class="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-800 hover:bg-indigo-100"
+                                        >
+                                            Try P&amp;A
+                                        </Link>
+                                        <Link
+                                            v-if="row.volume_item_count > 0"
+                                            :href="tryUrl(row, 'volume')"
+                                            class="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-800 hover:bg-violet-100"
+                                        >
+                                            Try volume
+                                        </Link>
+                                        <span
+                                            v-if="!row.perimeter_area_item_count && !row.volume_item_count"
+                                            class="text-xs text-slate-400"
+                                        >
+                                            —
+                                        </span>
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     <button

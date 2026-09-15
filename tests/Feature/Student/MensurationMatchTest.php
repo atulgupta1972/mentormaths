@@ -189,4 +189,41 @@ class MensurationMatchTest extends TestCase
             ])
             ->assertRedirect(route('student.mensuration-match.show'));
     }
+
+    public function test_admin_can_try_board_without_student_session(): void
+    {
+        ['grade' => $grade] = $this->seedStudent();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.mensuration-match.preview', [
+                'gradeLevel' => $grade->id,
+                'board' => 'perimeter_area',
+                'restart' => 1,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/MensurationMatch/Play')
+                ->where('grade_name', 'Class 7')
+                ->has('play.items')
+                ->has('play.formulas'));
+
+        $this->assertDatabaseCount('mensuration_match_sessions', 0);
+
+        $itemKey = 'perim_circle';
+        $expected = collect(config('mensuration_match.items'))->firstWhere('key', $itemKey)['formula'];
+
+        $this->actingAs($admin)
+            ->from(route('admin.mensuration-match.preview', [
+                'gradeLevel' => $grade->id,
+                'board' => 'perimeter_area',
+            ]))
+            ->post(route('admin.mensuration-match.preview-answer'), [
+                'item_key' => $itemKey,
+                'formula' => $expected,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseCount('mensuration_match_sessions', 0);
+    }
 }

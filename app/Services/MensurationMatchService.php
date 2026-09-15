@@ -305,10 +305,144 @@ class MensurationMatchService
         $grade = $enrollment->gradeLevel;
         $classNumber = $grade ? $this->classNumber($grade) : 0;
         $items = $this->itemsForBoard($session->board, $classNumber);
-        $answered = is_array($session->answers) ? $session->answers : [];
 
-        $playItems = collect($items)->map(function (array $item) use ($answered) {
-            $answer = $answered[$item['key']] ?? null;
+        return $this->buildPlayPayload(
+            board: $session->board,
+            items: $items,
+            answers: is_array($session->answers) ? $session->answers : [],
+            status: $session->status,
+            correctCount: (int) $session->correct_count,
+            totalItems: (int) $session->total_items,
+            sessionId: $session->id,
+        );
+    }
+
+    /**
+     * Session-backed preview so admins can try a class board without a student record.
+     *
+     * @return array<string, mixed>
+     */
+    public function startAdminPreview(GradeLevel $grade, string $board): array
+    {
+        if (! in_array($board, ['perimeter_area', 'volume'], true)) {
+            throw new InvalidArgumentException('Unknown board.');
+        }
+
+        $items = $this->itemsForBoard($board, $this->classNumber($grade));
+        if ($items === []) {
+            throw new InvalidArgumentException('No mensuration items for this class on this board.');
+        }
+
+        return [
+            'grade_level_id' => $grade->id,
+            'grade_name' => $grade->name,
+            'board' => $board,
+            'status' => MensurationMatchSession::STATUS_IN_PROGRESS,
+            'total_items' => count($items),
+            'correct_count' => 0,
+            'item_keys' => array_column($items, 'key'),
+            'answers' => [],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array{state: array<string, mixed>, result: array<string, mixed>}
+     */
+    public function submitAdminPreviewAnswer(array $state, string $itemKey, string $formula): array
+    {
+        if (($state['status'] ?? '') === MensurationMatchSession::STATUS_COMPLETED) {
+            throw new InvalidArgumentException('This preview board is already finished. Start again to retry.');
+        }
+
+        $keys = $state['item_keys'] ?? [];
+        if (! in_array($itemKey, $keys, true)) {
+            throw new InvalidArgumentException('That item is not in this board.');
+        }
+
+        $answers = is_array($state['answers'] ?? null) ? $state['answers'] : [];
+        if (isset($answers[$itemKey])) {
+            throw new InvalidArgumentException('Already answered.');
+        }
+
+        $catalog = collect($this->catalog())->keyBy('key');
+        $item = $catalog->get($itemKey);
+        if (! $item) {
+            throw new InvalidArgumentException('Unknown item.');
+        }
+
+        $correctFormula = (string) ($item['formula'] ?? '');
+        $isCorrect = $this->normalizeFormula($formula) === $this->normalizeFormula($correctFormula);
+
+        if ($isCorrect) {
+            $answers[$itemKey] = [
+                'formula' => $formula,
+                'correct' => true,
+                'expected' => $correctFormula,
+                'at' => now()->toIso8601String(),
+            ];
+        }
+
+        $correctCount = collect($answers)->where('correct', true)->count();
+        $done = $correctCount >= count($keys);
+
+        $state['answers'] = $answers;
+        $state['correct_count'] = $correctCount;
+        $state['status'] = $done ? MensurationMatchSession::STATUS_COMPLETED : MensurationMatchSession::STATUS_IN_PROGRESS;
+
+        return [
+            'state' => $state,
+            'result' => [
+                'correct' => $isCorrect,
+                'expected' => $correctFormula,
+                'explanation' => $this->flashLine($item),
+                'done' => $done,
+                'correct_count' => $correctCount,
+                'total' => count($keys),
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    public function adminPlayPayload(array $state): array
+    {
+        $grade = GradeLevel::query()->find($state['grade_level_id'] ?? null);
+        $classNumber = $grade ? $this->classNumber($grade) : 0;
+        $board = (string) ($state['board'] ?? 'perimeter_area');
+        $items = $this->itemsForBoard($board, $classNumber);
+
+        return $this->buildPlayPayload(
+            board: $board,
+            items: $items,
+            answers: is_array($state['answers'] ?? null) ? $state['answers'] : [],
+            status: (string) ($state['status'] ?? MensurationMatchSession::STATUS_IN_PROGRESS),
+            correctCount: (int) ($state['correct_count'] ?? 0),
+            totalItems: (int) ($state['total_items'] ?? count($items)),
+            sessionId: null,
+            gradeName: $grade?->name ?? ($state['grade_name'] ?? null),
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @param  array<string, mixed>  $answers
+     * @return array<string, mixed>
+     */
+    private function buildPlayPayload(
+        string $board,
+        array $items,
+        array $answers,
+        string $status,
+        int $correctCount,
+        int $totalItems,
+        ?int $sessionId = null,
+        ?string $gradeName = null,
+    ): array {
+        $playItems = collect($items)->map(function (array $item) use ($answers) {
+            $answer = $answers[$item['key']] ?? null;
             $matched = is_array($answer) && ! empty($answer['correct']);
 
             return [
@@ -323,11 +457,12 @@ class MensurationMatchService
         })->values()->all();
 
         return [
-            'session_id' => $session->id,
-            'board' => $session->board,
-            'board_title' => $session->board === 'volume' ? 'Volume' : 'Perimeter & Area',
-            'status' => $session->status,
-            'score' => (int) $session->correct_count.'/'.(int) $session->total_items,
+            'session_id' => $sessionId,
+            'board' => $board,
+            'board_title' => $board === 'volume' ? 'Volume' : 'Perimeter & Area',
+            'grade_name' => $gradeName,
+            'status' => $status,
+            'score' => $correctCount.'/'.$totalItems,
             'formulas' => $this->formulaBankForItems($items),
             'items' => $playItems,
         ];
