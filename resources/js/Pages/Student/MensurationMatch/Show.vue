@@ -1,8 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import MensurationDiagram from '@/Components/MensurationDiagram.vue';
+import MensurationMatchBoard from '@/Components/MensurationMatchBoard.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     enabled: { type: Boolean, default: false },
@@ -16,17 +16,9 @@ const flash = computed(() => page.props.flash || {});
 const feedback = computed(() => flash.value.mensuration_flash || null);
 
 const readyByBoard = ref({});
-const selectedFormula = ref(null);
-const lastTap = ref(null);
 const starting = ref(null);
-
-watch(
-    () => props.play?.session_id,
-    () => {
-        selectedFormula.value = null;
-        lastTap.value = null;
-    },
-);
+const submitting = ref(false);
+const boardRef = ref(null);
 
 function startBoard(boardKey) {
     starting.value = boardKey;
@@ -46,31 +38,17 @@ function openSession(sessionId) {
     router.get(route('student.mensuration-match.play', sessionId));
 }
 
-function pickFormula(formula) {
-    if (!props.play || props.play.status === 'completed') return;
-    selectedFormula.value = formula;
-    lastTap.value = { type: 'formula', value: formula };
-}
-
-function pickItem(item) {
-    if (!props.play || props.play.status === 'completed') return;
-    if (item.matched) return;
-    lastTap.value = { type: 'item', value: item.key };
-
-    if (!selectedFormula.value) {
-        return;
-    }
-
+function onAnswer({ item_key, formula }) {
+    if (!props.play?.session_id) return;
+    submitting.value = true;
     router.post(
         route('student.mensuration-match.answer', props.play.session_id),
-        {
-            item_key: item.key,
-            formula: selectedFormula.value,
-        },
+        { item_key, formula },
         {
             preserveScroll: true,
             onFinish: () => {
-                selectedFormula.value = null;
+                submitting.value = false;
+                boardRef.value?.clearSelection?.();
             },
         },
     );
@@ -101,16 +79,16 @@ function backToBoards() {
                     v-if="feedback && !feedback.correct"
                     class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
                 >
-                    Not quite — try another formula. {{ feedback.explanation }}
+                    Not quite — that formula does not fill this FIND. Try another.
                 </p>
 
                 <!-- Board picker / tick to start -->
                 <div v-if="!play" class="space-y-5">
                     <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <h3 class="text-lg font-semibold text-slate-900">Match stories to formulas</h3>
+                        <h3 class="text-lg font-semibold text-slate-900">Match FIND cards to formulas</h3>
                         <p class="mt-1 text-sm text-slate-600">
                             <span v-if="grade_name">Class {{ grade_name }} · </span>
-                            Tick “I’m ready”, then start a board. Tap a formula, then tap the matching story.
+                            Tick “I’m ready”, then start a board. Tap a formula, then tap the FIND card — the blank fills only when correct.
                         </p>
                     </div>
 
@@ -130,7 +108,7 @@ function backToBoards() {
                             <h4 class="text-base font-semibold text-slate-900">{{ board.title || board.label }}</h4>
                             <p class="mt-1 text-sm text-slate-600">{{ board.subtitle }}</p>
                             <p class="mt-2 text-xs text-slate-500">
-                                {{ board.item_count }} stories
+                                {{ board.item_count }} FIND cards
                                 <span v-if="board.completed_today" class="ml-1 font-medium text-emerald-700">· done today</span>
                             </p>
 
@@ -183,7 +161,7 @@ function backToBoards() {
                             <p class="text-sm text-slate-600">
                                 Score {{ play.score }} ·
                                 <span v-if="play.status === 'completed'" class="font-medium text-emerald-700">Board complete</span>
-                                <span v-else>Tap formula → tap story</span>
+                                <span v-else>Tap formula → tap FIND</span>
                             </p>
                         </div>
                         <button
@@ -195,60 +173,12 @@ function backToBoards() {
                         </button>
                     </div>
 
-                    <div class="grid gap-4 lg:grid-cols-5">
-                        <div class="space-y-3 lg:col-span-2">
-                            <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Formulas</h4>
-                            <button
-                                v-for="formula in play.formulas"
-                                :key="formula"
-                                type="button"
-                                class="block w-full rounded-xl border px-4 py-3 text-left font-mono text-sm font-semibold transition"
-                                :class="
-                                    selectedFormula === formula
-                                        ? 'border-indigo-500 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-200'
-                                        : 'border-slate-200 bg-white text-slate-800 hover:border-indigo-300'
-                                "
-                                :disabled="play.status === 'completed'"
-                                @click="pickFormula(formula)"
-                            >
-                                {{ formula }}
-                            </button>
-                        </div>
-
-                        <div class="space-y-3 lg:col-span-3">
-                            <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Stories</h4>
-                            <button
-                                v-for="item in play.items"
-                                :key="item.key"
-                                type="button"
-                                class="w-full rounded-xl border p-4 text-left transition"
-                                :class="
-                                    item.matched
-                                        ? 'border-emerald-300 bg-emerald-50 opacity-80'
-                                        : lastTap?.type === 'item' && lastTap.value === item.key
-                                          ? 'border-amber-400 bg-amber-50'
-                                          : 'border-slate-200 bg-white hover:border-indigo-300'
-                                "
-                                :disabled="item.matched || play.status === 'completed'"
-                                @click="pickItem(item)"
-                            >
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
-                                    <div class="shrink-0 rounded-lg bg-slate-50 p-1">
-                                        <MensurationDiagram :diagram="item.diagram" />
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-medium text-slate-900">{{ item.story }}</p>
-                                        <p v-if="item.matched" class="mt-2 font-mono text-xs font-semibold text-emerald-700">
-                                            ✓ {{ item.matched_formula }}
-                                        </p>
-                                        <p v-else-if="item.hint" class="mt-2 text-xs capitalize text-slate-500">
-                                            Looking for: {{ item.hint }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
+                    <MensurationMatchBoard
+                        ref="boardRef"
+                        :play="play"
+                        :submitting="submitting"
+                        @answer="onAnswer"
+                    />
                 </div>
             </div>
         </div>

@@ -17,9 +17,9 @@ function saveRow(row) {
     router.put(
         route('admin.mensuration-match.update', row.grade_level_id),
         {
-            enabled: row.enabled,
-            perimeter_area_enabled: row.perimeter_area_enabled,
-            volume_enabled: row.volume_enabled,
+            enabled: !!row.enabled,
+            perimeter_area_enabled: !!row.perimeter_area_enabled,
+            volume_enabled: !!row.volume_enabled,
         },
         {
             preserveScroll: true,
@@ -28,6 +28,10 @@ function saveRow(row) {
             },
         },
     );
+}
+
+function onToggle(row) {
+    saveRow(row);
 }
 
 function tryUrl(row, board) {
@@ -59,8 +63,9 @@ function tryUrl(row, board) {
                 <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h3 class="text-lg font-semibold text-slate-900">Class mapping</h3>
                     <p class="mt-1 text-sm text-slate-600">
-                        Tick a class to offer Mensuration Match, then choose which boards students can start.
-                        Use <span class="font-medium text-slate-800">Try</span> to run the board yourself (not saved to any student).
+                        Tick <span class="font-medium text-slate-800">Offer match</span> to show Mensuration Match to that class.
+                        Board ticks (Perimeter &amp; area / Volume) can be set anytime — changes save as soon as you click.
+                        Use <span class="font-medium text-slate-800">Try</span> to run a board yourself (not saved to any student).
                         Catalog: {{ catalog_summary.perimeter_area || 0 }} perimeter/area cards ·
                         {{ catalog_summary.volume || 0 }} volume cards.
                     </p>
@@ -75,7 +80,7 @@ function tryUrl(row, board) {
                                 <th class="px-4 py-3 text-center">Perimeter &amp; area</th>
                                 <th class="px-4 py-3 text-center">Volume</th>
                                 <th class="px-4 py-3">Try board</th>
-                                <th class="px-4 py-3"></th>
+                                <th class="px-4 py-3 text-right">Status</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
@@ -86,6 +91,7 @@ function tryUrl(row, board) {
                                         v-model="row.enabled"
                                         type="checkbox"
                                         class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                        @change="onToggle(row)"
                                     />
                                 </td>
                                 <td class="px-4 py-3 text-center">
@@ -93,7 +99,7 @@ function tryUrl(row, board) {
                                         v-model="row.perimeter_area_enabled"
                                         type="checkbox"
                                         class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        :disabled="!row.enabled"
+                                        @change="onToggle(row)"
                                     />
                                 </td>
                                 <td class="px-4 py-3 text-center">
@@ -101,7 +107,7 @@ function tryUrl(row, board) {
                                         v-model="row.volume_enabled"
                                         type="checkbox"
                                         class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        :disabled="!row.enabled"
+                                        @change="onToggle(row)"
                                     />
                                 </td>
                                 <td class="px-4 py-3">
@@ -128,15 +134,8 @@ function tryUrl(row, board) {
                                         </span>
                                     </div>
                                 </td>
-                                <td class="px-4 py-3 text-right">
-                                    <button
-                                        type="button"
-                                        class="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                                        :disabled="savingId === row.grade_level_id"
-                                        @click="saveRow(row)"
-                                    >
-                                        {{ savingId === row.grade_level_id ? 'Saving…' : 'Save' }}
-                                    </button>
+                                <td class="px-4 py-3 text-right text-xs text-slate-500">
+                                    {{ savingId === row.grade_level_id ? 'Saving…' : '' }}
                                 </td>
                             </tr>
                         </tbody>

@@ -79,6 +79,23 @@ class MensurationMatchTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page->component('Admin/MensurationMatch/Index'));
 
+        // Board ticks save even when Offer match is still off.
+        $this->actingAs($admin)
+            ->from(route('admin.mensuration-match.index'))
+            ->put(route('admin.mensuration-match.update', $grade), [
+                'enabled' => false,
+                'perimeter_area_enabled' => false,
+                'volume_enabled' => false,
+            ])
+            ->assertRedirect(route('admin.mensuration-match.index'));
+
+        $this->assertDatabaseHas('mensuration_match_settings', [
+            'grade_level_id' => $grade->id,
+            'enabled' => 0,
+            'perimeter_area_enabled' => 0,
+            'volume_enabled' => 0,
+        ]);
+
         $this->actingAs($admin)
             ->from(route('admin.mensuration-match.index'))
             ->put(route('admin.mensuration-match.update', $grade), [
