@@ -418,6 +418,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::put('/basics-drill/classes/{gradeLevel}', [BasicsDrillSettingsController::class, 'update'])->name('basics-drill.update');
     Route::get('/mensuration-match', [MensurationMatchSettingsController::class, 'index'])->name('mensuration-match.index');
     Route::put('/mensuration-match/classes/{gradeLevel}', [MensurationMatchSettingsController::class, 'update'])->name('mensuration-match.update');
+    Route::put('/mensuration-match/sheet', [MensurationMatchSettingsController::class, 'updateSheet'])->name('mensuration-match.sheet');
     Route::get('/mensuration-match/preview/{gradeLevel}', [MensurationMatchSettingsController::class, 'preview'])->name('mensuration-match.preview');
     Route::post('/mensuration-match/preview/answer', [MensurationMatchSettingsController::class, 'previewAnswer'])->name('mensuration-match.preview-answer');
     Route::get('/formula-bank/classes/{grade}', [FormulaBankController::class, 'classShow'])->name('formula-bank.classes.show');

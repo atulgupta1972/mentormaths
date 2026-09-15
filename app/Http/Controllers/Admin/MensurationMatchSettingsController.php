@@ -20,11 +20,15 @@ class MensurationMatchSettingsController extends Controller
 
     public function index(): Response
     {
+        $sheet = $this->mensuration->adminFormulaSheet();
+
         return Inertia::render('Admin/MensurationMatch/Index', [
             'rows' => $this->mensuration->adminRows(),
+            'sheet' => $sheet,
             'catalog_summary' => [
-                'perimeter_area' => collect($this->mensuration->catalog())->where('board', 'perimeter_area')->count(),
-                'volume' => collect($this->mensuration->catalog())->where('board', 'volume')->count(),
+                'perimeter' => collect($this->mensuration->catalog())->where('measure', 'perimeter')->count(),
+                'area' => collect($this->mensuration->catalog())->where('measure', 'area')->count(),
+                'volume' => collect($this->mensuration->catalog())->where('measure', 'volume')->count(),
             ],
         ]);
     }
@@ -39,7 +43,26 @@ class MensurationMatchSettingsController extends Controller
 
         $this->mensuration->upsertForGrade($gradeLevel, $validated);
 
-        return back()->with('success', $gradeLevel->name.' mensuration match settings saved.');
+        return back()->with('success', $gradeLevel->name.' offer settings saved.');
+    }
+
+    public function updateSheet(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'items' => ['required', 'array'],
+            'items.*.key' => ['required', 'string', 'max:64'],
+            'items.*.classes' => ['present', 'array'],
+            'items.*.classes.*' => ['integer', 'min:1', 'max:12'],
+        ]);
+
+        $byKey = [];
+        foreach ($validated['items'] as $row) {
+            $byKey[$row['key']] = $row['classes'];
+        }
+
+        $this->mensuration->saveItemClasses($byKey);
+
+        return back()->with('success', 'Mensuration formula class ticks saved.');
     }
 
     public function preview(Request $request, GradeLevel $gradeLevel): Response|RedirectResponse
@@ -49,8 +72,6 @@ class MensurationMatchSettingsController extends Controller
             'restart' => ['sometimes', 'boolean'],
         ]);
 
-        // restart=1 must only apply once, then redirect to a clean URL.
-        // Otherwise every answer `back()` would wipe the board.
         if ($request->boolean('restart')) {
             try {
                 $fresh = $this->mensuration->startAdminPreview($gradeLevel, $validated['board']);

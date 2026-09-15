@@ -286,4 +286,40 @@ class MensurationMatchTest extends TestCase
         $this->assertNotSame($findFormulas, $bank);
         $this->assertEqualsCanonicalizing($findFormulas, $bank);
     }
+
+    public function test_admin_can_save_formula_sheet_class_ticks(): void
+    {
+        ['grade' => $grade] = $this->seedStudent();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $classNumber = 7;
+
+        $this->actingAs($admin)
+            ->get(route('admin.mensuration-match.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/MensurationMatch/Index')
+                ->has('sheet.rows')
+                ->has('sheet.class_numbers'));
+
+        $this->actingAs($admin)
+            ->from(route('admin.mensuration-match.index'))
+            ->put(route('admin.mensuration-match.sheet'), [
+                'items' => [
+                    ['key' => 'perim_circle', 'classes' => [$classNumber]],
+                    ['key' => 'area_circle', 'classes' => []],
+                    ['key' => 'vol_cube', 'classes' => [8, 9]],
+                ],
+            ])
+            ->assertRedirect(route('admin.mensuration-match.index'));
+
+        $this->assertDatabaseHas('mensuration_match_item_classes', [
+            'item_key' => 'perim_circle',
+        ]);
+
+        $service = app(\App\Services\MensurationMatchService::class);
+        $pa = $service->itemsForBoard('perimeter_area', $classNumber);
+        $this->assertTrue(collect($pa)->contains(fn ($i) => $i['key'] === 'perim_circle'));
+        $this->assertFalse(collect($pa)->contains(fn ($i) => $i['key'] === 'area_circle'));
+        $this->assertSame([], $service->itemsForBoard('volume', $classNumber));
+    }
 }

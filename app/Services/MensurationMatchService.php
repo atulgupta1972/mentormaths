@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\GradeLevel;
+use App\Models\MensurationMatchItemClass;
 use App\Models\MensurationMatchSession;
 use App\Models\MensurationMatchSetting;
 use App\Models\Student;
@@ -12,6 +13,9 @@ use InvalidArgumentException;
 
 class MensurationMatchService
 {
+    /** @var array<string, list<int>>|null */
+    private ?array $itemClassOverrideCache = null;
+
     public function catalog(): array
     {
         return array_values(config('mensuration_match.items', []));
@@ -28,16 +32,154 @@ class MensurationMatchService
 
     public function itemAppliesToClass(array $item, int $classNumber): bool
     {
+        $classes = $this->resolvedClassesForItem($item);
+
+        return in_array($classNumber, $classes, true);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function resolvedClassesForItem(array $item): array
+    {
+        $key = (string) ($item['key'] ?? '');
+        $overrides = $this->itemClassOverrides();
+
+        if ($key !== '' && array_key_exists($key, $overrides)) {
+            return array_values(array_map('intval', $overrides[$key]));
+        }
+
+        return $this->defaultClassesFromConfig($item);
+    }
+
+    /**
+     * @return array<string, list<int>>
+     */
+    public function itemClassOverrides(): array
+    {
+        if ($this->itemClassOverrideCache !== null) {
+            return $this->itemClassOverrideCache;
+        }
+
+        $this->itemClassOverrideCache = MensurationMatchItemClass::query()
+            ->get()
+            ->mapWithKeys(fn (MensurationMatchItemClass $row) => [
+                $row->item_key => array_values(array_map('intval', $row->classes ?? [])),
+            ])
+            ->all();
+
+        return $this->itemClassOverrideCache;
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function defaultClassesFromConfig(array $item): array
+    {
         $classes = $item['classes'] ?? 'all';
         if ($classes === 'all' || $classes === ['all']) {
-            return true;
+            return $this->availableClassNumbers();
         }
 
         if (! is_array($classes)) {
-            return true;
+            return $this->availableClassNumbers();
         }
 
-        return in_array($classNumber, array_map('intval', $classes), true);
+        return array_values(array_map('intval', $classes));
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function availableClassNumbers(): array
+    {
+        return GradeLevel::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get()
+            ->map(fn (GradeLevel $grade) => $this->classNumber($grade))
+            ->filter(fn (int $n) => $n > 0)
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Formula sheet for admin: measure / figure / question / answer / class ticks.
+     *
+     * @return array{class_numbers: list<int>, rows: list<array<string, mixed>>}
+     */
+    public function adminFormulaSheet(): array
+    {
+        $classNumbers = $this->availableClassNumbers();
+        if ($classNumbers === []) {
+            $classNumbers = [4, 5, 6, 7, 8, 9];
+        }
+
+        $measureOrder = ['perimeter' => 1, 'area' => 2, 'volume' => 3];
+
+        $rows = collect($this->catalog())
+            ->sortBy(fn (array $item) => sprintf(
+                '%d-%s-%s',
+                $measureOrder[$item['measure'] ?? ''] ?? 9,
+                $item['figure'] ?? '',
+                $item['key'] ?? '',
+            ))
+            ->values()
+            ->map(function (array $item) use ($classNumbers) {
+                $classes = $this->resolvedClassesForItem($item);
+                $ticks = [];
+                foreach ($classNumbers as $n) {
+                    $ticks[(string) $n] = in_array($n, $classes, true);
+                }
+
+                return [
+                    'key' => $item['key'],
+                    'measure' => $item['measure'] ?? '',
+                    'figure' => $item['figure'] ?? '',
+                    'question' => $item['story'] ?? '',
+                    'answer' => $item['formula'] ?? '',
+                    'board' => $item['board'] ?? 'perimeter_area',
+                    'classes' => $ticks,
+                ];
+            })
+            ->all();
+
+        return [
+            'class_numbers' => $classNumbers,
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * @param  array<string, list<int>|array<int, mixed>>  $itemsByKey
+     */
+    public function saveItemClasses(array $itemsByKey): void
+    {
+        $validKeys = collect($this->catalog())->pluck('key')->all();
+
+        foreach ($itemsByKey as $key => $classes) {
+            $key = (string) $key;
+            if (! in_array($key, $validKeys, true)) {
+                continue;
+            }
+
+            $normalized = collect(is_array($classes) ? $classes : [])
+                ->map(fn ($n) => (int) $n)
+                ->filter(fn (int $n) => $n > 0)
+                ->unique()
+                ->sort()
+                ->values()
+                ->all();
+
+            MensurationMatchItemClass::query()->updateOrCreate(
+                ['item_key' => $key],
+                ['classes' => $normalized],
+            );
+        }
+
+        $this->itemClassOverrideCache = null;
     }
 
     public function settingsForGrade(GradeLevel $grade): MensurationMatchSetting
