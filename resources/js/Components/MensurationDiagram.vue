@@ -60,14 +60,44 @@ defineProps({
         </template>
 
         <!-- Cylinder -->
-        <template v-else-if="diagram === 'cylinder_fill'">
-            <ellipse cx="110" cy="40" rx="40" ry="14" fill="#cffafe" stroke="#0e7490" stroke-width="2" />
-            <path d="M70 40 V120 A40 14 0 0 0 150 120 V40" fill="#a5f3fc" stroke="#0e7490" stroke-width="2" />
-            <ellipse cx="110" cy="120" rx="40" ry="14" fill="#67e8f9" stroke="#0e7490" stroke-width="2" />
+        <template v-else-if="diagram === 'cylinder_fill' || diagram === 'cylinder_lateral' || diagram === 'cylinder_total'">
+            <ellipse cx="110" cy="40" rx="40" ry="14" :fill="diagram === 'cylinder_total' ? '#67e8f9' : '#cffafe'" stroke="#0e7490" stroke-width="2" />
+            <path
+                d="M70 40 V120 A40 14 0 0 0 150 120 V40"
+                :fill="diagram === 'cylinder_lateral' || diagram === 'cylinder_total' ? '#22d3ee' : '#a5f3fc'"
+                :opacity="diagram === 'cylinder_fill' ? 1 : 0.55"
+                stroke="#0e7490"
+                stroke-width="2"
+            />
+            <ellipse cx="110" cy="120" rx="40" ry="14" :fill="diagram === 'cylinder_total' ? '#67e8f9' : '#a5f3fc'" stroke="#0e7490" stroke-width="2" />
             <line x1="150" y1="40" x2="150" y2="120" stroke="#ea580c" stroke-width="2" stroke-dasharray="3 2" />
             <text x="156" y="84" font-size="13" fill="#ea580c" font-weight="700">h</text>
             <line x1="110" y1="120" x2="150" y2="120" stroke="#0e7490" stroke-width="2" />
             <text x="122" y="136" font-size="13" fill="#0e7490" font-weight="700">r</text>
+            <text v-if="diagram === 'cylinder_lateral'" x="110" y="18" text-anchor="middle" font-size="11" fill="#0e7490" font-weight="700">curved side</text>
+            <text v-if="diagram === 'cylinder_total'" x="110" y="18" text-anchor="middle" font-size="11" fill="#0e7490" font-weight="700">side + ends</text>
+        </template>
+
+        <!-- Cone -->
+        <template v-else-if="diagram === 'cone_lateral' || diagram === 'cone_total'">
+            <polygon points="110,28 50,125 170,125" fill="#fef3c7" stroke="#92400e" stroke-width="2" />
+            <ellipse
+                cx="110"
+                cy="125"
+                rx="60"
+                ry="14"
+                :fill="diagram === 'cone_total' ? '#fbbf24' : '#fde68a'"
+                stroke="#92400e"
+                stroke-width="2"
+            />
+            <line x1="110" y1="28" x2="110" y2="125" stroke="#ea580c" stroke-width="2" stroke-dasharray="3 2" />
+            <text x="116" y="80" font-size="12" fill="#ea580c" font-weight="700">h</text>
+            <line x1="110" y1="28" x2="170" y2="125" stroke="#b45309" stroke-width="2" />
+            <text x="148" y="70" font-size="13" fill="#b45309" font-weight="700">l</text>
+            <line x1="110" y1="125" x2="170" y2="125" stroke="#92400e" stroke-width="2" />
+            <text x="132" y="142" font-size="13" fill="#92400e" font-weight="700">r</text>
+            <text v-if="diagram === 'cone_lateral'" x="110" y="18" text-anchor="middle" font-size="11" fill="#92400e" font-weight="700">curved surface</text>
+            <text v-if="diagram === 'cone_total'" x="110" y="18" text-anchor="middle" font-size="11" fill="#92400e" font-weight="700">curved + base</text>
         </template>
 
         <!-- Cube -->
