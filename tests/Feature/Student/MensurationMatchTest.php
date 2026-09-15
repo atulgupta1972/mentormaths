@@ -272,4 +272,18 @@ class MensurationMatchTest extends TestCase
 
         $this->assertDatabaseCount('mensuration_match_sessions', 0);
     }
+
+    public function test_formula_bank_order_differs_from_find_order(): void
+    {
+        $service = app(\App\Services\MensurationMatchService::class);
+        $items = $service->itemsForBoard('perimeter_area', 7);
+        $this->assertGreaterThan(2, count($items));
+
+        $findFormulas = array_column($items, 'formula');
+        $bank = $service->formulaBankForItems($items, 'test-seed-class-7');
+
+        $this->assertSame(count($findFormulas), count($bank));
+        $this->assertNotSame($findFormulas, $bank);
+        $this->assertEqualsCanonicalizing($findFormulas, $bank);
+    }
 }

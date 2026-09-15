@@ -183,11 +183,65 @@ class MensurationMatchService
     /**
      * @return list<string>
      */
-    public function formulaBankForItems(array $items): array
+    public function formulaBankForItems(array $items, ?string $seed = null): array
     {
-        $formulas = collect($items)->pluck('formula')->unique()->values()->all();
-        // Keep order stable; bank = exact set of answers for this board.
-        return $formulas;
+        $natural = collect($items)->pluck('formula')->unique()->values()->all();
+        if (count($natural) <= 1) {
+            return $natural;
+        }
+
+        // Stable shuffle for this play session — never mirrors FIND card order.
+        $list = $this->seededShuffle($natural, ($seed ?? 'mensuration').'|formulas');
+        if ($list === $natural) {
+            $first = array_shift($list);
+            $list[] = $first;
+        }
+
+        return array_values($list);
+    }
+
+    /**
+     * @param  list<string>  $keys
+     * @return list<string>
+     */
+    public function shuffleItemKeys(array $keys, ?string $seed = null): array
+    {
+        if (count($keys) <= 1) {
+            return array_values($keys);
+        }
+
+        $natural = array_values($keys);
+        $list = $this->seededShuffle($natural, ($seed ?? 'mensuration').'|items');
+        if ($list === $natural) {
+            $first = array_shift($list);
+            $list[] = $first;
+        }
+
+        return array_values($list);
+    }
+
+    /**
+     * @template T
+     * @param  list<T>  $items
+     * @return list<T>
+     */
+    private function seededShuffle(array $items, string $seed): array
+    {
+        $list = array_values($items);
+        $n = count($list);
+        if ($n <= 1) {
+            return $list;
+        }
+
+        // crc32 can be negative on 32-bit; keep seed in unsigned range for mt_srand.
+        $state = (int) sprintf('%u', crc32($seed));
+        for ($i = $n - 1; $i > 0; $i--) {
+            $state = ($state * 1103515245 + 12345) & 0x7fffffff;
+            $j = $state % ($i + 1);
+            [$list[$i], $list[$j]] = [$list[$j], $list[$i]];
+        }
+
+        return $list;
     }
 
     public function startBoard(Student $student, StudentEnrollment $enrollment, string $board): MensurationMatchSession
@@ -220,6 +274,9 @@ class MensurationMatchService
         }
 
         $today = Carbon::today()->toDateString();
+        $shuffleSeed = $student->id.'|'.$today.'|'.$board;
+        $itemKeys = $this->shuffleItemKeys(array_column($items, 'key'), $shuffleSeed);
+
         $session = MensurationMatchSession::query()->firstOrNew([
             'student_id' => $student->id,
             'drill_date' => $today,
@@ -230,12 +287,17 @@ class MensurationMatchService
             return $session;
         }
 
+        // Keep an in-progress board's order; only set shuffled keys on fresh start.
+        if ($session->exists && is_array($session->item_keys) && $session->item_keys !== []) {
+            $itemKeys = $session->item_keys;
+        }
+
         $session->fill([
             'student_enrollment_id' => $enrollment->id,
             'status' => MensurationMatchSession::STATUS_IN_PROGRESS,
-            'total_items' => count($items),
+            'total_items' => count($itemKeys),
             'correct_count' => 0,
-            'item_keys' => array_column($items, 'key'),
+            'item_keys' => $itemKeys,
             'answers' => [],
             'started_at' => now(),
             'completed_at' => null,
@@ -304,7 +366,12 @@ class MensurationMatchService
     {
         $grade = $enrollment->gradeLevel;
         $classNumber = $grade ? $this->classNumber($grade) : 0;
-        $items = $this->itemsForBoard($session->board, $classNumber);
+        $items = $this->itemsOrderedByKeys(
+            $session->board,
+            $classNumber,
+            is_array($session->item_keys) ? $session->item_keys : [],
+        );
+        $seed = $session->student_id.'|'.$session->drill_date?->toDateString().'|'.$session->board;
 
         return $this->buildPlayPayload(
             board: $session->board,
@@ -314,6 +381,7 @@ class MensurationMatchService
             correctCount: (int) $session->correct_count,
             totalItems: (int) $session->total_items,
             sessionId: $session->id,
+            formulaSeed: $seed,
         );
     }
 
@@ -333,14 +401,18 @@ class MensurationMatchService
             throw new InvalidArgumentException('No mensuration items for this class on this board.');
         }
 
+        $seed = 'admin|'.$grade->id.'|'.$board.'|'.now()->format('Y-m-d-H-i-s');
+        $itemKeys = $this->shuffleItemKeys(array_column($items, 'key'), $seed);
+
         return [
             'grade_level_id' => $grade->id,
             'grade_name' => $grade->name,
             'board' => $board,
             'status' => MensurationMatchSession::STATUS_IN_PROGRESS,
-            'total_items' => count($items),
+            'total_items' => count($itemKeys),
             'correct_count' => 0,
-            'item_keys' => array_column($items, 'key'),
+            'item_keys' => $itemKeys,
+            'formula_seed' => $seed,
             'answers' => [],
         ];
     }
@@ -412,7 +484,9 @@ class MensurationMatchService
         $grade = GradeLevel::query()->find($state['grade_level_id'] ?? null);
         $classNumber = $grade ? $this->classNumber($grade) : 0;
         $board = (string) ($state['board'] ?? 'perimeter_area');
-        $items = $this->itemsForBoard($board, $classNumber);
+        $keys = is_array($state['item_keys'] ?? null) ? $state['item_keys'] : [];
+        $items = $this->itemsOrderedByKeys($board, $classNumber, $keys);
+        $seed = (string) ($state['formula_seed'] ?? ('admin|'.($state['grade_level_id'] ?? 0).'|'.$board));
 
         return $this->buildPlayPayload(
             board: $board,
@@ -423,7 +497,26 @@ class MensurationMatchService
             totalItems: (int) ($state['total_items'] ?? count($items)),
             sessionId: null,
             gradeName: $grade?->name ?? ($state['grade_name'] ?? null),
+            formulaSeed: $seed,
         );
+    }
+
+    /**
+     * @param  list<string>  $keys
+     * @return list<array<string, mixed>>
+     */
+    public function itemsOrderedByKeys(string $board, int $classNumber, array $keys): array
+    {
+        $byKey = collect($this->itemsForBoard($board, $classNumber))->keyBy('key');
+        if ($keys === []) {
+            return $byKey->values()->all();
+        }
+
+        return collect($keys)
+            ->map(fn (string $key) => $byKey->get($key))
+            ->filter()
+            ->values()
+            ->all();
     }
 
     /**
@@ -440,6 +533,7 @@ class MensurationMatchService
         int $totalItems,
         ?int $sessionId = null,
         ?string $gradeName = null,
+        ?string $formulaSeed = null,
     ): array {
         $playItems = collect($items)->map(function (array $item) use ($answers) {
             $answer = $answers[$item['key']] ?? null;
@@ -463,7 +557,7 @@ class MensurationMatchService
             'grade_name' => $gradeName,
             'status' => $status,
             'score' => $correctCount.'/'.$totalItems,
-            'formulas' => $this->formulaBankForItems($items),
+            'formulas' => $this->formulaBankForItems($items, $formulaSeed),
             'items' => $playItems,
         ];
     }
