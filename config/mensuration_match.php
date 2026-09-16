@@ -192,7 +192,7 @@ return [
             'figure' => 'sphere',
             'title' => 'Sphere',
             'story' => 'I fill a spherical ball of radius r. The volume is ____.',
-            'formula' => '⁴⁄₃πr³',
+            'formula' => '4/3πr³',
             'classes' => [8, 9, 10],
             'diagram' => 'sphere_fill',
         ],

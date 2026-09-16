@@ -432,6 +432,41 @@ class MensurationMatchService
     }
 
     /**
+     * After daily formula drill, drop students straight into the next board (no tick / board picker).
+     *
+     * @return MensurationMatchSession|null
+     */
+    public function sessionForAutoPlay(Student $student, StudentEnrollment $enrollment): ?MensurationMatchSession
+    {
+        if (! $this->isRequiredToday($student)) {
+            return null;
+        }
+
+        $boards = $this->boardsForEnrollment($enrollment);
+        if ($boards === []) {
+            return null;
+        }
+
+        if (collect($boards)->every(fn (array $b) => ! empty($b['completed_today']))) {
+            return null;
+        }
+
+        foreach ($boards as $board) {
+            if (! empty($board['session_id']) && empty($board['completed_today'])) {
+                return MensurationMatchSession::query()->find($board['session_id']);
+            }
+        }
+
+        foreach ($boards as $board) {
+            if (empty($board['completed_today']) && empty($board['session_id'])) {
+                return $this->startBoard($student, $enrollment, (string) $board['key']);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function itemsForBoard(string $board, int $classNumber): array

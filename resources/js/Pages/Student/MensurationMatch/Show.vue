@@ -186,7 +186,7 @@ function backToBoards() {
                             <p class="text-sm text-slate-600">
                                 Score {{ play.score }} ·
                                 <span v-if="play.status === 'completed'" class="font-medium text-emerald-700">Board complete</span>
-                                <span v-else>Tap formula → tap FIND</span>
+                                <span v-else>Pick the formula for each card</span>
                             </p>
                         </div>
                         <button

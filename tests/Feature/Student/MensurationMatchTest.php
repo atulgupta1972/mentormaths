@@ -142,11 +142,17 @@ class MensurationMatchTest extends TestCase
 
         $this->actingAs($studentUser)
             ->get(route('student.mensuration-match.show'))
+            ->assertRedirect();
+
+        $session = MensurationMatchSession::query()->first();
+        $this->assertNotNull($session);
+        $this->actingAs($studentUser)
+            ->get(route('student.mensuration-match.play', $session))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Student/MensurationMatch/Show')
                 ->where('enabled', true)
-                ->has('boards', 1));
+                ->has('play'));
 
         $this->actingAs($studentUser)
             ->from(route('student.mensuration-match.show'))
@@ -157,17 +163,15 @@ class MensurationMatchTest extends TestCase
             ->assertRedirect(route('student.mensuration-match.show'))
             ->assertSessionHasErrors('ready');
 
-        $this->actingAs($studentUser)
-            ->post(route('student.mensuration-match.start'), [
-                'board' => 'perimeter_area',
-                'ready' => true,
-            ])
-            ->assertRedirect();
-
-        $session = MensurationMatchSession::query()->first();
-        $this->assertNotNull($session);
         $this->assertSame('perimeter_area', $session->board);
         $this->assertSame(MensurationMatchSession::STATUS_IN_PROGRESS, $session->status);
+    }
+
+    public function test_sphere_volume_formula_is_four_thirds_pi_r_cubed(): void
+    {
+        $item = collect(config('mensuration_match.items'))->firstWhere('key', 'vol_sphere');
+        $this->assertNotNull($item);
+        $this->assertSame('4/3πr³', $item['formula']);
     }
 
     public function test_student_can_match_formula_and_retry_wrong_tap(): void

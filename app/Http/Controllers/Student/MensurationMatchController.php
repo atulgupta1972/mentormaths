@@ -33,6 +33,16 @@ class MensurationMatchController extends Controller
         $boards = $this->mensuration->boardsForEnrollment($enrollment);
         $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
 
+        try {
+            $autoSession = $this->mensuration->sessionForAutoPlay($student, $enrollment);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->route('student.mensuration-match.show')->with('error', $e->getMessage());
+        }
+
+        if ($autoSession) {
+            return redirect()->route('student.mensuration-match.play', $autoSession);
+        }
+
         $settings = $enrollment->gradeLevel
             ? $this->mensuration->settingsForGrade($enrollment->gradeLevel)
             : null;
