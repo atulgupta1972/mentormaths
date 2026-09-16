@@ -481,6 +481,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/exam-plans', [AdminExamPlanController::class, 'store'])->name('exam-plans.store');
     Route::put('/exam-plans/{examPlan}', [AdminExamPlanController::class, 'update'])->name('exam-plans.update');
     Route::delete('/exam-plans/{examPlan}', [AdminExamPlanController::class, 'destroy'])->name('exam-plans.destroy');
+    Route::post('/exam-plans/{examPlan}/exam-prep', [AdminExamPlanController::class, 'generateExamPrep'])->name('exam-plans.exam-prep.generate');
+    Route::post('/exam-prep/{worksheet}/approve', [AdminExamPlanController::class, 'approveExamPrep'])->name('exam-plans.exam-prep.approve');
 });
 
 Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->group(function () {

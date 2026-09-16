@@ -2,6 +2,7 @@
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import ExamPlanChapterTable from '@/Components/ExamPlanChapterTable.vue';
+import ExamPrepPlanBlock from '@/Components/ExamPrepPlanBlock.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -467,6 +468,48 @@ const removePlan = (plan) => {
     });
 };
 
+const examPrepPreview = (plan) => plan.exam_prep_preview || null;
+const examPrepSets = (plan) => plan.exam_prep_sets || [];
+const studentExamPrepAssignments = (plan) => (plan.prep_assignments || []).filter(
+    (prep) => prep.is_exam_prep || prep.kind_label === 'Exam prep',
+);
+
+const examPrepGeneratingId = ref(null);
+const examPrepApprovingId = ref(null);
+
+const generateExamPrep = (plan) => {
+    if (!isAdminContext.value) {
+        return;
+    }
+
+    examPrepGeneratingId.value = plan.id;
+    router.post(route('admin.exam-plans.exam-prep.generate', plan.id), {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            examPrepGeneratingId.value = null;
+        },
+    });
+};
+
+const approveExamPrep = (set) => {
+    if (!isAdminContext.value) {
+        return;
+    }
+
+    examPrepApprovingId.value = set.id;
+    router.post(route('admin.exam-plans.exam-prep.approve', set.id), {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            examPrepApprovingId.value = null;
+        },
+    });
+};
+
+const openExamPrepFromChip = (plan) => {
+    assigningPlanId.value = plan.id;
+    openPlanView(plan);
+};
+
 const syncRequestedForm = () => {
     if (props.highlightPlanId) {
         const plan = props.plans.find((row) => String(row.id) === String(props.highlightPlanId));
@@ -738,6 +781,14 @@ onUnmounted(() => {
                         {{ assigningPlanId === plan.id ? 'Close' : 'Assign' }}
                     </button>
                     <button
+                        v-if="isAdminContext"
+                        type="button"
+                        class="font-medium text-amber-700 hover:underline"
+                        @click="openExamPrepFromChip(plan)"
+                    >
+                        Exam prep
+                    </button>
+                    <button
                         v-else
                         type="button"
                         class="font-medium text-rose-600 hover:underline"
@@ -811,6 +862,19 @@ onUnmounted(() => {
                         @assign-set="assignSet(plan, $event)"
                     />
 
+                    <ExamPrepPlanBlock
+                        v-if="isAdminContext || studentExamPrepAssignments(plan).length"
+                        :plan="plan"
+                        :is-admin-context="isAdminContext"
+                        :preview="examPrepPreview(plan)"
+                        :sets="examPrepSets(plan)"
+                        :student-assignments="studentExamPrepAssignments(plan)"
+                        :generating="examPrepGeneratingId === plan.id"
+                        :approving-id="examPrepApprovingId"
+                        @generate="generateExamPrep(plan)"
+                        @approve="approveExamPrep"
+                    />
+
                     <div
                         v-if="!isAdminContext && marksDraft[plan.id]"
                         class="border-t border-gray-200 bg-emerald-50/40 px-4 py-3"
@@ -866,6 +930,36 @@ onUnmounted(() => {
             </div>
         </div>
 
+        <!-- Compact: exam-prep cards directly under exam date chips -->
+        <div
+            v-if="compact && !hidePlanList && plans.length && (isAdminContext || sortedPlans.some((plan) => studentExamPrepAssignments(plan).length))"
+            class="space-y-2"
+        >
+            <div
+                v-for="plan in sortedPlans.filter((row) => isAdminContext || studentExamPrepAssignments(row).length)"
+                :key="`exam-prep-${plan.id}`"
+                class="overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm"
+            >
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 bg-amber-50/60 px-2.5 py-1.5 text-[11px]">
+                    <span class="font-semibold text-amber-950">
+                        Below {{ formatDate(plan.exam_date) }} · {{ plan.title }}
+                    </span>
+                </div>
+                <ExamPrepPlanBlock
+                    :plan="plan"
+                    :is-admin-context="isAdminContext"
+                    :preview="examPrepPreview(plan)"
+                    :sets="examPrepSets(plan)"
+                    :student-assignments="studentExamPrepAssignments(plan)"
+                    :generating="examPrepGeneratingId === plan.id"
+                    :approving-id="examPrepApprovingId"
+                    compact
+                    @generate="generateExamPrep(plan)"
+                    @approve="approveExamPrep"
+                />
+            </div>
+        </div>
+
         <Teleport to="body">
             <div
                 v-if="compact && expandedPlan"
@@ -916,6 +1010,19 @@ onUnmounted(() => {
 
                 <div class="flex flex-1 justify-center overflow-y-auto px-4 py-3">
                     <div class="h-fit w-fit max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+                        <ExamPrepPlanBlock
+                            v-if="isAdminContext || studentExamPrepAssignments(expandedPlan).length"
+                            :plan="expandedPlan"
+                            :is-admin-context="isAdminContext"
+                            :preview="examPrepPreview(expandedPlan)"
+                            :sets="examPrepSets(expandedPlan)"
+                            :student-assignments="studentExamPrepAssignments(expandedPlan)"
+                            :generating="examPrepGeneratingId === expandedPlan.id"
+                            :approving-id="examPrepApprovingId"
+                            @generate="generateExamPrep(expandedPlan)"
+                            @approve="approveExamPrep"
+                        />
+
                         <ExamPlanChapterTable
                             :plan="expandedPlan"
                             :groups="chapterPrepGroups(expandedPlan)"

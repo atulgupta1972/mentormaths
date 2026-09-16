@@ -14,6 +14,7 @@ use App\Models\Worksheet;
 use App\Support\AssignmentProgress;
 use App\Support\PracticeSetScope;
 use App\Support\ScoreLabel;
+use App\Support\WorksheetPurpose;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
@@ -250,6 +251,9 @@ class ExamPlanService
         }
 
         if ($includeAssignables) {
+            $examPrep = app(ExamPrepCombinedTestService::class);
+            $data['exam_prep_sets'] = $examPrep->existingSetsForPlan($plan);
+            $data['exam_prep_preview'] = $examPrep->preview($plan);
             $data['assignable_chapters'] = $this->assignableSetsForPlan($plan);
         }
 
@@ -282,6 +286,10 @@ class ExamPlanService
 
             $topicSets = Worksheet::query()
                 ->where('status', Worksheet::STATUS_PUBLISHED)
+                ->where(function ($query) {
+                    $query->whereNull('purpose')
+                        ->orWhere('purpose', WorksheetPurpose::STANDARD);
+                })
                 ->where('scope', PracticeSetScope::TOPIC)
                 ->whereHas('topic', function ($query) use ($chapter, $partialTopicIds) {
                     $query->where('syllabus_chapter_id', $chapter->id);
@@ -310,6 +318,10 @@ class ExamPlanService
 
             $chapterTests = Worksheet::query()
                 ->where('status', Worksheet::STATUS_PUBLISHED)
+                ->where(function ($query) {
+                    $query->whereNull('purpose')
+                        ->orWhere('purpose', WorksheetPurpose::STANDARD);
+                })
                 ->where('scope', PracticeSetScope::CHAPTER)
                 ->where('syllabus_chapter_id', $chapter->id)
                 ->withCount('questions')
@@ -420,6 +432,7 @@ class ExamPlanService
                     'set_number' => $worksheet->set_number,
                     'questions_count' => $worksheet->questions_count ?? $summary['question_count'],
                     'kind_label' => $summary['kind_label'],
+                    'is_exam_prep' => $worksheet->isExamPrep(),
                     'chapter_id' => $chapter?->id,
                     'chapter_label' => $chapter ? self::chapterLabel($chapter) : null,
                     'topic_id' => $worksheet->syllabus_topic_id,

@@ -34,6 +34,7 @@ class Worksheet extends Model
         'catch_up_parent_worksheet_id',
         'catch_up_for_enrollment_id',
         'catch_up_source_question_ids',
+        'exam_plan_id',
         'delivery_mode',
         'written_status',
         'written_pdf_path',
@@ -97,6 +98,11 @@ class Worksheet extends Model
         return ($this->purpose ?? WorksheetPurpose::STANDARD) === WorksheetPurpose::FORMULA;
     }
 
+    public function isExamPrep(): bool
+    {
+        return ($this->purpose ?? WorksheetPurpose::STANDARD) === WorksheetPurpose::EXAM_PREP;
+    }
+
     public function isWritten(): bool
     {
         return ($this->delivery_mode ?? WorksheetDeliveryMode::ONLINE) === WorksheetDeliveryMode::WRITTEN;
@@ -139,6 +145,11 @@ class Worksheet extends Model
     public function catchUpEnrollment(): BelongsTo
     {
         return $this->belongsTo(StudentEnrollment::class, 'catch_up_for_enrollment_id');
+    }
+
+    public function examPlan(): BelongsTo
+    {
+        return $this->belongsTo(ExamPlan::class);
     }
 
     public function questions(): BelongsToMany

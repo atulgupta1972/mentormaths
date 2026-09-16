@@ -98,10 +98,12 @@ class AssignmentProgress
                 : $assignment->practiceSet->topic?->chapter?->name,
             'scope' => $assignment->practiceSet->scope ?? 'topic',
             'is_catch_up' => $assignment->practiceSet->isCatchUp(),
-            'kind_label' => $assignment->practiceSet->isCatchUp()
-                ? 'Catch-up'
-                : ($assignment->practiceSet->isChapterTest() ? 'Test' : 'Practice'),
-                'question_count' => $practiceSet->questions_count ?? 0,
+            'kind_label' => $assignment->practiceSet->isExamPrep()
+                ? 'Exam prep'
+                : ($assignment->practiceSet->isCatchUp()
+                    ? 'Catch-up'
+                    : ($assignment->practiceSet->isChapterTest() ? 'Test' : 'Practice')),
+            'question_count' => $practiceSet->questions_count ?? 0,
             'assignment_status' => $assignment->status,
             'target_date' => $assignment->due_date?->toDateString(),
             'assigned_at' => $assignment->assigned_at?->toDateTimeString(),

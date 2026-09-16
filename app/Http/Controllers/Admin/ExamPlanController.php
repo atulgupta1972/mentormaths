@@ -5,13 +5,19 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ExamPlan;
 use App\Models\Student;
+use App\Models\Worksheet;
 use App\Services\ExamPlanService;
+use App\Services\ExamPrepCombinedTestService;
+use App\Support\WorksheetPurpose;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class ExamPlanController extends Controller
 {
-    public function __construct(private ExamPlanService $examPlanService) {}
+    public function __construct(
+        private ExamPlanService $examPlanService,
+        private ExamPrepCombinedTestService $examPrep,
+    ) {}
 
     public function store(Request $request): RedirectResponse
     {
@@ -52,6 +58,41 @@ class ExamPlanController extends Controller
         $examPlan->delete();
 
         return back()->with('success', 'Exam plan removed.');
+    }
+
+    public function generateExamPrep(Request $request, ExamPlan $examPlan): RedirectResponse
+    {
+        try {
+            $created = $this->examPrep->generateDrafts($examPlan, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $count = count($created);
+        $codes = collect($created)->pluck('set_code')->implode(', ');
+
+        return back()->with(
+            'success',
+            "Created {$count} exam-prep draft".($count === 1 ? '' : 's')." ({$codes}). Review each set, then Approve to assign to the student.",
+        );
+    }
+
+    public function approveExamPrep(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        if (($worksheet->purpose ?? '') !== WorksheetPurpose::EXAM_PREP) {
+            return back()->with('error', 'Not an exam-prep set.');
+        }
+
+        try {
+            $result = $this->examPrep->approveAndAssign($worksheet, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with(
+            'success',
+            "Approved {$result['set_code']} and assigned to the student under the exam date.",
+        );
     }
 
     /**
