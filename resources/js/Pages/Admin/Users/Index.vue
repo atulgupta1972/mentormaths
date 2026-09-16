@@ -92,6 +92,14 @@ const groupBadgeClass = (code) => ({
                 </div>
 
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
+                    <div class="flex items-center justify-between border-b border-gray-100 px-4 py-2 text-sm text-gray-600">
+                        <span>
+                            Showing {{ users.from || 0 }}–{{ users.to || 0 }} of {{ users.total || 0 }}
+                        </span>
+                        <span v-if="filters.group_id" class="text-xs text-amber-700">
+                            Group filter is on — set Group to “All groups” to see everyone.
+                        </span>
+                    </div>
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
@@ -152,6 +160,33 @@ const groupBadgeClass = (code) => ({
                             </tr>
                         </tbody>
                     </table>
+
+                    <div
+                        v-if="users.prev_page_url || users.next_page_url"
+                        class="flex items-center justify-between border-t border-gray-100 px-4 py-3"
+                    >
+                        <Link
+                            v-if="users.prev_page_url"
+                            :href="users.prev_page_url"
+                            class="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                            preserve-scroll
+                        >
+                            ← Previous
+                        </Link>
+                        <span v-else class="text-sm text-gray-400">← Previous</span>
+                        <span class="text-sm text-gray-500">
+                            Page {{ users.current_page }} of {{ users.last_page }}
+                        </span>
+                        <Link
+                            v-if="users.next_page_url"
+                            :href="users.next_page_url"
+                            class="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                            preserve-scroll
+                        >
+                            Next →
+                        </Link>
+                        <span v-else class="text-sm text-gray-400">Next →</span>
+                    </div>
                 </div>
             </div>
         </div>
