@@ -97,6 +97,30 @@ class MensurationMatchService
         return (int) ($grade->sort_order ?: 0);
     }
 
+    /**
+     * Prefer a plain "Class N" row over debug/sandbox duplicates with the same number.
+     *
+     * @param  \Illuminate\Support\Collection<int, GradeLevel>  $grades
+     */
+    public function preferredGradeForClass($grades): GradeLevel
+    {
+        $list = $grades instanceof \Illuminate\Support\Collection
+            ? $grades->values()
+            : collect($grades)->values();
+
+        $canonical = $list->first(function (GradeLevel $grade) {
+            $n = $this->classNumber($grade);
+
+            return (bool) preg_match('/^class\s*'.$n.'$/i', trim((string) $grade->name));
+        });
+
+        if ($canonical) {
+            return $canonical;
+        }
+
+        return $list->sortBy('id')->first();
+    }
+
     public function itemAppliesToClass(array $item, int $classNumber): bool
     {
         $classes = $this->resolvedClassesForItem($item);
@@ -184,12 +208,17 @@ class MensurationMatchService
             ->orderBy('sort_order')
             ->get();
 
-        $classColumns = $grades
+        // One column per class number (e.g. skip "Class 4 Debug" when "Class 4" exists).
+        $preferredGrades = $grades
+            ->filter(fn (GradeLevel $grade) => $this->classNumber($grade) > 0)
+            ->groupBy(fn (GradeLevel $grade) => $this->classNumber($grade))
+            ->map(fn ($group) => $this->preferredGradeForClass($group))
+            ->sortKeys()
+            ->values();
+
+        $classColumns = $preferredGrades
             ->map(function (GradeLevel $grade) {
                 $classNumber = $this->classNumber($grade);
-                if ($classNumber <= 0) {
-                    return null;
-                }
 
                 $available = collect($this->catalog())
                     ->filter(fn (array $item) => $this->itemAppliesToClass($item, $classNumber))
@@ -207,11 +236,10 @@ class MensurationMatchService
                     'volume_count' => (int) ($available['volume'] ?? 0),
                 ];
             })
-            ->filter()
             ->values()
             ->all();
 
-        $classNumbers = collect($classColumns)->pluck('class_number')->unique()->sort()->values()->all();
+        $classNumbers = collect($classColumns)->pluck('class_number')->values()->all();
         if ($classNumbers === []) {
             $classNumbers = [4, 5, 6, 7, 8, 9];
         }

@@ -243,7 +243,7 @@ function measureBadge(measure) {
                                 </td>
                                 <td
                                     v-for="col in classColumns"
-                                    :key="`${row.key}-${col.class_number}`"
+                                    :key="`${row.key}-${col.grade_level_id}`"
                                     class="px-2 py-3 text-center"
                                 >
                                     <input

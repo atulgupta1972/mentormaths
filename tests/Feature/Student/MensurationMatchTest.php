@@ -221,6 +221,28 @@ class MensurationMatchTest extends TestCase
         $this->assertSame(1, $session->correct_count);
     }
 
+    public function test_formula_sheet_shows_one_column_per_class_number(): void
+    {
+        GradeLevel::query()->create([
+            'name' => 'Class 4 Debug',
+            'sort_order' => 4,
+            'is_active' => true,
+        ]);
+        GradeLevel::query()->firstOrCreate(
+            ['name' => 'Class 4'],
+            ['sort_order' => 4, 'is_active' => true],
+        );
+
+        $sheet = app(\App\Services\MensurationMatchService::class)->adminFormulaSheet();
+        $numbers = collect($sheet['class_columns'])->pluck('class_number');
+
+        $this->assertSame($numbers->unique()->count(), $numbers->count());
+        $this->assertSame(1, $numbers->filter(fn ($n) => (int) $n === 4)->count());
+
+        $class4 = collect($sheet['class_columns'])->firstWhere('class_number', 4);
+        $this->assertSame('Class 4', $class4['grade_name']);
+    }
+
     public function test_disabled_class_cannot_start(): void
     {
         ['user' => $user] = $this->seedStudent();
