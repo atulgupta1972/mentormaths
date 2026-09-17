@@ -33,10 +33,16 @@ class MensurationMatchController extends Controller
         $boards = $this->mensuration->boardsForEnrollment($enrollment);
         $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
 
+        if ($allDone) {
+            return redirect()
+                ->route($this->nextAfterMensuration($student))
+                ->with('success', 'Mensuration Match done — continuing your daily drills.');
+        }
+
         try {
             $autoSession = $this->mensuration->sessionForAutoPlay($student, $enrollment);
         } catch (\InvalidArgumentException $e) {
-            return redirect()->route('student.mensuration-match.show')->with('error', $e->getMessage());
+            return redirect()->route('dashboard')->with('error', $e->getMessage());
         }
 
         if ($autoSession) {
@@ -53,7 +59,7 @@ class MensurationMatchController extends Controller
             'boards' => $boards,
             'play' => null,
             'required_today' => $this->mensuration->isRequiredToday($student),
-            'all_done' => $allDone,
+            'all_done' => false,
             'next_url' => route($this->nextAfterMensuration($student)),
             'next_label' => $this->basics->gatePassed($student) ? 'Continue to dashboard' : 'Continue to basics drill',
         ]);
@@ -103,6 +109,21 @@ class MensurationMatchController extends Controller
         $boards = $this->mensuration->boardsForEnrollment($enrollment);
         $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
 
+        if ($session->status === MensurationMatchSession::STATUS_COMPLETED && $allDone) {
+            return redirect()
+                ->route($this->nextAfterMensuration($student))
+                ->with('success', 'Mensuration Match done — continuing your daily drills.');
+        }
+
+        if ($session->status === MensurationMatchSession::STATUS_COMPLETED) {
+            $next = $this->mensuration->nextIncompleteSession($student, $enrollment);
+            if ($next && (int) $next->id !== (int) $session->id) {
+                return redirect()->route('student.mensuration-match.play', $next);
+            }
+
+            return redirect()->route('student.mensuration-match.show');
+        }
+
         return Inertia::render('Student/MensurationMatch/Show', [
             'enabled' => true,
             'grade_name' => $enrollment->gradeLevel?->name,
@@ -130,6 +151,36 @@ class MensurationMatchController extends Controller
             $result = $this->mensuration->submitAnswer($session, $validated['item_key'], $validated['formula']);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
+        }
+
+        $session->refresh();
+
+        if (! empty($result['done']) || $session->status === MensurationMatchSession::STATUS_COMPLETED) {
+            $enrollment = $student->currentEnrollment()
+                ?? $student->enrollments()->with('gradeLevel')->latest('id')->first();
+            $enrollment?->loadMissing('gradeLevel');
+
+            if ($enrollment) {
+                $boards = $this->mensuration->boardsForEnrollment($enrollment);
+                $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
+
+                if ($allDone) {
+                    return redirect()
+                        ->route($this->nextAfterMensuration($student))
+                        ->with('success', 'Mensuration Match complete — on to the next drill.');
+                }
+
+                $next = $this->mensuration->nextIncompleteSession($student, $enrollment);
+                if ($next) {
+                    return redirect()
+                        ->route('student.mensuration-match.play', $next)
+                        ->with('success', 'Board complete — next board.');
+                }
+            }
+
+            return redirect()
+                ->route('student.mensuration-match.show')
+                ->with('success', 'Board complete.');
         }
 
         return back()->with([

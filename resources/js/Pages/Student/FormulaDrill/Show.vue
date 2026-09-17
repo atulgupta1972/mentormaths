@@ -157,8 +157,8 @@ const submitAnswer = async () => {
 
         if (payload.session_complete) {
             setTimeout(() => {
-                router.visit(route('dashboard'));
-            }, 1200);
+                router.visit(payload.next_url || route('dashboard'));
+            }, 900);
 
             return;
         }
@@ -196,8 +196,8 @@ const requestTeacherHelp = async () => {
 
         if (payload.session_complete) {
             setTimeout(() => {
-                router.visit(route('dashboard'));
-            }, 1200);
+                router.visit(payload.next_url || route('dashboard'));
+            }, 900);
 
             return;
         }
@@ -238,8 +238,8 @@ const reportIssue = async () => {
 
         if (payload.session_complete) {
             setTimeout(() => {
-                router.visit(route('dashboard'));
-            }, 1200);
+                router.visit(payload.next_url || route('dashboard'));
+            }, 900);
 
             return;
         }

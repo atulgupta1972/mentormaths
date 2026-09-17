@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
 use App\Models\FormulaDrillItem;
+use App\Services\BasicsDrillSessionService;
 use App\Services\FormulaDrillSessionService;
 use App\Services\MensurationMatchService;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,7 @@ class FormulaDrillController extends Controller
     public function __construct(
         private FormulaDrillSessionService $sessionService,
         private MensurationMatchService $mensuration,
+        private BasicsDrillSessionService $basics,
     ) {}
 
     public function show(Request $request): Response|RedirectResponse
@@ -40,11 +42,7 @@ class FormulaDrillController extends Controller
         $session = $this->sessionService->getOrCreateTodaysSession($student);
 
         if ($session->isComplete()) {
-            if (! $this->mensuration->gatePassed($student)) {
-                return redirect()->route('student.mensuration-match.show');
-            }
-
-            return redirect()->route('dashboard');
+            return redirect()->route($this->nextAfterFormulaRoute($student));
         }
 
         return Inertia::render('Student/FormulaDrill/Show', $this->sessionService->sessionPayload($session));
@@ -77,10 +75,10 @@ class FormulaDrillController extends Controller
 
         $session->refresh()->load(['items.question.options', 'items.question.blankAnswer']);
 
-        return response()->json([
+        return response()->json($this->withNextUrl($student, [
             ...$result,
             'session' => $this->sessionService->sessionPayload($session),
-        ]);
+        ]));
     }
 
     public function requestTeacherHelp(Request $request, FormulaDrillItem $item): JsonResponse
@@ -98,7 +96,7 @@ class FormulaDrillController extends Controller
 
         $result = $this->sessionService->requestTeacherHelp($session, $item);
 
-        return response()->json($result);
+        return response()->json($this->withNextUrl($student, $result));
     }
 
     public function reportIssue(Request $request, FormulaDrillItem $item): JsonResponse
@@ -121,6 +119,32 @@ class FormulaDrillController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        return response()->json($result);
+        return response()->json($this->withNextUrl($student, $result));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function withNextUrl($student, array $payload): array
+    {
+        if (! empty($payload['session_complete'])) {
+            $payload['next_url'] = route($this->nextAfterFormulaRoute($student));
+        }
+
+        return $payload;
+    }
+
+    private function nextAfterFormulaRoute($student): string
+    {
+        if (! $this->mensuration->gatePassed($student)) {
+            return 'student.mensuration-match.show';
+        }
+
+        if (! $this->basics->gatePassed($student)) {
+            return 'student.basics-drill.show';
+        }
+
+        return 'dashboard';
     }
 }

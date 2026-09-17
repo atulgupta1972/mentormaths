@@ -378,6 +378,56 @@ class MensurationMatchTest extends TestCase
         $this->assertSame([], $service->itemsForBoard('volume', $classNumber));
     }
 
+    public function test_completing_last_card_auto_continues_to_basics_drill(): void
+    {
+        ['user' => $user, 'student' => $student, 'grade' => $grade] = $this->seedStudent();
+
+        MensurationMatchSetting::query()->create([
+            'grade_level_id' => $grade->id,
+            'enabled' => true,
+            'perimeter_area_enabled' => true,
+            'volume_enabled' => false,
+        ]);
+
+        app(\App\Services\MensurationMatchService::class)->saveItemClasses([
+            'perim_circle' => [7],
+            'perim_rectangle' => [7],
+            'perim_triangle' => [7],
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('student.mensuration-match.start'), [
+                'board' => 'perimeter_area',
+                'ready' => true,
+            ]);
+
+        $session = MensurationMatchSession::query()->where('student_id', $student->id)->firstOrFail();
+        $catalog = collect(config('mensuration_match.items'))->keyBy('key');
+        $keys = $session->item_keys;
+        $this->assertNotEmpty($keys);
+
+        $lastKey = array_pop($keys);
+        foreach ($keys as $itemKey) {
+            $this->actingAs($user)
+                ->from(route('student.mensuration-match.play', $session))
+                ->post(route('student.mensuration-match.answer', $session), [
+                    'item_key' => $itemKey,
+                    'formula' => $catalog[$itemKey]['formula'],
+                ])
+                ->assertRedirect(route('student.mensuration-match.play', $session));
+        }
+
+        $this->actingAs($user)
+            ->from(route('student.mensuration-match.play', $session))
+            ->post(route('student.mensuration-match.answer', $session), [
+                'item_key' => $lastKey,
+                'formula' => $catalog[$lastKey]['formula'],
+            ])
+            ->assertRedirect(route('student.basics-drill.show'));
+
+        $this->assertTrue(app(\App\Services\MensurationMatchService::class)->gatePassed($student));
+    }
+
     public function test_dashboard_redirects_to_mensuration_after_formula_when_enabled(): void
     {
         ['user' => $user, 'student' => $student, 'grade' => $grade] = $this->seedStudent();

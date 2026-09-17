@@ -470,6 +470,14 @@ class MensurationMatchService
             return null;
         }
 
+        return $this->nextIncompleteSession($student, $enrollment);
+    }
+
+    /**
+     * Next incomplete board session — used after finishing a board mid-flow.
+     */
+    public function nextIncompleteSession(Student $student, StudentEnrollment $enrollment): ?MensurationMatchSession
+    {
         $boards = $this->boardsForEnrollment($enrollment);
         if ($boards === []) {
             return null;
