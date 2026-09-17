@@ -1,6 +1,4 @@
 <script setup>
-import SecondaryButton from '@/Components/SecondaryButton.vue';
-
 defineProps({
     plan: { type: Object, required: true },
     isAdminContext: { type: Boolean, default: false },
@@ -28,45 +26,54 @@ const statusLabel = (set) => {
     }
 
     if (set.status === 'published') {
-        return 'Published · not assigned';
+        return 'Published · awaiting assign';
     }
 
-    return 'Draft · needs review';
+    return 'Draft · review then publish';
 };
+
+const canGenerate = (preview) => Boolean(preview?.available > 0);
 </script>
 
 <template>
     <div
-        class="border-t border-amber-200 bg-amber-50/50"
-        :class="compact ? 'px-2 py-2' : 'px-4 py-3'"
+        class="border border-amber-300 bg-amber-50"
+        :class="compact ? 'rounded-md px-2.5 py-2' : 'rounded-lg px-4 py-3'"
     >
-        <div class="flex flex-wrap items-start justify-between gap-2">
-            <div class="min-w-0">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
                 <p
-                    class="font-semibold uppercase tracking-wide text-amber-900"
+                    class="font-semibold uppercase tracking-wide text-amber-950"
                     :class="compact ? 'text-[10px]' : 'text-[11px]'"
                 >
                     Exam prep (from wrongs)
                 </p>
                 <p class="mt-0.5 text-xs text-amber-950/80">
-                    Combined fill-in-the-blank test from this student’s failures on exam chapters
-                    (max 25 per set, up to 3 sets). MCQ only when fill-blank isn’t available.
+                    Build combined tests from this student’s failures on exam chapters
+                    (fill-blank first; MCQ only if needed). Max 25 questions per set, up to 3 sets.
+                </p>
+                <p
+                    v-if="isAdminContext"
+                    class="mt-1.5 text-[11px] font-medium text-amber-900"
+                >
+                    Steps: 1) Generate → 2) Review → 3) Publish for student
                 </p>
             </div>
-            <PrimaryButton
+
+            <button
                 v-if="isAdminContext"
                 type="button"
-                class="!py-1.5 !text-xs"
-                :disabled="generating || !(preview?.available > 0)"
+                class="shrink-0 rounded-md bg-amber-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="generating || !canGenerate(preview)"
                 @click="emit('generate')"
             >
-                {{ generating ? 'Generating…' : (sets.length ? 'Generate more' : 'Generate exam prep') }}
-            </PrimaryButton>
+                {{ generating ? 'Generating…' : (sets.length ? 'Generate more' : '1. Generate test') }}
+            </button>
         </div>
 
         <p
             v-if="isAdminContext && preview"
-            class="mt-2 text-xs text-amber-900"
+            class="mt-2 text-xs text-amber-950"
         >
             <template v-if="preview.available > 0">
                 {{ preview.available }} wrong sum{{ preview.available === 1 ? '' : 's' }} available
@@ -84,44 +91,56 @@ const statusLabel = (set) => {
             </template>
         </p>
 
+        <div
+            v-if="isAdminContext && !sets.length && canGenerate(preview)"
+            class="mt-2 rounded border border-dashed border-amber-400 bg-white/70 px-2.5 py-2 text-xs text-amber-950"
+        >
+            Click <strong>1. Generate test</strong> to create the draft set(s). Then use
+            <strong>2. Review</strong> and <strong>3. Publish for student</strong> below.
+        </div>
+
         <ul
             v-if="isAdminContext && sets.length"
-            class="mt-2 space-y-1.5"
+            class="mt-3 space-y-2"
         >
             <li
                 v-for="set in sets"
                 :key="set.id"
-                class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-2.5 py-1.5 text-xs"
+                class="rounded-md border border-amber-300 bg-white px-3 py-2.5 text-xs shadow-sm"
             >
-                <div class="min-w-0">
-                    <span class="font-semibold text-slate-900">{{ set.set_code }}</span>
-                    <span class="text-slate-500"> · {{ set.questions_count }} Q · {{ statusLabel(set) }}</span>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <a
-                        v-if="set.review_url"
-                        :href="set.review_url"
-                        class="font-medium text-indigo-600 hover:underline"
-                        target="_blank"
-                        rel="noopener"
-                    >
-                        Review
-                    </a>
-                    <PrimaryButton
-                        v-if="!set.assignment_id"
-                        type="button"
-                        class="!py-1 !text-[11px]"
-                        :disabled="approvingId === set.id"
-                        @click="emit('approve', set)"
-                    >
-                        {{ approvingId === set.id ? 'Approving…' : 'Approve & assign' }}
-                    </PrimaryButton>
-                    <span
-                        v-else
-                        class="text-[11px] font-medium text-emerald-700"
-                    >
-                        On student card
-                    </span>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="min-w-0">
+                        <span class="font-semibold text-slate-900">{{ set.set_code }}</span>
+                        <span class="text-slate-600">
+                            · {{ set.questions_count }} Q · {{ statusLabel(set) }}
+                        </span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <a
+                            v-if="set.review_url"
+                            :href="set.review_url"
+                            class="inline-flex items-center rounded-md border border-indigo-300 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800 hover:bg-indigo-100"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            2. Review
+                        </a>
+                        <button
+                            v-if="!set.assignment_id"
+                            type="button"
+                            class="inline-flex items-center rounded-md bg-emerald-700 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="approvingId === set.id"
+                            @click="emit('approve', set)"
+                        >
+                            {{ approvingId === set.id ? 'Publishing…' : '3. Publish for student' }}
+                        </button>
+                        <span
+                            v-else
+                            class="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800"
+                        >
+                            On student card
+                        </span>
+                    </div>
                 </div>
             </li>
         </ul>

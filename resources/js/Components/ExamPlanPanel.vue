@@ -7,6 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { formatScoreLabel } from '@/utils/scores';
+import { hasRoute } from '@/utils/routes';
 import { useForm, router } from '@inertiajs/vue3';
 import { computed, onUnmounted, ref, watch } from 'vue';
 
@@ -482,8 +483,12 @@ const generateExamPrep = (plan) => {
         return;
     }
 
+    const url = hasRoute('admin.exam-plans.exam-prep.generate')
+        ? route('admin.exam-plans.exam-prep.generate', plan.id)
+        : `/admin/exam-plans/${plan.id}/exam-prep`;
+
     examPrepGeneratingId.value = plan.id;
-    router.post(route('admin.exam-plans.exam-prep.generate', plan.id), {}, {
+    router.post(url, {}, {
         preserveScroll: true,
         onFinish: () => {
             examPrepGeneratingId.value = null;
@@ -496,8 +501,12 @@ const approveExamPrep = (set) => {
         return;
     }
 
+    const url = hasRoute('admin.exam-plans.exam-prep.approve')
+        ? route('admin.exam-plans.exam-prep.approve', set.id)
+        : `/admin/exam-prep/${set.id}/approve`;
+
     examPrepApprovingId.value = set.id;
-    router.post(route('admin.exam-plans.exam-prep.approve', set.id), {}, {
+    router.post(url, {}, {
         preserveScroll: true,
         onFinish: () => {
             examPrepApprovingId.value = null;
