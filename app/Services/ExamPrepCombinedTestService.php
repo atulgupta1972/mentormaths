@@ -25,6 +25,7 @@ class ExamPrepCombinedTestService
     public function __construct(
         private SetAssignmentService $assignmentService,
         private PracticeSetService $practiceSetService,
+        private McqToFillBlankService $mcqToFillBlank,
     ) {}
 
     /**
@@ -311,8 +312,6 @@ class ExamPrepCombinedTestService
             ->keys()
             ->first();
 
-        $fillCount = $chunk->where('type', Question::TYPE_FILL_IN_BLANK)->count();
-        $mcqCount = $chunk->where('type', Question::TYPE_MCQ)->count();
         $studentName = $enrollment->student?->name ?? 'Student';
         $setCode = $this->nextExamPrepCode($plan, $part);
         $setNumber = $primaryChapterId
@@ -322,6 +321,39 @@ class ExamPrepCombinedTestService
                 : ((int) Worksheet::query()->max('set_number') + 1));
 
         $partLabel = $totalParts > 1 ? " (part {$part}/{$totalParts})" : '';
+
+        $questionIds = $chunk->pluck('question_id')->map(fn ($id) => (int) $id)->values();
+        $questions = Question::query()
+            ->with(['options', 'blankAnswer'])
+            ->whereIn('id', $questionIds->all())
+            ->get()
+            ->keyBy('id');
+
+        $resolvedRows = $questionIds->map(function (int $questionId) use ($questions, $chunk) {
+            $source = $chunk->firstWhere('question_id', $questionId) ?? [
+                'question_id' => $questionId,
+                'type' => Question::TYPE_MCQ,
+                'topic_id' => null,
+                'chapter_id' => null,
+            ];
+            $question = $questions->get($questionId);
+            if ($question && $this->mcqToFillBlank->inspect($question)['convertible']) {
+                $question = $this->mcqToFillBlank->convert($question);
+                $questions->put($questionId, $question);
+            }
+
+            return [
+                'question_id' => $questionId,
+                'type' => $question?->type === Question::TYPE_FILL_IN_BLANK
+                    ? Question::TYPE_FILL_IN_BLANK
+                    : Question::TYPE_MCQ,
+                'topic_id' => $source['topic_id'] ?? null,
+                'chapter_id' => $source['chapter_id'] ?? null,
+            ];
+        });
+
+        $fillCount = $resolvedRows->where('type', Question::TYPE_FILL_IN_BLANK)->count();
+        $mcqCount = $resolvedRows->where('type', Question::TYPE_MCQ)->count();
 
         $worksheet = Worksheet::query()->create([
             'title' => "{$setCode} — Exam prep for {$studentName}{$partLabel}",
@@ -333,7 +365,7 @@ class ExamPrepCombinedTestService
             'syllabus_topic_id' => $primaryChapterId ? null : $primaryTopicId,
             'status' => Worksheet::STATUS_DRAFT,
             'notes' => sprintf(
-                'Exam prep for plan #%d (%s). %d fill-blank + %d MCQ from student wrongs. Review then Approve to assign.',
+                'Exam prep for plan #%d (%s). %d fill-blank + %d MCQ from student wrongs (numeric MCQs auto-converted). Review then Approve to assign.',
                 $plan->id,
                 $plan->title,
                 $fillCount,
@@ -343,10 +375,10 @@ class ExamPrepCombinedTestService
             'purpose' => WorksheetPurpose::EXAM_PREP,
             'exam_plan_id' => $plan->id,
             'catch_up_for_enrollment_id' => $enrollment->id,
-            'catch_up_source_question_ids' => $chunk->pluck('question_id')->values()->all(),
+            'catch_up_source_question_ids' => $resolvedRows->pluck('question_id')->values()->all(),
         ]);
 
-        foreach ($chunk->values() as $index => $row) {
+        foreach ($resolvedRows->values() as $index => $row) {
             $worksheet->questions()->attach($row['question_id'], ['sort_order' => $index + 1]);
         }
 
@@ -354,7 +386,7 @@ class ExamPrepCombinedTestService
             'id' => $worksheet->id,
             'set_code' => $setCode,
             'status' => Worksheet::STATUS_DRAFT,
-            'questions_count' => $chunk->count(),
+            'questions_count' => $resolvedRows->count(),
             'fill_blank_count' => $fillCount,
             'mcq_count' => $mcqCount,
             'review_url' => route('admin.practice-sets.show', $worksheet),

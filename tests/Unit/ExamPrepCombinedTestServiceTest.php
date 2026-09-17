@@ -8,6 +8,7 @@ use App\Models\ExamPlan;
 use App\Models\GradeLevel;
 use App\Models\PracticeCorrectionItem;
 use App\Models\Question;
+use App\Models\QuestionOption;
 use App\Models\SetAssignment;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
@@ -46,8 +47,8 @@ class ExamPrepCombinedTestServiceTest extends TestCase
         $this->assertSame(15, $created[1]['questions_count']);
         $this->assertSame(25, $created[0]['fill_blank_count']);
         $this->assertSame(0, $created[0]['mcq_count']);
-        $this->assertSame(5, $created[1]['fill_blank_count']);
-        $this->assertSame(10, $created[1]['mcq_count']);
+        $this->assertSame(15, $created[1]['fill_blank_count']);
+        $this->assertSame(0, $created[1]['mcq_count']);
 
         $first = Worksheet::query()->findOrFail($created[0]['id']);
         $this->assertSame(WorksheetPurpose::EXAM_PREP, $first->purpose);
@@ -82,12 +83,16 @@ class ExamPrepCombinedTestServiceTest extends TestCase
         $created = $service->generateDrafts($plan, $creator);
 
         $this->assertCount(1, $created);
-        $this->assertSame(2, $created[0]['fill_blank_count']);
-        $this->assertSame(3, $created[0]['mcq_count']);
+        // Numeric MCQs are auto-converted to fill-blank at generate time.
+        $this->assertSame(5, $created[0]['fill_blank_count']);
+        $this->assertSame(0, $created[0]['mcq_count']);
 
         $ws = Worksheet::query()->findOrFail($created[0]['id']);
         $ids = $ws->questions()->orderByPivot('sort_order')->pluck('questions.id')->all();
         $this->assertSame([...$fillIds, ...$mcqIds], $ids);
+        $this->assertTrue(
+            Question::query()->whereIn('id', $mcqIds)->get()->every(fn (Question $q) => $q->isFillInBlank()),
+        );
     }
 
     /**
@@ -181,6 +186,18 @@ class ExamPrepCombinedTestServiceTest extends TestCase
                 'question_text' => "MCQ {$i}?",
                 'type' => Question::TYPE_MCQ,
                 'source' => Question::SOURCE_MANUAL,
+            ]);
+            QuestionOption::query()->create([
+                'question_id' => $q->id,
+                'option_text' => (string) (10 + $i),
+                'is_correct' => false,
+                'sort_order' => 1,
+            ]);
+            QuestionOption::query()->create([
+                'question_id' => $q->id,
+                'option_text' => (string) (20 + $i),
+                'is_correct' => true,
+                'sort_order' => 2,
             ]);
             $mcqIds[] = $q->id;
             PracticeCorrectionItem::query()->create([

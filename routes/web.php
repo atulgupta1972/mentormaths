@@ -335,6 +335,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/practice-sets', [PracticeSetController::class, 'store'])->name('practice-sets.store');
     Route::get('/practice-sets/topics/{topic}', [PracticeSetTopicController::class, 'show'])->name('practice-sets.topics.show');
     Route::get('/practice-sets/{worksheet}', [PracticeSetController::class, 'show'])->name('practice-sets.show');
+    Route::post('/practice-sets/{worksheet}/convert-fill-blank', [PracticeSetController::class, 'convertMcqsToFillBlank'])->name('practice-sets.convert-fill-blank');
     Route::post('/practice-sets/{worksheet}/split', [PracticeSetController::class, 'split'])->name('practice-sets.split');
     Route::patch('/practice-sets/{worksheet}/set-code', [PracticeSetController::class, 'updateSetCode'])->name('practice-sets.update-set-code');
     Route::patch('/practice-sets/{worksheet}/tier', [PracticeSetController::class, 'updateTier'])->name('practice-sets.update-tier');

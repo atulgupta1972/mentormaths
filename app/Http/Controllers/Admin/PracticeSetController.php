@@ -12,6 +12,7 @@ use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\ChapterMixedQuestionService;
 use App\Services\ClassCoverageService;
+use App\Services\McqToFillBlankService;
 use App\Services\PracticeSetService;
 use App\Services\PracticeSetSplitService;
 use App\Support\PracticeSetMasterProfile;
@@ -235,13 +236,85 @@ class PracticeSetController extends Controller
             'topic.chapter.syllabusVersion.gradeLevel',
             'chapter.syllabusVersion.gradeLevel',
             'questions.options',
+            'questions.blankAnswer',
             'creator:id,name',
         ]);
         $worksheet->loadCount('questions');
 
+        $converter = app(McqToFillBlankService::class);
+
+        $questions = $worksheet->questions->map(function (Question $question) use ($converter) {
+            $inspect = $converter->inspect($question);
+            $correctOption = $question->options->firstWhere('is_correct', true);
+
+            return [
+                'id' => $question->id,
+                'type' => $question->type,
+                'type_label' => $question->isFillInBlank() ? 'Fill in the blank' : 'MCQ',
+                'question_text' => $question->question_text,
+                'diagram_url' => $question->diagram_url,
+                'explanation' => $question->explanation,
+                'method_hint' => $question->method_hint,
+                'options' => $question->options->map(fn ($opt) => [
+                    'id' => $opt->id,
+                    'option_text' => $opt->option_text,
+                    'is_correct' => (bool) $opt->is_correct,
+                ])->values()->all(),
+                'correct_answer' => $inspect['answer'] ?? $correctOption?->option_text,
+                'answer_format' => $inspect['answer_format'],
+                'can_convert_to_fill_blank' => $inspect['convertible'],
+                'convert_block_reason' => $inspect['convertible'] ? null : $inspect['reason'],
+            ];
+        })->values()->all();
+
         return Inertia::render('Admin/PracticeSets/Show', [
-            'practiceSet' => $worksheet,
+            'practiceSet' => [
+                'id' => $worksheet->id,
+                'display_title' => $worksheet->display_title ?? $worksheet->title,
+                'title' => $worksheet->title,
+                'set_code' => $worksheet->set_code,
+                'status' => $worksheet->status,
+                'tier_tagline' => $worksheet->tier_tagline ?? null,
+                'syllabus_topic_id' => $worksheet->syllabus_topic_id,
+                'purpose' => $worksheet->purpose,
+                'is_exam_prep' => $worksheet->isExamPrep(),
+                'exam_plan_id' => $worksheet->exam_plan_id,
+                'questions_count' => $worksheet->questions_count,
+                'topic' => $worksheet->topic,
+                'questions' => $questions,
+            ],
         ]);
+    }
+
+    public function convertMcqsToFillBlank(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        $validated = $request->validate([
+            'question_ids' => ['required', 'array', 'min:1'],
+            'question_ids.*' => ['integer', 'exists:questions,id'],
+        ]);
+
+        $setQuestionIds = $worksheet->questions()->pluck('questions.id')->map(fn ($id) => (int) $id)->all();
+        $requested = collect($validated['question_ids'])->map(fn ($id) => (int) $id)->unique()->values();
+        $invalid = $requested->reject(fn (int $id) => in_array($id, $setQuestionIds, true));
+
+        if ($invalid->isNotEmpty()) {
+            return back()->with('error', 'Some selected questions are not in this practice set.');
+        }
+
+        $result = app(McqToFillBlankService::class)->convertMany($requested->all());
+
+        if ($result['converted'] === 0) {
+            $detail = $result['errors'][0] ?? 'No convertible MCQs selected (need whole number / decimal / fraction answers).';
+
+            return back()->with('error', $detail);
+        }
+
+        $message = "Converted {$result['converted']} question".($result['converted'] === 1 ? '' : 's').' to fill-in-the-blank.';
+        if ($result['skipped'] > 0) {
+            $message .= " Skipped {$result['skipped']}.";
+        }
+
+        return back()->with('success', $message);
     }
 
     public function storeFromTopic(Request $request, SyllabusTopic $topic): RedirectResponse
