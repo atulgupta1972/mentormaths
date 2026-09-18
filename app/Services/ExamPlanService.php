@@ -246,15 +246,33 @@ class ExamPlanService
         ];
 
         if ($includePrep) {
-            $data['prep_assignments'] = $this->prepAssignmentsForPlan($plan)->values()->all();
-            $data['prep_summary'] = $this->prepSummary($data['prep_assignments']);
+            try {
+                $data['prep_assignments'] = $this->prepAssignmentsForPlan($plan)->values()->all();
+                $data['prep_summary'] = $this->prepSummary($data['prep_assignments']);
+            } catch (\Throwable $e) {
+                report($e);
+                $data['prep_assignments'] = [];
+                $data['prep_summary'] = ['total' => 0, 'completed' => 0, 'pending' => 0];
+            }
         }
 
         if ($includeAssignables) {
-            $examPrep = app(ExamPrepCombinedTestService::class);
-            $data['exam_prep_sets'] = $examPrep->existingSetsForPlan($plan);
-            $data['exam_prep_preview'] = $examPrep->preview($plan);
-            $data['assignable_chapters'] = $this->assignableSetsForPlan($plan);
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('worksheets', 'exam_plan_id')) {
+                    $examPrep = app(ExamPrepCombinedTestService::class);
+                    $data['exam_prep_sets'] = $examPrep->existingSetsForPlan($plan);
+                    $data['exam_prep_preview'] = $examPrep->preview($plan);
+                } else {
+                    $data['exam_prep_sets'] = [];
+                    $data['exam_prep_preview'] = null;
+                }
+                $data['assignable_chapters'] = $this->assignableSetsForPlan($plan);
+            } catch (\Throwable $e) {
+                report($e);
+                $data['exam_prep_sets'] = $data['exam_prep_sets'] ?? [];
+                $data['exam_prep_preview'] = $data['exam_prep_preview'] ?? null;
+                $data['assignable_chapters'] = $data['assignable_chapters'] ?? [];
+            }
         }
 
         return $data;
@@ -432,7 +450,7 @@ class ExamPlanService
                     'set_number' => $worksheet->set_number,
                     'questions_count' => $worksheet->questions_count ?? $summary['question_count'],
                     'kind_label' => $summary['kind_label'],
-                    'is_exam_prep' => $worksheet->isExamPrep(),
+                    'is_exam_prep' => ($worksheet->purpose ?? '') === WorksheetPurpose::EXAM_PREP,
                     'chapter_id' => $chapter?->id,
                     'chapter_label' => $chapter ? self::chapterLabel($chapter) : null,
                     'topic_id' => $worksheet->syllabus_topic_id,

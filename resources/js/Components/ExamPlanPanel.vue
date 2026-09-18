@@ -872,7 +872,7 @@ onUnmounted(() => {
                     />
 
                     <ExamPrepPlanBlock
-                        v-if="isAdminContext || studentExamPrepAssignments(plan).length"
+                        v-if="(isAdminContext && (examPrepPreview(plan) || examPrepSets(plan).length)) || studentExamPrepAssignments(plan).length"
                         :plan="plan"
                         :is-admin-context="isAdminContext"
                         :preview="examPrepPreview(plan)"
@@ -941,11 +941,17 @@ onUnmounted(() => {
 
         <!-- Compact: exam-prep cards directly under exam date chips -->
         <div
-            v-if="compact && !hidePlanList && plans.length && (isAdminContext || sortedPlans.some((plan) => studentExamPrepAssignments(plan).length))"
+            v-if="compact && !hidePlanList && plans.length && (
+                (!isAdminContext && sortedPlans.some((plan) => studentExamPrepAssignments(plan).length))
+                || (isAdminContext && sortedPlans.some((plan) => examPrepPreview(plan) || examPrepSets(plan).length))
+            )"
             class="space-y-2"
         >
             <div
-                v-for="plan in sortedPlans.filter((row) => isAdminContext || studentExamPrepAssignments(row).length)"
+                v-for="plan in sortedPlans.filter((row) => (
+                    (!isAdminContext && studentExamPrepAssignments(row).length)
+                    || (isAdminContext && (examPrepPreview(row) || examPrepSets(row).length))
+                ))"
                 :key="`exam-prep-${plan.id}`"
                 class="overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm"
             >
@@ -1020,7 +1026,7 @@ onUnmounted(() => {
                 <div class="flex flex-1 justify-center overflow-y-auto px-4 py-3">
                     <div class="h-fit w-fit max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
                         <ExamPrepPlanBlock
-                            v-if="isAdminContext || studentExamPrepAssignments(expandedPlan).length"
+                            v-if="(isAdminContext && (examPrepPreview(expandedPlan) || examPrepSets(expandedPlan).length)) || studentExamPrepAssignments(expandedPlan).length"
                             :plan="expandedPlan"
                             :is-admin-context="isAdminContext"
                             :preview="examPrepPreview(expandedPlan)"

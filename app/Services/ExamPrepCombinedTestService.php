@@ -178,6 +178,10 @@ class ExamPrepCombinedTestService
      */
     public function existingSetsForPlan(ExamPlan $plan): array
     {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('worksheets', 'exam_plan_id')) {
+            return [];
+        }
+
         return Worksheet::query()
             ->withCount('questions')
             ->where('purpose', WorksheetPurpose::EXAM_PREP)
@@ -274,6 +278,10 @@ class ExamPrepCombinedTestService
      */
     private function alreadyUsedQuestionIds(ExamPlan $plan): Collection
     {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('worksheets', 'exam_plan_id')) {
+            return collect();
+        }
+
         return Worksheet::query()
             ->where('purpose', WorksheetPurpose::EXAM_PREP)
             ->where('exam_plan_id', $plan->id)

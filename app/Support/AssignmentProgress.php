@@ -98,7 +98,7 @@ class AssignmentProgress
                 : $assignment->practiceSet->topic?->chapter?->name,
             'scope' => $assignment->practiceSet->scope ?? 'topic',
             'is_catch_up' => $assignment->practiceSet->isCatchUp(),
-            'kind_label' => $assignment->practiceSet->isExamPrep()
+            'kind_label' => ($assignment->practiceSet->purpose ?? '') === \App\Support\WorksheetPurpose::EXAM_PREP
                 ? 'Exam prep'
                 : ($assignment->practiceSet->isCatchUp()
                     ? 'Catch-up'

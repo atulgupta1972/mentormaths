@@ -100,11 +100,27 @@ class ClassHubController extends Controller
         }
 
         if ($this->isClassHubDeferredProgressRequest($request, 'Admin/Classes/Show')) {
+            $enrollmentIds = $this->enrollmentIdsForDeferredProgress($request, $gradeLevel);
+            $progress = [];
+
+            try {
+                if ($enrollmentIds !== []) {
+                    $enrollments = StudentEnrollment::query()
+                        ->with(['student:id,name,user_id', 'student.user:id,last_seen_at', 'academicYear'])
+                        ->whereIn('id', $enrollmentIds)
+                        ->get();
+                    $progress = $this->classHubProgress->studyPerformanceMetricsByEnrollment($enrollments);
+                }
+            } catch (Throwable $e) {
+                Log::error('Admin class hub failed to load partial progress metrics.', [
+                    'grade_level_id' => $gradeLevel->id,
+                    'message' => $e->getMessage(),
+                ]);
+                $progress = [];
+            }
+
             return Inertia::render('Admin/Classes/Show', [
-                'examPlanProgress' => $this->deferredExamPlanProgress(
-                    $gradeLevel,
-                    $this->enrollmentIdsForDeferredProgress($request, $gradeLevel),
-                ),
+                'examPlanProgress' => $progress,
             ]);
         }
 
