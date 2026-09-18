@@ -12,6 +12,17 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureUploaderGeminiCheckComplete
 {
+    /**
+     * New upload / import routes blocked while Gemini is pending.
+     * Viewing uploaded chapters and working Gemini on existing tasks stay allowed.
+     *
+     * @var list<string>
+     */
+    private const BLOCKED_WHILE_PENDING = [
+        'content.chapters.append-mcq',
+        'content.chapters.append-mcq-zip',
+    ];
+
     public function __construct(
         private ContentUploaderDashboardService $dashboardService,
     ) {}
@@ -37,30 +48,25 @@ class EnsureUploaderGeminiCheckComplete
             return $next($request);
         }
 
-        // Always allow the uploader to open the task list, and allow working on the
-        // specific tasks that still need Gemini.
-        if ($routeName === 'content.tasks.index') {
+        $blocksNewUpload = in_array($routeName, self::BLOCKED_WHILE_PENDING, true)
+            || Str::startsWith($routeName, 'content.textbooks.');
+
+        if (! $blocksNewUpload) {
             return $next($request);
         }
 
-        // Allow all task actions (viewing + verifying + Gemini paste verification).
-        // The restriction is only about starting new chapter upload/import/publishing.
-        if (Str::startsWith($routeName, 'content.tasks.')) {
-            return $next($request);
-        }
+        $this->emailGeminiPendingOncePerDay($user, $geminiPending);
 
-        // Block chapter actions (upload/import) while Gemini is pending.
-        if (Str::startsWith($routeName, 'content.chapters.')
-            || Str::startsWith($routeName, 'content.textbooks.')
-        ) {
-            $this->emailGeminiPendingOncePerDay($user, $geminiPending);
+        $message = $pendingCount === 1
+            ? 'Gemini check is pending on 1 uploaded chapter. Complete that Gemini check before starting any new upload.'
+            : "Gemini check is pending on {$pendingCount} uploaded chapters. Complete those Gemini checks before starting any new upload.";
 
-            return redirect()
-                ->route('content.tasks.index')
-                ->with('error', 'Gemini check is pending. Complete Gemini for the highlighted tasks before starting any new upload.');
-        }
+        $redirect = $request->headers->get('referer')
+            && $request->headers->get('referer') !== $request->fullUrl()
+            ? redirect()->back()
+            : redirect()->route('content.tasks.index');
 
-        return $next($request);
+        return $redirect->with('error', $message);
     }
 
     /**
@@ -83,4 +89,3 @@ class EnsureUploaderGeminiCheckComplete
         Cache::put($cacheKey, true, now()->addDay());
     }
 }
-

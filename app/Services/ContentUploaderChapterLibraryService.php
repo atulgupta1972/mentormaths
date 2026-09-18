@@ -13,13 +13,17 @@ class ContentUploaderChapterLibraryService
     public function __construct(
         private ContentTextbookAccessService $access,
         private TextbookChapterMcqImportService $mcqImport,
+        private ContentVerificationService $verificationService,
     ) {}
 
     /**
      * @return array{
      *     grades: list<array<string, mixed>>,
      *     selected_grade_id: int|null,
-     *     chapters: list<array<string, mixed>>
+     *     chapters: list<array<string, mixed>>,
+     *     gemini_pending_count: int,
+     *     gemini_blocked: bool,
+     *     gemini_pending: list<array<string, mixed>>
      * }
      */
     public function index(User $user, ?int $gradeLevelId = null): array
@@ -30,6 +34,8 @@ class ContentUploaderChapterLibraryService
             ->with(['textbookChapter.textbook.gradeLevel'])
             ->latest()
             ->get();
+
+        $progressByTask = $this->verificationService->progressForTasks($tasks, $user);
 
         $grades = $tasks
             ->map(function (ContentUploadTask $task) {
@@ -61,14 +67,22 @@ class ContentUploaderChapterLibraryService
 
                 return (int) $task->textbookChapter->textbook?->grade_level_id === (int) $selectedGradeId;
             })
-            ->map(fn (ContentUploadTask $task) => $this->serializeChapterCard($task))
+            ->map(fn (ContentUploadTask $task) => $this->serializeChapterCard(
+                $task,
+                $progressByTask[(int) $task->id] ?? null,
+            ))
             ->values()
             ->all();
+
+        $geminiPending = $this->geminiPendingFromTasks($tasks, $progressByTask);
 
         return [
             'grades' => $grades,
             'selected_grade_id' => $selectedGradeId,
             'chapters' => $chapters,
+            'gemini_pending_count' => $geminiPending->count(),
+            'gemini_blocked' => $geminiPending->isNotEmpty(),
+            'gemini_pending' => $geminiPending->all(),
         ];
     }
 
@@ -129,6 +143,17 @@ class ContentUploaderChapterLibraryService
             ];
         }
 
+        $allTasks = ContentUploadTask::query()
+            ->where('assigned_to_user_id', $user->id)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->with(['textbookChapter.textbook.gradeLevel'])
+            ->latest()
+            ->get();
+        $progressByTask = $this->verificationService->progressForTasks($allTasks, $user);
+        $thisProgress = $progressByTask[(int) $task->id] ?? null;
+        $geminiPending = $this->geminiPendingFromTasks($allTasks, $progressByTask);
+        $thisChapterNeedsGemini = $this->needsGeminiCheck($thisProgress);
+
         return [
             'chapter' => [
                 'id' => $chapter->id,
@@ -146,21 +171,28 @@ class ContentUploaderChapterLibraryService
                 'status' => $task->status,
                 'status_label' => $task->statusLabel(),
                 'can_delete' => ! $task->isLockedForUploaderDelete(),
-                'can_add' => true,
+                'can_add' => $geminiPending->isEmpty(),
+                'needs_gemini_check' => $thisChapterNeedsGemini,
+                'gemini_progress' => $thisProgress,
             ],
             'questions' => $questions,
+            'gemini_pending_count' => $geminiPending->count(),
+            'gemini_blocked' => $geminiPending->isNotEmpty(),
+            'gemini_pending' => $geminiPending->all(),
         ];
     }
 
     /**
+     * @param  array<string, mixed>|null  $geminiProgress
      * @return array<string, mixed>
      */
-    private function serializeChapterCard(ContentUploadTask $task): array
+    private function serializeChapterCard(ContentUploadTask $task, ?array $geminiProgress = null): array
     {
         $chapter = $task->textbookChapter;
 
         return [
             'id' => $chapter?->id,
+            'task_id' => $task->id,
             'chapter_number' => $chapter?->chapter_number,
             'title' => $chapter?->title,
             'textbook_name' => $chapter?->textbook?->name,
@@ -170,7 +202,47 @@ class ContentUploaderChapterLibraryService
             'task_status' => $task->status,
             'task_status_label' => $task->statusLabel(),
             'can_delete' => ! $task->isLockedForUploaderDelete(),
+            'gemini_progress' => $geminiProgress,
+            'needs_gemini_check' => $this->needsGeminiCheck($geminiProgress),
         ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, ContentUploadTask>  $tasks
+     * @param  array<int, array<string, mixed>>  $progressByTask
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function geminiPendingFromTasks($tasks, array $progressByTask): Collection
+    {
+        return $tasks
+            ->filter(fn (ContentUploadTask $task) => $this->needsGeminiCheck($progressByTask[(int) $task->id] ?? null))
+            ->map(function (ContentUploadTask $task) use ($progressByTask) {
+                $chapter = $task->textbookChapter;
+                $progress = $progressByTask[(int) $task->id] ?? null;
+
+                return [
+                    'id' => $task->id,
+                    'chapter_id' => $chapter?->id,
+                    'chapter_label' => $chapter
+                        ? trim(
+                            ($chapter->textbook?->gradeLevel?->name ? $chapter->textbook->gradeLevel->name.' · ' : '')
+                            .($chapter->textbook?->name ? $chapter->textbook->name.' · ' : '')
+                            .'Ch '.$chapter->displayChapterNumber().' — '.$chapter->displayTitle(),
+                        )
+                        : 'Chapter',
+                    'gemini_progress' => $progress,
+                ];
+            })
+            ->values();
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $progress
+     */
+    private function needsGeminiCheck(?array $progress): bool
+    {
+        return (bool) ($progress['can_gemini'] ?? false)
+            && (int) ($progress['pending'] ?? 0) > 0;
     }
 
     /**

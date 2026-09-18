@@ -1265,6 +1265,7 @@ class ContentUploadTaskController extends Controller
         }
 
         if (! in_array($task->status, [
+            ContentUploadTask::STATUS_IN_PROGRESS,
             ContentUploadTask::STATUS_UPLOADED,
             ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
             ContentUploadTask::STATUS_VERIFIED,

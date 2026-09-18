@@ -772,7 +772,7 @@ const formatHelpDate = (value) => {
                                 @click="geminiQueueFilter = 'pending'"
                             >
                                 <p class="text-xs font-semibold uppercase tracking-wide opacity-80">Pending</p>
-                                <p class="text-xl font-bold">{{ stats.gemini_pending_count ?? geminiPendingItems.length }}</p>
+                                <p class="text-xl font-bold">{{ geminiPendingItems.length }}</p>
                             </button>
                             <button
                                 type="button"
@@ -783,7 +783,7 @@ const formatHelpDate = (value) => {
                                 @click="geminiQueueFilter = 'done'"
                             >
                                 <p class="text-xs font-semibold uppercase tracking-wide opacity-80">Done</p>
-                                <p class="text-xl font-bold">{{ stats.gemini_done_count ?? geminiDoneItems.length }}</p>
+                                <p class="text-xl font-bold">{{ geminiDoneItems.length }}</p>
                             </button>
                         </div>
                         <ul v-if="filteredGeminiQueue.length" class="mt-3 space-y-2">

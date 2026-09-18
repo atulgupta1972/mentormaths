@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import GeminiCheckRequiredBanner from '@/Components/GeminiCheckRequiredBanner.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -7,6 +8,9 @@ const props = defineProps({
     chapter: { type: Object, required: true },
     task: { type: Object, required: true },
     questions: { type: Array, default: () => [] },
+    gemini_pending_count: { type: Number, default: 0 },
+    gemini_blocked: { type: Boolean, default: false },
+    gemini_pending: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -122,22 +126,44 @@ const submitRequest = () => {
                     {{ page.props.flash.error }}
                 </div>
 
+                <GeminiCheckRequiredBanner
+                    v-if="gemini_blocked || gemini_pending_count || task.needs_gemini_check"
+                    :pending-count="gemini_pending_count"
+                    :pending-tasks="gemini_pending"
+                    :show-flash="false"
+                />
+
                 <div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
                     <p>
                         Scroll the full list before adding more so you do not upload a duplicate.
-                        You can add questions after publish.
+                        You can add questions after publish, but only after Gemini is complete.
                         <span v-if="task.can_delete">Delete a wrong or duplicate question here.</span>
                         <span v-else>After publish, send a delete request to admin — you cannot delete it yourself.</span>
                     </p>
                     <div class="mt-3 flex flex-wrap gap-2">
                         <button
+                            v-if="task.can_add"
                             type="button"
                             class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
                             @click="showAdd = !showAdd"
                         >
                             {{ showAdd ? 'Hide add form' : 'Add more questions' }}
                         </button>
+                        <span
+                            v-else
+                            class="rounded-md bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900"
+                        >
+                            Finish Gemini check first to add questions
+                        </span>
                         <Link
+                            v-if="task.needs_gemini_check"
+                            :href="route('content.tasks.show', task.id)"
+                            class="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700"
+                        >
+                            Complete Gemini check →
+                        </Link>
+                        <Link
+                            v-if="task.can_add"
                             :href="route('content.textbooks.show', chapter.id)"
                             class="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                         >
@@ -146,7 +172,7 @@ const submitRequest = () => {
                     </div>
                 </div>
 
-                <div v-if="showAdd" class="space-y-4 rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
+                <div v-if="showAdd && task.can_add" class="space-y-4 rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                     <h3 class="font-semibold text-gray-900">Add more questions</h3>
                     <p class="text-sm text-gray-500">Paste AI JSON or upload a zip. Existing questions stay — new ones are appended.</p>
 

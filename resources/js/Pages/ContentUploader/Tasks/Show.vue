@@ -142,9 +142,16 @@ onUnmounted(() => clearInterval(pingTimer));
                     <p v-if="task.status === 'published'" class="mt-2 text-sm text-indigo-900">
                         This chapter is published — you can still complete Gemini review for any pending questions.
                     </p>
-                    <a v-if="textbookChapterUrl" :href="textbookChapterUrl" class="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline">
+                    <a
+                        v-if="textbookChapterUrl && !task.needs_gemini_check"
+                        :href="textbookChapterUrl"
+                        class="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline"
+                    >
                         Open textbook chapter →
                     </a>
+                    <p v-else-if="task.needs_gemini_check" class="mt-3 text-sm font-medium text-amber-800">
+                        Finish this Gemini check before opening the chapter editor or starting a new upload.
+                    </p>
                 </div>
 
                 <GeminiVerificationGuide v-if="showGeminiGuide" />

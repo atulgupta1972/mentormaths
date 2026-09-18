@@ -1,7 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import GeminiVerificationGuide from '@/Components/GeminiVerificationGuide.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import GeminiCheckRequiredBanner from '@/Components/GeminiCheckRequiredBanner.vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
@@ -15,8 +16,12 @@ const props = defineProps({
     geminiDone: { type: Array, default: () => [] },
 });
 
+const page = usePage();
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
-const bucketFilter = ref('all');
+const geminiBlocked = computed(() => Number(props.summary.gemini_pending || 0) > 0);
+const bucketFilter = ref(
+    (page.props.flash?.error && geminiBlocked.value) ? 'gemini_pending' : 'all',
+);
 
 const startReview = (taskId) => {
     router.post(route('content.tasks.start-review', taskId));
@@ -155,14 +160,15 @@ const geminiProgressLabel = (task) => {
                 </div>
 
                 <div
-                    v-if="summary.gemini_pending"
-                    class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900"
+                    v-if="geminiBlocked"
+                    class="space-y-3"
                 >
-                    Gemini check pending on {{ summary.gemini_pending }} chapter(s) — including published ones.
-                    Complete Gemini before starting new uploads. Chapters cannot be submitted for publish until Gemini is done.
+                    <GeminiCheckRequiredBanner
+                        :pending-count="summary.gemini_pending"
+                        :pending-tasks="geminiPending"
+                    />
+                    <GeminiVerificationGuide />
                 </div>
-
-                <GeminiVerificationGuide v-if="summary.gemini_pending" />
 
                 <div v-if="correctionsPending.length" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-rose-200">
                     <div class="border-b border-rose-100 bg-rose-50 px-3 py-2">
@@ -254,8 +260,14 @@ const geminiProgressLabel = (task) => {
                                         {{ task.rate_description || formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}
                                     </td>
                                     <td class="whitespace-nowrap px-2 py-1.5 text-right">
+                                        <span
+                                            v-if="geminiBlocked && task.bucket === 'upload_pending'"
+                                            class="font-medium text-amber-800"
+                                        >
+                                            Finish Gemini first
+                                        </span>
                                         <Link
-                                            v-if="task.needs_gemini_check"
+                                            v-else-if="task.needs_gemini_check"
                                             :href="route('content.tasks.show', task.id)"
                                             class="font-medium text-indigo-700 hover:underline"
                                         >
