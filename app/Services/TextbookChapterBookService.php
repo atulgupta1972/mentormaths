@@ -33,13 +33,18 @@ class TextbookChapterBookService
                 }),
             )
             ->orderBy('name')
-            ->get(['id', 'name', 'code', 'board_id'])
+            ->get(['id', 'name', 'code', 'practice_line', 'source_ref', 'board_id'])
             ->map(fn (Textbook $book) => [
                 'id' => $book->id,
                 'name' => $book->name,
                 'code' => $book->code,
+                'practice_line' => $book->practice_line ?? Textbook::PRACTICE_LINE_STANDARD,
+                'source_ref' => $book->source_ref,
+                'is_mentormaths' => $book->isMentorMathsPracticeLine(),
                 'board_id' => $book->board_id,
-                'label' => "{$book->name} ({$book->code})",
+                'label' => $book->isMentorMathsPracticeLine()
+                    ? "{$book->name} ({$book->code} · MentorMaths)"
+                    : "{$book->name} ({$book->code})",
             ])
             ->values()
             ->all();

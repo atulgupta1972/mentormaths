@@ -96,12 +96,22 @@ const applyConversion = () => {
     }
 
     if (!preview.value) {
-        window.alert('Preview first — check convertible vs MCQ-only lists.');
+        window.alert('Preview first — check convertible vs blocked / skipped lists.');
 
         return;
     }
 
-    const msg = `Apply conversion?\n\n${preview.value.convertible_count} → fill-in-blank (ready)\n${preview.value.not_possible_count} → stay MCQ in this set`;
+    if ((preview.value.blocked_count || 0) > 0) {
+        window.alert(
+            `${preview.value.blocked_count} row(s) blocked by similarity/publisher checks. Rewrite those stems in Gemini, then preview again.`,
+        );
+
+        return;
+    }
+
+    const msg = props.gemini?.is_mentormaths
+        ? `Apply MentorMaths transform?\n\n${preview.value.convertible_count} → fill-in-blank\n${preview.value.not_possible_count} → skipped`
+        : `Apply conversion?\n\n${preview.value.convertible_count} → fill-in-blank (ready)\n${preview.value.not_possible_count} → stay MCQ in this set`;
 
     if (!window.confirm(msg)) {
         return;
@@ -120,22 +130,33 @@ const applyConversion = () => {
 <template>
     <div v-if="gemini" class="space-y-4 rounded-lg border border-violet-200 bg-violet-50 p-4">
         <div>
-            <p class="text-sm font-semibold text-violet-950">Gemini bulk conversion</p>
+            <p class="text-sm font-semibold text-violet-950">
+                {{ gemini.is_mentormaths ? 'MentorMaths Gemini transform' : 'Gemini bulk conversion' }}
+            </p>
             <p class="mt-1 text-sm text-violet-900">
-                Faster than one-by-one: Gemini checks all {{ gemini.question_count }} MCQs.
-                Whole numbers and simple fractions (e.g. <strong>2/3</strong>) become fill-in-blank;
-                words, true/false, and mixed fractions stay <strong>MCQ-only</strong> in the same test set.
+                <template v-if="gemini.is_mentormaths">
+                    Rewrite every stem, change numbers/names, strip publisher wording.
+                    Only numeric fill-in-blanks are kept — similarity gate rejects near-copies.
+                </template>
+                <template v-else>
+                    Faster than one-by-one: Gemini checks all {{ gemini.question_count }} MCQs.
+                    Whole numbers and simple fractions (e.g. <strong>2/3</strong>) become fill-in-blank;
+                    words, true/false, and mixed fractions stay <strong>MCQ-only</strong> in the same test set.
+                </template>
             </p>
         </div>
 
         <ol class="space-y-2 text-sm text-violet-950">
             <li class="flex gap-2">
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">1</span>
-                <span>Copy <strong>MCQ reference JSON</strong> and attach/paste into Gemini with the prompt.</span>
+                <span>
+                    Copy <strong>{{ gemini.is_mentormaths ? 'source reference JSON' : 'MCQ reference JSON' }}</strong>
+                    and attach/paste into Gemini with the prompt.
+                </span>
             </li>
             <li class="flex gap-2">
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">2</span>
-                <span>Copy the <strong>conversion prompt</strong> into Gemini.</span>
+                <span>Copy the <strong>{{ gemini.is_mentormaths ? 'transform prompt' : 'conversion prompt' }}</strong> into Gemini.</span>
             </li>
             <li class="flex gap-2">
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">3</span>
@@ -145,10 +166,14 @@ const applyConversion = () => {
 
         <div class="flex flex-wrap gap-2">
             <SecondaryButton type="button" :disabled="!gemini.mcq_reference_json" @click="copyReference">
-                {{ copiedReference ? 'Reference copied!' : 'Copy MCQ reference JSON' }}
+                {{ copiedReference
+                    ? 'Reference copied!'
+                    : (gemini.is_mentormaths ? 'Copy source reference JSON' : 'Copy MCQ reference JSON') }}
             </SecondaryButton>
             <SecondaryButton type="button" :disabled="!gemini.prompt" @click="copyPrompt">
-                {{ copiedPrompt ? 'Prompt copied!' : 'Copy Gemini prompt' }}
+                {{ copiedPrompt
+                    ? 'Prompt copied!'
+                    : (gemini.is_mentormaths ? 'Copy transform prompt' : 'Copy Gemini prompt') }}
             </SecondaryButton>
         </div>
 
@@ -207,22 +232,45 @@ const applyConversion = () => {
                 </ul>
             </div>
 
-            <div class="rounded-md border border-amber-200 bg-white p-3">
-                <p class="text-xs font-semibold uppercase tracking-wide text-amber-900">
-                    Not possible · {{ preview.not_possible_count }}
-                </p>
-                <p class="mt-1 text-xs text-amber-900">Stay MCQ-only in this fill-in-blank test set.</p>
-                <ul class="mt-2 max-h-56 space-y-2 overflow-y-auto text-sm text-slate-800">
-                    <li
-                        v-for="row in preview.not_possible"
-                        :key="`skip-${row.index}`"
-                        class="rounded border border-amber-100 bg-amber-50/50 p-2"
-                    >
-                        <p class="font-semibold text-amber-950">Q{{ row.number }}<span v-if="row.label"> · {{ row.label }}</span></p>
-                        <p class="mt-1 text-xs text-slate-700">{{ row.mcq_question }}</p>
-                        <p class="mt-1 text-xs text-amber-800">{{ row.reason }} · MCQ key: {{ row.mcq_answer || '—' }}</p>
-                    </li>
-                </ul>
+            <div class="space-y-4">
+                <div
+                    v-if="(preview.blocked_count || 0) > 0"
+                    class="rounded-md border border-rose-200 bg-white p-3"
+                >
+                    <p class="text-xs font-semibold uppercase tracking-wide text-rose-900">
+                        Blocked · {{ preview.blocked_count }}
+                    </p>
+                    <p class="mt-1 text-xs text-rose-900">Too similar to source / banned wording / unchanged numbers.</p>
+                    <ul class="mt-2 max-h-40 space-y-2 overflow-y-auto text-sm text-slate-800">
+                        <li
+                            v-for="row in preview.blocked"
+                            :key="`block-${row.index}`"
+                            class="rounded border border-rose-100 bg-rose-50/50 p-2"
+                        >
+                            <p class="font-semibold text-rose-900">Q{{ row.number }}</p>
+                            <p class="mt-1 text-xs text-rose-800">{{ row.reason }}</p>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="rounded-md border border-amber-200 bg-white p-3">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-amber-900">
+                        Not possible · {{ preview.not_possible_count }}
+                    </p>
+                    <p class="mt-1 text-xs text-amber-900">
+                        {{ preview.is_mentormaths ? 'Skipped on this MentorMaths set.' : 'Stay MCQ-only in this fill-in-blank test set.' }}
+                    </p>
+                    <ul class="mt-2 max-h-56 space-y-2 overflow-y-auto text-sm text-slate-800">
+                        <li
+                            v-for="row in preview.not_possible"
+                            :key="`skip-${row.index}`"
+                            class="rounded border border-amber-100 bg-amber-50/50 p-2"
+                        >
+                            <p class="font-semibold text-amber-900">Q{{ row.number }}<span v-if="row.label"> · {{ row.label }}</span></p>
+                            <p class="mt-1 text-xs text-amber-800">{{ row.reason }}</p>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>

@@ -25,15 +25,16 @@ class TextbookChapterConversionPromptServiceTest extends TestCase
         $chapter = $this->seedChapterWithMcqs();
 
         $service = new TextbookChapterConversionPromptService(new TextbookSetCodeService);
-        $payload = $service->payload($chapter);
+        $payload = $service->payload($chapter, includeMcqReferenceJson: true);
 
         $this->assertStringContainsString('mcq_reference.json', $payload['prompt']);
-        $this->assertStringContainsString('MUST be a number or a fraction only', $payload['prompt']);
+        $this->assertStringContainsString('MUST be a whole number, decimal, or a simple proper/improper fraction only', $payload['prompt']);
         $this->assertStringContainsString('rewrite the question completely', $payload['prompt']);
-        $this->assertStringNotContainsString('short algebra token', $payload['prompt']);
+        $this->assertStringNotContainsString('TRANSFORM RULES', $payload['prompt']);
         $this->assertSame('C9-GP-CH08-F1', $payload['fill_blank_set_code']);
         $this->assertSame('C9-GP-CH08-W1', $payload['written_set_code']);
         $this->assertSame(1, $payload['question_count']);
+        $this->assertFalse($payload['is_mentormaths']);
 
         $reference = json_decode($payload['mcq_reference_json'], true);
         $this->assertSame('175', $reference['questions'][0]['correct_answer']);

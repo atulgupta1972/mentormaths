@@ -284,6 +284,8 @@ const publishFillBlankAndWritten = () => {
 
 const fillBlankReadyCount = computed(() => props.chapter.fill_blank_ready_count ?? 0);
 const canPublishFillBlank = computed(() => fillBlankReadyCount.value > 0);
+const isMentorMaths = computed(() => Boolean(props.chapter.book?.is_mentormaths));
+const canPublishMcq = computed(() => !isMentorMaths.value);
 
 const importMcq = () => {
     importForm.json = jsonInput.value;
@@ -556,11 +558,22 @@ const canChangeBook = computed(() =>
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">
                         {{ chapter.book?.grade_name || 'Class' }} · {{ chapter.book?.name || 'Textbook' }}
+                        <span
+                            v-if="isMentorMaths"
+                            class="ml-2 inline-flex rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-900 ring-1 ring-teal-200"
+                        >
+                            MentorMaths · fill-blank only
+                        </span>
                     </h2>
                     <p class="text-sm text-gray-500">
                         {{ chapter.label || `Ch ${chapter.chapter_number} — ${chapter.title}` }}
                         · {{ chapter.status_label }}
-                        · MCQ {{ mcqPublishSummary }}
+                        <template v-if="isMentorMaths">
+                            · Fill-blank {{ chapter.fill_blank_set_code || 'pending' }}
+                        </template>
+                        <template v-else>
+                            · MCQ {{ mcqPublishSummary }}
+                        </template>
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
@@ -603,6 +616,19 @@ const canChangeBook = computed(() =>
                 </div>
                 <div v-if="page.props.flash?.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
                     {{ page.props.flash.error }}
+                </div>
+
+                <div
+                    v-if="isMentorMaths"
+                    class="rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-950"
+                >
+                    <strong>MentorMaths practice line.</strong>
+                    PDF is private working material. Import source extracts → Gemini <em>transform</em>
+                    (rewrite wording + change numbers/names) → publish fill-blank + written only.
+                    MCQ publish is blocked for this book.
+                    <span v-if="chapter.book?.source_ref" class="mt-1 block text-xs text-teal-800">
+                        Internal source ref: {{ chapter.book.source_ref }} (admin only)
+                    </span>
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -766,7 +792,7 @@ const canChangeBook = computed(() =>
                     </SecondaryButton>
                 </div>
 
-                <div v-if="canEdit && hasItems && !hideUploaderEditPanels" class="flex flex-wrap items-center justify-between gap-3">
+                <div v-if="canEdit && hasItems && !hideUploaderEditPanels && canPublishMcq" class="flex flex-wrap items-center justify-between gap-3">
                     <p class="text-sm text-gray-600">
                         {{ approvedCount }} of {{ items.length }} approved · {{ uploaderMode ? 'save as' : 'publish as' }} {{ mcqPublishSummary }}.
                     </p>
@@ -776,6 +802,22 @@ const canChangeBook = computed(() =>
                             {{ chapter.status === 'published'
                                 ? (uploaderMode ? 'Re-save MCQ sets' : 'Re-publish MCQ sets')
                                 : (uploaderMode ? 'Save MCQ sets (ready to verify)' : 'Publish MCQ sets') }}
+                        </PrimaryButton>
+                    </div>
+                </div>
+
+                <div v-if="canEdit && hasItems && !hideUploaderEditPanels && isMentorMaths" class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50/60 px-4 py-3">
+                    <p class="text-sm text-teal-950">
+                        {{ fillBlankReadyCount }} fill-in-blank ready · MentorMaths does not publish MCQ sets.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <SecondaryButton type="button" :disabled="draftForm.processing" @click="saveDraft">Save draft</SecondaryButton>
+                        <PrimaryButton
+                            type="button"
+                            :disabled="publishFillBlankForm.processing || !canPublishFillBlank"
+                            @click="publishFillBlankAndWritten"
+                        >
+                            {{ publishFillBlankForm.processing ? 'Publishing…' : 'Publish fill-blank + written' }}
                         </PrimaryButton>
                     </div>
                 </div>
@@ -790,7 +832,7 @@ const canChangeBook = computed(() =>
                     <strong>{{ diagramLinkedCount }} chart/diagram image(s)</strong> linked — students will see these when attempting MCQs.
                 </div>
 
-                <div v-if="canEdit && hasItems && !hideUploaderEditPanels" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+                <div v-if="canEdit && hasItems && !hideUploaderEditPanels && canPublishMcq" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
                     <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -1265,7 +1307,7 @@ const canChangeBook = computed(() =>
                                 :disabled="publishFillBlankForm.processing || !canPublishFillBlank"
                                 @click="publishFillBlankAndWritten"
                             >
-                                {{ publishFillBlankForm.processing ? 'Publishing…' : 'Publish fill-blank + written' }}
+                                {{ publishFillBlankForm.processing ? 'Publishing…' : (isMentorMaths ? 'Publish MentorMaths fill-blank + written' : 'Publish fill-blank + written') }}
                             </PrimaryButton>
                         </div>
                     </div>

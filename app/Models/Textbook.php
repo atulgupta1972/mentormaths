@@ -8,11 +8,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Textbook extends Model
 {
+    public const PRACTICE_LINE_STANDARD = 'standard';
+
+    public const PRACTICE_LINE_MENTORMATHS = 'mentormaths';
+
     protected $fillable = [
         'grade_level_id',
         'board_id',
         'name',
         'code',
+        'practice_line',
+        'source_ref',
         'is_active',
         'created_by',
     ];
@@ -22,6 +28,19 @@ class Textbook extends Model
         return [
             'is_active' => 'boolean',
         ];
+    }
+
+    public function isMentorMathsPracticeLine(): bool
+    {
+        return ($this->practice_line ?? self::PRACTICE_LINE_STANDARD) === self::PRACTICE_LINE_MENTORMATHS;
+    }
+
+    /**
+     * Student-facing display name — never expose internal source_ref.
+     */
+    public function publicName(): string
+    {
+        return (string) $this->name;
     }
 
     public function gradeLevel(): BelongsTo

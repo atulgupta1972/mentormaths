@@ -78,10 +78,10 @@ const sampleBank = {
             ],
         },
         {
-            name: 'RD Sharma',
-            code: 'rds',
+            name: 'MentorMaths 1',
+            code: 'mm1',
             parts: [
-                { label: 'Part 1', mcq: 18, fill: 14, written: 10 },
+                { label: 'Part 1', mcq: 0, fill: 18, written: 12 },
             ],
         },
     ],

@@ -19,13 +19,16 @@ const presetChapterId = params.get('syllabus_chapter_id') || '';
 const form = useForm({
     mode: props.books?.length ? 'existing' : 'new',
     textbook_id: props.books?.[0] ? String(props.books[0].id) : '',
-    book_name: props.books[0]?.name || 'Ganita Prakash Part I',
-    book_code: props.books[0]?.code || 'GP',
+    book_name: props.books[0]?.name || 'MentorMaths 1',
+    book_code: props.books[0]?.code || 'MM1',
+    practice_line: props.books[0]?.practice_line || 'standard',
+    source_ref: props.books[0]?.source_ref || '',
     syllabus_chapter_id: presetChapterId,
     pdf: null,
 });
 
 const uploadError = ref('');
+const isMentorMaths = computed(() => form.practice_line === 'mentormaths');
 
 const selectedChapter = computed(() =>
     props.syllabusChapters.find((chapter) => String(chapter.id) === String(form.syllabus_chapter_id)),
@@ -38,6 +41,8 @@ const onModeChange = () => {
         form.textbook_id = String(props.books[0].id);
         form.book_name = props.books[0].name;
         form.book_code = props.books[0].code;
+        form.practice_line = props.books[0].practice_line || 'standard';
+        form.source_ref = props.books[0].source_ref || '';
     }
 };
 
@@ -46,6 +51,19 @@ const onBookSelect = () => {
     if (book) {
         form.book_name = book.name;
         form.book_code = book.code;
+        form.practice_line = book.practice_line || 'standard';
+        form.source_ref = book.source_ref || '';
+    }
+};
+
+const onPracticeLineChange = () => {
+    if (form.practice_line === 'mentormaths' && form.mode === 'new') {
+        if (!form.book_name || form.book_name === 'Ganita Prakash Part I') {
+            form.book_name = 'MentorMaths 1';
+        }
+        if (!form.book_code || form.book_code === 'GP') {
+            form.book_code = 'MM1';
+        }
     }
 };
 
@@ -72,6 +90,8 @@ const submit = () => {
             return {
                 book_name: book?.name || data.book_name,
                 book_code: book?.code || data.book_code,
+                practice_line: book?.practice_line || data.practice_line || 'standard',
+                source_ref: book?.source_ref || data.source_ref || null,
                 syllabus_chapter_id: data.syllabus_chapter_id,
                 pdf: data.pdf,
             };
@@ -80,6 +100,8 @@ const submit = () => {
         return {
             book_name: data.book_name,
             book_code: data.book_code,
+            practice_line: data.practice_line || 'standard',
+            source_ref: data.source_ref || null,
             syllabus_chapter_id: data.syllabus_chapter_id,
             pdf: data.pdf,
         };
@@ -117,7 +139,12 @@ const submit = () => {
                 >
                     <div class="rounded-md bg-sky-50 px-4 py-3 text-sm text-sky-900">
                         Uploading for <strong>{{ gradeLevel.name }}</strong>.
-                        Step 1: store the chapter PDF here. Step 2: use the AI prompt on the next page with Claude/Cursor/Gemini.
+                        <template v-if="isMentorMaths">
+                            MentorMaths line: PDF is private working material → transform to fill-in-blanks only (rewrite + new numbers/names).
+                        </template>
+                        <template v-else>
+                            Step 1: store the chapter PDF here. Step 2: use the AI prompt on the next page with Claude/Cursor/Gemini.
+                        </template>
                     </div>
 
                     <div class="flex flex-wrap gap-4 text-sm text-slate-800">
@@ -142,7 +169,7 @@ const submit = () => {
                         >
                             <option value="" disabled>Choose book…</option>
                             <option v-for="book in books" :key="book.id" :value="String(book.id)">
-                                {{ book.name }} ({{ book.code }})
+                                {{ book.name }} ({{ book.code }})<template v-if="book.is_mentormaths"> · MentorMaths</template>
                             </option>
                         </select>
                         <InputError :message="form.errors.book_name || form.errors.book_code" class="mt-1" />
@@ -150,16 +177,45 @@ const submit = () => {
 
                     <template v-else>
                         <div>
-                            <InputLabel for="book_name" value="Book name" />
+                            <InputLabel value="Practice line" />
+                            <div class="mt-2 flex flex-wrap gap-4 text-sm text-slate-800">
+                                <label class="inline-flex items-center gap-1.5">
+                                    <input v-model="form.practice_line" type="radio" value="standard" @change="onPracticeLineChange">
+                                    Standard (NCERT / GP — MCQ + fill-blank)
+                                </label>
+                                <label class="inline-flex items-center gap-1.5">
+                                    <input v-model="form.practice_line" type="radio" value="mentormaths" @change="onPracticeLineChange">
+                                    MentorMaths (fill-blank only · transform from PDF)
+                                </label>
+                            </div>
+                            <InputError :message="form.errors.practice_line" class="mt-1" />
+                        </div>
+
+                        <div>
+                            <InputLabel for="book_name" value="Book name (student-facing)" />
                             <TextInput id="book_name" v-model="form.book_name" class="mt-1 block w-full" required />
+                            <p v-if="isMentorMaths" class="mt-1 text-xs text-gray-500">
+                                Use MentorMaths 1, MentorMaths 2… — never put publisher names here.
+                            </p>
                             <InputError :message="form.errors.book_name" class="mt-1" />
                         </div>
 
                         <div>
                             <InputLabel for="book_code" value="Book code" />
                             <TextInput id="book_code" v-model="form.book_code" class="mt-1 block w-full" required />
-                            <p class="mt-1 text-xs text-gray-500">Short book code for set names — e.g. <strong>GP</strong> (Ganita Prakash) → set <strong>C9-GP-CH08-M</strong>.</p>
+                            <p class="mt-1 text-xs text-gray-500">
+                                Short book code for set names — e.g. <strong>MM1</strong> → set <strong>C9-MM1-CH08-F1</strong>.
+                            </p>
                             <InputError :message="form.errors.book_code" class="mt-1" />
+                        </div>
+
+                        <div v-if="isMentorMaths">
+                            <InputLabel for="source_ref" value="Internal source ref (admin only)" />
+                            <TextInput id="source_ref" v-model="form.source_ref" class="mt-1 block w-full" placeholder="e.g. RDS-C7 / RSA-C9" />
+                            <p class="mt-1 text-xs text-amber-800">
+                                Never shown to students. Private working note only.
+                            </p>
+                            <InputError :message="form.errors.source_ref" class="mt-1" />
                         </div>
                     </template>
 

@@ -60,19 +60,23 @@ class TextbookController extends Controller
         $books = Textbook::query()
             ->when($gradeLevel, fn ($q) => $q->where('grade_level_id', $gradeLevel->id))
             ->orderBy('name')
-            ->get(['id', 'name', 'code'])
+            ->get(['id', 'name', 'code', 'practice_line', 'source_ref'])
             ->map(fn (Textbook $book) => [
                 'id' => $book->id,
                 'name' => $book->name,
                 'code' => $book->code,
-                'label' => trim($book->name.' ('.$book->code.')'),
+                'practice_line' => $book->practice_line ?? Textbook::PRACTICE_LINE_STANDARD,
+                'is_mentormaths' => $book->isMentorMathsPracticeLine(),
+                'label' => $book->isMentorMathsPracticeLine()
+                    ? trim($book->name.' ('.$book->code.' · MentorMaths)')
+                    : trim($book->name.' ('.$book->code.')'),
             ])
             ->values()
             ->all();
 
         $chapters = TextbookChapter::query()
             ->with([
-                'textbook:id,name,code,grade_level_id',
+                'textbook:id,name,code,grade_level_id,practice_line,source_ref',
                 'textbook.gradeLevel:id,name',
                 'syllabusChapter:id,name,chapter_number',
                 'mcqWorksheet:id,set_code',
@@ -110,8 +114,13 @@ class TextbookController extends Controller
                 'fill_blank_ready_count' => $this->fillBlankImportService->fillBlankReadyCount(
                     is_array($chapter->extraction_items) ? $chapter->extraction_items : [],
                 ),
-                'can_convert_fill_blank' => $chapter->status === TextbookChapter::STATUS_PUBLISHED
-                    && count($chapter->extraction_items ?? []) > 0,
+                'can_convert_fill_blank' => count($chapter->extraction_items ?? []) > 0
+                    && (
+                        $chapter->status === TextbookChapter::STATUS_PUBLISHED
+                        || ($chapter->textbook?->isMentorMathsPracticeLine() ?? false)
+                    ),
+                'is_mentormaths' => $chapter->textbook?->isMentorMathsPracticeLine() ?? false,
+                'practice_line' => $chapter->textbook?->practice_line ?? Textbook::PRACTICE_LINE_STANDARD,
                 'concept_path_status' => $chapter->concept_path_status,
                 'concept_path_status_label' => \App\Support\ConceptPathStatus::label($chapter->concept_path_status),
                 'published_at' => $chapter->published_at?->toDateTimeString(),
@@ -153,7 +162,7 @@ class TextbookController extends Controller
             $books = Textbook::query()
                 ->where('grade_level_id', $gradeLevel->id)
                 ->orderBy('name')
-                ->get(['id', 'name', 'code'])
+                ->get(['id', 'name', 'code', 'practice_line', 'source_ref'])
                 ->all();
         }
 
@@ -178,6 +187,8 @@ class TextbookController extends Controller
         $validated = $request->validate([
             'book_name' => ['required', 'string', 'max:255'],
             'book_code' => ['required', 'string', 'max:32', 'alpha_dash'],
+            'practice_line' => ['nullable', 'string', Rule::in([Textbook::PRACTICE_LINE_STANDARD, Textbook::PRACTICE_LINE_MENTORMATHS])],
+            'source_ref' => ['nullable', 'string', 'max:64'],
             'syllabus_chapter_id' => ['required', 'integer', Rule::exists('syllabus_chapters', 'id')],
             'pdf' => ['required', 'file', 'mimes:pdf', 'max:51200'],
         ], [
@@ -186,6 +197,9 @@ class TextbookController extends Controller
             'pdf.max' => 'Each chapter PDF must be under 50 MB.',
             'pdf.uploaded' => 'The PDF is too large for the server upload limit. Set PHP upload_max_filesize and post_max_size to at least 20M on the server.',
         ]);
+
+        $practiceLine = $validated['practice_line'] ?? Textbook::PRACTICE_LINE_STANDARD;
+        $sourceRef = filled($validated['source_ref'] ?? null) ? trim((string) $validated['source_ref']) : null;
 
         $syllabusChapter = SyllabusChapter::query()->findOrFail($validated['syllabus_chapter_id']);
         $chapterNumber = $syllabusChapter->numericChapterNumber();
@@ -197,12 +211,24 @@ class TextbookController extends Controller
             ],
             [
                 'name' => $validated['book_name'],
+                'practice_line' => $practiceLine,
+                'source_ref' => $sourceRef,
                 'created_by' => $request->user()->id,
             ],
         );
 
+        $textbookUpdates = [];
         if ($textbook->name !== $validated['book_name']) {
-            $textbook->update(['name' => $validated['book_name']]);
+            $textbookUpdates['name'] = $validated['book_name'];
+        }
+        if (($textbook->practice_line ?? Textbook::PRACTICE_LINE_STANDARD) !== $practiceLine) {
+            $textbookUpdates['practice_line'] = $practiceLine;
+        }
+        if (($textbook->source_ref ?? null) !== $sourceRef) {
+            $textbookUpdates['source_ref'] = $sourceRef;
+        }
+        if ($textbookUpdates !== []) {
+            $textbook->update($textbookUpdates);
         }
 
         $existing = TextbookChapter::query()
@@ -231,7 +257,12 @@ class TextbookController extends Controller
 
         return redirect()
             ->route('admin.textbooks.show', $chapter)
-            ->with('success', 'Chapter PDF uploaded. Copy the AI prompt, generate MCQ JSON in Claude/Cursor/Gemini, then paste it below.');
+            ->with(
+                'success',
+                $textbook->isMentorMathsPracticeLine()
+                    ? 'Chapter PDF uploaded. Import source extracts, run MentorMaths Gemini transform (rewrite + new numbers), then publish fill-blank only.'
+                    : 'Chapter PDF uploaded. Copy the AI prompt, generate MCQ JSON in Claude/Cursor/Gemini, then paste it below.',
+            );
     }
 
     public function show(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
@@ -425,6 +456,9 @@ class TextbookController extends Controller
                     'name' => $textbookChapter->textbook?->name,
                     'code' => $textbookChapter->textbook?->code,
                     'grade_name' => $textbookChapter->textbook?->gradeLevel?->name,
+                    'practice_line' => $textbookChapter->textbook?->practice_line ?? Textbook::PRACTICE_LINE_STANDARD,
+                    'source_ref' => $textbookChapter->textbook?->source_ref,
+                    'is_mentormaths' => $textbookChapter->textbook?->isMentorMathsPracticeLine() ?? false,
                 ],
                 'syllabus_chapter_id' => $textbookChapter->syllabus_chapter_id,
                 'syllabus_chapter_label' => $textbookChapter->syllabusChapter
@@ -904,9 +938,15 @@ class TextbookController extends Controller
         }
 
         $codes = $this->setCodeService->codes($chapter);
+        $isMentorMaths = $chapter->textbook?->isMentorMathsPracticeLine() ?? false;
 
         return $this->redirectToChapterShow($chapter)
-            ->with('success', "Published online fill-blank {$codes['fill_blank']} and written {$codes['written']}. MCQ sets unchanged.");
+            ->with(
+                'success',
+                $isMentorMaths
+                    ? "Published MentorMaths fill-blank {$codes['fill_blank']} and written {$codes['written']} (no MCQ sets)."
+                    : "Published online fill-blank {$codes['fill_blank']} and written {$codes['written']}. MCQ sets unchanged.",
+            );
     }
 
     public function conceptPath(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
@@ -1465,6 +1505,7 @@ class TextbookController extends Controller
                 'book_name' => $textbookChapter->textbook?->name,
                 'book_code' => $textbookChapter->textbook?->code,
                 'grade_name' => $textbookChapter->textbook?->gradeLevel?->name,
+                'is_mentormaths' => $textbookChapter->textbook?->isMentorMathsPracticeLine() ?? false,
                 'items_count' => count($items),
                 'fill_blank_ready_count' => $this->fillBlankImportService->fillBlankReadyCount($items),
                 'fill_blank_set_code' => $textbookChapter->fillBlankWorksheet?->set_code
@@ -1510,7 +1551,9 @@ class TextbookController extends Controller
         return redirect()
             ->route('admin.textbooks.convert-gemini', $textbookChapter)
             ->with('success', sprintf(
-                'Applied Gemini conversion: %d fill-in-blank ready, %d stay MCQ-only in this set.',
+                $textbookChapter->textbook?->isMentorMathsPracticeLine()
+                    ? 'Applied MentorMaths transform: %d fill-in-blank ready, %d skipped.'
+                    : 'Applied Gemini conversion: %d fill-in-blank ready, %d stay MCQ-only in this set.',
                 $result['convertible_count'],
                 $result['not_possible_count'],
             ));

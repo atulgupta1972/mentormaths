@@ -40,6 +40,12 @@ class TextbookChapterPublishService
     {
         $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.gradeLevel']);
 
+        if ($chapter->textbook?->isMentorMathsPracticeLine()) {
+            throw new InvalidArgumentException(
+                'MentorMaths practice books publish fill-in-blanks only. Use “Publish fill-blank + written” after Gemini transform — do not publish MCQ sets.',
+            );
+        }
+
         $approved = collect($items)
             ->filter(fn (array $item) => ($item['approved'] ?? true) && trim((string) ($item['question_text'] ?? '')) !== '')
             ->values();
@@ -285,12 +291,38 @@ class TextbookChapterPublishService
         $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.gradeLevel']);
 
         $items = $chapter->extraction_items ?? [];
+        $isMentorMaths = $chapter->textbook?->isMentorMathsPracticeLine() ?? false;
+        $similarity = app(\App\Support\StemSimilarity::class);
+
         $fillBlankItems = collect($items)
             ->filter(fn (array $item) => $this->itemIsFillBlankReady($item))
             ->values();
 
         if ($fillBlankItems->isEmpty()) {
-            throw new InvalidArgumentException('Import fill-in-blank JSON first (Step 4).');
+            throw new InvalidArgumentException(
+                $isMentorMaths
+                    ? 'Transform source extracts into MentorMaths fill-in-blanks first (Gemini convert).'
+                    : 'Import fill-in-blank JSON first (Step 4).',
+            );
+        }
+
+        if ($isMentorMaths) {
+            foreach ($items as $index => $item) {
+                if (! is_array($item) || ! $this->itemIsFillBlankReady($item)) {
+                    continue;
+                }
+
+                $result = $similarity->compare(
+                    (string) ($item['question_text'] ?? ''),
+                    (string) ($item['fill_blank_question_text'] ?? ''),
+                );
+
+                if ($result['too_similar']) {
+                    throw new InvalidArgumentException(
+                        'Q'.($index + 1).': '.$result['reason'].' Re-run MentorMaths transform before publish.',
+                    );
+                }
+            }
         }
 
         $syllabusChapter = $chapter->syllabusChapter;
@@ -303,7 +335,7 @@ class TextbookChapterPublishService
         $fillPlan = $this->setCodeService->fillBlankPartPlan($chapter, $mcqCount);
         $writtenPlan = $this->setCodeService->writtenPartPlan($chapter, $mcqCount);
 
-        return DB::transaction(function () use ($chapter, $items, $publisher, $topic, $syllabusChapter, $fillPlan, $writtenPlan) {
+        return DB::transaction(function () use ($chapter, $items, $publisher, $topic, $syllabusChapter, $fillPlan, $writtenPlan, $isMentorMaths) {
             $this->deleteExistingWorksheets($chapter->fillBlankWorksheetIds());
             $this->deleteExistingWorksheets($chapter->writtenWorksheetIds());
 
@@ -367,6 +399,12 @@ class TextbookChapterPublishService
                 'fill_blank_worksheet_ids' => $fillBlankIds === [] ? null : $fillBlankIds,
                 'written_worksheet_id' => $writtenIds[0] ?? null,
                 'written_worksheet_ids' => $writtenIds === [] ? null : $writtenIds,
+                // MentorMaths practice line publishes fill-blank only (no MCQ sets).
+                ...($isMentorMaths ? [
+                    'status' => TextbookChapter::STATUS_PUBLISHED,
+                    'published_at' => now(),
+                    'published_by' => $publisher->id,
+                ] : []),
             ]);
 
             $fresh = $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter', 'mcqWorksheet', 'writtenWorksheet', 'fillBlankWorksheet']);

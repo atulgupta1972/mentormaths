@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Support\AnswerValidationService;
 use App\Support\ContentOperationsMailer;
 use App\Support\DiagramQuestionSupport;
+use App\Support\StemSimilarity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -203,6 +204,7 @@ class FillBlankConversionService
      */
     public function applyGeminiJsonToChapter(TextbookChapter $chapter, string $json): array
     {
+        $chapter->loadMissing('textbook');
         $items = array_values(array_filter(
             is_array($chapter->extraction_items) ? $chapter->extraction_items : [],
             fn ($item) => is_array($item),
@@ -214,6 +216,8 @@ class FillBlankConversionService
 
         $rows = app(FillBlankImportService::class)->parseJson($json);
         $convertedIndexes = [];
+        $isMentorMaths = $chapter->textbook?->isMentorMathsPracticeLine() ?? false;
+        $similarity = app(StemSimilarity::class);
 
         foreach ($rows as $row) {
             $sourceIndex = (int) ($row['source_index'] ?? 0);
@@ -233,6 +237,15 @@ class FillBlankConversionService
 
             if ($this->looksLikeWordAnswer($answer) || $this->isMixedFraction($answer) || $this->isTrueFalseAnswer($answer)) {
                 throw new InvalidArgumentException("Question {$sourceIndex} has a non-convertible answer ({$answer}). Omit it from Gemini JSON.");
+            }
+
+            $sourceStem = trim((string) ($items[$itemIndex]['question_text'] ?? ''));
+            $similarityResult = $similarity->compare($sourceStem, $questionText);
+
+            if ($isMentorMaths && $similarityResult['too_similar']) {
+                throw new InvalidArgumentException(
+                    "Question {$sourceIndex}: {$similarityResult['reason']} (overlap {$similarityResult['overlap']}).",
+                );
             }
 
             if ($this->itemMissingRequiredDiagram($items[$itemIndex], $chapter, $itemIndex)) {
@@ -274,6 +287,8 @@ class FillBlankConversionService
             $items[$itemIndex]['fill_blank_gemini_ready'] = true;
             $items[$itemIndex]['fill_blank_checked_at'] = now()->toIso8601String();
             $items[$itemIndex]['fill_blank_checked_hash'] = $this->checkHash($questionText, $format, $answer, $places);
+            $items[$itemIndex]['fill_blank_transformed'] = $isMentorMaths;
+            $items[$itemIndex]['fill_blank_similarity_overlap'] = $similarityResult['overlap'];
             $convertedIndexes[] = $itemIndex;
         }
 
