@@ -45,7 +45,7 @@ class MentorMathsPracticeLineTest extends TestCase
         $this->assertStringContainsString('rewrite the question completely', $payload['prompt']);
     }
 
-    public function test_apply_rejects_near_copy_on_mentormaths_line(): void
+    public function test_apply_skips_near_copy_on_mentormaths_line(): void
     {
         $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
 
@@ -60,9 +60,49 @@ class MentorMathsPracticeLineTest extends TestCase
         ], JSON_THROW_ON_ERROR);
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches('/too close|Numbers are unchanged|publisher/i');
+        $this->expectExceptionMessageMatches('/No convertible questions/i');
 
         app(FillBlankConversionService::class)->applyGeminiJsonToChapter($chapter, $json);
+    }
+
+    public function test_apply_skips_row_missing_blank_and_keeps_good_rows(): void
+    {
+        $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
+        $items = $chapter->extraction_items;
+        $items[] = [
+            'question_text' => 'What is 9 + 6?',
+            'correct_answer' => '15',
+            'topic' => 'Add',
+        ];
+        $chapter->update(['extraction_items' => $items]);
+
+        $json = json_encode([
+            'questions' => [
+                [
+                    'source_index' => 1,
+                    'topic' => 'Mean',
+                    'question' => 'Four scores are 72, 48, 21 and 39. Their mean is ____.',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '45',
+                    'explanation' => 'Total 180. Mean 45.',
+                ],
+                [
+                    'source_index' => 2,
+                    'topic' => 'Add',
+                    'question' => 'What is 9 + 6?',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '15',
+                    'explanation' => '9+6=15.',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $result = app(FillBlankConversionService::class)->applyGeminiJsonToChapter($chapter->fresh(), $json);
+
+        $this->assertSame(1, $result['convertible_count']);
+        $chapter->refresh();
+        $this->assertSame('45', $chapter->extraction_items[0]['fill_blank_correct_answer'] ?? null);
+        $this->assertTrue(empty($chapter->extraction_items[1]['fill_blank_question_text'] ?? null));
     }
 
     public function test_apply_accepts_rewritten_mentormaths_blank(): void

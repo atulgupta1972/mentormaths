@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Support\AnswerValidationService;
 use App\Support\ContentOperationsMailer;
 use App\Support\DiagramQuestionSupport;
+use App\Support\FillBlankStem;
 use App\Support\StemSimilarity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -227,16 +228,17 @@ class FillBlankConversionService
                 throw new InvalidArgumentException("Fill-blank row source_index {$sourceIndex} has no matching MCQ.");
             }
 
-            $questionText = trim((string) ($row['question_text'] ?? ''));
+            $questionText = FillBlankStem::normalize(trim((string) ($row['question_text'] ?? '')));
 
-            if (! str_contains($questionText, '____')) {
-                throw new InvalidArgumentException("Question {$sourceIndex} must contain ____ for the blank.");
+            if (! FillBlankStem::hasBlank($questionText)) {
+                // Gemini sometimes omits ____ — skip this row; do not fail the whole batch.
+                continue;
             }
 
             $answer = trim((string) ($row['correct_answer'] ?? ''));
 
             if ($this->looksLikeWordAnswer($answer) || $this->isMixedFraction($answer) || $this->isTrueFalseAnswer($answer)) {
-                throw new InvalidArgumentException("Question {$sourceIndex} has a non-convertible answer ({$answer}). Omit it from Gemini JSON.");
+                continue;
             }
 
             $sourceStem = trim((string) ($items[$itemIndex]['question_text'] ?? ''));
@@ -267,7 +269,7 @@ class FillBlankConversionService
             );
 
             if ($mismatch !== null) {
-                throw new InvalidArgumentException("Question {$sourceIndex}: {$mismatch['message']}");
+                continue;
             }
 
             $format = (string) ($row['answer_format'] ?? QuestionBlankAnswer::FORMAT_INTEGER);

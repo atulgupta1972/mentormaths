@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ContentUploadTask;
 use App\Models\TextbookChapter;
+use App\Support\FillBlankStem;
 use App\Support\StemSimilarity;
 
 class GeminiFillBlankConversionService
@@ -75,8 +76,24 @@ class GeminiFillBlankConversionService
                 continue;
             }
 
-            $fillBlankQuestion = (string) ($row['question_text'] ?? '');
+            $fillBlankQuestion = FillBlankStem::normalize((string) ($row['question_text'] ?? ''));
             $sourceStem = (string) ($items[$itemIndex]['question_text'] ?? '');
+
+            if (! FillBlankStem::hasBlank($fillBlankQuestion)) {
+                $blockedIndexes[] = $itemIndex;
+                $blocked[] = [
+                    'index' => $itemIndex,
+                    'number' => $sourceIndex,
+                    'label' => trim((string) ($items[$itemIndex]['label'] ?? $items[$itemIndex]['topic'] ?? '')),
+                    'mcq_question' => $sourceStem,
+                    'fill_blank_question' => $fillBlankQuestion,
+                    'reason' => 'Missing ____ blank in the question stem.',
+                    'overlap' => null,
+                ];
+
+                continue;
+            }
+
             $similarityResult = $this->similarity->compare($sourceStem, $fillBlankQuestion);
 
             if ($isMentorMaths && $similarityResult['too_similar']) {
