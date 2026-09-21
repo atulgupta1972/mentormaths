@@ -217,6 +217,7 @@ class FillBlankConversionService
 
         $rows = app(FillBlankImportService::class)->parseJson($json);
         $convertedIndexes = [];
+        $attemptedIndexes = [];
         $isMentorMaths = $chapter->textbook?->isMentorMathsPracticeLine() ?? false;
         $similarity = app(StemSimilarity::class);
 
@@ -227,6 +228,8 @@ class FillBlankConversionService
             if ($itemIndex < 0 || $itemIndex >= count($items)) {
                 throw new InvalidArgumentException("Fill-blank row source_index {$sourceIndex} has no matching MCQ.");
             }
+
+            $attemptedIndexes[] = $itemIndex;
 
             $questionText = FillBlankStem::normalize(trim((string) ($row['question_text'] ?? '')));
 
@@ -302,16 +305,35 @@ class FillBlankConversionService
                 continue;
             }
 
-            $items[$index] = $this->strippedFillBlankFields($item);
+            // Keep blanks saved from an earlier apply (second-pass rewrite of blocked rows).
+            if (filled($item['fill_blank_question_text'] ?? null)
+                && filled($item['fill_blank_correct_answer'] ?? null)
+                && empty($item['fill_blank_skipped'])) {
+                continue;
+            }
+
+            // Rows not attempted in this JSON stay as-is if they already have content;
+            // otherwise clear so omitted first-pass rows remain MCQ-only.
+            if (! in_array($index, $attemptedIndexes, true)) {
+                $items[$index] = $this->strippedFillBlankFields($item);
+            }
         }
 
         $chapter->update(['extraction_items' => array_values($items)]);
 
+        $readyCount = collect($items)->filter(
+            fn ($item) => is_array($item)
+                && filled($item['fill_blank_question_text'] ?? null)
+                && filled($item['fill_blank_correct_answer'] ?? null)
+                && empty($item['fill_blank_skipped']),
+        )->count();
+
         return [
             'convertible_count' => count($convertedIndexes),
-            'not_possible_count' => count($items) - count($convertedIndexes),
+            'not_possible_count' => count($items) - $readyCount,
             'checked_count' => count($convertedIndexes),
             'total' => count($items),
+            'ready_count' => $readyCount,
         ];
     }
 

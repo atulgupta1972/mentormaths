@@ -17,9 +17,15 @@ const props = defineProps({
 const page = usePage();
 const copiedPrompt = ref(false);
 const copiedReference = ref(false);
+const copiedRewritePrompt = ref(false);
+const copiedRewriteReference = ref(false);
 
 const jsonForm = useForm({
     json: page.props.flash?.conversion_gemini_json || '',
+});
+
+const rewriteForm = useForm({
+    json: page.props.flash?.conversion_rewrite_json || '',
 });
 
 const previewForm = useForm({
@@ -31,6 +37,7 @@ const applyForm = useForm({
 });
 
 const preview = computed(() => page.props.flash?.conversion_gemini_preview ?? null);
+const hasBlocked = computed(() => (preview.value?.blocked_count || 0) > 0);
 
 watch(
     () => page.props.flash?.conversion_gemini_json,
@@ -42,43 +49,51 @@ watch(
     { immediate: true },
 );
 
-const copyPrompt = async () => {
-    if (!props.gemini?.prompt) {
+watch(
+    () => page.props.flash?.conversion_rewrite_json,
+    (value) => {
+        if (value) {
+            rewriteForm.json = value;
+        }
+    },
+    { immediate: true },
+);
+
+const copyText = async (text, flagRef, fallbackLabel) => {
+    if (!text) {
         return;
     }
 
-    const result = await copyTextToClipboard(props.gemini.prompt);
+    const result = await copyTextToClipboard(text);
 
     if (result.ok) {
-        copiedPrompt.value = true;
+        flagRef.value = true;
         window.setTimeout(() => {
-            copiedPrompt.value = false;
+            flagRef.value = false;
         }, 2000);
 
         return;
     }
 
-    window.prompt('Copy this prompt into Gemini:', props.gemini.prompt);
+    window.prompt(fallbackLabel, text);
 };
 
-const copyReference = async () => {
-    if (!props.gemini?.mcq_reference_json) {
-        return;
-    }
-
-    const result = await copyTextToClipboard(props.gemini.mcq_reference_json);
-
-    if (result.ok) {
-        copiedReference.value = true;
-        window.setTimeout(() => {
-            copiedReference.value = false;
-        }, 2000);
-
-        return;
-    }
-
-    window.prompt('Copy MCQ reference JSON for Gemini:', props.gemini.mcq_reference_json);
-};
+const copyPrompt = () => copyText(props.gemini?.prompt, copiedPrompt, 'Copy this prompt into Gemini:');
+const copyReference = () => copyText(
+    props.gemini?.mcq_reference_json,
+    copiedReference,
+    'Copy MCQ reference JSON for Gemini:',
+);
+const copyRewritePrompt = () => copyText(
+    preview.value?.rewrite_prompt,
+    copiedRewritePrompt,
+    'Copy rewrite prompt into Gemini:',
+);
+const copyRewriteReference = () => copyText(
+    preview.value?.rewrite_reference_json,
+    copiedRewriteReference,
+    'Copy blocked reference JSON for Gemini:',
+);
 
 const runPreview = () => {
     if (!jsonForm.json.trim()) {
@@ -93,34 +108,39 @@ const runPreview = () => {
     });
 };
 
-const applyConversion = () => {
-    const json = jsonForm.json.trim();
-
-    if (!json) {
-        window.alert('Paste Gemini JSON first.');
+const runRewritePreview = () => {
+    if (!rewriteForm.json.trim()) {
+        window.alert('Paste the rewritten blocked JSON first.');
 
         return;
     }
 
+    previewForm.json = rewriteForm.json;
+    previewForm.post(props.previewRoute, {
+        preserveScroll: true,
+        onSuccess: () => {
+            // Keep rewrite JSON visible after preview.
+        },
+    });
+};
+
+const applyPayload = (json, label) => {
     if (!preview.value) {
-        window.alert('Preview first — check convertible vs blocked / skipped lists.');
+        window.alert('Preview first — check convertible vs blocked lists.');
 
         return;
     }
 
     if ((preview.value.convertible_count || 0) < 1) {
-        window.alert('No convertible rows yet. Rewrite blocked stems in Gemini (change numbers + wording), then Preview again.');
+        window.alert('No convertible rows yet. Fix missing ____ / rewrite wording+numbers in Gemini, then Preview again.');
 
         return;
     }
 
     const blocked = preview.value.blocked_count || 0;
-    let msg = props.gemini?.is_mentormaths
-        ? `Apply MentorMaths transform?\n\n${preview.value.convertible_count} → fill-in-blank\n${preview.value.not_possible_count} → skipped`
-        : `Apply conversion?\n\n${preview.value.convertible_count} → fill-in-blank (ready)\n${preview.value.not_possible_count} → stay MCQ in this set`;
-
+    let msg = `${label}\n\n${preview.value.convertible_count} → fill-in-blank`;
     if (blocked > 0) {
-        msg += `\n${blocked} blocked → left for a later rewrite (not applied now)`;
+        msg += `\n${blocked} still blocked → use Rewrite blocked pack below`;
     }
 
     if (!window.confirm(msg)) {
@@ -132,8 +152,33 @@ const applyConversion = () => {
         preserveScroll: true,
         onSuccess: () => {
             jsonForm.json = '';
+            rewriteForm.json = '';
         },
     });
+};
+
+const applyConversion = () => {
+    const json = jsonForm.json.trim();
+    if (!json) {
+        window.alert('Paste Gemini JSON first.');
+
+        return;
+    }
+
+    applyPayload(json, props.gemini?.is_mentormaths
+        ? 'Apply MentorMaths transform?'
+        : 'Apply conversion?');
+};
+
+const applyRewrite = () => {
+    const json = rewriteForm.json.trim();
+    if (!json) {
+        window.alert('Paste rewritten blocked JSON first.');
+
+        return;
+    }
+
+    applyPayload(json, 'Apply rewritten blocked rows? (keeps already-saved blanks)');
 };
 </script>
 
@@ -171,6 +216,10 @@ const applyConversion = () => {
             <li class="flex gap-2">
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">3</span>
                 <span>Paste Gemini’s JSON reply below → <strong>Preview split</strong> → <strong>Apply conversion</strong>.</span>
+            </li>
+            <li class="flex gap-2">
+                <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white">4</span>
+                <span>If rows are blocked: use <strong>Rewrite blocked pack</strong> → Gemini again → paste rewrite JSON → Apply rewrite.</span>
             </li>
         </ol>
 
@@ -244,16 +293,24 @@ const applyConversion = () => {
 
             <div class="space-y-4">
                 <div
-                    v-if="(preview.blocked_count || 0) > 0"
+                    v-if="hasBlocked"
                     class="rounded-md border border-rose-200 bg-white p-3"
                 >
                     <p class="text-xs font-semibold uppercase tracking-wide text-rose-900">
                         Blocked · {{ preview.blocked_count }}
                     </p>
                     <p class="mt-1 text-xs text-rose-900">
-                        Too similar to source / banned wording / unchanged numbers.
-                        You can still Apply the green rows now; rewrite these later in Gemini and Preview again.
+                        Missing ____ / too similar / unchanged numbers.
+                        Apply green rows now, then use the rewrite pack below for these.
                     </p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <SecondaryButton type="button" class="!text-xs" @click="copyRewriteReference">
+                            {{ copiedRewriteReference ? 'Blocked JSON copied!' : 'Copy blocked reference JSON' }}
+                        </SecondaryButton>
+                        <SecondaryButton type="button" class="!text-xs" @click="copyRewritePrompt">
+                            {{ copiedRewritePrompt ? 'Rewrite prompt copied!' : 'Copy rewrite prompt' }}
+                        </SecondaryButton>
+                    </div>
                     <ul class="mt-2 max-h-40 space-y-2 overflow-y-auto text-sm text-slate-800">
                         <li
                             v-for="row in preview.blocked"
@@ -284,6 +341,64 @@ const applyConversion = () => {
                         </li>
                     </ul>
                 </div>
+            </div>
+        </div>
+
+        <div
+            v-if="hasBlocked && preview?.rewrite_prompt"
+            class="space-y-3 rounded-lg border-2 border-rose-300 bg-rose-50 p-4"
+        >
+            <div>
+                <p class="text-sm font-semibold text-rose-950">Rewrite blocked rows (second pass)</p>
+                <p class="mt-1 text-sm text-rose-900">
+                    1) Copy blocked reference JSON + rewrite prompt → Gemini.
+                    2) Paste Gemini’s fixed JSON here.
+                    3) Preview → Apply rewrite (keeps blanks you already saved).
+                </p>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+                <SecondaryButton type="button" @click="copyRewriteReference">
+                    {{ copiedRewriteReference ? 'Blocked JSON copied!' : 'Copy blocked reference JSON' }}
+                </SecondaryButton>
+                <SecondaryButton type="button" @click="copyRewritePrompt">
+                    {{ copiedRewritePrompt ? 'Rewrite prompt copied!' : 'Copy rewrite prompt' }}
+                </SecondaryButton>
+            </div>
+
+            <details class="rounded-md border border-rose-100 bg-white p-3 text-xs text-slate-700">
+                <summary class="cursor-pointer font-medium text-rose-900">Preview rewrite prompt</summary>
+                <pre class="mt-2 max-h-40 overflow-auto whitespace-pre-wrap">{{ preview.rewrite_prompt }}</pre>
+            </details>
+
+            <div>
+                <label for="gemini_rewrite_json" class="text-sm font-medium text-rose-950">Paste rewritten blocked JSON</label>
+                <textarea
+                    id="gemini_rewrite_json"
+                    v-model="rewriteForm.json"
+                    rows="8"
+                    class="mt-1 block w-full rounded-md border-rose-200 font-mono text-xs shadow-sm focus:border-rose-500 focus:ring-rose-500"
+                    placeholder='{"questions":[{"source_index":14,"question":"... ____",...}]}'
+                    :disabled="disabled"
+                />
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+                <SecondaryButton
+                    type="button"
+                    :disabled="disabled || previewForm.processing || !rewriteForm.json.trim()"
+                    @click="runRewritePreview"
+                >
+                    {{ previewForm.processing ? 'Previewing…' : 'Preview rewrite' }}
+                </SecondaryButton>
+                <PrimaryButton
+                    type="button"
+                    class="!bg-rose-700 hover:!bg-rose-800"
+                    :disabled="disabled || applyForm.processing || !preview || !rewriteForm.json.trim()"
+                    @click="applyRewrite"
+                >
+                    {{ applyForm.processing ? 'Applying…' : 'Apply rewrite' }}
+                </PrimaryButton>
             </div>
         </div>
     </div>
