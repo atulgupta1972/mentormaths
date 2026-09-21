@@ -31,7 +31,31 @@ class MentorMathsPracticeLineTest extends TestCase
         $this->assertTrue($payload['transform_required']);
         $this->assertStringContainsString('TRANSFORM RULES', $payload['prompt']);
         $this->assertStringContainsString('Change every significant number', $payload['prompt']);
+        $this->assertStringContainsString('Invent a NEW numeric practice question', $payload['prompt']);
         $this->assertStringContainsString('no MCQ set', $payload['prompt']);
+    }
+
+    public function test_remaining_rewrite_pack_covers_rows_without_blanks(): void
+    {
+        $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
+        $items = $chapter->extraction_items;
+        $items[0]['fill_blank_question_text'] = 'Mean of 2, 4, 6 is ____.';
+        $items[0]['fill_blank_correct_answer'] = '4';
+        $items[0]['fill_blank_skipped'] = false;
+        $items[] = [
+            'question_text' => 'Which congruence criterion is used for RHS?',
+            'correct_answer' => 'RHS',
+            'topic' => 'RHS Criterion',
+            'label' => 'Q2',
+        ];
+        $chapter->update(['extraction_items' => $items]);
+
+        $pack = app(\App\Services\GeminiFillBlankConversionService::class)->remainingRewritePack($chapter);
+
+        $this->assertSame(1, $pack['remaining_count']);
+        $this->assertStringContainsString('Invent ORIGINAL numeric', $pack['prompt']);
+        $this->assertStringContainsString('RHS Criterion', $pack['reference_json']);
+        $this->assertStringContainsString('"source_index": 2', $pack['reference_json']);
     }
 
     public function test_standard_prompt_still_converts_from_mcq(): void

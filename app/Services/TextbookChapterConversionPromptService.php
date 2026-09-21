@@ -151,7 +151,8 @@ Practice line: MentorMaths (fill-blank only — no MCQ publish for this book)
 
 Input:
 - Attach or paste source_reference.json ({$count} extracted items with answers). Treat these as PRIVATE working notes only — never copy wording.
-- Keep source_index matching the source row (1..{$count}). You may SKIP a row (omit it) when it cannot become a numeric blank.
+- Keep source_index matching the source row (1..{$count}).
+- Aim to return as many of the {$count} rows as possible. Chapters need at least 15 numeric fill-blanks.
 
 TRANSFORM RULES (mandatory — copyright + anti-cheat):
 1. Rewrite the question completely in fresh MentorMaths wording. Do NOT lightly paraphrase.
@@ -164,11 +165,15 @@ TRANSFORM RULES (mandatory — copyright + anti-cheat):
    NEVER use English words, mixed fractions, true/false, yes/no, or option letters.
    NEVER put units in correct_answer — put the unit in the stem ("____ metres").
 7. Allowed answer_format values ONLY: "integer", "decimal", "fraction" (never "text").
-8. Algebra: do not ask for a full expansion in one blank. Pick one numeric blank, or skip.
-9. Preserve topic skill and diagram needs when still relevant after rewrite.
-10. Explanation must end with the same value as correct_answer.
-11. Do NOT include options arrays.
-12. Return ONLY rows you can transform. Omitted rows are skipped (not published as MCQ on this practice line).
+8. Algebra: do not ask for a full expansion in one blank. Pick one numeric blank (e.g. a coefficient).
+9. Theory / proof / congruence / CPCT / "which criterion" / true-false style rows:
+   Do NOT skip them. Invent a NEW numeric practice question on the SAME skill
+   (give side lengths or angles, ask for a missing length/angle/count; apply a formula).
+   Example: RHS congruence MCQ → "In △PQR, PQ = 8 cm, PR = 8 cm, and height from P is 6 cm. The base QR is ____ cm."
+10. Preserve topic skill and diagram needs when still relevant after rewrite.
+11. Explanation must end with the same value as correct_answer.
+12. Do NOT include options arrays.
+13. Skip (omit) a row ONLY if you truly cannot invent any honest numeric blank for that skill.
 
 After publish, MentorMaths sets are fill-blank {$codes['fill_blank']}1 / {$codes['fill_blank']}2… and written {$codes['written']}1 / {$codes['written']}2… (no MCQ set).
 

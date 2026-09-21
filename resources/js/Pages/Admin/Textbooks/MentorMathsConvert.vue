@@ -119,7 +119,7 @@ const publish = () => {
                     {{ readyCount }} / {{ minReady }} minimum
                     <span v-if="!meetsMinimum">
                         — need {{ chapter.remaining_to_minimum || (minReady - readyCount) }} more before publish.
-                        Keep applying transform / rewrite blocked pack.
+                        Apply convertibles, then use Invent numeric pack for skipped rows.
                     </span>
                     <span v-else> — ready to publish.</span>
                 </div>

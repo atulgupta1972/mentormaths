@@ -151,12 +151,15 @@ class GeminiFillBlankConversionService
                 'mcq_question' => (string) ($item['question_text'] ?? ''),
                 'mcq_answer' => (string) ($item['correct_answer'] ?? ''),
                 'reason' => $isMentorMaths
-                    ? 'Skipped — not transformed into a numeric MentorMaths blank'
+                    ? 'Skipped by Gemini — use Invent numeric pack below'
                     : $this->conversion->notConvertibleReason($item),
             ];
         }
 
         $rewritePack = $this->blockedRewritePack($chapter, $blocked);
+        $skippedPack = $isMentorMaths
+            ? $this->skippedRewritePack($chapter, $notPossible)
+            : ['prompt' => '', 'reference_json' => ''];
 
         return [
             'total' => count($items),
@@ -170,6 +173,52 @@ class GeminiFillBlankConversionService
             'transform_required' => $isMentorMaths,
             'rewrite_prompt' => $rewritePack['prompt'],
             'rewrite_reference_json' => $rewritePack['reference_json'],
+            'skipped_rewrite_prompt' => $skippedPack['prompt'],
+            'skipped_rewrite_reference_json' => $skippedPack['reference_json'],
+        ];
+    }
+
+    /**
+     * Rescue pack for rows Gemini omitted (proof/theory/etc.) — invent numeric blanks.
+     *
+     * @return array{prompt: string, reference_json: string, remaining_count: int}
+     */
+    public function remainingRewritePack(TextbookChapter $chapter): array
+    {
+        $chapter->loadMissing('textbook');
+        $items = array_values(array_filter(
+            is_array($chapter->extraction_items) ? $chapter->extraction_items : [],
+            fn ($item) => is_array($item),
+        ));
+
+        $remaining = [];
+        foreach ($items as $index => $item) {
+            $hasBlank = filled($item['fill_blank_question_text'] ?? null)
+                && filled($item['fill_blank_correct_answer'] ?? null)
+                && empty($item['fill_blank_skipped']);
+
+            if ($hasBlank) {
+                continue;
+            }
+
+            $remaining[] = [
+                'index' => $index,
+                'number' => $index + 1,
+                'label' => trim((string) ($item['label'] ?? $item['topic'] ?? '')),
+                'mcq_question' => (string) ($item['question_text'] ?? ''),
+                'mcq_answer' => (string) ($item['correct_answer'] ?? ''),
+                'topic' => $item['topic'] ?? $item['label'] ?? null,
+                'difficulty' => $item['difficulty'] ?? null,
+                'reason' => 'Still needs a numeric MentorMaths blank',
+            ];
+        }
+
+        $pack = $this->skippedRewritePack($chapter, $remaining);
+
+        return [
+            'prompt' => $pack['prompt'],
+            'reference_json' => $pack['reference_json'],
+            'remaining_count' => count($remaining),
         ];
     }
 
@@ -250,6 +299,94 @@ JSON format:
       "correct_answer": "5/9",
       "method_hint": "Divide the product by the known factor.",
       "explanation": "(25/54) ÷ (5/6) = 5/9.",
+      "difficulty": "Easy",
+      "needs_diagram": false
+    }
+  ]
+}
+PROMPT;
+
+        return [
+            'prompt' => $prompt,
+            'reference_json' => json_encode($reference, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) ?: '{}',
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $skipped
+     * @return array{prompt: string, reference_json: string}
+     */
+    public function skippedRewritePack(TextbookChapter $chapter, array $skipped): array
+    {
+        if ($skipped === []) {
+            return ['prompt' => '', 'reference_json' => ''];
+        }
+
+        $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter']);
+        $count = count($skipped);
+
+        $questions = [];
+        foreach ($skipped as $row) {
+            $questions[] = array_filter([
+                'source_index' => (int) ($row['number'] ?? 0),
+                'topic' => $row['topic'] ?? $row['label'] ?? null,
+                'source_question' => $row['mcq_question'] ?? null,
+                'source_answer' => $row['mcq_answer'] ?? null,
+                'skip_reason' => $row['reason'] ?? null,
+                'difficulty' => $row['difficulty'] ?? null,
+            ], fn ($value) => $value !== null && $value !== '');
+        }
+
+        $reference = [
+            'chapter' => "Ch {$chapter->chapter_number} — {$chapter->title}",
+            'book' => $chapter->textbook?->name,
+            'grade' => $chapter->textbook?->gradeLevel?->name,
+            'skipped_count' => $count,
+            'questions' => $questions,
+        ];
+
+        $context = collect([
+            $chapter->textbook?->gradeLevel?->name ? "Class: {$chapter->textbook->gradeLevel->name}" : null,
+            $chapter->textbook?->name ? "Book: {$chapter->textbook->name} (MentorMaths invent-numeric pass)" : null,
+            "Chapter {$chapter->chapter_number}: {$chapter->title}",
+        ])->filter()->implode("\n");
+
+        $prompt = <<<PROMPT
+These {$count} MentorMaths source rows were SKIPPED (proof / theory / criterion / non-numeric).
+Invent ORIGINAL numeric fill-in-the-blank questions on the SAME skill for each source_index.
+Return ONLY valid JSON (no markdown fences).
+
+Context:
+{$context}
+
+Input:
+- Attach/paste skipped_reference.json ({$count} omitted rows).
+- Keep the same source_index values exactly.
+- You MUST attempt every source_index. Aim to return all {$count} rows.
+
+Invent rules (mandatory):
+1. Every question MUST contain exactly one blank shown as "____" (four underscores).
+2. Completely original MentorMaths wording — never copy the source stem.
+3. Invent concrete numbers (lengths, angles, counts) so the student computes a numeric answer.
+4. For congruence / CPCT / RHS / SAS / ASA / "which criterion" rows: give side lengths or angles and ask for a missing length, angle, or perimeter segment — do NOT ask which criterion name.
+5. Never mention publisher brands, book titles, exercise codes, or page numbers.
+6. "correct_answer" must be integer / decimal / simple fraction only (e.g. "42", "3/4"). No words, true/false, option letters.
+7. Put units in the stem ("____ cm"), not in correct_answer.
+8. answer_format only: "integer", "decimal", or "fraction".
+9. explanation must end with the same value as correct_answer.
+10. Skip a source_index ONLY if that skill cannot support any honest numeric blank.
+
+JSON format:
+{
+  "questions": [
+    {
+      "source_index": 49,
+      "topic": "RHS congruence",
+      "question": "In right △ABC with right angle at C, AC = 9 cm and BC = 12 cm. Hypotenuse AB is ____ cm.",
+      "answer_format": "integer",
+      "correct_answer": "15",
+      "method_hint": "Use the Pythagoras theorem.",
+      "explanation": "AB² = 9² + 12² = 81 + 144 = 225, so AB = 15.",
       "difficulty": "Easy",
       "needs_diagram": false
     }

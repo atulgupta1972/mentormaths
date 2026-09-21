@@ -19,6 +19,8 @@ const copiedPrompt = ref(false);
 const copiedReference = ref(false);
 const copiedRewritePrompt = ref(false);
 const copiedRewriteReference = ref(false);
+const copiedSkippedPrompt = ref(false);
+const copiedSkippedReference = ref(false);
 
 const jsonForm = useForm({
     json: page.props.flash?.conversion_gemini_json || '',
@@ -28,8 +30,13 @@ const rewriteForm = useForm({
     json: page.props.flash?.conversion_rewrite_json || '',
 });
 
+const skippedForm = useForm({
+    json: page.props.flash?.conversion_skipped_json || '',
+});
+
 const previewForm = useForm({
     json: '',
+    source: 'main',
 });
 
 const applyForm = useForm({
@@ -38,6 +45,17 @@ const applyForm = useForm({
 
 const preview = computed(() => page.props.flash?.conversion_gemini_preview ?? null);
 const hasBlocked = computed(() => (preview.value?.blocked_count || 0) > 0);
+const hasSkipped = computed(() => (preview.value?.not_possible_count || 0) > 0
+    || (props.gemini?.remaining_count || 0) > 0);
+const skippedPrompt = computed(() => preview.value?.skipped_rewrite_prompt
+    || props.gemini?.skipped_rewrite_prompt
+    || '');
+const skippedReference = computed(() => preview.value?.skipped_rewrite_reference_json
+    || props.gemini?.skipped_rewrite_reference_json
+    || '');
+const skippedCount = computed(() => preview.value?.not_possible_count
+    || props.gemini?.remaining_count
+    || 0);
 
 watch(
     () => page.props.flash?.conversion_gemini_json,
@@ -54,6 +72,16 @@ watch(
     (value) => {
         if (value) {
             rewriteForm.json = value;
+        }
+    },
+    { immediate: true },
+);
+
+watch(
+    () => page.props.flash?.conversion_skipped_json,
+    (value) => {
+        if (value) {
+            skippedForm.json = value;
         }
     },
     { immediate: true },
@@ -94,6 +122,16 @@ const copyRewriteReference = () => copyText(
     copiedRewriteReference,
     'Copy blocked reference JSON for Gemini:',
 );
+const copySkippedPrompt = () => copyText(
+    skippedPrompt.value,
+    copiedSkippedPrompt,
+    'Copy invent-numeric prompt into Gemini:',
+);
+const copySkippedReference = () => copyText(
+    skippedReference.value,
+    copiedSkippedReference,
+    'Copy skipped reference JSON for Gemini:',
+);
 
 const runPreview = () => {
     if (!jsonForm.json.trim()) {
@@ -103,6 +141,7 @@ const runPreview = () => {
     }
 
     previewForm.json = jsonForm.json;
+    previewForm.source = 'main';
     previewForm.post(props.previewRoute, {
         preserveScroll: true,
     });
@@ -116,11 +155,23 @@ const runRewritePreview = () => {
     }
 
     previewForm.json = rewriteForm.json;
+    previewForm.source = 'rewrite';
     previewForm.post(props.previewRoute, {
         preserveScroll: true,
-        onSuccess: () => {
-            // Keep rewrite JSON visible after preview.
-        },
+    });
+};
+
+const runSkippedPreview = () => {
+    if (!skippedForm.json.trim()) {
+        window.alert('Paste the invented numeric JSON first.');
+
+        return;
+    }
+
+    previewForm.json = skippedForm.json;
+    previewForm.source = 'skipped';
+    previewForm.post(props.previewRoute, {
+        preserveScroll: true,
     });
 };
 
@@ -153,6 +204,7 @@ const applyPayload = (json, label) => {
         onSuccess: () => {
             jsonForm.json = '';
             rewriteForm.json = '';
+            skippedForm.json = '';
         },
     });
 };
@@ -180,6 +232,17 @@ const applyRewrite = () => {
 
     applyPayload(json, 'Apply rewritten blocked rows? (keeps already-saved blanks)');
 };
+
+const applySkipped = () => {
+    const json = skippedForm.json.trim();
+    if (!json) {
+        window.alert('Paste invented numeric JSON first.');
+
+        return;
+    }
+
+    applyPayload(json, 'Apply invented numeric rows? (keeps already-saved blanks)');
+};
 </script>
 
 <template>
@@ -191,7 +254,7 @@ const applyRewrite = () => {
             <p class="mt-1 text-sm text-violet-900">
                 <template v-if="gemini.is_mentormaths">
                     Rewrite every stem, change numbers/names, strip publisher wording.
-                    Only numeric fill-in-blanks are kept — similarity gate rejects near-copies.
+                    Proof/theory rows must be reinvented as numeric blanks — use Invent numeric pack if Gemini skipped them.
                 </template>
                 <template v-else>
                     Faster than one-by-one: Gemini checks all {{ gemini.question_count }} MCQs.
@@ -219,7 +282,7 @@ const applyRewrite = () => {
             </li>
             <li class="flex gap-2">
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white">4</span>
-                <span>If rows are blocked: use <strong>Rewrite blocked pack</strong> → Gemini again → paste rewrite JSON → Apply rewrite.</span>
+                <span>Blocked rows → <strong>Rewrite blocked pack</strong>. Skipped / Not possible → <strong>Invent numeric pack</strong>.</span>
             </li>
         </ol>
 
@@ -328,8 +391,24 @@ const applyRewrite = () => {
                         Not possible · {{ preview.not_possible_count }}
                     </p>
                     <p class="mt-1 text-xs text-amber-900">
-                        {{ preview.is_mentormaths ? 'Skipped on this MentorMaths set.' : 'Stay MCQ-only in this fill-in-blank test set.' }}
+                        <template v-if="preview.is_mentormaths">
+                            Gemini omitted these. Use <strong>Invent numeric pack</strong> below — do not stop at a handful of blanks.
+                        </template>
+                        <template v-else>
+                            Stay MCQ-only in this fill-in-blank test set.
+                        </template>
                     </p>
+                    <div
+                        v-if="preview.is_mentormaths && skippedPrompt"
+                        class="mt-3 flex flex-wrap gap-2"
+                    >
+                        <SecondaryButton type="button" class="!text-xs" @click="copySkippedReference">
+                            {{ copiedSkippedReference ? 'Skipped JSON copied!' : 'Copy skipped reference JSON' }}
+                        </SecondaryButton>
+                        <SecondaryButton type="button" class="!text-xs" @click="copySkippedPrompt">
+                            {{ copiedSkippedPrompt ? 'Invent prompt copied!' : 'Copy invent-numeric prompt' }}
+                        </SecondaryButton>
+                    </div>
                     <ul class="mt-2 max-h-56 space-y-2 overflow-y-auto text-sm text-slate-800">
                         <li
                             v-for="row in preview.not_possible"
@@ -398,6 +477,65 @@ const applyRewrite = () => {
                     @click="applyRewrite"
                 >
                     {{ applyForm.processing ? 'Applying…' : 'Apply rewrite' }}
+                </PrimaryButton>
+            </div>
+        </div>
+
+        <div
+            v-if="gemini.is_mentormaths && hasSkipped && skippedPrompt"
+            class="space-y-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-4"
+        >
+            <div>
+                <p class="text-sm font-semibold text-amber-950">
+                    Invent numeric blanks · {{ skippedCount }} skipped
+                </p>
+                <p class="mt-1 text-sm text-amber-900">
+                    Geometry / proof / criterion rows were omitted. Copy this pack → Gemini invents numeric practice
+                    on the same skill → paste → Preview → Apply (keeps blanks you already have).
+                </p>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+                <SecondaryButton type="button" @click="copySkippedReference">
+                    {{ copiedSkippedReference ? 'Skipped JSON copied!' : 'Copy skipped reference JSON' }}
+                </SecondaryButton>
+                <SecondaryButton type="button" @click="copySkippedPrompt">
+                    {{ copiedSkippedPrompt ? 'Invent prompt copied!' : 'Copy invent-numeric prompt' }}
+                </SecondaryButton>
+            </div>
+
+            <details class="rounded-md border border-amber-100 bg-white p-3 text-xs text-slate-700">
+                <summary class="cursor-pointer font-medium text-amber-900">Preview invent-numeric prompt</summary>
+                <pre class="mt-2 max-h-40 overflow-auto whitespace-pre-wrap">{{ skippedPrompt }}</pre>
+            </details>
+
+            <div>
+                <label for="gemini_skipped_json" class="text-sm font-medium text-amber-950">Paste invented numeric JSON</label>
+                <textarea
+                    id="gemini_skipped_json"
+                    v-model="skippedForm.json"
+                    rows="8"
+                    class="mt-1 block w-full rounded-md border-amber-200 font-mono text-xs shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                    placeholder='{"questions":[{"source_index":49,"question":"... ____",...}]}'
+                    :disabled="disabled"
+                />
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+                <SecondaryButton
+                    type="button"
+                    :disabled="disabled || previewForm.processing || !skippedForm.json.trim()"
+                    @click="runSkippedPreview"
+                >
+                    {{ previewForm.processing ? 'Previewing…' : 'Preview invented rows' }}
+                </SecondaryButton>
+                <PrimaryButton
+                    type="button"
+                    class="!bg-amber-700 hover:!bg-amber-800"
+                    :disabled="disabled || applyForm.processing || !preview || !skippedForm.json.trim()"
+                    @click="applySkipped"
+                >
+                    {{ applyForm.processing ? 'Applying…' : 'Apply invented rows' }}
                 </PrimaryButton>
             </div>
         </div>

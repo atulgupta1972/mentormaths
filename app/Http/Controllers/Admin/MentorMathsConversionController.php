@@ -80,6 +80,12 @@ class MentorMathsConversionController extends Controller
         if ($items !== [] && ($textbookChapter->textbook?->isMentorMathsPracticeLine() ?? false)) {
             try {
                 $gemini = $this->geminiFillBlank->payload($textbookChapter);
+                $remaining = $this->geminiFillBlank->remainingRewritePack($textbookChapter);
+                if (($remaining['remaining_count'] ?? 0) > 0) {
+                    $gemini['remaining_count'] = $remaining['remaining_count'];
+                    $gemini['skipped_rewrite_prompt'] = $remaining['prompt'];
+                    $gemini['skipped_rewrite_reference_json'] = $remaining['reference_json'];
+                }
             } catch (\Throwable $e) {
                 report($e);
                 $gemini = null;
@@ -149,6 +155,7 @@ class MentorMathsConversionController extends Controller
 
         $validated = $request->validate([
             'json' => ['required', 'string', 'min:20'],
+            'source' => ['nullable', 'string', Rule::in(['main', 'rewrite', 'skipped'])],
         ]);
 
         try {
@@ -157,9 +164,13 @@ class MentorMathsConversionController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
-        return back()
-            ->with('conversion_gemini_preview', $preview)
-            ->with('conversion_gemini_json', $validated['json']);
+        $redirect = back()->with('conversion_gemini_preview', $preview);
+
+        return match ($validated['source'] ?? 'main') {
+            'rewrite' => $redirect->with('conversion_rewrite_json', $validated['json']),
+            'skipped' => $redirect->with('conversion_skipped_json', $validated['json']),
+            default => $redirect->with('conversion_gemini_json', $validated['json']),
+        };
     }
 
     public function applyGemini(Request $request, TextbookChapter $textbookChapter): RedirectResponse
@@ -181,8 +192,9 @@ class MentorMathsConversionController extends Controller
         return redirect()
             ->route('admin.mentormaths-conversion.show', $textbookChapter)
             ->with('success', sprintf(
-                'Transform applied: %d fill-in-blank ready, %d skipped.',
+                'Transform applied: +%d this pass · %d fill-in-blank ready total · %d still need invent/rewrite.',
                 $result['convertible_count'],
+                $result['ready_count'] ?? $result['convertible_count'],
                 $result['not_possible_count'],
             ));
     }
