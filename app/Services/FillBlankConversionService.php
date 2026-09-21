@@ -243,9 +243,8 @@ class FillBlankConversionService
             $similarityResult = $similarity->compare($sourceStem, $questionText);
 
             if ($isMentorMaths && $similarityResult['too_similar']) {
-                throw new InvalidArgumentException(
-                    "Question {$sourceIndex}: {$similarityResult['reason']} (overlap {$similarityResult['overlap']}).",
-                );
+                // Leave for a later rewrite pass — do not block the whole batch.
+                continue;
             }
 
             if ($this->itemMissingRequiredDiagram($items[$itemIndex], $chapter, $itemIndex)) {

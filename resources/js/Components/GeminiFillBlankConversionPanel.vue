@@ -108,17 +108,20 @@ const applyConversion = () => {
         return;
     }
 
-    if ((preview.value.blocked_count || 0) > 0) {
-        window.alert(
-            `${preview.value.blocked_count} row(s) blocked by similarity/publisher checks. Rewrite those stems in Gemini, then preview again.`,
-        );
+    if ((preview.value.convertible_count || 0) < 1) {
+        window.alert('No convertible rows yet. Rewrite blocked stems in Gemini (change numbers + wording), then Preview again.');
 
         return;
     }
 
-    const msg = props.gemini?.is_mentormaths
+    const blocked = preview.value.blocked_count || 0;
+    let msg = props.gemini?.is_mentormaths
         ? `Apply MentorMaths transform?\n\n${preview.value.convertible_count} → fill-in-blank\n${preview.value.not_possible_count} → skipped`
         : `Apply conversion?\n\n${preview.value.convertible_count} → fill-in-blank (ready)\n${preview.value.not_possible_count} → stay MCQ in this set`;
+
+    if (blocked > 0) {
+        msg += `\n${blocked} blocked → left for a later rewrite (not applied now)`;
+    }
 
     if (!window.confirm(msg)) {
         return;
@@ -247,7 +250,10 @@ const applyConversion = () => {
                     <p class="text-xs font-semibold uppercase tracking-wide text-rose-900">
                         Blocked · {{ preview.blocked_count }}
                     </p>
-                    <p class="mt-1 text-xs text-rose-900">Too similar to source / banned wording / unchanged numbers.</p>
+                    <p class="mt-1 text-xs text-rose-900">
+                        Too similar to source / banned wording / unchanged numbers.
+                        You can still Apply the green rows now; rewrite these later in Gemini and Preview again.
+                    </p>
                     <ul class="mt-2 max-h-40 space-y-2 overflow-y-auto text-sm text-slate-800">
                         <li
                             v-for="row in preview.blocked"
