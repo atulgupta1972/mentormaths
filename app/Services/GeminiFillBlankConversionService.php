@@ -76,9 +76,12 @@ class GeminiFillBlankConversionService
                 continue;
             }
 
-            $fillBlankQuestion = FillBlankStem::normalize((string) ($row['question_text'] ?? ''));
-            $sourceStem = (string) ($items[$itemIndex]['question_text'] ?? '');
             $answer = trim((string) ($row['correct_answer'] ?? ''));
+            $fillBlankQuestion = FillBlankStem::ensureBlank(
+                (string) ($row['question_text'] ?? ''),
+                $answer,
+            );
+            $sourceStem = (string) ($items[$itemIndex]['question_text'] ?? '');
             $answerFormat = (string) ($row['answer_format'] ?? '');
             $explanation = (string) ($row['explanation'] ?? '');
             $methodHint = (string) ($row['method_hint'] ?? '');

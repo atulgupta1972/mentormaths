@@ -9,7 +9,10 @@ namespace App\Support;
 class StemSimilarity
 {
     /** Reject when Jaccard token overlap is at or above this (0–1). */
-    public const DEFAULT_MAX_OVERLAP = 0.72;
+    public const DEFAULT_MAX_OVERLAP = 0.78;
+
+    /** Numbers-unchanged only blocks when wording is also somewhat similar. */
+    public const NUMBERS_UNCHANGED_MIN_OVERLAP = 0.55;
 
     /**
      * Publisher / brand phrases that must never appear in student-facing stems.
@@ -55,14 +58,16 @@ class StemSimilarity
             && count($shared) === count($sourceNumbers)
             && count($shared) === count($rewrittenNumbers);
 
-        $tooSimilar = $bannedHit !== null || $overlap >= $maxOverlap || $numbersUnchanged;
+        // Unchanged numbers alone are OK if the stem was substantially rewritten.
+        $numbersBlock = $numbersUnchanged && $overlap >= self::NUMBERS_UNCHANGED_MIN_OVERLAP;
+        $tooSimilar = $bannedHit !== null || $overlap >= $maxOverlap || $numbersBlock;
 
         $reason = null;
         if ($bannedHit !== null) {
             $reason = "Stem still mentions publisher/brand wording (“{$bannedHit}”).";
         } elseif ($overlap >= $maxOverlap) {
             $reason = 'Stem is too close to the source extract (rewrite wording more thoroughly).';
-        } elseif ($numbersUnchanged) {
+        } elseif ($numbersBlock) {
             $reason = 'Numbers are unchanged from the source — change quantities so the answer changes.';
         }
 

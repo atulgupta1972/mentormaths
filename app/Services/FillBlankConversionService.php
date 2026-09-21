@@ -231,14 +231,15 @@ class FillBlankConversionService
 
             $attemptedIndexes[] = $itemIndex;
 
-            $questionText = FillBlankStem::normalize(trim((string) ($row['question_text'] ?? '')));
+            $answer = trim((string) ($row['correct_answer'] ?? ''));
+            $questionText = FillBlankStem::ensureBlank(
+                trim((string) ($row['question_text'] ?? '')),
+                $answer,
+            );
 
             if (! FillBlankStem::hasBlank($questionText)) {
-                // Gemini sometimes omits ____ — skip this row; do not fail the whole batch.
                 continue;
             }
-
-            $answer = trim((string) ($row['correct_answer'] ?? ''));
 
             if ($this->looksLikeWordAnswer($answer) || $this->isMixedFraction($answer) || $this->isTrueFalseAnswer($answer)) {
                 continue;

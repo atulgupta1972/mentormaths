@@ -10,6 +10,7 @@ const props = defineProps({
     grades: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
     pending_count: { type: Number, default: 0 },
+    min_fill_blank_ready: { type: Number, default: 15 },
 });
 
 const page = usePage();
@@ -20,7 +21,7 @@ const selectedBookId = computed(() => props.filters?.textbook_id ?? '');
 const stepLabel = (step) => ({
     rebrand: '1. Rebrand book',
     import: '2. Import questions',
-    transform: '3. Transform fill-blanks',
+    transform: `3. Transform (need ${props.min_fill_blank_ready}+)`,
     publish: '4. Publish',
     done: 'Done',
 }[step] || step);
@@ -58,7 +59,7 @@ const onBookChange = (event) => {
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">MentorMaths conversion queue</h2>
                     <p class="text-sm text-gray-500">
-                        Convert publisher chapters one by one — rebrand → transform → fill-blank publish.
+                        Convert publisher chapters one by one — rebrand → transform (≥{{ min_fill_blank_ready }} fill-blanks) → publish.
                         Finished chapters leave this list.
                     </p>
                 </div>
@@ -154,8 +155,17 @@ const onBookChange = (event) => {
                                 </td>
                                 <td class="px-4 py-3 text-xs text-gray-600">
                                     <div>{{ row.items_count }} extracted</div>
-                                    <div v-if="row.fill_blank_ready_count" class="text-violet-700">
-                                        {{ row.fill_blank_ready_count }} fill-blank ready
+                                    <div
+                                        v-if="row.fill_blank_ready_count"
+                                        :class="row.meets_publish_minimum ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-800'"
+                                    >
+                                        {{ row.fill_blank_ready_count }} / {{ row.min_fill_blank_ready || min_fill_blank_ready }} fill-blank ready
+                                        <span v-if="!row.meets_publish_minimum">
+                                            (need {{ row.remaining_to_minimum }} more)
+                                        </span>
+                                    </div>
+                                    <div v-else class="text-amber-800">
+                                        0 / {{ row.min_fill_blank_ready || min_fill_blank_ready }} fill-blank ready
                                     </div>
                                 </td>
                                 <td class="px-4 py-3 text-right">
@@ -163,7 +173,7 @@ const onBookChange = (event) => {
                                         :href="route('admin.mentormaths-conversion.show', row.id)"
                                         class="inline-flex rounded-md bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-800"
                                     >
-                                        Convert
+                                        {{ row.queue_step === 'publish' ? 'Publish' : 'Convert' }}
                                     </Link>
                                 </td>
                             </tr>

@@ -28,7 +28,10 @@ const rebrandForm = useForm({
 const publishForm = useForm({});
 
 const needsRebrand = computed(() => !props.chapter.is_mentormaths);
-const canPublish = computed(() => (props.chapter.fill_blank_ready_count || 0) > 0 && props.chapter.is_mentormaths);
+const readyCount = computed(() => props.chapter.fill_blank_ready_count || 0);
+const minReady = computed(() => props.chapter.min_fill_blank_ready || 15);
+const meetsMinimum = computed(() => readyCount.value >= minReady.value);
+const canPublish = computed(() => meetsMinimum.value && props.chapter.is_mentormaths);
 
 const submitRebrand = () => {
     rebrandForm.post(route('admin.mentormaths-conversion.rebrand', props.chapter.id), {
@@ -93,9 +96,9 @@ const publish = () => {
                     </li>
                     <li
                         class="rounded-md px-3 py-2 font-semibold ring-1"
-                        :class="queue_step === 'transform' ? 'bg-amber-50 text-amber-950 ring-amber-200' : (chapter.fill_blank_ready_count ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-slate-50 text-slate-600 ring-slate-200')"
+                        :class="queue_step === 'transform' || (readyCount > 0 && !meetsMinimum) ? 'bg-amber-50 text-amber-950 ring-amber-200' : (meetsMinimum ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-slate-50 text-slate-600 ring-slate-200')"
                     >
-                        3. Transform
+                        3. Transform (min {{ minReady }})
                     </li>
                     <li
                         class="rounded-md px-3 py-2 font-semibold ring-1"
@@ -104,6 +107,22 @@ const publish = () => {
                         4. Publish → leaves queue
                     </li>
                 </ol>
+
+                <div
+                    v-if="chapter.is_mentormaths && chapter.items_count"
+                    class="rounded-lg border px-4 py-3 text-sm"
+                    :class="meetsMinimum
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                        : 'border-amber-200 bg-amber-50 text-amber-950'"
+                >
+                    <strong>Fill-blank progress:</strong>
+                    {{ readyCount }} / {{ minReady }} minimum
+                    <span v-if="!meetsMinimum">
+                        — need {{ chapter.remaining_to_minimum || (minReady - readyCount) }} more before publish.
+                        Keep applying transform / rewrite blocked pack.
+                    </span>
+                    <span v-else> — ready to publish.</span>
+                </div>
 
                 <!-- Step 1 -->
                 <div class="rounded-lg border border-teal-200 bg-white p-5 shadow-sm">
@@ -188,8 +207,13 @@ const publish = () => {
                     <div class="rounded-lg border border-emerald-200 bg-white p-5 shadow-sm">
                         <h3 class="font-semibold text-emerald-950">4. Publish fill-blank + written</h3>
                         <p class="mt-1 text-sm text-emerald-900">
-                            {{ chapter.fill_blank_ready_count || 0 }} fill-in-blank ready.
-                            After publish, this chapter leaves the queue.
+                            {{ readyCount }} / {{ minReady }} fill-in-blank ready.
+                            <template v-if="!meetsMinimum">
+                                Publish stays locked until you reach {{ minReady }}.
+                            </template>
+                            <template v-else>
+                                After publish, this chapter leaves the queue.
+                            </template>
                         </p>
                         <div class="mt-4 flex flex-wrap gap-2">
                             <PrimaryButton

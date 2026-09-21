@@ -25,4 +25,16 @@ class FillBlankStemTest extends TestCase
         $this->assertFalse(FillBlankStem::hasBlank('Find the value of x.'));
         $this->assertTrue(FillBlankStem::hasBlank('Find the value of x = ____.'));
     }
+
+    public function test_ensure_blank_appends_when_missing(): void
+    {
+        $this->assertSame(
+            'Find the value of x is ____.',
+            FillBlankStem::ensureBlank('Find the value of x.', '7'),
+        );
+        $this->assertSame(
+            'The total is ____.',
+            FillBlankStem::ensureBlank('The total is 42.', '42'),
+        );
+    }
 }

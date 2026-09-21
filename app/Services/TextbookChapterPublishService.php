@@ -307,6 +307,8 @@ class TextbookChapterPublishService
         }
 
         if ($isMentorMaths) {
+            $ready = $fillBlankItems->count();
+
             foreach ($items as $index => $item) {
                 if (! is_array($item) || ! $this->itemIsFillBlankReady($item)) {
                     continue;
@@ -322,6 +324,14 @@ class TextbookChapterPublishService
                         'Q'.($index + 1).': '.$result['reason'].' Re-run MentorMaths transform before publish.',
                     );
                 }
+            }
+
+            if ($ready < MentorMathsConversionQueueService::MIN_FILL_BLANK_READY) {
+                throw new InvalidArgumentException(
+                    'Need at least '.MentorMathsConversionQueueService::MIN_FILL_BLANK_READY
+                    .' fill-in-blank questions before publish (currently '.$ready.'). '
+                    .'Keep transforming / rewriting blocked rows until you reach the minimum.',
+                );
             }
         }
 

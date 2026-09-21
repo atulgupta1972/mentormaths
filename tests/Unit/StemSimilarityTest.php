@@ -31,6 +31,17 @@ class StemSimilarityTest extends TestCase
         $this->assertNull($result['reason']);
     }
 
+    public function test_accepts_strong_rewrite_even_if_numbers_match(): void
+    {
+        $svc = new StemSimilarity;
+        $source = 'Ramesh scored 67, 55, 18 and 35 runs. Find the mean.';
+        $rewritten = 'Compute the arithmetic average of the four match totals 67, 55, 18 and 35. Mean = ____.';
+
+        $result = $svc->compare($source, $rewritten);
+
+        $this->assertFalse($result['too_similar']);
+    }
+
     public function test_rejects_publisher_brand_in_stem(): void
     {
         $svc = new StemSimilarity;

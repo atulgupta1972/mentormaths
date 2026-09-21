@@ -11,6 +11,9 @@ use Illuminate\Validation\ValidationException;
 
 class MentorMathsConversionQueueService
 {
+    /** Minimum fill-in-blanks required before a chapter can be published. */
+    public const MIN_FILL_BLANK_READY = 15;
+
     /**
      * Publisher practice books that should be converted one chapter at a time.
      */
@@ -128,7 +131,25 @@ class MentorMathsConversionQueueService
                 'textbook_id' => $textbookId,
             ],
             'pending_count' => count($chapters),
+            'min_fill_blank_ready' => self::MIN_FILL_BLANK_READY,
         ];
+    }
+
+    public function fillBlankReadyCount(TextbookChapter $chapter): int
+    {
+        $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
+
+        return collect($items)->filter(
+            fn ($item) => is_array($item)
+                && filled($item['fill_blank_question_text'] ?? null)
+                && filled($item['fill_blank_correct_answer'] ?? null)
+                && empty($item['fill_blank_skipped']),
+        )->count();
+    }
+
+    public function meetsPublishMinimum(TextbookChapter $chapter): bool
+    {
+        return $this->fillBlankReadyCount($chapter) >= self::MIN_FILL_BLANK_READY;
     }
 
     /**
@@ -137,13 +158,8 @@ class MentorMathsConversionQueueService
     public function chapterRow(TextbookChapter $chapter): array
     {
         $chapter->syncDisplayFromSyllabus();
+        $fillReady = $this->fillBlankReadyCount($chapter);
         $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
-        $fillReady = collect($items)->filter(
-            fn ($item) => is_array($item)
-                && filled($item['fill_blank_question_text'] ?? null)
-                && filled($item['fill_blank_correct_answer'] ?? null)
-                && empty($item['fill_blank_skipped']),
-        )->count();
 
         $book = $chapter->textbook;
         $classNumber = $this->classNumber($book?->gradeLevel?->name);
@@ -167,6 +183,9 @@ class MentorMathsConversionQueueService
             'status_label' => $chapter->statusLabel(),
             'items_count' => count($items),
             'fill_blank_ready_count' => $fillReady,
+            'min_fill_blank_ready' => self::MIN_FILL_BLANK_READY,
+            'meets_publish_minimum' => $fillReady >= self::MIN_FILL_BLANK_READY,
+            'remaining_to_minimum' => max(0, self::MIN_FILL_BLANK_READY - $fillReady),
             'fill_blank_set_code' => $chapter->fillBlankWorksheet?->set_code,
             'has_fill_blank_published' => $chapter->fillBlankWorksheetIds() !== [],
             'is_mentormaths' => $book?->isMentorMathsPracticeLine() ?? false,
@@ -190,13 +209,10 @@ class MentorMathsConversionQueueService
             return 'import';
         }
 
-        $fillReady = collect($items)->contains(
-            fn ($item) => is_array($item)
-                && filled($item['fill_blank_question_text'] ?? null)
-                && filled($item['fill_blank_correct_answer'] ?? null),
-        );
+        $fillReady = $this->fillBlankReadyCount($chapter);
 
-        if (! $fillReady) {
+        // Keep transforming until the chapter reaches the publish minimum.
+        if ($fillReady < self::MIN_FILL_BLANK_READY) {
             return 'transform';
         }
 

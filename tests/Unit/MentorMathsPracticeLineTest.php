@@ -70,9 +70,9 @@ class MentorMathsPracticeLineTest extends TestCase
         $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
         $items = $chapter->extraction_items;
         $items[] = [
-            'question_text' => 'What is 9 + 6?',
-            'correct_answer' => '15',
-            'topic' => 'Add',
+            'question_text' => 'Is the number even or odd?',
+            'correct_answer' => 'even',
+            'topic' => 'Parity',
         ];
         $chapter->update(['extraction_items' => $items]);
 
@@ -88,11 +88,11 @@ class MentorMathsPracticeLineTest extends TestCase
                 ],
                 [
                     'source_index' => 2,
-                    'topic' => 'Add',
-                    'question' => 'What is 9 + 6?',
+                    'topic' => 'Parity',
+                    'question' => 'Is the number even or odd?',
                     'answer_format' => 'integer',
-                    'correct_answer' => '15',
-                    'explanation' => '9+6=15.',
+                    'correct_answer' => 'even',
+                    'explanation' => 'even.',
                 ],
             ],
         ], JSON_THROW_ON_ERROR);
@@ -149,6 +149,47 @@ class MentorMathsPracticeLineTest extends TestCase
         $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
+        $items = [];
+        $questions = [];
+        for ($i = 1; $i <= 15; $i++) {
+            $a = 10 + $i;
+            $b = 20 + $i;
+            $sum = $a + $b;
+            $na = $a + 3;
+            $nb = $b + 5;
+            $nsum = $na + $nb;
+            $items[] = [
+                'question_text' => "What is {$a} + {$b}?",
+                'correct_answer' => (string) $sum,
+                'topic' => 'Add',
+            ];
+            $questions[] = [
+                'source_index' => $i,
+                'topic' => 'Add',
+                'question' => "Add {$na} and {$nb}. The sum is ____.",
+                'answer_format' => 'integer',
+                'correct_answer' => (string) $nsum,
+                'explanation' => "{$na}+{$nb}={$nsum}.",
+            ];
+        }
+        $chapter->update(['extraction_items' => $items]);
+
+        $json = json_encode(['questions' => $questions], JSON_THROW_ON_ERROR);
+        app(FillBlankConversionService::class)->applyGeminiJsonToChapter($chapter->fresh(), $json);
+
+        $published = app(TextbookChapterPublishService::class)
+            ->publishFillBlankAndWritten($chapter->fresh(), $admin);
+
+        $this->assertSame(TextbookChapter::STATUS_PUBLISHED, $published->status);
+        $this->assertNotEmpty($published->fillBlankWorksheetIds());
+        $this->assertSame([], $published->mcqWorksheetIds());
+    }
+
+    public function test_publish_blocked_below_minimum_fill_blanks(): void
+    {
+        $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
         $json = json_encode([
             'questions' => [[
                 'source_index' => 1,
@@ -162,12 +203,11 @@ class MentorMathsPracticeLineTest extends TestCase
 
         app(FillBlankConversionService::class)->applyGeminiJsonToChapter($chapter, $json);
 
-        $published = app(TextbookChapterPublishService::class)
-            ->publishFillBlankAndWritten($chapter->fresh(), $admin);
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/at least 15/i');
 
-        $this->assertSame(TextbookChapter::STATUS_PUBLISHED, $published->status);
-        $this->assertNotEmpty($published->fillBlankWorksheetIds());
-        $this->assertSame([], $published->mcqWorksheetIds());
+        app(TextbookChapterPublishService::class)
+            ->publishFillBlankAndWritten($chapter->fresh(), $admin);
     }
 
     private function seedChapter(string $practiceLine): TextbookChapter
