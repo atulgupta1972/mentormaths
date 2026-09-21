@@ -2,6 +2,7 @@
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { copyTextToClipboard } from '@/utils/clipboard';
 import { useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
@@ -46,15 +47,18 @@ const copyPrompt = async () => {
         return;
     }
 
-    try {
-        await navigator.clipboard.writeText(props.gemini.prompt);
+    const result = await copyTextToClipboard(props.gemini.prompt);
+
+    if (result.ok) {
         copiedPrompt.value = true;
         window.setTimeout(() => {
             copiedPrompt.value = false;
         }, 2000);
-    } catch {
-        window.prompt('Copy this prompt into Gemini:', props.gemini.prompt);
+
+        return;
     }
+
+    window.prompt('Copy this prompt into Gemini:', props.gemini.prompt);
 };
 
 const copyReference = async () => {
@@ -62,15 +66,18 @@ const copyReference = async () => {
         return;
     }
 
-    try {
-        await navigator.clipboard.writeText(props.gemini.mcq_reference_json);
+    const result = await copyTextToClipboard(props.gemini.mcq_reference_json);
+
+    if (result.ok) {
         copiedReference.value = true;
         window.setTimeout(() => {
             copiedReference.value = false;
         }, 2000);
-    } catch {
-        window.prompt('Copy MCQ reference JSON for Gemini:', props.gemini.mcq_reference_json);
+
+        return;
     }
+
+    window.prompt('Copy MCQ reference JSON for Gemini:', props.gemini.mcq_reference_json);
 };
 
 const runPreview = () => {

@@ -7,6 +7,7 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextbookChapterGeminiPanel from '@/Components/TextbookChapterGeminiPanel.vue';
 import { safeRoute } from '@/utils/routes';
 import { formatScoreLabel } from '@/utils/scores';
+import { copyTextToClipboard } from '@/utils/clipboard';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -38,6 +39,9 @@ const items = ref(cloneItems(props.chapter.items));
 const setPlan = ref(clonePlan(props.chapter.mcq_set_plan));
 const copied = ref(false);
 const conversionCopied = ref(false);
+const copyError = ref('');
+const promptBox = ref(null);
+const conversionPromptBox = ref(null);
 const jsonInput = ref('');
 const fillBlankJsonInput = ref('');
 
@@ -249,19 +253,42 @@ const removeSetPlanRow = (index) => {
 };
 
 const copyPrompt = async () => {
-    await navigator.clipboard.writeText(props.mcqImport.prompt || '');
-    copied.value = true;
-    window.setTimeout(() => {
-        copied.value = false;
-    }, 2000);
+    copyError.value = '';
+    const result = await copyTextToClipboard(props.mcqImport.prompt || '', promptBox.value);
+
+    if (result.ok) {
+        copied.value = true;
+        window.setTimeout(() => {
+            copied.value = false;
+        }, 2000);
+
+        return;
+    }
+
+    copyError.value = result.message || 'Could not copy. Select the prompt and press Ctrl+C.';
+    promptBox.value?.focus();
+    promptBox.value?.select();
 };
 
 const copyConversionPrompt = async () => {
-    await navigator.clipboard.writeText(props.fillBlankConversion?.prompt || '');
-    conversionCopied.value = true;
-    window.setTimeout(() => {
-        conversionCopied.value = false;
-    }, 2000);
+    copyError.value = '';
+    const result = await copyTextToClipboard(
+        props.fillBlankConversion?.prompt || '',
+        conversionPromptBox.value,
+    );
+
+    if (result.ok) {
+        conversionCopied.value = true;
+        window.setTimeout(() => {
+            conversionCopied.value = false;
+        }, 2000);
+
+        return;
+    }
+
+    copyError.value = result.message || 'Could not copy. Select the prompt and press Ctrl+C.';
+    conversionPromptBox.value?.focus();
+    conversionPromptBox.value?.select();
 };
 
 const importFillBlank = () => {
@@ -1274,10 +1301,13 @@ const canChangeBook = computed(() =>
                     </div>
 
                     <textarea
+                        ref="conversionPromptBox"
                         :value="fillBlankConversion.prompt"
                         rows="10"
                         readonly
                         class="w-full rounded-md border-violet-200 bg-white font-mono text-xs text-gray-800"
+                        @focus="$event.target.select()"
+                        @click="$event.target.select()"
                     />
 
                     <details class="text-sm text-violet-900">
@@ -1333,12 +1363,17 @@ const canChangeBook = computed(() =>
                             {{ copied ? 'Copied!' : 'Copy prompt' }}
                         </SecondaryButton>
                     </div>
+                    <p v-if="copyError" class="text-sm text-rose-700">{{ copyError }}</p>
                     <textarea
+                        ref="promptBox"
                         :value="mcqImport.prompt"
                         rows="12"
                         readonly
                         class="w-full rounded-md border-gray-200 bg-gray-50 font-mono text-xs text-gray-800"
+                        @focus="$event.target.select()"
+                        @click="$event.target.select()"
                     />
+                    <p class="text-xs text-gray-500">If Copy prompt fails, click inside the box and press Ctrl+C.</p>
 
                     <details class="text-sm text-gray-600">
                         <summary class="cursor-pointer font-medium text-gray-800">Sample JSON format (questions only)</summary>

@@ -2,6 +2,7 @@
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { copyTextToClipboard } from '@/utils/clipboard';
 import { useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -44,15 +45,18 @@ const copyPrompt = async () => {
         return;
     }
 
-    try {
-        await navigator.clipboard.writeText(prompt);
+    const result = await copyTextToClipboard(prompt);
+
+    if (result.ok) {
         copied.value = true;
         window.setTimeout(() => {
             copied.value = false;
         }, 2000);
-    } catch {
-        window.prompt('Copy this prompt into Gemini:', prompt);
+
+        return;
     }
+
+    window.prompt('Copy this prompt into Gemini:', prompt);
 };
 
 const applyPaste = () => {
