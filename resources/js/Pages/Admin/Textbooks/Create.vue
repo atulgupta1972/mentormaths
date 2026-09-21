@@ -11,6 +11,7 @@ const props = defineProps({
     gradeLevel: { type: Object, default: null },
     syllabusChapters: { type: Array, default: () => [] },
     books: { type: Array, default: () => [] },
+    sourceRefOptions: { type: Array, default: () => [] },
 });
 
 const params = new URLSearchParams(window.location.search);
@@ -43,6 +44,11 @@ const onModeChange = () => {
         form.book_code = props.books[0].code;
         form.practice_line = props.books[0].practice_line || 'standard';
         form.source_ref = props.books[0].source_ref || '';
+    } else if (form.mode === 'new') {
+        form.practice_line = 'mentormaths';
+        form.book_name = 'MentorMaths 1';
+        form.book_code = 'MM1';
+        form.source_ref = props.sourceRefOptions?.[0]?.value || '';
     }
 };
 
@@ -58,11 +64,13 @@ const onBookSelect = () => {
 
 const onPracticeLineChange = () => {
     if (form.practice_line === 'mentormaths' && form.mode === 'new') {
-        if (!form.book_name || form.book_name === 'Ganita Prakash Part I') {
-            form.book_name = 'MentorMaths 1';
-        }
-        if (!form.book_code || form.book_code === 'GP') {
+        form.book_name = form.book_name?.startsWith('MentorMaths') ? form.book_name : 'MentorMaths 1';
+        const code = String(form.book_code || '').toLowerCase();
+        if (!code || code === 'gp' || !code.startsWith('mm')) {
             form.book_code = 'MM1';
+        }
+        if (!form.source_ref && props.sourceRefOptions?.length) {
+            form.source_ref = props.sourceRefOptions[0].value;
         }
     }
 };
@@ -211,7 +219,21 @@ const submit = () => {
 
                         <div v-if="isMentorMaths">
                             <InputLabel for="source_ref" value="Internal source ref (admin only)" />
-                            <TextInput id="source_ref" v-model="form.source_ref" class="mt-1 block w-full" placeholder="e.g. RDS-C7 / RSA-C9" />
+                            <select
+                                id="source_ref"
+                                v-model="form.source_ref"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                                required
+                            >
+                                <option value="" disabled>Choose source…</option>
+                                <option
+                                    v-for="opt in sourceRefOptions"
+                                    :key="opt.value"
+                                    :value="opt.value"
+                                >
+                                    {{ opt.label }}
+                                </option>
+                            </select>
                             <p class="mt-1 text-xs text-amber-800">
                                 Never shown to students. Private working note only.
                             </p>

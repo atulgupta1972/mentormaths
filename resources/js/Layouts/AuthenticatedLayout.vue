@@ -199,6 +199,12 @@ const contentGroup = computed(() => ({
             show: isAdmin.value,
         },
         {
+            label: 'MentorMaths queue',
+            href: route('admin.mentormaths-conversion.index'),
+            active: route().current('admin.mentormaths-conversion.*'),
+            show: isAdmin.value && route().has('admin.mentormaths-conversion.index'),
+        },
+        {
             label: 'Concept builder',
             href: route('admin.concept-builder.index'),
             active: route().current('admin.concept-builder.*'),

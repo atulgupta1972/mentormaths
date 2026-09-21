@@ -61,9 +61,14 @@ const setBookFilter = (event) => {
                         Upload chapter PDFs → copy AI prompt → paste MCQ JSON → publish sets like <strong>C9-GP-CH08-M</strong>.
                     </p>
                 </div>
-                <Link :href="route('admin.textbooks.create')">
-                    <PrimaryButton>Upload chapter</PrimaryButton>
-                </Link>
+                <div class="flex flex-wrap gap-2">
+                    <Link :href="route('admin.mentormaths-conversion.index')">
+                        <PrimaryButton class="!bg-teal-700 hover:!bg-teal-800">MentorMaths queue</PrimaryButton>
+                    </Link>
+                    <Link :href="route('admin.textbooks.create')">
+                        <PrimaryButton>Upload chapter</PrimaryButton>
+                    </Link>
+                </div>
             </div>
         </template>
 

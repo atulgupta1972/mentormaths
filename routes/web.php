@@ -377,6 +377,18 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/textbooks', [TextbookController::class, 'index'])->name('textbooks.index');
     Route::get('/textbooks/create', [TextbookController::class, 'create'])->name('textbooks.create');
     Route::post('/textbooks', [TextbookController::class, 'store'])->name('textbooks.store');
+    Route::get('/mentormaths-conversion', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'index'])
+        ->name('mentormaths-conversion.index');
+    Route::get('/mentormaths-conversion/chapters/{textbookChapter}', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'show'])
+        ->name('mentormaths-conversion.show');
+    Route::post('/mentormaths-conversion/chapters/{textbookChapter}/rebrand', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'rebrand'])
+        ->name('mentormaths-conversion.rebrand');
+    Route::post('/mentormaths-conversion/chapters/{textbookChapter}/convert-gemini-preview', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'previewGemini'])
+        ->name('mentormaths-conversion.convert-gemini-preview');
+    Route::post('/mentormaths-conversion/chapters/{textbookChapter}/convert-gemini-apply', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'applyGemini'])
+        ->name('mentormaths-conversion.convert-gemini-apply');
+    Route::post('/mentormaths-conversion/chapters/{textbookChapter}/publish', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'publish'])
+        ->name('mentormaths-conversion.publish');
     Route::get('/textbooks/chapters/{textbookChapter}', [TextbookController::class, 'show'])->name('textbooks.show');
     Route::post('/textbooks/chapters/{textbookChapter}/draft', [TextbookController::class, 'updateDraft'])->name('textbooks.draft');
     Route::post('/textbooks/chapters/{textbookChapter}/reclassify-item', [TextbookController::class, 'reclassifyStagingItem'])->name('textbooks.reclassify-item');

@@ -25,6 +25,7 @@ use App\Services\TextbookChapterPublishService;
 use App\Services\TextbookChapterStagingGeminiService;
 use App\Services\TextbookMcqSetPlanService;
 use App\Services\TextbookSetCodeService;
+use App\Support\MentorMathsSourceRef;
 use App\Support\UploadedFileDiagnostics;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -166,10 +167,16 @@ class TextbookController extends Controller
                 ->all();
         }
 
+        $classNumber = null;
+        if ($gradeLevel?->name && preg_match('/(\d+)/', $gradeLevel->name, $m)) {
+            $classNumber = (int) $m[1];
+        }
+
         return Inertia::render('Admin/Textbooks/Create', [
             'gradeLevel' => $gradeLevel?->only(['id', 'name']),
             'syllabusChapters' => $chapters,
             'books' => $books,
+            'sourceRefOptions' => MentorMathsSourceRef::options($classNumber),
         ]);
     }
 
@@ -184,11 +191,20 @@ class TextbookController extends Controller
             UploadedFileDiagnostics::assertValid($uploadedPdf, 'pdf');
         }
 
+        $classNumber = null;
+        if ($gradeLevel->name && preg_match('/(\d+)/', $gradeLevel->name, $m)) {
+            $classNumber = (int) $m[1];
+        }
+
         $validated = $request->validate([
             'book_name' => ['required', 'string', 'max:255'],
             'book_code' => ['required', 'string', 'max:32', 'alpha_dash'],
             'practice_line' => ['nullable', 'string', Rule::in([Textbook::PRACTICE_LINE_STANDARD, Textbook::PRACTICE_LINE_MENTORMATHS])],
-            'source_ref' => ['nullable', 'string', 'max:64'],
+            'source_ref' => [
+                'nullable',
+                'string',
+                Rule::in(array_merge([''], MentorMathsSourceRef::values($classNumber))),
+            ],
             'syllabus_chapter_id' => ['required', 'integer', Rule::exists('syllabus_chapters', 'id')],
             'pdf' => ['required', 'file', 'mimes:pdf', 'max:51200'],
         ], [
@@ -200,6 +216,10 @@ class TextbookController extends Controller
 
         $practiceLine = $validated['practice_line'] ?? Textbook::PRACTICE_LINE_STANDARD;
         $sourceRef = filled($validated['source_ref'] ?? null) ? trim((string) $validated['source_ref']) : null;
+
+        if ($practiceLine === Textbook::PRACTICE_LINE_MENTORMATHS && $sourceRef === null) {
+            return back()->withErrors(['source_ref' => 'Choose an internal source reference.'])->withInput();
+        }
 
         $syllabusChapter = SyllabusChapter::query()->findOrFail($validated['syllabus_chapter_id']);
         $chapterNumber = $syllabusChapter->numericChapterNumber();
