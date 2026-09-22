@@ -41,12 +41,8 @@ class DashboardController extends Controller
             if ($this->isAdminDashboardDeferredQueueRequest($request)) {
                 return Inertia::render('Dashboard', [
                     'isAdmin' => true,
-                    'contentPublishQueue' => Inertia::defer(
-                        fn () => $this->dashboardService->contentPublishQueueForAdmin($request),
-                    ),
-                    'contentRecheckQueue' => Inertia::defer(
-                        fn () => $this->dashboardService->contentRecheckQueueForAdmin($request),
-                    ),
+                    'contentPublishQueue' => $this->safeAdminPublishQueue($request),
+                    'contentRecheckQueue' => $this->safeAdminRecheckQueue($request),
                 ]);
             }
 
@@ -99,10 +95,10 @@ class DashboardController extends Controller
                     'gradeLevels' => $gradeLevels,
                     ...$adminDashboard,
                     'contentPublishQueue' => Inertia::defer(
-                        fn () => $this->dashboardService->contentPublishQueueForAdmin($request),
+                        fn () => $this->safeAdminPublishQueue($request),
                     ),
                     'contentRecheckQueue' => Inertia::defer(
-                        fn () => $this->dashboardService->contentRecheckQueueForAdmin($request),
+                        fn () => $this->safeAdminRecheckQueue($request),
                     ),
                 ]);
             } catch (Throwable $e) {
@@ -114,8 +110,8 @@ class DashboardController extends Controller
                     'gradeLevels' => [],
                     'loadError' => $e->getMessage(),
                     ...$this->dashboardService->emptyAdminPayload($request),
-                    'contentPublishQueue' => Inertia::defer(fn () => []),
-                    'contentRecheckQueue' => Inertia::defer(fn () => []),
+                    'contentPublishQueue' => [],
+                    'contentRecheckQueue' => [],
                 ]);
             }
         }
@@ -247,11 +243,32 @@ class DashboardController extends Controller
 
         foreach ($this->dashboardPartialDataKeys($request) as $key) {
             if ($key === 'classCoverage') {
-                $payload['classCoverage'] = $this->deferredClassCoverage($enrollment, $user);
+                try {
+                    $payload['classCoverage'] = $this->classCoverage->forEnrollment($enrollment);
+                } catch (Throwable $e) {
+                    Log::error('Student dashboard failed to load study plan.', [
+                        'user_id' => $user->id,
+                        'enrollment_id' => $enrollment?->id,
+                        'message' => $e->getMessage(),
+                    ]);
+                    $payload['classCoverage'] = array_merge(ClassCoverageService::emptyPayload(), [
+                        'load_error' => 'Your study plan could not be loaded. Please try again in a few minutes or tell your teacher.',
+                    ]);
+                }
             }
 
             if ($key === 'assignments') {
-                $payload['assignments'] = $this->deferredAssignments($enrollment);
+                try {
+                    $payload['assignments'] = $enrollment
+                        ? $this->attemptService->dashboardForEnrollment($enrollment)
+                        : [];
+                } catch (Throwable $e) {
+                    Log::error('Student dashboard failed to load assignment list.', [
+                        'enrollment_id' => $enrollment?->id,
+                        'message' => $e->getMessage(),
+                    ]);
+                    $payload['assignments'] = [];
+                }
             }
         }
 
@@ -280,12 +297,49 @@ class DashboardController extends Controller
     private function deferredAssignments(?StudentEnrollment $enrollment): DeferProp
     {
         return Inertia::defer(function () use ($enrollment) {
-            if (! $enrollment) {
+            try {
+                if (! $enrollment) {
+                    return [];
+                }
+
+                return $this->attemptService->dashboardForEnrollment($enrollment);
+            } catch (Throwable $e) {
+                Log::error('Student dashboard failed to load assignment list.', [
+                    'enrollment_id' => $enrollment?->id,
+                    'message' => $e->getMessage(),
+                ]);
+
                 return [];
             }
-
-            return $this->attemptService->dashboardForEnrollment($enrollment);
         });
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function safeAdminPublishQueue(Request $request): array
+    {
+        try {
+            return $this->dashboardService->contentPublishQueueForAdmin($request);
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard deferred publish queue failed.', ['message' => $e->getMessage()]);
+
+            return [];
+        }
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function safeAdminRecheckQueue(Request $request): array
+    {
+        try {
+            return $this->dashboardService->contentRecheckQueueForAdmin($request);
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard deferred recheck queue failed.', ['message' => $e->getMessage()]);
+
+            return [];
+        }
     }
 
     /**
