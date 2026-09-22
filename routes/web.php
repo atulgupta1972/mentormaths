@@ -391,6 +391,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('mentormaths-conversion.discard-publish-blockers');
     Route::post('/mentormaths-conversion/chapters/{textbookChapter}/publish', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'publish'])
         ->name('mentormaths-conversion.publish');
+    Route::post('/mentormaths-conversion/export-pack', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'exportPack'])
+        ->name('mentormaths-conversion.export-pack');
+    Route::post('/mentormaths-conversion/import-pack', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'importPack'])
+        ->name('mentormaths-conversion.import-pack');
     Route::get('/textbooks/chapters/{textbookChapter}', [TextbookController::class, 'show'])->name('textbooks.show');
     Route::post('/textbooks/chapters/{textbookChapter}/draft', [TextbookController::class, 'updateDraft'])->name('textbooks.draft');
     Route::post('/textbooks/chapters/{textbookChapter}/reclassify-item', [TextbookController::class, 'reclassifyStagingItem'])->name('textbooks.reclassify-item');

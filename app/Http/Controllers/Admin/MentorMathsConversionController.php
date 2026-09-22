@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\TextbookChapter;
 use App\Services\AdminGradeContext;
 use App\Services\GeminiFillBlankConversionService;
+use App\Services\MentorMathsConversionPackService;
 use App\Services\MentorMathsConversionQueueService;
 use App\Services\TextbookChapterFillBlankImportService;
 use App\Services\TextbookChapterPublishService;
@@ -13,9 +14,11 @@ use App\Services\TextbookSetCodeService;
 use App\Support\MentorMathsSourceRef;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MentorMathsConversionController extends Controller
 {
@@ -26,6 +29,7 @@ class MentorMathsConversionController extends Controller
         private TextbookChapterPublishService $publishService,
         private TextbookChapterFillBlankImportService $fillBlankImportService,
         private TextbookSetCodeService $setCodeService,
+        private MentorMathsConversionPackService $conversionPacks,
     ) {}
 
     public function index(Request $request): Response
@@ -52,18 +56,14 @@ class MentorMathsConversionController extends Controller
             'writtenWorksheet',
         ]);
 
-        if (! $this->queue->chapterIsPending($textbookChapter)
-            && $textbookChapter->fillBlankWorksheetIds() !== []) {
-            return redirect()
-                ->route('admin.mentormaths-conversion.index')
-                ->with('success', 'This chapter is already converted and published — removed from the queue.');
-        }
-
         if (! $this->queue->isConversionCandidate($textbookChapter->textbook)) {
             return redirect()
                 ->route('admin.mentormaths-conversion.index')
                 ->with('error', 'This book is not on the MentorMaths conversion queue.');
         }
+
+        // Done chapters stay viewable (export / re-check), they are just not "pending".
+        $alreadyDone = $this->queue->chapterIsDone($textbookChapter);
 
         $row = $this->queue->chapterRow($textbookChapter);
         $gradeId = (int) ($textbookChapter->textbook?->grade_level_id ?? 0);
@@ -119,6 +119,7 @@ class MentorMathsConversionController extends Controller
             ],
             'gemini' => $gemini,
             'queue_step' => $row['queue_step'],
+            'already_done' => $alreadyDone,
         ]);
     }
 
@@ -270,5 +271,60 @@ class MentorMathsConversionController extends Controller
                 'success',
                 "Done — {$chapter->textbook?->name} Ch {$chapter->chapter_number} published as fill-blank {$codes['fill_blank']}. Removed from queue.",
             );
+    }
+
+    public function exportPack(Request $request): StreamedResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:textbook_chapters,id'],
+        ]);
+
+        try {
+            $written = $this->conversionPacks->writePackFile($validated['ids']);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $filename = basename($written['path']);
+
+        return response()->streamDownload(function () use ($written) {
+            echo Storage::disk('local')->get($written['path']);
+        }, $filename, [
+            'Content-Type' => 'application/json',
+        ]);
+    }
+
+    public function importPack(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'pack' => ['required', 'file', 'mimes:json,txt', 'max:20480'],
+            'publish' => ['nullable', 'boolean'],
+        ]);
+
+        $raw = file_get_contents($validated['pack']->getRealPath());
+        $decoded = json_decode((string) $raw, true);
+        if (! is_array($decoded)) {
+            return back()->with('error', 'Pack file is not valid JSON.');
+        }
+
+        $publish = $request->boolean('publish', true);
+
+        try {
+            $result = $this->conversionPacks->importPack($decoded, $request->user(), $publish);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $ok = count($result['imported']);
+        $fail = count($result['errors']);
+        $msg = "Imported {$ok} chapter(s)".($publish ? ' (publish attempted)' : ' (saved only)').'.';
+        if ($fail > 0) {
+            $msg .= ' '.$fail.' failed: '.implode(' | ', array_slice($result['errors'], 0, 3));
+        }
+
+        return redirect()
+            ->route('admin.mentormaths-conversion.index')
+            ->with($fail > 0 && $ok === 0 ? 'error' : 'success', $msg);
     }
 }

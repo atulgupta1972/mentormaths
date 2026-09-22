@@ -1,8 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     chapters: { type: Array, default: () => [] },
@@ -21,6 +21,12 @@ const page = usePage();
 const selectedGradeId = computed(() => props.filters?.grade_level_id ?? '');
 const selectedBookId = computed(() => props.filters?.textbook_id ?? '');
 const nextChapter = computed(() => props.next_chapter || props.chapters?.[0] || null);
+const packFileInput = ref(null);
+const exportBusy = ref(false);
+const importForm = useForm({
+    pack: null,
+    publish: true,
+});
 
 const stepLabel = (step) => ({
     rebrand: '1. Rebrand book',
@@ -50,6 +56,74 @@ const onGradeChange = (event) => {
 const onBookChange = (event) => {
     applyFilters({
         textbook_id: event.target.value || undefined,
+    });
+};
+
+const exportDonePack = async () => {
+    const ids = (props.done_chapters || []).map((row) => row.id);
+    if (!ids.length || exportBusy.value) {
+        return;
+    }
+
+    exportBusy.value = true;
+    try {
+        const body = new FormData();
+        ids.forEach((id) => body.append('ids[]', String(id)));
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (token) {
+            body.append('_token', token);
+        }
+
+        const response = await fetch(route('admin.mentormaths-conversion.export-pack'), {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                Accept: 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Export failed');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^"]+)"?/i);
+        anchor.href = url;
+        anchor.download = match?.[1] || `mm-conversion-pack-${ids.length}.json`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        window.alert('Could not export the conversion pack. Try again or use the artisan command.');
+    } finally {
+        exportBusy.value = false;
+    }
+};
+
+const onPackSelected = (event) => {
+    const file = event.target.files?.[0] || null;
+    importForm.pack = file;
+};
+
+const submitImportPack = () => {
+    if (!importForm.pack) {
+        return;
+    }
+
+    importForm.post(route('admin.mentormaths-conversion.import-pack'), {
+        forceFormData: true,
+        onFinish: () => {
+            importForm.reset('pack');
+            if (packFileInput.value) {
+                packFileInput.value.value = '';
+            }
+        },
     });
 };
 </script>
@@ -216,9 +290,51 @@ const onBookChange = (event) => {
                 </div>
 
                 <div class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-emerald-200">
-                    <div class="border-b border-emerald-100 bg-emerald-50 px-4 py-2">
-                        <h3 class="text-sm font-semibold text-emerald-950">Done · {{ done_count }}</h3>
-                        <p class="text-xs text-emerald-800">Fill-blank sets published — newest first.</p>
+                    <div class="flex flex-wrap items-start justify-between gap-3 border-b border-emerald-100 bg-emerald-50 px-4 py-2">
+                        <div>
+                            <h3 class="text-sm font-semibold text-emerald-950">Done · {{ done_count }}</h3>
+                            <p class="text-xs text-emerald-800">Fill-blank sets published — newest first.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                v-if="done_chapters.length"
+                                type="button"
+                                class="rounded-md border border-emerald-400 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-50 disabled:opacity-60"
+                                :disabled="exportBusy"
+                                @click="exportDonePack"
+                            >
+                                {{ exportBusy ? 'Preparing…' : `Download pack (${done_chapters.length})` }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="border-b border-emerald-100 bg-white px-4 py-3">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Import pack on this server</p>
+                        <p class="mt-1 text-xs text-gray-600">
+                            Use on production after copying a pack JSON from local. Matching is by book code + chapter title/number.
+                        </p>
+                        <form class="mt-2 flex flex-wrap items-end gap-3" @submit.prevent="submitImportPack">
+                            <div>
+                                <input
+                                    ref="packFileInput"
+                                    type="file"
+                                    accept=".json,application/json"
+                                    class="block w-full text-xs text-gray-600"
+                                    @change="onPackSelected"
+                                />
+                            </div>
+                            <label class="flex items-center gap-2 text-xs text-gray-700">
+                                <input v-model="importForm.publish" type="checkbox" class="rounded border-gray-300 text-emerald-700" />
+                                Publish fill-blank worksheets after import
+                            </label>
+                            <PrimaryButton
+                                type="submit"
+                                class="!py-1.5 !text-xs"
+                                :disabled="!importForm.pack || importForm.processing"
+                            >
+                                {{ importForm.processing ? 'Importing…' : 'Import pack' }}
+                            </PrimaryButton>
+                        </form>
                     </div>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-gray-50">
