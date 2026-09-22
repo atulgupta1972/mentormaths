@@ -253,6 +253,63 @@ class MentorMathsPracticeLineTest extends TestCase
         $this->assertSame([], $published->mcqWorksheetIds());
     }
 
+    public function test_fill_blank_republish_replaces_orphaned_set_code(): void
+    {
+        $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $items = [];
+        $questions = [];
+        for ($i = 1; $i <= 15; $i++) {
+            $a = 10 + $i;
+            $b = 20 + $i;
+            $sum = $a + $b;
+            $na = $a + 7;
+            $nb = $b + 2;
+            $nsum = $na + $nb;
+            $items[] = [
+                'question_text' => "What is {$a} + {$b}?",
+                'correct_answer' => (string) $sum,
+                'topic' => 'Add',
+            ];
+            $questions[] = [
+                'source_index' => $i,
+                'topic' => 'Add',
+                'question' => "Find {$na} + {$nb}. The total is ____.",
+                'answer_format' => 'integer',
+                'correct_answer' => (string) $nsum,
+                'explanation' => "{$na}+{$nb}={$nsum}.",
+            ];
+        }
+        $chapter->update(['extraction_items' => $items]);
+
+        $json = json_encode(['questions' => $questions], JSON_THROW_ON_ERROR);
+        app(FillBlankConversionService::class)->applyGeminiJsonToChapter($chapter->fresh(), $json);
+
+        $first = app(TextbookChapterPublishService::class)
+            ->publishFillBlankAndWritten($chapter->fresh(), $admin);
+
+        $oldIds = $first->fillBlankWorksheetIds();
+        $this->assertNotEmpty($oldIds);
+
+        // Simulate a stale chapter link: worksheets remain, but chapter no longer points at them.
+        $first->update([
+            'fill_blank_worksheet_id' => null,
+            'fill_blank_worksheet_ids' => null,
+            'written_worksheet_id' => null,
+            'written_worksheet_ids' => null,
+        ]);
+
+        $this->assertDatabaseHas('worksheets', ['id' => $oldIds[0]]);
+
+        $second = app(TextbookChapterPublishService::class)
+            ->publishFillBlankAndWritten($first->fresh(), $admin);
+
+        $this->assertNotEmpty($second->fillBlankWorksheetIds());
+        $this->assertDatabaseMissing('worksheets', ['id' => $oldIds[0]]);
+        $this->assertDatabaseHas('worksheets', ['id' => $second->fillBlankWorksheetIds()[0]]);
+    }
+
     public function test_publish_blocked_below_minimum_fill_blanks(): void
     {
         $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);

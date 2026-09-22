@@ -348,6 +348,10 @@ class TextbookChapterPublishService
         return DB::transaction(function () use ($chapter, $items, $publisher, $topic, $syllabusChapter, $fillPlan, $writtenPlan, $isMentorMaths) {
             $this->deleteExistingWorksheets($chapter->fillBlankWorksheetIds());
             $this->deleteExistingWorksheets($chapter->writtenWorksheetIds());
+            // Also clear any orphaned worksheets that still hold these set codes
+            // (chapter FK/json ids can go stale after a failed or partial publish).
+            $this->deleteWorksheetsBySetCodes(array_column($fillPlan, 'set_code'));
+            $this->deleteWorksheetsBySetCodes(array_column($writtenPlan, 'set_code'));
 
             $fillBlankByIndex = [];
             $writtenByIndex = [];
@@ -442,6 +446,53 @@ class TextbookChapterPublishService
             $worksheet?->questions()->detach();
             $worksheet?->delete();
         }
+    }
+
+    /**
+     * @param  list<string|null>  $setCodes
+     */
+    private function deleteWorksheetsBySetCodes(array $setCodes): void
+    {
+        foreach ($setCodes as $setCode) {
+            $code = trim((string) $setCode);
+            if ($code === '') {
+                continue;
+            }
+
+            $worksheet = Worksheet::query()->where('set_code', $code)->first();
+            if (! $worksheet) {
+                continue;
+            }
+
+            $worksheet->questions()->detach();
+            $worksheet->delete();
+        }
+    }
+
+    /**
+     * Remove a worksheet that already holds this set code so republish can recreate it.
+     * Throws if the code belongs to a different syllabus chapter.
+     */
+    private function releaseSetCodeForChapter(string $setCode, SyllabusChapter $syllabusChapter): void
+    {
+        $code = trim($setCode);
+        if ($code === '') {
+            throw new InvalidArgumentException('Each worksheet needs a set code.');
+        }
+
+        $existing = Worksheet::query()->where('set_code', $code)->first();
+        if (! $existing) {
+            return;
+        }
+
+        if ((int) $existing->syllabus_chapter_id !== (int) $syllabusChapter->id) {
+            throw new InvalidArgumentException(
+                "Set code {$code} already exists on another chapter. Change the set plan codes or delete the old set first."
+            );
+        }
+
+        $existing->questions()->detach();
+        $existing->delete();
     }
 
     /**
@@ -619,6 +670,8 @@ class TextbookChapterPublishService
             return null;
         }
 
+        $this->releaseSetCodeForChapter($writtenCode, $syllabusChapter);
+
         $writtenWorksheet = Worksheet::create([
             'title' => "{$chapter->title} — Textbook written".($setNumber > 1 ? " — Part {$setNumber}" : ''),
             'set_number' => $setNumber,
@@ -676,6 +729,8 @@ class TextbookChapterPublishService
         if ($questions === []) {
             throw new InvalidArgumentException('No fill-in-blank questions to publish.');
         }
+
+        $this->releaseSetCodeForChapter($fillBlankCode, $syllabusChapter);
 
         $worksheet = Worksheet::create([
             'title' => "{$chapter->title} — Textbook fill in blank".($setNumber > 1 ? " — Part {$setNumber}" : ''),
