@@ -179,6 +179,79 @@ class GeminiFillBlankConversionService
     }
 
     /**
+     * Ready fill-blanks that would still fail publish (similarity / brand wording).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function publishBlockers(TextbookChapter $chapter): array
+    {
+        $chapter->loadMissing('textbook');
+
+        if (! ($chapter->textbook?->isMentorMathsPracticeLine() ?? false)) {
+            return [];
+        }
+
+        $items = array_values(array_filter(
+            is_array($chapter->extraction_items) ? $chapter->extraction_items : [],
+            fn ($item) => is_array($item),
+        ));
+
+        $blockers = [];
+
+        foreach ($items as $index => $item) {
+            $hasBlank = filled($item['fill_blank_question_text'] ?? null)
+                && filled($item['fill_blank_correct_answer'] ?? null)
+                && empty($item['fill_blank_skipped']);
+
+            if (! $hasBlank) {
+                continue;
+            }
+
+            $sourceStem = (string) ($item['question_text'] ?? '');
+            $fillStem = (string) ($item['fill_blank_question_text'] ?? '');
+            $result = $this->similarity->compare($sourceStem, $fillStem);
+
+            if (! $result['too_similar']) {
+                continue;
+            }
+
+            $blockers[] = [
+                'index' => $index,
+                'number' => $index + 1,
+                'label' => trim((string) ($item['label'] ?? $item['topic'] ?? '')),
+                'mcq_question' => $sourceStem,
+                'fill_blank_question' => $fillStem,
+                'correct_answer' => (string) ($item['fill_blank_correct_answer'] ?? ''),
+                'answer_format' => (string) ($item['fill_blank_answer_format'] ?? ''),
+                'explanation' => (string) ($item['fill_blank_explanation'] ?? ''),
+                'method_hint' => (string) ($item['fill_blank_method_hint'] ?? ''),
+                'topic' => $item['topic'] ?? $item['label'] ?? null,
+                'difficulty' => $item['difficulty'] ?? null,
+                'reason' => $result['reason'] ?? 'Stem too close to source',
+                'overlap' => $result['overlap'],
+            ];
+        }
+
+        return $blockers;
+    }
+
+    /**
+     * @return array{prompt: string, reference_json: string, blocker_count: int, blockers: list<array<string, mixed>>}
+     */
+    public function publishBlockerRewritePack(TextbookChapter $chapter): array
+    {
+        $blockers = $this->publishBlockers($chapter);
+        $pack = $this->blockedRewritePack($chapter, $blockers);
+
+        return [
+            'prompt' => $pack['prompt'],
+            'reference_json' => $pack['reference_json'],
+            'blocker_count' => count($blockers),
+            'blockers' => $blockers,
+        ];
+    }
+
+    /**
      * Rescue pack for rows Gemini omitted (proof/theory/etc.) — invent numeric blanks.
      *
      * @return array{prompt: string, reference_json: string, remaining_count: int}

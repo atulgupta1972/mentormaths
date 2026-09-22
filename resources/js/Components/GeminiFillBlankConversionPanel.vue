@@ -21,6 +21,8 @@ const copiedRewritePrompt = ref(false);
 const copiedRewriteReference = ref(false);
 const copiedSkippedPrompt = ref(false);
 const copiedSkippedReference = ref(false);
+const copiedBlockerPrompt = ref(false);
+const copiedBlockerReference = ref(false);
 
 const jsonForm = useForm({
     json: page.props.flash?.conversion_gemini_json || '',
@@ -56,6 +58,14 @@ const skippedReference = computed(() => preview.value?.skipped_rewrite_reference
 const skippedCount = computed(() => preview.value?.not_possible_count
     || props.gemini?.remaining_count
     || 0);
+const hasPublishBlockers = computed(() => (props.gemini?.publish_blocker_count || 0) > 0);
+const blockerPrompt = computed(() => props.gemini?.publish_blocker_rewrite_prompt || '');
+const blockerReference = computed(() => props.gemini?.publish_blocker_rewrite_reference_json || '');
+const blockerCount = computed(() => props.gemini?.publish_blocker_count || 0);
+
+const blockerForm = useForm({
+    json: page.props.flash?.conversion_blocker_json || '',
+});
 
 watch(
     () => page.props.flash?.conversion_gemini_json,
@@ -82,6 +92,16 @@ watch(
     (value) => {
         if (value) {
             skippedForm.json = value;
+        }
+    },
+    { immediate: true },
+);
+
+watch(
+    () => page.props.flash?.conversion_blocker_json,
+    (value) => {
+        if (value) {
+            blockerForm.json = value;
         }
     },
     { immediate: true },
@@ -132,6 +152,16 @@ const copySkippedReference = () => copyText(
     copiedSkippedReference,
     'Copy skipped reference JSON for Gemini:',
 );
+const copyBlockerPrompt = () => copyText(
+    blockerPrompt.value,
+    copiedBlockerPrompt,
+    'Copy too-similar rewrite prompt into Gemini:',
+);
+const copyBlockerReference = () => copyText(
+    blockerReference.value,
+    copiedBlockerReference,
+    'Copy too-similar reference JSON for Gemini:',
+);
 
 const runPreview = () => {
     if (!jsonForm.json.trim()) {
@@ -175,6 +205,20 @@ const runSkippedPreview = () => {
     });
 };
 
+const runBlockerPreview = () => {
+    if (!blockerForm.json.trim()) {
+        window.alert('Paste the rewritten too-similar JSON first.');
+
+        return;
+    }
+
+    previewForm.json = blockerForm.json;
+    previewForm.source = 'blocker';
+    previewForm.post(props.previewRoute, {
+        preserveScroll: true,
+    });
+};
+
 const applyPayload = (json, label) => {
     if (!preview.value) {
         window.alert('Preview first — check convertible vs blocked lists.');
@@ -205,6 +249,7 @@ const applyPayload = (json, label) => {
             jsonForm.json = '';
             rewriteForm.json = '';
             skippedForm.json = '';
+            blockerForm.json = '';
         },
     });
 };
@@ -242,6 +287,17 @@ const applySkipped = () => {
     }
 
     applyPayload(json, 'Apply invented numeric rows? (keeps already-saved blanks)');
+};
+
+const applyBlockerRewrite = () => {
+    const json = blockerForm.json.trim();
+    if (!json) {
+        window.alert('Paste rewritten too-similar JSON first.');
+
+        return;
+    }
+
+    applyPayload(json, 'Apply rewritten too-similar rows? (keeps other blanks)');
 };
 </script>
 
@@ -536,6 +592,66 @@ const applySkipped = () => {
                     @click="applySkipped"
                 >
                     {{ applyForm.processing ? 'Applying…' : 'Apply invented rows' }}
+                </PrimaryButton>
+            </div>
+        </div>
+
+        <div
+            v-if="gemini.is_mentormaths && hasPublishBlockers && blockerPrompt"
+            id="rewrite-too-similar"
+            class="space-y-3 rounded-lg border-2 border-rose-400 bg-rose-50 p-4"
+        >
+            <div>
+                <p class="text-sm font-semibold text-rose-950">
+                    Rewrite too-similar stems · {{ blockerCount }} blocking publish
+                </p>
+                <p class="mt-1 text-sm text-rose-900">
+                    These blanks are already saved but still too close to the source. Copy pack → Gemini → paste →
+                    Preview → Apply, then Publish.
+                </p>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+                <SecondaryButton type="button" @click="copyBlockerReference">
+                    {{ copiedBlockerReference ? 'Too-similar JSON copied!' : 'Copy too-similar reference JSON' }}
+                </SecondaryButton>
+                <SecondaryButton type="button" @click="copyBlockerPrompt">
+                    {{ copiedBlockerPrompt ? 'Rewrite prompt copied!' : 'Copy rewrite prompt' }}
+                </SecondaryButton>
+            </div>
+
+            <details class="rounded-md border border-rose-100 bg-white p-3 text-xs text-slate-700">
+                <summary class="cursor-pointer font-medium text-rose-900">Preview rewrite prompt</summary>
+                <pre class="mt-2 max-h-40 overflow-auto whitespace-pre-wrap">{{ blockerPrompt }}</pre>
+            </details>
+
+            <div>
+                <label for="gemini_blocker_json" class="text-sm font-medium text-rose-950">Paste rewritten too-similar JSON</label>
+                <textarea
+                    id="gemini_blocker_json"
+                    v-model="blockerForm.json"
+                    rows="8"
+                    class="mt-1 block w-full rounded-md border-rose-200 font-mono text-xs shadow-sm focus:border-rose-500 focus:ring-rose-500"
+                    placeholder='{"questions":[{"source_index":38,"question":"... ____",...}]}'
+                    :disabled="disabled"
+                />
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+                <SecondaryButton
+                    type="button"
+                    :disabled="disabled || previewForm.processing || !blockerForm.json.trim()"
+                    @click="runBlockerPreview"
+                >
+                    {{ previewForm.processing ? 'Previewing…' : 'Preview rewrite' }}
+                </SecondaryButton>
+                <PrimaryButton
+                    type="button"
+                    class="!bg-rose-700 hover:!bg-rose-800"
+                    :disabled="disabled || applyForm.processing || !preview || !blockerForm.json.trim()"
+                    @click="applyBlockerRewrite"
+                >
+                    {{ applyForm.processing ? 'Applying…' : 'Apply rewrite' }}
                 </PrimaryButton>
             </div>
         </div>

@@ -31,7 +31,29 @@ const needsRebrand = computed(() => !props.chapter.is_mentormaths);
 const readyCount = computed(() => props.chapter.fill_blank_ready_count || 0);
 const minReady = computed(() => props.chapter.min_fill_blank_ready || 15);
 const meetsMinimum = computed(() => readyCount.value >= minReady.value);
-const canPublish = computed(() => meetsMinimum.value && props.chapter.is_mentormaths);
+const publishBlockers = computed(() => props.chapter.publish_blockers || []);
+const publishBlockerCount = computed(() => props.chapter.publish_blocker_count || publishBlockers.value.length || 0);
+const hasPublishBlockers = computed(() => publishBlockerCount.value > 0);
+const canPublish = computed(() => meetsMinimum.value && props.chapter.is_mentormaths && !hasPublishBlockers.value);
+
+const statusHeadline = computed(() => {
+    if (needsRebrand.value) {
+        return 'Pending: rebrand this book to MentorMaths.';
+    }
+    if (!props.chapter.items_count) {
+        return 'Pending: import source questions for this chapter.';
+    }
+    if (!meetsMinimum.value) {
+        return `Pending: invent/apply more fill-blanks (${readyCount.value}/${minReady.value}).`;
+    }
+    if (hasPublishBlockers.value) {
+        return `Pending: rewrite ${publishBlockerCount.value} too-similar stem(s), then publish.`;
+    }
+    if (props.queue_step === 'publish' || !props.chapter.has_fill_blank_published) {
+        return 'Pending: click Publish (local only until you pull this on the server).';
+    }
+    return 'Done — published on this environment.';
+});
 
 const submitRebrand = () => {
     rebrandForm.post(route('admin.mentormaths-conversion.rebrand', props.chapter.id), {
@@ -96,22 +118,36 @@ const publish = () => {
                     </li>
                     <li
                         class="rounded-md px-3 py-2 font-semibold ring-1"
-                        :class="queue_step === 'transform' || (readyCount > 0 && !meetsMinimum) ? 'bg-amber-50 text-amber-950 ring-amber-200' : (meetsMinimum ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-slate-50 text-slate-600 ring-slate-200')"
+                        :class="queue_step === 'transform' || (readyCount > 0 && !meetsMinimum) || hasPublishBlockers ? 'bg-amber-50 text-amber-950 ring-amber-200' : (meetsMinimum ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-slate-50 text-slate-600 ring-slate-200')"
                     >
                         3. Transform (min {{ minReady }})
                     </li>
                     <li
                         class="rounded-md px-3 py-2 font-semibold ring-1"
-                        :class="queue_step === 'publish' ? 'bg-amber-50 text-amber-950 ring-amber-200' : 'bg-slate-50 text-slate-600 ring-slate-200'"
+                        :class="queue_step === 'publish' && !hasPublishBlockers ? 'bg-amber-50 text-amber-950 ring-amber-200' : (chapter.has_fill_blank_published ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-slate-50 text-slate-600 ring-slate-200')"
                     >
                         4. Publish → leaves queue
                     </li>
                 </ol>
 
                 <div
+                    class="rounded-lg border px-4 py-3 text-sm"
+                    :class="hasPublishBlockers || !meetsMinimum || needsRebrand
+                        ? 'border-amber-300 bg-amber-50 text-amber-950'
+                        : 'border-sky-200 bg-sky-50 text-sky-950'"
+                >
+                    <p class="font-semibold">Where you are (this machine only)</p>
+                    <p class="mt-1">{{ statusHeadline }}</p>
+                    <p class="mt-2 text-xs opacity-90">
+                        Work on <code class="rounded bg-white/70 px-1">maths_foundation.test</code> stays local until you
+                        <code class="rounded bg-white/70 px-1">git pull</code> + publish on the production server.
+                    </p>
+                </div>
+
+                <div
                     v-if="chapter.is_mentormaths && chapter.items_count"
                     class="rounded-lg border px-4 py-3 text-sm"
-                    :class="meetsMinimum
+                    :class="meetsMinimum && !hasPublishBlockers
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
                         : 'border-amber-200 bg-amber-50 text-amber-950'"
                 >
@@ -121,7 +157,32 @@ const publish = () => {
                         — need {{ chapter.remaining_to_minimum || (minReady - readyCount) }} more before publish.
                         Apply convertibles, then use Invent numeric pack for skipped rows.
                     </span>
-                    <span v-else> — ready to publish.</span>
+                    <span v-else-if="hasPublishBlockers">
+                        — count is fine, but {{ publishBlockerCount }} stem(s) still fail the similarity gate (listed below).
+                    </span>
+                    <span v-else> — count OK; publish when ready.</span>
+                </div>
+
+                <div
+                    v-if="hasPublishBlockers"
+                    class="rounded-lg border-2 border-rose-300 bg-rose-50 p-4 text-sm text-rose-950"
+                >
+                    <p class="font-semibold">Pending before publish · {{ publishBlockerCount }} too-similar</p>
+                    <p class="mt-1 text-rose-900">
+                        Scroll to <strong>Rewrite too-similar stems</strong> in the transform panel (or use the buttons there):
+                        copy pack → Gemini → paste → Apply → Publish.
+                    </p>
+                    <ul class="mt-3 max-h-40 space-y-2 overflow-y-auto">
+                        <li
+                            v-for="row in publishBlockers"
+                            :key="`blocker-${row.number}`"
+                            class="rounded border border-rose-200 bg-white/70 px-3 py-2"
+                        >
+                            <span class="font-semibold">Q{{ row.number }}</span>
+                            <span v-if="row.label"> · {{ row.label }}</span>
+                            <p class="mt-0.5 text-xs text-rose-800">{{ row.reason }}</p>
+                        </li>
+                    </ul>
                 </div>
 
                 <!-- Step 1 -->
@@ -211,8 +272,12 @@ const publish = () => {
                             <template v-if="!meetsMinimum">
                                 Publish stays locked until you reach {{ minReady }}.
                             </template>
+                            <template v-else-if="hasPublishBlockers">
+                                Locked until you rewrite {{ publishBlockerCount }} too-similar stem(s) above.
+                            </template>
                             <template v-else>
-                                After publish, this chapter leaves the queue.
+                                After publish, this chapter leaves the <strong>local</strong> queue.
+                                Production still needs a separate publish after you deploy code + re-run convert there (or migrate content).
                             </template>
                         </p>
                         <div class="mt-4 flex flex-wrap gap-2">

@@ -58,6 +58,22 @@ class MentorMathsPracticeLineTest extends TestCase
         $this->assertStringContainsString('"source_index": 2', $pack['reference_json']);
     }
 
+    public function test_publish_blockers_list_near_copy_stems(): void
+    {
+        $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
+        $items = $chapter->extraction_items;
+        $items[0]['fill_blank_question_text'] = 'What is the total of 67, 55, 18 and 35? The answer is ____.';
+        $items[0]['fill_blank_correct_answer'] = '175';
+        $items[0]['fill_blank_skipped'] = false;
+        $chapter->update(['extraction_items' => $items]);
+
+        $blockers = app(\App\Services\GeminiFillBlankConversionService::class)->publishBlockers($chapter);
+
+        $this->assertCount(1, $blockers);
+        $this->assertSame(1, $blockers[0]['number']);
+        $this->assertStringContainsString('too close', strtolower((string) $blockers[0]['reason']));
+    }
+
     public function test_standard_prompt_still_converts_from_mcq(): void
     {
         $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_STANDARD);

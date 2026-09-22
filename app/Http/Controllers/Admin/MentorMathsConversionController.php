@@ -86,6 +86,13 @@ class MentorMathsConversionController extends Controller
                     $gemini['skipped_rewrite_prompt'] = $remaining['prompt'];
                     $gemini['skipped_rewrite_reference_json'] = $remaining['reference_json'];
                 }
+
+                $blockerPack = $this->geminiFillBlank->publishBlockerRewritePack($textbookChapter);
+                if (($blockerPack['blocker_count'] ?? 0) > 0) {
+                    $gemini['publish_blocker_count'] = $blockerPack['blocker_count'];
+                    $gemini['publish_blocker_rewrite_prompt'] = $blockerPack['prompt'];
+                    $gemini['publish_blocker_rewrite_reference_json'] = $blockerPack['reference_json'];
+                }
             } catch (\Throwable $e) {
                 report($e);
                 $gemini = null;
@@ -155,7 +162,7 @@ class MentorMathsConversionController extends Controller
 
         $validated = $request->validate([
             'json' => ['required', 'string', 'min:20'],
-            'source' => ['nullable', 'string', Rule::in(['main', 'rewrite', 'skipped'])],
+            'source' => ['nullable', 'string', Rule::in(['main', 'rewrite', 'skipped', 'blocker'])],
         ]);
 
         try {
@@ -169,6 +176,7 @@ class MentorMathsConversionController extends Controller
         return match ($validated['source'] ?? 'main') {
             'rewrite' => $redirect->with('conversion_rewrite_json', $validated['json']),
             'skipped' => $redirect->with('conversion_skipped_json', $validated['json']),
+            'blocker' => $redirect->with('conversion_blocker_json', $validated['json']),
             default => $redirect->with('conversion_gemini_json', $validated['json']),
         };
     }

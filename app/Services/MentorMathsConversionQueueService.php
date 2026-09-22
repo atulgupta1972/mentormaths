@@ -160,6 +160,7 @@ class MentorMathsConversionQueueService
         $chapter->syncDisplayFromSyllabus();
         $fillReady = $this->fillBlankReadyCount($chapter);
         $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
+        $publishBlockers = app(GeminiFillBlankConversionService::class)->publishBlockers($chapter);
 
         $book = $chapter->textbook;
         $classNumber = $this->classNumber($book?->gradeLevel?->name);
@@ -186,6 +187,13 @@ class MentorMathsConversionQueueService
             'min_fill_blank_ready' => self::MIN_FILL_BLANK_READY,
             'meets_publish_minimum' => $fillReady >= self::MIN_FILL_BLANK_READY,
             'remaining_to_minimum' => max(0, self::MIN_FILL_BLANK_READY - $fillReady),
+            'publish_blocker_count' => count($publishBlockers),
+            'publish_blockers' => collect($publishBlockers)->map(fn (array $row) => [
+                'number' => $row['number'],
+                'label' => $row['label'],
+                'reason' => $row['reason'],
+                'overlap' => $row['overlap'] ?? null,
+            ])->values()->all(),
             'fill_blank_set_code' => $chapter->fillBlankWorksheet?->set_code,
             'has_fill_blank_published' => $chapter->fillBlankWorksheetIds() !== [],
             'is_mentormaths' => $book?->isMentorMathsPracticeLine() ?? false,
@@ -216,11 +224,20 @@ class MentorMathsConversionQueueService
             return 'transform';
         }
 
+        if ($this->publishBlockerCount($chapter) > 0) {
+            return 'transform';
+        }
+
         if ($chapter->fillBlankWorksheetIds() === []) {
             return 'publish';
         }
 
         return 'done';
+    }
+
+    public function publishBlockerCount(TextbookChapter $chapter): int
+    {
+        return count(app(GeminiFillBlankConversionService::class)->publishBlockers($chapter));
     }
 
     /**
