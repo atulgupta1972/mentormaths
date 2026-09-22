@@ -11,15 +11,25 @@ use InvalidArgumentException;
 class ImportMentorMathsConversionPackCommand extends Command
 {
     protected $signature = 'mentormaths:import-conversion-pack
-                            {path : Path to pack JSON (absolute, or relative to storage/app)}
+                            {path? : Path to pack JSON (absolute, or relative to storage/app)}
                             {--user= : Admin user id (defaults to first admin)}
-                            {--no-publish : Only merge fill-blanks; do not publish worksheets}';
+                            {--no-publish : Only merge fill-blanks; do not publish worksheets}
+                            {--list-books : Show textbooks on this server (for matching help)}';
 
     protected $description = 'Import a MentorMaths conversion pack and optionally publish fill-blank worksheets';
 
     public function handle(MentorMathsConversionPackService $packs): int
     {
-        $path = (string) $this->argument('path');
+        if ($this->option('list-books')) {
+            return $this->listBooks();
+        }
+
+        $path = (string) ($this->argument('path') ?? '');
+        if ($path === '') {
+            $this->error('Pass the pack path, or use --list-books.');
+
+            return self::FAILURE;
+        }
         $absolute = $this->resolvePath($path);
 
         if (! is_file($absolute)) {
@@ -68,6 +78,37 @@ class ImportMentorMathsConversionPackCommand extends Command
         }
 
         return $result['errors'] === [] ? self::SUCCESS : self::SUCCESS;
+    }
+
+    private function listBooks(): int
+    {
+        $rows = \App\Models\Textbook::query()
+            ->with('gradeLevel:id,name')
+            ->orderBy('grade_level_id')
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'practice_line', 'source_ref', 'grade_level_id']);
+
+        if ($rows->isEmpty()) {
+            $this->warn('No textbooks found.');
+
+            return self::SUCCESS;
+        }
+
+        $this->table(
+            ['id', 'grade', 'code', 'name', 'practice_line', 'source_ref'],
+            $rows->map(fn ($book) => [
+                $book->id,
+                $book->gradeLevel?->name,
+                $book->code,
+                $book->name,
+                $book->practice_line,
+                $book->source_ref,
+            ])->all(),
+        );
+
+        $this->comment('Pack looks for code mm2, or MentorMaths name, or Mentormaths + source_ref RDS-C7.');
+
+        return self::SUCCESS;
     }
 
     private function resolvePath(string $path): string

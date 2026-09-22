@@ -107,6 +107,85 @@ class MentorMathsConversionPackTest extends TestCase
         );
     }
 
+    public function test_import_matches_publisher_book_by_source_ref_when_mm2_missing(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedBasics();
+
+        $publisherBook = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'RD Sharma',
+            'code' => 'rds',
+            'practice_line' => Textbook::PRACTICE_LINE_STANDARD,
+            'source_ref' => 'RDS-C7',
+            'created_by' => $admin->id,
+        ]);
+
+        $items = [];
+        for ($i = 1; $i <= 15; $i++) {
+            $items[] = [
+                'question_text' => "Source {$i}?",
+                'correct_answer' => (string) $i,
+                'topic' => 'Add',
+            ];
+        }
+
+        $target = TextbookChapter::query()->create([
+            'textbook_id' => $publisherBook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 4,
+            'title' => 'Simple Equations',
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'created_by' => $admin->id,
+            'extraction_items' => $items,
+        ]);
+
+        $packItems = $items;
+        foreach ($packItems as $i => $row) {
+            $packItems[$i]['fill_blank_question_text'] = 'Ready '.($i + 1).' is ____.';
+            $packItems[$i]['fill_blank_correct_answer'] = (string) ($i + 3);
+            $packItems[$i]['fill_blank_answer_format'] = 'integer';
+            $packItems[$i]['fill_blank_explanation'] = 'Answer is '.($i + 3).'.';
+            $packItems[$i]['include_in_fill_blank'] = true;
+            $packItems[$i]['fill_blank_skipped'] = false;
+        }
+
+        $pack = [
+            'format' => MentorMathsConversionPackService::FORMAT,
+            'version' => MentorMathsConversionPackService::VERSION,
+            'chapters' => [[
+                'match' => [
+                    'book_code' => 'mm2',
+                    'book_name' => 'MentorMaths 2',
+                    'source_ref' => 'RDS-C7',
+                    'grade_name' => 'Class 7',
+                    'chapter_number' => 4,
+                    'title' => 'Simple Equations',
+                    'syllabus_chapter_name' => 'Simple Equations',
+                ],
+                'extraction_items' => $packItems,
+            ]],
+        ];
+
+        // Without Mentormaths line, import should still find the RDS book via source_ref/class,
+        // but refuse publish until rebranded.
+        $result = app(MentorMathsConversionPackService::class)->importPack($pack, $admin, publish: false);
+
+        $this->assertNotEmpty($result['errors']);
+        $this->assertStringContainsString('MentorMaths practice line', $result['errors'][0]);
+
+        // After rebrand, import + publish works.
+        $publisherBook->update([
+            'name' => 'MentorMaths 2',
+            'code' => 'mm2',
+            'practice_line' => Textbook::PRACTICE_LINE_MENTORMATHS,
+        ]);
+
+        $result = app(MentorMathsConversionPackService::class)->importPack($pack, $admin, publish: true);
+        $this->assertSame([], $result['errors']);
+        $this->assertTrue($result['imported'][0]['published']);
+        $this->assertSame($target->id, $result['imported'][0]['target_chapter_id']);
+    }
+
     /**
      * @return array{0: GradeLevel, 1: SyllabusChapter, 2: User}
      */

@@ -208,30 +208,24 @@ class MentorMathsConversionPackService
     public function resolveTargetChapter(array $match): TextbookChapter
     {
         $bookCode = strtolower(trim((string) ($match['book_code'] ?? '')));
+        $bookName = trim((string) ($match['book_name'] ?? ''));
         $title = trim((string) ($match['title'] ?? ''));
         $chapterNumber = $match['chapter_number'] ?? null;
         $syllabusName = trim((string) ($match['syllabus_chapter_name'] ?? ''));
         $sourceRef = trim((string) ($match['source_ref'] ?? ''));
+        $gradeName = trim((string) ($match['grade_name'] ?? ''));
 
-        if ($bookCode === '') {
-            throw new InvalidArgumentException('Pack match.book_code is required.');
-        }
-
-        $books = Textbook::query()
-            ->with('gradeLevel')
-            ->whereRaw('LOWER(code) = ?', [$bookCode])
-            ->when($sourceRef !== '', fn ($q) => $q->where('source_ref', $sourceRef))
-            ->get();
+        $books = $this->resolveTargetBooks($match);
 
         if ($books->isEmpty()) {
-            $books = Textbook::query()
-                ->with('gradeLevel')
-                ->whereRaw('LOWER(code) = ?', [$bookCode])
-                ->get();
-        }
-
-        if ($books->isEmpty()) {
-            throw new InvalidArgumentException("No textbook with code {$bookCode} found on this server.");
+            $hint = $this->availableBookHint($gradeName);
+            throw new InvalidArgumentException(
+                "No textbook matched code {$bookCode}"
+                .($bookName !== '' ? " / name \"{$bookName}\"" : '')
+                .($sourceRef !== '' ? " / source {$sourceRef}" : '')
+                .' on this server.'
+                .($hint !== '' ? " Available: {$hint}. Rebrand the Class 7 book to MentorMaths (code mm2) first, then re-run import." : '')
+            );
         }
 
         $bookIds = $books->pluck('id')->all();
@@ -256,6 +250,19 @@ class MentorMathsConversionPackService
             return $numberOk && ($titleOk || $syllabusOk || ($title === '' && $syllabusName === ''));
         })->values();
 
+        // If number+title failed (prod chapter numbers differ), retry by title/syllabus only.
+        if ($filtered->isEmpty() && ($title !== '' || $syllabusName !== '')) {
+            $filtered = $candidates->filter(function (TextbookChapter $chapter) use ($title, $syllabusName) {
+                return ($title !== '' && (
+                    $this->titlesMatch($title, (string) $chapter->title)
+                    || $this->titlesMatch($title, (string) ($chapter->syllabusChapter?->name ?? ''))
+                )) || ($syllabusName !== '' && (
+                    $this->titlesMatch($syllabusName, (string) ($chapter->syllabusChapter?->name ?? ''))
+                    || $this->titlesMatch($syllabusName, (string) $chapter->title)
+                ));
+            })->values();
+        }
+
         if ($filtered->count() === 1) {
             return $filtered->first();
         }
@@ -267,20 +274,137 @@ class MentorMathsConversionPackService
                 return $exact;
             }
 
+            $bookLabel = $books->map(fn (Textbook $b) => $b->code)->unique()->implode('/');
             throw new InvalidArgumentException(
                 'Multiple chapters matched '
                 .($title !== '' ? $title : "ch {$chapterNumber}")
-                .' on book '.$bookCode
+                .' on book '.$bookLabel
                 .'. Rename/align titles on prod, or import one chapter at a time.'
             );
         }
 
+        $bookLabel = $books->map(fn (Textbook $b) => $b->code.' ('.$b->name.')')->unique()->implode(', ');
         throw new InvalidArgumentException(
             'No matching chapter for '
             .($title !== '' ? $title : "chapter {$chapterNumber}")
-            .' on book '.$bookCode
-            .'. Upload/import the source chapter on prod first, then import this pack.'
+            .' under '.$bookLabel
+            .'. Upload/import that source chapter on prod first (or rebrand the publisher book to MentorMaths), then import this pack.'
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $match
+     * @return \Illuminate\Support\Collection<int, Textbook>
+     */
+    private function resolveTargetBooks(array $match)
+    {
+        $bookCode = strtolower(trim((string) ($match['book_code'] ?? '')));
+        $bookName = trim((string) ($match['book_name'] ?? ''));
+        $sourceRef = trim((string) ($match['source_ref'] ?? ''));
+        $gradeName = trim((string) ($match['grade_name'] ?? ''));
+
+        $query = Textbook::query()->with('gradeLevel');
+
+        // 1) Exact code (mm2)
+        if ($bookCode !== '') {
+            $books = (clone $query)->whereRaw('LOWER(code) = ?', [$bookCode])->get();
+            if ($books->isNotEmpty()) {
+                return $books;
+            }
+        }
+
+        // 2) MentorMaths practice line + source_ref (RDS-C7)
+        if ($sourceRef !== '') {
+            $books = (clone $query)
+                ->where('practice_line', Textbook::PRACTICE_LINE_MENTORMATHS)
+                ->where('source_ref', $sourceRef)
+                ->get();
+            if ($books->isNotEmpty()) {
+                return $books;
+            }
+        }
+
+        // 3) Book name (MentorMaths 2)
+        if ($bookName !== '') {
+            $books = (clone $query)->get()->filter(
+                fn (Textbook $book) => $this->titlesMatch($bookName, (string) $book->name)
+            )->values();
+            if ($books->isNotEmpty()) {
+                return $books;
+            }
+        }
+
+        // 4) Mentormaths line + same class
+        if ($gradeName !== '') {
+            $books = (clone $query)
+                ->where('practice_line', Textbook::PRACTICE_LINE_MENTORMATHS)
+                ->whereHas('gradeLevel', fn ($q) => $q->where('name', $gradeName))
+                ->get();
+            if ($books->count() === 1) {
+                return $books;
+            }
+        }
+
+        // 5) Publisher conversion book on that class with matching source_ref or RDS-like code
+        if ($gradeName !== '' || $sourceRef !== '') {
+            $books = (clone $query)
+                ->when($gradeName !== '', fn ($q) => $q->whereHas(
+                    'gradeLevel',
+                    fn ($inner) => $inner->where('name', $gradeName),
+                ))
+                ->get()
+                ->filter(function (Textbook $book) use ($sourceRef) {
+                    if (! app(MentorMathsConversionQueueService::class)->isConversionCandidate($book)) {
+                        return false;
+                    }
+                    if ($sourceRef !== '' && (string) $book->source_ref === $sourceRef) {
+                        return true;
+                    }
+
+                    $code = strtolower((string) $book->code);
+
+                    return in_array($code, ['rds', 'rs', 'mm2', 'mm1'], true)
+                        || str_starts_with($code, 'mm');
+                })
+                ->values();
+
+            if ($books->isNotEmpty()) {
+                return $books;
+            }
+        }
+
+        return collect();
+    }
+
+    private function availableBookHint(string $gradeName): string
+    {
+        $books = Textbook::query()
+            ->with('gradeLevel:id,name')
+            ->when($gradeName !== '', fn ($q) => $q->whereHas(
+                'gradeLevel',
+                fn ($inner) => $inner->where('name', $gradeName),
+            ))
+            ->orderBy('name')
+            ->limit(12)
+            ->get(['id', 'name', 'code', 'practice_line', 'source_ref', 'grade_level_id']);
+
+        if ($books->isEmpty()) {
+            $books = Textbook::query()->orderBy('name')->limit(12)->get(['id', 'name', 'code', 'practice_line', 'source_ref']);
+        }
+
+        return $books
+            ->map(function (Textbook $book) {
+                $bits = [$book->code, $book->name];
+                if ($book->source_ref) {
+                    $bits[] = $book->source_ref;
+                }
+                if ($book->practice_line) {
+                    $bits[] = $book->practice_line;
+                }
+
+                return implode(' · ', $bits);
+            })
+            ->implode(' | ');
     }
 
     /**
