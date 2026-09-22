@@ -39,6 +39,18 @@ class MentorMathsConversionQueueService
         return false;
     }
 
+    public function chapterIsDone(TextbookChapter $chapter): bool
+    {
+        $chapter->loadMissing('textbook');
+
+        $book = $chapter->textbook;
+        if (! $book || ! $this->isConversionCandidate($book)) {
+            return false;
+        }
+
+        return $book->isMentorMathsPracticeLine() && $chapter->fillBlankWorksheetIds() !== [];
+    }
+
     public function chapterIsPending(TextbookChapter $chapter): bool
     {
         $chapter->loadMissing('textbook');
@@ -48,21 +60,18 @@ class MentorMathsConversionQueueService
             return false;
         }
 
-        // Done = MentorMaths line + fill-blank worksheets published.
-        if ($book->isMentorMathsPracticeLine() && $chapter->fillBlankWorksheetIds() !== []) {
-            return false;
-        }
-
-        return true;
+        return ! $this->chapterIsDone($chapter);
     }
 
     /**
      * @return array{
      *     chapters: list<array<string, mixed>>,
+     *     done_chapters: list<array<string, mixed>>,
      *     books: list<array<string, mixed>>,
      *     grades: list<array{id: int, name: string}>,
      *     filters: array{grade_level_id: ?int, textbook_id: ?int},
-     *     pending_count: int
+     *     pending_count: int,
+     *     done_count: int
      * }
      */
     public function queue(?int $gradeLevelId = null, ?int $textbookId = null): array
@@ -101,7 +110,7 @@ class MentorMathsConversionQueueService
 
         $bookIds = $candidateBooks->pluck('id')->all();
 
-        $chapters = TextbookChapter::query()
+        $allChapters = TextbookChapter::query()
             ->with([
                 'textbook:id,name,code,grade_level_id,practice_line,source_ref',
                 'textbook.gradeLevel:id,name,sort_order',
@@ -116,14 +125,24 @@ class MentorMathsConversionQueueService
             ->when($textbookId, fn ($q) => $q->where('textbook_id', $textbookId))
             ->orderBy('textbook_id')
             ->orderBy('chapter_number')
-            ->get()
+            ->get();
+
+        $chapters = $allChapters
             ->filter(fn (TextbookChapter $chapter) => $this->chapterIsPending($chapter))
+            ->map(fn (TextbookChapter $chapter) => $this->chapterRow($chapter))
+            ->values()
+            ->all();
+
+        $doneChapters = $allChapters
+            ->filter(fn (TextbookChapter $chapter) => $this->chapterIsDone($chapter))
+            ->sortByDesc(fn (TextbookChapter $chapter) => $chapter->published_at?->timestamp ?? $chapter->updated_at?->timestamp ?? 0)
             ->map(fn (TextbookChapter $chapter) => $this->chapterRow($chapter))
             ->values()
             ->all();
 
         return [
             'chapters' => $chapters,
+            'done_chapters' => $doneChapters,
             'books' => $booksForFilter,
             'grades' => $grades,
             'filters' => [
@@ -131,6 +150,7 @@ class MentorMathsConversionQueueService
                 'textbook_id' => $textbookId,
             ],
             'pending_count' => count($chapters),
+            'done_count' => count($doneChapters),
             'min_fill_blank_ready' => self::MIN_FILL_BLANK_READY,
             'next_chapter' => $chapters[0] ?? null,
         ];
@@ -216,7 +236,9 @@ class MentorMathsConversionQueueService
                 'overlap' => $row['overlap'] ?? null,
             ])->values()->all(),
             'fill_blank_set_code' => $chapter->fillBlankWorksheet?->set_code,
+            'fill_blank_worksheet_count' => count($chapter->fillBlankWorksheetIds()),
             'has_fill_blank_published' => $chapter->fillBlankWorksheetIds() !== [],
+            'published_at' => $chapter->published_at?->toDateString(),
             'is_mentormaths' => $book?->isMentorMathsPracticeLine() ?? false,
             'source_ref' => $book?->source_ref,
             'guessed_source_ref' => $guessedRef,

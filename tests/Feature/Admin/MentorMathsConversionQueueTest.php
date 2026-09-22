@@ -58,7 +58,7 @@ class MentorMathsConversionQueueTest extends TestCase
             'created_by' => $admin->id,
         ]);
 
-        TextbookChapter::query()->create([
+        $doneChapter = TextbookChapter::query()->create([
             'textbook_id' => $doneBook->id,
             'syllabus_chapter_id' => $syllabusChapter->id,
             'chapter_number' => 2,
@@ -78,6 +78,10 @@ class MentorMathsConversionQueueTest extends TestCase
                 ->where('pending_count', 1)
                 ->has('chapters', 1)
                 ->where('chapters.0.id', $pending->id)
+                ->where('done_count', 1)
+                ->has('done_chapters', 1)
+                ->where('done_chapters.0.id', $doneChapter->id)
+                ->where('done_chapters.0.has_fill_blank_published', true)
             );
     }
 

@@ -6,10 +6,12 @@ import { computed } from 'vue';
 
 const props = defineProps({
     chapters: { type: Array, default: () => [] },
+    done_chapters: { type: Array, default: () => [] },
     books: { type: Array, default: () => [] },
     grades: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
     pending_count: { type: Number, default: 0 },
+    done_count: { type: Number, default: 0 },
     min_fill_blank_ready: { type: Number, default: 15 },
     next_chapter: { type: Object, default: null },
 });
@@ -62,7 +64,7 @@ const onBookChange = (event) => {
                     <h2 class="text-xl font-semibold text-gray-800">MentorMaths conversion queue</h2>
                     <p class="text-sm text-gray-500">
                         Convert publisher chapters one by one — rebrand → transform (≥{{ min_fill_blank_ready }} fill-blanks) → publish.
-                        Finished chapters leave this list.
+                        Pending work is listed first; finished chapters are shown below.
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
@@ -113,6 +115,10 @@ const onBookChange = (event) => {
                         <p class="text-xs font-semibold uppercase tracking-wide text-teal-800">Pending</p>
                         <p class="text-2xl font-bold text-teal-950">{{ pending_count }}</p>
                     </div>
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wide text-emerald-800">Done</p>
+                        <p class="text-2xl font-bold text-emerald-950">{{ done_count }}</p>
+                    </div>
                     <div class="min-w-[12rem]">
                         <label for="grade_filter" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">Class</label>
                         <select
@@ -142,6 +148,9 @@ const onBookChange = (event) => {
                 </div>
 
                 <div class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+                    <div class="border-b border-gray-100 bg-amber-50/70 px-4 py-2">
+                        <h3 class="text-sm font-semibold text-amber-950">Pending · {{ pending_count }}</h3>
+                    </div>
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-gray-50">
                             <tr>
@@ -155,7 +164,7 @@ const onBookChange = (event) => {
                         <tbody class="divide-y divide-gray-100">
                             <tr v-if="!chapters.length">
                                 <td colspan="5" class="px-4 py-10 text-center text-gray-500">
-                                    No pending chapters for this filter. Converted chapters drop off automatically.
+                                    No pending chapters for this filter.
                                 </td>
                             </tr>
                             <tr v-for="row in chapters" :key="row.id">
@@ -199,6 +208,67 @@ const onBookChange = (event) => {
                                         class="inline-flex rounded-md bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-800"
                                     >
                                         {{ row.queue_step === 'publish' ? 'Publish' : 'Convert' }}
+                                    </Link>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-emerald-200">
+                    <div class="border-b border-emerald-100 bg-emerald-50 px-4 py-2">
+                        <h3 class="text-sm font-semibold text-emerald-950">Done · {{ done_count }}</h3>
+                        <p class="text-xs text-emerald-800">Fill-blank sets published — newest first.</p>
+                    </div>
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-600">Class / Book</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-600">Chapter</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-600">Published</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-600">Sets</th>
+                                <th class="px-4 py-3 text-right font-semibold text-gray-600">Open</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <tr v-if="!done_chapters.length">
+                                <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+                                    No finished chapters for this filter yet.
+                                </td>
+                            </tr>
+                            <tr v-for="row in done_chapters" :key="`done-${row.id}`">
+                                <td class="px-4 py-3">
+                                    <div class="font-medium text-gray-900">{{ row.book_name }}</div>
+                                    <div class="text-xs text-gray-500">
+                                        {{ row.grade_name }} · {{ row.book_code }}
+                                        <span v-if="row.source_ref"> · {{ row.source_ref }}</span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <div class="font-medium">{{ row.label || `Ch ${row.chapter_number} — ${row.title}` }}</div>
+                                    <div class="text-xs text-gray-500">{{ row.status_label }}</div>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
+                                        Done
+                                    </span>
+                                    <div v-if="row.published_at" class="mt-1 text-xs text-gray-500">{{ row.published_at }}</div>
+                                </td>
+                                <td class="px-4 py-3 text-xs text-gray-600">
+                                    <div>{{ row.fill_blank_ready_count }} fill-blank ready</div>
+                                    <div v-if="row.fill_blank_set_code" class="font-mono text-[11px] text-gray-500">
+                                        {{ row.fill_blank_set_code }}
+                                        <span v-if="row.fill_blank_worksheet_count > 1">
+                                            +{{ row.fill_blank_worksheet_count - 1 }} more
+                                        </span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <Link
+                                        :href="route('admin.mentormaths-conversion.show', row.id)"
+                                        class="inline-flex rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-50"
+                                    >
+                                        View
                                     </Link>
                                 </td>
                             </tr>
