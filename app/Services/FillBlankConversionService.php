@@ -577,8 +577,21 @@ class FillBlankConversionService
     public function clearRows(ContentUploadTask $task, array $indexes): int
     {
         $this->assertConversionTask($task);
-        $chapter = $task->textbookChapter;
-        $items = $chapter->extraction_items ?? [];
+
+        return $this->clearChapterRows($task->textbookChapter, $indexes);
+    }
+
+    /**
+     * Drop fill-blank conversion for selected extraction indexes (MentorMaths / chapter tools).
+     *
+     * @param  list<int>  $indexes  0-based extraction item indexes
+     */
+    public function clearChapterRows(TextbookChapter $chapter, array $indexes): int
+    {
+        $items = array_values(array_filter(
+            is_array($chapter->extraction_items) ? $chapter->extraction_items : [],
+            fn ($item) => is_array($item),
+        ));
         $cleared = 0;
 
         foreach (array_unique(array_map('intval', $indexes)) as $index) {

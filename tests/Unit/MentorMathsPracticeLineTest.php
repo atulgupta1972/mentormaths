@@ -74,6 +74,34 @@ class MentorMathsPracticeLineTest extends TestCase
         $this->assertStringContainsString('too close', strtolower((string) $blockers[0]['reason']));
     }
 
+    public function test_discard_publish_blockers_keeps_minimum(): void
+    {
+        $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
+        $items = [];
+        for ($i = 1; $i <= 16; $i++) {
+            $items[] = [
+                'question_text' => "Source extract stem number {$i} with value ".($i * 3).'.',
+                'correct_answer' => (string) ($i * 3),
+                'topic' => "T{$i}",
+                'fill_blank_question_text' => $i === 1
+                    ? "Source extract stem number {$i} with value ".($i * 3).' is ____.'
+                    : "MentorMaths rewritten stem {$i}: find ____.",
+                'fill_blank_correct_answer' => (string) ($i * 7 + 1),
+                'fill_blank_skipped' => false,
+            ];
+        }
+        $chapter->update(['extraction_items' => $items]);
+
+        $service = app(\App\Services\GeminiFillBlankConversionService::class);
+        $this->assertNotEmpty($service->publishBlockers($chapter));
+
+        $result = $service->discardPublishBlockers($chapter, null);
+
+        $this->assertGreaterThanOrEqual(1, $result['discarded']);
+        $this->assertSame(0, $result['remaining_blockers']);
+        $this->assertGreaterThanOrEqual(15, $result['ready_count']);
+    }
+
     public function test_standard_prompt_still_converts_from_mcq(): void
     {
         $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_STANDARD);

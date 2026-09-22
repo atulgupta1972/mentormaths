@@ -189,6 +189,7 @@ class MentorMathsConversionQueueService
             'remaining_to_minimum' => max(0, self::MIN_FILL_BLANK_READY - $fillReady),
             'publish_blocker_count' => count($publishBlockers),
             'publish_blockers' => collect($publishBlockers)->map(fn (array $row) => [
+                'index' => $row['index'],
                 'number' => $row['number'],
                 'label' => $row['label'],
                 'reason' => $row['reason'],

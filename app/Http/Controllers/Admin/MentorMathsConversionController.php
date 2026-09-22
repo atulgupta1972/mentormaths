@@ -207,6 +207,50 @@ class MentorMathsConversionController extends Controller
             ));
     }
 
+    public function discardPublishBlockers(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $textbookChapter->loadMissing('textbook');
+        abort_unless($textbookChapter->textbook?->isMentorMathsPracticeLine(), 422, 'Rebrand the book to MentorMaths first.');
+
+        $validated = $request->validate([
+            'indexes' => ['nullable', 'array'],
+            'indexes.*' => ['integer', 'min:0'],
+            'all' => ['nullable', 'boolean'],
+        ]);
+
+        $indexes = ! empty($validated['all'])
+            ? null
+            : array_values($validated['indexes'] ?? []);
+
+        if ($indexes === [] && empty($validated['all'])) {
+            return back()->with('error', 'Pick at least one stuck question to discard.');
+        }
+
+        try {
+            $result = $this->geminiFillBlank->discardPublishBlockers(
+                $textbookChapter,
+                empty($validated['all']) ? $indexes : null,
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $msg = sprintf(
+            'Discarded %d stuck blank(s). %d fill-blank ready · %d still blocking.',
+            $result['discarded'],
+            $result['ready_count'],
+            $result['remaining_blockers'],
+        );
+
+        if ($result['remaining_blockers'] === 0) {
+            $msg .= ' You can publish now.';
+        }
+
+        return redirect()
+            ->route('admin.mentormaths-conversion.show', $textbookChapter)
+            ->with('success', $msg);
+    }
+
     public function publish(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
         $textbookChapter->loadMissing('textbook');

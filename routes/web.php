@@ -387,6 +387,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('mentormaths-conversion.convert-gemini-preview');
     Route::post('/mentormaths-conversion/chapters/{textbookChapter}/convert-gemini-apply', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'applyGemini'])
         ->name('mentormaths-conversion.convert-gemini-apply');
+    Route::post('/mentormaths-conversion/chapters/{textbookChapter}/discard-publish-blockers', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'discardPublishBlockers'])
+        ->name('mentormaths-conversion.discard-publish-blockers');
     Route::post('/mentormaths-conversion/chapters/{textbookChapter}/publish', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'publish'])
         ->name('mentormaths-conversion.publish');
     Route::get('/textbooks/chapters/{textbookChapter}', [TextbookController::class, 'show'])->name('textbooks.show');

@@ -4,6 +4,7 @@ import GeminiFillBlankConversionPanel from '@/Components/GeminiFillBlankConversi
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -26,6 +27,10 @@ const rebrandForm = useForm({
 });
 
 const publishForm = useForm({});
+const discardForm = useForm({
+    indexes: [],
+    all: false,
+});
 
 const needsRebrand = computed(() => !props.chapter.is_mentormaths);
 const readyCount = computed(() => props.chapter.fill_blank_ready_count || 0);
@@ -35,6 +40,13 @@ const publishBlockers = computed(() => props.chapter.publish_blockers || []);
 const publishBlockerCount = computed(() => props.chapter.publish_blocker_count || publishBlockers.value.length || 0);
 const hasPublishBlockers = computed(() => publishBlockerCount.value > 0);
 const canPublish = computed(() => meetsMinimum.value && props.chapter.is_mentormaths && !hasPublishBlockers.value);
+const canDiscardAllStuck = computed(() => {
+    if (!hasPublishBlockers.value) {
+        return false;
+    }
+
+    return (readyCount.value - publishBlockerCount.value) >= minReady.value;
+});
 
 const statusHeadline = computed(() => {
     if (needsRebrand.value) {
@@ -47,7 +59,7 @@ const statusHeadline = computed(() => {
         return `Pending: invent/apply more fill-blanks (${readyCount.value}/${minReady.value}).`;
     }
     if (hasPublishBlockers.value) {
-        return `Pending: rewrite ${publishBlockerCount.value} too-similar stem(s), then publish.`;
+        return `Pending: rewrite or discard ${publishBlockerCount.value} too-similar stem(s), then publish.`;
     }
     if (props.queue_step === 'publish' || !props.chapter.has_fill_blank_published) {
         return 'Pending: click Publish (local only until you pull this on the server).';
@@ -57,6 +69,45 @@ const statusHeadline = computed(() => {
 
 const submitRebrand = () => {
     rebrandForm.post(route('admin.mentormaths-conversion.rebrand', props.chapter.id), {
+        preserveScroll: true,
+    });
+};
+
+const discardOne = (row) => {
+    const after = readyCount.value - 1;
+    if (after < minReady.value) {
+        window.alert(`Cannot discard Q${row.number} — would leave only ${after} blanks (need ${minReady.value}).`);
+
+        return;
+    }
+
+    if (!window.confirm(`Discard stuck Q${row.number}? It will not be published as fill-blank.`)) {
+        return;
+    }
+
+    discardForm.indexes = [row.index];
+    discardForm.all = false;
+    discardForm.post(route('admin.mentormaths-conversion.discard-publish-blockers', props.chapter.id), {
+        preserveScroll: true,
+    });
+};
+
+const discardAllStuck = () => {
+    if (!canDiscardAllStuck.value) {
+        window.alert(`Cannot discard all stuck — remaining blanks would drop below ${minReady.value}.`);
+
+        return;
+    }
+
+    if (!window.confirm(
+        `Discard all ${publishBlockerCount.value} stuck blanks and keep ${readyCount.value - publishBlockerCount.value} good ones?`,
+    )) {
+        return;
+    }
+
+    discardForm.indexes = [];
+    discardForm.all = true;
+    discardForm.post(route('admin.mentormaths-conversion.discard-publish-blockers', props.chapter.id), {
         preserveScroll: true,
     });
 };
@@ -167,20 +218,48 @@ const publish = () => {
                     v-if="hasPublishBlockers"
                     class="rounded-lg border-2 border-rose-300 bg-rose-50 p-4 text-sm text-rose-950"
                 >
-                    <p class="font-semibold">Pending before publish · {{ publishBlockerCount }} too-similar</p>
-                    <p class="mt-1 text-rose-900">
-                        Scroll to <strong>Rewrite too-similar stems</strong> in the transform panel (or use the buttons there):
-                        copy pack → Gemini → paste → Apply → Publish.
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p class="font-semibold">Pending before publish · {{ publishBlockerCount }} too-similar</p>
+                            <p class="mt-1 text-rose-900">
+                                Rewrite them in the transform pack below, <strong>or discard</strong> a few stuck ones
+                                if you already have {{ minReady }}+ good blanks.
+                            </p>
+                        </div>
+                        <SecondaryButton
+                            type="button"
+                            class="!border-rose-300 !bg-white !text-rose-900"
+                            :disabled="discardForm.processing || !canDiscardAllStuck"
+                            @click="discardAllStuck"
+                        >
+                            {{ discardForm.processing ? 'Discarding…' : `Discard all ${publishBlockerCount} stuck` }}
+                        </SecondaryButton>
+                    </div>
+                    <p
+                        v-if="!canDiscardAllStuck"
+                        class="mt-2 text-xs text-rose-800"
+                    >
+                        Discard-all locked — keeping only good blanks would drop below {{ minReady }}.
                     </p>
-                    <ul class="mt-3 max-h-40 space-y-2 overflow-y-auto">
+                    <ul class="mt-3 max-h-52 space-y-2 overflow-y-auto">
                         <li
                             v-for="row in publishBlockers"
                             :key="`blocker-${row.number}`"
-                            class="rounded border border-rose-200 bg-white/70 px-3 py-2"
+                            class="flex flex-wrap items-center justify-between gap-2 rounded border border-rose-200 bg-white/70 px-3 py-2"
                         >
-                            <span class="font-semibold">Q{{ row.number }}</span>
-                            <span v-if="row.label"> · {{ row.label }}</span>
-                            <p class="mt-0.5 text-xs text-rose-800">{{ row.reason }}</p>
+                            <div>
+                                <span class="font-semibold">Q{{ row.number }}</span>
+                                <span v-if="row.label"> · {{ row.label }}</span>
+                                <p class="mt-0.5 text-xs text-rose-800">{{ row.reason }}</p>
+                            </div>
+                            <SecondaryButton
+                                type="button"
+                                class="!border-rose-200 !bg-white !px-2 !py-1 !text-xs !text-rose-900"
+                                :disabled="discardForm.processing || (readyCount - 1) < minReady"
+                                @click="discardOne(row)"
+                            >
+                                Discard
+                            </SecondaryButton>
                         </li>
                     </ul>
                 </div>

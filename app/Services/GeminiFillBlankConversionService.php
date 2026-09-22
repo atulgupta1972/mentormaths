@@ -252,6 +252,61 @@ class GeminiFillBlankConversionService
     }
 
     /**
+     * Discard stuck too-similar fill-blanks so the chapter can publish with the rest.
+     *
+     * @param  list<int>|null  $indexes  0-based; null = all current publish blockers
+     * @return array{discarded: int, ready_count: int, remaining_blockers: int}
+     */
+    public function discardPublishBlockers(TextbookChapter $chapter, ?array $indexes = null): array
+    {
+        $chapter->loadMissing('textbook');
+
+        if (! ($chapter->textbook?->isMentorMathsPracticeLine() ?? false)) {
+            throw new \InvalidArgumentException('Rebrand the book to MentorMaths first.');
+        }
+
+        $blockers = $this->publishBlockers($chapter);
+        if ($blockers === []) {
+            throw new \InvalidArgumentException('No too-similar stems to discard.');
+        }
+
+        $blockerIndexes = array_map(fn (array $row) => (int) $row['index'], $blockers);
+
+        if ($indexes === null) {
+            $toDiscard = $blockerIndexes;
+        } else {
+            $requested = array_values(array_unique(array_map('intval', $indexes)));
+            $toDiscard = array_values(array_intersect($requested, $blockerIndexes));
+        }
+
+        if ($toDiscard === []) {
+            throw new \InvalidArgumentException('None of those rows are current publish blockers.');
+        }
+
+        $readyBefore = app(TextbookChapterFillBlankImportService::class)
+            ->fillBlankReadyCount(is_array($chapter->extraction_items) ? $chapter->extraction_items : []);
+        $readyAfter = $readyBefore - count($toDiscard);
+
+        if ($readyAfter < MentorMathsConversionQueueService::MIN_FILL_BLANK_READY) {
+            throw new \InvalidArgumentException(
+                'Discarding these would leave only '.$readyAfter
+                .' fill-blanks (need at least '.MentorMathsConversionQueueService::MIN_FILL_BLANK_READY
+                .'). Rewrite some stems instead, or discard fewer.',
+            );
+        }
+
+        $discarded = $this->conversion->clearChapterRows($chapter, $toDiscard);
+        $chapter->refresh();
+
+        return [
+            'discarded' => $discarded,
+            'ready_count' => app(TextbookChapterFillBlankImportService::class)
+                ->fillBlankReadyCount(is_array($chapter->extraction_items) ? $chapter->extraction_items : []),
+            'remaining_blockers' => count($this->publishBlockers($chapter)),
+        ];
+    }
+
+    /**
      * Rescue pack for rows Gemini omitted (proof/theory/etc.) — invent numeric blanks.
      *
      * @return array{prompt: string, reference_json: string, remaining_count: int}
