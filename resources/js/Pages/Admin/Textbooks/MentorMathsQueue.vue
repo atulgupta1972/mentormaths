@@ -11,12 +11,14 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     pending_count: { type: Number, default: 0 },
     min_fill_blank_ready: { type: Number, default: 15 },
+    next_chapter: { type: Object, default: null },
 });
 
 const page = usePage();
 
 const selectedGradeId = computed(() => props.filters?.grade_level_id ?? '');
 const selectedBookId = computed(() => props.filters?.textbook_id ?? '');
+const nextChapter = computed(() => props.next_chapter || props.chapters?.[0] || null);
 
 const stepLabel = (step) => ({
     rebrand: '1. Rebrand book',
@@ -81,6 +83,29 @@ const onBookChange = (event) => {
                 </div>
                 <div v-if="page.props.flash?.error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
                     {{ page.props.flash.error }}
+                </div>
+
+                <div
+                    v-if="pending_count > 0 && nextChapter"
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-teal-400 bg-teal-50 px-5 py-4 shadow-sm"
+                >
+                    <div>
+                        <p class="text-sm font-semibold text-teal-950">
+                            {{ pending_count }} chapters still pending
+                        </p>
+                        <p class="mt-1 text-sm text-teal-900">
+                            Next up:
+                            <span class="font-semibold">{{ nextChapter.book_name }}</span>
+                            · {{ nextChapter.label || `Ch ${nextChapter.chapter_number} — ${nextChapter.title}` }}
+                            <span class="text-teal-800"> ({{ stepLabel(nextChapter.queue_step) }})</span>
+                        </p>
+                    </div>
+                    <Link
+                        :href="route('admin.mentormaths-conversion.show', nextChapter.id)"
+                        class="inline-flex items-center rounded-md bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800"
+                    >
+                        Continue next chapter →
+                    </Link>
                 </div>
 
                 <div class="flex flex-wrap items-end gap-4 rounded-lg border border-teal-200 bg-teal-50/60 px-4 py-3">

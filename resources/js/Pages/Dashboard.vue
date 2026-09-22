@@ -55,6 +55,10 @@ const props = defineProps({
     mailSettings: { type: Object, default: null },
     gradeLevels: { type: Array, default: () => [] },
     loadError: { type: String, default: null },
+    mentorMathsConversion: {
+        type: Object,
+        default: () => ({ pending_count: 0, next_chapter_id: null, next_chapter_label: null }),
+    },
 });
 
 const showHelpRequests = ref(false);
@@ -379,6 +383,40 @@ const formatHelpDate = (value) => {
                         {{ page.props.flash.error }}
                     </div>
 
+                    <div
+                        v-if="hasRoute('admin.mentormaths-conversion.index') && (mentorMathsConversion?.pending_count || 0) > 0"
+                        class="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-teal-400 bg-teal-50 px-5 py-4 shadow-sm"
+                    >
+                        <div>
+                            <p class="text-sm font-semibold text-teal-950">
+                                MentorMaths conversion · {{ mentorMathsConversion.pending_count }} pending
+                            </p>
+                            <p class="mt-1 text-sm text-teal-900">
+                                <template v-if="mentorMathsConversion.next_chapter_label">
+                                    Next: {{ mentorMathsConversion.next_chapter_label }}
+                                </template>
+                                <template v-else>
+                                    Finish rebrand → transform (≥15 blanks) → publish, one chapter at a time.
+                                </template>
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <Link
+                                v-if="mentorMathsConversion.next_chapter_id"
+                                :href="safeRoute('admin.mentormaths-conversion.show', mentorMathsConversion.next_chapter_id)"
+                                class="inline-flex items-center rounded-md bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800"
+                            >
+                                Continue next chapter →
+                            </Link>
+                            <Link
+                                :href="safeRoute('admin.mentormaths-conversion.index')"
+                                class="inline-flex items-center rounded-md border border-teal-300 bg-white px-4 py-2.5 text-sm font-semibold text-teal-900 hover:bg-teal-100"
+                            >
+                                Open conversion queue
+                            </Link>
+                        </div>
+                    </div>
+
                     <div class="rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 px-4 py-3 text-white shadow">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div>
@@ -386,6 +424,13 @@ const formatHelpDate = (value) => {
                                 <p class="text-[11px] text-indigo-100">Plan · Practice · Perform</p>
                             </div>
                             <div class="flex flex-wrap gap-1.5 text-[11px]">
+                                <Link
+                                    v-if="hasRoute('admin.mentormaths-conversion.index')"
+                                    :href="safeRoute('admin.mentormaths-conversion.index')"
+                                    class="rounded-md bg-white/15 px-2.5 py-1 font-medium hover:bg-white/25"
+                                >
+                                    MentorMaths convert{{ stats.mentormaths_conversion_pending ? ` (${stats.mentormaths_conversion_pending})` : '' }}
+                                </Link>
                                 <Link :href="route('admin.classes.index')" class="rounded-md bg-white/15 px-2.5 py-1 font-medium hover:bg-white/25">
                                     Classes
                                 </Link>

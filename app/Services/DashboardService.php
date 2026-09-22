@@ -23,6 +23,7 @@ class DashboardService
         private QuestionResolutionService $resolutionService,
         private QuestionIssueReportService $issueReports,
         private ContentVerificationService $verificationService,
+        private MentorMathsConversionQueueService $mentorMathsConversion,
     ) {}
 
     /**
@@ -205,6 +206,17 @@ class DashboardService
             Log::error('Admin dashboard failed to load locked attempts.', ['message' => $e->getMessage()]);
         }
 
+        $mentorMathsConversion = [
+            'pending_count' => 0,
+            'next_chapter_id' => null,
+            'next_chapter_label' => null,
+        ];
+        try {
+            $mentorMathsConversion = $this->mentorMathsConversion->summary($grade?->id);
+        } catch (Throwable $e) {
+            Log::error('Admin dashboard failed to load MentorMaths conversion queue.', ['message' => $e->getMessage()]);
+        }
+
         return [
             'activeYear' => $activeYear->only(['id', 'name']),
             'selectedGrade' => $grade?->only(['id', 'name']),
@@ -223,6 +235,7 @@ class DashboardService
                 'content_recheck_queue_count' => 0,
                 'gemini_pending_count' => 0,
                 'gemini_done_count' => 0,
+                'mentormaths_conversion_pending' => (int) ($mentorMathsConversion['pending_count'] ?? 0),
             ],
             'students' => $students,
             'helpRequests' => $helpRequests,
@@ -230,6 +243,7 @@ class DashboardService
             'questionIssueReportsSentToUploader' => $questionIssueReportsSentToUploader,
             'lockedAttempts' => $lockedAttempts,
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
+            'mentorMathsConversion' => $mentorMathsConversion,
         ];
     }
 
@@ -332,6 +346,7 @@ class DashboardService
                 'content_recheck_queue_count' => 0,
                 'gemini_pending_count' => 0,
                 'gemini_done_count' => 0,
+                'mentormaths_conversion_pending' => 0,
             ],
             'students' => [],
             'helpRequests' => [],
@@ -339,6 +354,11 @@ class DashboardService
             'questionIssueReportsSentToUploader' => [],
             'lockedAttempts' => [],
             'examTypeOptions' => $this->examPlanService->examTypeOptions(),
+            'mentorMathsConversion' => [
+                'pending_count' => 0,
+                'next_chapter_id' => null,
+                'next_chapter_label' => null,
+            ],
         ];
     }
 

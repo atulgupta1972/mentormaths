@@ -132,6 +132,26 @@ class MentorMathsConversionQueueService
             ],
             'pending_count' => count($chapters),
             'min_fill_blank_ready' => self::MIN_FILL_BLANK_READY,
+            'next_chapter' => $chapters[0] ?? null,
+        ];
+    }
+
+    /**
+     * Lightweight summary for Dashboard / nav CTAs.
+     *
+     * @return array{pending_count: int, next_chapter_id: ?int, next_chapter_label: ?string}
+     */
+    public function summary(?int $gradeLevelId = null): array
+    {
+        $queue = $this->queue($gradeLevelId, null);
+        $next = $queue['next_chapter'] ?? null;
+
+        return [
+            'pending_count' => (int) ($queue['pending_count'] ?? 0),
+            'next_chapter_id' => isset($next['id']) ? (int) $next['id'] : null,
+            'next_chapter_label' => $next
+                ? trim(($next['grade_name'] ?? '').' · '.($next['label'] ?? $next['title'] ?? 'Next chapter'))
+                : null,
         ];
     }
 
