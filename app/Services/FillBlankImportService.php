@@ -340,7 +340,7 @@ PROMPT;
     /**
      * @return list<array<string, mixed>>
      */
-    public function parseJson(string $json): array
+    public function parseJson(string $json, bool $enforceAnswerConsistency = true): array
     {
         $data = json_decode($this->stripMarkdownFences($json), true);
 
@@ -363,7 +363,7 @@ PROMPT;
                 continue;
             }
 
-            $parsed[] = $this->normalizeItem($item, $index);
+            $parsed[] = $this->normalizeItem($item, $index, $enforceAnswerConsistency);
         }
 
         if ($parsed === []) {
@@ -511,7 +511,7 @@ PROMPT;
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
-    private function normalizeItem(array $item, int $index): array
+    private function normalizeItem(array $item, int $index, bool $enforceAnswerConsistency = true): array
     {
         $questionText = trim((string) ($item['question'] ?? $item['question_text'] ?? ''));
 
@@ -534,9 +534,14 @@ PROMPT;
         $format = $this->resolveAnswerFormat($format, $correctAnswer);
         $explanation = trim((string) ($item['explanation'] ?? ''));
 
-        $mismatch = app(FillBlankAnswerConsistency::class)->mismatch($correctAnswer, $explanation, $format);
-        if ($mismatch !== null) {
-            throw new InvalidArgumentException('Question '.($index + 1).': '.$mismatch['message']);
+        $mismatch = null;
+        if ($enforceAnswerConsistency) {
+            $mismatch = app(FillBlankAnswerConsistency::class)->mismatch($correctAnswer, $explanation, $format);
+            if ($mismatch !== null) {
+                throw new InvalidArgumentException('Question '.($index + 1).': '.$mismatch['message']);
+            }
+        } else {
+            $mismatch = app(FillBlankAnswerConsistency::class)->mismatch($correctAnswer, $explanation, $format);
         }
 
         return [
@@ -551,6 +556,7 @@ PROMPT;
             'method_hint' => trim((string) ($item['method_hint'] ?? $item['hint'] ?? '')),
             'difficulty' => trim((string) ($item['difficulty'] ?? '')),
             'needs_diagram' => DiagramQuestionSupport::needsDiagram($item),
+            'answer_consistency_error' => $mismatch['message'] ?? null,
         ];
     }
 

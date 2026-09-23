@@ -390,6 +390,12 @@ const applyBlockerRewrite = () => {
                 {{ applyForm.processing ? 'Applying…' : 'Apply conversion' }}
             </PrimaryButton>
         </div>
+        <p
+            v-if="page.props.flash?.error"
+            class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900"
+        >
+            {{ page.props.flash.error }}
+        </p>
 
         <div v-if="preview" class="grid gap-4 lg:grid-cols-2">
             <div class="rounded-md border border-emerald-200 bg-white p-3">

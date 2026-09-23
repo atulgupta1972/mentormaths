@@ -57,7 +57,7 @@ class GeminiFillBlankConversionService
             fn ($item) => is_array($item),
         ));
 
-        $parsed = $this->fillBlankImport->parseJson($json);
+        $parsed = $this->fillBlankImport->parseJson($json, enforceAnswerConsistency: false);
         $convertibleIndexes = [];
         $blockedIndexes = [];
         $convertible = [];
@@ -91,7 +91,9 @@ class GeminiFillBlankConversionService
             $blockReason = null;
             $overlap = null;
 
-            if (! FillBlankStem::hasBlank($fillBlankQuestion)) {
+            if (filled($row['answer_consistency_error'] ?? null)) {
+                $blockReason = (string) $row['answer_consistency_error'];
+            } elseif (! FillBlankStem::hasBlank($fillBlankQuestion)) {
                 $blockReason = 'Missing ____ blank in the question stem.';
             } else {
                 $similarityResult = $this->similarity->compare($sourceStem, $fillBlankQuestion);

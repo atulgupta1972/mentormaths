@@ -6,6 +6,9 @@ use App\Models\QuestionBlankAnswer;
 
 class FillBlankAnswerConsistency
 {
+    /** Captures integers, decimals, simple fractions (11/3), and mixed fractions (1 2/3). */
+    private const NUMBER_PATTERN = '-?\d+(?:\.\d+)?(?:\s+\d+\s*\/\s*\d+|\s*\/\s*\d+)?';
+
     /**
      * @return array{
      *     stored_answer: string,
@@ -49,14 +52,15 @@ class FillBlankAnswerConsistency
     private function extractCandidates(string $explanation): array
     {
         $candidates = [];
+        $number = self::NUMBER_PATTERN;
 
-        if (preg_match('/\[Correction[^\]]*?(?:=|is)\s*(-?\d+(?:\.\d+)?(?:\s+\d+\s*\/\s*\d+)?)/iu', $explanation, $match)) {
+        if (preg_match('/\[Correction[^\]]*?(?:=|is)\s*('.$number.')/iu', $explanation, $match)) {
             $candidates[] = trim($match[1]);
         }
 
         $patterns = [
-            '/(?:product|answer|result|final(?:\s+answer)?)\s*(?:of[^=]{0,120})?=\s*(-?\d+(?:\.\d+)?(?:\s+\d+\s*\/\s*\d+)?)/iu',
-            '/(?:answer|result)\s*(?:is|:)\s*(-?\d+(?:\.\d+)?(?:\s+\d+\s*\/\s*\d+)?)/iu',
+            '/(?:product|answer|result|final(?:\s+answer)?)\s*(?:of[^=]{0,120})?=\s*('.$number.')/iu',
+            '/(?:answer|result)\s*(?:is|:)\s*('.$number.')/iu',
         ];
 
         foreach ($patterns as $pattern) {
@@ -67,7 +71,7 @@ class FillBlankAnswerConsistency
             }
         }
 
-        if (preg_match('/=\s*(-?\d+(?:\.\d+)?(?:\s+\d+\s*\/\s*\d+)?)\s*\.?\s*$/u', trim($explanation), $match)) {
+        if (preg_match('/=\s*('.$number.')\s*\.?\s*$/u', trim($explanation), $match)) {
             $candidates[] = trim($match[1]);
         }
 
@@ -91,9 +95,14 @@ class FillBlankAnswerConsistency
             return true;
         }
 
-        if ($format === QuestionBlankAnswer::FORMAT_FRACTION) {
-            return $this->fractionValue($stored) !== null
-                && abs($this->fractionValue($stored) - $this->fractionValue($expected)) < 0.0001;
+        $storedFraction = $this->fractionValue($stored);
+        $expectedFraction = $this->fractionValue($expected);
+
+        if ($format === QuestionBlankAnswer::FORMAT_FRACTION
+            || ($storedFraction !== null && $expectedFraction !== null && str_contains($stored, '/'))) {
+            if ($storedFraction !== null && $expectedFraction !== null) {
+                return abs($storedFraction - $expectedFraction) < 0.0001;
+            }
         }
 
         if (is_numeric($stored) && is_numeric($expected)) {

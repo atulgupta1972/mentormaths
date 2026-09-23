@@ -33,4 +33,31 @@ class FillBlankAnswerConsistencyTest extends TestCase
 
         $this->assertNull($result);
     }
+
+    public function test_simple_fraction_in_explanation_is_not_truncated_to_numerator(): void
+    {
+        $checker = new FillBlankAnswerConsistency;
+
+        $result = $checker->mismatch(
+            '11/3',
+            'Substitute and simplify. The value of the expression is 11/3.',
+            'fraction',
+        );
+
+        $this->assertNull($result);
+    }
+
+    public function test_fraction_answer_still_mismatches_when_explanation_ends_on_different_integer(): void
+    {
+        $checker = new FillBlankAnswerConsistency;
+
+        $result = $checker->mismatch(
+            '11/3',
+            'Work shown above. Final answer is 11.',
+            'fraction',
+        );
+
+        $this->assertNotNull($result);
+        $this->assertSame('11', $result['suggested_answer']);
+    }
 }
