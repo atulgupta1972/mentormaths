@@ -1,6 +1,13 @@
 <script setup>
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { isAttemptFullscreenActive, requestAttemptFullscreen } from '@/utils/attemptFullscreen';
+import {
+    hasAttemptImmersiveOk,
+    isAttemptFullscreenActive,
+    isAttemptImmersiveSatisfied,
+    isBenignFullscreenExit,
+    markAttemptImmersiveOk,
+    requestAttemptFullscreen,
+} from '@/utils/attemptFullscreen';
 import { onMounted, onUnmounted, ref } from 'vue';
 
 const props = defineProps({
@@ -24,12 +31,24 @@ const emit = defineEmits(['ready', 'lost']);
 const needsFullscreen = ref(false);
 const errorMessage = ref('');
 const entering = ref(false);
+let readyOnce = hasAttemptImmersiveOk();
 
 const syncState = () => {
-    const active = isAttemptFullscreenActive();
-    needsFullscreen.value = !active;
+    const satisfied = isAttemptImmersiveSatisfied();
 
-    if (active) {
+    // Do not yank the fill-blank keyboard / re-prompt while the student is typing.
+    if (!satisfied && readyOnce && isBenignFullscreenExit()) {
+        needsFullscreen.value = false;
+        emit('ready');
+
+        return;
+    }
+
+    needsFullscreen.value = !satisfied;
+
+    if (satisfied) {
+        readyOnce = true;
+        markAttemptImmersiveOk();
         errorMessage.value = '';
         emit('ready');
     } else {
@@ -51,12 +70,25 @@ const enterFullscreen = async () => {
         if (!ok) {
             errorMessage.value = 'Fullscreen was blocked. Allow it in your browser, then try again. Close side panels (Gemini / Copilot) first.';
             syncState();
+
             return;
         }
 
+        readyOnce = true;
         syncState();
     } finally {
         entering.value = false;
+    }
+};
+
+const onFocusIn = (event) => {
+    const tag = event.target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || event.target?.isContentEditable) {
+        // Keep gate closed while typing fill-blanks (iPad keyboard exits API fullscreen).
+        if (readyOnce || isAttemptFullscreenActive() || hasAttemptImmersiveOk()) {
+            needsFullscreen.value = false;
+            emit('ready');
+        }
     }
 };
 
@@ -64,8 +96,9 @@ onMounted(() => {
     syncState();
     document.addEventListener('fullscreenchange', syncState);
     document.addEventListener('webkitfullscreenchange', syncState);
+    document.addEventListener('focusin', onFocusIn, true);
 
-    if (props.autoEnter && !isAttemptFullscreenActive()) {
+    if (props.autoEnter && !isAttemptImmersiveSatisfied()) {
         // Best-effort: succeeds when Start/Continue already opened fullscreen, or browser allows it.
         enterFullscreen();
     }
@@ -74,6 +107,7 @@ onMounted(() => {
 onUnmounted(() => {
     document.removeEventListener('fullscreenchange', syncState);
     document.removeEventListener('webkitfullscreenchange', syncState);
+    document.removeEventListener('focusin', onFocusIn, true);
 });
 </script>
 

@@ -1,5 +1,10 @@
 import { onMounted, onUnmounted, ref } from 'vue';
-import { isAttemptFullscreenActive } from '@/utils/attemptFullscreen';
+import {
+    isAttemptFullscreenActive,
+    isAttemptImmersiveSatisfied,
+    isBenignFullscreenExit,
+    isEditableFocusTarget,
+} from '@/utils/attemptFullscreen';
 
 const COPY_KEYS = new Set(['c', 'x', 'v', 'a']);
 const BLOCKED_KEYS = new Set(['p', 's', 'u']);
@@ -9,13 +14,7 @@ function readCsrfToken() {
 }
 
 function isEditableTarget(target) {
-    if (!target || !(target instanceof HTMLElement)) {
-        return false;
-    }
-
-    const tag = target.tagName;
-
-    return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
+    return isEditableFocusTarget(target);
 }
 
 function shouldBlockShortcut(event) {
@@ -186,7 +185,7 @@ export function useAttemptContentProtection(options = {}) {
     };
 
     const onWindowFocus = () => {
-        if (!attemptLocked.value && !document.hidden && (!requireFullscreen || isAttemptFullscreenActive())) {
+        if (!attemptLocked.value && !document.hidden && (!requireFullscreen || isAttemptImmersiveSatisfied())) {
             contentHidden.value = false;
         }
     };
@@ -194,13 +193,14 @@ export function useAttemptContentProtection(options = {}) {
     const onFullscreenChange = () => {
         const active = isAttemptFullscreenActive();
 
-        if (requireFullscreen && wasFullscreen && !active) {
+        // iPad keyboard / fill-blank focus drops fullscreenElement — not a real leave.
+        if (requireFullscreen && wasFullscreen && !active && !isBenignFullscreenExit()) {
             noteLeave();
         }
 
-        wasFullscreen = active;
+        wasFullscreen = active || isAttemptImmersiveSatisfied();
 
-        if (active && !attemptLocked.value && !document.hidden) {
+        if ((active || isAttemptImmersiveSatisfied()) && !attemptLocked.value && !document.hidden) {
             contentHidden.value = false;
         }
     };
