@@ -951,8 +951,17 @@ class TextbookController extends Controller
 
     public function publishFillBlankAndWritten(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
+        $validated = $request->validate([
+            'allow_close_stems' => ['sometimes', 'boolean'],
+        ]);
+        $allowCloseStems = (bool) ($validated['allow_close_stems'] ?? false);
+
         try {
-            $chapter = $this->publishService->publishFillBlankAndWritten($textbookChapter, $request->user());
+            $chapter = $this->publishService->publishFillBlankAndWritten(
+                $textbookChapter,
+                $request->user(),
+                $allowCloseStems,
+            );
         } catch (\InvalidArgumentException $exception) {
             return back()->with('error', $exception->getMessage());
         } catch (\Illuminate\Database\UniqueConstraintViolationException $exception) {
@@ -978,12 +987,15 @@ class TextbookController extends Controller
 
         $codes = $this->setCodeService->codes($chapter);
         $isMentorMaths = $chapter->textbook?->isMentorMathsPracticeLine() ?? false;
+        $overrideNote = $allowCloseStems && $isMentorMaths
+            ? ' (similarity gate overridden).'
+            : '';
 
         return $this->redirectToChapterShow($chapter)
             ->with(
                 'success',
                 $isMentorMaths
-                    ? "Published MentorMaths fill-blank {$codes['fill_blank']} and written {$codes['written']} (no MCQ sets)."
+                    ? "Published MentorMaths fill-blank {$codes['fill_blank']} and written {$codes['written']} (no MCQ sets).{$overrideNote}"
                     : "Published online fill-blank {$codes['fill_blank']} and written {$codes['written']}. MCQ sets unchanged.",
             );
     }

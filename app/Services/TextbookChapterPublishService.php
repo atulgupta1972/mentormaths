@@ -286,8 +286,11 @@ class TextbookChapterPublishService
         return $flat->values()->get($itemIndex);
     }
 
-    public function publishFillBlankAndWritten(TextbookChapter $chapter, User $publisher): TextbookChapter
-    {
+    public function publishFillBlankAndWritten(
+        TextbookChapter $chapter,
+        User $publisher,
+        bool $allowCloseStems = false,
+    ): TextbookChapter {
         $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter.syllabusVersion.gradeLevel']);
 
         $items = $chapter->extraction_items ?? [];
@@ -309,20 +312,23 @@ class TextbookChapterPublishService
         if ($isMentorMaths) {
             $ready = $fillBlankItems->count();
 
-            foreach ($items as $index => $item) {
-                if (! is_array($item) || ! $this->itemIsFillBlankReady($item)) {
-                    continue;
-                }
+            if (! $allowCloseStems) {
+                foreach ($items as $index => $item) {
+                    if (! is_array($item) || ! $this->itemIsFillBlankReady($item)) {
+                        continue;
+                    }
 
-                $result = $similarity->compare(
-                    (string) ($item['question_text'] ?? ''),
-                    (string) ($item['fill_blank_question_text'] ?? ''),
-                );
-
-                if ($result['too_similar']) {
-                    throw new InvalidArgumentException(
-                        'Q'.($index + 1).': '.$result['reason'].' Re-run MentorMaths transform before publish.',
+                    $result = $similarity->compare(
+                        (string) ($item['question_text'] ?? ''),
+                        (string) ($item['fill_blank_question_text'] ?? ''),
                     );
+
+                    if ($result['too_similar']) {
+                        throw new InvalidArgumentException(
+                            'Q'.($index + 1).': '.$result['reason']
+                            .' Re-run MentorMaths transform, or tick “Allow close-to-source stems” to publish anyway.',
+                        );
+                    }
                 }
             }
 

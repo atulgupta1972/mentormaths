@@ -257,8 +257,17 @@ class MentorMathsConversionController extends Controller
         $textbookChapter->loadMissing('textbook');
         abort_unless($textbookChapter->textbook?->isMentorMathsPracticeLine(), 422, 'Rebrand the book to MentorMaths first.');
 
+        $validated = $request->validate([
+            'allow_close_stems' => ['sometimes', 'boolean'],
+        ]);
+        $allowCloseStems = (bool) ($validated['allow_close_stems'] ?? false);
+
         try {
-            $chapter = $this->publishService->publishFillBlankAndWritten($textbookChapter, $request->user());
+            $chapter = $this->publishService->publishFillBlankAndWritten(
+                $textbookChapter,
+                $request->user(),
+                $allowCloseStems,
+            );
         } catch (\InvalidArgumentException $exception) {
             return back()->with('error', $exception->getMessage());
         } catch (\Illuminate\Database\UniqueConstraintViolationException $exception) {
@@ -278,12 +287,13 @@ class MentorMathsConversionController extends Controller
         }
 
         $codes = $this->setCodeService->codes($chapter);
+        $overrideNote = $allowCloseStems ? ' Similarity gate overridden.' : '';
 
         return redirect()
             ->route('admin.mentormaths-conversion.index')
             ->with(
                 'success',
-                "Done — {$chapter->textbook?->name} Ch {$chapter->chapter_number} published as fill-blank {$codes['fill_blank']}. Removed from queue.",
+                "Done — {$chapter->textbook?->name} Ch {$chapter->chapter_number} published as fill-blank {$codes['fill_blank']}. Removed from queue.{$overrideNote}",
             );
     }
 

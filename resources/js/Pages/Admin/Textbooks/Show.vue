@@ -47,7 +47,9 @@ const fillBlankJsonInput = ref('');
 
 const importForm = useForm({ json: '' });
 const fillBlankImportForm = useForm({ json: '' });
-const publishFillBlankForm = useForm({});
+const publishFillBlankForm = useForm({
+    allow_close_stems: false,
+});
 const publishFillBlankError = ref('');
 const zipImportForm = useForm({ pack: null });
 const zipPackInput = ref(null);
@@ -857,6 +859,17 @@ const canChangeBook = computed(() =>
                         <p class="text-sm text-teal-950">
                             {{ fillBlankReadyCount }} fill-in-blank ready · MentorMaths does not publish MCQ sets.
                         </p>
+                        <label class="mt-2 flex cursor-pointer items-start gap-2 text-sm text-teal-950">
+                            <input
+                                v-model="publishFillBlankForm.allow_close_stems"
+                                type="checkbox"
+                                class="mt-0.5 rounded border-teal-400 text-teal-700 focus:ring-teal-500"
+                            >
+                            <span>
+                                Allow close-to-source stems
+                                <span class="block text-xs text-teal-800/80">Tick only for common/normal sums you are fine publishing as-is.</span>
+                            </span>
+                        </label>
                         <p
                             v-if="publishFillBlankError || page.props.flash?.error"
                             class="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900"
@@ -1351,6 +1364,20 @@ const canChangeBook = computed(() =>
                             placeholder='{"questions": [ { "source_index": 1, "question": "... ____.", ... } ]}'
                         />
                         <InputError :message="fillBlankImportForm.errors.json" class="mt-1" />
+                        <label
+                            v-if="isMentorMaths"
+                            class="mt-3 flex cursor-pointer items-start gap-2 text-sm text-violet-950"
+                        >
+                            <input
+                                v-model="publishFillBlankForm.allow_close_stems"
+                                type="checkbox"
+                                class="mt-0.5 rounded border-violet-400 text-violet-700 focus:ring-violet-500"
+                            >
+                            <span>
+                                Allow close-to-source stems
+                                <span class="block text-xs text-violet-800/80">Skip the similarity gate for common/normal sums.</span>
+                            </span>
+                        </label>
                         <div class="mt-3 flex flex-wrap gap-2">
                             <PrimaryButton
                                 type="button"

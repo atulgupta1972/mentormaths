@@ -335,6 +335,43 @@ class MentorMathsPracticeLineTest extends TestCase
             ->publishFillBlankAndWritten($chapter->fresh(), $admin);
     }
 
+    public function test_allow_close_stems_skips_similarity_gate(): void
+    {
+        $chapter = $this->seedChapter(practiceLine: Textbook::PRACTICE_LINE_MENTORMATHS);
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $items = [];
+        for ($i = 1; $i <= 15; $i++) {
+            $value = $i * 3;
+            $items[] = [
+                'question_text' => "Source extract stem number {$i} with value {$value}.",
+                'correct_answer' => (string) $value,
+                'topic' => "T{$i}",
+                'fill_blank_question_text' => "Source extract stem number {$i} with value {$value} is ____.",
+                'fill_blank_correct_answer' => (string) $value,
+                'fill_blank_answer_format' => 'integer',
+                'fill_blank_explanation' => "Value is {$value}.",
+                'fill_blank_skipped' => false,
+                'fill_blank_gemini_ready' => true,
+            ];
+        }
+        $chapter->update(['extraction_items' => $items]);
+
+        try {
+            app(TextbookChapterPublishService::class)
+                ->publishFillBlankAndWritten($chapter->fresh(), $admin, allowCloseStems: false);
+            $this->fail('Expected similarity gate to block publish.');
+        } catch (\InvalidArgumentException $exception) {
+            $this->assertMatchesRegularExpression('/too close/i', $exception->getMessage());
+        }
+
+        $published = app(TextbookChapterPublishService::class)
+            ->publishFillBlankAndWritten($chapter->fresh(), $admin, allowCloseStems: true);
+
+        $this->assertSame(TextbookChapter::STATUS_PUBLISHED, $published->status);
+        $this->assertNotEmpty($published->fillBlankWorksheetIds());
+    }
+
     private function seedChapter(string $practiceLine): TextbookChapter
     {
         $year = AcademicYear::query()->create([

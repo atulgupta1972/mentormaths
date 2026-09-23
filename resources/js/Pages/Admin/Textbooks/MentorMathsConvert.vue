@@ -26,7 +26,9 @@ const rebrandForm = useForm({
     source_ref: props.rebrand.source_ref || '',
 });
 
-const publishForm = useForm({});
+const publishForm = useForm({
+    allow_close_stems: false,
+});
 const discardForm = useForm({
     indexes: [],
     all: false,
@@ -39,7 +41,13 @@ const meetsMinimum = computed(() => readyCount.value >= minReady.value);
 const publishBlockers = computed(() => props.chapter.publish_blockers || []);
 const publishBlockerCount = computed(() => props.chapter.publish_blocker_count || publishBlockers.value.length || 0);
 const hasPublishBlockers = computed(() => publishBlockerCount.value > 0);
-const canPublish = computed(() => meetsMinimum.value && props.chapter.is_mentormaths && !hasPublishBlockers.value);
+const canPublish = computed(() => {
+    if (!meetsMinimum.value || !props.chapter.is_mentormaths) {
+        return false;
+    }
+
+    return !hasPublishBlockers.value || publishForm.allow_close_stems;
+});
 const canDiscardAllStuck = computed(() => {
     if (!hasPublishBlockers.value) {
         return false;
@@ -351,14 +359,30 @@ const publish = () => {
                             <template v-if="!meetsMinimum">
                                 Publish stays locked until you reach {{ minReady }}.
                             </template>
-                            <template v-else-if="hasPublishBlockers">
-                                Locked until you rewrite {{ publishBlockerCount }} too-similar stem(s) above.
+                            <template v-else-if="hasPublishBlockers && !publishForm.allow_close_stems">
+                                Locked until you rewrite {{ publishBlockerCount }} too-similar stem(s), or tick allow below.
                             </template>
                             <template v-else>
                                 After publish, this chapter leaves the <strong>local</strong> queue.
                                 Production still needs a separate publish after you deploy code + re-run convert there (or migrate content).
                             </template>
                         </p>
+                        <label
+                            v-if="hasPublishBlockers && meetsMinimum"
+                            class="mt-3 flex cursor-pointer items-start gap-2 text-sm text-emerald-950"
+                        >
+                            <input
+                                v-model="publishForm.allow_close_stems"
+                                type="checkbox"
+                                class="mt-0.5 rounded border-emerald-400 text-emerald-700 focus:ring-emerald-500"
+                            >
+                            <span>
+                                Allow close-to-source stems
+                                <span class="block text-xs text-emerald-800/80">
+                                    Publish anyway for common/normal sums ({{ publishBlockerCount }} similar stem(s)).
+                                </span>
+                            </span>
+                        </label>
                         <div class="mt-4 flex flex-wrap gap-2">
                             <PrimaryButton
                                 type="button"
