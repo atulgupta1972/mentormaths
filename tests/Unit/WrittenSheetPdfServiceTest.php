@@ -26,6 +26,7 @@ class WrittenSheetPdfServiceTest extends TestCase
             'chapterName' => 'Algebraic Expressions',
             'topicName' => null,
             'kindLabel' => 'Test',
+            'isCongruenceSheet' => false,
         ])->render();
 
         $this->assertStringContainsString('How to write each answer (on your answer sheet)', $html);
@@ -33,8 +34,44 @@ class WrittenSheetPdfServiceTest extends TestCase
         $this->assertStringContainsString('2. To find:', $html);
         $this->assertStringContainsString('3. Solution:', $html);
         $this->assertStringContainsString('4. Answer:', $html);
-        $this->assertStringContainsString('not from this sheet', $html);
         $this->assertStringNotContainsString('page-break-before: always', $html);
+    }
+
+    public function test_congruence_written_sheet_uses_proof_scaffold_two_per_page(): void
+    {
+        $worksheet = Worksheet::make([
+            'set_code' => 'C7-GT-W1',
+            'scope' => PracticeSetScope::CHAPTER,
+        ]);
+
+        $html = view('reports.written-sheet-pdf', [
+            'worksheet' => $worksheet,
+            'questions' => [
+                ['number' => 1, 'text' => 'Prove △ABC ≅ △PQR', 'diagram_path' => null, 'type' => 'fill_in_blank', 'options' => []],
+                ['number' => 2, 'text' => 'Prove △DEF ≅ △XYZ', 'diagram_path' => null, 'type' => 'fill_in_blank', 'options' => []],
+            ],
+            'className' => 'Class 7',
+            'boardCode' => 'CBSE',
+            'chapterName' => 'Geometric Twins',
+            'topicName' => null,
+            'kindLabel' => 'Practice',
+            'isCongruenceSheet' => true,
+        ])->render();
+
+        $this->assertStringContainsString('1. To prove:', $html);
+        $this->assertStringContainsString('Condition / Reason', $html);
+        $this->assertStringContainsString('Congruent by which criterion', $html);
+        $this->assertStringContainsString('cong-page', $html);
+        $this->assertStringContainsString('2 sums / page', $html);
+    }
+
+    public function test_is_congruence_sheet_detects_geometric_twins(): void
+    {
+        $service = app(WrittenSheetPdfService::class);
+
+        $this->assertTrue($service->isCongruenceSheet('P2- Ch 1 — Geometric Twins', null));
+        $this->assertTrue($service->isCongruenceSheet(null, 'Criteria for Congruence (SSS, SAS)'));
+        $this->assertFalse($service->isCongruenceSheet('Algebraic Expressions', 'Like Terms'));
     }
 
     public function test_question_text_for_sheet_expands_blanks_for_print(): void

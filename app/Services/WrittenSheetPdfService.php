@@ -48,6 +48,11 @@ class WrittenSheetPdfService
             : $worksheet->topic?->chapter;
 
         $syllabus = $chapter?->syllabusVersion;
+        $isCongruenceSheet = $this->isCongruenceSheet(
+            $chapter?->name,
+            $worksheet->topic?->name,
+            $questions,
+        );
 
         $pdf = Pdf::loadView('reports.written-sheet-pdf', [
             'worksheet' => $worksheet,
@@ -57,6 +62,7 @@ class WrittenSheetPdfService
             'chapterName' => $chapter?->name,
             'topicName' => $worksheet->topic?->name,
             'kindLabel' => $worksheet->isChapterTest() ? 'Test' : 'Practice',
+            'isCongruenceSheet' => $isCongruenceSheet,
         ])->setPaper('a4', 'portrait');
 
         $directory = 'written-sheets/'.$worksheet->id;
@@ -96,5 +102,33 @@ class WrittenSheetPdfService
         $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
 
         return trim($text);
+    }
+
+    /**
+     * Congruence / Geometric Twins sheets use a proof scaffold (To prove + Condition/Reason).
+     *
+     * @param  list<array<string, mixed>>  $questions
+     */
+    public function isCongruenceSheet(?string $chapterName, ?string $topicName, array $questions = []): bool
+    {
+        $haystack = mb_strtolower(trim(($chapterName ?? '').' '.($topicName ?? '')));
+
+        if ($haystack !== '' && (
+            str_contains($haystack, 'geometric twin')
+            || str_contains($haystack, 'congruence')
+            || str_contains($haystack, 'congruent')
+        )) {
+            return true;
+        }
+
+        $proveHits = 0;
+        foreach ($questions as $question) {
+            $text = mb_strtolower((string) ($question['text'] ?? ''));
+            if (str_contains($text, 'prove') && (str_contains($text, '≅') || str_contains($text, 'congruent'))) {
+                $proveHits++;
+            }
+        }
+
+        return $proveHits >= 2;
     }
 }
