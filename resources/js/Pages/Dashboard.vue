@@ -749,13 +749,6 @@ const formatHelpDate = (value) => {
                         </ul>
                     </section>
 
-                    <Deferred :data="['contentPublishQueue', 'contentRecheckQueue']">
-                        <template #fallback>
-                            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
-                                Loading content queues…
-                            </div>
-                        </template>
-
                     <section
                         v-if="contentPublishQueue.length"
                         class="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm"
@@ -860,7 +853,6 @@ const formatHelpDate = (value) => {
                             No chapters in this Gemini bucket.
                         </p>
                     </section>
-                    </Deferred>
 
                     <section class="space-y-3">
                         <div>

@@ -158,20 +158,60 @@ class MentorMathsConversionQueueService
 
     /**
      * Lightweight summary for Dashboard / nav CTAs.
+     * Must not run publish-blocker scans or full chapterRow mapping.
      *
      * @return array{pending_count: int, next_chapter_id: ?int, next_chapter_label: ?string}
      */
     public function summary(?int $gradeLevelId = null): array
     {
-        $queue = $this->queue($gradeLevelId, null);
-        $next = $queue['next_chapter'] ?? null;
+        $candidateBookIds = Textbook::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'grade_level_id', 'practice_line', 'source_ref', 'is_active'])
+            ->filter(fn (Textbook $book) => $this->isConversionCandidate($book))
+            ->when($gradeLevelId, fn (Collection $c) => $c->where('grade_level_id', $gradeLevelId))
+            ->pluck('id')
+            ->values()
+            ->all();
+
+        if ($candidateBookIds === []) {
+            return [
+                'pending_count' => 0,
+                'next_chapter_id' => null,
+                'next_chapter_label' => null,
+            ];
+        }
+
+        $pending = TextbookChapter::query()
+            ->with([
+                'textbook:id,name,code,grade_level_id,practice_line,source_ref',
+                'textbook.gradeLevel:id,name',
+                'syllabusChapter:id,name,chapter_number',
+            ])
+            ->whereIn('textbook_id', $candidateBookIds)
+            ->orderBy('textbook_id')
+            ->orderBy('chapter_number')
+            ->get()
+            ->filter(fn (TextbookChapter $chapter) => $this->chapterIsPending($chapter))
+            ->values();
+
+        $next = $pending->first();
+        if (! $next) {
+            return [
+                'pending_count' => 0,
+                'next_chapter_id' => null,
+                'next_chapter_label' => null,
+            ];
+        }
+
+        $next->syncDisplayFromSyllabus();
 
         return [
-            'pending_count' => (int) ($queue['pending_count'] ?? 0),
-            'next_chapter_id' => isset($next['id']) ? (int) $next['id'] : null,
-            'next_chapter_label' => $next
-                ? trim(($next['grade_name'] ?? '').' · '.($next['label'] ?? $next['title'] ?? 'Next chapter'))
-                : null,
+            'pending_count' => $pending->count(),
+            'next_chapter_id' => (int) $next->id,
+            'next_chapter_label' => trim(
+                ($next->textbook?->gradeLevel?->name ?? '').' · '.$next->displaySyllabusLabel()
+            ),
         ];
     }
 

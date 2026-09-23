@@ -38,14 +38,6 @@ class DashboardController extends Controller
         $user = $request->user();
 
         if ($user->isAdmin()) {
-            if ($this->isAdminDashboardDeferredQueueRequest($request)) {
-                return Inertia::render('Dashboard', [
-                    'isAdmin' => true,
-                    'contentPublishQueue' => $this->safeAdminPublishQueue($request),
-                    'contentRecheckQueue' => $this->safeAdminRecheckQueue($request),
-                ]);
-            }
-
             try {
                 $adminDashboard = $this->dashboardService->forAdmin($request);
             } catch (Throwable $e) {
@@ -94,12 +86,9 @@ class DashboardController extends Controller
                     'mailSettings' => $mailSettings,
                     'gradeLevels' => $gradeLevels,
                     ...$adminDashboard,
-                    'contentPublishQueue' => Inertia::defer(
-                        fn () => $this->safeAdminPublishQueue($request),
-                    ),
-                    'contentRecheckQueue' => Inertia::defer(
-                        fn () => $this->safeAdminRecheckQueue($request),
-                    ),
+                    // Load inline — deferred queue reloads were 500'ing on prod.
+                    'contentPublishQueue' => $this->safeAdminPublishQueue($request),
+                    'contentRecheckQueue' => $this->safeAdminRecheckQueue($request),
                 ]);
             } catch (Throwable $e) {
                 Log::error('Admin dashboard failed to render.', ['message' => $e->getMessage()]);
@@ -210,14 +199,6 @@ class DashboardController extends Controller
                 'message' => 'Could not load this student.',
             ], 500);
         }
-    }
-
-    /**
-     * Inertia deferred loads for admin content queues should not rerun the full dashboard query.
-     */
-    private function isAdminDashboardDeferredQueueRequest(Request $request): bool
-    {
-        return $this->isDashboardDeferredRequest($request, ['contentPublishQueue', 'contentRecheckQueue']);
     }
 
     /**
