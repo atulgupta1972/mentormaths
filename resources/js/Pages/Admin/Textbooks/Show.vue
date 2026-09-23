@@ -48,6 +48,7 @@ const fillBlankJsonInput = ref('');
 const importForm = useForm({ json: '' });
 const fillBlankImportForm = useForm({ json: '' });
 const publishFillBlankForm = useForm({});
+const publishFillBlankError = ref('');
 const zipImportForm = useForm({ pack: null });
 const zipPackInput = ref(null);
 
@@ -303,9 +304,27 @@ const importFillBlank = () => {
 };
 
 const publishFillBlankAndWritten = () => {
+    publishFillBlankError.value = '';
     publishFillBlankForm.post(chapterRoute('publish-fill-blank-written'), {
-        preserveScroll: true,
-        onSuccess: () => applyFromProps(),
+        preserveScroll: false,
+        onSuccess: () => {
+            publishFillBlankError.value = '';
+            applyFromProps();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        onError: (errors) => {
+            const first = Object.values(errors || {})[0];
+            publishFillBlankError.value = typeof first === 'string'
+                ? first
+                : 'Publish failed. Scroll to the top for details, or check the server log.';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        onFinish: () => {
+            const flashError = page.props.flash?.error;
+            if (flashError) {
+                publishFillBlankError.value = flashError;
+            }
+        },
     });
 };
 
@@ -834,9 +853,17 @@ const canChangeBook = computed(() =>
                 </div>
 
                 <div v-if="canEdit && hasItems && !hideUploaderEditPanels && isMentorMaths" class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50/60 px-4 py-3">
-                    <p class="text-sm text-teal-950">
-                        {{ fillBlankReadyCount }} fill-in-blank ready · MentorMaths does not publish MCQ sets.
-                    </p>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm text-teal-950">
+                            {{ fillBlankReadyCount }} fill-in-blank ready · MentorMaths does not publish MCQ sets.
+                        </p>
+                        <p
+                            v-if="publishFillBlankError || page.props.flash?.error"
+                            class="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900"
+                        >
+                            {{ publishFillBlankError || page.props.flash?.error }}
+                        </p>
+                    </div>
                     <div class="flex flex-wrap gap-2">
                         <SecondaryButton type="button" :disabled="draftForm.processing" @click="saveDraft">Save draft</SecondaryButton>
                         <PrimaryButton
@@ -1340,6 +1367,12 @@ const canChangeBook = computed(() =>
                                 {{ publishFillBlankForm.processing ? 'Publishing…' : (isMentorMaths ? 'Publish MentorMaths fill-blank + written' : 'Publish fill-blank + written') }}
                             </PrimaryButton>
                         </div>
+                        <p
+                            v-if="publishFillBlankError || page.props.flash?.error"
+                            class="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900"
+                        >
+                            {{ publishFillBlankError || page.props.flash?.error }}
+                        </p>
                     </div>
                 </div>
 

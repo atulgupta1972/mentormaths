@@ -261,6 +261,20 @@ class MentorMathsConversionController extends Controller
             $chapter = $this->publishService->publishFillBlankAndWritten($textbookChapter, $request->user());
         } catch (\InvalidArgumentException $exception) {
             return back()->with('error', $exception->getMessage());
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'Publish failed: a set code already exists. Delete the old fill-blank/written sets for this chapter and try again.',
+            );
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'Publish failed: '.\Illuminate\Support\Str::limit($exception->getMessage(), 240),
+            );
         }
 
         $codes = $this->setCodeService->codes($chapter);

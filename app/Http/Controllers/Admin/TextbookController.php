@@ -955,6 +955,25 @@ class TextbookController extends Controller
             $chapter = $this->publishService->publishFillBlankAndWritten($textbookChapter, $request->user());
         } catch (\InvalidArgumentException $exception) {
             return back()->with('error', $exception->getMessage());
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'Publish failed: a set code already exists (duplicate worksheet). Pull the latest Mentormaths fix, or delete the old fill-blank/written sets for this chapter and try again.',
+            );
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            $message = $exception->getMessage();
+            if (str_contains($message, 'Duplicate entry') || str_contains($message, '1062')) {
+                $message = 'Publish failed: duplicate set code. Delete the existing fill-blank/written worksheets for this chapter (or update the app), then publish again.';
+            }
+
+            return back()->with(
+                'error',
+                'Publish failed: '.\Illuminate\Support\Str::limit($message, 240),
+            );
         }
 
         $codes = $this->setCodeService->codes($chapter);
