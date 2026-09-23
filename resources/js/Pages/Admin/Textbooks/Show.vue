@@ -1,6 +1,7 @@
 <script setup>
 import InputLabel from '@/Components/InputLabel.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import DiagramCropModal from '@/Components/DiagramCropModal.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -118,10 +119,10 @@ const optionLetter = (index) => String.fromCharCode(65 + index);
 const isFillBlankItem = (item) => item.question_type === 'fill_blank';
 const diagramLinkedCount = computed(() => items.value.filter((item) => item.diagram_staging_path || item.diagram_preview_url).length);
 const replacingDiagramIndex = ref(null);
+const cropTarget = ref(null);
 
-const replaceDiagram = (index, event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+const postDiagramFile = (index, file, onDone = null) => {
+    if (!file || replacingDiagramIndex.value !== null) {
         return;
     }
 
@@ -136,8 +137,49 @@ const replaceDiagram = (index, event) => {
         onSuccess: () => applyFromProps(),
         onFinish: () => {
             replacingDiagramIndex.value = null;
-            event.target.value = '';
+            onDone?.();
         },
+    });
+};
+
+const replaceDiagram = (index, event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    postDiagramFile(index, file, () => {
+        event.target.value = '';
+    });
+};
+
+const openCropEditor = (index, item) => {
+    if (!item?.diagram_preview_url || replacingDiagramIndex.value !== null) {
+        return;
+    }
+
+    cropTarget.value = {
+        item_index: index,
+        diagram_url: item.diagram_preview_url,
+    };
+};
+
+const closeCropEditor = () => {
+    if (cropTarget.value && replacingDiagramIndex.value === cropTarget.value.item_index) {
+        return;
+    }
+
+    cropTarget.value = null;
+};
+
+const saveCroppedDiagram = (file) => {
+    if (!cropTarget.value) {
+        return;
+    }
+
+    const index = cropTarget.value.item_index;
+    postDiagramFile(index, file, () => {
+        cropTarget.value = null;
     });
 };
 
@@ -1055,14 +1097,24 @@ const canChangeBook = computed(() =>
                                                 @change="replaceDiagram(index, $event)"
                                             >
                                         </label>
-                                        <button
-                                            v-if="item.diagram_preview_url"
-                                            type="button"
-                                            class="text-[10px] text-rose-600 hover:underline"
-                                            @click="removeDiagram(index)"
-                                        >
-                                            Remove chart
-                                        </button>
+                                        <div v-if="item.diagram_preview_url" class="flex flex-wrap gap-x-3 gap-y-1">
+                                            <button
+                                                type="button"
+                                                class="text-[10px] text-indigo-700 hover:underline disabled:opacity-50"
+                                                :disabled="replacingDiagramIndex === index"
+                                                @click="openCropEditor(index, item)"
+                                            >
+                                                Crop figure
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="text-[10px] text-rose-600 hover:underline disabled:opacity-50"
+                                                :disabled="replacingDiagramIndex === index"
+                                                @click="removeDiagram(index)"
+                                            >
+                                                Remove chart
+                                            </button>
+                                        </div>
                                         <p v-if="replacingDiagramIndex === index" class="text-[10px] text-gray-500">Uploading…</p>
                                     </div>
                                 </td>
@@ -1498,5 +1550,13 @@ const canChangeBook = computed(() =>
 
             </div>
         </div>
+
+        <DiagramCropModal
+            :show="Boolean(cropTarget)"
+            :image-url="cropTarget?.diagram_url || ''"
+            :processing="Boolean(cropTarget && replacingDiagramIndex === cropTarget.item_index)"
+            @close="closeCropEditor"
+            @cropped="saveCroppedDiagram"
+        />
     </AuthenticatedLayout>
 </template>
