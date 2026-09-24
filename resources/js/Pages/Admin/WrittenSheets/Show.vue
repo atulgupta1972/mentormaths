@@ -39,6 +39,10 @@ const props = defineProps({
 
 const page = usePage();
 const regenerateForm = useForm({});
+const splitForm = useForm({
+    sizes: '',
+});
+const showSplitPanel = ref(false);
 const verifyForm = useForm({
     master_profile: props.sheet.tier || 'starter',
 });
@@ -469,6 +473,67 @@ watch(selectedGradeLevelId, (value) => {
 
 const regenerate = () => {
     regenerateForm.post(route('admin.written-sheets.regenerate', props.sheet.id), { preserveScroll: true });
+};
+
+const halfSplitSizes = computed(() => {
+    const total = Number(props.sheet.questions_count) || 0;
+    if (total < 4) {
+        return '';
+    }
+    const first = Math.ceil(total / 2);
+    const second = total - first;
+
+    return `${first}+${second}`;
+});
+
+const parsedSplitSizes = computed(() => {
+    const raw = String(splitForm.sizes || '').trim();
+    if (!raw) {
+        return [];
+    }
+
+    return raw
+        .split(/[+\s,;]+/)
+        .map((part) => part.trim())
+        .filter((part) => /^\d+$/.test(part))
+        .map((part) => Number(part))
+        .filter((n) => n > 0);
+});
+
+const splitPreviewOk = computed(() => {
+    const sizes = parsedSplitSizes.value;
+    const total = Number(props.sheet.questions_count) || 0;
+
+    return sizes.length >= 2 && sizes.reduce((a, b) => a + b, 0) === total;
+});
+
+const splitPreviewLabel = computed(() => {
+    if (!splitPreviewOk.value) {
+        return '';
+    }
+
+    return parsedSplitSizes.value.join(' + ');
+});
+
+const applySplitPreset = (expression) => {
+    splitForm.sizes = expression;
+    showSplitPanel.value = true;
+};
+
+const runSplit = () => {
+    if (!splitPreviewOk.value) {
+        window.alert(`Enter sizes that add up to ${props.sheet.questions_count}, e.g. ${halfSplitSizes.value || '10+10'}.`);
+
+        return;
+    }
+
+    if (!window.confirm(
+        `Split this written sheet into ${splitPreviewLabel.value}? New set codes get -W1, -W2… PDFs regenerate; verify each part before assigning.`,
+    )) {
+        return;
+    }
+
+    splitForm.post(route('admin.written-sheets.split', props.sheet.id));
 };
 
 const verify = () => {
@@ -1026,6 +1091,13 @@ const progressLabel = (p) => {
                         >
                             Regenerate PDF
                         </SecondaryButton>
+                        <SecondaryButton
+                            v-if="sheet.can_split"
+                            type="button"
+                            @click="showSplitPanel = !showSplitPanel"
+                        >
+                            {{ showSplitPanel ? 'Hide split' : 'Split sheet…' }}
+                        </SecondaryButton>
                         <p v-if="sheet.uses_uploaded_pdf" class="w-full text-sm text-gray-600">
                             This sheet uses an uploaded PDF. Use the replace panel below to swap the file if needed.
                         </p>
@@ -1037,6 +1109,87 @@ const progressLabel = (p) => {
                         >
                             Send back to draft
                         </DangerButton>
+                    </div>
+
+                    <div
+                        v-if="sheet.can_split && showSplitPanel"
+                        class="mt-4 rounded-lg border border-violet-200 bg-violet-50/60 p-4"
+                    >
+                        <h4 class="text-sm font-semibold text-violet-950">Split into smaller written sheets</h4>
+                        <p class="mt-1 text-sm text-violet-900">
+                            This sheet has <strong>{{ sheet.questions_count }}</strong> sums.
+                            Choose how to break it (example: <code class="rounded bg-white/80 px-1">10+10</code> or
+                            <code class="rounded bg-white/80 px-1">12+8</code>).
+                            Order of questions is kept. Each part gets its own set code and PDF.
+                        </p>
+
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <SecondaryButton
+                                v-if="halfSplitSizes"
+                                type="button"
+                                @click="applySplitPreset(halfSplitSizes)"
+                            >
+                                Half ({{ halfSplitSizes }})
+                            </SecondaryButton>
+                            <SecondaryButton
+                                v-if="sheet.questions_count >= 20"
+                                type="button"
+                                @click="applySplitPreset('10+10')"
+                            >
+                                10+10
+                            </SecondaryButton>
+                            <SecondaryButton
+                                v-if="sheet.questions_count === 20"
+                                type="button"
+                                @click="applySplitPreset('12+8')"
+                            >
+                                12+8
+                            </SecondaryButton>
+                            <SecondaryButton
+                                v-if="sheet.questions_count === 20"
+                                type="button"
+                                @click="applySplitPreset('8+12')"
+                            >
+                                8+12
+                            </SecondaryButton>
+                        </div>
+
+                        <div class="mt-3 max-w-sm">
+                            <InputLabel value="Part sizes" />
+                            <input
+                                v-model="splitForm.sizes"
+                                type="text"
+                                class="mt-1 block w-full rounded-md border-violet-300 text-sm shadow-sm"
+                                :placeholder="halfSplitSizes || '10+10'"
+                            >
+                            <p class="mt-1 text-xs text-violet-800">
+                                <template v-if="splitPreviewOk">
+                                    Will create {{ parsedSplitSizes.length }} sheets: {{ splitPreviewLabel }}
+                                </template>
+                                <template v-else>
+                                    Sizes must add up to {{ sheet.questions_count }}.
+                                </template>
+                            </p>
+                        </div>
+
+                        <div
+                            v-if="(sheet.split_related_sets || []).length"
+                            class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                        >
+                            Related set codes already exist — rename/delete them first if the split needs those codes:
+                            <span class="font-mono">{{ sheet.split_related_sets.map((s) => s.set_code).join(', ') }}</span>
+                        </div>
+
+                        <div class="mt-3">
+                            <PrimaryButton
+                                type="button"
+                                class="!bg-violet-800 hover:!bg-violet-900"
+                                :disabled="splitForm.processing || !splitPreviewOk"
+                                @click="runSplit"
+                            >
+                                {{ splitForm.processing ? 'Splitting…' : 'Split now' }}
+                            </PrimaryButton>
+                        </div>
                     </div>
 
                     <p class="mt-3 text-sm text-gray-600">

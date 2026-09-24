@@ -738,6 +738,36 @@ class WrittenSheetController extends Controller
         return back()->with('success', 'PDF regenerated. Please review again before verifying.');
     }
 
+    public function split(Request $request, Worksheet $worksheet): RedirectResponse
+    {
+        abort_unless($worksheet->isWritten(), 404);
+
+        $validated = $request->validate([
+            'sizes' => ['required', 'string', 'max:80'],
+        ]);
+
+        try {
+            $result = $this->writtenSheetService->split(
+                $worksheet,
+                $request->user(),
+                $validated['sizes'],
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $codes = collect($result['plan'])->map(
+            fn (array $row) => $row['set_code'].' ('.$row['count'].')',
+        )->implode(', ');
+
+        return redirect()
+            ->route('admin.written-sheets.show', $result['kept'])
+            ->with(
+                'success',
+                'Split into '.count($result['plan'])." written sheets: {$codes}. Review each PDF, then verify.",
+            );
+    }
+
     public function verify(Request $request, Worksheet $worksheet): RedirectResponse
     {
         abort_unless($worksheet->isWritten(), 404);

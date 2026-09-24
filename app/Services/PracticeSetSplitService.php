@@ -6,6 +6,8 @@ use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Support\PracticeSetScope;
+use App\Support\WorksheetDeliveryMode;
+use App\Support\WrittenSheetStatus;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -60,6 +62,72 @@ class PracticeSetSplitService
         return $base !== '' ? $base : $trimmed;
     }
 
+    /**
+     * @param  list<int>  $sizes  e.g. [10, 10] or [12, 8]
+     * @return list<array{part: int, count: int, set_code: string, from: int, to: int}>
+     */
+    public function buildPlanFromSizes(int $questionCount, string $setCode, array $sizes): array
+    {
+        $sizes = array_values(array_map('intval', $sizes));
+        $sizes = array_values(array_filter($sizes, fn (int $n) => $n > 0));
+
+        if ($sizes === []) {
+            throw new InvalidArgumentException('Enter at least two part sizes, e.g. 10+10 or 12+8.');
+        }
+
+        if (count($sizes) < 2) {
+            throw new InvalidArgumentException('Need at least two parts to split a sheet.');
+        }
+
+        if (array_sum($sizes) !== $questionCount) {
+            throw new InvalidArgumentException(
+                'Part sizes ('.implode('+', $sizes).") must add up to {$questionCount} sums."
+            );
+        }
+
+        $base = $this->baseCode($setCode);
+        $plan = [];
+        $from = 1;
+
+        foreach ($sizes as $index => $count) {
+            $part = $index + 1;
+            $plan[] = [
+                'part' => $part,
+                'count' => $count,
+                'set_code' => $base.$part,
+                'from' => $from,
+                'to' => $from + $count - 1,
+            ];
+            $from += $count;
+        }
+
+        return $plan;
+    }
+
+    /**
+     * Parse "10+10" / "12 + 8" / "10,10" into positive ints.
+     *
+     * @return list<int>
+     */
+    public function parseSizesExpression(string $expression): array
+    {
+        $parts = preg_split('/[+\s,;]+/', trim($expression)) ?: [];
+        $sizes = [];
+
+        foreach ($parts as $part) {
+            $part = trim((string) $part);
+            if ($part === '' || ! ctype_digit($part)) {
+                continue;
+            }
+            $n = (int) $part;
+            if ($n > 0) {
+                $sizes[] = $n;
+            }
+        }
+
+        return $sizes;
+    }
+
     public function canSplit(Worksheet $worksheet, int $batchSize = self::DEFAULT_BATCH_SIZE): bool
     {
         $count = $worksheet->questions_count ?? $worksheet->questions()->count();
@@ -104,6 +172,25 @@ class PracticeSetSplitService
     }
 
     /**
+     * Split using an explicit size list (preferred for written sheets: 10+10, 12+8).
+     *
+     * @param  list<int>  $sizes
+     * @return array{kept: Worksheet, created: list<Worksheet>, plan: list<array{part: int, count: int, set_code: string, from: int, to: int}>}
+     */
+    public function splitWithSizes(Worksheet $worksheet, User $actor, array $sizes): array
+    {
+        $ordered = $worksheet->questions()
+            ->orderBy('worksheet_question.sort_order')
+            ->orderBy('questions.id')
+            ->get(['questions.id']);
+
+        $questionCount = $ordered->count();
+        $plan = $this->buildPlanFromSizes($questionCount, (string) $worksheet->set_code, $sizes);
+
+        return $this->applyPlan($worksheet, $actor, $ordered, $plan);
+    }
+
+    /**
      * Split a large practice set into ordered parts of up to $batchSize questions each.
      * The original worksheet keeps part 1; additional worksheets are created for the rest.
      *
@@ -126,6 +213,17 @@ class PracticeSetSplitService
         }
 
         $plan = $this->buildPlan($questionCount, (string) $worksheet->set_code, $batchSize);
+
+        return $this->applyPlan($worksheet, $actor, $ordered, $plan);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Question>|mixed  $ordered
+     * @param  list<array{part: int, count: int, set_code: string, from: int, to: int}>  $plan
+     * @return array{kept: Worksheet, created: list<Worksheet>, plan: list<array{part: int, count: int, set_code: string, from: int, to: int}>}
+     */
+    private function applyPlan(Worksheet $worksheet, User $actor, $ordered, array $plan): array
+    {
         $codes = array_column($plan, 'set_code');
 
         $conflicts = Worksheet::query()
@@ -157,10 +255,18 @@ class PracticeSetSplitService
                 $worksheet->questions()->attach($questionId, ['sort_order' => $index + 1]);
             }
 
-            $worksheet->update([
+            $worksheetUpdates = [
                 'set_code' => $plan[0]['set_code'],
                 'title' => $this->titledPart($baseTitle, 1, count($plan)),
-            ]);
+            ];
+
+            if ($worksheet->isWritten()) {
+                $worksheetUpdates['written_status'] = WrittenSheetStatus::PENDING_REVIEW;
+                $worksheetUpdates['written_verified_at'] = null;
+                $worksheetUpdates['written_verified_by'] = null;
+            }
+
+            $worksheet->update($worksheetUpdates);
 
             $created = [];
             $nextSetNumber = $this->nextSetNumberAfter($worksheet);
@@ -184,7 +290,11 @@ class PracticeSetSplitService
                     'notes' => $worksheet->notes,
                     'created_by' => $actor->id,
                     'purpose' => $worksheet->purpose,
-                    'delivery_mode' => $worksheet->delivery_mode,
+                    'delivery_mode' => $worksheet->delivery_mode ?? WorksheetDeliveryMode::ONLINE,
+                    'written_status' => $worksheet->isWritten() ? WrittenSheetStatus::PENDING_REVIEW : null,
+                    'written_pdf_path' => null,
+                    'written_verified_at' => null,
+                    'written_verified_by' => null,
                 ]);
 
                 foreach ($chunk as $index => $question) {

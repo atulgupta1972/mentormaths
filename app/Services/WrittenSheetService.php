@@ -30,6 +30,7 @@ class WrittenSheetService
         private FillBlankImportService $fillBlankImportService,
         private WrittenSheetPdfImportService $pdfImportService,
         private QuestionZipImportService $zipImportService,
+        private PracticeSetSplitService $splitService,
     ) {}
 
     /**
@@ -911,8 +912,71 @@ class WrittenSheetService
             'can_reset_sheet' => $this->canResetSheet($worksheet),
             'can_edit_questions' => $this->canEditQuestions($worksheet),
             'can_update_answers' => $this->canUpdateAnswers($worksheet),
+            'can_split' => $this->canSplit($worksheet),
+            'split_related_sets' => $this->canSplit($worksheet)
+                ? $this->splitService->relatedSetsForSplitUi($worksheet)
+                : [],
             'has_student_submissions' => $this->hasStudentSubmissions($worksheet),
         ];
+    }
+
+    public function canSplit(Worksheet $worksheet): bool
+    {
+        if (! $worksheet->isWritten()) {
+            return false;
+        }
+
+        if ($this->hasStudentSubmissions($worksheet)) {
+            return false;
+        }
+
+        if ($this->usesUploadedPdf($worksheet)) {
+            return false;
+        }
+
+        $count = (int) ($worksheet->questions_count ?? $worksheet->questions()->count());
+
+        return $count >= 4;
+    }
+
+    /**
+     * Split a generated written sheet into smaller sheets (e.g. 20 → 10+10 or 12+8).
+     *
+     * @param  list<int>|string  $sizesOrExpression
+     * @return array{kept: Worksheet, created: list<Worksheet>, plan: list<array{part: int, count: int, set_code: string, from: int, to: int}>}
+     */
+    public function split(Worksheet $worksheet, User $actor, array|string $sizesOrExpression): array
+    {
+        if (! $this->canSplit($worksheet)) {
+            if ($this->hasStudentSubmissions($worksheet)) {
+                throw new \InvalidArgumentException('Cannot split — students have already uploaded work on this sheet.');
+            }
+            if ($this->usesUploadedPdf($worksheet)) {
+                throw new \InvalidArgumentException('Cannot split an uploaded PDF sheet. Split only works for generated PDFs.');
+            }
+
+            throw new \InvalidArgumentException('This written sheet cannot be split.');
+        }
+
+        $sizes = is_string($sizesOrExpression)
+            ? $this->splitService->parseSizesExpression($sizesOrExpression)
+            : array_values(array_map('intval', $sizesOrExpression));
+
+        $result = $this->splitService->splitWithSizes($worksheet, $actor, $sizes);
+
+        // Regenerate printable PDFs for every part.
+        $this->generatePdf($result['kept']->fresh(['questions.blankAnswer', 'questions.options']));
+        foreach ($result['created'] as $sibling) {
+            $this->generatePdf($sibling->fresh(['questions.blankAnswer', 'questions.options']));
+        }
+
+        $result['kept'] = $result['kept']->fresh()->loadCount('questions');
+        $result['created'] = array_map(
+            fn (Worksheet $row) => $row->fresh()->loadCount('questions'),
+            $result['created'],
+        );
+
+        return $result;
     }
 
     /**
