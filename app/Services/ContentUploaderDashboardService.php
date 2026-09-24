@@ -17,10 +17,11 @@ class ContentUploaderDashboardService
     /**
      * @return array{
      *     tasks: Collection<int, array<string, mixed>>,
-     *     summary: array{upload_pending: int, review_pending: int, convert_pending: int, corrections_pending: int, gemini_pending: int, gemini_done: int, total_active: int},
+     *     summary: array{upload_pending: int, review_pending: int, convert_pending: int, concept_pending: int, corrections_pending: int, gemini_pending: int, gemini_done: int, total_active: int},
      *     uploadPending: Collection<int, array<string, mixed>>,
      *     reviewPending: Collection<int, array<string, mixed>>,
      *     convertPending: Collection<int, array<string, mixed>>,
+     *     conceptPending: Collection<int, array<string, mixed>>,
      *     correctionsPending: Collection<int, array<string, mixed>>,
      *     geminiPending: Collection<int, array<string, mixed>>,
      *     geminiDone: Collection<int, array<string, mixed>>
@@ -46,6 +47,7 @@ class ContentUploaderDashboardService
         $uploadPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'upload_pending')->values();
         $reviewPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'review_pending')->values();
         $convertPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'convert_pending')->values();
+        $conceptPending = $tasks->filter(fn (array $task) => $task['bucket'] === 'concept_pending')->values();
         $correctionsPending = $this->pendingCorrectionsForUser($user);
 
         $geminiPending = $tasks->filter(fn (array $task) =>
@@ -65,14 +67,16 @@ class ContentUploaderDashboardService
                 'upload_pending' => $uploadPending->count(),
                 'review_pending' => $reviewPending->count(),
                 'convert_pending' => $convertPending->count(),
+                'concept_pending' => $conceptPending->count(),
                 'corrections_pending' => $correctionsPending->count(),
                 'gemini_pending' => $geminiPending->count(),
                 'gemini_done' => $geminiDone->count(),
-                'total_active' => $uploadPending->count() + $reviewPending->count() + $convertPending->count() + $geminiPending->count(),
+                'total_active' => $uploadPending->count() + $reviewPending->count() + $convertPending->count() + $conceptPending->count() + $geminiPending->count(),
             ],
             'uploadPending' => $uploadPending,
             'reviewPending' => $reviewPending,
             'convertPending' => $convertPending,
+            'conceptPending' => $conceptPending,
             'correctionsPending' => $correctionsPending,
             'geminiPending' => $geminiPending,
             'geminiDone' => $geminiDone,
@@ -128,6 +132,10 @@ class ContentUploaderDashboardService
             'work_type' => $task->work_type ?: ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
             'work_type_label' => $task->workTypeLabel(),
             'is_fill_blank_conversion' => $task->isFillBlankConversion(),
+            'is_concept_path_build' => $task->isConceptPathBuild(),
+            'concept_path_url' => $task->isConceptPathBuild() && $chapter
+                ? route('content.textbooks.concept-path', $chapter)
+                : null,
             'status' => $task->status,
             'status_label' => $task->statusLabel(),
             'rate_basis' => $task->rate_basis,

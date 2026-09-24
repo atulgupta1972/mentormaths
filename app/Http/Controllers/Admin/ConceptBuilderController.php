@@ -8,8 +8,10 @@ use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\Textbook;
+use App\Models\User;
 use App\Models\TextbookChapter;
 use App\Services\AdminGradeContext;
+use App\Services\ConceptPathJobService;
 use App\Services\TextbookChapterBookService;
 use App\Support\ConceptPathStatus;
 use App\Support\UploadedFileDiagnostics;
@@ -24,6 +26,7 @@ class ConceptBuilderController extends Controller
     public function __construct(
         private AdminGradeContext $gradeContext,
         private TextbookChapterBookService $bookService,
+        private ConceptPathJobService $conceptPathJobs,
     ) {}
 
     public function index(Request $request): Response
@@ -73,10 +76,18 @@ class ConceptBuilderController extends Controller
                 })
                 ->groupBy('syllabus_chapter_id');
 
+            $conceptJobs = \App\Models\ContentUploadTask::query()
+                ->with('assignee:id,name')
+                ->whereIn('textbook_chapter_id', $textbookChapters->flatten()->pluck('id')->all() ?: [-1])
+                ->where('work_type', \App\Models\ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD)
+                ->where('status', '!=', \App\Models\ContentUploadTask::STATUS_CANCELLED)
+                ->get()
+                ->keyBy('textbook_chapter_id');
+
             foreach ($versions as $version) {
                 foreach ($version->chapters as $syllabusChapter) {
                     $uploads = ($textbookChapters->get($syllabusChapter->id) ?? collect())
-                        ->map(function (TextbookChapter $upload) use ($uploaderMode) {
+                        ->map(function (TextbookChapter $upload) use ($uploaderMode, $conceptJobs) {
                             $hasPdf = filled($upload->pdf_path);
                             $isApproved = $upload->concept_path_status === ConceptPathStatus::APPROVED;
                             $cardCount = is_array($upload->concept_path_items['cards'] ?? null)
@@ -85,6 +96,8 @@ class ConceptBuilderController extends Controller
                                     fn ($card) => is_array($card) && ($card['approved'] ?? true),
                                 ))
                                 : 0;
+
+                            $job = $conceptJobs->get($upload->id);
 
                             return [
                                 'id' => $upload->id,
@@ -110,6 +123,15 @@ class ConceptBuilderController extends Controller
                                 'upload_url' => $uploaderMode
                                     ? route('content.textbooks.show', $upload)
                                     : route('admin.textbooks.show', $upload),
+                                'concept_job' => $job ? [
+                                    'id' => $job->id,
+                                    'status' => $job->status,
+                                    'status_label' => $job->statusLabel(),
+                                    'assignee_name' => $job->assignee?->name,
+                                    'amount_inr' => $job->rateUnitInr(),
+                                    'task_url' => route('admin.content-tasks.show', $job),
+                                ] : null,
+                                'can_assign_concept' => ! $uploaderMode && $hasPdf && ! $job,
                             ];
                         })
                         ->values()
@@ -138,11 +160,24 @@ class ConceptBuilderController extends Controller
             }
         }
 
+        $uploaders = [];
+        if (! $uploaderMode) {
+            $uploaders = User::query()
+                ->whereHas('groups', fn ($q) => $q->where('code', User::ROLE_CONTENT_UPLOADER))
+                ->orderBy('name')
+                ->get(['id', 'name', 'email'])
+                ->map(fn (User $user) => $user->only(['id', 'name', 'email']))
+                ->values()
+                ->all();
+        }
+
         return Inertia::render('Admin/ConceptBuilder/Index', [
             'uploaderMode' => $uploaderMode,
             'gradeLevel' => $gradeLevel?->only(['id', 'name']),
             'chapters' => $chapters,
             'books' => $books,
+            'contentUploaders' => $uploaders,
+            'defaultConceptAmountInr' => ConceptPathJobService::DEFAULT_AMOUNT_INR,
             'storeUrl' => $uploaderMode
                 ? route('content.concept-builder.store')
                 : route('admin.concept-builder.store'),

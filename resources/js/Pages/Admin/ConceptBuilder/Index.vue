@@ -2,7 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
 
 const props = defineProps({
@@ -10,12 +10,38 @@ const props = defineProps({
     gradeLevel: { type: Object, default: null },
     chapters: { type: Array, default: () => [] },
     books: { type: Array, default: () => [] },
+    contentUploaders: { type: Array, default: () => [] },
+    defaultConceptAmountInr: { type: Number, default: 50 },
     storeUrl: { type: String, default: '' },
     createUrl: { type: String, default: '' },
 });
 
 const page = usePage();
 const uploadForId = ref(null);
+const assignForms = reactive({});
+
+const ensureAssignForm = (uploadId) => {
+    if (!assignForms[uploadId]) {
+        assignForms[uploadId] = {
+            assigned_to_user_id: props.contentUploaders[0]?.id ?? '',
+            offered_amount_inr: props.defaultConceptAmountInr,
+        };
+    }
+    return assignForms[uploadId];
+};
+
+const assignConcept = (upload) => {
+    const form = ensureAssignForm(upload.id);
+    if (!form.assigned_to_user_id) {
+        return;
+    }
+
+    router.post(route('admin.content-tasks.assign-concept-path'), {
+        textbook_chapter_id: upload.id,
+        assigned_to_user_id: form.assigned_to_user_id,
+        offered_amount_inr: form.offered_amount_inr || props.defaultConceptAmountInr,
+    });
+};
 
 const form = useForm({
     syllabus_chapter_id: '',
@@ -251,6 +277,42 @@ const submitUpload = () => {
                                                     Open · upload PDF
                                                 </Link>
                                             </div>
+                                            <p
+                                                v-if="upload.concept_job"
+                                                class="mt-1 w-full text-[11px] text-fuchsia-900"
+                                            >
+                                                Assigned · {{ upload.concept_job.assignee_name }} · ₹{{ upload.concept_job.amount_inr }} ·
+                                                <Link :href="upload.concept_job.task_url" class="font-semibold underline">{{ upload.concept_job.status_label }}</Link>
+                                            </p>
+                                            <form
+                                                v-else-if="upload.can_assign_concept"
+                                                class="mt-2 flex w-full flex-wrap items-end gap-2 rounded border border-fuchsia-100 bg-fuchsia-50/60 p-2"
+                                                @submit.prevent="assignConcept(upload)"
+                                            >
+                                                <div>
+                                                    <label class="text-[10px] font-semibold uppercase text-fuchsia-800">Uploader</label>
+                                                    <select
+                                                        v-model="ensureAssignForm(upload.id).assigned_to_user_id"
+                                                        required
+                                                        class="mt-0.5 block rounded-md border-gray-300 text-xs"
+                                                    >
+                                                        <option value="" disabled>Select</option>
+                                                        <option v-for="person in contentUploaders" :key="person.id" :value="person.id">{{ person.name }}</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="text-[10px] font-semibold uppercase text-fuchsia-800">₹ / chapter</label>
+                                                    <input
+                                                        v-model="ensureAssignForm(upload.id).offered_amount_inr"
+                                                        type="number"
+                                                        min="1"
+                                                        class="mt-0.5 w-20 rounded-md border-gray-300 text-xs"
+                                                    >
+                                                </div>
+                                                <button type="submit" class="rounded-md bg-fuchsia-700 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-fuchsia-800">
+                                                    Assign concept @ ₹{{ defaultConceptAmountInr }}
+                                                </button>
+                                            </form>
                                         </div>
                                     </div>
                                     <p v-else class="mt-1 text-xs text-slate-600">

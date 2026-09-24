@@ -858,6 +858,9 @@ const togglePagePicker = (index) => {
                             >
                                 {{ isApproved ? 'Already approved' : (approveForm.processing ? 'Approving…' : 'Approve concept flow') }}
                             </PrimaryButton>
+                            <p v-if="isApproved && uploaderMode" class="text-xs font-medium text-fuchsia-900">
+                                Next: open <strong>Run concepts</strong> and walk through every card — that submits your ₹50 concept-builder job.
+                            </p>
                         </div>
                     </div>
 

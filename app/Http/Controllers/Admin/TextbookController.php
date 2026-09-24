@@ -13,6 +13,7 @@ use App\Models\TextbookChapter;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Services\ConceptPathService;
+use App\Services\ConceptPathJobService;
 use App\Services\GeminiFillBlankConversionService;
 use App\Services\SetAssignmentService;
 use App\Services\TextbookChapterAnswerClassificationService;
@@ -51,6 +52,7 @@ class TextbookController extends Controller
         private TextbookChapterStagingGeminiService $stagingGemini,
         private TextbookChapterAnswerClassificationService $answerClassification,
         private ConceptPathService $conceptPath,
+        private ConceptPathJobService $conceptPathJobs,
     ) {}
 
     public function index(Request $request): Response
@@ -1477,9 +1479,28 @@ class TextbookController extends Controller
             ? route('content.textbooks.concept-path.play', $textbookChapter)
             : route('admin.textbooks.concept-path.play', $textbookChapter);
 
+        $jobCompletedFlash = null;
+        if (! $singleCard && $request->user()) {
+            try {
+                $beforeStatus = $this->conceptPathJobs->openTaskForChapter($textbookChapter)?->status;
+                $completed = $this->conceptPathJobs->completeAfterFullRun($textbookChapter, $request->user());
+                if (
+                    $completed
+                    && $beforeStatus !== ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH
+                    && $completed->status === ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH
+                ) {
+                    $jobCompletedFlash = 'Concept builder job submitted for pay (₹'.$completed->payableAmountInr().').';
+                }
+            } catch (\InvalidArgumentException $e) {
+                return $this->redirectToConceptPath($request, $textbookChapter)
+                    ->with('error', $e->getMessage());
+            }
+        }
+
         return Inertia::render('Admin/Textbooks/ConceptPathPlay', [
             'uploaderMode' => $uploaderMode,
             'singleCard' => $singleCard,
+            'jobCompletedFlash' => $jobCompletedFlash,
             'chapter' => [
                 'id' => $textbookChapter->id,
                 'label' => $textbookChapter->displaySyllabusLabel(),

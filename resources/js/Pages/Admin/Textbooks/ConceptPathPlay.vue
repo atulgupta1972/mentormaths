@@ -12,6 +12,7 @@ import { computed, ref, watch } from 'vue';
 const props = defineProps({
     uploaderMode: { type: Boolean, default: false },
     singleCard: { type: Boolean, default: false },
+    jobCompletedFlash: { type: String, default: null },
     chapter: { type: Object, required: true },
     path: { type: Object, required: true },
 });
@@ -262,6 +263,12 @@ const clockDemoTurn = computed(() => {
 
         <div class="py-8">
             <div class="mx-auto max-w-2xl space-y-4 px-4 sm:px-6">
+                <div
+                    v-if="jobCompletedFlash"
+                    class="rounded-lg border border-fuchsia-200 bg-fuchsia-50 px-4 py-3 text-sm font-medium text-fuchsia-950"
+                >
+                    {{ jobCompletedFlash }}
+                </div>
                 <div class="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                     <div class="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <span>{{ path.chapter_title || chapter.title }}</span>

@@ -26,6 +26,7 @@ use App\Services\ContentUploadTaskService;
 use App\Services\ContentVerificationService;
 use App\Services\ContentWorkSessionService;
 use App\Services\FillBlankConversionService;
+use App\Services\ConceptPathJobService;
 use App\Services\QuestionResolutionService;
 use App\Services\TextbookMcqSetPlanService;
 use App\Services\TextbookChapterBookService;
@@ -54,6 +55,7 @@ class ContentUploadTaskController extends Controller
         private TextbookChapterBookService $bookService,
         private TextbookChapterMapService $chapterMapService,
         private FillBlankConversionService $fillBlankConversion,
+        private ConceptPathJobService $conceptPathJobs,
     ) {}
 
     public function index(Request $request): Response
@@ -1124,6 +1126,39 @@ class ContentUploadTaskController extends Controller
             ->with('success', "Fill-in-blank conversion assigned to {$uploader->name}.");
     }
 
+    public function assignConceptPathBuild(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'textbook_chapter_id' => ['required', 'integer', 'exists:textbook_chapters,id'],
+            'assigned_to_user_id' => ['required', 'integer', 'exists:users,id'],
+            'offered_amount_inr' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'admin_notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $chapter = TextbookChapter::query()->findOrFail($validated['textbook_chapter_id']);
+        $uploader = User::query()->findOrFail($validated['assigned_to_user_id']);
+
+        if (! $uploader->groups()->where('code', User::ROLE_CONTENT_UPLOADER)->exists()) {
+            return back()->with('error', 'Pick a content uploader.');
+        }
+
+        try {
+            $task = $this->conceptPathJobs->assign(
+                $chapter,
+                $uploader,
+                $request->user(),
+                $validated['offered_amount_inr'] ?? ConceptPathJobService::DEFAULT_AMOUNT_INR,
+                $validated['admin_notes'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.content-tasks.show', $task)
+            ->with('success', "Concept builder (₹{$task->offered_amount_inr}) assigned to {$uploader->name}.");
+    }
+
     public function approveQuestionDelete(Request $request, ContentUploadTask $contentTask, ContentQuestionDeleteRequest $deleteRequest): RedirectResponse
     {
         abort_unless((int) $deleteRequest->content_upload_task_id === (int) $contentTask->id, 404);
@@ -1185,6 +1220,7 @@ class ContentUploadTaskController extends Controller
             'work_type' => $task->work_type ?: ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
             'work_type_label' => $task->workTypeLabel(),
             'is_fill_blank_conversion' => $task->isFillBlankConversion(),
+            'is_concept_path_build' => $task->isConceptPathBuild(),
             'status' => $task->status,
             'status_label' => $task->statusLabel(),
             'rate_basis' => $task->rate_basis,

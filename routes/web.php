@@ -461,6 +461,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/content-tasks', [ContentUploadTaskController::class, 'index'])->name('content-tasks.index');
     Route::get('/content-tasks/create', [ContentUploadTaskController::class, 'create'])->name('content-tasks.create');
     Route::post('/content-tasks/assign-fill-blank-conversion', [ContentUploadTaskController::class, 'assignFillBlankConversion'])->name('content-tasks.assign-fill-blank-conversion');
+    Route::post('/content-tasks/assign-concept-path', [ContentUploadTaskController::class, 'assignConceptPathBuild'])->name('content-tasks.assign-concept-path');
     Route::post('/content-tasks', [ContentUploadTaskController::class, 'store'])->name('content-tasks.store');
     Route::post('/content-tasks/bulk-reassign', [ContentUploadTaskController::class, 'bulkReassign'])->name('content-tasks.bulk-reassign');
     Route::get('/content-tasks/{contentTask}', [ContentUploadTaskController::class, 'show'])->name('content-tasks.show');

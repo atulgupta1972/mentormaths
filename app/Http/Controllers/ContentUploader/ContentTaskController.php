@@ -56,12 +56,18 @@ class ContentTaskController extends Controller
         return Inertia::render('ContentUploader/Tasks/Index', $dashboard);
     }
 
-    public function show(Request $request, ContentUploadTask $contentTask): Response
+    public function show(Request $request, ContentUploadTask $contentTask): Response|RedirectResponse
     {
         $this->authorizeTask($contentTask, $request);
 
         if ($contentTask->isFillBlankConversion()) {
             return $this->convert($request, $contentTask);
+        }
+
+        if ($contentTask->isConceptPathBuild() && ! $contentTask->isAwaitingAgreement()) {
+            return redirect()
+                ->route('content.textbooks.concept-path', $contentTask->textbookChapter)
+                ->with('success', 'Build concepts, Approve, then Run the full path to submit for ₹'.$contentTask->payableAmountInr().'.');
         }
 
         $contentTask->load(['textbookChapter.textbook.gradeLevel']);
@@ -118,16 +124,26 @@ class ContentTaskController extends Controller
         $this->authorizeTask($contentTask, $request);
 
         try {
-            $this->taskService->agree($contentTask, $request->user());
+            $contentTask = $this->taskService->agree($contentTask, $request->user());
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
+        if ($contentTask->isConceptPathBuild()) {
+            return redirect()
+                ->route('content.textbooks.concept-path', $contentTask->textbookChapter)
+                ->with('success', 'Rate agreed. Build the concept path, Approve, then Run concepts to finish (₹'.$contentTask->payableAmountInr().').');
+        }
+
+        if ($contentTask->isFillBlankConversion()) {
+            return redirect()
+                ->route('content.tasks.convert', $contentTask)
+                ->with('success', 'Rate agreed. Convert each MCQ, Check as a student, then submit.');
+        }
+
         return redirect()
-            ->route($contentTask->isFillBlankConversion() ? 'content.tasks.convert' : 'content.tasks.show', $contentTask)
-            ->with('success', $contentTask->isFillBlankConversion()
-                ? 'Rate agreed. Convert each MCQ, Check as a student, then submit.'
-                : 'Rate agreed. You can start work on this chapter.');
+            ->route('content.tasks.show', $contentTask)
+            ->with('success', 'Rate agreed. You can start work on this chapter.');
     }
 
     public function markUploaded(Request $request, ContentUploadTask $contentTask): RedirectResponse

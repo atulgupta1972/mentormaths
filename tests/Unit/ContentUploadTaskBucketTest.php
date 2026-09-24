@@ -36,4 +36,16 @@ class ContentUploadTaskBucketTest extends TestCase
         $this->assertSame('convert_pending', $task->uploaderBucket());
         $this->assertSame('Fill-in-blank conversion', $task->uploaderBucketLabel());
     }
+
+    public function test_concept_build_task_buckets_to_concept_pending_after_agree(): void
+    {
+        $task = new ContentUploadTask([
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+        ]);
+
+        $this->assertSame('concept_pending', $task->uploaderBucket());
+        $this->assertSame('Concept builder', $task->uploaderBucketLabel());
+        $this->assertSame('Concept builder', $task->workTypeLabel());
+    }
 }

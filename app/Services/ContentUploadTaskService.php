@@ -318,6 +318,10 @@ class ContentUploadTaskService
             throw new \InvalidArgumentException('This task is not awaiting agreement.');
         }
 
+        if ($task->isConceptPathBuild()) {
+            app(ConceptPathJobService::class)->assertCanStart($uploader, $task);
+        }
+
         $task->update([
             'status' => ContentUploadTask::STATUS_IN_PROGRESS,
             'agreed_amount_inr' => $task->offered_amount_inr,
@@ -378,6 +382,10 @@ class ContentUploadTaskService
         $this->verificationService->assertGeminiReadyForPublish($task, $uploader);
 
         $this->assertChapterHasPdf($task->textbookChapter);
+
+        if (! $task->isFillBlankConversion() && ! $task->isConceptPathBuild()) {
+            app(ConceptPathJobService::class)->assertMcqMaySubmit($task->textbookChapter);
+        }
 
         $task->update([
             'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
