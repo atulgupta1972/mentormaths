@@ -91,6 +91,8 @@ class ClassHubProgressService
         return [
             'completion_pct' => $this->resolveDisplayCompletionPct($performance),
             'score_pct' => $this->resolveDisplayScorePct($performance),
+            'revision_score_pct' => $performance['revision_score_pct'] ?? null,
+            'revision_completion_pct' => $performance['revision_completion_pct'] ?? null,
             'revision_done' => $performance['revision_done'] ?? $performance['correction_done'] ?? 0,
             'revision_pending' => max(
                 0,
@@ -236,6 +238,8 @@ class ClassHubProgressService
         return [
             'completion_pct' => $this->resolveDisplayCompletionPct($performance),
             'score_pct' => $this->resolveDisplayScorePct($performance),
+            'revision_score_pct' => $performance['revision_score_pct'] ?? null,
+            'revision_completion_pct' => $performance['revision_completion_pct'] ?? null,
             'revision_done' => $performance['revision_done'] ?? $performance['correction_done'] ?? 0,
             'revision_pending' => max(
                 0,
@@ -272,6 +276,8 @@ class ClassHubProgressService
         return [
             'completion_pct' => null,
             'score_pct' => null,
+            'revision_score_pct' => null,
+            'revision_completion_pct' => null,
             'revision_done' => 0,
             'revision_pending' => 0,
             'open_wrongs' => 0,

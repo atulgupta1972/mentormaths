@@ -130,12 +130,19 @@ const revisionLabel = (progress) => {
 
     const pending = Number(progress.revision_pending || 0);
     const openWrongs = Number(progress.open_wrongs || 0);
+    const scorePct = progress.revision_score_pct != null ? Number(progress.revision_score_pct) : null;
+    const completionPct = progress.revision_completion_pct != null ? Number(progress.revision_completion_pct) : null;
 
-    if (pending <= 0 && openWrongs <= 0) {
+    if (pending <= 0 && openWrongs <= 0 && scorePct == null && completionPct == null) {
         return 'Clear';
     }
 
     const parts = [];
+    if (completionPct != null || scorePct != null) {
+        const completionBit = completionPct != null ? `${completionPct}%` : '—';
+        const scoreBit = scorePct != null ? `${scorePct}%` : '—';
+        parts.push(`${completionBit} · ${scoreBit}`);
+    }
     if (pending > 0) {
         parts.push(`${pending} pending`);
     }
@@ -143,6 +150,19 @@ const revisionLabel = (progress) => {
         parts.push(`${openWrongs} wrong`);
     }
 
+    return parts.length ? parts.join(' · ') : 'Clear';
+};
+
+const revisionPendingLabel = (progress) => {
+    const pending = Number(progress?.revision_pending || 0);
+    const openWrongs = Number(progress?.open_wrongs || 0);
+    const parts = [];
+    if (pending > 0) {
+        parts.push(`${pending} pending`);
+    }
+    if (openWrongs > 0) {
+        parts.push(`${openWrongs} wrong`);
+    }
     return parts.join(' · ');
 };
 
@@ -231,7 +251,7 @@ const studyPlanHref = (studentId) => {
                                     <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Exam date</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Sum-based completion on all assigned sets">Completion %</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500" title="Average score on attempted sums">Score %</th>
-                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500">Revision</th>
+                                    <th class="px-3 py-3 text-left text-xs uppercase text-gray-500" title="Revision completion % · score % · pending / wrong">Revision</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500">Days logged</th>
                                     <th class="px-3 py-3 text-center text-xs uppercase text-gray-500">Hours spent</th>
                                 </tr>
@@ -299,7 +319,24 @@ const studyPlanHref = (studentId) => {
                                             <ClassHubMetricSpinner label="Loading revision" size="sm" />
                                         </div>
                                         <template v-else>
-                                            {{ revisionLabel(rowProgress(row)) }}
+                                            <template v-if="rowProgress(row).revision_score_pct != null || rowProgress(row).revision_completion_pct != null">
+                                                <p class="font-semibold tabular-nums text-indigo-900">
+                                                    <span v-if="rowProgress(row).revision_completion_pct != null">{{ rowProgress(row).revision_completion_pct }}%</span>
+                                                    <span v-else>—</span>
+                                                    <span class="mx-0.5 text-slate-400">·</span>
+                                                    <span v-if="rowProgress(row).revision_score_pct != null" class="text-emerald-800">{{ rowProgress(row).revision_score_pct }}%</span>
+                                                    <span v-else>—</span>
+                                                </p>
+                                                <p
+                                                    v-if="rowProgress(row).revision_pending || rowProgress(row).open_wrongs"
+                                                    class="text-[10px] font-medium text-orange-800"
+                                                >
+                                                    {{ revisionPendingLabel(rowProgress(row)) }}
+                                                </p>
+                                            </template>
+                                            <template v-else>
+                                                {{ revisionLabel(rowProgress(row)) }}
+                                            </template>
                                         </template>
                                     </td>
                                     <td class="px-3 py-3 text-center font-semibold tabular-nums text-slate-800">
