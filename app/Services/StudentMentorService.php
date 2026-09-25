@@ -7,6 +7,8 @@ use App\Models\Student;
 use App\Models\StudentMentorAssignment;
 use App\Models\User;
 use App\Support\EnrollmentSource;
+use App\Support\StudentIdentity;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
 class StudentMentorService
@@ -26,11 +28,15 @@ class StudentMentorService
                 : $student->coachingClassTeacher()->first();
 
             if ($teacher) {
+                $mentorUserId = $teacher->user_id
+                    ? (int) $teacher->user_id
+                    : $this->findMentorUserIdByMobile($teacher->mobile);
+
                 return [
                     'type' => EnrollmentSource::MENTOR_COACHING_TEACHER,
                     'name' => $teacher->name,
                     'mobile' => $teacher->mobile,
-                    'mentoring_user_id' => $teacher->user_id,
+                    'mentoring_user_id' => $mentorUserId,
                     'label' => 'Coaching teacher',
                 ];
             }
@@ -42,7 +48,7 @@ class StudentMentorService
                     'type' => EnrollmentSource::MENTOR_PARENT1,
                     'name' => $student->parent1_name ?: 'Parent 1',
                     'mobile' => $student->parent1_mobile,
-                    'mentoring_user_id' => null,
+                    'mentoring_user_id' => $this->findMentorUserIdByMobile($student->parent1_mobile),
                     'label' => 'Parent (communication)',
                 ];
             }
@@ -52,7 +58,7 @@ class StudentMentorService
                     'type' => EnrollmentSource::MENTOR_PARENT2,
                     'name' => $student->parent2_name ?: 'Parent 2',
                     'mobile' => $student->parent2_mobile,
-                    'mentoring_user_id' => null,
+                    'mentoring_user_id' => $this->findMentorUserIdByMobile($student->parent2_mobile),
                     'label' => 'Parent (communication)',
                 ];
             }
@@ -108,6 +114,7 @@ class StudentMentorService
                 $teacher = CoachingClassTeacher::query()->find($teacherId);
                 if ($teacher && (int) $teacher->coaching_class_id === (int) $coachingClassId) {
                     $mentorType = EnrollmentSource::MENTOR_COACHING_TEACHER;
+                    $this->linkTeacherToMentorUser($teacher);
                     $mentorUserId = $teacher->user_id ?: $mentorUserId;
                 } else {
                     $teacherId = null;
@@ -126,6 +133,12 @@ class StudentMentorService
             $student->mentor_type = $mentorType;
         } else {
             $student->mentor_type = $this->pickParentMentorType($student);
+            if (! $mentorUserId) {
+                $resolved = $this->resolve($student);
+                if (! empty($resolved['mentoring_user_id'])) {
+                    $student->mentor_user_id = $resolved['mentoring_user_id'];
+                }
+            }
         }
 
         $student->save();
@@ -223,13 +236,14 @@ class StudentMentorService
     /**
      * Summary row for admin student lists.
      *
-     * @return array{mapped: bool, label: string, name: ?string, mobile: ?string, source: string, source_label: string}
+     * @return array{mapped: bool, label: string, name: ?string, mobile: ?string, source: string, source_label: string, login_linked: bool}
      */
     public function summaryForList(Student $student): array
     {
         $resolved = $this->resolve($student);
         $source = $student->enrollment_source ?: EnrollmentSource::INDIVIDUAL;
         $mapped = $this->isMapped($student);
+        $loginLinked = (bool) ($resolved['mentoring_user_id'] ?? null);
 
         return [
             'mapped' => $mapped,
@@ -238,6 +252,7 @@ class StudentMentorService
             'mobile' => $mapped ? $resolved['mobile'] : null,
             'source' => $source,
             'source_label' => EnrollmentSource::label($source),
+            'login_linked' => $loginLinked,
         ];
     }
 
@@ -258,6 +273,18 @@ class StudentMentorService
     {
         $resolved = $this->resolve($student->loadMissing('coachingClassTeacher', 'mentorUser'));
         $mentorUserId = $resolved['mentoring_user_id'] ?? $student->mentor_user_id;
+
+        if ($mentorUserId && ! $student->mentor_user_id) {
+            $student->forceFill(['mentor_user_id' => $mentorUserId])->save();
+        }
+
+        if (
+            $mentorUserId
+            && $student->coachingClassTeacher
+            && ! $student->coachingClassTeacher->user_id
+        ) {
+            $this->linkTeacherToMentorUser($student->coachingClassTeacher);
+        }
 
         $active = StudentMentorAssignment::query()
             ->where('student_id', $student->id)
@@ -306,6 +333,10 @@ class StudentMentorService
      */
     public function studentIdsForUser(User $user): array
     {
+        // Heal coaching-teacher → mentor-user links by matching mobile (admin often
+        // creates teachers without user_id, so Mapped shows in admin but mentor login is empty).
+        $this->linkTeachersMatchingUserMobile($user);
+
         $teacherIds = CoachingClassTeacher::query()
             ->where('user_id', $user->id)
             ->pluck('id')
@@ -326,9 +357,12 @@ class StudentMentorService
             ->where('is_active', true)
             ->pluck('student_id');
 
+        $fromParentMobile = $this->studentIdsMatchingNotifyParentMobile($user);
+
         return $fromTeachers
             ->merge($fromMentorUser)
             ->merge($fromAssignments)
+            ->merge($fromParentMobile)
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->values()
@@ -353,5 +387,128 @@ class StudentMentorService
         if (! $this->canAccessStudent($user, $studentId)) {
             abort(403, 'You can only view students enrolled under you.');
         }
+    }
+
+    /**
+     * Link a coaching teacher row to a mentor User when mobiles match.
+     */
+    public function linkTeacherToMentorUser(CoachingClassTeacher $teacher): ?User
+    {
+        if ($teacher->user_id) {
+            return User::query()->find($teacher->user_id);
+        }
+
+        $mentor = $this->findMentorUserByMobile($teacher->mobile);
+
+        if (! $mentor) {
+            return null;
+        }
+
+        $teacher->forceFill(['user_id' => $mentor->id])->save();
+
+        return $mentor;
+    }
+
+    public function findMentorUserIdByMobile(?string $mobile): ?int
+    {
+        return $this->findMentorUserByMobile($mobile)?->id;
+    }
+
+    public function findMentorUserByMobile(?string $mobile): ?User
+    {
+        $needle = StudentIdentity::normalizeMobile($mobile);
+
+        if (! $needle) {
+            return null;
+        }
+
+        return User::query()
+            ->where(function ($query) {
+                $query->where('role', User::ROLE_MENTOR)
+                    ->orWhereHas('groups', fn ($groups) => $groups->where('code', User::ROLE_MENTOR));
+            })
+            ->whereNotNull('mobile')
+            ->where('mobile', '!=', '')
+            ->get(['id', 'name', 'mobile', 'role'])
+            ->first(fn (User $candidate) => StudentIdentity::normalizeMobile($candidate->mobile) === $needle);
+    }
+
+    private function linkTeachersMatchingUserMobile(User $user): void
+    {
+        $needle = StudentIdentity::normalizeMobile($user->mobile);
+
+        if (! $needle) {
+            return;
+        }
+
+        CoachingClassTeacher::query()
+            ->whereNull('user_id')
+            ->where(function ($query) use ($needle) {
+                $query->where('mobile', $needle)
+                    ->orWhere('mobile', 'like', '%'.$needle);
+            })
+            ->get()
+            ->each(function (CoachingClassTeacher $teacher) use ($needle, $user) {
+                if (StudentIdentity::normalizeMobile($teacher->mobile) === $needle) {
+                    $teacher->forceFill(['user_id' => $user->id])->save();
+                }
+            });
+    }
+
+    /**
+     * Individual enrollments where notify-parent mobile matches this mentor's mobile.
+     *
+     * @return Collection<int, int>
+     */
+    private function studentIdsMatchingNotifyParentMobile(User $user): Collection
+    {
+        $needle = StudentIdentity::normalizeMobile($user->mobile);
+
+        if (! $needle) {
+            return collect();
+        }
+
+        $candidates = Student::query()
+            ->where(function ($query) use ($needle) {
+                $query->where(function ($q) use ($needle) {
+                    $q->where('notify_parent1_mobile', true)
+                        ->where(function ($m) use ($needle) {
+                            $m->where('parent1_mobile', $needle)
+                                ->orWhere('parent1_mobile', 'like', '%'.$needle);
+                        });
+                })->orWhere(function ($q) use ($needle) {
+                    $q->where('notify_parent2_mobile', true)
+                        ->where(function ($m) use ($needle) {
+                            $m->where('parent2_mobile', $needle)
+                                ->orWhere('parent2_mobile', 'like', '%'.$needle);
+                        });
+                });
+            })
+            ->get(['id', 'notify_parent1_mobile', 'parent1_mobile', 'notify_parent2_mobile', 'parent2_mobile', 'mentor_user_id']);
+
+        $ids = collect();
+
+        foreach ($candidates as $student) {
+            $match = (
+                $student->notify_parent1_mobile
+                && StudentIdentity::normalizeMobile($student->parent1_mobile) === $needle
+            ) || (
+                $student->notify_parent2_mobile
+                && StudentIdentity::normalizeMobile($student->parent2_mobile) === $needle
+            );
+
+            if (! $match) {
+                continue;
+            }
+
+            $ids->push((int) $student->id);
+
+            if (! $student->mentor_user_id) {
+                $student->forceFill(['mentor_user_id' => $user->id])->save();
+                $this->syncMentorAssignment($student->fresh(['coachingClassTeacher', 'mentorUser']));
+            }
+        }
+
+        return $ids;
     }
 }

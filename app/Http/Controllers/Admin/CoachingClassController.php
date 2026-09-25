@@ -210,11 +210,13 @@ class CoachingClassController extends Controller
             'is_active' => ['boolean'],
         ]);
 
-        $coachingClass->teachers()->create([
+        $teacher = $coachingClass->teachers()->create([
             ...$validated,
             'is_active' => $validated['is_active'] ?? true,
             'sort_order' => (int) $coachingClass->teachers()->max('sort_order') + 1,
         ]);
+
+        $this->mentorService->linkTeacherToMentorUser($teacher);
 
         return back()->with('success', 'Teacher added.');
     }
@@ -238,6 +240,10 @@ class CoachingClassController extends Controller
             ...$validated,
             'is_active' => $validated['is_active'] ?? $teacher->is_active,
         ]);
+
+        if (! $teacher->user_id) {
+            $this->mentorService->linkTeacherToMentorUser($teacher->fresh());
+        }
 
         return back()->with('success', 'Teacher updated.');
     }

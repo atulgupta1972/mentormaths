@@ -5,11 +5,14 @@ namespace Tests\Unit;
 use App\Models\Student;
 use App\Services\StudentMentorService;
 use App\Support\EnrollmentSource;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 class StudentMentorServiceTest extends TestCase
 {
+    use RefreshDatabase;
+
     #[Test]
     public function individual_mentor_requires_notify_tick(): void
     {
@@ -28,6 +31,7 @@ class StudentMentorServiceTest extends TestCase
         $resolved = $service->resolve($student);
         $this->assertSame(EnrollmentSource::MENTOR_PARENT2, $resolved['type']);
         $this->assertSame('Mom', $resolved['name']);
+        $this->assertNull($resolved['mentoring_user_id']);
     }
 
     #[Test]

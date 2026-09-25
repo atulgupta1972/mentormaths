@@ -186,6 +186,127 @@ class MentorClassHubTest extends TestCase
             ->assertRedirect(route('mentor.classes.index'));
     }
 
+    public function test_mentor_sees_students_when_teacher_linked_only_by_matching_mobile(): void
+    {
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+        $grade = GradeLevel::query()->create([
+            'name' => 'Class 6',
+            'sort_order' => 6,
+            'is_active' => true,
+        ]);
+        $board = Board::query()->create([
+            'code' => 'CBSE',
+            'name' => 'CBSE',
+            'is_active' => true,
+        ]);
+
+        $mentor = $this->makeMentor('neeru@example.com', '9625522556');
+
+        $tuition = CoachingClass::query()->create(['name' => 'Neeru Tuition', 'is_active' => true]);
+        // Admin Mapped teacher — name/mobile only, no user_id (the bug case).
+        $teacher = CoachingClassTeacher::query()->create([
+            'coaching_class_id' => $tuition->id,
+            'name' => 'NEERU GUPTA',
+            'mobile' => '9625522556',
+            'user_id' => null,
+            'is_active' => true,
+        ]);
+
+        $student = Student::query()->create([
+            'name' => 'Akshara Singh',
+            'parent1_name' => 'P',
+            'parent1_mobile' => '9000000001',
+            'school_name' => 'S',
+            'enrollment_source' => 'coaching',
+            'coaching_class_id' => $tuition->id,
+            'coaching_class_teacher_id' => $teacher->id,
+            'notify_parent1_mobile' => true,
+            'notify_parent2_mobile' => false,
+            'notify_student_mobile' => false,
+        ]);
+
+        StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'school_name' => 'Demo School',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+            'enrollment_source' => 'coaching',
+            'coaching_class_id' => $tuition->id,
+        ]);
+
+        $this->assertNull($teacher->fresh()->user_id);
+
+        $this->actingAs($mentor)
+            ->get(route('mentor.classes.show', $grade->id))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Mentor/Classes/Show')
+                ->has('examPlanRows', 1)
+                ->where('examPlanRows.0.student_name', 'Akshara Singh'));
+
+        $this->assertSame($mentor->id, $teacher->fresh()->user_id);
+    }
+
+    public function test_mentor_sees_individual_students_when_notify_parent_mobile_matches(): void
+    {
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+        $grade = GradeLevel::query()->create([
+            'name' => 'Class 5',
+            'sort_order' => 5,
+            'is_active' => true,
+        ]);
+        $board = Board::query()->create([
+            'code' => 'CBSE',
+            'name' => 'CBSE',
+            'is_active' => true,
+        ]);
+
+        $mentor = $this->makeMentor('parent.mentor@example.com', '9625522556');
+
+        $student = Student::query()->create([
+            'name' => 'atul gupta',
+            'parent1_name' => 'NEERU GUPTA',
+            'parent1_mobile' => '9625522556',
+            'school_name' => 'S',
+            'enrollment_source' => 'individual',
+            'notify_parent1_mobile' => true,
+            'notify_parent2_mobile' => false,
+            'notify_student_mobile' => false,
+        ]);
+
+        StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'school_name' => 'Demo School',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+            'enrollment_source' => 'individual',
+        ]);
+
+        $this->actingAs($mentor)
+            ->get(route('mentor.classes.show', $grade->id))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Mentor/Classes/Show')
+                ->has('examPlanRows', 1)
+                ->where('examPlanRows.0.student_name', 'atul gupta'));
+
+        $this->assertSame($mentor->id, $student->fresh()->mentor_user_id);
+    }
+
     private function makeChapter(AcademicYear $year, GradeLevel $grade, Board $board): SyllabusChapter
     {
         $maths = Subject::query()->firstOrCreate(
@@ -209,11 +330,12 @@ class MentorClassHubTest extends TestCase
         ]);
     }
 
-    private function makeMentor(string $email = 'mentor@example.com'): User
+    private function makeMentor(string $email = 'mentor@example.com', ?string $mobile = null): User
     {
         $user = User::factory()->create([
             'email' => $email,
             'role' => User::ROLE_TEACHER,
+            'mobile' => $mobile,
             'is_active' => true,
         ]);
 
