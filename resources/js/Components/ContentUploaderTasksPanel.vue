@@ -5,9 +5,11 @@ import GeminiVerificationGuide from '@/Components/GeminiVerificationGuide.vue';
 import { Link, router } from '@inertiajs/vue3';
 
 const props = defineProps({
-    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, corrections_pending: 0, gemini_pending: 0, gemini_done: 0, total_active: 0 }) },
+    summary: { type: Object, default: () => ({ upload_pending: 0, review_pending: 0, convert_pending: 0, concept_pending: 0, corrections_pending: 0, gemini_pending: 0, gemini_done: 0, total_active: 0 }) },
     uploadPending: { type: Array, default: () => [] },
     reviewPending: { type: Array, default: () => [] },
+    convertPending: { type: Array, default: () => [] },
+    conceptPending: { type: Array, default: () => [] },
     correctionsPending: { type: Array, default: () => [] },
     geminiPending: { type: Array, default: () => [] },
     geminiDone: { type: Array, default: () => [] },
@@ -29,6 +31,14 @@ const chapterHref = (task) => {
         return route('content.tasks.show', task.id);
     }
 
+    if (task.is_fill_blank_conversion) {
+        return route('content.tasks.convert', task.id);
+    }
+
+    if (task.is_concept_path_build || task.concept_path_url) {
+        return task.concept_path_url || route('content.textbooks.concept-path', task.chapter.id);
+    }
+
     return route('content.textbooks.show', task.chapter.id);
 };
 
@@ -40,18 +50,29 @@ const geminiProgressLabel = (task) => {
 
     return `${progress.verified}/${progress.total}`;
 };
+
+const hasContent = () =>
+    props.summary.total_active > 0
+    || props.uploadPending.length
+    || props.reviewPending.length
+    || props.convertPending.length
+    || props.conceptPending.length
+    || props.correctionsPending.length
+    || props.geminiPending.length;
 </script>
 
 <template>
     <section
-        v-if="summary.total_active > 0 || uploadPending.length || reviewPending.length || correctionsPending.length || geminiPending.length"
+        v-if="hasContent()"
         class="rounded-xl border border-sky-200 bg-gradient-to-br from-sky-50 to-indigo-50 p-4 shadow-sm"
         :class="compact ? '' : 'space-y-4'"
     >
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-                <h3 class="text-sm font-semibold uppercase tracking-wide text-sky-900">Content upload tasks</h3>
-                <p v-if="!compact" class="mt-1 text-sm text-sky-800">Upload chapter MCQs, review questions, then run Gemini checks on published chapters.</p>
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-sky-900">Content work</h3>
+                <p v-if="!compact" class="mt-1 text-sm text-sky-800">
+                    MCQ upload, fill-in-blank conversion, and concept builder jobs — each shown in its own section.
+                </p>
             </div>
             <Link :href="route('content.tasks.index')" class="text-sm font-medium text-indigo-700 hover:underline">
                 All tasks →
@@ -64,6 +85,18 @@ const geminiProgressLabel = (task) => {
             </span>
             <span class="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-900">
                 Review pending: {{ summary.review_pending }}
+            </span>
+            <span
+                v-if="summary.convert_pending"
+                class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900"
+            >
+                Fill-blank convert: {{ summary.convert_pending }}
+            </span>
+            <span
+                v-if="summary.concept_pending"
+                class="rounded-full bg-fuchsia-100 px-3 py-1 text-xs font-semibold text-fuchsia-900"
+            >
+                Concept builder: {{ summary.concept_pending }}
             </span>
             <span
                 v-if="summary.gemini_pending"
@@ -80,6 +113,53 @@ const geminiProgressLabel = (task) => {
         </div>
 
         <GeminiVerificationGuide v-if="geminiPending.length && !compact" class="mt-4" compact />
+
+        <div v-if="conceptPending.length" class="mt-4 space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-fuchsia-800">Concept builder</p>
+            <p v-if="!compact" class="text-xs text-fuchsia-900/80">
+                Agree rate → build cards → approve → Run full path (required to finish &amp; get paid).
+            </p>
+            <div
+                v-for="task in conceptPending"
+                :key="`concept-${task.id}`"
+                class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-fuchsia-200"
+            >
+                <div>
+                    <p class="font-medium text-gray-900">
+                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
+                    </p>
+                    <p class="text-xs text-gray-500">
+                        Concept builder · {{ task.status_label }} · {{ formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}
+                    </p>
+                </div>
+                <Link :href="chapterHref(task)">
+                    <PrimaryButton type="button" class="!bg-fuchsia-700 !py-2 !text-xs hover:!bg-fuchsia-800">
+                        {{ task.status === 'pending_agreement' ? 'Agree concept rate →' : 'Build concepts →' }}
+                    </PrimaryButton>
+                </Link>
+            </div>
+        </div>
+
+        <div v-if="convertPending.length" class="mt-4 space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-emerald-800">Fill-in-blank conversion</p>
+            <div
+                v-for="task in convertPending"
+                :key="`convert-${task.id}`"
+                class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-emerald-200"
+            >
+                <div>
+                    <p class="font-medium text-gray-900">
+                        {{ task.chapter?.grade_name }} · {{ task.chapter?.textbook_name || 'Book' }} · Ch {{ task.chapter?.chapter_number }} — {{ task.chapter?.title }}
+                    </p>
+                    <p class="text-xs text-gray-500">{{ task.status_label }} · {{ formatInr(task.agreed_amount_inr || task.offered_amount_inr) }}</p>
+                </div>
+                <Link :href="chapterHref(task)">
+                    <PrimaryButton type="button" class="!bg-emerald-700 !py-2 !text-xs hover:!bg-emerald-800">
+                        Convert →
+                    </PrimaryButton>
+                </Link>
+            </div>
+        </div>
 
         <div v-if="geminiPending.length" class="mt-4 space-y-2">
             <p class="text-xs font-semibold uppercase tracking-wide text-indigo-800">Gemini verification pending</p>
@@ -147,7 +227,7 @@ const geminiProgressLabel = (task) => {
         </div>
 
         <div v-if="uploadPending.length" class="mt-4 space-y-2">
-            <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">Upload pending</p>
+            <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">MCQ upload pending</p>
             <div
                 v-for="task in uploadPending"
                 :key="`upload-${task.id}`"

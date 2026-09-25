@@ -1,14 +1,29 @@
 <p>Hello,</p>
 
 <p>
-    <strong>{{ $task->assignee->name }}</strong> submitted
+    <strong>{{ $task->assignee->name }}</strong>
+    @if ($task->isConceptPathBuild())
+        completed the <strong>concept builder</strong> job (approved path + full Run) for
+    @elseif ($task->isFillBlankConversion())
+        submitted fill-in-blank conversion for
+    @else
+        submitted
+    @endif
     <strong>Ch {{ $task->textbookChapter->chapter_number }} — {{ $task->textbookChapter->title }}</strong>
     ({{ $task->textbookChapter->textbook->gradeLevel->name ?? 'Class' }})
-    for admin publish.
+    @unless ($task->isConceptPathBuild())
+        for admin publish
+    @endunless
+    .
 </p>
 
 <p>
-    All questions have been verified. Please review and publish from the admin dashboard:<br>
+    @if ($task->isConceptPathBuild())
+        Payable amount: <strong>₹{{ number_format($task->payableAmountInr()) }}</strong>.
+        Review / mark paid from Finance or Content tasks:<br>
+    @else
+        All questions have been verified. Please review and publish from the admin dashboard:<br>
+    @endif
     <a href="{{ route('admin.content-tasks.index') }}">{{ route('admin.content-tasks.index') }}</a>
 </p>
 

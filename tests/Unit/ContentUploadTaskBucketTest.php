@@ -48,4 +48,15 @@ class ContentUploadTaskBucketTest extends TestCase
         $this->assertSame('Concept builder', $task->uploaderBucketLabel());
         $this->assertSame('Concept builder', $task->workTypeLabel());
     }
+
+    public function test_concept_build_awaiting_agreement_stays_in_concept_bucket(): void
+    {
+        $task = new ContentUploadTask([
+            'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+        ]);
+
+        $this->assertSame('concept_pending', $task->uploaderBucket());
+        $this->assertSame('Agree concept rate', $task->uploaderBucketLabel());
+    }
 }

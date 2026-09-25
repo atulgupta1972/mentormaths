@@ -18,9 +18,14 @@ class ContentTaskAgreementAdmin extends Mailable
     public function envelope(): Envelope
     {
         $chapter = $this->task->textbookChapter;
+        $kind = match (true) {
+            $this->task->isConceptPathBuild() => 'concept builder',
+            $this->task->isFillBlankConversion() => 'fill-in-blank',
+            default => 'MCQ upload',
+        };
 
         return new Envelope(
-            subject: "Mentor Maths — {$this->task->assignee->name} agreed · Ch {$chapter->chapter_number} · ₹{$this->task->agreed_amount_inr}",
+            subject: "Mentor Maths — {$this->task->assignee->name} agreed · {$kind} · Ch {$chapter->chapter_number} · ₹{$this->task->agreed_amount_inr}",
         );
     }
 

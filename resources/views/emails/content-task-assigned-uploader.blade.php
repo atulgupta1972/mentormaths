@@ -4,12 +4,24 @@
     You have been assigned
     <strong>{{ $tasks->count() }}</strong>
     textbook chapter{{ $tasks->count() === 1 ? '' : 's' }} for
-    <strong>{{ $tasks->contains(fn ($task) => $task->isFillBlankConversion()) ? 'fill-in-blank conversion' : 'content upload (MCQ)' }}</strong>
+    <strong>
+        @if ($allConcept)
+            concept builder
+        @elseif ($allFillBlank)
+            fill-in-blank conversion
+        @else
+            content upload (MCQ)
+        @endif
+    </strong>
     on Mentor Maths.
 </p>
 
 <p>
-    @if ($tasks->contains(fn ($task) => $task->isFillBlankConversion()) && ! $tasks->contains(fn ($task) => ! $task->isFillBlankConversion()))
+    @if ($allConcept)
+        <strong>Work type:</strong> Concept builder (teaching cards for the chapter).
+        Not MCQ upload. Build the concept path from the chapter PDF, approve it, then
+        <strong>Run</strong> the full path end-to-end to complete the job and earn the offered rate.
+    @elseif ($allFillBlank)
         <strong>Work type:</strong> Convert published MCQs to fill-in-blank (and written).
         Skip number-names. Check every included blank as a student (key hidden), then submit for admin publish.
     @else
@@ -39,7 +51,9 @@
         </p>
         <p style="margin: 0 0 6px;">
             <strong>What to do:</strong>
-            @if ($task->isFillBlankConversion())
+            @if ($task->isConceptPathBuild())
+                Build concept cards for this chapter → Approve → Run the full concept path (mandatory).
+            @elseif ($task->isFillBlankConversion())
                 Convert each MCQ to a fill-in-blank, Check as a student, skip number-names.
             @else
                 Upload MCQs for this chapter (from the textbook PDF / Cursor JSON),
@@ -60,10 +74,15 @@
 
 <p><strong>Brief process:</strong></p>
 <ol>
-    <li>Log in → open <a href="{{ $tasksUrl }}">My content tasks</a>.</li>
+    <li>Log in → open <a href="{{ $tasksUrl }}">My content tasks</a> (look for the <strong>Concept builder</strong> section if this is a concept job).</li>
     <li>Open each chapter task above and review class, chapter, and offered rate.</li>
     <li>Click <strong>I agree — start work</strong> only if you accept the rate.</li>
-    @if ($tasks->contains(fn ($task) => $task->isFillBlankConversion()) && ! $tasks->contains(fn ($task) => ! $task->isFillBlankConversion()))
+    @if ($allConcept)
+        <li>Open <strong>Build concepts</strong> for the chapter (Concept path editor).</li>
+        <li>Create / edit teaching cards from the PDF, attach figures, then <strong>Approve concept flow</strong>.</li>
+        <li>Click <strong>Run concepts</strong> and walk through <em>every</em> card to the end — that finishes the job for pay.</li>
+        <li>Do one concept chapter at a time before starting the next assigned concept job.</li>
+    @elseif ($allFillBlank)
         <li>Open Convert, skip number-names, edit each blank, then <strong>Check as a student</strong>.</li>
         <li>Submit when every included blank is Checked. Admin publishes fill-in-blank and written.</li>
     @else
@@ -73,7 +92,7 @@
     @endif
 </ol>
 
-@if ($guideUrl)
+@if ($guideUrl && ! $allConcept)
     <p>
         Screen-wise guide:
         <a href="{{ $guideUrl }}">{{ $guideUrl }}</a>
@@ -83,6 +102,9 @@
 <p>
     Login: <a href="{{ $loginUrl }}">{{ $loginUrl }}</a><br>
     All my tasks: <a href="{{ $tasksUrl }}">{{ $tasksUrl }}</a>
+    @if ($primaryTaskUrl)
+        <br>This assignment: <a href="{{ $primaryTaskUrl }}">{{ $primaryTaskUrl }}</a>
+    @endif
 </p>
 
 <p>Thank you,<br>{{ config('app.name') }}</p>

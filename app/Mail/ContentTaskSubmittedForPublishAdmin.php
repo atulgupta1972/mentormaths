@@ -18,9 +18,14 @@ class ContentTaskSubmittedForPublishAdmin extends Mailable
     public function envelope(): Envelope
     {
         $chapter = $this->task->textbookChapter;
+        $kind = match (true) {
+            $this->task->isConceptPathBuild() => 'Concept builder done',
+            $this->task->isFillBlankConversion() => 'Fill-blank ready',
+            default => 'Publish ready',
+        };
 
         return new Envelope(
-            subject: "Mentor Maths — Publish ready · Ch {$chapter->chapter_number} · {$this->task->assignee->name}",
+            subject: "Mentor Maths — {$kind} · Ch {$chapter->chapter_number} · {$this->task->assignee->name}",
         );
     }
 

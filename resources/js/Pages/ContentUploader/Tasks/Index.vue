@@ -295,7 +295,7 @@ const geminiProgressLabel = (task) => {
                                             :href="chapterHref(task)"
                                             class="font-medium text-fuchsia-700 hover:underline"
                                         >
-                                            Build concepts →
+                                            {{ task.status === 'pending_agreement' ? 'Agree concept →' : 'Build concepts →' }}
                                         </Link>
                                         <Link
                                             v-else-if="task.bucket === 'upload_pending'"

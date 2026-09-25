@@ -336,10 +336,7 @@ class ContentUploadTask extends Model
                 return 'done';
             }
 
-            if ($this->status === self::STATUS_PENDING_AGREEMENT) {
-                return 'upload_pending';
-            }
-
+            // Keep agree + build + run in one Concept builder bucket (not MCQ upload).
             return 'concept_pending';
         }
 
@@ -393,12 +390,14 @@ class ContentUploadTask extends Model
     public function uploaderBucketLabel(): string
     {
         return match ($this->uploaderBucket()) {
-            'upload_pending' => ($this->isFillBlankConversion() || $this->isConceptPathBuild())
+            'upload_pending' => $this->isFillBlankConversion()
                 ? 'Agree rate'
                 : 'Upload pending',
             'review_pending' => 'Review pending',
             'convert_pending' => 'Fill-in-blank conversion',
-            'concept_pending' => 'Concept builder',
+            'concept_pending' => $this->status === self::STATUS_PENDING_AGREEMENT
+                ? 'Agree concept rate'
+                : 'Concept builder',
             default => 'Complete',
         };
     }
