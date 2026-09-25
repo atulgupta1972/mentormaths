@@ -133,7 +133,7 @@ class ContentUploaderDashboardService
             'work_type_label' => $task->workTypeLabel(),
             'is_fill_blank_conversion' => $task->isFillBlankConversion(),
             'is_concept_path_build' => $task->isConceptPathBuild(),
-            'concept_path_url' => $task->isConceptPathBuild() && $chapter
+            'concept_path_url' => $task->isConceptPathBuild() && $chapter && $hasPdf
                 ? route('content.textbooks.concept-path', $chapter)
                 : null,
             'status' => $task->status,

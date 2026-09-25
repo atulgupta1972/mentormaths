@@ -14,10 +14,6 @@ class ConceptPathJobService
 {
     public const DEFAULT_AMOUNT_INR = 50;
 
-    public function __construct(
-        private TextbookChapterBookService $bookService,
-    ) {}
-
     public function assign(
         TextbookChapter $chapter,
         User $uploader,
@@ -25,10 +21,6 @@ class ConceptPathJobService
         ?int $amountOverrideInr = null,
         ?string $adminNotes = null,
     ): ContentUploadTask {
-        if (! $this->bookService->hasStoredPdf($chapter)) {
-            throw new InvalidArgumentException('Upload the chapter PDF before assigning concept builder.');
-        }
-
         $existing = ContentUploadTask::query()
             ->where('textbook_chapter_id', $chapter->id)
             ->where('work_type', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD)
@@ -44,6 +36,8 @@ class ConceptPathJobService
         if ($offered <= 0) {
             throw new InvalidArgumentException('Concept builder rate must be at least ₹1.');
         }
+
+        // PDF may be missing — assignee uploads it, then builds concepts and Runs.
 
         $task = ContentUploadTask::query()->create([
             'textbook_chapter_id' => $chapter->id,

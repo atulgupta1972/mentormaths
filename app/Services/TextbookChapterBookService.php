@@ -149,6 +149,71 @@ class TextbookChapterBookService
     }
 
     /**
+     * Link a syllabus chapter to a book without requiring a PDF yet
+     * (admin assigns concept builder; uploader uploads the PDF later).
+     */
+    public function ensureChapterLinkedForSyllabus(
+        SyllabusChapter $syllabusChapter,
+        int $gradeLevelId,
+        User $user,
+        ?int $textbookId = null,
+        ?string $bookName = null,
+        ?string $bookCode = null,
+    ): TextbookChapter {
+        $syllabusChapter->loadMissing('syllabusVersion');
+        $boardId = (int) ($syllabusChapter->syllabusVersion?->board_id ?? 0);
+
+        if ($boardId <= 0) {
+            throw new \InvalidArgumentException('This syllabus chapter has no board. Fix the syllabus link first.');
+        }
+
+        if ($textbookId) {
+            $textbook = Textbook::query()->findOrFail($textbookId);
+
+            if ((int) $textbook->grade_level_id !== $gradeLevelId) {
+                throw new \InvalidArgumentException('Selected book is not for this class.');
+            }
+
+            if ($textbook->board_id !== null && (int) $textbook->board_id !== $boardId) {
+                throw new \InvalidArgumentException('Selected book belongs to a different board.');
+            }
+
+            if ($textbook->board_id === null) {
+                $textbook->update(['board_id' => $boardId]);
+            }
+        } else {
+            $textbook = $this->resolveTextbookForBoard(
+                $gradeLevelId,
+                $boardId,
+                (string) $bookName,
+                (string) $bookCode,
+                $user->id,
+            );
+        }
+
+        $chapterNumber = $syllabusChapter->numericChapterNumber();
+
+        $chapter = TextbookChapter::query()
+            ->where('textbook_id', $textbook->id)
+            ->where('syllabus_chapter_id', $syllabusChapter->id)
+            ->first();
+
+        if (! $chapter) {
+            $chapter = TextbookChapter::query()->create([
+                'textbook_id' => $textbook->id,
+                'syllabus_chapter_id' => $syllabusChapter->id,
+                'chapter_number' => $chapterNumber,
+                'title' => $syllabusChapter->name,
+                'pdf_path' => null,
+                'status' => TextbookChapter::STATUS_DRAFT,
+                'created_by' => $user->id,
+            ]);
+        }
+
+        return $chapter->fresh(['textbook.gradeLevel', 'syllabusChapter']);
+    }
+
+    /**
      * Create or attach a syllabus chapter PDF under a chosen book (concept-builder upload-first flow).
      */
     public function ensureChapterPdfForSyllabus(

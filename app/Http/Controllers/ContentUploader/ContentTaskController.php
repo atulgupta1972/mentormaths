@@ -65,9 +65,18 @@ class ContentTaskController extends Controller
         }
 
         if ($contentTask->isConceptPathBuild() && ! $contentTask->isAwaitingAgreement()) {
+            $chapter = $contentTask->textbookChapter;
+            $hasPdf = $chapter && app(\App\Services\TextbookChapterBookService::class)->hasStoredPdf($chapter);
+
+            if ($hasPdf) {
+                return redirect()
+                    ->route('content.textbooks.concept-path', $chapter)
+                    ->with('success', 'Build concepts, Approve, then Run the full path to submit for ₹'.$contentTask->payableAmountInr().'.');
+            }
+
             return redirect()
-                ->route('content.textbooks.concept-path', $contentTask->textbookChapter)
-                ->with('success', 'Build concepts, Approve, then Run the full path to submit for ₹'.$contentTask->payableAmountInr().'.');
+                ->route('content.textbooks.show', $chapter)
+                ->with('success', 'Upload the chapter PDF first, then Build concepts → Approve → Run (₹'.$contentTask->payableAmountInr().').');
         }
 
         $contentTask->load(['textbookChapter.textbook.gradeLevel']);
@@ -130,9 +139,18 @@ class ContentTaskController extends Controller
         }
 
         if ($contentTask->isConceptPathBuild()) {
+            $chapter = $contentTask->textbookChapter;
+            $hasPdf = $chapter && app(\App\Services\TextbookChapterBookService::class)->hasStoredPdf($chapter);
+
+            if ($hasPdf) {
+                return redirect()
+                    ->route('content.textbooks.concept-path', $chapter)
+                    ->with('success', 'Rate agreed. Build the concept path, Approve, then Run concepts to finish (₹'.$contentTask->payableAmountInr().').');
+            }
+
             return redirect()
-                ->route('content.textbooks.concept-path', $contentTask->textbookChapter)
-                ->with('success', 'Rate agreed. Build the concept path, Approve, then Run concepts to finish (₹'.$contentTask->payableAmountInr().').');
+                ->route('content.textbooks.show', $chapter)
+                ->with('success', 'Rate agreed. Upload the chapter PDF first, then Build concepts → Approve → Run (₹'.$contentTask->payableAmountInr().').');
         }
 
         if ($contentTask->isFillBlankConversion()) {

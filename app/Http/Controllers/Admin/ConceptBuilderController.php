@@ -133,7 +133,7 @@ class ConceptBuilderController extends Controller
                                     'amount_inr' => $job->rateUnitInr(),
                                     'task_url' => route('admin.content-tasks.show', $job),
                                 ] : null,
-                                'can_assign_concept' => ! $uploaderMode && $hasPdf && ! $job,
+                                'can_assign_concept' => ! $uploaderMode && ! $job,
                             ];
                         })
                         ->values()
@@ -203,7 +203,8 @@ class ConceptBuilderController extends Controller
             'textbook_id' => ['nullable', 'integer', Rule::exists('textbooks', 'id')],
             'book_name' => ['required_without:textbook_id', 'nullable', 'string', 'max:255'],
             'book_code' => ['required_without:textbook_id', 'nullable', 'string', 'max:32', 'alpha_dash'],
-            'pdf' => ['required', 'file', 'mimes:pdf', 'max:51200'],
+            // Admin may link a book without PDF and assign; uploader must still upload PDF when they submit.
+            'pdf' => [$uploaderMode ? 'required' : 'nullable', 'file', 'mimes:pdf', 'max:51200'],
         ], [
             'pdf.required' => 'Choose a chapter PDF file.',
             'pdf.mimes' => 'Only PDF files are allowed.',
@@ -222,18 +223,35 @@ class ConceptBuilderController extends Controller
         }
 
         try {
-            $chapter = $this->bookService->ensureChapterPdfForSyllabus(
-                $syllabusChapter,
-                (int) $gradeLevel->id,
-                $request->user(),
-                $uploadedPdf,
-                isset($validated['textbook_id']) ? (int) $validated['textbook_id'] : null,
-                $validated['book_name'] ?? null,
-                $validated['book_code'] ?? null,
-                $uploaderMode,
-            );
+            if ($uploadedPdf) {
+                $chapter = $this->bookService->ensureChapterPdfForSyllabus(
+                    $syllabusChapter,
+                    (int) $gradeLevel->id,
+                    $request->user(),
+                    $uploadedPdf,
+                    isset($validated['textbook_id']) ? (int) $validated['textbook_id'] : null,
+                    $validated['book_name'] ?? null,
+                    $validated['book_code'] ?? null,
+                    $uploaderMode,
+                );
+            } else {
+                $chapter = $this->bookService->ensureChapterLinkedForSyllabus(
+                    $syllabusChapter,
+                    (int) $gradeLevel->id,
+                    $request->user(),
+                    isset($validated['textbook_id']) ? (int) $validated['textbook_id'] : null,
+                    $validated['book_name'] ?? null,
+                    $validated['book_code'] ?? null,
+                );
+            }
         } catch (\InvalidArgumentException $exception) {
             return back()->with('error', $exception->getMessage());
+        }
+
+        if (! $uploadedPdf) {
+            return redirect()
+                ->route($uploaderMode ? 'content.concept-builder.index' : 'admin.concept-builder.index')
+                ->with('success', 'Book linked for '.($chapter->textbook?->name ?? 'book').' — assign concept builder; uploader will upload the PDF.');
         }
 
         $conceptPathUrl = $uploaderMode

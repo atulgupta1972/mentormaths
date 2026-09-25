@@ -103,6 +103,73 @@ class ConceptBuilderTest extends TestCase
         $response->assertRedirect(route('admin.textbooks.concept-path', $newChapter));
     }
 
+    public function test_admin_can_assign_concept_builder_when_pdf_missing(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $grade, , $upload] = $this->seedConceptBuilder(withPdf: false);
+        $upload->update(['pdf_path' => null]);
+
+        $uploader = tap(User::factory()->create(['role' => User::ROLE_TEACHER]), function (User $user) {
+            app(UserGroupService::class)->attachGroupByCode($user, User::ROLE_CONTENT_UPLOADER);
+        });
+
+        $this->actingAs($admin)
+            ->withSession([AdminGradeContext::SESSION_KEY => $grade->id])
+            ->get(route('admin.concept-builder.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('chapters.0.uploads.0.has_pdf', false)
+                ->where('chapters.0.uploads.0.can_assign_concept', true)
+            );
+
+        $this->actingAs($admin)
+            ->post(route('admin.content-tasks.assign-concept-path'), [
+                'textbook_chapter_id' => $upload->id,
+                'assigned_to_user_id' => $uploader->id,
+                'offered_amount_inr' => 50,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('content_upload_tasks', [
+            'textbook_chapter_id' => $upload->id,
+            'assigned_to_user_id' => $uploader->id,
+            'work_type' => \App\Models\ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'offered_amount_inr' => 50,
+        ]);
+    }
+
+    public function test_admin_can_link_book_without_pdf_for_later_assign(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $grade, $syllabusChapter] = $this->seedConceptBuilder(withPdf: true);
+
+        $other = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'code' => 'ncert',
+            'name' => 'NCERT Maths',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession([AdminGradeContext::SESSION_KEY => $grade->id])
+            ->post(route('admin.concept-builder.store'), [
+                'syllabus_chapter_id' => $syllabusChapter->id,
+                'textbook_id' => $other->id,
+            ])
+            ->assertRedirect(route('admin.concept-builder.index'));
+
+        $linked = TextbookChapter::query()
+            ->where('textbook_id', $other->id)
+            ->where('syllabus_chapter_id', $syllabusChapter->id)
+            ->first();
+
+        $this->assertNotNull($linked);
+        $this->assertNull($linked->pdf_path);
+    }
+
     public function test_concept_builder_marks_rd_sharma_books_for_ui_filter(): void
     {
         $this->withoutVite();

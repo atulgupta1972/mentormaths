@@ -198,7 +198,7 @@ const submitUpload = () => {
 
     const payload = {
         syllabus_chapter_id: form.syllabus_chapter_id,
-        pdf: form.pdf,
+        pdf: form.pdf || null,
     };
 
     if (uploadUi.mode === 'existing') {
@@ -214,6 +214,7 @@ const submitUpload = () => {
     form.transform(() => payload).post(props.storeUrl, {
         forceFormData: true,
         onFinish: () => form.transform((data) => data),
+        onSuccess: () => closeUpload(),
     });
 };
 </script>
@@ -389,7 +390,7 @@ const submitUpload = () => {
                                                     >
                                                 </div>
                                                 <button type="submit" class="rounded-md bg-fuchsia-700 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-fuchsia-800">
-                                                    Assign concept @ ₹{{ defaultConceptAmountInr }}
+                                                    {{ upload.has_pdf ? `Assign concept @ ₹${defaultConceptAmountInr}` : `Assign (uploader uploads PDF) @ ₹${defaultConceptAmountInr}` }}
                                                 </button>
                                             </form>
                                         </div>
@@ -406,7 +407,7 @@ const submitUpload = () => {
                                     class="rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-indigo-800 hover:bg-indigo-50"
                                     @click="uploadForId === row.syllabus_chapter_id ? closeUpload() : openUpload(row)"
                                 >
-                                    {{ uploadForId === row.syllabus_chapter_id ? 'Cancel' : (row.uploads?.length ? 'Add book / upload PDF' : 'Upload chapter PDF') }}
+                                    {{ uploadForId === row.syllabus_chapter_id ? 'Cancel' : (row.uploads?.length ? 'Add / link book' : 'Link book / upload PDF') }}
                                 </button>
                             </div>
 
@@ -416,7 +417,9 @@ const submitUpload = () => {
                                 @submit.prevent="submitUpload"
                             >
                                 <p class="text-xs font-semibold text-indigo-950">
-                                    Upload PDF for <span class="font-bold">{{ row.label }}</span> — pick which book this PDF belongs to.
+                                    Link <span class="font-bold">{{ row.label }}</span> to a book.
+                                    <span v-if="!uploaderMode">PDF is optional — assign without PDF and the uploader will upload it.</span>
+                                    <span v-else>Upload the chapter PDF to continue.</span>
                                 </p>
 
                                 <div class="flex flex-wrap gap-4 text-xs text-slate-800">
@@ -478,19 +481,24 @@ const submitUpload = () => {
                                 </div>
 
                                 <div>
-                                    <label class="mb-1 block text-xs font-medium text-slate-700">Chapter PDF</label>
+                                    <label class="mb-1 block text-xs font-medium text-slate-700">
+                                        Chapter PDF
+                                        <span v-if="!uploaderMode" class="font-normal text-slate-500">(optional — leave empty if uploader will upload)</span>
+                                    </label>
                                     <input
                                         type="file"
                                         accept="application/pdf"
                                         class="block w-full text-sm"
-                                        required
+                                        :required="uploaderMode"
                                         @change="onPdfChange"
                                     >
                                     <InputError :message="uploadUi.error || form.errors.pdf" class="mt-1" />
                                 </div>
 
                                 <PrimaryButton type="submit" class="!text-xs" :disabled="form.processing || !!uploadUi.error">
-                                    {{ form.processing ? 'Uploading…' : 'Upload PDF & open concept path' }}
+                                    <template v-if="form.processing">Saving…</template>
+                                    <template v-else-if="uploaderMode || form.pdf">Upload PDF &amp; open concept path</template>
+                                    <template v-else>Link book (no PDF yet)</template>
                                 </PrimaryButton>
                             </form>
                         </li>

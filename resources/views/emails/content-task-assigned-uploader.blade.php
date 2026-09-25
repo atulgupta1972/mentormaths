@@ -19,8 +19,8 @@
 <p>
     @if ($allConcept)
         <strong>Work type:</strong> Concept builder (teaching cards for the chapter).
-        Not MCQ upload. Build the concept path from the chapter PDF, approve it, then
-        <strong>Run</strong> the full path end-to-end to complete the job and earn the offered rate.
+        Not MCQ upload. If the chapter PDF is missing, upload it first. Then build the concept path,
+        approve it, and <strong>Run</strong> the full path end-to-end to complete the job and earn the offered rate.
     @elseif ($allFillBlank)
         <strong>Work type:</strong> Convert published MCQs to fill-in-blank (and written).
         Skip number-names. Check every included blank as a student (key hidden), then submit for admin publish.
@@ -52,6 +52,9 @@
         <p style="margin: 0 0 6px;">
             <strong>What to do:</strong>
             @if ($task->isConceptPathBuild())
+                @if (! filled($chapter?->pdf_path))
+                    Upload the chapter PDF →
+                @endif
                 Build concept cards for this chapter → Approve → Run the full concept path (mandatory).
             @elseif ($task->isFillBlankConversion())
                 Convert each MCQ to a fill-in-blank, Check as a student, skip number-names.
@@ -78,7 +81,7 @@
     <li>Open each chapter task above and review class, chapter, and offered rate.</li>
     <li>Click <strong>I agree — start work</strong> only if you accept the rate.</li>
     @if ($allConcept)
-        <li>Open <strong>Build concepts</strong> for the chapter (Concept path editor).</li>
+        <li>Open <strong>Build concepts</strong> for the chapter (Concept path editor). If PDF is missing, open the chapter page and upload it first.</li>
         <li>Create / edit teaching cards from the PDF, attach figures, then <strong>Approve concept flow</strong>.</li>
         <li>Click <strong>Run concepts</strong> and walk through <em>every</em> card to the end — that finishes the job for pay.</li>
         <li>Do one concept chapter at a time before starting the next assigned concept job.</li>

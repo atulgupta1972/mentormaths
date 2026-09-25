@@ -36,7 +36,10 @@ const chapterHref = (task) => {
         return route('content.tasks.convert', task.id);
     }
 
-    if (task.is_concept_path_build || task.concept_path_url) {
+    if (task.is_concept_path_build) {
+        if (!task.has_pdf && task.chapter?.id) {
+            return route('content.textbooks.show', task.chapter.id);
+        }
         return task.concept_path_url || route('content.textbooks.concept-path', task.chapter.id);
     }
 
