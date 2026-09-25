@@ -20,6 +20,7 @@ class ConceptPathJobService
         User $admin,
         ?int $amountOverrideInr = null,
         ?string $adminNotes = null,
+        bool $notify = true,
     ): ContentUploadTask {
         $existing = ContentUploadTask::query()
             ->where('textbook_chapter_id', $chapter->id)
@@ -50,9 +51,41 @@ class ConceptPathJobService
             'admin_notes' => $adminNotes,
         ]);
 
-        ContentOperationsMailer::notifyAssigned($uploader, [$task->fresh(['textbookChapter.textbook.gradeLevel'])]);
+        if ($notify) {
+            ContentOperationsMailer::notifyAssigned($uploader, [$task->fresh(['textbookChapter.textbook.gradeLevel'])]);
+        }
 
         return $task->fresh(['assignee', 'textbookChapter.textbook.gradeLevel']);
+    }
+
+    /**
+     * Assign several chapters to one uploader in one go (single email).
+     *
+     * @param  list<TextbookChapter>  $chapters
+     * @return list<ContentUploadTask>
+     */
+    public function assignMany(
+        array $chapters,
+        User $uploader,
+        User $admin,
+        ?int $amountOverrideInr = null,
+        ?string $adminNotes = null,
+    ): array {
+        if ($chapters === []) {
+            throw new InvalidArgumentException('Select at least one chapter to assign.');
+        }
+
+        $tasks = [];
+        foreach ($chapters as $chapter) {
+            $tasks[] = $this->assign($chapter, $uploader, $admin, $amountOverrideInr, $adminNotes, notify: false);
+        }
+
+        ContentOperationsMailer::notifyAssigned(
+            $uploader,
+            collect($tasks)->map(fn (ContentUploadTask $task) => $task->fresh(['textbookChapter.textbook.gradeLevel']))->all(),
+        );
+
+        return $tasks;
     }
 
     /**

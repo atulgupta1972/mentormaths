@@ -20,10 +20,17 @@ const page = usePage();
 const uploadForId = ref(null);
 const assignForms = reactive({});
 const assignOpenId = ref(null);
+const selectedIds = ref([]);
+const batchAssigning = ref(false);
 
 /** Concept paths belong on school textbooks — hide RD Sharma by default. */
 const hideRdSharma = ref(true);
 const bookFilterId = ref('');
+
+const batchForm = reactive({
+    assigned_to_user_id: props.contentUploaders[0]?.id ?? '',
+    offered_amount_inr: props.defaultConceptAmountInr,
+});
 
 const ensureAssignForm = (uploadId) => {
     if (!assignForms[uploadId]) {
@@ -116,6 +123,38 @@ const tableRows = computed(() => {
 const pendingRows = computed(() => tableRows.value.filter((r) => !r.built));
 const builtRows = computed(() => tableRows.value.filter((r) => r.built));
 
+const assignablePendingRows = computed(() =>
+    pendingRows.value.filter((r) => r.upload?.can_assign_concept),
+);
+
+const selectedCount = computed(() => selectedIds.value.length);
+
+const allAssignableSelected = computed(() => {
+    const ids = assignablePendingRows.value.map((r) => r.upload.id);
+    return ids.length > 0 && ids.every((id) => selectedIds.value.includes(id));
+});
+
+const toggleSelect = (uploadId) => {
+    const id = Number(uploadId);
+    if (selectedIds.value.includes(id)) {
+        selectedIds.value = selectedIds.value.filter((x) => x !== id);
+    } else {
+        selectedIds.value = [...selectedIds.value, id];
+    }
+};
+
+const toggleSelectAllAssignable = () => {
+    if (allAssignableSelected.value) {
+        selectedIds.value = [];
+        return;
+    }
+    selectedIds.value = assignablePendingRows.value.map((r) => r.upload.id);
+};
+
+const clearSelection = () => {
+    selectedIds.value = [];
+};
+
 const assignConcept = (upload) => {
     const form = ensureAssignForm(upload.id);
     if (!form.assigned_to_user_id) {
@@ -126,6 +165,34 @@ const assignConcept = (upload) => {
         textbook_chapter_id: upload.id,
         assigned_to_user_id: form.assigned_to_user_id,
         offered_amount_inr: form.offered_amount_inr || props.defaultConceptAmountInr,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            assignOpenId.value = null;
+            selectedIds.value = selectedIds.value.filter((id) => id !== upload.id);
+        },
+    });
+};
+
+const assignSelected = () => {
+    if (!selectedIds.value.length || !batchForm.assigned_to_user_id) {
+        return;
+    }
+
+    batchAssigning.value = true;
+    router.post(route('admin.content-tasks.assign-concept-path'), {
+        textbook_chapter_ids: selectedIds.value,
+        assigned_to_user_id: batchForm.assigned_to_user_id,
+        offered_amount_inr: batchForm.offered_amount_inr || props.defaultConceptAmountInr,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            batchAssigning.value = false;
+        },
+        onSuccess: () => {
+            selectedIds.value = [];
+            assignOpenId.value = null;
+        },
     });
 };
 
@@ -344,11 +411,55 @@ const isFirstPendingForChapter = (row) => {
                 <template v-else>
                     <!-- Needs work -->
                     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-3 py-1.5">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5">
                             <h3 class="text-xs font-bold uppercase tracking-wide text-amber-950">
                                 Needs concept builder
                             </h3>
                             <span class="text-[11px] font-semibold text-amber-800">{{ pendingRows.length }}</span>
+                        </div>
+
+                        <div
+                            v-if="!uploaderMode && assignablePendingRows.length"
+                            class="sticky top-0 z-10 flex flex-wrap items-end gap-2 border-b border-fuchsia-200 bg-fuchsia-50 px-3 py-2"
+                        >
+                            <p class="mr-auto text-xs text-fuchsia-950">
+                                <strong>{{ selectedCount }}</strong> selected
+                                <button
+                                    v-if="selectedCount"
+                                    type="button"
+                                    class="ml-2 text-[10px] font-semibold uppercase underline"
+                                    @click="clearSelection"
+                                >
+                                    Clear
+                                </button>
+                            </p>
+                            <div>
+                                <label class="text-[10px] font-semibold uppercase text-fuchsia-800">Uploader</label>
+                                <select
+                                    v-model="batchForm.assigned_to_user_id"
+                                    class="mt-0.5 block rounded-md border-gray-300 py-1 text-xs"
+                                >
+                                    <option value="" disabled>Select</option>
+                                    <option v-for="person in contentUploaders" :key="person.id" :value="person.id">{{ person.name }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-semibold uppercase text-fuchsia-800">₹ each</label>
+                                <input
+                                    v-model="batchForm.offered_amount_inr"
+                                    type="number"
+                                    min="1"
+                                    class="mt-0.5 w-16 rounded-md border-gray-300 py-1 text-xs"
+                                >
+                            </div>
+                            <button
+                                type="button"
+                                class="rounded-md bg-fuchsia-700 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-fuchsia-800 disabled:opacity-50"
+                                :disabled="!selectedCount || !batchForm.assigned_to_user_id || batchAssigning"
+                                @click="assignSelected"
+                            >
+                                {{ batchAssigning ? 'Assigning…' : `Assign ${selectedCount || ''} selected` }}
+                            </button>
                         </div>
 
                         <div v-if="!pendingRows.length" class="px-3 py-4 text-sm text-slate-500">
@@ -359,6 +470,16 @@ const isFirstPendingForChapter = (row) => {
                             <table class="min-w-full text-left text-sm">
                                 <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                                     <tr>
+                                        <th v-if="!uploaderMode" class="w-8 px-2 py-1.5">
+                                            <input
+                                                type="checkbox"
+                                                class="rounded border-gray-300 text-fuchsia-700 focus:ring-fuchsia-500"
+                                                :checked="allAssignableSelected"
+                                                :disabled="!assignablePendingRows.length"
+                                                title="Select all assignable"
+                                                @change="toggleSelectAllAssignable"
+                                            >
+                                        </th>
                                         <th class="px-3 py-1.5">Chapter</th>
                                         <th class="px-3 py-1.5">Book</th>
                                         <th class="px-3 py-1.5">Status</th>
@@ -368,7 +489,19 @@ const isFirstPendingForChapter = (row) => {
                                 </thead>
                                 <tbody class="divide-y divide-slate-100">
                                     <template v-for="row in pendingRows" :key="row.key">
-                                        <tr class="align-middle hover:bg-slate-50/80">
+                                        <tr
+                                            class="align-middle hover:bg-slate-50/80"
+                                            :class="row.upload && selectedIds.includes(row.upload.id) ? 'bg-fuchsia-50/50' : ''"
+                                        >
+                                            <td v-if="!uploaderMode" class="px-2 py-1.5">
+                                                <input
+                                                    v-if="row.upload?.can_assign_concept"
+                                                    type="checkbox"
+                                                    class="rounded border-gray-300 text-fuchsia-700 focus:ring-fuchsia-500"
+                                                    :checked="selectedIds.includes(row.upload.id)"
+                                                    @change="toggleSelect(row.upload.id)"
+                                                >
+                                            </td>
                                             <td class="max-w-[14rem] px-3 py-1.5">
                                                 <p class="truncate font-medium text-slate-900" :title="row.chapter.label">
                                                     {{ row.chapter.label }}
@@ -410,7 +543,7 @@ const isFirstPendingForChapter = (row) => {
                                                         class="rounded border border-fuchsia-300 bg-fuchsia-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-fuchsia-900 hover:bg-fuchsia-100"
                                                         @click="assignOpenId = assignOpenId === row.upload.id ? null : row.upload.id"
                                                     >
-                                                        {{ assignOpenId === row.upload.id ? 'Cancel' : 'Assign' }}
+                                                        {{ assignOpenId === row.upload.id ? 'Cancel' : 'Assign 1' }}
                                                     </button>
                                                 </template>
                                                 <span v-else class="text-xs text-slate-400">—</span>
@@ -451,7 +584,7 @@ const isFirstPendingForChapter = (row) => {
                                             </td>
                                         </tr>
                                         <tr v-if="row.upload && assignOpenId === row.upload.id && row.upload.can_assign_concept">
-                                            <td colspan="5" class="bg-fuchsia-50/70 px-3 py-2">
+                                            <td :colspan="uploaderMode ? 5 : 6" class="bg-fuchsia-50/70 px-3 py-2">
                                                 <form class="flex flex-wrap items-end gap-2" @submit.prevent="assignConcept(row.upload)">
                                                     <div>
                                                         <label class="text-[10px] font-semibold uppercase text-fuchsia-800">Uploader</label>
@@ -480,7 +613,7 @@ const isFirstPendingForChapter = (row) => {
                                             </td>
                                         </tr>
                                         <tr v-if="uploadForId === row.chapter.syllabus_chapter_id && isFirstPendingForChapter(row)">
-                                            <td colspan="5" class="bg-indigo-50/60 px-3 py-2">
+                                            <td :colspan="uploaderMode ? 5 : 6" class="bg-indigo-50/60 px-3 py-2">
                                                 <form class="space-y-2" @submit.prevent="submitUpload">
                                                     <p class="text-xs font-semibold text-indigo-950">
                                                         Link {{ row.chapter.label }}

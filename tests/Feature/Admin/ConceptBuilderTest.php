@@ -124,18 +124,71 @@ class ConceptBuilderTest extends TestCase
             );
 
         $this->actingAs($admin)
+            ->from(route('admin.concept-builder.index'))
+            ->withSession([AdminGradeContext::SESSION_KEY => $grade->id])
             ->post(route('admin.content-tasks.assign-concept-path'), [
                 'textbook_chapter_id' => $upload->id,
                 'assigned_to_user_id' => $uploader->id,
                 'offered_amount_inr' => 50,
             ])
-            ->assertRedirect();
+            ->assertRedirect(route('admin.concept-builder.index'));
 
         $this->assertDatabaseHas('content_upload_tasks', [
             'textbook_chapter_id' => $upload->id,
             'assigned_to_user_id' => $uploader->id,
             'work_type' => \App\Models\ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
             'offered_amount_inr' => 50,
+        ]);
+    }
+
+    public function test_admin_can_batch_assign_concept_builder_chapters(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $grade, $syllabusChapter, $upload] = $this->seedConceptBuilder(withPdf: false);
+        $upload->update(['pdf_path' => null]);
+
+        $book2 = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'code' => 'ncert',
+            'name' => 'NCERT Maths',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $second = TextbookChapter::query()->create([
+            'textbook_id' => $book2->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 1,
+            'title' => 'Integers',
+            'pdf_path' => null,
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $uploader = tap(User::factory()->create(['role' => User::ROLE_TEACHER]), function (User $user) {
+            app(UserGroupService::class)->attachGroupByCode($user, User::ROLE_CONTENT_UPLOADER);
+        });
+
+        $this->actingAs($admin)
+            ->from(route('admin.concept-builder.index'))
+            ->withSession([AdminGradeContext::SESSION_KEY => $grade->id])
+            ->post(route('admin.content-tasks.assign-concept-path'), [
+                'textbook_chapter_ids' => [$upload->id, $second->id],
+                'assigned_to_user_id' => $uploader->id,
+                'offered_amount_inr' => 50,
+            ])
+            ->assertRedirect(route('admin.concept-builder.index'));
+
+        $this->assertDatabaseHas('content_upload_tasks', [
+            'textbook_chapter_id' => $upload->id,
+            'assigned_to_user_id' => $uploader->id,
+            'work_type' => \App\Models\ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+        ]);
+        $this->assertDatabaseHas('content_upload_tasks', [
+            'textbook_chapter_id' => $second->id,
+            'assigned_to_user_id' => $uploader->id,
+            'work_type' => \App\Models\ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
         ]);
     }
 
