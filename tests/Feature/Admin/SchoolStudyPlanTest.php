@@ -256,6 +256,7 @@ class SchoolStudyPlanTest extends TestCase
 
         $mentor = User::factory()->create(['role' => User::ROLE_TEACHER]);
         app(UserGroupService::class)->attachGroupByCode($mentor, User::ROLE_MENTOR);
+        $student->forceFill(['mentor_user_id' => $mentor->id])->save();
 
         $this->actingAs($mentor)
             ->withSession(['admin_grade_level_id' => $grade->id])
@@ -270,6 +271,27 @@ class SchoolStudyPlanTest extends TestCase
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('set_assignments', [
+            'worksheet_id' => $worksheet->id,
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+    }
+
+    public function test_mentor_cannot_assign_worksheet_to_unmapped_student(): void
+    {
+        [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
+        $worksheet = $this->seedChapterWorksheet($chapters[1], $admin);
+
+        $mentor = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($mentor, User::ROLE_MENTOR);
+
+        $this->actingAs($mentor)
+            ->post(route('admin.practice-sets.assign', $worksheet), [
+                'student_id' => $student->id,
+                'target_date' => now()->toDateString(),
+            ])
+            ->assertForbidden();
     }
 
     public function test_new_published_set_auto_assigns_when_chapter_is_studied(): void

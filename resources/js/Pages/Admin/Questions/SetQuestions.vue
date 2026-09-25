@@ -715,7 +715,7 @@ const generateHints = () => {
                 </div>
 
                 <section
-                    v-if="isAdmin && assignmentPanel"
+                    v-if="assignmentPanel"
                     class="overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-sm"
                 >
                     <div class="border-b border-indigo-100 bg-indigo-50/60 px-5 py-4">

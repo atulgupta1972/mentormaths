@@ -134,7 +134,7 @@ const teachingGroup = computed(() => ({
             label: 'School study plans',
             href: route('admin.school-study-plan.index'),
             active: route().current('admin.school-study-plan.*'),
-            show: isAdmin.value && route().has('admin.school-study-plan.index'),
+            show: (isAdmin.value || isMentor.value) && route().has('admin.school-study-plan.index'),
         },
     ],
 }));

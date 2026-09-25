@@ -10,6 +10,7 @@ use App\Models\Worksheet;
 use App\Services\ClassCoverageService;
 use App\Services\SetAssignmentService;
 use App\Services\SetAttemptService;
+use App\Services\StudentMentorService;
 use App\Support\AssignmentMailer;
 use App\Support\AssignmentProgress;
 use App\Support\AttemptIntegrity;
@@ -25,10 +26,13 @@ class SetAssignmentController extends Controller
         private SetAssignmentService $assignmentService,
         private SetAttemptService $attemptService,
         private ClassCoverageService $classCoverage,
+        private StudentMentorService $mentorService,
     ) {}
 
-    public function show(SetAssignment $assignment): Response|RedirectResponse
+    public function show(Request $request, SetAssignment $assignment): Response|RedirectResponse
     {
+        $this->assertCanManageAssignment($request, $assignment);
+
         $assignment->load([
             'enrollment.student:id,name',
             'enrollment.gradeLevel:id,name',
@@ -116,6 +120,8 @@ class SetAssignmentController extends Controller
 
     public function updateEffectiveChapter(Request $request, SetAssignment $assignment): RedirectResponse
     {
+        $this->assertCanManageAssignment($request, $assignment);
+
         $validated = $request->validate([
             'effective_syllabus_chapter_id' => ['nullable', 'integer', 'exists:syllabus_chapters,id'],
         ]);
@@ -168,6 +174,8 @@ class SetAssignmentController extends Controller
             'effective_syllabus_chapter_id' => ['nullable', 'integer', 'exists:syllabus_chapters,id'],
         ]);
 
+        $this->mentorService->assertCanAccessStudent($request->user(), (int) $validated['student_id']);
+
         $student = Student::findOrFail($validated['student_id']);
         $enrollment = $student->currentEnrollment();
 
@@ -206,6 +214,10 @@ class SetAssignmentController extends Controller
 
     public function storeBulk(Request $request, Worksheet $worksheet): RedirectResponse
     {
+        if ($request->user()?->isMentor() && ! $request->user()?->isAdmin()) {
+            abort(403, 'Mentors assign to selected students only, not a whole class at once.');
+        }
+
         $validated = $request->validate([
             'grade_level_id' => ['nullable', 'exists:grade_levels,id'],
             'board_id' => ['nullable', 'exists:boards,id'],
@@ -270,10 +282,19 @@ class SetAssignmentController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
+        $studentIds = array_map('intval', $validated['student_ids']);
+        if ($request->user()?->isMentor() && ! $request->user()?->isAdmin()) {
+            $allowed = $this->mentorService->studentIdsForUser($request->user());
+            $studentIds = array_values(array_intersect($studentIds, $allowed));
+            if ($studentIds === []) {
+                abort(403, 'You can only assign to students enrolled under you.');
+            }
+        }
+
         try {
             $result = $this->assignmentService->assignToStudents(
                 $worksheet,
-                $validated['student_ids'],
+                $studentIds,
                 $request->user(),
                 $validated['target_date'],
                 $validated['notes'] ?? null,
@@ -317,8 +338,10 @@ class SetAssignmentController extends Controller
         return $redirect;
     }
 
-    public function destroy(SetAssignment $assignment): RedirectResponse
+    public function destroy(Request $request, SetAssignment $assignment): RedirectResponse
     {
+        $this->assertCanManageAssignment($request, $assignment);
+
         $assignment->load(['enrollment.student', 'practiceSet']);
 
         try {
@@ -335,6 +358,8 @@ class SetAssignmentController extends Controller
 
     public function reassign(Request $request, SetAssignment $assignment): RedirectResponse
     {
+        $this->assertCanManageAssignment($request, $assignment);
+
         $validated = $request->validate([
             'target_date' => ['required', 'date'],
             'notes' => ['nullable', 'string'],
@@ -396,5 +421,13 @@ class SetAssignmentController extends Controller
         }
 
         return $redirect;
+    }
+
+    private function assertCanManageAssignment(Request $request, SetAssignment $assignment): void
+    {
+        $assignment->loadMissing('enrollment');
+        $studentId = (int) ($assignment->enrollment?->student_id ?? 0);
+        abort_unless($studentId > 0, 404);
+        $this->mentorService->assertCanAccessStudent($request->user(), $studentId);
     }
 }

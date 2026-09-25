@@ -21,6 +21,13 @@ class EnsureUserIsAdmin
             'admin.students.concept-path.*',
             'admin.grade-context.update',
             'admin.questions.coverage',
+            // Assign / reassign practice sets to their mentees (any class chapter).
+            'admin.practice-sets.assign',
+            'admin.practice-sets.assign-students',
+            'admin.set-assignments.show',
+            'admin.set-assignments.destroy',
+            'admin.set-assignments.reassign',
+            'admin.set-assignments.effective-chapter',
         ])) {
             return $next($request);
         }

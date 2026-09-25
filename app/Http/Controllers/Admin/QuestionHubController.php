@@ -22,6 +22,7 @@ use App\Services\PracticeSetSplitService;
 use App\Services\QuestionMethodHintService;
 use App\Services\SetAssignmentService;
 use App\Services\SetCodeLookupService;
+use App\Services\StudentMentorService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
@@ -43,6 +44,7 @@ class QuestionHubController extends Controller
         private SetCodeLookupService $setCodeLookup,
         private SetAssignmentService $assignmentService,
         private PracticeSetSplitService $splitService,
+        private StudentMentorService $mentorService,
     ) {}
 
     public function setCodeReview(Request $request): Response
@@ -494,6 +496,8 @@ class QuestionHubController extends Controller
         }
 
         $isAdmin = (bool) $request->user()?->isAdmin();
+        $isMentor = (bool) $request->user()?->isMentor();
+        $canAssign = $isAdmin || $isMentor;
 
         $worksheet->load([
             'topic.chapter.syllabusVersion.board',
@@ -526,7 +530,12 @@ class QuestionHubController extends Controller
         $activeYear = AcademicYear::active();
         $assignmentPanel = null;
 
-        if ($isAdmin && $worksheet->status === Worksheet::STATUS_PUBLISHED) {
+        if ($canAssign && $worksheet->status === Worksheet::STATUS_PUBLISHED) {
+            $mentorStudentIds = null;
+            if (! $isAdmin && $isMentor) {
+                $mentorStudentIds = $this->mentorService->studentIdsForUser($request->user());
+            }
+
             $assignmentPanel = [
                 'activeYear' => $activeYear?->only(['id', 'name']),
                 'gradeLevels' => GradeLevel::query()
@@ -534,10 +543,10 @@ class QuestionHubController extends Controller
                     ->orderBy('sort_order')
                     ->get(['id', 'name']),
                 'students' => $this->assignmentService
-                    ->activeStudentsForAssignment($activeYear?->id)
+                    ->activeStudentsForAssignment($activeYear?->id, null, null, $mentorStudentIds)
                     ->all(),
                 'existingAssignments' => $this->assignmentService
-                    ->worksheetAssignmentOverview($worksheet->id, $activeYear?->id)
+                    ->worksheetAssignmentOverview($worksheet->id, $activeYear?->id, $mentorStudentIds)
                     ->all(),
             ];
         }

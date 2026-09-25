@@ -310,11 +310,21 @@ class SetAssignmentService
      *     is_overdue: bool
      * }>
      */
-    public function worksheetAssignmentOverview(int $worksheetId, ?int $academicYearId = null): Collection
-    {
+    /**
+     * @param  list<int>|null  $studentIds  When set, only these students’ assignments are included.
+     */
+    public function worksheetAssignmentOverview(
+        int $worksheetId,
+        ?int $academicYearId = null,
+        ?array $studentIds = null,
+    ): Collection {
         $yearId = $academicYearId ?? AcademicYear::active()?->id;
 
         if (! $yearId) {
+            return collect();
+        }
+
+        if ($studentIds !== null && $studentIds === []) {
             return collect();
         }
 
@@ -326,7 +336,9 @@ class SetAssignmentService
             ])
             ->where('worksheet_id', $worksheetId)
             ->whereNot('status', SetAssignment::STATUS_CANCELLED)
-            ->whereHas('enrollment', fn ($q) => $q->where('academic_year_id', $yearId))
+            ->whereHas('enrollment', fn ($q) => $q
+                ->where('academic_year_id', $yearId)
+                ->when($studentIds !== null, fn ($query) => $query->whereIn('student_id', $studentIds)))
             ->get()
             ->map(function (SetAssignment $assignment) {
                 $latest = $assignment->attempts->first();
@@ -362,10 +374,14 @@ class SetAssignmentService
      *     label: string
      * }>
      */
+    /**
+     * @param  list<int>|null  $studentIds  When set, only these students are included (e.g. mentor mentees).
+     */
     public function activeStudentsForAssignment(
         ?int $academicYearId = null,
         ?int $gradeLevelId = null,
         ?int $boardId = null,
+        ?array $studentIds = null,
     ): Collection {
         $yearId = $academicYearId ?? AcademicYear::active()?->id;
 
@@ -373,7 +389,12 @@ class SetAssignmentService
             return collect();
         }
 
+        if ($studentIds !== null && $studentIds === []) {
+            return collect();
+        }
+
         return Student::query()
+            ->when($studentIds !== null, fn ($q) => $q->whereIn('id', $studentIds))
             ->whereHas('enrollments', fn ($q) => $q
                 ->where('academic_year_id', $yearId)
                 ->where('status', StudentEnrollment::STATUS_ACTIVE)
