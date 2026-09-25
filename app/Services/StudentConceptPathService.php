@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Student;
 use App\Models\StudentConceptPathProgress;
 use App\Models\StudentEnrollment;
 use App\Models\TextbookChapter;
@@ -20,8 +21,12 @@ class StudentConceptPathService
      * @param  list<int>  $syllabusChapterIds
      * @return array<int, array<string, mixed>> keyed by syllabus_chapter_id
      */
-    public function learnCtasForSyllabusChapters(User $user, ?StudentEnrollment $enrollment, array $syllabusChapterIds): array
-    {
+    public function learnCtasForSyllabusChapters(
+        ?User $learner,
+        ?StudentEnrollment $enrollment,
+        array $syllabusChapterIds,
+        ?int $forStudentId = null,
+    ): array {
         if ($syllabusChapterIds === []) {
             return [];
         }
@@ -37,18 +42,20 @@ class StudentConceptPathService
             return [];
         }
 
-        $progress = StudentConceptPathProgress::query()
-            ->where('user_id', $user->id)
-            ->whereIn('textbook_chapter_id', $chapters->pluck('id'))
-            ->get()
-            ->keyBy('textbook_chapter_id');
+        $progress = $learner
+            ? StudentConceptPathProgress::query()
+                ->where('user_id', $learner->id)
+                ->whereIn('textbook_chapter_id', $chapters->pluck('id'))
+                ->get()
+                ->keyBy('textbook_chapter_id')
+            : collect();
 
         $out = [];
 
         foreach ($chapters->groupBy('syllabus_chapter_id') as $syllabusId => $group) {
             /** @var TextbookChapter $tc */
             $tc = $group->first();
-            $payload = $this->ctaPayload($tc, $progress->get($tc->id));
+            $payload = $this->ctaPayload($tc, $progress->get($tc->id), $forStudentId);
             if ($payload) {
                 $out[(int) $syllabusId] = $payload;
             }
@@ -60,8 +67,11 @@ class StudentConceptPathService
     /**
      * @return array<string, mixed>
      */
-    public function ctaPayload(TextbookChapter $chapter, ?StudentConceptPathProgress $progress = null): ?array
-    {
+    public function ctaPayload(
+        TextbookChapter $chapter,
+        ?StudentConceptPathProgress $progress = null,
+        ?int $forStudentId = null,
+    ): ?array {
         if ($chapter->concept_path_status !== ConceptPathStatus::APPROVED) {
             return null;
         }
@@ -78,6 +88,12 @@ class StudentConceptPathService
             $status = 'in_progress';
         }
 
+        $statusLabel = match ($status) {
+            'completed' => 'Done',
+            'in_progress' => 'In progress',
+            default => 'Not done',
+        };
+
         return [
             'textbook_chapter_id' => $chapter->id,
             'title' => is_array($chapter->concept_path_items)
@@ -87,8 +103,15 @@ class StudentConceptPathService
             'cards_total' => count($cards),
             'cards_completed' => (int) ($progress?->cards_completed ?? 0),
             'status' => $status,
+            'status_label' => $statusLabel,
             'completed_at' => $progress?->completed_at?->toIso8601String(),
             'learn_url' => route('student.concept-path.show', $chapter),
+            'staff_run_url' => $forStudentId
+                ? route('admin.students.concept-path.show', [
+                    'student' => $forStudentId,
+                    'textbookChapter' => $chapter->id,
+                ])
+                : null,
         ];
     }
 
@@ -98,41 +121,48 @@ class StudentConceptPathService
             throw new InvalidArgumentException('Only students can learn concept paths here.');
         }
 
-        if ($chapter->concept_path_status !== ConceptPathStatus::APPROVED) {
-            throw new InvalidArgumentException('Concepts for this chapter are not ready yet.');
+        $this->assertChapterReadyForLearn($chapter, $user->student?->currentEnrollment());
+    }
+
+    /**
+     * Staff (admin/mentor) runs concepts with a student — progress is stored on the student's login.
+     */
+    public function assertStaffCanRunForStudent(User $staff, Student $student, TextbookChapter $chapter): User
+    {
+        if (! $staff->isAdmin() && ! $staff->isMentor()) {
+            throw new InvalidArgumentException('Only mentors or admins can run concept learning with a student.');
         }
 
-        if ($this->approvedCards($chapter) === []) {
-            throw new InvalidArgumentException('No concept cards are available for this chapter.');
+        if ($staff->isMentor() && ! $staff->isAdmin()) {
+            app(StudentMentorService::class)->assertCanAccessStudent($staff, $student->id);
         }
 
-        $enrollment = $user->student?->currentEnrollment();
-        if (! $enrollment) {
-            throw new InvalidArgumentException('No active enrollment for this year.');
+        $learner = $student->user;
+        if (! $learner) {
+            throw new InvalidArgumentException('This student has no login yet — create their access code / user first.');
         }
 
-        if (! $chapter->syllabus_chapter_id) {
-            throw new InvalidArgumentException('This concept path is not linked to a syllabus chapter.');
-        }
+        $enrollment = $student->currentEnrollment();
+        $this->assertChapterReadyForLearn($chapter, $enrollment);
 
-        $summary = $this->chapterSummary->forEnrollment($enrollment);
-        $allowedIds = collect($summary['chapters'] ?? [])->pluck('id')->map(fn ($id) => (int) $id)->all();
-
-        if (! in_array((int) $chapter->syllabus_chapter_id, $allowedIds, true)) {
-            throw new InvalidArgumentException('This chapter is not on your study plan.');
-        }
+        return $learner;
     }
 
     public function startOrResume(User $user, TextbookChapter $chapter): StudentConceptPathProgress
     {
         $this->assertStudentCanAccess($user, $chapter);
 
-        $enrollment = $user->student?->currentEnrollment();
+        return $this->startOrResumeForLearner($user, $chapter);
+    }
+
+    public function startOrResumeForLearner(User $learner, TextbookChapter $chapter): StudentConceptPathProgress
+    {
+        $enrollment = $learner->student?->currentEnrollment();
         $cards = $this->approvedCards($chapter);
         $total = count($cards);
 
         $progress = StudentConceptPathProgress::query()->firstOrNew([
-            'user_id' => $user->id,
+            'user_id' => $learner->id,
             'textbook_chapter_id' => $chapter->id,
         ]);
 
@@ -164,6 +194,79 @@ class StudentConceptPathService
     {
         $progress = $this->startOrResume($user, $chapter);
 
+        return $this->applyCardEvent($progress, $event);
+    }
+
+    /**
+     * @param  array{card_index?: int, card_step?: int, card_type?: string, correct?: bool|null, action?: string}  $event
+     */
+    public function recordCardForLearner(User $learner, TextbookChapter $chapter, array $event): StudentConceptPathProgress
+    {
+        $progress = $this->startOrResumeForLearner($learner, $chapter);
+
+        return $this->applyCardEvent($progress, $event);
+    }
+
+    public function complete(User $user, TextbookChapter $chapter): StudentConceptPathProgress
+    {
+        $progress = $this->startOrResume($user, $chapter);
+
+        return $this->markComplete($progress);
+    }
+
+    public function completeForLearner(User $learner, TextbookChapter $chapter): StudentConceptPathProgress
+    {
+        $progress = $this->startOrResumeForLearner($learner, $chapter);
+
+        return $this->markComplete($progress);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function playCards(TextbookChapter $chapter): array
+    {
+        $cards = $this->approvedCards($chapter);
+        $cards = $this->conceptPath->withDiagramUrls($cards);
+
+        return array_values(array_map(function (array $card, int $index) {
+            $card['step'] = $index + 1;
+
+            return $card;
+        }, $cards, array_keys($cards)));
+    }
+
+    private function assertChapterReadyForLearn(TextbookChapter $chapter, ?StudentEnrollment $enrollment): void
+    {
+        if ($chapter->concept_path_status !== ConceptPathStatus::APPROVED) {
+            throw new InvalidArgumentException('Concepts for this chapter are not ready yet.');
+        }
+
+        if ($this->approvedCards($chapter) === []) {
+            throw new InvalidArgumentException('No concept cards are available for this chapter.');
+        }
+
+        if (! $enrollment) {
+            throw new InvalidArgumentException('No active enrollment for this year.');
+        }
+
+        if (! $chapter->syllabus_chapter_id) {
+            throw new InvalidArgumentException('This concept path is not linked to a syllabus chapter.');
+        }
+
+        $summary = $this->chapterSummary->forEnrollment($enrollment);
+        $allowedIds = collect($summary['chapters'] ?? [])->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if (! in_array((int) $chapter->syllabus_chapter_id, $allowedIds, true)) {
+            throw new InvalidArgumentException('This chapter is not on the student study plan.');
+        }
+    }
+
+    /**
+     * @param  array{card_index?: int, card_step?: int, card_type?: string, correct?: bool|null, action?: string}  $event
+     */
+    private function applyCardEvent(StudentConceptPathProgress $progress, array $event): StudentConceptPathProgress
+    {
         $cardIndex = max(0, (int) ($event['card_index'] ?? 0));
         $action = (string) ($event['action'] ?? 'advance');
         $events = is_array($progress->events) ? $progress->events : [];
@@ -176,7 +279,6 @@ class StudentConceptPathService
             'correct' => array_key_exists('correct', $event) ? $event['correct'] : null,
         ];
 
-        // Keep the log bounded.
         if (count($events) > 200) {
             $events = array_slice($events, -200);
         }
@@ -198,9 +300,8 @@ class StudentConceptPathService
         return $progress->fresh();
     }
 
-    public function complete(User $user, TextbookChapter $chapter): StudentConceptPathProgress
+    private function markComplete(StudentConceptPathProgress $progress): StudentConceptPathProgress
     {
-        $progress = $this->startOrResume($user, $chapter);
         $events = is_array($progress->events) ? $progress->events : [];
         $events[] = [
             'at' => now()->toIso8601String(),
@@ -219,21 +320,6 @@ class StudentConceptPathService
         $progress->save();
 
         return $progress->fresh();
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    public function playCards(TextbookChapter $chapter): array
-    {
-        $cards = $this->approvedCards($chapter);
-        $cards = $this->conceptPath->withDiagramUrls($cards);
-
-        return array_values(array_map(function (array $card, int $index) {
-            $card['step'] = $index + 1;
-
-            return $card;
-        }, $cards, array_keys($cards)));
     }
 
     /**

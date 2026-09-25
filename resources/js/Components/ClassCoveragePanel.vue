@@ -92,8 +92,34 @@ const canMoveChapter = computed(() =>
     (isStudentView.value && route().has('student.assignments.study-chapter'))
     || route().has('admin.set-assignments.effective-chapter'),
 );
-/** Ch No + Chapter + Topics + Completion % + Score % + Revision status + Studied + Under study */
-const columnCount = computed(() => 8);
+/** Ch No + Chapter + Topics + Completion % + Score % + Revision + Concept learning + Studied + Under study */
+const columnCount = computed(() => 9);
+
+const conceptLearnTone = (learn) => {
+    if (! learn) {
+        return 'text-slate-400';
+    }
+    if (learn.status === 'completed') {
+        return 'bg-emerald-100 text-emerald-900';
+    }
+    if (learn.status === 'in_progress') {
+        return 'bg-amber-100 text-amber-950';
+    }
+    return 'bg-rose-50 text-rose-900';
+};
+
+const conceptLearnLabel = (learn) => {
+    if (! learn) {
+        return '—';
+    }
+    if (learn.status === 'completed') {
+        return 'Done';
+    }
+    if (learn.status === 'in_progress') {
+        return `${learn.cards_completed}/${learn.cards_total}`;
+    }
+    return 'Not done';
+};
 
 const movingAssignmentId = ref(null);
 const moveTargets = ref({});
@@ -997,6 +1023,9 @@ const startRevision = (item) => {
                         <th class="bg-indigo-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Revision completion / score">
                             Revision
                         </th>
+                        <th class="bg-fuchsia-900 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Concept learning path for this chapter">
+                            Concept learning
+                        </th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Studied</th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Under study</th>
                     </tr>
@@ -1114,6 +1143,20 @@ const startRevision = (item) => {
                                 </span>
                             </td>
                             <td
+                                class="bg-fuchsia-50/70 px-1.5 py-1 text-center align-middle"
+                                :class="chapterRowLineClass(chapter.id)"
+                            >
+                                <span
+                                    class="inline-block rounded px-1.5 py-px text-[10px] font-bold uppercase tracking-wide"
+                                    :class="conceptLearnTone(chapter.concept_learn)"
+                                    :title="chapter.concept_learn
+                                        ? `${chapter.concept_learn.status_label || conceptLearnLabel(chapter.concept_learn)}${chapter.concept_learn.book_name ? ' · ' + chapter.concept_learn.book_name : ''}`
+                                        : 'No approved concept path for this chapter yet'"
+                                >
+                                    {{ conceptLearnLabel(chapter.concept_learn) }}
+                                </span>
+                            </td>
+                            <td
                                 class="px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                             >
@@ -1157,10 +1200,11 @@ const startRevision = (item) => {
                         >
                             <td :colspan="columnCount" class="border-b border-slate-200 border-t border-slate-300 px-3 py-3">
                                 <div
-                                    v-if="isStudentView && chapter.concept_learn?.learn_url"
-                                    class="mb-4 flex justify-center"
+                                    v-if="chapter.concept_learn"
+                                    class="mb-4 flex flex-wrap justify-center gap-3"
                                 >
                                     <Link
+                                        v-if="isStudentView && chapter.concept_learn.learn_url"
                                         :href="chapter.concept_learn.learn_url"
                                         class="inline-flex min-w-[240px] flex-col items-center justify-center rounded-xl bg-indigo-700 px-6 py-4 text-center shadow-md ring-2 ring-indigo-300 transition hover:bg-indigo-800"
                                     >
@@ -1176,6 +1220,27 @@ const startRevision = (item) => {
                                             </template>
                                             <template v-else>
                                                 {{ chapter.concept_learn.cards_total }} concept cards
+                                                <span v-if="chapter.concept_learn.book_name"> · {{ chapter.concept_learn.book_name }}</span>
+                                            </template>
+                                        </span>
+                                    </Link>
+                                    <Link
+                                        v-if="!isStudentView && chapter.concept_learn.staff_run_url"
+                                        :href="chapter.concept_learn.staff_run_url"
+                                        class="inline-flex min-w-[240px] flex-col items-center justify-center rounded-xl bg-fuchsia-700 px-6 py-4 text-center shadow-md ring-2 ring-fuchsia-300 transition hover:bg-fuchsia-800"
+                                    >
+                                        <span class="text-sm font-extrabold uppercase tracking-[0.14em] text-white">
+                                            Run concepts with student
+                                        </span>
+                                        <span class="mt-1 text-[11px] font-medium text-fuchsia-100">
+                                            <template v-if="chapter.concept_learn.status === 'completed'">
+                                                Done · Run again
+                                            </template>
+                                            <template v-else-if="chapter.concept_learn.status === 'in_progress'">
+                                                Continue · {{ chapter.concept_learn.cards_completed }}/{{ chapter.concept_learn.cards_total }} cards
+                                            </template>
+                                            <template v-else>
+                                                {{ chapter.concept_learn.cards_total }} cards
                                                 <span v-if="chapter.concept_learn.book_name"> · {{ chapter.concept_learn.book_name }}</span>
                                             </template>
                                         </span>

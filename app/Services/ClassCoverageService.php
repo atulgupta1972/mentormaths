@@ -64,13 +64,12 @@ class ClassCoverageService
 
         $enrollment->loadMissing(['student.user']);
         $learner = $enrollment->student?->user;
-        $conceptLearnByChapter = $learner
-            ? $this->conceptPathLearn->learnCtasForSyllabusChapters(
-                $learner,
-                $enrollment,
-                $chapterOptions->pluck('id')->map(fn ($id) => (int) $id)->all(),
-            )
-            : [];
+        $conceptLearnByChapter = $this->conceptPathLearn->learnCtasForSyllabusChapters(
+            $learner,
+            $enrollment,
+            $chapterOptions->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            (int) $enrollment->student_id,
+        );
 
         $chapters = $chapterOptions->values()->map(function (array $chapter) use (
             $coverages,

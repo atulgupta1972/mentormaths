@@ -14,6 +14,8 @@ const props = defineProps({
     path: { type: Object, required: true },
     progress: { type: Object, default: () => ({}) },
     routes: { type: Object, required: true },
+    guidedByStaff: { type: Boolean, default: false },
+    studentName: { type: String, default: '' },
 });
 
 const page = usePage();
@@ -277,14 +279,25 @@ const clockDemoTurn = computed(() => {
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-gray-800">Learn concepts</h2>
+                    <h2 class="text-xl font-semibold text-gray-800">
+                        {{ guidedByStaff ? 'Concept learning with student' : 'Learn concepts' }}
+                    </h2>
                     <p class="text-sm text-gray-500">
-                        {{ chapter.grade_name }} · {{ chapter.book_name }}
-                        · {{ chapter.label }}
+                        <template v-if="guidedByStaff && studentName">
+                            Running with <span class="font-semibold text-fuchsia-800">{{ studentName }}</span>
+                            · progress is saved for the student.
+                        </template>
+                        <template v-else>
+                            {{ chapter.grade_name }} · {{ chapter.book_name }}
+                            · {{ chapter.label }}
+                        </template>
+                    </p>
+                    <p v-if="guidedByStaff" class="text-sm text-gray-500">
+                        {{ chapter.grade_name }} · {{ chapter.book_name }} · {{ chapter.label }}
                     </p>
                 </div>
                 <Link :href="chapter.study_plan_url" class="text-sm text-indigo-600 hover:underline">
-                    ← Study plan
+                    ← {{ guidedByStaff ? 'Student coverage' : 'Study plan' }}
                 </Link>
             </div>
         </template>

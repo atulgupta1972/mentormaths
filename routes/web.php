@@ -261,6 +261,13 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::put('/school-study-plan/{student}/{syllabusChapter}', [SchoolStudyPlanController::class, 'update'])
         ->name('school-study-plan.update');
 
+    Route::get('/students/{student}/concept-path/{textbookChapter}', [\App\Http\Controllers\Admin\StudentConceptPathController::class, 'show'])
+        ->name('students.concept-path.show');
+    Route::post('/students/{student}/concept-path/{textbookChapter}/record-card', [\App\Http\Controllers\Admin\StudentConceptPathController::class, 'recordCard'])
+        ->name('students.concept-path.record-card');
+    Route::post('/students/{student}/concept-path/{textbookChapter}/complete', [\App\Http\Controllers\Admin\StudentConceptPathController::class, 'complete'])
+        ->name('students.concept-path.complete');
+
     Route::get('/syllabus', [SyllabusVersionController::class, 'index'])
         ->name('syllabus.index');
     Route::post('/syllabus', [SyllabusVersionController::class, 'store'])

@@ -48,11 +48,58 @@ class StudentConceptPathLearnTest extends TestCase
                 ->where('classCoverage.chapters.0.id', $syllabusChapter->id)
                 ->where('classCoverage.chapters.0.concept_learn.textbook_chapter_id', $textbookChapter->id)
                 ->where('classCoverage.chapters.0.concept_learn.status', 'not_started')
+                ->where('classCoverage.chapters.0.concept_learn.status_label', 'Not done')
                 ->where(
                     'classCoverage.chapters.0.concept_learn.learn_url',
                     route('student.concept-path.show', $textbookChapter),
                 )
+                ->where(
+                    'classCoverage.chapters.0.concept_learn.staff_run_url',
+                    route('admin.students.concept-path.show', [
+                        'student' => $user->student->id,
+                        'textbookChapter' => $textbookChapter->id,
+                    ]),
+                )
             );
+    }
+
+    public function test_admin_can_run_concepts_with_student_and_progress_belongs_to_student(): void
+    {
+        [$user, , $textbookChapter] = $this->seedStudentWithApprovedConcepts();
+        $student = $user->student;
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.students.concept-path.show', [
+                'student' => $student->id,
+                'textbookChapter' => $textbookChapter->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Student/ConceptPathLearn')
+                ->where('guidedByStaff', true)
+                ->where('studentName', $student->name)
+                ->has('path.cards', 2)
+            );
+
+        $this->assertDatabaseHas('student_concept_path_progress', [
+            'user_id' => $user->id,
+            'textbook_chapter_id' => $textbookChapter->id,
+            'status' => StudentConceptPathProgress::STATUS_IN_PROGRESS,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.students.concept-path.complete', [
+                'student' => $student->id,
+                'textbookChapter' => $textbookChapter->id,
+            ]))
+            ->assertRedirect(route('admin.school-study-plan.index', ['student_id' => $student->id]));
+
+        $this->assertDatabaseHas('student_concept_path_progress', [
+            'user_id' => $user->id,
+            'textbook_chapter_id' => $textbookChapter->id,
+            'status' => StudentConceptPathProgress::STATUS_COMPLETED,
+        ]);
     }
 
     public function test_student_can_learn_concepts_and_progress_is_recorded(): void
