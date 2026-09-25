@@ -20,6 +20,10 @@ const page = usePage();
 const uploadForId = ref(null);
 const assignForms = reactive({});
 
+/** Concept paths belong on school textbooks — hide RD Sharma by default. */
+const hideRdSharma = ref(true);
+const bookFilterId = ref('');
+
 const ensureAssignForm = (uploadId) => {
     if (!assignForms[uploadId]) {
         assignForms[uploadId] = {
@@ -29,6 +33,51 @@ const ensureAssignForm = (uploadId) => {
     }
     return assignForms[uploadId];
 };
+
+const isRdSharmaBook = (bookOrUpload) => Boolean(bookOrUpload?.is_rd_sharma);
+
+const visibleBooks = computed(() => {
+    return (props.books || []).filter((book) => {
+        if (hideRdSharma.value && isRdSharmaBook(book)) {
+            return false;
+        }
+        if (bookFilterId.value && String(book.id) !== String(bookFilterId.value)) {
+            return false;
+        }
+        return true;
+    });
+});
+
+const bookFilterOptions = computed(() => {
+    return (props.books || []).filter((book) => !(hideRdSharma.value && isRdSharmaBook(book)));
+});
+
+const filteredUploads = (uploads) => {
+    return (uploads || []).filter((upload) => {
+        if (hideRdSharma.value && isRdSharmaBook(upload)) {
+            return false;
+        }
+        if (bookFilterId.value && String(upload.textbook_id) !== String(bookFilterId.value)) {
+            return false;
+        }
+        return true;
+    });
+};
+
+const hiddenRdSharmaCount = computed(() => {
+    if (!hideRdSharma.value) {
+        return 0;
+    }
+    let n = 0;
+    for (const row of props.chapters || []) {
+        for (const upload of row.uploads || []) {
+            if (isRdSharmaBook(upload)) {
+                n += 1;
+            }
+        }
+    }
+    return n;
+});
 
 const assignConcept = (upload) => {
     const form = ensureAssignForm(upload.id);
@@ -80,7 +129,7 @@ const booksForRow = (row) => {
     const boardId = row.board_id ? Number(row.board_id) : null;
     const linked = new Set((row.linked_textbook_ids || []).map(Number));
 
-    return (props.books || []).filter((book) => {
+    return visibleBooks.value.filter((book) => {
         if (linked.has(Number(book.id))) {
             return false;
         }
@@ -198,8 +247,38 @@ const submitUpload = () => {
                 </div>
 
                 <div class="rounded-lg border border-violet-200 bg-violet-50/70 px-4 py-3 text-sm text-violet-950">
-                    Each syllabus chapter can have PDFs from different books (e.g. Ganita Prakash and RD Sharma).
-                    Choose the book, upload its chapter PDF if missing, then build concepts for that book.
+                    Build teach/check concepts on the school textbook (e.g. Ganita Prakash / NCERT).
+                    RD Sharma and other practice books are hidden by default — they are not needed for Concept Builder.
+                </div>
+
+                <div
+                    v-if="gradeLevel && chapters.length"
+                    class="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800"
+                >
+                    <label class="inline-flex items-center gap-2 font-medium">
+                        <input v-model="hideRdSharma" type="checkbox" class="rounded border-gray-300 text-violet-700 focus:ring-violet-500">
+                        Hide RD Sharma
+                    </label>
+                    <span v-if="hideRdSharma && hiddenRdSharmaCount" class="text-xs text-slate-500">
+                        {{ hiddenRdSharmaCount }} RD Sharma chapter{{ hiddenRdSharmaCount === 1 ? '' : 's' }} hidden
+                    </span>
+                    <div class="ml-auto flex flex-wrap items-center gap-2">
+                        <label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="concept-book-filter">Book</label>
+                        <select
+                            id="concept-book-filter"
+                            v-model="bookFilterId"
+                            class="rounded-md border-gray-300 text-sm"
+                        >
+                            <option value="">All books</option>
+                            <option
+                                v-for="book in bookFilterOptions"
+                                :key="book.id"
+                                :value="String(book.id)"
+                            >
+                                {{ book.label }}
+                            </option>
+                        </select>
+                    </div>
                 </div>
 
                 <div v-if="!gradeLevel" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -227,9 +306,9 @@ const submitUpload = () => {
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0 flex-1">
                                     <p class="font-semibold text-slate-900">{{ row.label }}</p>
-                                    <div v-if="row.uploads?.length" class="mt-2 space-y-2">
+                                    <div v-if="filteredUploads(row.uploads).length" class="mt-2 space-y-2">
                                         <div
-                                            v-for="upload in row.uploads"
+                                            v-for="upload in filteredUploads(row.uploads)"
                                             :key="upload.id"
                                             class="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 bg-slate-50/80 px-2.5 py-2"
                                         >
@@ -315,6 +394,9 @@ const submitUpload = () => {
                                             </form>
                                         </div>
                                     </div>
+                                    <p v-else-if="row.uploads?.length && hideRdSharma" class="mt-1 text-xs text-slate-600">
+                                        Only RD Sharma linked here — uncheck “Hide RD Sharma” to see it, or upload the school textbook PDF.
+                                    </p>
                                     <p v-else class="mt-1 text-xs text-slate-600">
                                         No textbook chapter linked yet — choose a book and upload its PDF.
                                     </p>
@@ -377,7 +459,7 @@ const submitUpload = () => {
                                             v-model="form.book_name"
                                             type="text"
                                             class="w-full rounded-md border-gray-300 text-sm"
-                                            placeholder="e.g. RD Sharma"
+                                            placeholder="e.g. Ganita Prakash"
                                             required
                                         >
                                         <InputError :message="form.errors.book_name" class="mt-1" />
@@ -388,7 +470,7 @@ const submitUpload = () => {
                                             v-model="form.book_code"
                                             type="text"
                                             class="w-full rounded-md border-gray-300 text-sm"
-                                            placeholder="e.g. rds"
+                                            placeholder="e.g. gp"
                                             required
                                         >
                                         <InputError :message="form.errors.book_code" class="mt-1" />

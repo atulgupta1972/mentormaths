@@ -41,6 +41,8 @@ class ConceptBuilderTest extends TestCase
                 ->where('chapters.0.label', 'Ch 1 — Integers')
                 ->where('chapters.0.has_pdf', true)
                 ->where('chapters.0.uploads.0.concept_path_url', route('admin.textbooks.concept-path', $upload))
+                ->where('chapters.0.uploads.0.is_rd_sharma', false)
+                ->where('books.0.is_rd_sharma', false)
                 ->where('storeUrl', route('admin.concept-builder.store'))
             );
     }
@@ -99,6 +101,46 @@ class ConceptBuilderTest extends TestCase
         $this->assertNotEmpty($newChapter->pdf_path);
         Storage::disk('public')->assertExists($newChapter->pdf_path);
         $response->assertRedirect(route('admin.textbooks.concept-path', $newChapter));
+    }
+
+    public function test_concept_builder_marks_rd_sharma_books_for_ui_filter(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $grade, $syllabusChapter] = $this->seedConceptBuilder(withPdf: true);
+
+        $rds = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'code' => 'rds',
+            'name' => 'RD Sharma',
+            'source_ref' => 'RDS-7',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        TextbookChapter::query()->create([
+            'textbook_id' => $rds->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 1,
+            'title' => 'Integers',
+            'pdf_path' => 'textbooks/rds-ch1.pdf',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->assertTrue($rds->looksLikeRdSharma());
+
+        $this->actingAs($admin)
+            ->withSession([AdminGradeContext::SESSION_KEY => $grade->id])
+            ->get(route('admin.concept-builder.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/ConceptBuilder/Index')
+                ->where('books', fn ($books) => collect($books)->contains(fn ($b) => $b['id'] === $rds->id && $b['is_rd_sharma'] === true))
+                ->where('chapters.0.uploads', fn ($uploads) => collect($uploads)->contains(
+                    fn ($u) => $u['textbook_id'] === $rds->id && $u['is_rd_sharma'] === true
+                ))
+            );
     }
 
     public function test_concept_path_preview_saves_draft_without_huge_session_flash(): void

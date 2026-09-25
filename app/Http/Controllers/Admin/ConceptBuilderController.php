@@ -43,12 +43,13 @@ class ConceptBuilderController extends Controller
             $books = Textbook::query()
                 ->where('grade_level_id', $gradeLevel->id)
                 ->orderBy('name')
-                ->get(['id', 'name', 'code', 'board_id'])
+                ->get(['id', 'name', 'code', 'board_id', 'source_ref', 'practice_line'])
                 ->map(fn (Textbook $book) => [
                     'id' => $book->id,
                     'name' => $book->name,
                     'code' => $book->code,
                     'board_id' => $book->board_id,
+                    'is_rd_sharma' => $book->looksLikeRdSharma(),
                     'label' => "{$book->name} ({$book->code})",
                 ])
                 ->values()
@@ -68,7 +69,7 @@ class ConceptBuilderController extends Controller
             $syllabusChapterIds = $versions->flatMap(fn ($v) => $v->chapters->pluck('id'))->all();
 
             $textbookChapters = TextbookChapter::query()
-                ->with(['textbook:id,name,code,grade_level_id', 'syllabusChapter:id,name,chapter_number'])
+                ->with(['textbook:id,name,code,grade_level_id,source_ref,practice_line', 'syllabusChapter:id,name,chapter_number'])
                 ->whereIn('syllabus_chapter_id', $syllabusChapterIds ?: [-1])
                 ->get()
                 ->each(function (TextbookChapter $row) {
@@ -104,6 +105,7 @@ class ConceptBuilderController extends Controller
                                 'book_name' => $upload->textbook?->name,
                                 'book_code' => $upload->textbook?->code,
                                 'textbook_id' => $upload->textbook_id,
+                                'is_rd_sharma' => $upload->textbook?->looksLikeRdSharma() ?? false,
                                 'has_pdf' => $hasPdf,
                                 'status_label' => $upload->statusLabel(),
                                 'concept_path_status' => $upload->concept_path_status,
