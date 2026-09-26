@@ -13,6 +13,7 @@ const props = defineProps({
     all_done: { type: Boolean, default: false },
     next_url: { type: String, default: null },
     next_label: { type: String, default: 'Continue' },
+    boot_error: { type: String, default: null },
 });
 
 const page = usePage();
@@ -78,6 +79,9 @@ function backToBoards() {
                 </p>
                 <p v-if="flash.error" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
                     {{ flash.error }}
+                </p>
+                <p v-if="boot_error" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                    {{ boot_error }}
                 </p>
                 <p
                     v-if="feedback && !feedback.correct"

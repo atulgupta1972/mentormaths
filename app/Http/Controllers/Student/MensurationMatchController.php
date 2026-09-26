@@ -33,16 +33,39 @@ class MensurationMatchController extends Controller
         $boards = $this->mensuration->boardsForEnrollment($enrollment);
         $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
 
+        // Stay on the completion screen — do not auto-kick to dashboard (iPad users
+        // reported being dropped onto the site front page mid-flow).
         if ($allDone) {
-            return redirect()
-                ->route($this->nextAfterMensuration($student))
-                ->with('success', 'Mensuration Match done — continuing your daily drills.');
+            $settings = $enrollment->gradeLevel
+                ? $this->mensuration->settingsForGrade($enrollment->gradeLevel)
+                : null;
+
+            return Inertia::render('Student/MensurationMatch/Show', [
+                'enabled' => (bool) ($settings?->enabled),
+                'grade_name' => $enrollment->gradeLevel?->name,
+                'boards' => $boards,
+                'play' => null,
+                'required_today' => $this->mensuration->isRequiredToday($student),
+                'all_done' => true,
+                'next_url' => route($this->nextAfterMensuration($student)),
+                'next_label' => $this->basics->gatePassed($student) ? 'Continue to dashboard' : 'Continue to basics drill',
+            ]);
         }
 
         try {
             $autoSession = $this->mensuration->sessionForAutoPlay($student, $enrollment);
         } catch (\InvalidArgumentException $e) {
-            return redirect()->route('dashboard')->with('error', $e->getMessage());
+            return Inertia::render('Student/MensurationMatch/Show', [
+                'enabled' => false,
+                'grade_name' => $enrollment->gradeLevel?->name,
+                'boards' => $boards,
+                'play' => null,
+                'required_today' => false,
+                'all_done' => false,
+                'next_url' => route('dashboard'),
+                'next_label' => 'Go to dashboard',
+                'boot_error' => $e->getMessage(),
+            ]);
         }
 
         if ($autoSession) {
@@ -81,13 +104,17 @@ class MensurationMatchController extends Controller
         $enrollment?->loadMissing('gradeLevel');
 
         if (! $student || ! $enrollment) {
-            return back()->with('error', 'Student enrollment required.');
+            return redirect()
+                ->route('student.mensuration-match.show')
+                ->with('error', 'Student enrollment required.');
         }
 
         try {
             $session = $this->mensuration->startBoard($student, $enrollment, $validated['board']);
         } catch (\InvalidArgumentException $e) {
-            return back()->with('error', $e->getMessage());
+            return redirect()
+                ->route('student.mensuration-match.show')
+                ->with('error', $e->getMessage());
         }
 
         return redirect()->route('student.mensuration-match.play', $session);
@@ -110,9 +137,7 @@ class MensurationMatchController extends Controller
         $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
 
         if ($session->status === MensurationMatchSession::STATUS_COMPLETED && $allDone) {
-            return redirect()
-                ->route($this->nextAfterMensuration($student))
-                ->with('success', 'Mensuration Match done — continuing your daily drills.');
+            return redirect()->route('student.mensuration-match.show');
         }
 
         if ($session->status === MensurationMatchSession::STATUS_COMPLETED) {
@@ -147,10 +172,13 @@ class MensurationMatchController extends Controller
             'formula' => ['required', 'string', 'max:64'],
         ]);
 
+        $playUrl = route('student.mensuration-match.play', $session);
+
         try {
             $result = $this->mensuration->submitAnswer($session, $validated['item_key'], $validated['formula']);
         } catch (\InvalidArgumentException $e) {
-            return back()->with('error', $e->getMessage());
+            // Never use back() — on iPad Safari a missing Referer falls through to `/` (site front page).
+            return redirect()->to($playUrl)->with('error', $e->getMessage());
         }
 
         $session->refresh();
@@ -166,8 +194,8 @@ class MensurationMatchController extends Controller
 
                 if ($allDone) {
                     return redirect()
-                        ->route($this->nextAfterMensuration($student))
-                        ->with('success', 'Mensuration Match complete — on to the next drill.');
+                        ->route('student.mensuration-match.show')
+                        ->with('success', 'Mensuration Match complete — tap Continue when you are ready.');
                 }
 
                 $next = $this->mensuration->nextIncompleteSession($student, $enrollment);
@@ -183,7 +211,7 @@ class MensurationMatchController extends Controller
                 ->with('success', 'Board complete.');
         }
 
-        return back()->with([
+        return redirect()->to($playUrl)->with([
             'success' => $result['correct'] ? 'Correct — '.$result['explanation'] : null,
             'mensuration_flash' => $result,
         ]);

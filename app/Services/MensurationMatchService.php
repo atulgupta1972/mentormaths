@@ -85,7 +85,8 @@ class MensurationMatchService
             return false;
         }
 
-        return $this->boardsForEnrollment($enrollment) !== [];
+        return $this->boardsForEnrollment($enrollment) !== []
+            && ! $this->gatePassed($student);
     }
 
     public function classNumber(GradeLevel $grade): int

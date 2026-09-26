@@ -378,7 +378,7 @@ class MensurationMatchTest extends TestCase
         $this->assertSame([], $service->itemsForBoard('volume', $classNumber));
     }
 
-    public function test_completing_last_card_auto_continues_to_basics_drill(): void
+    public function test_completing_last_card_stays_on_mensuration_completion_screen(): void
     {
         ['user' => $user, 'student' => $student, 'grade' => $grade] = $this->seedStudent();
 
@@ -423,9 +423,52 @@ class MensurationMatchTest extends TestCase
                 'item_key' => $lastKey,
                 'formula' => $catalog[$lastKey]['formula'],
             ])
-            ->assertRedirect(route('student.basics-drill.show'));
+            ->assertRedirect(route('student.mensuration-match.show'));
 
         $this->assertTrue(app(\App\Services\MensurationMatchService::class)->gatePassed($student));
+
+        $this->actingAs($user)
+            ->get(route('student.mensuration-match.show'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Student/MensurationMatch/Show')
+                ->where('all_done', true)
+                ->where('next_url', route('student.basics-drill.show')));
+    }
+
+    public function test_wrong_answer_stays_on_play_even_without_referer(): void
+    {
+        ['user' => $user, 'student' => $student, 'grade' => $grade] = $this->seedStudent();
+
+        MensurationMatchSetting::query()->create([
+            'grade_level_id' => $grade->id,
+            'enabled' => true,
+            'perimeter_area_enabled' => true,
+            'volume_enabled' => false,
+        ]);
+
+        app(\App\Services\MensurationMatchService::class)->saveItemClasses([
+            'perim_circle' => [7],
+            'perim_rectangle' => [7],
+            'perim_triangle' => [7],
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('student.mensuration-match.start'), [
+                'board' => 'perimeter_area',
+                'ready' => true,
+            ]);
+
+        $session = MensurationMatchSession::query()->where('student_id', $student->id)->firstOrFail();
+        $itemKey = $session->item_keys[0];
+
+        // No From / Referer — old back() fell through to `/` (site front page) on iPad Safari.
+        $this->actingAs($user)
+            ->post(route('student.mensuration-match.answer', $session), [
+                'item_key' => $itemKey,
+                'formula' => 'WRONG',
+            ])
+            ->assertRedirect(route('student.mensuration-match.play', $session));
     }
 
     public function test_dashboard_redirects_to_mensuration_after_formula_when_enabled(): void
