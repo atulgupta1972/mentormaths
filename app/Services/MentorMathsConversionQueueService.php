@@ -356,6 +356,151 @@ class MentorMathsConversionQueueService
     }
 
     /**
+     * Full sum text for every pending chapter in the current filter.
+     *
+     * @return array{chapters: list<array<string, mixed>>, filters: array{grade_level_id: ?int, textbook_id: ?int}, book_name: ?string}
+     */
+    public function reviewPayload(?int $gradeLevelId = null, ?int $textbookId = null): array
+    {
+        $queue = $this->queue($gradeLevelId, $textbookId);
+        $ids = collect($queue['chapters'])->pluck('id')->all();
+        $models = TextbookChapter::query()
+            ->whereIn('id', $ids !== [] ? $ids : [0])
+            ->get()
+            ->keyBy('id');
+
+        $chapters = [];
+        foreach ($queue['chapters'] as $row) {
+            $model = $models->get($row['id']);
+            $items = is_array($model?->extraction_items) ? $model->extraction_items : [];
+            $sums = [];
+            foreach ($items as $index => $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $fill = trim((string) ($item['fill_blank_question_text'] ?? ''));
+                $mcq = trim((string) ($item['question_text'] ?? ''));
+                $sums[] = [
+                    'index' => $index,
+                    'number' => $index + 1,
+                    'text' => $fill !== '' ? $fill : $mcq,
+                    'field' => $fill !== '' ? 'fill_blank' : 'question',
+                    'will_publish' => $fill !== '' && filled($item['fill_blank_correct_answer'] ?? null),
+                ];
+            }
+
+            $chapters[] = [
+                'id' => $row['id'],
+                'label' => $row['label'],
+                'book_name' => $row['book_name'],
+                'grade_name' => $row['grade_name'],
+                'is_mentormaths' => $row['is_mentormaths'],
+                'meets_publish_minimum' => $row['meets_publish_minimum'],
+                'fill_blank_ready_count' => $row['fill_blank_ready_count'],
+                'sums' => $sums,
+            ];
+        }
+
+        return [
+            'chapters' => $chapters,
+            'filters' => $queue['filters'],
+            'book_name' => $chapters[0]['book_name'] ?? null,
+        ];
+    }
+
+    /**
+     * Replace a phrase (old book name or a person's name) in pending sum text.
+     */
+    public function replaceInPendingSums(?int $gradeLevelId, ?int $textbookId, string $find, string $replace): int
+    {
+        $find = trim($find);
+        if (mb_strlen($find) < 2) {
+            throw ValidationException::withMessages([
+                'find' => 'Type at least 2 characters to find (a book name or a person name).',
+            ]);
+        }
+
+        $payload = $this->reviewPayload($gradeLevelId, $textbookId);
+        $ids = collect($payload['chapters'])->pluck('id')->all();
+        $replaced = 0;
+
+        TextbookChapter::query()
+            ->whereIn('id', $ids !== [] ? $ids : [0])
+            ->orderBy('id')
+            ->each(function (TextbookChapter $chapter) use ($find, $replace, &$replaced) {
+                $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
+                $changed = false;
+
+                foreach ($items as $index => $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+                    foreach (['question_text', 'fill_blank_question_text'] as $field) {
+                        $text = (string) ($item[$field] ?? '');
+                        if ($text === '' || ! str_contains($text, $find)) {
+                            continue;
+                        }
+                        $next = str_replace($find, $replace, $text, $count);
+                        $replaced += $count;
+                        $items[$index][$field] = $next;
+                        $changed = true;
+                    }
+                }
+
+                if ($changed) {
+                    $chapter->update(['extraction_items' => array_values($items)]);
+                }
+            });
+
+        return $replaced;
+    }
+
+    /**
+     * @param  list<array{index: int, text: string, field: string}>  $sums
+     */
+    public function saveSumTexts(TextbookChapter $chapter, array $sums): int
+    {
+        $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
+        $saved = 0;
+
+        foreach ($sums as $sum) {
+            $index = (int) ($sum['index'] ?? -1);
+            if (! isset($items[$index]) || ! is_array($items[$index])) {
+                continue;
+            }
+            $field = ($sum['field'] ?? '') === 'fill_blank' ? 'fill_blank_question_text' : 'question_text';
+            $items[$index][$field] = trim((string) ($sum['text'] ?? ''));
+            $saved++;
+        }
+
+        if ($saved > 0) {
+            $chapter->update(['extraction_items' => array_values($items)]);
+        }
+
+        return $saved;
+    }
+
+    /**
+     * @return list<TextbookChapter>
+     */
+    public function pendingChapterModels(?int $gradeLevelId, ?int $textbookId): array
+    {
+        $ids = collect($this->queue($gradeLevelId, $textbookId)['chapters'])->pluck('id')->all();
+
+        if ($ids === []) {
+            return [];
+        }
+
+        return TextbookChapter::query()
+            ->with(['textbook', 'syllabusChapter'])
+            ->whereIn('id', $ids)
+            ->orderBy('textbook_id')
+            ->orderBy('chapter_number')
+            ->get()
+            ->all();
+    }
+
+    /**
      * Rebrand a publisher textbook onto the MentorMaths practice line.
      */
     public function rebrandTextbook(

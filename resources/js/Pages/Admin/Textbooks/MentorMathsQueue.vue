@@ -176,12 +176,23 @@ const submitImportPack = () => {
                             <span class="text-teal-800"> ({{ stepLabel(nextChapter.queue_step) }})</span>
                         </p>
                     </div>
-                    <Link
-                        :href="route('admin.mentormaths-conversion.show', nextChapter.id)"
-                        class="inline-flex items-center rounded-md bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800"
-                    >
-                        Continue next chapter →
-                    </Link>
+                    <div class="flex flex-wrap gap-2">
+                        <Link
+                            :href="route('admin.mentormaths-conversion.review', {
+                                grade_level_id: selectedGradeId || undefined,
+                                textbook_id: selectedBookId || undefined,
+                            })"
+                            class="inline-flex items-center rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-teal-900 ring-1 ring-teal-300 hover:bg-teal-100"
+                        >
+                            Review all sums
+                        </Link>
+                        <Link
+                            :href="route('admin.mentormaths-conversion.show', nextChapter.id)"
+                            class="inline-flex items-center rounded-md bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800"
+                        >
+                            Continue next chapter →
+                        </Link>
+                    </div>
                 </div>
 
                 <div class="flex flex-wrap items-end gap-4 rounded-lg border border-teal-200 bg-teal-50/60 px-4 py-3">

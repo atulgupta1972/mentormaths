@@ -123,6 +123,56 @@ class MentorMathsConversionQueueTest extends TestCase
         $this->assertSame('RDS-C7', $rds->source_ref);
     }
 
+    public function test_review_lists_sum_text_and_replaces_a_name(): void
+    {
+        $this->withoutVite();
+        [$grade, $syllabusChapter, $admin] = $this->seedBasics();
+
+        $book = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'MentorMaths 2',
+            'code' => 'mm2',
+            'practice_line' => Textbook::PRACTICE_LINE_MENTORMATHS,
+            'source_ref' => 'RDS-C7',
+            'created_by' => $admin->id,
+        ]);
+
+        $chapter = TextbookChapter::query()->create([
+            'textbook_id' => $book->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 4,
+            'title' => 'Quadratic Equations',
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'created_by' => $admin->id,
+            'extraction_items' => [[
+                'question_text' => 'From RD Sharma: find x.',
+                'fill_blank_question_text' => 'From RD Sharma: x is ____.',
+                'fill_blank_correct_answer' => '2',
+            ]],
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.mentormaths-conversion.review', ['grade_level_id' => $grade->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Textbooks/MentorMathsReview')
+                ->where('chapters.0.id', $chapter->id)
+                ->where('chapters.0.sums.0.text', 'From RD Sharma: x is ____.'));
+
+        $this->actingAs($admin)
+            ->post(route('admin.mentormaths-conversion.review.replace'), [
+                'find' => 'RD Sharma',
+                'replace' => 'MentorMaths 2',
+                'grade_level_id' => $grade->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $items = $chapter->fresh()->extraction_items;
+        $this->assertSame('From MentorMaths 2: find x.', $items[0]['question_text']);
+        $this->assertSame('From MentorMaths 2: x is ____.', $items[0]['fill_blank_question_text']);
+    }
+
     /**
      * @return array{0: GradeLevel, 1: SyllabusChapter, 2: User}
      */

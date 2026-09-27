@@ -46,6 +46,103 @@ class MentorMathsConversionController extends Controller
         return Inertia::render('Admin/Textbooks/MentorMathsQueue', $payload);
     }
 
+    public function review(Request $request): Response
+    {
+        $gradeLevel = $this->gradeContext->resolve($request);
+        $gradeId = $request->filled('grade_level_id')
+            ? (int) $request->input('grade_level_id')
+            : ($gradeLevel?->id);
+        $bookId = $request->filled('textbook_id') ? (int) $request->input('textbook_id') : null;
+
+        return Inertia::render('Admin/Textbooks/MentorMathsReview', $this->queue->reviewPayload($gradeId, $bookId));
+    }
+
+    public function replaceSums(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'find' => ['required', 'string', 'max:200'],
+            'replace' => ['nullable', 'string', 'max:200'],
+            'grade_level_id' => ['nullable', 'integer'],
+            'textbook_id' => ['nullable', 'integer'],
+        ]);
+
+        $count = $this->queue->replaceInPendingSums(
+            isset($validated['grade_level_id']) ? (int) $validated['grade_level_id'] : null,
+            isset($validated['textbook_id']) ? (int) $validated['textbook_id'] : null,
+            $validated['find'],
+            (string) ($validated['replace'] ?? ''),
+        );
+
+        return back()->with('success', $count > 0
+            ? "Replaced \"{$validated['find']}\" in {$count} place(s)."
+            : "No sums contained \"{$validated['find']}\".");
+    }
+
+    public function saveSums(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'sums' => ['required', 'array', 'min:1'],
+            'sums.*.index' => ['required', 'integer', 'min:0'],
+            'sums.*.text' => ['nullable', 'string'],
+            'sums.*.field' => ['required', 'string', Rule::in(['question', 'fill_blank'])],
+        ]);
+
+        $saved = $this->queue->saveSumTexts($textbookChapter, $validated['sums']);
+
+        return back()->with('success', "Saved {$saved} sum(s) in this chapter.");
+    }
+
+    public function acceptReady(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'grade_level_id' => ['nullable', 'integer'],
+            'textbook_id' => ['nullable', 'integer'],
+        ]);
+
+        $gradeId = isset($validated['grade_level_id']) ? (int) $validated['grade_level_id'] : null;
+        $bookId = isset($validated['textbook_id']) ? (int) $validated['textbook_id'] : null;
+        $published = 0;
+        $skipped = [];
+
+        foreach ($this->queue->pendingChapterModels($gradeId, $bookId) as $chapter) {
+            $chapter->loadMissing('textbook');
+            if (! ($chapter->textbook?->isMentorMathsPracticeLine() ?? false)) {
+                $skipped[] = ($chapter->displaySyllabusLabel() ?: 'Chapter').' — book name is not MentorMaths yet';
+
+                continue;
+            }
+
+            if ($this->queue->fillBlankReadyCount($chapter) < MentorMathsConversionQueueService::MIN_FILL_BLANK_READY) {
+                $skipped[] = ($chapter->displaySyllabusLabel() ?: 'Chapter').' — fewer than '.MentorMathsConversionQueueService::MIN_FILL_BLANK_READY.' fill-blank sums';
+
+                continue;
+            }
+
+            try {
+                $this->publishService->publishFillBlankAndWritten($chapter, $request->user(), true);
+                $published++;
+            } catch (\Throwable $exception) {
+                report($exception);
+                $skipped[] = ($chapter->displaySyllabusLabel() ?: 'Chapter').' — '.\Illuminate\Support\Str::limit($exception->getMessage(), 120);
+            }
+        }
+
+        $message = $published > 0
+            ? "Converted {$published} chapter(s) with the current book name."
+            : 'Nothing was converted.';
+
+        if ($skipped !== []) {
+            $message .= ' Skipped: '.implode('; ', array_slice($skipped, 0, 4)).'.';
+        }
+
+        return redirect()
+            ->route('admin.mentormaths-conversion.index', array_filter([
+                'grade_level_id' => $gradeId,
+                'textbook_id' => $bookId,
+            ]))
+            ->with($published > 0 ? 'success' : 'warning', $message);
+    }
+
     public function show(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
     {
         $textbookChapter->load([
