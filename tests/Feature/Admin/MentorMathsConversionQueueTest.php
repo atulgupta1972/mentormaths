@@ -207,14 +207,10 @@ class MentorMathsConversionQueueTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/Textbooks/MentorMathsChapterSums')
                 ->where('current_book_name', 'MentorMaths 2')
-                ->where('suggested_book_name', 'RS Aggarwal')
-                ->where('chapter.sums.0.text', 'In RS Aggarwal the mean is ____.')
-                ->where('chapter.sums.0.mentions', ['RS Aggarwal']));
+                ->where('old_book_name', 'RS Aggarwal'));
 
         $this->actingAs($admin)
-            ->post(route('admin.mentormaths-conversion.replace-book', $chapter), [
-                'book_name' => 'RS Aggarwal',
-            ])
+            ->post(route('admin.mentormaths-conversion.replace-book', $chapter))
             ->assertRedirect()
             ->assertSessionHas('success');
 

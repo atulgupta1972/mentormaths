@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\GradeLevel;
+use App\Models\Question;
 use App\Models\Textbook;
 use App\Models\TextbookChapter;
+use App\Models\Worksheet;
 use App\Support\MentorMathsSourceRef;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -409,16 +411,12 @@ class MentorMathsConversionQueueService
     }
 
     /**
-     * One chapter: every sum, the current book name, and other book names that can replace it in the text.
-     *
-     * @return array{chapter: array<string, mixed>, current_book_name: string, other_books: list<array{name: string}>, suggested_book_name: ?string}
+     * @return array{chapter: array<string, mixed>, current_book_name: string, old_book_name: ?string}
      */
     public function chapterSumsPayload(TextbookChapter $chapter): array
     {
         $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter']);
         $row = $this->chapterRow($chapter);
-        $otherBooks = $this->otherBookNames($chapter);
-        $names = array_column($otherBooks, 'name');
 
         return [
             'chapter' => [
@@ -426,16 +424,46 @@ class MentorMathsConversionQueueService
                 'label' => $row['label'],
                 'grade_name' => $row['grade_name'],
                 'book_name' => $row['book_name'],
-                'is_mentormaths' => $row['is_mentormaths'],
-                'meets_publish_minimum' => $row['meets_publish_minimum'],
-                'fill_blank_ready_count' => $row['fill_blank_ready_count'],
                 'items_count' => $row['items_count'],
-                'queue_step' => $row['queue_step'],
-                'sums' => $this->sumRows($chapter, $names),
             ],
             'current_book_name' => (string) ($row['book_name'] ?? ''),
-            'other_books' => $otherBooks,
-            'suggested_book_name' => $this->suggestedBookName($chapter, $names),
+            'old_book_name' => $this->publisherNameFromSourceRef((string) ($chapter->textbook?->source_ref ?? '')),
+        ];
+    }
+
+    /**
+     * Put this chapter's current book name on its stored sums and on questions already published from it.
+     *
+     * @return array{places: int, message: string}
+     */
+    public function applyCurrentBookNameEverywhere(TextbookChapter $chapter): array
+    {
+        $chapter->loadMissing('textbook');
+        $to = trim((string) ($chapter->textbook?->name ?? ''));
+        if ($to === '') {
+            throw ValidationException::withMessages([
+                'book_name' => 'This chapter has no book name to apply.',
+            ]);
+        }
+
+        $from = $this->publisherNameFromSourceRef((string) ($chapter->textbook?->source_ref ?? ''));
+        $needles = $from !== null ? $this->bookNameNeedles($from) : $this->allPublisherNeedles();
+        $needles = array_values(array_filter(
+            $needles,
+            fn (string $needle) => mb_strtolower($needle) !== mb_strtolower($to),
+        ));
+
+        $places = 0;
+        $places += $this->replaceNeedlesInExtraction($chapter, $needles, $to);
+        $places += $this->replaceNeedlesInPublishedQuestions($chapter, $needles, $to);
+
+        $old = $from ?? 'the old book name';
+
+        return [
+            'places' => $places,
+            'message' => $places > 0
+                ? "Changed {$places} place(s) in this chapter to {$to}."
+                : "{$to} is already the book name for this chapter everywhere.",
         ];
     }
 
@@ -490,95 +518,136 @@ class MentorMathsConversionQueueService
         return $replaced;
     }
 
-    /**
-     * @param  list<string>  $watchNames
-     * @return list<array{index: int, number: int, text: string, field: string, will_publish: bool, mentions: list<string>}>
-     */
-    private function sumRows(TextbookChapter $chapter, array $watchNames): array
+    private function publisherNameFromSourceRef(string $ref): ?string
     {
-        $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
-        $sums = [];
-
-        foreach ($items as $index => $item) {
-            if (! is_array($item)) {
-                continue;
-            }
-            $fill = trim((string) ($item['fill_blank_question_text'] ?? ''));
-            $mcq = trim((string) ($item['question_text'] ?? ''));
-            $text = $fill !== '' ? $fill : $mcq;
-            $mentions = [];
-            foreach ($watchNames as $name) {
-                if ($this->textHasBookName($text, $name)) {
-                    $mentions[] = $name;
-                }
-            }
-            $sums[] = [
-                'index' => $index,
-                'number' => $index + 1,
-                'text' => $text,
-                'field' => $fill !== '' ? 'fill_blank' : 'question',
-                'will_publish' => $fill !== '' && filled($item['fill_blank_correct_answer'] ?? null),
-                'mentions' => $mentions,
-            ];
-        }
-
-        return $sums;
-    }
-
-    /**
-     * @return list<array{name: string}>
-     */
-    private function otherBookNames(TextbookChapter $chapter): array
-    {
-        $current = trim((string) ($chapter->textbook?->name ?? ''));
-        $classNumber = $this->classNumber($chapter->textbook?->gradeLevel?->name);
-        $names = [];
-
-        foreach (MentorMathsSourceRef::options($classNumber) as $option) {
-            $publisher = trim((string) ($option['publisher'] ?? ''));
-            if ($publisher !== '' && mb_strtolower($publisher) !== mb_strtolower($current)) {
-                $names[$publisher] = $publisher;
-            }
-        }
-
-        $gradeId = (int) ($chapter->textbook?->grade_level_id ?? 0);
-        if ($gradeId > 0) {
-            Textbook::query()
-                ->where('grade_level_id', $gradeId)
-                ->orderBy('name')
-                ->get(['name'])
-                ->each(function (Textbook $book) use (&$names, $current) {
-                    $name = trim((string) $book->name);
-                    if ($name !== '' && mb_strtolower($name) !== mb_strtolower($current)) {
-                        $names[$name] = $name;
-                    }
-                });
-        }
-
-        ksort($names, SORT_NATURAL | SORT_FLAG_CASE);
-
-        return array_map(fn (string $name) => ['name' => $name], array_values($names));
-    }
-
-    /**
-     * @param  list<string>  $names
-     */
-    private function suggestedBookName(TextbookChapter $chapter, array $names): ?string
-    {
-        $ref = (string) ($chapter->textbook?->source_ref ?? '');
-        $fromRef = match (true) {
+        return match (true) {
             str_starts_with($ref, 'RDS-') => 'RD Sharma',
             str_starts_with($ref, 'RSA-') => 'RS Aggarwal',
             str_starts_with($ref, 'GL-') => 'Greya Lakshmi',
             str_starts_with($ref, 'EXEM-') => 'NCERT Exemplar',
             default => null,
         };
+    }
 
-        if ($fromRef !== null && in_array($fromRef, $names, true)) {
-            return $fromRef;
+    /**
+     * @return list<string>
+     */
+    private function allPublisherNeedles(): array
+    {
+        $needles = [];
+        foreach (['RD Sharma', 'RS Aggarwal', 'Greya Lakshmi', 'NCERT Exemplar'] as $name) {
+            $needles = array_merge($needles, $this->bookNameNeedles($name));
         }
 
-        return $names[0] ?? null;
+        return array_values(array_unique($needles));
+    }
+
+    /**
+     * @param  list<string>  $needles
+     */
+    private function replaceNeedlesInExtraction(TextbookChapter $chapter, array $needles, string $to): int
+    {
+        if ($needles === []) {
+            return 0;
+        }
+
+        $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
+        $replaced = 0;
+        $changed = false;
+
+        foreach ($items as $index => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            foreach (['question_text', 'fill_blank_question_text'] as $field) {
+                $text = (string) ($item[$field] ?? '');
+                if ($text === '') {
+                    continue;
+                }
+                $next = $this->swapBookNames($text, $needles, $to, $count);
+                if ($count > 0) {
+                    $items[$index][$field] = $next;
+                    $replaced += $count;
+                    $changed = true;
+                }
+            }
+        }
+
+        if ($changed) {
+            $chapter->update(['extraction_items' => array_values($items)]);
+        }
+
+        return $replaced;
+    }
+
+    /**
+     * @param  list<string>  $needles
+     */
+    private function replaceNeedlesInPublishedQuestions(TextbookChapter $chapter, array $needles, string $to): int
+    {
+        if ($needles === []) {
+            return 0;
+        }
+
+        $worksheetIds = $chapter->allWorksheetIds();
+        $replaced = 0;
+
+        if ($worksheetIds !== []) {
+            Question::query()
+                ->whereHas('worksheets', fn ($query) => $query->whereIn('worksheets.id', $worksheetIds))
+                ->with('options')
+                ->orderBy('id')
+                ->each(function (Question $question) use ($needles, $to, &$replaced) {
+                    foreach (['question_text', 'explanation', 'method_hint'] as $field) {
+                        $text = (string) ($question->{$field} ?? '');
+                        if ($text === '') {
+                            continue;
+                        }
+                        $next = $this->swapBookNames($text, $needles, $to, $count);
+                        if ($count > 0) {
+                            $question->{$field} = $next;
+                            $replaced += $count;
+                        }
+                    }
+                    if ($question->isDirty()) {
+                        $question->save();
+                    }
+                    foreach ($question->options as $option) {
+                        $text = (string) ($option->option_text ?? '');
+                        if ($text === '') {
+                            continue;
+                        }
+                        $next = $this->swapBookNames($text, $needles, $to, $count);
+                        if ($count > 0) {
+                            $option->option_text = $next;
+                            $option->save();
+                            $replaced += $count;
+                        }
+                    }
+                });
+
+            Worksheet::query()
+                ->whereIn('id', $worksheetIds)
+                ->orderBy('id')
+                ->each(function (Worksheet $worksheet) use ($needles, $to, &$replaced) {
+                    foreach (['title', 'notes'] as $field) {
+                        $text = (string) ($worksheet->{$field} ?? '');
+                        if ($text === '') {
+                            continue;
+                        }
+                        $next = $this->swapBookNames($text, $needles, $to, $count);
+                        if ($count > 0) {
+                            $worksheet->{$field} = $next;
+                            $replaced += $count;
+                        }
+                    }
+                    if ($worksheet->isDirty()) {
+                        $worksheet->save();
+                    }
+                });
+        }
+
+        return $replaced;
     }
 
     /**
@@ -630,17 +699,6 @@ class MentorMathsConversionQueueService
         }
 
         return $next;
-    }
-
-    private function textHasBookName(string $text, string $name): bool
-    {
-        if ($text === '' || trim($name) === '') {
-            return false;
-        }
-
-        $this->swapBookNames($text, $this->bookNameNeedles($name), $name, $count);
-
-        return $count > 0;
     }
 
     /**

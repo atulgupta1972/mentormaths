@@ -246,7 +246,6 @@ const submitImportPack = () => {
                                     <div class="font-medium text-gray-900">{{ row.book_name }}</div>
                                     <div class="text-xs text-gray-500">
                                         {{ row.grade_name }} · {{ row.book_code }}
-                                        <span v-if="row.source_ref"> · {{ row.source_ref }}</span>
                                     </div>
                                     <div v-if="row.is_mentormaths" class="mt-1 text-[11px] font-semibold text-teal-800">
                                         MentorMaths line
@@ -286,7 +285,7 @@ const submitImportPack = () => {
                                         :href="route('admin.mentormaths-conversion.chapter-sums', row.id)"
                                         class="inline-flex rounded-md bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-800"
                                     >
-                                        Sums
+                                        Book name
                                     </Link>
                                 </td>
                             </tr>
@@ -362,7 +361,6 @@ const submitImportPack = () => {
                                     <div class="font-medium text-gray-900">{{ row.book_name }}</div>
                                     <div class="text-xs text-gray-500">
                                         {{ row.grade_name }} · {{ row.book_code }}
-                                        <span v-if="row.source_ref"> · {{ row.source_ref }}</span>
                                     </div>
                                 </td>
                                 <td class="px-4 py-3">

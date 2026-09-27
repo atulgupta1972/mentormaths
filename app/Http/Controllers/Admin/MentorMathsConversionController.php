@@ -94,18 +94,11 @@ class MentorMathsConversionController extends Controller
         );
     }
 
-    public function replaceChapterBookName(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    public function replaceChapterBookName(TextbookChapter $textbookChapter): RedirectResponse
     {
-        $validated = $request->validate([
-            'book_name' => ['required', 'string', 'max:200'],
-        ]);
+        $result = $this->queue->applyCurrentBookNameEverywhere($textbookChapter);
 
-        $count = $this->queue->replaceBookNameInChapter($textbookChapter, $validated['book_name']);
-        $current = trim((string) ($textbookChapter->textbook?->name ?? ''));
-
-        return back()->with($count > 0 ? 'success' : 'warning', $count > 0
-            ? "Replaced \"{$validated['book_name']}\" with \"{$current}\" in {$count} place(s)."
-            : "No sum in this chapter contains \"{$validated['book_name']}\".");
+        return back()->with('success', $result['message']);
     }
 
     public function convertChapter(Request $request, TextbookChapter $textbookChapter): RedirectResponse
