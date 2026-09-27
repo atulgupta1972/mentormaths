@@ -875,7 +875,7 @@ const chapterStatsById = computed(() => {
 });
 
 const chaptersWithStats = computed(() =>
-    chapters.value.map((chapter) => ({
+    visibleChapters.value.map((chapter) => ({
         chapter,
         stats: chapterStatsById.value[chapter.id],
     })),
@@ -1139,7 +1139,7 @@ const startRevision = (item) => {
                     >
                         <option value="">Last 1st-term chapter…</option>
                         <option
-                            v-for="chapter in visibleChapters"
+                            v-for="chapter in chapters"
                             :key="`split-${chapter.id}`"
                             :value="String(chapter.id)"
                         >
@@ -1633,81 +1633,95 @@ const startRevision = (item) => {
         </div>
 
         <div
-            v-if="additionalGroups.length"
-            class="mt-3 rounded-xl border-2 border-slate-700 bg-white p-3 shadow-md ring-1 ring-slate-300"
+            v-if="termFilter === 'all' && additionalGroups.length"
+            class="mt-4"
         >
-            <div class="flex flex-wrap items-baseline justify-between gap-2">
-                <p class="text-[12px] font-extrabold uppercase tracking-wide text-slate-950">
-                    Additional
-                </p>
-                <p class="text-[11px] font-semibold text-slate-600">
-                    Sheets from another class / board / book — move into a chapter, or leave here.
-                </p>
-            </div>
-
-            <div class="mt-2 space-y-3">
-                <div
-                    v-for="group in additionalGroups"
-                    :key="`additional-${group.id}`"
-                >
-                    <p class="text-[11px] font-bold tracking-wide text-slate-800">
-                        {{ group.label }}
-                    </p>
-                    <div class="mt-1.5 space-y-2">
-                        <div
-                            v-for="item in group.items"
-                            :key="`additional-item-${item.assignment_id || item.worksheet_id}`"
-                            class="flex flex-wrap items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-2 py-1.5"
+            <h4 class="mb-1 text-sm font-semibold text-slate-800">Others</h4>
+            <p class="mb-2 text-[11px] text-slate-500">
+                Sheets other than this student's syllabus. Move one into a chapter, or leave it here.
+            </p>
+            <div class="overflow-x-auto rounded-lg border-2 border-slate-400 shadow-sm">
+                <table class="w-full min-w-[44rem] border-collapse text-[13px] leading-snug">
+                    <thead>
+                        <tr class="bg-slate-700 text-white">
+                            <th class="px-2 py-1.5 text-left font-semibold">Chapter</th>
+                            <th class="px-2 py-1.5 text-left font-semibold whitespace-nowrap">Class</th>
+                            <th class="px-2 py-1.5 text-left font-semibold">Sets</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="(group, index) in additionalGroups"
+                            :key="`additional-${group.id}`"
+                            class="align-top"
+                            :class="index % 2 === 0 ? 'bg-white' : 'bg-slate-100'"
                         >
-                            <CoverageSetItemCard
-                                :item="item"
-                                group-key="additional"
-                                :is-student-view="isStudentView"
-                                :can-staff-assign="canStaffAssign"
-                                :assigning-worksheet-id="assigningWorksheetId"
-                                :pending-assign-key="pendingAssignKey"
-                                :staff-assign-form="staffAssignForm"
-                                @self-assign="selfAssign"
-                                @start-correction="startCorrection"
-                                @start-revision="startRevision"
-                                @open-staff-assign="openStaffAssign"
-                                @confirm-staff-assign="confirmStaffAssign"
-                                @cancel-staff-assign="pendingAssignKey = null"
-                            />
-                            <template v-if="canMoveChapter && item.assignment_id && item.can_move_chapter !== false">
-                                <select
-                                    v-model="moveTargets[item.assignment_id]"
-                                    class="rounded border-slate-300 px-1.5 py-1 text-[11px] font-semibold text-slate-800"
+                            <td class="px-2 py-2 font-medium text-slate-900">
+                                {{ group.chapter_name || group.label }}
+                                <span v-if="group.textbook_name" class="mt-0.5 block text-[11px] font-normal text-slate-500">
+                                    {{ group.textbook_name }}
+                                </span>
+                            </td>
+                            <td class="whitespace-nowrap px-2 py-2 text-slate-600">
+                                {{ [group.grade_name, group.board_code || group.board_name].filter(Boolean).join(' · ') || '—' }}
+                            </td>
+                            <td class="px-2 py-2">
+                                <div
+                                    v-for="item in group.items"
+                                    :key="`additional-item-${item.assignment_id || item.worksheet_id}`"
+                                    class="mb-1.5 flex flex-wrap items-center gap-2 last:mb-0"
                                 >
-                                    <option value="">Move to chapter…</option>
-                                    <option
-                                        v-for="choice in chapterChoices"
-                                        :key="choice.id"
-                                        :value="choice.id"
-                                    >
-                                        {{ choice.label }}
-                                    </option>
-                                </select>
-                                <button
-                                    type="button"
-                                    class="rounded bg-indigo-700 px-2 py-1 text-[10px] font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
-                                    :disabled="movingAssignmentId === item.assignment_id"
-                                    @click="moveAdditionalToChapter(item)"
-                                >
-                                    Move
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded border border-slate-400 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                                    :disabled="movingAssignmentId === item.assignment_id"
-                                    @click="leaveInAdditional(item)"
-                                >
-                                    Leave in Additional
-                                </button>
-                            </template>
-                        </div>
-                    </div>
-                </div>
+                                    <CoverageSetItemCard
+                                        :item="item"
+                                        group-key="additional"
+                                        :is-student-view="isStudentView"
+                                        :can-staff-assign="canStaffAssign"
+                                        :assigning-worksheet-id="assigningWorksheetId"
+                                        :pending-assign-key="pendingAssignKey"
+                                        :staff-assign-form="staffAssignForm"
+                                        @self-assign="selfAssign"
+                                        @start-correction="startCorrection"
+                                        @start-revision="startRevision"
+                                        @open-staff-assign="openStaffAssign"
+                                        @confirm-staff-assign="confirmStaffAssign"
+                                        @cancel-staff-assign="pendingAssignKey = null"
+                                    />
+                                    <template v-if="canMoveChapter && item.assignment_id && item.can_move_chapter !== false">
+                                        <select
+                                            v-model="moveTargets[item.assignment_id]"
+                                            class="rounded border-slate-300 px-1.5 py-1 text-[11px] font-semibold text-slate-800"
+                                        >
+                                            <option value="">Move to chapter…</option>
+                                            <option
+                                                v-for="choice in chapterChoices"
+                                                :key="choice.id"
+                                                :value="choice.id"
+                                            >
+                                                {{ choice.label }}
+                                            </option>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            class="rounded bg-indigo-700 px-2 py-1 text-[10px] font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
+                                            :disabled="movingAssignmentId === item.assignment_id"
+                                            @click="moveAdditionalToChapter(item)"
+                                        >
+                                            Move
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="rounded border border-slate-400 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                                            :disabled="movingAssignmentId === item.assignment_id"
+                                            @click="leaveInAdditional(item)"
+                                        >
+                                            Leave in Others
+                                        </button>
+                                    </template>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </section>

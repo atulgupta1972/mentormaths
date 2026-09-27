@@ -232,6 +232,8 @@ class SetCoverageGrouping
                 'label' => (string) ($group['label'] ?? $group['name'] ?? 'Other'),
                 'grade_name' => $group['grade_name'] ?? null,
                 'board_name' => $group['board_name'] ?? null,
+                'board_code' => $group['board_code'] ?? null,
+                'textbook_name' => $group['textbook_name'] ?? null,
                 'chapter_name' => $group['chapter_name'] ?? null,
                 'syllabus_chapter_id' => $group['syllabus_chapter_id'] ?? null,
                 'items' => $rows,
