@@ -70,6 +70,15 @@ class MentorMathsConversionQueueTest extends TestCase
             'extraction_items' => [['question_text' => 'Q?', 'correct_answer' => '1']],
         ]);
 
+        $namedOnly = TextbookChapter::query()->create([
+            'textbook_id' => $doneBook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 9,
+            'title' => 'Trigonometry',
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'created_by' => $admin->id,
+        ]);
+
         $this->actingAs($admin)
             ->get(route('admin.mentormaths-conversion.index', ['grade_level_id' => $grade->id]))
             ->assertOk()
@@ -78,10 +87,14 @@ class MentorMathsConversionQueueTest extends TestCase
                 ->where('pending_count', 1)
                 ->has('chapters', 1)
                 ->where('chapters.0.id', $pending->id)
-                ->where('done_count', 1)
-                ->has('done_chapters', 1)
-                ->where('done_chapters.0.id', $doneChapter->id)
-                ->where('done_chapters.0.has_fill_blank_published', true)
+                ->where('done_count', 2)
+                ->has('done_chapters', 2)
+                ->where('done_chapters', function ($chapters) use ($doneChapter, $namedOnly) {
+                    $ids = collect($chapters)->pluck('id')->all();
+
+                    return in_array($doneChapter->id, $ids, true)
+                        && in_array($namedOnly->id, $ids, true);
+                })
             );
     }
 
@@ -130,10 +143,9 @@ class MentorMathsConversionQueueTest extends TestCase
 
         $book = Textbook::query()->create([
             'grade_level_id' => $grade->id,
-            'name' => 'MentorMaths 2',
-            'code' => 'mm2',
-            'practice_line' => Textbook::PRACTICE_LINE_MENTORMATHS,
-            'source_ref' => 'RDS-C7',
+            'name' => 'RD Sharma',
+            'code' => 'rds',
+            'practice_line' => Textbook::PRACTICE_LINE_STANDARD,
             'created_by' => $admin->id,
         ]);
 

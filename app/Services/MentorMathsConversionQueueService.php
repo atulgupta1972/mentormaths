@@ -62,7 +62,8 @@ class MentorMathsConversionQueueService
             return false;
         }
 
-        return ! $this->chapterIsDone($chapter);
+        // The queue is only for a book name that is not MentorMaths yet.
+        return ! $book->isMentorMathsPracticeLine();
     }
 
     /**
@@ -136,7 +137,7 @@ class MentorMathsConversionQueueService
             ->all();
 
         $doneChapters = $allChapters
-            ->filter(fn (TextbookChapter $chapter) => $this->chapterIsDone($chapter))
+            ->filter(fn (TextbookChapter $chapter) => $chapter->textbook?->isMentorMathsPracticeLine() ?? false)
             ->sortByDesc(fn (TextbookChapter $chapter) => $chapter->published_at?->timestamp ?? $chapter->updated_at?->timestamp ?? 0)
             ->map(fn (TextbookChapter $chapter) => $this->chapterRow($chapter))
             ->values()

@@ -60,7 +60,7 @@ const onBookChange = (event) => {
 };
 
 const exportDonePack = async () => {
-    const ids = (props.done_chapters || []).map((row) => row.id);
+        const ids = (props.done_chapters || []).filter((row) => row.has_fill_blank_published).map((row) => row.id);
     if (!ids.length || exportBusy.value) {
         return;
     }
@@ -137,8 +137,7 @@ const submitImportPack = () => {
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">MentorMaths conversion queue</h2>
                     <p class="text-sm text-gray-500">
-                        Convert publisher chapters one by one — rebrand → transform (≥{{ min_fill_blank_ready }} fill-blanks) → publish.
-                        Pending work is listed first; finished chapters are shown below.
+                        Pending chapters still use a publisher book name. Once the book is MentorMaths, the chapter moves to Done.
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
@@ -297,17 +296,17 @@ const submitImportPack = () => {
                     <div class="flex flex-wrap items-start justify-between gap-3 border-b border-emerald-100 bg-emerald-50 px-4 py-2">
                         <div>
                             <h3 class="text-sm font-semibold text-emerald-950">Done · {{ done_count }}</h3>
-                            <p class="text-xs text-emerald-800">Fill-blank sets published — newest first.</p>
+                            <p class="text-xs text-emerald-800">Book name is already MentorMaths.</p>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
                             <button
-                                v-if="done_chapters.length"
+                                v-if="done_chapters.some((row) => row.has_fill_blank_published)"
                                 type="button"
                                 class="rounded-md border border-emerald-400 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-50 disabled:opacity-60"
                                 :disabled="exportBusy"
                                 @click="exportDonePack"
                             >
-                                {{ exportBusy ? 'Preparing…' : `Download pack (${done_chapters.length})` }}
+                                {{ exportBusy ? 'Preparing…' : `Download pack (${done_chapters.filter((row) => row.has_fill_blank_published).length})` }}
                             </button>
                         </div>
                     </div>
