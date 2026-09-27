@@ -258,6 +258,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('school-study-plan.index');
     Route::post('/school-study-plan/send-reminders', [SchoolStudyPlanController::class, 'sendReminders'])
         ->name('school-study-plan.send-reminders');
+    Route::put('/school-study-plan/{student}/terms', [SchoolStudyPlanController::class, 'updateTerms'])
+        ->name('school-study-plan.terms');
     Route::put('/school-study-plan/{student}/{syllabusChapter}', [SchoolStudyPlanController::class, 'update'])
         ->name('school-study-plan.update');
 
@@ -552,6 +554,8 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'mensuration.drill', 'ba
         ->name('assignments.study-chapter');
     Route::get('/school-study-plan', [ClassCoverageController::class, 'show'])
         ->name('school-study-plan.show');
+    Route::put('/school-study-plan/terms', [ClassCoverageController::class, 'updateTerms'])
+        ->name('school-study-plan.terms');
 
     Route::get('/concept-path/{textbookChapter}', [\App\Http\Controllers\Student\ConceptPathController::class, 'show'])
         ->name('concept-path.show');

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\SetAssignment;
 use App\Models\StudentChapterCoverage;
 use App\Models\StudentChapterMetric;
+use App\Models\StudentChapterTerm;
 use App\Models\StudentEnrollment;
 use App\Models\SyllabusChapter;
 use App\Models\TextbookChapter;
@@ -50,6 +51,11 @@ class ClassCoverageService
             ->get()
             ->keyBy('syllabus_chapter_id');
 
+        $termsByChapter = StudentChapterTerm::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
+            ->pluck('term', 'syllabus_chapter_id');
+
         $chapterMetrics = StudentChapterMetric::query()
             ->where('student_enrollment_id', $enrollment->id)
             ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
@@ -73,6 +79,7 @@ class ClassCoverageService
 
         $chapters = $chapterOptions->values()->map(function (array $chapter) use (
             $coverages,
+            $termsByChapter,
             $chapterMetrics,
             $summaryById,
             $availabilityColumns,
@@ -111,6 +118,9 @@ class ClassCoverageService
                 'topics_label' => collect($chapter['topics'] ?? [])->pluck('name')->implode(', '),
                 'studied' => $isStudied,
                 'under_study' => $isUnderStudy,
+                'term' => ($term = $termsByChapter->get($chapter['id'])) !== null
+                    ? (int) $term
+                    : null,
                 'availability' => $availability,
                 'items' => $this->formatDetailItems($rawItems),
                 'performance' => $chapterMetrics->get($chapter['id'])?->performance,
@@ -603,6 +613,50 @@ class ClassCoverageService
             ['key' => 'written', 'label' => 'Written', 'short' => 'Writ'],
             ['key' => 'fill_blank', 'label' => 'Fill in blank', 'short' => 'Fill'],
         ];
+    }
+
+    /**
+     * Per-student term tags (1st / 2nd). Not stored on the shared syllabus.
+     *
+     * @param  list<array{chapter_id: int, term: int|null}>  $items
+     */
+    public function setChapterTerms(StudentEnrollment $enrollment, array $items): void
+    {
+        $allowed = $this->examPlanService
+            ->chapterOptionsForEnrollment($enrollment)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        DB::transaction(function () use ($enrollment, $items, $allowed) {
+            foreach ($items as $item) {
+                $chapterId = (int) ($item['chapter_id'] ?? 0);
+                if (! in_array($chapterId, $allowed, true)) {
+                    throw ValidationException::withMessages([
+                        'items' => 'One of these chapters is not part of this student\'s class syllabus.',
+                    ]);
+                }
+
+                $term = $item['term'] ?? null;
+                $query = StudentChapterTerm::query()
+                    ->where('student_enrollment_id', $enrollment->id)
+                    ->where('syllabus_chapter_id', $chapterId);
+
+                if ($term === null || $term === '' || (int) $term === 0) {
+                    $query->delete();
+
+                    continue;
+                }
+
+                StudentChapterTerm::query()->updateOrCreate(
+                    [
+                        'student_enrollment_id' => $enrollment->id,
+                        'syllabus_chapter_id' => $chapterId,
+                    ],
+                    ['term' => (int) $term],
+                );
+            }
+        });
     }
 
     public function markUnderStudy(StudentEnrollment $enrollment, SyllabusChapter $chapter): void

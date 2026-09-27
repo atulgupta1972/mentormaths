@@ -8,6 +8,7 @@ use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Student;
 use App\Models\StudentChapterCoverage;
+use App\Models\StudentChapterTerm;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
@@ -292,6 +293,66 @@ class SchoolStudyPlanTest extends TestCase
                 'target_date' => now()->toDateString(),
             ])
             ->assertForbidden();
+    }
+
+    public function test_admin_can_tag_chapters_by_term_for_one_student(): void
+    {
+        [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
+        $enrollment = $student->enrollments()->first();
+
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapters[0]->id,
+            'status' => StudentChapterCoverage::STATUS_STUDIED,
+            'studied_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->put(route('admin.school-study-plan.terms', $student), [
+                'items' => [
+                    ['chapter_id' => $chapters[0]->id, 'term' => 1],
+                    ['chapter_id' => $chapters[1]->id, 'term' => 1],
+                    ['chapter_id' => $chapters[2]->id, 'term' => 2],
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('student_chapter_terms', [
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapters[2]->id,
+            'term' => StudentChapterTerm::TERM_SECOND,
+        ]);
+
+        $this->assertDatabaseHas('student_chapter_coverages', [
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapters[0]->id,
+            'status' => StudentChapterCoverage::STATUS_STUDIED,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.school-study-plan.index', ['student_id' => $student->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('classCoverage.chapters.0.term', 1)
+                ->where('classCoverage.chapters.2.term', 2));
+
+        $studentUser = $student->user;
+        $this->actingAs($studentUser)
+            ->put(route('student.school-study-plan.terms'), [
+                'items' => [
+                    ['chapter_id' => $chapters[1]->id, 'term' => 2],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('student_chapter_terms', [
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapters[1]->id,
+            'term' => 2,
+        ]);
     }
 
     public function test_new_published_set_auto_assigns_when_chapter_is_studied(): void

@@ -197,4 +197,43 @@ class SchoolStudyPlanController extends Controller
             ->route('admin.school-study-plan.index', ['student_id' => $student->id])
             ->with('success', $message);
     }
+
+    public function updateTerms(Request $request, Student $student): RedirectResponse
+    {
+        $user = $request->user();
+        if ($user?->isMentor() && ! $user->isAdmin()) {
+            $this->mentorService->assertCanAccessStudent($user, $student->id);
+        }
+
+        $enrollment = $this->activeEnrollmentFor($request, $student);
+        abort_unless($enrollment, 404, 'No active enrollment for this student.');
+
+        $validated = $request->validate([
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.chapter_id' => ['required', 'integer', 'exists:syllabus_chapters,id'],
+            'items.*.term' => ['nullable', 'integer', 'in:1,2'],
+        ]);
+
+        $this->coverageService->setChapterTerms($enrollment, $validated['items']);
+
+        return back()->with('success', 'Chapter terms saved for this student.');
+    }
+
+    private function activeEnrollmentFor(Request $request, Student $student): ?StudentEnrollment
+    {
+        $activeYear = AcademicYear::active();
+        $gradeLevel = $this->gradeContext->resolve($request);
+        $user = $request->user();
+        $mentorScoped = $user?->isMentor() && ! $user->isAdmin();
+
+        return StudentEnrollment::query()
+            ->where('student_id', $student->id)
+            ->when($activeYear, fn ($q) => $q->where('academic_year_id', $activeYear->id))
+            ->when(
+                $gradeLevel && ! $mentorScoped,
+                fn ($q) => $q->where('grade_level_id', $gradeLevel->id),
+            )
+            ->where('status', StudentEnrollment::STATUS_ACTIVE)
+            ->first();
+    }
 }

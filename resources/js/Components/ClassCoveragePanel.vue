@@ -92,8 +92,101 @@ const canMoveChapter = computed(() =>
     (isStudentView.value && route().has('student.assignments.study-chapter'))
     || route().has('admin.set-assignments.effective-chapter'),
 );
-/** Ch No + Chapter + Topics + Completion % + Score % + Revision + Concept learning + Studied + Under study */
-const columnCount = computed(() => 9);
+/** Ch No + Chapter + Topics + Completion % + Score % + Revision + Concept learning + Studied + Under study + Term */
+const columnCount = computed(() => 10);
+
+const termFilter = ref('all');
+const termFilterTouched = ref(false);
+const splitThroughId = ref('');
+const savingTerms = ref(false);
+
+const termRouteName = computed(() => (
+    isStudentView.value ? 'student.school-study-plan.terms' : 'admin.school-study-plan.terms'
+));
+
+watch(rawChapters, (rows) => {
+    if (termFilterTouched.value) {
+        return;
+    }
+
+    termFilter.value = rows.some((chapter) => Number(chapter.term) === 2) ? '2' : 'all';
+}, { immediate: true });
+
+const termCounts = computed(() => ({
+    all: chapters.value.length,
+    1: chapters.value.filter((chapter) => Number(chapter.term) === 1).length,
+    2: chapters.value.filter((chapter) => Number(chapter.term) === 2).length,
+    unset: chapters.value.filter((chapter) => chapter.term !== 1 && chapter.term !== 2).length,
+}));
+
+const visibleChapters = computed(() => {
+    if (termFilter.value === 'all') {
+        return chapters.value;
+    }
+
+    const term = Number(termFilter.value);
+
+    return chapters.value.filter((chapter) => Number(chapter.term) === term);
+});
+
+const setTermFilter = (value) => {
+    termFilterTouched.value = true;
+    termFilter.value = value;
+};
+
+const saveTerms = (items) => {
+    if (savingTerms.value || !items.length) {
+        return;
+    }
+
+    if (!route().has(termRouteName.value)) {
+        saveError.value = 'Term save is not available. Try refreshing the page.';
+
+        return;
+    }
+
+    savingTerms.value = true;
+    saveError.value = '';
+
+    const params = isStudentView.value ? {} : { ...props.updateRouteParams };
+
+    router.put(route(termRouteName.value, params), { items }, {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['classCoverage', 'flash'],
+        onError: (errors) => {
+            const first = Object.values(errors ?? {})[0];
+            saveError.value = Array.isArray(first) ? first[0] : (first || 'Could not save terms.');
+        },
+        onFinish: () => {
+            savingTerms.value = false;
+        },
+    });
+};
+
+const setChapterTerm = (chapter, value) => {
+    const term = value === '' || value === null ? null : Number(value);
+    saveTerms([{ chapter_id: chapter.id, term }]);
+};
+
+const applyTermSplit = () => {
+    const cutoff = Number(splitThroughId.value);
+    const list = chapters.value;
+    const index = list.findIndex((chapter) => Number(chapter.id) === cutoff);
+
+    if (index < 0) {
+        saveError.value = 'Pick the last 1st-term chapter, then apply the split.';
+
+        return;
+    }
+
+    saveTerms(list.map((chapter, i) => ({
+        chapter_id: chapter.id,
+        term: i <= index ? 1 : 2,
+    })));
+    termFilterTouched.value = true;
+    termFilter.value = '2';
+};
 
 const conceptLearnTone = (learn) => {
     if (! learn) {
@@ -1007,7 +1100,75 @@ const startRevision = (item) => {
             No syllabus chapters for your class / board yet.
         </div>
 
-        <div v-else class="overflow-x-auto rounded-lg border-2 border-slate-400 shadow-sm">
+        <div v-else class="mb-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Show</span>
+                <button
+                    type="button"
+                    class="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                    :class="termFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-700 ring-1 ring-slate-300'"
+                    @click="setTermFilter('all')"
+                >
+                    All ({{ termCounts.all }})
+                </button>
+                <button
+                    type="button"
+                    class="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                    :class="termFilter === '1' ? 'bg-sky-800 text-white' : 'bg-white text-slate-700 ring-1 ring-slate-300'"
+                    @click="setTermFilter('1')"
+                >
+                    1st term ({{ termCounts[1] }})
+                </button>
+                <button
+                    type="button"
+                    class="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                    :class="termFilter === '2' ? 'bg-indigo-700 text-white' : 'bg-white text-slate-700 ring-1 ring-slate-300'"
+                    @click="setTermFilter('2')"
+                >
+                    2nd term ({{ termCounts[2] }})
+                </button>
+                <span v-if="termCounts.unset" class="text-[11px] text-slate-500">{{ termCounts.unset }} not tagged</span>
+            </div>
+            <div class="flex flex-wrap items-end gap-2">
+                <label class="text-[11px] text-slate-600">
+                    <span class="mb-0.5 block font-semibold text-slate-700">Quick split for this student</span>
+                    <select
+                        v-model="splitThroughId"
+                        class="rounded-md border-slate-300 py-1 text-xs"
+                        :disabled="savingTerms"
+                    >
+                        <option value="">Last 1st-term chapter…</option>
+                        <option
+                            v-for="chapter in visibleChapters"
+                            :key="`split-${chapter.id}`"
+                            :value="String(chapter.id)"
+                        >
+                            Through {{ chapterNumberLabel(chapter) }} · {{ chapterNameLabel(chapter) }}
+                        </option>
+                    </select>
+                </label>
+                <button
+                    type="button"
+                    class="rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-600 disabled:opacity-40"
+                    :disabled="savingTerms || !splitThroughId"
+                    @click="applyTermSplit"
+                >
+                    {{ savingTerms ? 'Saving…' : '1st term through here, rest 2nd' }}
+                </button>
+            </div>
+            <p class="text-[11px] leading-snug text-slate-500">
+                Terms are for this student only. After the split, change any chapter that sits in the other term from the Term column.
+            </p>
+        </div>
+
+        <div
+            v-if="chapters.length && !visibleChapters.length"
+            class="rounded border border-dashed border-slate-300 px-3 py-3 text-xs text-slate-600"
+        >
+            No chapters in this term yet. Choose All, or use the quick split above.
+        </div>
+
+        <div v-else-if="chapters.length" class="overflow-x-auto rounded-lg border-2 border-slate-400 shadow-sm">
             <table class="w-full min-w-[44rem] border-collapse text-[13px] leading-snug">
                 <thead>
                     <tr class="bg-[#0b2a5b] text-white">
@@ -1028,6 +1189,7 @@ const startRevision = (item) => {
                         </th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Studied</th>
                         <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Under study</th>
+                        <th class="px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">Term</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1191,6 +1353,22 @@ const startRevision = (item) => {
                                 >
                                     <span v-if="chapter.under_study">✓</span>
                                 </button>
+                            </td>
+                            <td
+                                class="px-1 py-1 text-center align-middle"
+                                :class="chapterRowLineClass(chapter.id)"
+                                @click.stop
+                            >
+                                <select
+                                    class="rounded border-slate-300 py-0.5 text-[11px]"
+                                    :disabled="savingTerms || savingId === chapter.id"
+                                    :value="chapter.term === 1 || chapter.term === 2 ? String(chapter.term) : ''"
+                                    @change="setChapterTerm(chapter, $event.target.value)"
+                                >
+                                    <option value="">—</option>
+                                    <option value="1">1st</option>
+                                    <option value="2">2nd</option>
+                                </select>
                             </td>
                         </tr>
 

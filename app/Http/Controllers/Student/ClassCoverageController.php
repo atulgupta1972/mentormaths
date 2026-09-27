@@ -71,6 +71,25 @@ class ClassCoverageController extends Controller
         return back()->with('success', $message);
     }
 
+    public function updateTerms(Request $request): RedirectResponse
+    {
+        $enrollment = $request->user()->student?->currentEnrollment();
+
+        if (! $enrollment) {
+            return back()->with('error', 'No active enrollment for this year.');
+        }
+
+        $validated = $request->validate([
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.chapter_id' => ['required', 'integer', 'exists:syllabus_chapters,id'],
+            'items.*.term' => ['nullable', 'integer', 'in:1,2'],
+        ]);
+
+        $this->coverageService->setChapterTerms($enrollment, $validated['items']);
+
+        return back()->with('success', 'Chapter terms saved.');
+    }
+
     /**
      * Move an assigned sheet into a home syllabus chapter, or leave it in Additional (null).
      */
