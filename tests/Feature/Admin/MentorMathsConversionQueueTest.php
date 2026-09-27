@@ -173,6 +173,56 @@ class MentorMathsConversionQueueTest extends TestCase
         $this->assertSame('From MentorMaths 2: x is ____.', $items[0]['fill_blank_question_text']);
     }
 
+    public function test_chapter_page_shows_sums_and_replaces_the_selected_book_name(): void
+    {
+        $this->withoutVite();
+        [$grade, $syllabusChapter, $admin] = $this->seedBasics();
+
+        $book = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'name' => 'MentorMaths 2',
+            'code' => 'mm2',
+            'practice_line' => Textbook::PRACTICE_LINE_MENTORMATHS,
+            'source_ref' => 'RSA-C7',
+            'created_by' => $admin->id,
+        ]);
+
+        $chapter = TextbookChapter::query()->create([
+            'textbook_id' => $book->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 13,
+            'title' => 'Statistics',
+            'status' => TextbookChapter::STATUS_REVIEW,
+            'created_by' => $admin->id,
+            'extraction_items' => [[
+                'question_text' => 'R.S. Aggarwal: the mean is 4.',
+                'fill_blank_question_text' => 'In RS Aggarwal the mean is ____.',
+                'fill_blank_correct_answer' => '4',
+            ]],
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.mentormaths-conversion.chapter-sums', $chapter))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Textbooks/MentorMathsChapterSums')
+                ->where('current_book_name', 'MentorMaths 2')
+                ->where('suggested_book_name', 'RS Aggarwal')
+                ->where('chapter.sums.0.text', 'In RS Aggarwal the mean is ____.')
+                ->where('chapter.sums.0.mentions', ['RS Aggarwal']));
+
+        $this->actingAs($admin)
+            ->post(route('admin.mentormaths-conversion.replace-book', $chapter), [
+                'book_name' => 'RS Aggarwal',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $items = $chapter->fresh()->extraction_items;
+        $this->assertSame('MentorMaths 2: the mean is 4.', $items[0]['question_text']);
+        $this->assertSame('In MentorMaths 2 the mean is ____.', $items[0]['fill_blank_question_text']);
+    }
+
     /**
      * @return array{0: GradeLevel, 1: SyllabusChapter, 2: User}
      */

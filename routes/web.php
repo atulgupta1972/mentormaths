@@ -395,6 +395,12 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('mentormaths-conversion.review.replace');
     Route::post('/mentormaths-conversion/review/accept', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'acceptReady'])
         ->name('mentormaths-conversion.review.accept');
+    Route::get('/mentormaths-conversion/chapters/{textbookChapter}/sums', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'chapterSums'])
+        ->name('mentormaths-conversion.chapter-sums');
+    Route::post('/mentormaths-conversion/chapters/{textbookChapter}/replace-book', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'replaceChapterBookName'])
+        ->name('mentormaths-conversion.replace-book');
+    Route::post('/mentormaths-conversion/chapters/{textbookChapter}/convert', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'convertChapter'])
+        ->name('mentormaths-conversion.convert-chapter');
     Route::post('/mentormaths-conversion/chapters/{textbookChapter}/sums', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'saveSums'])
         ->name('mentormaths-conversion.sums');
     Route::get('/mentormaths-conversion/chapters/{textbookChapter}', [\App\Http\Controllers\Admin\MentorMathsConversionController::class, 'show'])

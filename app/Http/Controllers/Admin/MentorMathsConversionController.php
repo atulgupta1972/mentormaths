@@ -78,6 +78,63 @@ class MentorMathsConversionController extends Controller
             : "No sums contained \"{$validated['find']}\".");
     }
 
+    public function chapterSums(TextbookChapter $textbookChapter): Response|RedirectResponse
+    {
+        $textbookChapter->loadMissing('textbook');
+
+        if (! $textbookChapter->textbook || ! $this->queue->isConversionCandidate($textbookChapter->textbook)) {
+            return redirect()
+                ->route('admin.mentormaths-conversion.index')
+                ->with('error', 'This book is not on the MentorMaths conversion queue.');
+        }
+
+        return Inertia::render(
+            'Admin/Textbooks/MentorMathsChapterSums',
+            $this->queue->chapterSumsPayload($textbookChapter),
+        );
+    }
+
+    public function replaceChapterBookName(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'book_name' => ['required', 'string', 'max:200'],
+        ]);
+
+        $count = $this->queue->replaceBookNameInChapter($textbookChapter, $validated['book_name']);
+        $current = trim((string) ($textbookChapter->textbook?->name ?? ''));
+
+        return back()->with($count > 0 ? 'success' : 'warning', $count > 0
+            ? "Replaced \"{$validated['book_name']}\" with \"{$current}\" in {$count} place(s)."
+            : "No sum in this chapter contains \"{$validated['book_name']}\".");
+    }
+
+    public function convertChapter(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $textbookChapter->loadMissing('textbook');
+
+        if (! ($textbookChapter->textbook?->isMentorMathsPracticeLine() ?? false)) {
+            return back()->with('warning', 'This chapter is not on a MentorMaths book yet.');
+        }
+
+        if ($this->queue->fillBlankReadyCount($textbookChapter) < MentorMathsConversionQueueService::MIN_FILL_BLANK_READY) {
+            return back()->with('warning', 'This chapter needs at least '.MentorMathsConversionQueueService::MIN_FILL_BLANK_READY.' fill-blank sums before it can convert.');
+        }
+
+        try {
+            $this->publishService->publishFillBlankAndWritten($textbookChapter, $request->user(), true);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->with('error', \Illuminate\Support\Str::limit($exception->getMessage(), 180));
+        }
+
+        return redirect()
+            ->route('admin.mentormaths-conversion.index', array_filter([
+                'grade_level_id' => $textbookChapter->textbook?->grade_level_id,
+            ]))
+            ->with('success', 'Converted this chapter with the current book name.');
+    }
+
     public function saveSums(Request $request, TextbookChapter $textbookChapter): RedirectResponse
     {
         $validated = $request->validate([

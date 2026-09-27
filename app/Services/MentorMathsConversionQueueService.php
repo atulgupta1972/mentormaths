@@ -409,6 +409,241 @@ class MentorMathsConversionQueueService
     }
 
     /**
+     * One chapter: every sum, the current book name, and other book names that can replace it in the text.
+     *
+     * @return array{chapter: array<string, mixed>, current_book_name: string, other_books: list<array{name: string}>, suggested_book_name: ?string}
+     */
+    public function chapterSumsPayload(TextbookChapter $chapter): array
+    {
+        $chapter->loadMissing(['textbook.gradeLevel', 'syllabusChapter']);
+        $row = $this->chapterRow($chapter);
+        $otherBooks = $this->otherBookNames($chapter);
+        $names = array_column($otherBooks, 'name');
+
+        return [
+            'chapter' => [
+                'id' => $row['id'],
+                'label' => $row['label'],
+                'grade_name' => $row['grade_name'],
+                'book_name' => $row['book_name'],
+                'is_mentormaths' => $row['is_mentormaths'],
+                'meets_publish_minimum' => $row['meets_publish_minimum'],
+                'fill_blank_ready_count' => $row['fill_blank_ready_count'],
+                'items_count' => $row['items_count'],
+                'queue_step' => $row['queue_step'],
+                'sums' => $this->sumRows($chapter, $names),
+            ],
+            'current_book_name' => (string) ($row['book_name'] ?? ''),
+            'other_books' => $otherBooks,
+            'suggested_book_name' => $this->suggestedBookName($chapter, $names),
+        ];
+    }
+
+    /**
+     * Replace a chosen book name with this chapter's current book name.
+     */
+    public function replaceBookNameInChapter(TextbookChapter $chapter, string $fromName): int
+    {
+        $chapter->loadMissing('textbook');
+        $from = trim($fromName);
+        $to = trim((string) ($chapter->textbook?->name ?? ''));
+
+        if (mb_strlen($from) < 2) {
+            throw ValidationException::withMessages([
+                'book_name' => 'Choose a book name to replace.',
+            ]);
+        }
+
+        if ($to === '' || mb_strtolower($from) === mb_strtolower($to)) {
+            throw ValidationException::withMessages([
+                'book_name' => 'Pick a different book name. The current book name stays as it is.',
+            ]);
+        }
+
+        $needles = $this->bookNameNeedles($from);
+        $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
+        $replaced = 0;
+        $changed = false;
+
+        foreach ($items as $index => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            foreach (['question_text', 'fill_blank_question_text'] as $field) {
+                $text = (string) ($item[$field] ?? '');
+                if ($text === '') {
+                    continue;
+                }
+                $next = $this->swapBookNames($text, $needles, $to, $count);
+                if ($count > 0) {
+                    $items[$index][$field] = $next;
+                    $replaced += $count;
+                    $changed = true;
+                }
+            }
+        }
+
+        if ($changed) {
+            $chapter->update(['extraction_items' => array_values($items)]);
+        }
+
+        return $replaced;
+    }
+
+    /**
+     * @param  list<string>  $watchNames
+     * @return list<array{index: int, number: int, text: string, field: string, will_publish: bool, mentions: list<string>}>
+     */
+    private function sumRows(TextbookChapter $chapter, array $watchNames): array
+    {
+        $items = is_array($chapter->extraction_items) ? $chapter->extraction_items : [];
+        $sums = [];
+
+        foreach ($items as $index => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $fill = trim((string) ($item['fill_blank_question_text'] ?? ''));
+            $mcq = trim((string) ($item['question_text'] ?? ''));
+            $text = $fill !== '' ? $fill : $mcq;
+            $mentions = [];
+            foreach ($watchNames as $name) {
+                if ($this->textHasBookName($text, $name)) {
+                    $mentions[] = $name;
+                }
+            }
+            $sums[] = [
+                'index' => $index,
+                'number' => $index + 1,
+                'text' => $text,
+                'field' => $fill !== '' ? 'fill_blank' : 'question',
+                'will_publish' => $fill !== '' && filled($item['fill_blank_correct_answer'] ?? null),
+                'mentions' => $mentions,
+            ];
+        }
+
+        return $sums;
+    }
+
+    /**
+     * @return list<array{name: string}>
+     */
+    private function otherBookNames(TextbookChapter $chapter): array
+    {
+        $current = trim((string) ($chapter->textbook?->name ?? ''));
+        $classNumber = $this->classNumber($chapter->textbook?->gradeLevel?->name);
+        $names = [];
+
+        foreach (MentorMathsSourceRef::options($classNumber) as $option) {
+            $publisher = trim((string) ($option['publisher'] ?? ''));
+            if ($publisher !== '' && mb_strtolower($publisher) !== mb_strtolower($current)) {
+                $names[$publisher] = $publisher;
+            }
+        }
+
+        $gradeId = (int) ($chapter->textbook?->grade_level_id ?? 0);
+        if ($gradeId > 0) {
+            Textbook::query()
+                ->where('grade_level_id', $gradeId)
+                ->orderBy('name')
+                ->get(['name'])
+                ->each(function (Textbook $book) use (&$names, $current) {
+                    $name = trim((string) $book->name);
+                    if ($name !== '' && mb_strtolower($name) !== mb_strtolower($current)) {
+                        $names[$name] = $name;
+                    }
+                });
+        }
+
+        ksort($names, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return array_map(fn (string $name) => ['name' => $name], array_values($names));
+    }
+
+    /**
+     * @param  list<string>  $names
+     */
+    private function suggestedBookName(TextbookChapter $chapter, array $names): ?string
+    {
+        $ref = (string) ($chapter->textbook?->source_ref ?? '');
+        $fromRef = match (true) {
+            str_starts_with($ref, 'RDS-') => 'RD Sharma',
+            str_starts_with($ref, 'RSA-') => 'RS Aggarwal',
+            str_starts_with($ref, 'GL-') => 'Greya Lakshmi',
+            str_starts_with($ref, 'EXEM-') => 'NCERT Exemplar',
+            default => null,
+        };
+
+        if ($fromRef !== null && in_array($fromRef, $names, true)) {
+            return $fromRef;
+        }
+
+        return $names[0] ?? null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function bookNameNeedles(string $name): array
+    {
+        $needles = [trim($name)];
+        $lower = mb_strtolower($name);
+
+        if (str_contains($lower, 'aggarwal') || str_contains($lower, 'agarwal')) {
+            $needles = array_merge($needles, [
+                'RS Aggarwal', 'R.S. Aggarwal', 'R. S. Aggarwal', 'R S Aggarwal',
+                'RS Agarwal', 'R.S. Agarwal', 'R. S. Agarwal', 'R S Agarwal',
+            ]);
+        }
+        if (str_contains($lower, 'sharma')) {
+            $needles = array_merge($needles, [
+                'RD Sharma', 'R.D. Sharma', 'R. D. Sharma', 'R D Sharma',
+            ]);
+        }
+        if (str_contains($lower, 'exemplar')) {
+            $needles[] = 'NCERT Exemplar';
+        }
+        if (str_contains($lower, 'lakshmi')) {
+            $needles[] = 'Greya Lakshmi';
+        }
+
+        $needles = array_values(array_unique(array_filter($needles, fn (string $needle) => mb_strlen(trim($needle)) >= 2)));
+        usort($needles, fn (string $a, string $b) => mb_strlen($b) <=> mb_strlen($a));
+
+        return $needles;
+    }
+
+    /**
+     * @param  list<string>  $needles
+     */
+    private function swapBookNames(string $text, array $needles, string $to, ?int &$count = null): string
+    {
+        $count = 0;
+        $next = $text;
+        foreach ($needles as $needle) {
+            $found = 0;
+            $replaced = str_ireplace($needle, $to, $next, $found);
+            if ($found > 0) {
+                $next = $replaced;
+                $count += $found;
+            }
+        }
+
+        return $next;
+    }
+
+    private function textHasBookName(string $text, string $name): bool
+    {
+        if ($text === '' || trim($name) === '') {
+            return false;
+        }
+
+        $this->swapBookNames($text, $this->bookNameNeedles($name), $name, $count);
+
+        return $count > 0;
+    }
+
+    /**
      * Replace a phrase (old book name or a person's name) in pending sum text.
      */
     public function replaceInPendingSums(?int $gradeLevelId, ?int $textbookId, string $find, string $replace): int
