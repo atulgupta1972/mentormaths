@@ -17,6 +17,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class ClassCoverageService
 {
@@ -1169,15 +1170,23 @@ class ClassCoverageService
         $actorId = auth()->id();
 
         defer(function () use ($enrollmentId, $chapterId, $actorId) {
-            $enrollment = StudentEnrollment::query()->find($enrollmentId);
-            $chapter = SyllabusChapter::query()->find($chapterId);
-            $actor = $actorId ? User::query()->find($actorId) : null;
+            try {
+                $enrollment = StudentEnrollment::query()->find($enrollmentId);
+                $chapter = SyllabusChapter::query()->find($chapterId);
+                $actor = $actorId ? User::query()->find($actorId) : null;
 
-            if (! $enrollment || ! $chapter) {
-                return;
+                if (! $enrollment || ! $chapter) {
+                    return;
+                }
+
+                app(self::class)->runChapterMarkSideEffects($enrollment, $chapter, $actor);
+            } catch (Throwable $e) {
+                Log::error('Study-plan auto-assign failed.', [
+                    'enrollment_id' => $enrollmentId,
+                    'chapter_id' => $chapterId,
+                    'message' => $e->getMessage(),
+                ]);
             }
-
-            app(self::class)->runChapterMarkSideEffects($enrollment, $chapter, $actor);
         });
     }
 

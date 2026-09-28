@@ -116,8 +116,9 @@ class DashboardController extends Controller
         $enrollment = $user->student?->currentEnrollment();
         $enrollment?->loadMissing(['gradeLevel:id,name', 'board:id,name']);
 
-        if ($this->isStudentDashboardDeferredRequest($request)) {
-            return Inertia::render('Dashboard', $this->studentDeferredPayload($request, $enrollment, $user));
+        if ($request->header('X-Inertia-Partial-Component') === 'Dashboard'
+            && $this->dashboardPartialDataKeys($request) !== []) {
+            return Inertia::render('Dashboard', $this->studentPartialPayload($request, $enrollment, $user));
         }
 
         $gradeLevelId = $request->integer('grade_level_id') ?: null;
@@ -204,27 +205,17 @@ class DashboardController extends Controller
     }
 
     /**
-     * Inertia deferred loads for student study plan / set lists should not rerun the full dashboard query.
-     */
-    private function isStudentDashboardDeferredRequest(Request $request): bool
-    {
-        $user = $request->user();
-
-        if (! $user || $user->isAdmin() || ! $user->student) {
-            return false;
-        }
-
-        return $this->isDashboardDeferredRequest($request, ['classCoverage', 'assignments']);
-    }
-
-    /**
+     * Partial dashboard reloads (study-plan tick asks for assignments + stats) must return
+     * plain data. Wrapping those keys in DeferProp again 500s the Inertia request.
+     *
      * @return array<string, mixed>
      */
-    private function studentDeferredPayload(Request $request, ?StudentEnrollment $enrollment, User $user): array
+    private function studentPartialPayload(Request $request, ?StudentEnrollment $enrollment, User $user): array
     {
         $payload = ['isAdmin' => false];
+        $keys = $this->dashboardPartialDataKeys($request);
 
-        foreach ($this->dashboardPartialDataKeys($request) as $key) {
+        foreach ($keys as $key) {
             if ($key === 'classCoverage') {
                 try {
                     $payload['classCoverage'] = $this->classCoverage->forEnrollment($enrollment);
@@ -251,6 +242,41 @@ class DashboardController extends Controller
                         'message' => $e->getMessage(),
                     ]);
                     $payload['assignments'] = [];
+                }
+            }
+        }
+
+        $studentKeys = [
+            'stats',
+            'resumeItems',
+            'latestWorkGroups',
+            'olderPendingGroups',
+            'followUpItems',
+            'upcomingExams',
+            'resolutionItems',
+            'resolutionCount',
+            'loadError',
+        ];
+
+        if (array_intersect($keys, $studentKeys) !== []) {
+            try {
+                $studentData = $this->dashboardService->forStudent(
+                    $enrollment,
+                    includeAssignmentList: false,
+                );
+            } catch (Throwable $e) {
+                Log::error('Student dashboard failed to reload stats.', [
+                    'user_id' => $user->id,
+                    'enrollment_id' => $enrollment?->id,
+                    'message' => $e->getMessage(),
+                ]);
+                $studentData = $this->dashboardService->forStudent(null);
+                $studentData['loadError'] = 'Some of your work could not be loaded. Please try again in a few minutes or tell your teacher.';
+            }
+
+            foreach ($studentKeys as $key) {
+                if (in_array($key, $keys, true)) {
+                    $payload[$key] = $studentData[$key] ?? null;
                 }
             }
         }
@@ -323,24 +349,6 @@ class DashboardController extends Controller
 
             return [];
         }
-    }
-
-    /**
-     * @param  list<string>  $allowed
-     */
-    private function isDashboardDeferredRequest(Request $request, array $allowed): bool
-    {
-        if ($request->header('X-Inertia-Partial-Component') !== 'Dashboard') {
-            return false;
-        }
-
-        $only = $this->dashboardPartialDataKeys($request);
-
-        if ($only === []) {
-            return false;
-        }
-
-        return array_diff($only, $allowed) === [];
     }
 
     /**

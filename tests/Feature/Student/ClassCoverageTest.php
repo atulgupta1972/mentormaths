@@ -5,6 +5,7 @@ namespace Tests\Feature\Student;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
+use App\Models\SetAssignment;
 use App\Models\Student;
 use App\Models\StudentChapterCoverage;
 use App\Models\StudentEnrollment;
@@ -12,6 +13,11 @@ use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\User;
+use App\Models\Worksheet;
+use App\Support\PracticeSetScope;
+use App\Support\PracticeSetTier;
+use App\Support\WorksheetDeliveryMode;
+use App\Support\WrittenSheetStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -108,6 +114,39 @@ class ClassCoverageTest extends TestCase
         $this->assertDatabaseMissing('student_chapter_coverages', [
             'student_enrollment_id' => $enrollment->id,
             'syllabus_chapter_id' => $chapters[0]->id,
+        ]);
+    }
+
+    public function test_marking_chapter_studied_assigns_verified_written_sheet(): void
+    {
+        [$user, $enrollment, $chapters] = $this->seedStudentWithChapters(1);
+
+        $worksheet = Worksheet::query()->create([
+            'title' => 'Written part 1',
+            'set_number' => 1,
+            'set_code' => 'T7211-W1',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapters[0]->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'written_status' => WrittenSheetStatus::VERIFIED,
+            'written_pdf_path' => 'written-sheets/w1.pdf',
+            'written_verified_at' => now(),
+            'written_verified_by' => $user->id,
+            'created_by' => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('student.class-coverage.update', $chapters[0]), [
+                'status' => 'studied',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('set_assignments', [
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'status' => SetAssignment::STATUS_ASSIGNED,
         ]);
     }
 

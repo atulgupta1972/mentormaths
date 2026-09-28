@@ -268,6 +268,35 @@ class DashboardTest extends TestCase
                     ->has('assignments')));
     }
 
+    public function test_student_study_tick_reload_returns_assignments_and_stats(): void
+    {
+        $this->withoutVite();
+        $this->withoutMiddleware([
+            EnsureFormulaDrillComplete::class,
+            EnsureBasicsDrillComplete::class,
+        ]);
+
+        [, $enrollment] = $this->seedAdminDashboard();
+        $user = $enrollment->student->user;
+        $version = app(\App\Http\Middleware\HandleInertiaRequests::class)->version(request());
+
+        $response = $this->actingAs($user)
+            ->withHeaders([
+                'X-Inertia' => 'true',
+                'X-Inertia-Partial-Component' => 'Dashboard',
+                'X-Inertia-Partial-Data' => 'assignments,stats',
+                'X-Inertia-Version' => (string) $version,
+            ])
+            ->get(route('dashboard'));
+
+        $response->assertOk();
+        $payload = $response->json();
+        $this->assertSame('Dashboard', $payload['component'] ?? null);
+        $this->assertIsArray($payload['props']['assignments'] ?? null);
+        $this->assertIsArray($payload['props']['stats'] ?? null);
+        $this->assertArrayHasKey('sets_todo', $payload['props']['stats']);
+    }
+
     public function test_admin_dashboard_survives_grade_context_switch(): void
     {
         $this->withoutVite();
