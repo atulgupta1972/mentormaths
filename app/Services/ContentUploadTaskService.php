@@ -318,10 +318,6 @@ class ContentUploadTaskService
             throw new \InvalidArgumentException('This task is not awaiting agreement.');
         }
 
-        if ($task->isConceptPathBuild()) {
-            app(ConceptPathJobService::class)->assertCanStart($uploader, $task);
-        }
-
         $task->update([
             'status' => ContentUploadTask::STATUS_IN_PROGRESS,
             'agreed_amount_inr' => $task->offered_amount_inr,

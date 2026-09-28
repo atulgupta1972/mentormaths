@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\ContentUploadTask;
 use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\GradeLevel;
@@ -190,6 +191,55 @@ class ConceptBuilderTest extends TestCase
             'assigned_to_user_id' => $uploader->id,
             'work_type' => \App\Models\ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
         ]);
+    }
+
+    public function test_uploader_can_agree_concept_job_while_another_is_still_open(): void
+    {
+        $this->withoutVite();
+
+        [$admin, , $syllabusChapter, $upload] = $this->seedConceptBuilder(withPdf: false);
+        $upload->update(['pdf_path' => null]);
+
+        $uploader = tap(User::factory()->create(['role' => User::ROLE_TEACHER]), function (User $user) {
+            app(UserGroupService::class)->attachGroupByCode($user, User::ROLE_CONTENT_UPLOADER);
+        });
+
+        $other = TextbookChapter::query()->create([
+            'textbook_id' => $upload->textbook_id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 5,
+            'title' => 'Round and Round',
+            'pdf_path' => null,
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $other->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 50,
+            'agreed_amount_inr' => 50,
+            'agreed_at' => now(),
+        ]);
+
+        $next = ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $upload->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            'offered_amount_inr' => 50,
+        ]);
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.agree', $next))
+            ->assertRedirect(route('content.textbooks.show', $upload))
+            ->assertSessionHas('success');
+
+        $this->assertSame(ContentUploadTask::STATUS_IN_PROGRESS, $next->fresh()->status);
     }
 
     public function test_admin_can_link_book_without_pdf_for_later_assign(): void
