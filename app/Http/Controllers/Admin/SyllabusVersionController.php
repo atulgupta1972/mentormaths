@@ -279,6 +279,46 @@ class SyllabusVersionController extends Controller
         return $this->processImport($request, $syllabusVersion);
     }
 
+    public function appendIntoVersion(Request $request, SyllabusVersion $syllabusVersion): RedirectResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls', 'extensions:xlsx,xls', 'max:10240'],
+        ]);
+
+        try {
+            $result = $this->importService->appendFromFile($request->file('file'), $syllabusVersion);
+        } catch (\Throwable $e) {
+            report($e);
+
+            $message = str_contains(strtolower($e->getMessage()), 'zip')
+                ? 'Server cannot read .xlsx files (PHP zip extension missing). Ask your host to enable ext-zip.'
+                : 'Could not read the Excel file: '.$e->getMessage();
+
+            return back()->with('error', $message);
+        }
+
+        $addedChapters = (int) ($result['added_chapters'] ?? 0);
+        $addedTopics = (int) ($result['added_topics'] ?? 0);
+        $skipped = $result['skipped_chapters'] ?? [];
+
+        if ($addedTopics === 0) {
+            $message = $skipped !== []
+                ? 'No new chapters were added. Already in this syllabus: '.implode(', ', $skipped).'.'
+                : 'No topics were found to add. Check the Excel headers: Chapter No., Main Topic (Chapter), Sub-Topic.';
+
+            return back()->with('error', $message);
+        }
+
+        $message = "Added {$addedChapters} chapter(s) and {$addedTopics} topic(s). Existing chapters were kept.";
+        if ($skipped !== []) {
+            $message .= ' Skipped already saved: '.implode(', ', $skipped).'.';
+        }
+
+        return redirect()
+            ->route('admin.syllabus.show', $syllabusVersion)
+            ->with('success', $message);
+    }
+
     public function previewImportIntoVersion(Request $request, SyllabusVersion $syllabusVersion): JsonResponse
     {
         $request->validate([

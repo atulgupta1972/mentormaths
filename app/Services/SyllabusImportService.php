@@ -29,6 +29,107 @@ class SyllabusImportService
     }
 
     /**
+     * Add chapters from an Excel file without deleting or rewriting chapters already saved.
+     *
+     * @return array{added_chapters: int, added_topics: int, skipped_chapters: list<string>}
+     */
+    public function appendFromFile(UploadedFile $file, SyllabusVersion $version): array
+    {
+        return $this->appendRows($version, $this->parseFileToPreviewRows($file)->all());
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{added_chapters: int, added_topics: int, skipped_chapters: list<string>}
+     */
+    public function appendRows(SyllabusVersion $version, array $rows): array
+    {
+        $addedChapters = 0;
+        $addedTopics = 0;
+        $skipped = [];
+
+        DB::transaction(function () use ($version, $rows, &$addedChapters, &$addedTopics, &$skipped) {
+            $originalKeys = [];
+            foreach ($version->chapters()->get() as $chapter) {
+                $originalKeys[$this->chapterKey((string) $chapter->chapter_number, (string) $chapter->name)] = true;
+            }
+
+            $chapterSort = (int) ($version->chapters()->max('sort_order') ?? 0);
+            $chapterIds = $version->chapters()->pluck('id');
+            $topicSort = (int) (SyllabusTopic::query()
+                ->when($chapterIds->isNotEmpty(), fn ($query) => $query->whereIn('syllabus_chapter_id', $chapterIds))
+                ->max('sort_order') ?? 0);
+
+            $chapterCache = [];
+            $createdSort = [];
+            $currentKey = null;
+            $skip = false;
+
+            foreach ($rows as $row) {
+                $topicName = trim((string) ($row['topic_name'] ?? ''));
+                $chapterName = trim((string) ($row['chapter_name'] ?? ''));
+                if ($topicName === '' && $chapterName === '') {
+                    continue;
+                }
+
+                $number = $this->cleanChapterNumber($row['chapter_number'] ?? '');
+                $key = $this->chapterKey($number, $chapterName);
+
+                if ($key !== $currentKey) {
+                    $currentKey = $key;
+                    $skip = $key !== '|' && isset($originalKeys[$key]);
+                    if ($skip) {
+                        $skipped[$key] = trim($number.' '.$chapterName);
+                    }
+                }
+
+                if ($skip) {
+                    continue;
+                }
+
+                if (! isset($createdSort[$key])) {
+                    $chapterSort++;
+                    $createdSort[$key] = $chapterSort;
+                    $addedChapters++;
+                }
+
+                $this->resolveChapter($version, $row, $createdSort[$key], $chapterCache, true);
+
+                if ($topicName === '') {
+                    continue;
+                }
+
+                $chapter = $chapterCache[$key] ?? null;
+                if (! $chapter) {
+                    continue;
+                }
+
+                $topicSort++;
+                SyllabusTopic::query()->create([
+                    'syllabus_chapter_id' => $chapter->id,
+                    'name' => $topicName,
+                    'learning_outcomes' => $row['learning_outcomes'] ?? null,
+                    'difficulty' => $row['difficulty'] ?? null,
+                    'planned_periods' => $this->parsePeriods($row['planned_periods'] ?? null),
+                    'remarks' => $row['remarks'] ?? null,
+                    'sort_order' => $topicSort,
+                ]);
+                $addedTopics++;
+            }
+
+            if ($addedTopics > 0) {
+                $version->update(['status' => SyllabusVersion::STATUS_PUBLISHED]);
+            }
+        });
+
+        return [
+            'added_chapters' => $addedChapters,
+            'added_topics' => $addedTopics,
+            'skipped_chapters' => array_values($skipped),
+        ];
+    }
+
+    /**
      * Parse an Excel syllabus file into editable row arrays without touching the database.
      */
     public function parseFileToPreviewRows(UploadedFile $file): Collection

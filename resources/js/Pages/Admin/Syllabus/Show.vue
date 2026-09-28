@@ -87,6 +87,7 @@ const previewActive = ref(false);
 const previewFilename = ref('');
 const previewLoading = ref(false);
 const importReplaceProcessing = ref(false);
+const importAppendProcessing = ref(false);
 const previewWarnings = ref([]);
 const savedRowSnapshot = ref(null);
 const importFileInput = ref(null);
@@ -262,6 +263,56 @@ const submitImportReplace = () => {
         },
         onFinish: () => {
             importReplaceProcessing.value = false;
+        },
+    });
+};
+
+const submitImportAppend = () => {
+    importFeedback.value = '';
+    importFeedbackType.value = '';
+    importForm.clearErrors();
+
+    if (!importForm.file) {
+        importForm.setError('file', 'Choose an Excel file first.');
+        importFeedback.value = 'Choose an Excel file first.';
+        importFeedbackType.value = 'error';
+
+        return;
+    }
+
+    const filename = importForm.file.name;
+    const confirmMessage = hasSavedRows.value
+        ? `Add new chapters from "${filename}"? The ${props.rows.length} saved row(s) stay. Chapters already in this syllabus are skipped.`
+        : `Add chapters from "${filename}" into this syllabus?`;
+
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    importAppendProcessing.value = true;
+    importFeedback.value = 'Adding chapters…';
+    importFeedbackType.value = 'info';
+
+    importForm.post(route('admin.syllabus.import-append', props.version.id), {
+        preserveScroll: true,
+        forceFormData: true,
+        onSuccess: () => {
+            previewActive.value = false;
+            previewFilename.value = '';
+            lastPreviewedFile.value = '';
+            previewWarnings.value = [];
+            savedRowSnapshot.value = null;
+            importForm.reset('file');
+        },
+        onError: () => {
+            importFeedbackType.value = 'error';
+            importFeedback.value =
+                importForm.errors.file
+                || Object.values(importForm.errors)[0]
+                || 'Could not add chapters. Check the Excel headers and try again.';
+        },
+        onFinish: () => {
+            importAppendProcessing.value = false;
         },
     });
 };
@@ -1029,12 +1080,12 @@ const saveNewHead = async () => {
                             />
                             <InputError class="mt-1" :message="importForm.errors.file" />
                         </div>
-                        <PrimaryButton type="submit" :disabled="previewLoading || importReplaceProcessing">
+                        <PrimaryButton type="submit" :disabled="previewLoading || importReplaceProcessing || importAppendProcessing">
                             {{ previewLoading ? 'Reading…' : 'Preview Excel' }}
                         </PrimaryButton>
                         <SecondaryButton
                             type="button"
-                            :disabled="previewLoading || importReplaceProcessing || !importForm.file"
+                            :disabled="previewLoading || importReplaceProcessing || importAppendProcessing || !importForm.file"
                             @click="submitImportReplace"
                         >
                             {{ importReplaceProcessing ? 'Importing…' : 'Import & replace' }}
@@ -1042,12 +1093,27 @@ const saveNewHead = async () => {
                         <DangerButton
                             v-if="canClearSyllabus"
                             type="button"
-                            :disabled="previewLoading || importReplaceProcessing"
+                            :disabled="previewLoading || importReplaceProcessing || importAppendProcessing"
                             @click="clearAllSyllabus"
                         >
                             Clear all rows
                         </DangerButton>
                     </form>
+                    <div class="mt-4 border-t border-indigo-200 pt-4">
+                        <h4 class="text-sm font-medium text-gray-900">Add additional chapters</h4>
+                        <p class="mt-1 text-sm text-gray-600">
+                            Uses the Excel file chosen above. Saved chapters stay.
+                            New chapters are added at the end. A chapter already in this syllabus is skipped.
+                        </p>
+                        <SecondaryButton
+                            type="button"
+                            class="mt-3"
+                            :disabled="previewLoading || importReplaceProcessing || importAppendProcessing || !importForm.file"
+                            @click="submitImportAppend"
+                        >
+                            {{ importAppendProcessing ? 'Adding…' : 'Add additional chapters' }}
+                        </SecondaryButton>
+                    </div>
                     <div
                         v-if="importFeedback"
                         class="mt-3 rounded-md border px-4 py-3 text-sm"

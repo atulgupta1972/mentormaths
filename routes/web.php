@@ -278,6 +278,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('syllabus.import');
     Route::post('/syllabus/{syllabusVersion}/import', [SyllabusVersionController::class, 'importIntoVersion'])
         ->name('syllabus.import-into');
+    Route::post('/syllabus/{syllabusVersion}/import-append', [SyllabusVersionController::class, 'appendIntoVersion'])
+        ->name('syllabus.import-append');
     Route::post('/syllabus/{syllabusVersion}/import-preview', [SyllabusVersionController::class, 'previewImportIntoVersion'])
         ->name('syllabus.import-preview');
     Route::put('/syllabus/{syllabusVersion}/rows', [SyllabusVersionController::class, 'updateRows'])

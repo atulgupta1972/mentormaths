@@ -427,6 +427,41 @@ class SyllabusQuickTopicTest extends TestCase
         $this->assertSame('Geometry', $rows->firstWhere('chapter_name', 'Angles as Turns')['chapter_head_name']);
     }
 
+    public function test_append_rows_adds_a_new_chapter_and_keeps_the_saved_one(): void
+    {
+        $version = $this->seedSyllabusVersion();
+        $service = app(SyllabusImportService::class);
+
+        $service->syncRows($version, [[
+            'chapter_number' => '1',
+            'chapter_name' => 'Number Systems',
+            'topic_name' => 'Real numbers',
+        ]], replaceExisting: true);
+
+        $result = $service->appendRows($version, [
+            [
+                'chapter_number' => '1',
+                'chapter_name' => 'Number Systems',
+                'topic_name' => 'This topic must not replace the saved chapter',
+            ],
+            [
+                'chapter_number' => '15',
+                'chapter_name' => 'Probability',
+                'topic_name' => 'Experimental probability',
+            ],
+        ]);
+
+        $chapters = $version->fresh()->chapters()->orderBy('sort_order')->get();
+
+        $this->assertSame(1, $result['added_chapters']);
+        $this->assertSame(1, $result['added_topics']);
+        $this->assertCount(2, $chapters);
+        $this->assertSame('Number Systems', $chapters[0]->name);
+        $this->assertSame(['Real numbers'], $chapters[0]->topics()->pluck('name')->all());
+        $this->assertSame('Probability', $chapters[1]->name);
+        $this->assertSame(['Experimental probability'], $chapters[1]->topics()->pluck('name')->all());
+    }
+
     public function test_import_creates_missing_chapter_head_from_excel_column(): void
     {
         $version = $this->seedSyllabusVersion();
