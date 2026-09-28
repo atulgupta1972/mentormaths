@@ -996,6 +996,9 @@ const formatHelpDate = (value) => {
                     <div v-if="page.props.flash?.success" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
                         {{ page.props.flash.success }}
                     </div>
+                    <div v-if="page.props.flash?.error" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                        {{ page.props.flash.error }}
+                    </div>
 
                     <section
                             v-if="resolutionItems.length"

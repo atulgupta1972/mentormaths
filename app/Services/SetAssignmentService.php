@@ -29,7 +29,7 @@ class SetAssignmentService
             throw new \InvalidArgumentException('Only published practice sets can be assigned.');
         }
 
-        if ($practiceSet->isWritten() && ! $practiceSet->isWrittenVerified()) {
+        if ($practiceSet->isWritten() && ! $practiceSet->isFormula() && ! $practiceSet->isWrittenVerified()) {
             throw new \InvalidArgumentException('Written sheet must be verified by admin before assigning.');
         }
 

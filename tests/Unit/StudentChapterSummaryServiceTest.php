@@ -77,6 +77,7 @@ class StudentChapterSummaryServiceTest extends TestCase
         $studentUser = $this->studentUserForEnrollment($enrollment);
 
         $this->actingAs($studentUser)
+            ->from(route('dashboard'))
             ->post(route('student.worksheets.self-assign', $practiceOne))
             ->assertRedirect(route('dashboard'));
 
@@ -85,6 +86,68 @@ class StudentChapterSummaryServiceTest extends TestCase
             'worksheet_id' => $practiceOne->id,
             'status' => SetAssignment::STATUS_ASSIGNED,
         ]);
+    }
+
+    public function test_student_can_self_assign_formula_set_without_server_error(): void
+    {
+        $this->withoutMiddleware([
+            \App\Http\Middleware\EnsureFormulaDrillComplete::class,
+            \App\Http\Middleware\EnsureBasicsDrillComplete::class,
+            \App\Http\Middleware\EnsureMensurationMatchComplete::class,
+        ]);
+
+        [$enrollment] = $this->seedChapterContent(withFormula: true);
+        $formula = Worksheet::query()->where('purpose', WorksheetPurpose::FORMULA)->firstOrFail();
+        $studentUser = $this->studentUserForEnrollment($enrollment);
+
+        $question = \App\Models\Question::query()->create([
+            'syllabus_topic_id' => $formula->syllabus_topic_id,
+            'type' => \App\Models\Question::TYPE_MCQ,
+            'question_text' => 'Area of a square',
+            'bank_purpose' => \App\Support\QuestionBankPurpose::FORMULA,
+            'source' => \App\Models\Question::SOURCE_MANUAL,
+            'created_by' => $studentUser->id,
+        ]);
+        $formula->questions()->attach([$question->id => ['sort_order' => 1]]);
+
+        $this->actingAs($studentUser)
+            ->from(route('dashboard'))
+            ->post(route('student.worksheets.self-assign', $formula))
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('set_assignments', [
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $formula->id,
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        $summary = app(StudentChapterSummaryService::class)->forEnrollment($enrollment);
+        $formulaItem = $summary['chapters'][0]['items']['formula'][0];
+        $this->assertFalse($formulaItem['can_assign']);
+        $this->assertNotNull($formulaItem['assignment_id']);
+
+        $this->withoutVite()
+            ->actingAs($studentUser)
+            ->get(route('dashboard'))
+            ->assertOk();
+
+        $version = app(\App\Http\Middleware\HandleInertiaRequests::class)->version(request());
+
+        $partial = $this->actingAs($studentUser)
+            ->withHeaders([
+                'X-Inertia' => 'true',
+                'X-Inertia-Partial-Component' => 'Dashboard',
+                'X-Inertia-Partial-Data' => 'classCoverage,assignments',
+                'X-Inertia-Version' => (string) $version,
+            ])
+            ->get(route('dashboard'));
+
+        $partial->assertOk();
+        $payload = $partial->json();
+        $this->assertSame('Dashboard', $payload['component'] ?? null);
+        $this->assertIsArray($payload['props']['classCoverage']['chapters'] ?? null);
+        $this->assertIsArray($payload['props']['assignments'] ?? null);
     }
 
     public function test_school_study_plan_includes_chapter_availability(): void

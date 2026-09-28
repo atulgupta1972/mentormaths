@@ -403,7 +403,7 @@ class AssignmentProgress
             'set_code' => $summary['set_code'],
             'set_number' => $summary['set_number'],
             'kind_label' => $summary['kind_label'],
-            'delivery_mode' => $assignment->practiceSet->delivery_mode ?? 'online',
+            'delivery_mode' => $assignment->practiceSet?->delivery_mode ?? 'online',
             'is_catch_up' => $summary['is_catch_up'],
             'scope' => $summary['scope'],
             'chapter_name' => $summary['chapter_name'],

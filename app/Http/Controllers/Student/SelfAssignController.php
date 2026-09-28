@@ -9,6 +9,8 @@ use App\Services\RevisionAssignmentService;
 use App\Services\SetAssignmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class SelfAssignController extends Controller
 {
@@ -64,13 +66,25 @@ class SelfAssignController extends Controller
 
         $dueDate = now()->addDays(3)->toDateString();
 
-        $this->assignmentService->assign(
-            $worksheet,
-            $enrollment,
-            $user,
-            $dueDate,
-            'Self-assigned from chapter summary',
-        );
+        try {
+            $this->assignmentService->assign(
+                $worksheet,
+                $enrollment,
+                $user,
+                $dueDate,
+                'Self-assigned from chapter summary',
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (Throwable $e) {
+            Log::error('Student self-assign failed.', [
+                'worksheet_id' => $worksheet->id,
+                'enrollment_id' => $enrollment->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return back()->with('error', 'Could not assign this set. Please try again, or tell your teacher.');
+        }
 
         $assignment = SetAssignment::query()
             ->where('student_enrollment_id', $enrollment->id)
@@ -79,14 +93,12 @@ class SelfAssignController extends Controller
             ->orderByDesc('id')
             ->first();
 
-        if ($worksheet->isWritten() && $assignment) {
+        if ($worksheet->isWritten() && ! $worksheet->isFormula() && $assignment) {
             return redirect()
                 ->route('student.written-assignments.show', $assignment)
                 ->with('success', "{$worksheet->set_code} is ready — download the sheet and upload your work.");
         }
 
-        return redirect()
-            ->route('dashboard')
-            ->with('success', "{$worksheet->set_code} added to your work — open it from the study plan.");
+        return back()->with('success', "{$worksheet->set_code} added to your work — open it from the study plan.");
     }
 }

@@ -444,7 +444,7 @@ class AdminChapterContentService
     {
         $questions = $worksheet->relationLoaded('questions')
             ? $worksheet->questions
-            : $worksheet->questions()->get(['id', 'worksheet_id', 'type']);
+            : $worksheet->questions()->get(['id', 'type']);
 
         if ($questions->isEmpty()) {
             return false;
