@@ -412,7 +412,7 @@ class MentorMathsConversionQueueService
     }
 
     /**
-     * @return array{chapter: array<string, mixed>, current_book_name: string, old_book_name: ?string}
+     * @return array{chapter: array<string, mixed>, current_book_name: string}
      */
     public function chapterSumsPayload(TextbookChapter $chapter): array
     {
@@ -428,7 +428,6 @@ class MentorMathsConversionQueueService
                 'items_count' => $row['items_count'],
             ],
             'current_book_name' => (string) ($row['book_name'] ?? ''),
-            'old_book_name' => $this->publisherNameFromSourceRef((string) ($chapter->textbook?->source_ref ?? '')),
         ];
     }
 

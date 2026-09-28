@@ -794,8 +794,8 @@ const canChangeBook = computed(() =>
                             </select>
                         </div>
                         <div v-else class="flex flex-wrap items-end gap-2">
-                            <input v-model="changeBookForm.book_name" type="text" placeholder="Book name (e.g. RD Sharma)" class="rounded-md border-gray-300 text-sm" required>
-                            <input v-model="changeBookForm.book_code" type="text" placeholder="Code (e.g. rdsharma)" class="w-36 rounded-md border-gray-300 text-sm" required>
+                            <input v-model="changeBookForm.book_name" type="text" placeholder="Book name" class="rounded-md border-gray-300 text-sm" required>
+                            <input v-model="changeBookForm.book_code" type="text" placeholder="Code" class="w-36 rounded-md border-gray-300 text-sm" required>
                         </div>
                         <PrimaryButton type="submit" class="!py-1.5 !text-xs" :disabled="changeBookForm.processing">
                             {{ changeBookForm.processing ? 'Saving…' : 'Update book' }}

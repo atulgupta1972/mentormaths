@@ -5,7 +5,6 @@ import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 const props = defineProps({
     chapter: { type: Object, required: true },
     current_book_name: { type: String, default: '' },
-    old_book_name: { type: String, default: '' },
 });
 
 const page = usePage();
@@ -49,10 +48,7 @@ const applyName = () => {
                     <p class="mt-1 text-2xl font-semibold text-slate-900">{{ current_book_name }}</p>
                     <p class="mt-3 text-sm text-slate-600">
                         This is the name used for this chapter in the question bank, study plan, and student pages.
-                        <template v-if="old_book_name">
-                            One click replaces {{ old_book_name }} with {{ current_book_name }} in this chapter’s questions.
-                        </template>
-                        <template v-else-if="!chapter.items_count">
+                        <template v-if="!chapter.items_count">
                             This chapter has no questions stored yet.
                         </template>
                     </p>

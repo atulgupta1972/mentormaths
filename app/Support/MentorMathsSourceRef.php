@@ -28,9 +28,12 @@ class MentorMathsSourceRef
         foreach ($classes as $class) {
             foreach ($publishers as $publisher) {
                 $value = "{$publisher['code']}-C{$class}";
+                $hidePublisherName = in_array($publisher['code'], ['RDS', 'RSA'], true);
                 $options[] = [
                     'value' => $value,
-                    'label' => "{$value} — {$publisher['label']} Class {$class}",
+                    'label' => $hidePublisherName
+                        ? "{$value} — Class {$class}"
+                        : "{$value} — {$publisher['label']} Class {$class}",
                     'publisher' => $publisher['label'],
                 ];
             }

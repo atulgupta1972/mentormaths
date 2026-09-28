@@ -23,7 +23,7 @@ const assignOpenId = ref(null);
 const selectedIds = ref([]);
 const batchAssigning = ref(false);
 
-/** Concept paths belong on school textbooks — hide RD Sharma by default. */
+/** Concept paths belong on school textbooks. Publisher practice books stay out of this list. */
 const hideRdSharma = ref(true);
 const bookFilterId = ref('');
 
@@ -71,21 +71,6 @@ const filteredUploads = (uploads) => {
         return true;
     });
 };
-
-const hiddenRdSharmaCount = computed(() => {
-    if (!hideRdSharma.value) {
-        return 0;
-    }
-    let n = 0;
-    for (const row of props.chapters || []) {
-        for (const upload of row.uploads || []) {
-            if (isRdSharmaBook(upload)) {
-                n += 1;
-            }
-        }
-    }
-    return n;
-});
 
 const isBuiltUpload = (upload) => Boolean(upload?.is_approved);
 
@@ -371,13 +356,6 @@ const isFirstPendingForChapter = (row) => {
                     v-if="gradeLevel && chapters.length"
                     class="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800"
                 >
-                    <label class="inline-flex items-center gap-2 font-medium">
-                        <input v-model="hideRdSharma" type="checkbox" class="rounded border-gray-300 text-violet-700 focus:ring-violet-500">
-                        Hide RD Sharma
-                    </label>
-                    <span v-if="hideRdSharma && hiddenRdSharmaCount" class="text-xs text-slate-500">
-                        {{ hiddenRdSharmaCount }} hidden
-                    </span>
                     <span class="text-xs text-slate-500">
                         Needs work {{ pendingRows.length }} · Built {{ builtRows.length }}
                     </span>
@@ -517,7 +495,7 @@ const isFirstPendingForChapter = (row) => {
                                                     </p>
                                                     <p class="text-[10px] text-slate-500">{{ row.upload.book_code }}</p>
                                                 </template>
-                                                <span v-else-if="row.onlyRdHidden" class="text-xs text-slate-500">RD Sharma only (hidden)</span>
+                                                <span v-else-if="row.onlyRdHidden" class="text-xs text-slate-500">Not linked</span>
                                                 <span v-else class="text-xs text-slate-500">Not linked</span>
                                             </td>
                                             <td class="px-3 py-1.5">
