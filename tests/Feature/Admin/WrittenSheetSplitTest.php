@@ -7,6 +7,10 @@ use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Question;
 use App\Models\QuestionBlankAnswer;
+use App\Models\SetAssignment;
+use App\Models\Student;
+use App\Models\StudentChapterCoverage;
+use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
@@ -71,6 +75,31 @@ class WrittenSheetSplitTest extends TestCase
         $this->assertSame(WorksheetDeliveryMode::WRITTEN, $part2->delivery_mode);
         $this->assertSame(WrittenSheetStatus::PENDING_REVIEW, $part2->written_status);
         $this->assertNotNull($part2->written_pdf_path);
+    }
+
+    public function test_split_assigns_new_written_part_when_chapter_already_studied(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $worksheet = $this->seedWrittenSheet(20, 'C7-GT-CH03-W');
+        $enrollment = $this->seedStudiedEnrollment($worksheet->chapter);
+
+        $this->mock(WrittenSheetPdfService::class, function ($mock) {
+            $mock->shouldReceive('generate')->andReturnUsing(function (Worksheet $sheet) {
+                return 'written-sheets/'.$sheet->id.'/test.pdf';
+            });
+        });
+
+        $this->actingAs($admin)
+            ->post(route('admin.written-sheets.split', $worksheet), ['sizes' => '10+10'])
+            ->assertRedirect();
+
+        $part2 = Worksheet::query()->where('set_code', 'C7-GT-CH03-W2')->firstOrFail();
+
+        $this->assertDatabaseHas('set_assignments', [
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $part2->id,
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
     }
 
     public function test_written_split_rejects_sizes_that_do_not_add_up(): void
@@ -154,5 +183,38 @@ class WrittenSheetSplitTest extends TestCase
         }
 
         return $worksheet->fresh()->loadCount('questions');
+    }
+
+    private function seedStudiedEnrollment(SyllabusChapter $chapter): StudentEnrollment
+    {
+        $chapter->loadMissing('syllabusVersion');
+        $version = $chapter->syllabusVersion;
+
+        $user = User::factory()->create(['role' => User::ROLE_STUDENT]);
+        $student = Student::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Studied Student',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543210',
+            'school_name' => 'School',
+        ]);
+
+        $enrollment = StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $version->academic_year_id,
+            'board_id' => $version->board_id,
+            'grade_level_id' => $version->grade_level_id,
+            'school_name' => 'School',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => StudentChapterCoverage::STATUS_STUDIED,
+            'studied_at' => now(),
+        ]);
+
+        return $enrollment;
     }
 }

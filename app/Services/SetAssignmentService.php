@@ -29,7 +29,7 @@ class SetAssignmentService
             throw new \InvalidArgumentException('Only published practice sets can be assigned.');
         }
 
-        if ($practiceSet->isWritten() && ! $practiceSet->isFormula() && ! $practiceSet->isWrittenVerified()) {
+        if ($practiceSet->isWritten() && ! $practiceSet->isFormula() && ! $this->writtenSheetIsAssignable($practiceSet)) {
             throw new \InvalidArgumentException('Written sheet must be verified by admin before assigning.');
         }
 
@@ -200,6 +200,20 @@ class SetAssignmentService
         ]);
 
         return $assignment->fresh();
+    }
+
+    /**
+     * Verified sheets are assignable. Split parts stay pending review, but a published
+     * sheet that already has a printable PDF is ready for the study plan.
+     */
+    private function writtenSheetIsAssignable(Worksheet $practiceSet): bool
+    {
+        if ($practiceSet->isWrittenVerified()) {
+            return true;
+        }
+
+        return $practiceSet->status === Worksheet::STATUS_PUBLISHED
+            && filled($practiceSet->written_pdf_path);
     }
 
     private function assertEffectiveChapterForEnrollment(

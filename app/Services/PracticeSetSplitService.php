@@ -316,7 +316,14 @@ class PracticeSetSplitService
             ];
         });
 
-        $this->coverageService->assignNewWorksheetsDueToday($result['created'], $actor);
+        $onlineCreated = array_values(array_filter(
+            $result['created'],
+            fn (Worksheet $sibling) => ! $sibling->isWritten(),
+        ));
+
+        if ($onlineCreated !== []) {
+            $this->coverageService->assignNewWorksheetsDueToday($onlineCreated, $actor);
+        }
 
         return $result;
     }

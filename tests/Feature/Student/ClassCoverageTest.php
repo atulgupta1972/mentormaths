@@ -150,6 +150,55 @@ class ClassCoverageTest extends TestCase
         ]);
     }
 
+    public function test_marking_chapter_studied_assigns_split_written_part_that_has_a_pdf(): void
+    {
+        [$user, $enrollment, $chapters] = $this->seedStudentWithChapters(1);
+
+        $worksheet = Worksheet::query()->create([
+            'title' => 'Written part 2',
+            'set_number' => 2,
+            'set_code' => 'T7211-W2',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapters[0]->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'written_status' => WrittenSheetStatus::PENDING_REVIEW,
+            'written_pdf_path' => 'written-sheets/w2.pdf',
+            'created_by' => $user->id,
+        ]);
+
+        $withoutPdf = Worksheet::query()->create([
+            'title' => 'Written part 3',
+            'set_number' => 3,
+            'set_code' => 'T7211-W3',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapters[0]->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'written_status' => WrittenSheetStatus::PENDING_REVIEW,
+            'written_pdf_path' => null,
+            'created_by' => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('student.class-coverage.update', $chapters[0]), [
+                'status' => 'studied',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('set_assignments', [
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+        $this->assertDatabaseMissing('set_assignments', [
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $withoutPdf->id,
+        ]);
+    }
+
     public function test_student_can_mark_chapter_studied(): void
     {
         [$user, $enrollment, $chapters] = $this->seedStudentWithChapters(2);

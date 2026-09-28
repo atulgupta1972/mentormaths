@@ -964,7 +964,9 @@ class WrittenSheetService
 
         $result = $this->splitService->splitWithSizes($worksheet, $actor, $sizes);
 
-        // Regenerate printable PDFs for every part.
+        // Regenerate printable PDFs, then assign new parts to students who already
+        // marked this chapter Studied / Under study. Split clears verification, so
+        // this must run after the PDF exists.
         $this->generatePdf($result['kept']->fresh(['questions.blankAnswer', 'questions.options']));
         foreach ($result['created'] as $sibling) {
             $this->generatePdf($sibling->fresh(['questions.blankAnswer', 'questions.options']));
@@ -975,6 +977,8 @@ class WrittenSheetService
             fn (Worksheet $row) => $row->fresh()->loadCount('questions'),
             $result['created'],
         );
+
+        app(ClassCoverageService::class)->assignNewWorksheetsDueToday($result['created'], $actor);
 
         return $result;
     }
