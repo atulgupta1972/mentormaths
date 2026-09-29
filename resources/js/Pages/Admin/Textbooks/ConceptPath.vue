@@ -745,7 +745,7 @@ const togglePagePicker = (index) => {
                         </li>
                         <li>Copy the concept-path prompt below and paste it with the PDF.</li>
                         <li>Paste JSON → <strong>Preview cards</strong> — the app pulls figure pages from the chapter PDF automatically when <code>figure_page</code> is set.</li>
-                        <li>Then <strong>Edit / crop</strong> each page to keep only the diagram. Approve when ready.</li>
+                        <li>The prompt attaches the <strong>full textbook page</strong>. Check each figure and <strong>Edit / crop</strong> it so only the diagram for that card remains, then approve.</li>
                     </ol>
                     <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Status: {{ statusLabel }}
@@ -803,16 +803,24 @@ const togglePagePicker = (index) => {
                 </div>
 
                 <div v-if="cards.length" class="space-y-3">
-                    <div class="flex flex-wrap items-end justify-between gap-2">
-                        <div>
-                            <p class="text-sm font-semibold text-slate-900">Review concept flow</p>
-                            <p class="text-xs text-slate-600">
-                                {{ includedCount }} included · {{ teachCount }} teach · {{ checkCount }} check
-                                <span v-if="angleMapCount"> · {{ angleMapCount }} angle-map</span>
-                                <span v-if="turnClockCount"> · {{ turnClockCount }} turn-clock</span>
-                            </p>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-900">Review concept flow</p>
+                        <p class="text-xs text-slate-600">
+                            {{ includedCount }} included · {{ teachCount }} teach · {{ checkCount }} check
+                            <span v-if="angleMapCount"> · {{ angleMapCount }} angle-map</span>
+                            <span v-if="turnClockCount"> · {{ turnClockCount }} turn-clock</span>
+                        </p>
+                    </div>
+
+                    <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                        <p class="font-semibold">Before you approve, crop every figure</p>
+                        <p class="mt-1">
+                            The prompt attached the <strong>full textbook page</strong> to the card.
+                            Check each figure and use <strong>Edit / crop</strong> so the image shows only the diagram that belongs on that concept card.
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
                             <SecondaryButton
                                 v-if="!hasAngleMap"
                                 type="button"
@@ -858,11 +866,20 @@ const togglePagePicker = (index) => {
                             >
                                 {{ isApproved ? 'Already approved' : (approveForm.processing ? 'Approving…' : 'Approve concept flow') }}
                             </PrimaryButton>
-                            <p v-if="isApproved && uploaderMode" class="text-xs font-medium text-fuchsia-900">
-                                Next: open <strong>Run concepts</strong> and walk through every card — that submits your ₹50 concept-builder job.
+                            <Link
+                                v-if="chapter.play_url && chapter.can_run_full"
+                                :href="chapter.play_url"
+                                class="rounded-md bg-fuchsia-700 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-fuchsia-800"
+                            >
+                                Run full cards
+                            </Link>
+                            <p v-if="isApproved && uploaderMode && chapter.can_run_full" class="basis-full text-xs font-medium text-fuchsia-900">
+                                Run full cards walks every card from here. That submits your ₹50 concept-builder job.
+                            </p>
+                            <p v-else-if="uploaderMode && !isApproved" class="basis-full text-xs font-medium text-fuchsia-900">
+                                After you approve, <strong>Run full cards</strong> appears here and walks every card.
                             </p>
                         </div>
-                    </div>
 
                     <div
                         v-for="(card, index) in cards"
@@ -1180,7 +1197,7 @@ const togglePagePicker = (index) => {
                                 <div>
                                     <p class="text-xs font-medium uppercase tracking-wide text-slate-600">Figure from chapter PDF</p>
                                     <p v-if="card.diagram_url" class="mt-1 text-sm text-slate-600">
-                                        Page attached from the chapter PDF — crop to keep only the figure.
+                                        This is the full textbook page. Crop it to the diagram that matches this card.
                                     </p>
                                     <p v-else-if="card.figure_page" class="mt-1 text-sm text-violet-950">
                                         Will use <strong>PDF page {{ card.figure_page }}</strong> from this chapter (already uploaded).
