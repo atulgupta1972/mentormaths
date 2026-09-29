@@ -896,7 +896,7 @@ class ContentVerificationService
             'can_gemini' => false,
         ];
 
-        if ($task->isFillBlankConversion()) {
+        if ($task->isFillBlankConversion() || $task->isConceptPathBuild()) {
             return $empty;
         }
 

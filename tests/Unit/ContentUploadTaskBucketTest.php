@@ -59,4 +59,14 @@ class ContentUploadTaskBucketTest extends TestCase
         $this->assertSame('concept_pending', $task->uploaderBucket());
         $this->assertSame('Agree concept rate', $task->uploaderBucketLabel());
     }
+
+    public function test_concept_build_status_is_pdf_prompt_check_not_gemini_verification(): void
+    {
+        $task = new ContentUploadTask([
+            'status' => ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+        ]);
+
+        $this->assertSame('Upload PDF → prompt → check', $task->statusLabel());
+    }
 }

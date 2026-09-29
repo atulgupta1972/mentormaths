@@ -404,13 +404,21 @@ class ContentUploadTask extends Model
 
     public function statusLabel(): string
     {
+        if ($this->isConceptPathBuild()) {
+            return match ($this->status) {
+                self::STATUS_PENDING_AGREEMENT => 'Awaiting rate agreement',
+                self::STATUS_SUBMITTED_FOR_PUBLISH => 'Submitted — admin to publish',
+                self::STATUS_PUBLISHED => 'Published',
+                self::STATUS_CANCELLED => 'Cancelled',
+                default => 'Upload PDF → prompt → check',
+            };
+        }
+
         return match ($this->status) {
             self::STATUS_PENDING_AGREEMENT => 'Awaiting rate agreement',
-            self::STATUS_IN_PROGRESS => $this->isConceptPathBuild()
-                ? 'Build concepts → approve → Run'
-                : ($this->isFillBlankConversion()
-                    ? 'Convert fill-in-blanks'
-                    : 'In progress'),
+            self::STATUS_IN_PROGRESS => $this->isFillBlankConversion()
+                ? 'Convert fill-in-blanks'
+                : 'In progress',
             self::STATUS_UPLOADED => 'Uploaded — verify questions',
             self::STATUS_VERIFICATION_IN_PROGRESS => 'Verification in progress',
             self::STATUS_VERIFIED => 'Verified — ready to publish',

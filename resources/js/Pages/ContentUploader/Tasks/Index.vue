@@ -259,7 +259,7 @@ const geminiProgressLabel = (task) => {
                                     </td>
                                     <td class="px-2 py-1.5">
                                         <span
-                                            v-if="task.gemini_progress?.can_gemini"
+                                            v-if="!task.is_concept_path_build && task.gemini_progress?.can_gemini"
                                             class="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
                                             :class="task.needs_gemini_check ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'"
                                         >
@@ -272,7 +272,14 @@ const geminiProgressLabel = (task) => {
                                     </td>
                                     <td class="whitespace-nowrap px-2 py-1.5 text-right">
                                         <Link
-                                            v-if="task.needs_gemini_check"
+                                            v-if="task.is_concept_path_build || task.bucket === 'concept_pending'"
+                                            :href="chapterHref(task)"
+                                            class="font-medium text-fuchsia-700 hover:underline"
+                                        >
+                                            {{ task.next_step_label || (task.status === 'pending_agreement' ? 'Agree concept →' : 'Build concepts →') }}
+                                        </Link>
+                                        <Link
+                                            v-else-if="task.needs_gemini_check"
                                             :href="route('content.tasks.show', task.id)"
                                             class="font-medium text-indigo-700 hover:underline"
                                         >
@@ -292,13 +299,6 @@ const geminiProgressLabel = (task) => {
                                             class="font-medium text-emerald-700 hover:underline"
                                         >
                                             Convert →
-                                        </Link>
-                                        <Link
-                                            v-else-if="task.bucket === 'concept_pending'"
-                                            :href="chapterHref(task)"
-                                            class="font-medium text-fuchsia-700 hover:underline"
-                                        >
-                                            {{ task.status === 'pending_agreement' ? 'Agree concept →' : 'Build concepts →' }}
                                         </Link>
                                         <Link
                                             v-else-if="task.bucket === 'upload_pending'"

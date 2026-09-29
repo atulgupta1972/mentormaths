@@ -52,6 +52,21 @@ class ContentVerificationGeminiRecheckTest extends TestCase
         $this->assertSame(ContentAiVerificationService::VERDICT_APPROVE, $approvedRow['ai_verdict']);
     }
 
+    public function test_concept_builder_does_not_require_gemini_check(): void
+    {
+        [$uploader, $task] = $this->seedPublishedGeminiRun();
+        $task->update([
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'status' => ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+        ]);
+
+        $progress = app(ContentVerificationService::class)->progressForTask($task->fresh(), $uploader);
+
+        $this->assertFalse($progress['can_gemini']);
+        $this->assertSame(0, $progress['pending']);
+        $this->assertSame(0, $progress['total']);
+    }
+
     public function test_fixing_gemini_flagged_fill_blank_passes_gemini_without_recheck(): void
     {
         [$uploader, $task, $run, $approved, $flagged] = $this->seedPublishedGeminiRun();

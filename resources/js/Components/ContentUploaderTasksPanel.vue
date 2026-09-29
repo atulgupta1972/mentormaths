@@ -120,7 +120,7 @@ const hasContent = () =>
         <div v-if="conceptPending.length" class="mt-4 space-y-2">
             <p class="text-xs font-semibold uppercase tracking-wide text-fuchsia-800">Concept builder</p>
             <p v-if="!compact" class="text-xs text-fuchsia-900/80">
-                Agree rate → build cards → approve → Run full path (required to finish &amp; get paid).
+                No Gemini check. Upload the chapter PDF, then prompt → generate → check the cards.
             </p>
             <div
                 v-for="task in conceptPending"
@@ -137,7 +137,7 @@ const hasContent = () =>
                 </div>
                 <Link :href="chapterHref(task)">
                     <PrimaryButton type="button" class="!bg-fuchsia-700 !py-2 !text-xs hover:!bg-fuchsia-800">
-                        {{ task.status === 'pending_agreement' ? 'Agree concept rate →' : 'Build concepts →' }}
+                        {{ task.next_step_label || (task.status === 'pending_agreement' ? 'Agree concept rate →' : 'Build concepts →') }}
                     </PrimaryButton>
                 </Link>
             </div>

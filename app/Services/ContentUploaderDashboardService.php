@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\ContentQuestionCorrection;
 use App\Models\ContentUploadTask;
+use App\Models\TextbookChapter;
 use App\Models\User;
+use App\Support\ConceptPathStatus;
 use Illuminate\Support\Collection;
 
 class ContentUploaderDashboardService
@@ -51,12 +53,14 @@ class ContentUploaderDashboardService
         $correctionsPending = $this->pendingCorrectionsForUser($user);
 
         $geminiPending = $tasks->filter(fn (array $task) =>
-            ($task['gemini_progress']['can_gemini'] ?? false)
+            ! ($task['is_concept_path_build'] ?? false)
+            && ($task['gemini_progress']['can_gemini'] ?? false)
             && (int) ($task['gemini_progress']['pending'] ?? 0) > 0,
         )->values();
 
         $geminiDone = $tasks->filter(fn (array $task) =>
-            ($task['gemini_progress']['can_gemini'] ?? false)
+            ! ($task['is_concept_path_build'] ?? false)
+            && ($task['gemini_progress']['can_gemini'] ?? false)
             && (int) ($task['gemini_progress']['pending'] ?? 0) === 0
             && (int) ($task['gemini_progress']['total'] ?? 0) > 0,
         )->values();
@@ -137,7 +141,10 @@ class ContentUploaderDashboardService
                 ? route('content.textbooks.concept-path', $chapter)
                 : null,
             'status' => $task->status,
-            'status_label' => $task->statusLabel(),
+            'status_label' => $this->displayStatusLabel($task, $chapter, $hasPdf),
+            'next_step_label' => $task->isConceptPathBuild()
+                ? $this->conceptNextStepLabel($task, $chapter, $hasPdf)
+                : null,
             'rate_basis' => $task->rate_basis,
             'rate_basis_label' => $task->rateBasisLabel(),
             'rate_description' => $task->rateDescription(),
@@ -157,7 +164,8 @@ class ContentUploaderDashboardService
                 : false,
             'has_pdf' => $hasPdf,
             'gemini_progress' => $geminiProgress,
-            'needs_gemini_check' => (bool) ($geminiProgress['can_gemini'] ?? false)
+            'needs_gemini_check' => ! $task->isConceptPathBuild()
+                && (bool) ($geminiProgress['can_gemini'] ?? false)
                 && (int) ($geminiProgress['pending'] ?? 0) > 0,
             'chapter' => $chapter ? [
                 'id' => $chapter->id,
@@ -172,5 +180,44 @@ class ContentUploaderDashboardService
                 'has_pdf' => $hasPdf,
             ] : null,
         ];
+    }
+
+    private function displayStatusLabel(ContentUploadTask $task, ?TextbookChapter $chapter, bool $hasPdf): string
+    {
+        if (! $task->isConceptPathBuild() || in_array($task->status, [
+            ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_PUBLISHED,
+            ContentUploadTask::STATUS_CANCELLED,
+        ], true)) {
+            return $task->statusLabel();
+        }
+
+        if (! $hasPdf) {
+            return 'Upload chapter PDF';
+        }
+
+        if ($chapter?->concept_path_status === ConceptPathStatus::APPROVED) {
+            return 'Check done — run full cards';
+        }
+
+        return 'Prompt → generate → check';
+    }
+
+    private function conceptNextStepLabel(ContentUploadTask $task, ?TextbookChapter $chapter, bool $hasPdf): string
+    {
+        if ($task->status === ContentUploadTask::STATUS_PENDING_AGREEMENT) {
+            return 'Agree concept →';
+        }
+
+        if (! $hasPdf) {
+            return 'Upload PDF →';
+        }
+
+        if ($chapter?->concept_path_status === ConceptPathStatus::APPROVED) {
+            return 'Run full cards →';
+        }
+
+        return 'Prompt & check →';
     }
 }
