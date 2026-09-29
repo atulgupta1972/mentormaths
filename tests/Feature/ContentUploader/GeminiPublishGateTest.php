@@ -33,6 +33,77 @@ class GeminiPublishGateTest extends TestCase
         $this->withoutMiddleware(PreventRequestForgery::class);
     }
 
+    public function test_gemini_pending_still_allows_concept_builder_after_agree(): void
+    {
+        Mail::fake();
+        $this->withoutVite();
+
+        [$uploader, $publishedChapter, $mcqTask] = $this->seedPublishedTask();
+        $mcqTask->update(['status' => ContentUploadTask::STATUS_PUBLISHED]);
+
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $conceptChapter = TextbookChapter::query()->create([
+            'textbook_id' => $publishedChapter->textbook_id,
+            'syllabus_chapter_id' => $publishedChapter->syllabus_chapter_id,
+            'chapter_number' => 2,
+            'title' => 'Concept chapter',
+            'pdf_path' => $publishedChapter->pdf_path,
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $conceptTask = ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $conceptChapter->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            'offered_amount_inr' => 50,
+        ]);
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.agree', $conceptTask))
+            ->assertRedirect(route('content.textbooks.concept-path', $conceptChapter))
+            ->assertSessionMissing('error');
+
+        $this->actingAs($uploader)
+            ->get(route('content.textbooks.concept-path', $conceptChapter))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Admin/Textbooks/ConceptPath'));
+
+        $uploadChapter = TextbookChapter::query()->create([
+            'textbook_id' => $publishedChapter->textbook_id,
+            'syllabus_chapter_id' => $publishedChapter->syllabus_chapter_id,
+            'chapter_number' => 3,
+            'title' => 'Needs PDF',
+            'pdf_path' => null,
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $uploadTask = ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $uploadChapter->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            'offered_amount_inr' => 50,
+        ]);
+
+        $this->actingAs($uploader)
+            ->post(route('content.tasks.agree', $uploadTask))
+            ->assertRedirect(route('content.textbooks.show', $uploadChapter));
+
+        $this->actingAs($uploader)
+            ->get(route('content.textbooks.show', $uploadChapter))
+            ->assertOk();
+
+        $this->actingAs($uploader)
+            ->from(route('content.tasks.index'))
+            ->post(route('content.textbooks.import-mcq', $publishedChapter), ['json' => '{"questions":[]}'])
+            ->assertRedirect(route('content.tasks.index'))
+            ->assertSessionHas('error');
+    }
+
     public function test_uploader_cannot_submit_for_publish_until_gemini_is_complete(): void
     {
         Mail::fake();

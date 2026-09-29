@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ContentUploadTask;
+use App\Models\TextbookChapter;
 use App\Services\ContentUploaderDashboardService;
 use App\Support\ContentOperationsMailer;
 use Closure;
@@ -49,6 +51,12 @@ class EnsureUploaderGeminiCheckComplete
             return $next($request);
         }
 
+        // Concept builder is a separate job — do not trap the uploader on the task list
+        // after they agree, even if another chapter still needs Gemini.
+        if ($this->isConceptBuilderWork($request, $user)) {
+            return $next($request);
+        }
+
         // Block chapter actions (upload/import) while Gemini is pending.
         if (Str::startsWith($routeName, 'content.chapters.')
             || Str::startsWith($routeName, 'content.textbooks.')
@@ -61,6 +69,43 @@ class EnsureUploaderGeminiCheckComplete
         }
 
         return $next($request);
+    }
+
+    private function isConceptBuilderWork(Request $request, $user): bool
+    {
+        $routeName = (string) $request->route()?->getName();
+
+        if (Str::startsWith($routeName, 'content.concept-builder.')
+            || Str::startsWith($routeName, 'content.textbooks.concept-path')
+        ) {
+            return true;
+        }
+
+        $chapterRoutes = [
+            'content.textbooks.show',
+            'content.textbooks.upload-pdf',
+            'content.textbooks.download',
+        ];
+
+        if (! in_array($routeName, $chapterRoutes, true)) {
+            return false;
+        }
+
+        $chapter = $request->route('textbookChapter');
+        if (! $chapter instanceof TextbookChapter) {
+            return false;
+        }
+
+        return ContentUploadTask::query()
+            ->where('textbook_chapter_id', $chapter->id)
+            ->where('assigned_to_user_id', $user->id)
+            ->where('work_type', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD)
+            ->whereNotIn('status', [
+                ContentUploadTask::STATUS_CANCELLED,
+                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                ContentUploadTask::STATUS_PUBLISHED,
+            ])
+            ->exists();
     }
 
     /**
