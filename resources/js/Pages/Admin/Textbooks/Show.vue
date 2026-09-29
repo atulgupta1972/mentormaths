@@ -101,16 +101,24 @@ watch(
 );
 
 const hasItems = computed(() => items.value.length > 0);
+const conceptBuilderOnly = computed(() =>
+    props.uploaderMode && Boolean(props.contentUploadTask?.is_concept_path_build),
+);
 const showUploaderReviewCta = computed(() =>
-    props.uploaderMode
+    !conceptBuilderOnly.value
+    && props.uploaderMode
     && props.chapter.status === 'published'
     && props.contentUploadTask?.can_start_review,
 );
 const showUploaderEditor = ref(false);
-const hideUploaderEditPanels = computed(() => showUploaderReviewCta.value && !showUploaderEditor.value);
+const hideUploaderEditPanels = computed(() =>
+    conceptBuilderOnly.value || (showUploaderReviewCta.value && !showUploaderEditor.value),
+);
 const awaitingImport = computed(() => props.chapter.status === 'draft' && !hasItems.value);
 const canEdit = computed(() => ['review', 'published', 'failed'].includes(props.chapter.status) || hasItems.value);
-const showImportSteps = computed(() => awaitingImport.value || (canEdit.value && !hasItems.value));
+const showImportSteps = computed(() =>
+    !conceptBuilderOnly.value && (awaitingImport.value || (canEdit.value && !hasItems.value)),
+);
 const approvedCount = computed(() => items.value.filter((item) => item.approved !== false).length);
 const fillBlankItemCount = computed(() => items.value.filter((item) => item.question_type === 'fill_blank').length);
 const mcqItemCount = computed(() => items.value.filter((item) => item.question_type === 'mcq' || !item.question_type).length);
@@ -632,11 +640,15 @@ const submitChangeSyllabus = () => {
     });
 };
 
-const canChangeBook = computed(() =>
-    props.uploaderMode
+const canChangeBook = computed(() => {
+    if (conceptBuilderOnly.value) {
+        return false;
+    }
+
+    return props.uploaderMode
         ? props.contentUploadTask?.can_change_book
-        : true,
-);
+        : true;
+});
 </script>
 
 <template>
@@ -649,7 +661,7 @@ const canChangeBook = computed(() =>
                     <h2 class="text-xl font-semibold text-gray-800">
                         {{ chapter.book?.grade_name || 'Class' }} · {{ chapter.book?.name || 'Textbook' }}
                         <span
-                            v-if="isMentorMaths"
+                            v-if="isMentorMaths && !conceptBuilderOnly"
                             class="ml-2 inline-flex rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-900 ring-1 ring-teal-200"
                         >
                             MentorMaths · fill-blank only
@@ -658,7 +670,11 @@ const canChangeBook = computed(() =>
                     <p class="text-sm text-gray-500">
                         {{ chapter.label || `Ch ${chapter.chapter_number} — ${chapter.title}` }}
                         · {{ chapter.status_label }}
-                        <template v-if="isMentorMaths">
+                        <template v-if="conceptBuilderOnly">
+                            · Concept builder
+                            <span v-if="chapter.concept_path_status_label"> · {{ chapter.concept_path_status_label }}</span>
+                        </template>
+                        <template v-else-if="isMentorMaths">
                             · Fill-blank {{ chapter.fill_blank_set_code || 'pending' }}
                         </template>
                         <template v-else>
@@ -675,7 +691,7 @@ const canChangeBook = computed(() =>
                         Download PDF
                     </a>
                     <Link
-                        v-if="uploaderMode"
+                        v-if="uploaderMode && !conceptBuilderOnly"
                         :href="safeRoute('content.chapters.show', chapter.id, `/content/chapters/${chapter.id}`)"
                         class="text-sm text-indigo-600 hover:underline"
                     >
@@ -709,7 +725,7 @@ const canChangeBook = computed(() =>
                 </div>
 
                 <div
-                    v-if="isMentorMaths"
+                    v-if="isMentorMaths && !conceptBuilderOnly"
                     class="rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-950"
                 >
                     <strong>MentorMaths practice line.</strong>
@@ -726,7 +742,12 @@ const canChangeBook = computed(() =>
                         <div>
                             <p class="text-sm font-semibold text-gray-900">Chapter PDF</p>
                             <p class="mt-1 text-xs text-gray-600">
-                                Required before review/submit. Upload the textbook PDF for this chapter.
+                                <template v-if="conceptBuilderOnly">
+                                    Upload the chapter PDF, then build the concept path. Approve it and run every card to finish.
+                                </template>
+                                <template v-else>
+                                    Required before review/submit. Upload the textbook PDF for this chapter.
+                                </template>
                             </p>
                             <p class="mt-2">
                                 <span
@@ -743,7 +764,7 @@ const canChangeBook = computed(() =>
                                     Download
                                 </a>
                                 <Link
-                                    v-if="chapter.has_pdf"
+                                    v-if="chapter.has_pdf && !conceptBuilderOnly"
                                     :href="chapterRoute('concept-path')"
                                     class="ml-3 text-sm font-semibold text-violet-700 hover:underline"
                                 >
@@ -753,6 +774,13 @@ const canChangeBook = computed(() =>
                                     </span>
                                 </Link>
                             </p>
+                            <Link
+                                v-if="conceptBuilderOnly && chapter.has_pdf"
+                                :href="chapterRoute('concept-path')"
+                                class="mt-3 inline-flex rounded-md bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-800"
+                            >
+                                Build concept path →
+                            </Link>
                         </div>
                         <form class="flex flex-wrap items-end gap-2" @submit.prevent="submitPdf">
                             <input
@@ -1455,7 +1483,7 @@ const canChangeBook = computed(() =>
                     </div>
                 </div>
 
-                <div v-if="!hasItems" class="rounded-lg border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-950">
+                <div v-if="!hasItems && !conceptBuilderOnly" class="rounded-lg border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-950">
                     <h3 class="font-semibold">Mixed practice set workflow</h3>
                     <ol class="mt-2 list-decimal space-y-1 pl-5">
                         <li>Upload the chapter PDF (stored on server — download link above).</li>

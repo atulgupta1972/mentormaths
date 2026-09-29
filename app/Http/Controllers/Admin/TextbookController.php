@@ -430,6 +430,7 @@ class TextbookController extends Controller
                     'status' => $task->status,
                     'status_label' => $task->statusLabel(),
                     'bucket' => $task->uploaderBucket(),
+                    'is_concept_path_build' => $task->isConceptPathBuild(),
                     'can_start_review' => $task->uploaderBucket() === 'review_pending',
                     'can_change_book' => $this->bookService->uploaderCanChangeBook($textbookChapter, $request->user()),
                     'has_pdf' => $hasPdf,
@@ -567,7 +568,23 @@ class TextbookController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
-        return $this->redirectToChapterShow($textbookChapter->fresh())
+        $fresh = $textbookChapter->fresh();
+        if (
+            $this->isContentUploaderContext($request)
+            && $this->bookService->hasStoredPdf($fresh)
+            && ContentUploadTask::query()
+                ->where('textbook_chapter_id', $fresh->id)
+                ->where('assigned_to_user_id', $request->user()?->id)
+                ->where('work_type', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD)
+                ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+                ->exists()
+        ) {
+            return redirect()
+                ->route('content.textbooks.concept-path', $fresh)
+                ->with('success', 'Chapter PDF saved. Build the concept path next.');
+        }
+
+        return $this->redirectToChapterShow($fresh)
             ->with('success', 'Chapter PDF saved.');
     }
 

@@ -326,4 +326,34 @@ class TextbookChapterBookTest extends TestCase
 
         return [$uploader, $chapter->fresh(), $task, $bookB];
     }
+
+    public function test_concept_builder_chapter_page_is_marked_concept_only(): void
+    {
+        $this->withoutVite();
+
+        [$uploader, $chapter, $task] = $this->seedTask();
+        $task->update(['work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD]);
+
+        $this->actingAs($uploader)
+            ->get(route('content.textbooks.show', $chapter))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Textbooks/Show')
+                ->where('uploaderMode', true)
+                ->where('contentUploadTask.is_concept_path_build', true));
+    }
+
+    public function test_concept_builder_pdf_upload_opens_concept_path(): void
+    {
+        Storage::fake('public');
+
+        [$uploader, $chapter, $task] = $this->seedTask(withPdf: false);
+        $task->update(['work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD]);
+
+        $this->actingAs($uploader)
+            ->post(route('content.textbooks.upload-pdf', $chapter), [
+                'pdf' => UploadedFile::fake()->create('chapter.pdf', 100, 'application/pdf'),
+            ])
+            ->assertRedirect(route('content.textbooks.concept-path', $chapter));
+    }
 }
