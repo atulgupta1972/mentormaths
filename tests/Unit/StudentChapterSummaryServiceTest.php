@@ -170,12 +170,15 @@ class StudentChapterSummaryServiceTest extends TestCase
                 ->component('Student/SchoolStudyPlan')
                 ->has('classCoverage.chapters', 1)
                 ->where('classCoverage.study_plan_performance', null)
-                ->where('classCoverage.chapters.0.availability.practice', 0)
+                ->where('classCoverage.chapters.0.availability.practice', 2)
                 ->where('classCoverage.chapters.0.items.formula.items', [])
-                ->where('classCoverage.chapters.0.items.blocks.0.item_count', 0));
+                ->where(
+                    'classCoverage.chapters.0.items.blocks',
+                    fn ($blocks) => collect($blocks)->sum('item_count') >= 2,
+                ));
     }
 
-    public function test_school_study_plan_shows_saved_percent_without_rebuilding_sets(): void
+    public function test_school_study_plan_lists_worksheets_and_keeps_saved_percent(): void
     {
         $this->withoutMiddleware([
             \App\Http\Middleware\EnsureFormulaDrillComplete::class,
@@ -217,7 +220,10 @@ class StudentChapterSummaryServiceTest extends TestCase
                 ->where('classCoverage.chapters.0.performance.scorePct', 75)
                 ->where('classCoverage.chapters.0.performance.revisionCompletionPct', 100)
                 ->where('classCoverage.study_plan_performance.completion_pct', 80)
-                ->where('classCoverage.chapters.0.items.blocks.0.item_count', 0));
+                ->where(
+                    'classCoverage.chapters.0.items.blocks',
+                    fn ($blocks) => collect($blocks)->sum('item_count') >= 2,
+                ));
     }
 
     public function test_chapter_summary_includes_formula_sets(): void

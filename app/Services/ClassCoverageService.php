@@ -63,6 +63,7 @@ class ClassCoverageService
             ->get()
             ->keyBy('syllabus_chapter_id');
 
+        // Worksheet list is live. Chapter % stay on StudentChapterMetric and change only when a sheet is finished.
         $summary = $withLiveSummary
             ? $this->chapterSummaryService->forEnrollment($enrollment)
             : ['chapters' => [], 'book_columns' => [], 'other_groups' => []];
