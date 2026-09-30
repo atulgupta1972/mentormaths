@@ -29,8 +29,8 @@ class SetAssignmentService
             throw new \InvalidArgumentException('Only published practice sets can be assigned.');
         }
 
-        if ($practiceSet->isWritten() && ! $practiceSet->isFormula() && ! $this->writtenSheetIsAssignable($practiceSet)) {
-            throw new \InvalidArgumentException('Written sheet must be verified by admin before assigning.');
+        if ($practiceSet->isWritten() && ! $practiceSet->isFormula()) {
+            $practiceSet = $this->prepareWrittenSheetForAssign($practiceSet);
         }
 
         if ($effectiveSyllabusChapterId) {
@@ -203,9 +203,28 @@ class SetAssignmentService
     }
 
     /**
-     * Verified sheets are assignable. Split parts stay pending review, but a published
-     * sheet that already has a printable PDF is ready for the study plan.
+     * A published written sheet is assignable once it has a printable PDF.
+     * Split parts are often saved without one — build it so the student can take the sheet.
      */
+    private function prepareWrittenSheetForAssign(Worksheet $practiceSet): Worksheet
+    {
+        if ($this->writtenSheetIsAssignable($practiceSet)) {
+            return $practiceSet;
+        }
+
+        if (! $practiceSet->questions()->exists()) {
+            throw new \InvalidArgumentException('This written sheet has no questions yet, so it cannot be assigned.');
+        }
+
+        try {
+            return app(WrittenSheetService::class)->generatePdf($practiceSet);
+        } catch (\InvalidArgumentException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new \InvalidArgumentException('Could not prepare this written sheet. Please try again.');
+        }
+    }
+
     private function writtenSheetIsAssignable(Worksheet $practiceSet): bool
     {
         if ($practiceSet->isWrittenVerified()) {

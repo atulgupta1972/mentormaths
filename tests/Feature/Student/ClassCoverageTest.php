@@ -11,9 +11,12 @@ use App\Models\StudentChapterCoverage;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
+use App\Models\SyllabusTopic;
 use App\Models\SyllabusVersion;
 use App\Models\User;
+use App\Models\Question;
 use App\Models\Worksheet;
+use App\Services\WrittenSheetPdfService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\WorksheetDeliveryMode;
@@ -196,6 +199,57 @@ class ClassCoverageTest extends TestCase
         $this->assertDatabaseMissing('set_assignments', [
             'student_enrollment_id' => $enrollment->id,
             'worksheet_id' => $withoutPdf->id,
+        ]);
+    }
+
+    public function test_marking_studied_assigns_written_sheet_by_creating_its_pdf(): void
+    {
+        [$user, $enrollment, $chapters] = $this->seedStudentWithChapters(1);
+
+        $worksheet = Worksheet::query()->create([
+            'title' => 'Written part 2',
+            'set_number' => 2,
+            'set_code' => 'T7211-W2',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapters[0]->id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'written_status' => WrittenSheetStatus::PENDING_REVIEW,
+            'written_pdf_path' => null,
+            'created_by' => $user->id,
+        ]);
+
+        $topic = SyllabusTopic::query()->create([
+            'syllabus_chapter_id' => $chapters[0]->id,
+            'name' => 'Area',
+            'sort_order' => 1,
+        ]);
+        $question = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_MCQ,
+            'question_text' => 'Find the area of a square of side 4 cm.',
+            'source' => Question::SOURCE_MANUAL,
+            'created_by' => $user->id,
+        ]);
+        $worksheet->questions()->attach($question->id, ['sort_order' => 1]);
+
+        $this->mock(WrittenSheetPdfService::class, function ($mock) {
+            $mock->shouldReceive('generate')->once()->andReturn('written-sheets/w2.pdf');
+        });
+
+        $this->actingAs($user)
+            ->from(route('dashboard'))
+            ->post(route('student.worksheets.self-assign', $worksheet))
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('success');
+
+        $worksheet->refresh();
+        $this->assertSame('written-sheets/w2.pdf', $worksheet->written_pdf_path);
+        $this->assertDatabaseHas('set_assignments', [
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'status' => SetAssignment::STATUS_ASSIGNED,
         ]);
     }
 

@@ -3,7 +3,7 @@ import { formatDate } from '@/utils/dates';
 import ChapterPerformanceSummary from '@/Components/ChapterPerformanceSummary.vue';
 import CoverageItemsWithRevisionRail from '@/Components/CoverageItemsWithRevisionRail.vue';
 import CoverageSetItemCard from '@/Components/CoverageSetItemCard.vue';
-import { Link, router, useForm } from '@inertiajs/vue3';
+import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -34,6 +34,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['statusOverrides']);
+const page = usePage();
 
 const savingId = ref(null);
 const saveError = ref('');
@@ -1039,6 +1040,12 @@ const selfAssign = (item) => {
         preserveScroll: true,
         preserveState: true,
         only: ['flash', 'classCoverage', 'assignments'],
+        onSuccess: () => {
+            saveError.value = page.props.flash?.error || '';
+        },
+        onError: () => {
+            saveError.value = 'Could not assign this set. Please try again.';
+        },
         onFinish: () => {
             assigningWorksheetId.value = null;
         },
