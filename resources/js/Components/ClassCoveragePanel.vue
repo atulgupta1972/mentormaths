@@ -475,20 +475,16 @@ const mark = (chapter, status) => {
             saveError.value = '';
 
             if (isStudentView.value) {
-                router.reload({
-                    only: ['assignments', 'stats'],
-                    preserveScroll: true,
-                    preserveState: true,
-                });
-            } else {
-                chapterStatusOverrides.value = {};
-                emit('statusOverrides', {});
-                router.reload({
-                    only: ['classCoverage', 'flash'],
-                    preserveScroll: true,
-                    preserveState: true,
-                });
+                return;
             }
+
+            chapterStatusOverrides.value = {};
+            emit('statusOverrides', {});
+            router.reload({
+                only: ['classCoverage', 'flash'],
+                preserveScroll: true,
+                preserveState: true,
+            });
         },
         onError: (errors) => {
             chapterStatusOverrides.value = {};
@@ -504,7 +500,7 @@ const mark = (chapter, status) => {
     };
 
     if (isStudentView.value) {
-        visitOptions.only = ['flash'];
+        visitOptions.only = ['flash', 'classCoverage', 'assignments', 'stats'];
     }
 
     router.put(route(props.updateRouteName, params), {
@@ -1041,6 +1037,8 @@ const selfAssign = (item) => {
 
     router.post(route('student.worksheets.self-assign', item.worksheet_id), {}, {
         preserveScroll: true,
+        preserveState: true,
+        only: ['flash', 'classCoverage', 'assignments'],
         onFinish: () => {
             assigningWorksheetId.value = null;
         },
@@ -1058,6 +1056,8 @@ const startCorrection = (item) => {
         assignment_id: item.assignment_id || null,
     }, {
         preserveScroll: true,
+        preserveState: true,
+        only: ['flash', 'classCoverage', 'assignments'],
         onFinish: () => {
             assigningWorksheetId.value = null;
         },

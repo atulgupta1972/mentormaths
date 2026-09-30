@@ -689,7 +689,7 @@ class ClassCoverageService
             );
         });
 
-        $this->deferChapterMarkSideEffects($enrollment, $chapter);
+        $this->runChapterMarkSideEffects($enrollment, $chapter, auth()->user());
     }
 
     public function clearCoverage(StudentEnrollment $enrollment, SyllabusChapter $chapter): void
@@ -722,7 +722,7 @@ class ClassCoverageService
             );
         });
 
-        $this->deferChapterMarkSideEffects($enrollment, $chapter);
+        $this->runChapterMarkSideEffects($enrollment, $chapter, auth()->user());
     }
 
     /**
@@ -1163,43 +1163,23 @@ class ClassCoverageService
     }
 
     /**
-     * Formula consolidation and set auto-assign run after the HTTP response so Studied / Under study
-     * ticks feel instant on the dashboard.
+     * Assign the chapter's sets before the response, so the open chapter can show Open immediately.
      */
-    private function deferChapterMarkSideEffects(StudentEnrollment $enrollment, SyllabusChapter $chapter): void
-    {
-        $enrollmentId = $enrollment->id;
-        $chapterId = $chapter->id;
-        $actorId = auth()->id();
-
-        defer(function () use ($enrollmentId, $chapterId, $actorId) {
-            try {
-                $enrollment = StudentEnrollment::query()->find($enrollmentId);
-                $chapter = SyllabusChapter::query()->find($chapterId);
-                $actor = $actorId ? User::query()->find($actorId) : null;
-
-                if (! $enrollment || ! $chapter) {
-                    return;
-                }
-
-                app(self::class)->runChapterMarkSideEffects($enrollment, $chapter, $actor);
-            } catch (Throwable $e) {
-                Log::error('Study-plan auto-assign failed.', [
-                    'enrollment_id' => $enrollmentId,
-                    'chapter_id' => $chapterId,
-                    'message' => $e->getMessage(),
-                ]);
-            }
-        });
-    }
-
     private function runChapterMarkSideEffects(
         StudentEnrollment $enrollment,
         SyllabusChapter $chapter,
         ?User $actor,
     ): void {
-        $this->formulaBank->ensureChaptersHaveSingleFormulaSet([$chapter->id], $actor);
-        $this->assignChapterContentDueToday($enrollment, $chapter, $actor);
+        try {
+            $this->formulaBank->ensureChaptersHaveSingleFormulaSet([$chapter->id], $actor);
+            $this->assignChapterContentDueToday($enrollment, $chapter, $actor);
+        } catch (Throwable $e) {
+            Log::error('Study-plan auto-assign failed.', [
+                'enrollment_id' => $enrollment->id,
+                'chapter_id' => $chapter->id,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

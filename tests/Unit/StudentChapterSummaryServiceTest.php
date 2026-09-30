@@ -90,6 +90,42 @@ class StudentChapterSummaryServiceTest extends TestCase
         ]);
     }
 
+    public function test_written_self_assign_stays_on_the_open_chapter_page(): void
+    {
+        $this->withoutMiddleware([
+            \App\Http\Middleware\EnsureFormulaDrillComplete::class,
+            \App\Http\Middleware\EnsureBasicsDrillComplete::class,
+            \App\Http\Middleware\EnsureMensurationMatchComplete::class,
+        ]);
+
+        [$enrollment, $chapter] = $this->seedChapterContent();
+        $studentUser = $this->studentUserForEnrollment($enrollment);
+        $written = Worksheet::query()->create([
+            'title' => 'Written sheet',
+            'set_number' => 1,
+            'set_code' => 'T7211-W2',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapter->id,
+            'delivery_mode' => WorksheetDeliveryMode::WRITTEN,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'written_pdf_path' => 'written-sheets/w2.pdf',
+            'created_by' => $studentUser->id,
+        ]);
+
+        $this->actingAs($studentUser)
+            ->from(route('dashboard'))
+            ->post(route('student.worksheets.self-assign', $written))
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('set_assignments', [
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $written->id,
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+    }
+
     public function test_student_can_self_assign_formula_set_without_server_error(): void
     {
         $this->withoutMiddleware([
