@@ -64,6 +64,20 @@ const geminiBuckets = [
 
 const allBuckets = [...buckets, ...geminiBuckets];
 
+const workKind = computed(() =>
+    props.filters.work_kind === 'content' || props.filters.work_kind === 'concept'
+        ? props.filters.work_kind
+        : 'all',
+);
+
+const visibleBuckets = computed(() => (workKind.value === 'concept' ? buckets : allBuckets));
+
+const workKindOptions = [
+    { key: 'all', label: 'All work' },
+    { key: 'content', label: 'Content upload' },
+    { key: 'concept', label: 'Concept builder' },
+];
+
 const cellBucketCount = (gradeId, uploaderId, bucket) =>
     props.matrix.cells?.[String(gradeId)]?.[String(uploaderId)]?.breakup?.[bucket] ?? 0;
 
@@ -74,13 +88,21 @@ const isDrillOpen = (gradeId, uploaderId) =>
 const matrixQuery = (extra = {}) => ({
     board_id: props.matrix.board_id || undefined,
     status: props.filters.status || undefined,
+    work_kind: workKind.value === 'all' ? undefined : workKind.value,
     ...extra,
 });
 
 const setBoard = (boardId) => {
-    router.get(route('admin.content-tasks.index'), {
+    router.get(route('admin.content-tasks.index'), matrixQuery({
         board_id: boardId || undefined,
+    }), { preserveState: true, replace: true });
+};
+
+const setWorkKind = (kind) => {
+    router.get(route('admin.content-tasks.index'), {
+        board_id: props.matrix.board_id || undefined,
         status: props.filters.status || undefined,
+        work_kind: kind === 'all' ? undefined : kind,
     }, { preserveState: true, replace: true });
 };
 
@@ -108,10 +130,11 @@ const toggleDrill = (gradeId, uploaderId, bucket) => {
 };
 
 const closeDrill = () => {
-    router.get(route('admin.content-tasks.index'), {
-        board_id: props.matrix.board_id || undefined,
-        status: props.filters.status || undefined,
-    }, { preserveState: true, replace: true, preserveScroll: true });
+    router.get(route('admin.content-tasks.index'), matrixQuery(), {
+        preserveState: true,
+        replace: true,
+        preserveScroll: true,
+    });
 };
 
 const statusTone = (group) => ({
@@ -390,7 +413,11 @@ watch(
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Content allocation matrix</h2>
-                    <p class="text-sm text-gray-500">People with assigned chapters — five counts each: review, submitted, published, Gemini pending, Gemini done.</p>
+                    <p class="text-sm text-gray-500">
+                        <template v-if="workKind === 'concept'">Concept builder only — review, submitted, and published. No Gemini check.</template>
+                        <template v-else-if="workKind === 'content'">Content upload only — review, submitted, published, Gemini pending, Gemini done.</template>
+                        <template v-else>People with assigned chapters — five counts each: review, submitted, published, Gemini pending, Gemini done.</template>
+                    </p>
                 </div>
                 <div class="flex gap-2">
                     <Link :href="route('admin.content-rate-cards.index')" class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
@@ -436,6 +463,23 @@ watch(
                                 </option>
                             </select>
                         </div>
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Work type</p>
+                            <div class="mt-1 flex flex-wrap gap-1">
+                                <button
+                                    v-for="option in workKindOptions"
+                                    :key="option.key"
+                                    type="button"
+                                    class="rounded-md px-3 py-1.5 text-sm font-medium ring-1"
+                                    :class="workKind === option.key
+                                        ? 'bg-slate-900 text-white ring-slate-900'
+                                        : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'"
+                                    @click="setWorkKind(option.key)"
+                                >
+                                    {{ option.label }}
+                                </button>
+                            </div>
+                        </div>
                         <p class="text-xs text-gray-500">
                             Showing <strong>{{ matrix.total_assignments ?? 0 }}</strong> assignment(s)
                             <span v-if="(matrix.database_total ?? 0) !== (matrix.total_assignments ?? 0)">
@@ -476,7 +520,7 @@ watch(
                                     <th
                                         v-for="uploader in matrix.uploaders"
                                         :key="uploader.id"
-                                        colspan="5"
+                                        :colspan="visibleBuckets.length"
                                         class="border border-slate-200 px-3 py-2 text-center"
                                         :title="uploader.email"
                                     >
@@ -486,7 +530,7 @@ watch(
                                 <tr class="bg-slate-50 text-center text-[10px] font-semibold uppercase tracking-wide">
                                     <template v-for="uploader in matrix.uploaders" :key="`hdr-${uploader.id}`">
                                         <th
-                                            v-for="bucket in allBuckets"
+                                            v-for="bucket in visibleBuckets"
                                             :key="`${uploader.id}-${bucket.key}`"
                                             class="border border-slate-200 px-2 py-1"
                                             :class="bucket.heading"
@@ -503,7 +547,7 @@ watch(
                                     </td>
                                     <template v-for="uploader in matrix.uploaders" :key="`${grade.id}-${uploader.id}`">
                                         <td
-                                            v-for="bucket in allBuckets"
+                                            v-for="bucket in visibleBuckets"
                                             :key="`${grade.id}-${uploader.id}-${bucket.key}`"
                                             class="border border-slate-200 px-1 py-1 text-center"
                                         >

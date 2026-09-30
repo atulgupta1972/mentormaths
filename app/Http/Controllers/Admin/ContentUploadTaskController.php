@@ -68,6 +68,10 @@ class ContentUploadTaskController extends Controller
         if (! in_array($drillBucket, ['under_review', 'submitted', 'published', 'gemini_pending', 'gemini_done'], true)) {
             $drillBucket = null;
         }
+        $workKind = $request->string('work_kind')->toString();
+        if (! in_array($workKind, ['content', 'concept'], true)) {
+            $workKind = 'all';
+        }
 
         $tasks = ContentUploadTask::query()
             ->with([
@@ -81,6 +85,11 @@ class ContentUploadTaskController extends Controller
                 'textbookChapter.syllabusChapter.syllabusVersion.board:id,code,name',
             ])
             ->when($status !== '', fn ($q) => $q->where('status', $status))
+            ->when($workKind === 'concept', fn ($q) => $q->where('work_type', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD))
+            ->when($workKind === 'content', fn ($q) => $q->where(function ($query) {
+                $query->whereNull('work_type')
+                    ->orWhere('work_type', '!=', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD);
+            }))
             ->latest()
             ->paginate(20)
             ->withQueryString()
@@ -94,12 +103,18 @@ class ContentUploadTaskController extends Controller
                 'drill_grade_id' => $drillGradeId,
                 'drill_uploader_id' => $drillUploaderId,
                 'drill_bucket' => $drillBucket,
+                'work_kind' => $workKind,
             ],
             'statuses' => $this->statusOptions(),
-            'matrix' => $this->matrixService->build($boardId, $drillGradeId, $drillUploaderId, $request->user()),
+            'matrix' => $this->matrixService->build($boardId, $drillGradeId, $drillUploaderId, $request->user(), $workKind),
             'uploaders' => $this->contentUploaders(),
             'pendingPublishCount' => ContentUploadTask::query()
                 ->where('status', ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH)
+                ->when($workKind === 'concept', fn ($q) => $q->where('work_type', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD))
+                ->when($workKind === 'content', fn ($q) => $q->where(function ($query) {
+                    $query->whereNull('work_type')
+                        ->orWhere('work_type', '!=', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD);
+                }))
                 ->count(),
         ]);
     }

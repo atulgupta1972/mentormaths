@@ -555,6 +555,77 @@ class ContentUploadTaskTest extends TestCase
                 ->where('matrix.grades', fn ($grades) => collect($grades)->pluck('id')->map(fn ($id) => (int) $id)->all() === [(int) $grade->id]));
     }
 
+    public function test_allocation_matrix_can_filter_content_upload_from_concept_builder(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash',
+            'code' => 'GP-KIND',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $conceptSyllabus = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $syllabusChapter->syllabus_version_id,
+            'name' => 'Views',
+            'chapter_number' => 'Ch 9',
+            'sort_order' => 9,
+        ]);
+        $contentChapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 1,
+            'title' => 'Content chapter',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $conceptChapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $conceptSyllabus->id,
+            'chapter_number' => 2,
+            'title' => 'Concept chapter',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        ContentUploadTask::create([
+            'textbook_chapter_id' => $contentChapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 100,
+        ]);
+        ContentUploadTask::create([
+            'textbook_chapter_id' => $conceptChapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 50,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.index', ['work_kind' => 'content']))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('filters.work_kind', 'content')
+                ->where('matrix.work_kind', 'content')
+                ->where('matrix.total_assignments', 1)
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.count", 1));
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.index', ['work_kind' => 'concept']))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('filters.work_kind', 'concept')
+                ->where('matrix.total_assignments', 1)
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.count", 1));
+    }
+
     public function test_store_uses_default_per_question_rate_when_matrix_empty(): void
     {
         [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();

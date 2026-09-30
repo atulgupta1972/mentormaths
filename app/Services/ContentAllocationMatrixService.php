@@ -28,7 +28,7 @@ class ContentAllocationMatrixService
      *     database_total: int
      * }
      */
-    public function build(?int $boardId, ?int $drillGradeId = null, ?int $drillUploaderId = null, ?User $progressUser = null): array
+    public function build(?int $boardId, ?int $drillGradeId = null, ?int $drillUploaderId = null, ?User $progressUser = null, string $workKind = 'all'): array
     {
         $this->bookService->mergeAllDuplicateBookChapters();
 
@@ -75,6 +75,13 @@ class ContentAllocationMatrixService
             ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
             ->latest('id')
             ->get();
+
+        $workKind = in_array($workKind, ['content', 'concept'], true) ? $workKind : 'all';
+        if ($workKind === 'concept') {
+            $tasks = $tasks->filter(fn (ContentUploadTask $task) => $task->isConceptPathBuild())->values();
+        } elseif ($workKind === 'content') {
+            $tasks = $tasks->filter(fn (ContentUploadTask $task) => ! $task->isConceptPathBuild())->values();
+        }
 
         $boardCode = null;
         if ($boardId) {
@@ -261,11 +268,7 @@ class ContentAllocationMatrixService
             'drill' => $drill,
             'total_assignments' => $tasks->count(),
             'database_total' => $databaseTotal,
-            'work_types' => [
-                ['key' => 'content_upload', 'label' => 'Content upload (textbook MCQ)', 'active' => true],
-                ['key' => 'mcq', 'label' => 'MCQ bank', 'active' => false],
-                ['key' => 'fill_blank', 'label' => 'Fill in blanks', 'active' => false],
-            ],
+            'work_kind' => $workKind,
         ];
     }
 
