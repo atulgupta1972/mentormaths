@@ -593,6 +593,22 @@ class WrittenSheetController extends Controller
         );
     }
 
+    public function destroyQuestion(Worksheet $worksheet, Question $question): RedirectResponse
+    {
+        abort_unless($worksheet->isWritten(), 404);
+
+        try {
+            $worksheet = $this->writtenSheetService->deleteQuestion($worksheet, $question);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with(
+            'success',
+            "Question removed. {$worksheet->questions_count} left, and the PDF was regenerated.",
+        );
+    }
+
     public function importZipPack(Request $request): RedirectResponse
     {
         $validated = $request->validate([

@@ -17,6 +17,7 @@ use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Models\WrittenSubmission;
+use App\Services\WrittenSheetPdfService;
 use App\Services\WrittenSheetService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
@@ -210,6 +211,32 @@ class WrittenSheetServiceTest extends TestCase
         $this->assertSame('Simplify: 3(2x + 1) - (x - 4) = ___ x + 7.', $question->fresh()->question_text);
         $this->assertSame('5', $question->fresh()->blankAnswer->correct_answer);
         $this->assertNotSame($oldPdfPath, $updated->written_pdf_path);
+        $this->assertSame(WrittenSheetStatus::PENDING_REVIEW, $updated->written_status);
+    }
+
+    public function test_delete_question_removes_it_and_regenerates_the_pdf(): void
+    {
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+        $second = Question::query()->create([
+            'syllabus_topic_id' => $topic->id,
+            'type' => Question::TYPE_FILL_IN_BLANK,
+            'question_text' => 'What is 3 + 3?',
+            'source' => Question::SOURCE_MANUAL,
+        ]);
+
+        $this->mock(WrittenSheetPdfService::class, function ($mock) {
+            $mock->shouldReceive('generate')->once()->andReturn('written-sheets/after-delete.pdf');
+        });
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->createFromTopic($topic, [$question->id, $second->id], $admin);
+
+        $updated = $service->deleteQuestion($worksheet, $second);
+
+        $this->assertSame(1, $updated->questions_count);
+        $this->assertSame($question->id, $updated->questions()->first()->id);
+        $this->assertNull(Question::query()->find($second->id));
+        $this->assertSame('written-sheets/after-delete.pdf', $updated->written_pdf_path);
         $this->assertSame(WrittenSheetStatus::PENDING_REVIEW, $updated->written_status);
     }
 

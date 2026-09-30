@@ -158,6 +158,22 @@ const cancelQuestionEditor = () => {
     questionsForm.clearErrors();
 };
 
+const deleteSheetQuestion = (question) => {
+    if (! question?.id || ! props.sheet.can_edit_questions) {
+        return;
+    }
+
+    const label = question.number ? `Q${question.number}` : 'this question';
+
+    if (! confirm(`Remove ${label} from this sheet? The PDF will be regenerated.`)) {
+        return;
+    }
+
+    router.delete(route('admin.written-sheets.questions.destroy', [props.sheet.id, question.id]), {
+        preserveScroll: true,
+    });
+};
+
 const submitQuestions = () => {
     questionsForm.post(route('admin.written-sheets.update-questions', props.sheet.id), {
         preserveScroll: true,
@@ -1953,7 +1969,12 @@ const progressLabel = (p) => {
 
                 <div class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                     <div class="flex flex-wrap items-center justify-between gap-3">
-                        <h3 class="font-medium text-gray-900">Questions on this sheet</h3>
+                        <div>
+                            <h3 class="font-medium text-gray-900">Questions on this sheet</h3>
+                            <p v-if="sheet.can_edit_questions" class="mt-0.5 text-xs text-gray-500">
+                                Delete a sum here if it should not be on the sheet. The PDF is regenerated.
+                            </p>
+                        </div>
                         <div class="flex flex-wrap gap-2">
                             <SecondaryButton
                                 v-if="sheet.can_edit_questions && !showQuestionEditor"
@@ -1986,7 +2007,16 @@ const progressLabel = (p) => {
                                 :key="question.id"
                                 class="rounded-md border border-indigo-100 bg-white p-3"
                             >
-                                <p class="text-sm font-semibold text-gray-900">Q{{ question.number }}</p>
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="text-sm font-semibold text-gray-900">Q{{ question.number }}</p>
+                                    <button
+                                        type="button"
+                                        class="text-xs font-semibold text-rose-700 hover:text-rose-900"
+                                        @click="deleteSheetQuestion(question)"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
                                 <div class="mt-2">
                                     <InputLabel value="Question text" class="!text-xs" />
                                     <textarea
@@ -2107,10 +2137,20 @@ const progressLabel = (p) => {
                     </div>
 
                     <ol v-else class="mt-3 space-y-3">
-                        <li v-for="question in sheet.questions" :key="question.id" class="text-sm">
-                            <span class="font-semibold text-gray-900">Q{{ question.number }}.</span>
-                            <span class="text-gray-700" v-html="question.question_text" />
-                            <div class="mt-1 text-xs text-gray-500">Answer: {{ question.correct_answer || '—' }}</div>
+                        <li v-for="question in sheet.questions" :key="question.id" class="flex items-start justify-between gap-3 text-sm">
+                            <div class="min-w-0">
+                                <span class="font-semibold text-gray-900">Q{{ question.number }}.</span>
+                                <span class="text-gray-700" v-html="question.question_text" />
+                                <div class="mt-1 text-xs text-gray-500">Answer: {{ question.correct_answer || '—' }}</div>
+                            </div>
+                            <button
+                                v-if="sheet.can_edit_questions"
+                                type="button"
+                                class="shrink-0 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-100"
+                                @click="deleteSheetQuestion(question)"
+                            >
+                                Delete
+                            </button>
                         </li>
                     </ol>
                 </div>

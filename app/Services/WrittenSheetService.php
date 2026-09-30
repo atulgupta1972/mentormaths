@@ -800,6 +800,43 @@ class WrittenSheetService
         return $worksheet->fresh()->loadCount('questions');
     }
 
+    public function deleteQuestion(Worksheet $worksheet, Question $question): Worksheet
+    {
+        if (! $this->canEditQuestions($worksheet)) {
+            throw new \InvalidArgumentException('Cannot edit questions on this sheet.');
+        }
+
+        $attached = $worksheet->questions()->where('questions.id', $question->id)->exists();
+
+        if (! $attached) {
+            throw new \InvalidArgumentException('That question is not on this sheet.');
+        }
+
+        if ($worksheet->questions()->count() <= 1) {
+            throw new \InvalidArgumentException('Keep at least one question. Clear the sheet if you want to remove the last one.');
+        }
+
+        $worksheet->questions()->detach($question->id);
+
+        $stillUsed = Worksheet::query()
+            ->whereHas('questions', fn ($query) => $query->where('questions.id', $question->id))
+            ->exists();
+
+        if (! $stillUsed) {
+            $question->delete();
+        }
+
+        $remaining = $worksheet->questions()->orderByPivot('sort_order')->get();
+
+        foreach ($remaining as $index => $row) {
+            $worksheet->questions()->updateExistingPivot($row->id, ['sort_order' => $index + 1]);
+        }
+
+        $this->generatePdf($worksheet->fresh());
+
+        return $worksheet->fresh()->loadCount('questions');
+    }
+
     public function canUpdateAnswers(Worksheet $worksheet): bool
     {
         if (! $worksheet->isWritten()) {
