@@ -67,7 +67,7 @@ class SelfAssignController extends Controller
         $dueDate = now()->addDays(3)->toDateString();
 
         try {
-            $this->assignmentService->assign(
+            $assignment = $this->assignmentService->assign(
                 $worksheet,
                 $enrollment,
                 $user,
@@ -86,6 +86,11 @@ class SelfAssignController extends Controller
             return back()->with('error', 'Could not assign this set. Please try again, or tell your teacher.');
         }
 
-        return back()->with('success', "{$worksheet->set_code} is on this chapter — use Open when you are ready.");
+        return back()
+            ->with('success', "{$worksheet->set_code} is on this chapter — use Open when you are ready.")
+            ->with('assigned_sheet', [
+                'worksheet_id' => $worksheet->id,
+                'assignment_id' => $assignment->id,
+            ]);
     }
 }

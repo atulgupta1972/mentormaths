@@ -242,7 +242,9 @@ class ClassCoverageTest extends TestCase
             ->from(route('dashboard'))
             ->post(route('student.worksheets.self-assign', $worksheet))
             ->assertRedirect(route('dashboard'))
-            ->assertSessionHas('success');
+            ->assertSessionHas('success')
+            ->assertSessionHas('assigned_sheet.worksheet_id', $worksheet->id)
+            ->assertSessionHas('assigned_sheet.assignment_id');
 
         $worksheet->refresh();
         $this->assertSame('written-sheets/w2.pdf', $worksheet->written_pdf_path);

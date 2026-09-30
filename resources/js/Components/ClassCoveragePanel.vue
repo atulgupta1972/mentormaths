@@ -39,7 +39,19 @@ const page = usePage();
 const savingId = ref(null);
 const saveError = ref('');
 const assigningWorksheetId = ref(null);
-const expandedChapterIds = ref(new Set());
+const openChaptersKey = 'student-study-plan-open-chapters';
+const readOpenChapters = () => {
+    try {
+        const raw = sessionStorage.getItem(openChaptersKey);
+        const ids = raw ? JSON.parse(raw) : [];
+
+        return new Set((Array.isArray(ids) ? ids : []).map((id) => Number(id)));
+    } catch {
+        return new Set();
+    }
+};
+const expandedChapterIds = ref(readOpenChapters());
+const assignedSheets = ref({});
 const chapterStatusOverrides = ref({});
 
 const rawChapters = computed(() => props.classCoverage?.chapters ?? []);
@@ -501,7 +513,7 @@ const mark = (chapter, status) => {
     };
 
     if (isStudentView.value) {
-        visitOptions.only = ['flash', 'classCoverage', 'assignments', 'stats'];
+        visitOptions.only = ['flash', 'assignments', 'stats'];
     }
 
     router.put(route(props.updateRouteName, params), {
@@ -547,18 +559,44 @@ const applyOptimisticStatus = (chapterId, nextStatus) => {
 };
 
 const toggleChapter = (chapterId) => {
+    const id = Number(chapterId);
     const next = new Set(expandedChapterIds.value);
 
-    if (next.has(chapterId)) {
-        next.delete(chapterId);
+    if (next.has(id)) {
+        next.delete(id);
     } else {
-        next.add(chapterId);
+        next.add(id);
     }
 
     expandedChapterIds.value = next;
+
+    try {
+        sessionStorage.setItem(openChaptersKey, JSON.stringify([...next]));
+    } catch {
+        // The open chapter is still kept in memory for this visit.
+    }
 };
 
-const isExpanded = (chapterId) => expandedChapterIds.value.has(chapterId);
+const shownItem = (item) => {
+    const patch = assignedSheets.value[String(item?.worksheet_id ?? '')];
+
+    if (! patch || item?.is_revision) {
+        return item;
+    }
+
+    return {
+        ...item,
+        assignment_id: patch.assignment_id,
+        can_assign: false,
+        can_open: true,
+        status: item.status === 'not_assigned' ? 'pending' : item.status,
+        status_label: item.status === 'not_assigned' ? 'NOT DONE' : item.status_label,
+    };
+};
+
+const shownItems = (items) => (items || []).map((item) => shownItem(item));
+
+const isExpanded = (chapterId) => expandedChapterIds.value.has(Number(chapterId));
 
 const chapterNumberLabel = (chapter) => {
     const number = String(chapter.chapter_number ?? '').trim();
@@ -1039,9 +1077,17 @@ const selfAssign = (item) => {
     router.post(route('student.worksheets.self-assign', item.worksheet_id), {}, {
         preserveScroll: true,
         preserveState: true,
-        only: ['flash', 'classCoverage', 'assignments'],
+        only: ['flash'],
         onSuccess: () => {
             saveError.value = page.props.flash?.error || '';
+            const sheet = page.props.flash?.assigned_sheet;
+
+            if (sheet?.worksheet_id && sheet?.assignment_id) {
+                assignedSheets.value = {
+                    ...assignedSheets.value,
+                    [String(sheet.worksheet_id)]: sheet,
+                };
+            }
         },
         onError: () => {
             saveError.value = 'Could not assign this set. Please try again.';
@@ -1477,8 +1523,8 @@ const startRevision = (item) => {
                                             {{ book.name }}
                                         </p>
                                         <CoverageItemsWithRevisionRail
-                                            :items="book.items"
-                                            :revision-items="book.revision_items || []"
+                                            :items="shownItems(book.items)"
+                                            :revision-items="shownItems(book.revision_items || [])"
                                             group-key="books"
                                             revision-group-key="revisions"
                                             :item-key-prefix="`book-${book.id}`"
@@ -1503,7 +1549,7 @@ const startRevision = (item) => {
                                         <p class="text-[11px] font-extrabold uppercase tracking-wide text-violet-950">Formula</p>
                                         <div class="mt-1.5 flex flex-wrap gap-1.5">
                                             <CoverageSetItemCard
-                                                v-for="item in chapterDashboard(chapter).formula.items"
+                                                v-for="item in shownItems(chapterDashboard(chapter).formula.items)"
                                                 :key="`formula-${item.worksheet_id}`"
                                                 :item="item"
                                                 group-key="formula"
@@ -1552,8 +1598,8 @@ const startRevision = (item) => {
                                                         {{ row.label }}
                                                     </p>
                                                     <CoverageItemsWithRevisionRail
-                                                        :items="row.items"
-                                                        :revision-items="row.revision_items || []"
+                                                        :items="shownItems(row.items)"
+                                                        :revision-items="shownItems(row.revision_items || [])"
                                                         :group-key="`${block.tier}:${row.key}`"
                                                         :revision-group-key="`${block.tier}:${row.key}:rev`"
                                                         :item-key-prefix="`${block.tier}-${row.key}`"
@@ -1589,7 +1635,7 @@ const startRevision = (item) => {
                                                 </p>
                                                 <div class="mt-1 flex flex-wrap gap-1.5">
                                                     <CoverageSetItemCard
-                                                        v-for="item in group.items"
+                                                        v-for="item in shownItems(group.items)"
                                                         :key="`other-${group.id}-${item.worksheet_id}`"
                                                         :item="item"
                                                         group-key="other"
@@ -1635,7 +1681,7 @@ const startRevision = (item) => {
                                         </p>
                                         <div class="mt-0.5 flex flex-wrap gap-1.5">
                                             <CoverageSetItemCard
-                                                v-for="item in group.items"
+                                                v-for="item in shownItems(group.items)"
                                                 :key="`${group.key}-${item.worksheet_id}`"
                                                 :item="item"
                                                 :group-key="group.key"
@@ -1696,7 +1742,7 @@ const startRevision = (item) => {
                             </td>
                             <td class="px-2 py-2">
                                 <div
-                                    v-for="item in group.items"
+                                    v-for="item in shownItems(group.items)"
                                     :key="`additional-item-${item.assignment_id || item.worksheet_id}`"
                                     class="mb-1.5 flex flex-wrap items-center gap-2 last:mb-0"
                                 >
