@@ -221,7 +221,7 @@ class DashboardController extends Controller
         foreach ($keys as $key) {
             if ($key === 'classCoverage') {
                 try {
-                    $payload['classCoverage'] = $this->classCoverage->forEnrollment($enrollment);
+                    $payload['classCoverage'] = $this->classCoverage->forEnrollment($enrollment, withLiveSummary: false);
                 } catch (Throwable $e) {
                     Log::error('Student dashboard failed to load study plan.', [
                         'user_id' => $user->id,
@@ -291,7 +291,7 @@ class DashboardController extends Controller
     {
         return Inertia::defer(function () use ($enrollment, $user) {
             try {
-                return $this->classCoverage->forEnrollment($enrollment);
+                return $this->classCoverage->forEnrollment($enrollment, withLiveSummary: false);
             } catch (Throwable $e) {
                 Log::error('Student dashboard failed to load study plan.', [
                     'user_id' => $user->id,

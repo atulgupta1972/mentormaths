@@ -93,7 +93,8 @@ const canMoveChapter = computed(() =>
     || route().has('admin.set-assignments.effective-chapter'),
 );
 /** Ch No + Chapter + Topics + Completion % + Score % + Revision + Concept learning + Studied + Under study + Term */
-const columnCount = computed(() => 10);
+const showLiveStats = computed(() => ! isStudentView.value);
+const columnCount = computed(() => (showLiveStats.value ? 10 : 7));
 
 const termFilter = ref('all');
 const termFilterTouched = ref(false);
@@ -1071,8 +1072,14 @@ const startRevision = (item) => {
     <section class="w-full max-w-7xl">
         <h3 class="mb-1 text-base font-semibold text-slate-800">Class coverage & available content</h3>
         <p class="mb-2 text-sm leading-snug text-slate-500">
-            Click a chapter to see set details and scores. Tick each chapter independently — click the same box again to clear it.
-            <span v-if="canStaffAssign"> Click a set to assign it — target date defaults to today.</span>
+            <template v-if="isStudentView">
+                Tick each chapter you have already <strong>Studied</strong>, or the one <strong>Under study</strong>.
+                Completion and score are not calculated on this page.
+            </template>
+            <template v-else>
+                Click a chapter to see set details and scores. Tick each chapter independently — click the same box again to clear it.
+                <span v-if="canStaffAssign"> Click a set to assign it — target date defaults to today.</span>
+            </template>
         </p>
         <p v-if="upcomingExamByChapterId.size" class="mb-2 text-sm leading-snug text-amber-900">
             Chapters in an upcoming exam have a thin dark-brown line (rose if within 7 days).
@@ -1082,14 +1089,14 @@ const startRevision = (item) => {
         </p>
 
         <ChapterPerformanceSummary
-            v-if="studyPlanPerformance"
+            v-if="showLiveStats && studyPlanPerformance"
             class="mb-3"
             :perf="studyPlanPerformance"
             title="Study plan performance"
             :subtitle="studyPlanAsOnLabel"
         />
         <div
-            v-else-if="chapters.length"
+            v-else-if="showLiveStats && chapters.length"
             class="mb-3 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 px-3 py-2.5 text-[11px] font-semibold text-indigo-950"
         >
             Mark chapters as <span class="font-extrabold">Studied</span> or <span class="font-extrabold">Under study</span>
@@ -1175,13 +1182,13 @@ const startRevision = (item) => {
                         <th class="w-16 px-2 py-1.5 text-left font-semibold whitespace-nowrap">Ch No</th>
                         <th class="min-w-[9rem] max-w-[14rem] px-2 py-1.5 text-left font-semibold">Chapter</th>
                         <th class="min-w-[8rem] max-w-[12rem] px-2 py-1.5 text-left font-semibold">Topics</th>
-                        <th class="bg-sky-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Sums attempted / total pool sums">
+                        <th v-if="showLiveStats" class="bg-sky-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Sums attempted / total pool sums">
                             Completion %
                         </th>
-                        <th class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="First-try correct sums / total pool sums">
+                        <th v-if="showLiveStats" class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="First-try correct sums / total pool sums">
                             Score %
                         </th>
-                        <th class="bg-indigo-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Revision completion / score">
+                        <th v-if="showLiveStats" class="bg-indigo-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Revision completion / score">
                             Revision
                         </th>
                         <th class="bg-fuchsia-900 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Concept learning path for this chapter">
@@ -1249,6 +1256,7 @@ const startRevision = (item) => {
                                 <span v-else class="text-slate-400">—</span>
                             </td>
                             <td
+                                v-if="showLiveStats"
                                 class="bg-sky-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                                 :title="stats.total
@@ -1268,6 +1276,7 @@ const startRevision = (item) => {
                                 >{{ stats.done }}/{{ stats.total }}</span>
                             </td>
                             <td
+                                v-if="showLiveStats"
                                 class="bg-violet-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                                 :title="stats.done
@@ -1287,6 +1296,7 @@ const startRevision = (item) => {
                                 >{{ stats.correct ?? 0 }}/{{ stats.done }}</span>
                             </td>
                             <td
+                                v-if="showLiveStats"
                                 class="bg-indigo-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                                 title="Revision completion % · score %"

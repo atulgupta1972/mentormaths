@@ -167,10 +167,10 @@ class StudentChapterSummaryServiceTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Student/SchoolStudyPlan')
                 ->has('classCoverage.chapters', 1)
-                ->has('classCoverage.availability_columns')
-                ->where('classCoverage.chapters.0.availability.practice', 2)
-                ->where('classCoverage.chapters.0.availability.test', 1)
-                ->has('classCoverage.chapters.0.items'));
+                ->where('classCoverage.study_plan_performance', null)
+                ->where('classCoverage.chapters.0.availability.practice', 0)
+                ->where('classCoverage.chapters.0.items.formula.items', [])
+                ->where('classCoverage.chapters.0.items.blocks.0.item_count', 0));
     }
 
     public function test_chapter_summary_includes_formula_sets(): void

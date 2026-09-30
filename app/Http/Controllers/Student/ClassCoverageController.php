@@ -36,7 +36,7 @@ class ClassCoverageController extends Controller
         }
 
         return Inertia::render('Student/SchoolStudyPlan', [
-            'classCoverage' => $this->coverageService->forEnrollment($enrollment),
+            'classCoverage' => $this->coverageService->forEnrollment($enrollment, withLiveSummary: false),
             'upcomingExams' => $examPlans['upcoming'],
             'context' => [
                 'grade_name' => $enrollment?->gradeLevel?->name,

@@ -36,7 +36,7 @@ class ClassCoverageService
      *     availability_columns: list<array{key: string, label: string, short: string}>
      * }
      */
-    public function forEnrollment(?StudentEnrollment $enrollment): array
+    public function forEnrollment(?StudentEnrollment $enrollment, bool $withLiveSummary = true): array
     {
         $emptyColumns = $this->defaultAvailabilityColumns();
 
@@ -57,13 +57,17 @@ class ClassCoverageService
             ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
             ->pluck('term', 'syllabus_chapter_id');
 
-        $chapterMetrics = StudentChapterMetric::query()
-            ->where('student_enrollment_id', $enrollment->id)
-            ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
-            ->get()
-            ->keyBy('syllabus_chapter_id');
+        $chapterMetrics = $withLiveSummary
+            ? StudentChapterMetric::query()
+                ->where('student_enrollment_id', $enrollment->id)
+                ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
+                ->get()
+                ->keyBy('syllabus_chapter_id')
+            : collect();
 
-        $summary = $this->chapterSummaryService->forEnrollment($enrollment);
+        $summary = $withLiveSummary
+            ? $this->chapterSummaryService->forEnrollment($enrollment)
+            : ['chapters' => [], 'book_columns' => [], 'other_groups' => []];
         $summaryById = collect($summary['chapters'] ?? [])->keyBy('id');
         $availabilityColumns = $this->availabilityColumnsFor($summary['book_columns'] ?? []);
         $otherGroups = $summary['other_groups'] ?? [];
@@ -158,7 +162,9 @@ class ClassCoverageService
             'availability_columns' => $availabilityColumns,
             'additional_groups' => $additionalGroups,
             'chapter_choices' => $chapterChoices,
-            'study_plan_performance' => $this->studyPlanPerformanceFromStoredChapterMetrics($chapters),
+            'study_plan_performance' => $withLiveSummary
+                ? $this->studyPlanPerformanceFromStoredChapterMetrics($chapters)
+                : null,
         ];
     }
 
