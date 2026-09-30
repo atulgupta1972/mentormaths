@@ -8,6 +8,8 @@ use App\Models\GradeLevel;
 use App\Models\SetAssignment;
 use App\Models\SetAttempt;
 use App\Models\Student;
+use App\Models\StudentChapterCoverage;
+use App\Models\StudentChapterMetric;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
@@ -170,6 +172,51 @@ class StudentChapterSummaryServiceTest extends TestCase
                 ->where('classCoverage.study_plan_performance', null)
                 ->where('classCoverage.chapters.0.availability.practice', 0)
                 ->where('classCoverage.chapters.0.items.formula.items', [])
+                ->where('classCoverage.chapters.0.items.blocks.0.item_count', 0));
+    }
+
+    public function test_school_study_plan_shows_saved_percent_without_rebuilding_sets(): void
+    {
+        $this->withoutMiddleware([
+            \App\Http\Middleware\EnsureFormulaDrillComplete::class,
+            \App\Http\Middleware\EnsureBasicsDrillComplete::class,
+        ]);
+
+        [$enrollment, $chapter] = $this->seedChapterContent();
+        $studentUser = $this->studentUserForEnrollment($enrollment);
+
+        StudentChapterCoverage::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapter->id,
+            'status' => StudentChapterCoverage::STATUS_STUDIED,
+        ]);
+        StudentChapterMetric::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'syllabus_chapter_id' => $chapter->id,
+            'performance' => [
+                'total' => 10,
+                'done' => 8,
+                'correct' => 6,
+                'completionPct' => 80,
+                'scorePct' => 75,
+                'revisionTotal' => 4,
+                'revisionDone' => 4,
+                'revisionCorrect' => 3,
+                'revisionCompletionPct' => 100,
+                'revisionScorePct' => 75,
+            ],
+            'metrics_updated_at' => now(),
+        ]);
+
+        $this->withoutVite()
+            ->actingAs($studentUser)
+            ->get(route('student.school-study-plan.show'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('classCoverage.chapters.0.performance.completionPct', 80)
+                ->where('classCoverage.chapters.0.performance.scorePct', 75)
+                ->where('classCoverage.chapters.0.performance.revisionCompletionPct', 100)
+                ->where('classCoverage.study_plan_performance.completion_pct', 80)
                 ->where('classCoverage.chapters.0.items.blocks.0.item_count', 0));
     }
 

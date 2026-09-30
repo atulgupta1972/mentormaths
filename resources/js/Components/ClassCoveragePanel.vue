@@ -93,8 +93,7 @@ const canMoveChapter = computed(() =>
     || route().has('admin.set-assignments.effective-chapter'),
 );
 /** Ch No + Chapter + Topics + Completion % + Score % + Revision + Concept learning + Studied + Under study + Term */
-const showLiveStats = computed(() => ! isStudentView.value);
-const columnCount = computed(() => (showLiveStats.value ? 10 : 7));
+const columnCount = computed(() => 10);
 
 const termFilter = ref('all');
 const termFilterTouched = ref(false);
@@ -845,10 +844,22 @@ const chapterPerformance = (dashboard) => {
     return perf;
 };
 
-/** Always returns glance stats for the coverage table (— when no data). */
+/** Saved chapter % only for students — page refresh must not recompute from sets. */
 const chapterRowStats = (chapter) => {
     if (chapter.performance && typeof chapter.performance === 'object') {
         return chapter.performance;
+    }
+
+    if (isStudentView.value) {
+        return {
+            total: 0,
+            done: 0,
+            correct: 0,
+            completionPct: null,
+            scorePct: null,
+            revisionCompletionPct: null,
+            revisionScorePct: null,
+        };
     }
 
     let items = [];
@@ -952,6 +963,10 @@ const studyPlanPerformance = computed(() => {
             chapterCount: stored.chapterCount ?? stored.chapter_count ?? 0,
             chapterLabels: stored.chapterLabels ?? stored.chapter_labels ?? [],
         };
+    }
+
+    if (isStudentView.value) {
+        return null;
     }
 
     const tracked = trackedStudyChapters.value;
@@ -1074,7 +1089,7 @@ const startRevision = (item) => {
         <p class="mb-2 text-sm leading-snug text-slate-500">
             <template v-if="isStudentView">
                 Tick each chapter you have already <strong>Studied</strong>, or the one <strong>Under study</strong>.
-                Completion and score are not calculated on this page.
+                Completion and score are the last saved figures. They update only when you finish a worksheet or a revision sheet — refreshing this page does not recalculate them.
             </template>
             <template v-else>
                 Click a chapter to see set details and scores. Tick each chapter independently — click the same box again to clear it.
@@ -1089,14 +1104,14 @@ const startRevision = (item) => {
         </p>
 
         <ChapterPerformanceSummary
-            v-if="showLiveStats && studyPlanPerformance"
+            v-if="studyPlanPerformance"
             class="mb-3"
             :perf="studyPlanPerformance"
             title="Study plan performance"
             :subtitle="studyPlanAsOnLabel"
         />
         <div
-            v-else-if="showLiveStats && chapters.length"
+            v-else-if="chapters.length"
             class="mb-3 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 px-3 py-2.5 text-[11px] font-semibold text-indigo-950"
         >
             Mark chapters as <span class="font-extrabold">Studied</span> or <span class="font-extrabold">Under study</span>
@@ -1182,13 +1197,13 @@ const startRevision = (item) => {
                         <th class="w-16 px-2 py-1.5 text-left font-semibold whitespace-nowrap">Ch No</th>
                         <th class="min-w-[9rem] max-w-[14rem] px-2 py-1.5 text-left font-semibold">Chapter</th>
                         <th class="min-w-[8rem] max-w-[12rem] px-2 py-1.5 text-left font-semibold">Topics</th>
-                        <th v-if="showLiveStats" class="bg-sky-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Sums attempted / total pool sums">
+                        <th class="bg-sky-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Sums attempted / total pool sums">
                             Completion %
                         </th>
-                        <th v-if="showLiveStats" class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="First-try correct sums / total pool sums">
+                        <th class="bg-violet-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="First-try correct sums / total pool sums">
                             Score %
                         </th>
-                        <th v-if="showLiveStats" class="bg-indigo-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Revision completion / score">
+                        <th class="bg-indigo-800 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Revision completion / score">
                             Revision
                         </th>
                         <th class="bg-fuchsia-900 px-2 py-1.5 text-center font-bold whitespace-nowrap" title="Concept learning path for this chapter">
@@ -1256,7 +1271,6 @@ const startRevision = (item) => {
                                 <span v-else class="text-slate-400">—</span>
                             </td>
                             <td
-                                v-if="showLiveStats"
                                 class="bg-sky-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                                 :title="stats.total
@@ -1276,7 +1290,6 @@ const startRevision = (item) => {
                                 >{{ stats.done }}/{{ stats.total }}</span>
                             </td>
                             <td
-                                v-if="showLiveStats"
                                 class="bg-violet-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                                 :title="stats.done
@@ -1296,7 +1309,6 @@ const startRevision = (item) => {
                                 >{{ stats.correct ?? 0 }}/{{ stats.done }}</span>
                             </td>
                             <td
-                                v-if="showLiveStats"
                                 class="bg-indigo-50/80 px-1.5 py-1 text-center align-middle"
                                 :class="chapterRowLineClass(chapter.id)"
                                 title="Revision completion % · score %"

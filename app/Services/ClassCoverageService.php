@@ -57,13 +57,11 @@ class ClassCoverageService
             ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
             ->pluck('term', 'syllabus_chapter_id');
 
-        $chapterMetrics = $withLiveSummary
-            ? StudentChapterMetric::query()
-                ->where('student_enrollment_id', $enrollment->id)
-                ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
-                ->get()
-                ->keyBy('syllabus_chapter_id')
-            : collect();
+        $chapterMetrics = StudentChapterMetric::query()
+            ->where('student_enrollment_id', $enrollment->id)
+            ->whereIn('syllabus_chapter_id', $chapterOptions->pluck('id'))
+            ->get()
+            ->keyBy('syllabus_chapter_id');
 
         $summary = $withLiveSummary
             ? $this->chapterSummaryService->forEnrollment($enrollment)
@@ -162,9 +160,7 @@ class ClassCoverageService
             'availability_columns' => $availabilityColumns,
             'additional_groups' => $additionalGroups,
             'chapter_choices' => $chapterChoices,
-            'study_plan_performance' => $withLiveSummary
-                ? $this->studyPlanPerformanceFromStoredChapterMetrics($chapters)
-                : null,
+            'study_plan_performance' => $this->studyPlanPerformanceFromStoredChapterMetrics($chapters),
         ];
     }
 
