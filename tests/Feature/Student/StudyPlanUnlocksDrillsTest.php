@@ -62,6 +62,21 @@ class StudyPlanUnlocksDrillsTest extends TestCase
             ->assertRedirect(route('student.formula-drill.show'));
     }
 
+    public function test_first_day_without_study_plan_opens_the_planner(): void
+    {
+        ['user' => $user] = $this->seedStudent(withStudyPlan: false, pastFirstDay: false);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('promptStudyPlan', true));
+
+        $this->actingAs($user)
+            ->get(route('student.formula-drill.show'))
+            ->assertRedirect(route('student.school-study-plan.show'))
+            ->assertSessionHas('warning');
+    }
+
     public function test_first_day_skips_drills_even_with_study_plan(): void
     {
         ['user' => $user] = $this->seedStudent(withStudyPlan: true, pastFirstDay: false);

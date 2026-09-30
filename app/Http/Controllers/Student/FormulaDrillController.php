@@ -28,15 +28,15 @@ class FormulaDrillController extends Controller
         abort_unless($student, 403);
 
         if (! $this->sessionService->drillsUnlocked($student)) {
-            if ($this->sessionService->isFirstAccessDay($student)) {
+            if ($this->sessionService->isFirstAccessDay($student) && $this->sessionService->studyPlanMarked($student)) {
                 return redirect()
                     ->route('dashboard')
-                    ->with('warning', 'No drills on your first day — mark your study plan today. Formula and basics drills start from tomorrow.');
+                    ->with('warning', 'No drills on your first day. They start from tomorrow.');
             }
 
             return redirect()
                 ->route('student.school-study-plan.show')
-                ->with('warning', 'Mark your school study plan first (Studied / Under study). Daily drills unlock after that.');
+                ->with('warning', 'There are no drills yet. Tick each chapter you have already Studied, or the one Under study. Drills start the day after you do that.');
         }
 
         $session = $this->sessionService->getOrCreateTodaysSession($student);

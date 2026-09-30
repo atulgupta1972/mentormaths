@@ -29,6 +29,7 @@ const props = defineProps({
         type: Object,
         default: () => ({ grade_name: null, board_name: null }),
     },
+    promptStudyPlan: { type: Boolean, default: false },
     assignments: { type: Array, default: () => [] },
     resumeItems: { type: Array, default: () => [] },
     latestWorkGroups: { type: Array, default: () => [] },
@@ -163,6 +164,18 @@ const underStudyChapter = computed(() => {
 const studiedChapterRows = computed(() => coverageChapters.value.filter((c) => c.studied));
 
 const underStudyChapterRows = computed(() => coverageChapters.value.filter((c) => c.under_study));
+
+const needsStudyPlanTicks = computed(() => {
+    if (studiedChapterRows.value.length || underStudyChapterRows.value.length) {
+        return false;
+    }
+
+    if ((props.classCoverage?.chapters || []).length > 0) {
+        return true;
+    }
+
+    return props.promptStudyPlan;
+});
 
 const resumeItems = computed(() => props.resumeItems || []);
 
@@ -860,6 +873,32 @@ const formatHelpDate = (value) => {
                 <!-- Student / teacher / uploader dashboard -->
                 <template v-else>
                     <div
+                        v-if="page.props.flash?.warning"
+                        class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                    >
+                        {{ page.props.flash.warning }}
+                    </div>
+
+                    <section
+                        v-if="needsStudyPlanTicks && !isContentUploader"
+                        class="rounded-xl border-2 border-sky-400 bg-sky-50 p-4 shadow-sm"
+                    >
+                        <p class="text-xs font-semibold uppercase tracking-wide text-sky-950">No drills yet</p>
+                        <p class="mt-1 text-sm text-sky-950">
+                            Open <strong>My School Study Plan</strong> and tick every chapter you have already
+                            <strong>Studied</strong>, or the chapter that is <strong>Under study</strong>.
+                            Daily drills start from tomorrow after you tick them.
+                        </p>
+                        <Link
+                            v-if="hasRoute('student.school-study-plan.show')"
+                            :href="safeRoute('student.school-study-plan.show')"
+                            class="mt-3 inline-flex rounded-md bg-sky-700 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-800"
+                        >
+                            Open study planner
+                        </Link>
+                    </section>
+
+                    <div
                         v-if="loadError"
                         class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
                     >
@@ -930,11 +969,10 @@ const formatHelpDate = (value) => {
                             v-else-if="classCoverage.chapters?.length && studiedChapterRows.length === 0 && underStudyChapterRows.length === 0"
                             class="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3"
                         >
-                            <p class="text-xs font-semibold uppercase tracking-wide text-sky-950">Please start — study plan first</p>
+                            <p class="text-xs font-semibold uppercase tracking-wide text-sky-950">Tick your chapters here</p>
                             <p class="mt-1 text-sm text-sky-900">
-                                Mark chapters as <span class="font-semibold">Studied</span> or one as
-                                <span class="font-semibold">Under study</span> below.
-                                No drills on day one — daily drills unlock from tomorrow after your study plan is filled.
+                                Tick <span class="font-semibold">Studied</span> for chapters you have finished, and
+                                <span class="font-semibold">Under study</span> for the one you are doing now.
                             </p>
                         </div>
 

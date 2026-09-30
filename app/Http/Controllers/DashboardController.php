@@ -172,6 +172,9 @@ class DashboardController extends Controller
                 'grade_name' => $enrollment?->gradeLevel?->name,
                 'board_name' => $enrollment?->board?->name,
             ],
+            'promptStudyPlan' => $enrollment
+                ? ! $this->classCoverage->hasMarkedStudyPlan($enrollment)
+                : false,
             'loadError' => $loadError,
             'assignments' => $this->deferredAssignments($enrollment),
             ...$studentData,

@@ -66,6 +66,11 @@ class FormulaDrillSessionService
             return false;
         }
 
+        return $this->studyPlanMarked($student);
+    }
+
+    public function studyPlanMarked(Student $student): bool
+    {
         return $this->coverageService->hasMarkedStudyPlan($student->currentEnrollment());
     }
 
