@@ -60,6 +60,8 @@ class EnsureMensurationMatchComplete
             'student.formula-drill.*',
             'student.mensuration-match.*',
             'student.school-study-plan.*',
+            'student.worksheets.self-assign',
+            'student.worksheets.correction-practice',
             'logout',
             'verification.*',
         );

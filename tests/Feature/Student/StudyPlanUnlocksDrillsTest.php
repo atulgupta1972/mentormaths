@@ -14,6 +14,10 @@ use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\User;
+use App\Models\Worksheet;
+use App\Support\PracticeSetScope;
+use App\Support\PracticeSetTier;
+use App\Support\WorksheetDeliveryMode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -88,6 +92,33 @@ class StudyPlanUnlocksDrillsTest extends TestCase
         $this->actingAs($user)
             ->get(route('student.formula-drill.show'))
             ->assertRedirect(route('dashboard'));
+    }
+
+    public function test_student_can_self_assign_from_study_plan_before_daily_drills(): void
+    {
+        ['user' => $user] = $this->seedStudent(withStudyPlan: true, pastFirstDay: true);
+        $chapter = SyllabusChapter::query()->firstOrFail();
+        $worksheet = Worksheet::query()->create([
+            'title' => 'Practice 1',
+            'set_number' => 1,
+            'set_code' => 'S711',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapter->id,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+            'status' => Worksheet::STATUS_PUBLISHED,
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('student.school-study-plan.show'))
+            ->post(route('student.worksheets.self-assign', $worksheet))
+            ->assertRedirect(route('student.school-study-plan.show'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('set_assignments', [
+            'worksheet_id' => $worksheet->id,
+            'status' => 'assigned',
+        ]);
     }
 
     public function test_student_signup_sends_onboarding_process_email(): void

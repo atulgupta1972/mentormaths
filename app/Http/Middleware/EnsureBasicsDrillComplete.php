@@ -66,6 +66,8 @@ class EnsureBasicsDrillComplete
             'student.mensuration-match.*',
             'student.basics-drill.*',
             'student.school-study-plan.*',
+            'student.worksheets.self-assign',
+            'student.worksheets.correction-practice',
             'logout',
             'verification.*',
         );

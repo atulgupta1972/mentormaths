@@ -52,6 +52,8 @@ class EnsureFormulaDrillComplete
         return $request->routeIs(
             'student.formula-drill.*',
             'student.school-study-plan.*',
+            'student.worksheets.self-assign',
+            'student.worksheets.correction-practice',
             'logout',
             'verification.*',
         );
