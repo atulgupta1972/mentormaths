@@ -16,6 +16,7 @@ use App\Services\AdminGradeContext;
 use App\Services\UserGroupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -367,6 +368,53 @@ class ConceptBuilderTest extends TestCase
                 ->where('conceptPath.status', 'draft')
                 ->has('conceptPath.cards', 2)
             );
+    }
+
+    public function test_approving_a_concept_path_submits_the_uploader_job(): void
+    {
+        Mail::fake();
+
+        [$admin, , , $upload] = $this->seedConceptBuilder(withPdf: true);
+        $uploader = tap(User::factory()->create(['role' => User::ROLE_TEACHER]), function (User $user) {
+            app(UserGroupService::class)->attachGroupByCode($user, User::ROLE_CONTENT_UPLOADER);
+        });
+
+        $upload->update([
+            'concept_path_status' => 'draft',
+            'concept_path_items' => [
+                'chapter_title' => 'Lines and Angles',
+                'cards' => [
+                    [
+                        'step' => 1,
+                        'type' => 'teach',
+                        'title' => 'A line',
+                        'body' => 'A line goes on forever.',
+                        'approved' => true,
+                    ],
+                ],
+            ],
+        ]);
+
+        $task = ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $upload->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 50,
+            'agreed_amount_inr' => 50,
+            'agreed_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.concept-path.approve', $upload))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $upload->refresh();
+        $task->refresh();
+        $this->assertSame('approved', $upload->concept_path_status);
+        $this->assertSame(ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH, $task->status);
     }
 
     public function test_approved_concept_path_can_be_run_from_builder(): void

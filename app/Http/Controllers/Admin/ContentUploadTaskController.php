@@ -60,6 +60,8 @@ class ContentUploadTaskController extends Controller
 
     public function index(Request $request): Response
     {
+        $this->conceptPathJobs->submitApprovedJobsStillOpen();
+
         $status = $request->string('status')->toString();
         $boardId = $request->filled('board_id') ? $request->integer('board_id') : null;
         $drillGradeId = $request->integer('drill_grade_id') ?: null;

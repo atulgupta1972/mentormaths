@@ -195,16 +195,81 @@ class ConceptPathJobService
             'concept_path_last_played_at' => now(),
         ]);
 
+        return $this->markSubmitted($task, notify: true);
+    }
+
+    /**
+     * An approved concept path is finished work. Put the open job on the
+     * admin dashboard (Submitted) so it is not buried with unfinished chapters.
+     */
+    public function submitOpenJobForApprovedChapter(TextbookChapter $chapter, bool $notify = true): ?ContentUploadTask
+    {
+        if ($chapter->concept_path_status !== ConceptPathStatus::APPROVED) {
+            return null;
+        }
+
+        $task = $this->openTaskForChapter($chapter);
+
+        if (! $task) {
+            return null;
+        }
+
+        return $this->markSubmitted($task, $notify);
+    }
+
+    /**
+     * Chapters already approved before this rule still sit as "in progress".
+     * Opening the dashboard moves those jobs to submitted without emailing again.
+     */
+    public function submitApprovedJobsStillOpen(): int
+    {
+        $tasks = ContentUploadTask::query()
+            ->where('work_type', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD)
+            ->whereNotIn('status', [
+                ContentUploadTask::STATUS_PENDING_AGREEMENT,
+                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                ContentUploadTask::STATUS_PUBLISHED,
+                ContentUploadTask::STATUS_CANCELLED,
+            ])
+            ->whereHas('textbookChapter', fn ($query) => $query->where('concept_path_status', ConceptPathStatus::APPROVED))
+            ->get();
+
+        $moved = 0;
+        foreach ($tasks as $task) {
+            $fresh = $this->markSubmitted($task, notify: false);
+            if ($fresh->status === ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH) {
+                $moved++;
+            }
+        }
+
+        return $moved;
+    }
+
+    private function markSubmitted(ContentUploadTask $task, bool $notify): ContentUploadTask
+    {
+        if (in_array($task->status, [
+            ContentUploadTask::STATUS_PENDING_AGREEMENT,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_PUBLISHED,
+            ContentUploadTask::STATUS_CANCELLED,
+        ], true)) {
+            return $task;
+        }
+
         $task->update([
             'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
-            'submitted_at' => now(),
+            'submitted_at' => $task->submitted_at ?? now(),
         ]);
 
-        ContentOperationsMailer::notifySubmittedForPublish($task->fresh([
+        $fresh = $task->fresh([
             'assignee',
             'textbookChapter.textbook.gradeLevel',
-        ]));
+        ]);
 
-        return $task->fresh();
+        if ($notify && $fresh) {
+            ContentOperationsMailer::notifySubmittedForPublish($fresh);
+        }
+
+        return $fresh ?? $task;
     }
 }

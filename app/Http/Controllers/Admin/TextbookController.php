@@ -1216,6 +1216,7 @@ class TextbookController extends Controller
     {
         try {
             $this->conceptPath->approve($textbookChapter, $request->user());
+            $this->conceptPathJobs->submitOpenJobForApprovedChapter($textbookChapter->fresh(), notify: true);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
@@ -1225,7 +1226,7 @@ class TextbookController extends Controller
         }
 
         return $this->redirectToChapterShow($textbookChapter)
-            ->with('success', 'Concept path approved. Use Run concepts on Concept builder to walk through the cards.');
+            ->with('success', 'Concept path approved. It is now on the dashboard under Concept builder → Submitted.');
     }
 
     public function resetConceptPath(TextbookChapter $textbookChapter): RedirectResponse

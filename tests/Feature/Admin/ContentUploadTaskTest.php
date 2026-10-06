@@ -626,6 +626,57 @@ class ContentUploadTaskTest extends TestCase
                 ->where("matrix.cells.{$grade->id}.{$uploader->id}.count", 1));
     }
 
+    public function test_approved_concept_job_appears_as_submitted_on_the_dashboard(): void
+    {
+        [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
+
+        $textbook = Textbook::create([
+            'grade_level_id' => $grade->id,
+            'name' => 'Ganita Prakash',
+            'code' => 'GP-APPROVED',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $chapter = TextbookChapter::create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 2,
+            'title' => 'Lines and Angles',
+            'status' => TextbookChapter::STATUS_DRAFT,
+            'concept_path_status' => 'approved',
+            'concept_path_items' => [
+                'cards' => [
+                    ['step' => 1, 'type' => 'teach', 'title' => 'Lines', 'approved' => true],
+                ],
+            ],
+            'created_by' => $admin->id,
+        ]);
+        $uploader = User::factory()->create(['role' => User::ROLE_TEACHER]);
+        app(UserGroupService::class)->attachGroupByCode($uploader, User::ROLE_CONTENT_UPLOADER);
+
+        $task = ContentUploadTask::create([
+            'textbook_chapter_id' => $chapter->id,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'offered_amount_inr' => 50,
+            'agreed_amount_inr' => 50,
+            'agreed_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.index', ['work_kind' => 'concept']))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('pendingPublishCount', 1)
+                ->where('matrix.total_assignments', 1)
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.breakup.submitted", 1)
+                ->where("matrix.cells.{$grade->id}.{$uploader->id}.breakup.under_review", 0));
+
+        $this->assertSame(ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH, $task->fresh()->status);
+    }
+
     public function test_store_uses_default_per_question_rate_when_matrix_empty(): void
     {
         [$grade, $syllabusChapter, $admin] = $this->seedGradeAndAdmin();
