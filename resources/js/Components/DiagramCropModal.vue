@@ -35,9 +35,6 @@ const hasCrop = computed(() => {
     return Boolean(box && box.width >= MIN_SIZE && box.height >= MIN_SIZE);
 });
 
-const scaleX = computed(() => (displayWidth.value > 0 ? naturalWidth.value / displayWidth.value : 1));
-const scaleY = computed(() => (displayHeight.value > 0 ? naturalHeight.value / displayHeight.value : 1));
-
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const measureImage = () => {
@@ -179,6 +176,67 @@ const endDrag = () => {
     }
 };
 
+/**
+ * Storage URLs are often absolute (APP_URL). If that host differs from the
+ * page (www, http/https), drawing the <img> taints the canvas and toBlob throws.
+ * Public files are also available at /storage on the current host.
+ */
+const imageCandidates = (url) => {
+    if (!url || typeof window === 'undefined') {
+        return [];
+    }
+
+    const candidates = [];
+    try {
+        const parsed = new URL(url, window.location.href);
+        if (parsed.pathname.startsWith('/storage/')) {
+            candidates.push(`${window.location.origin}${parsed.pathname}${parsed.search}`);
+        }
+        if (!candidates.includes(parsed.href)) {
+            candidates.push(parsed.href);
+        }
+    } catch {
+        candidates.push(url);
+    }
+
+    return candidates;
+};
+
+const loadImageElement = (src) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not load this figure for cropping.'));
+    img.src = src;
+});
+
+const loadDrawableImage = async (url) => {
+    let lastError = null;
+
+    for (const candidate of imageCandidates(url)) {
+        try {
+            const response = await fetch(candidate, { credentials: 'same-origin' });
+            if (!response.ok) {
+                continue;
+            }
+
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            try {
+                const img = await loadImageElement(objectUrl);
+
+                return { img, objectUrl };
+            } catch (error) {
+                URL.revokeObjectURL(objectUrl);
+                throw error;
+            }
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('Could not load this figure for cropping.');
+};
+
 const applyCrop = async () => {
     if (!hasCrop.value || !imageRef.value || applying.value || props.processing) {
         return;
@@ -186,13 +244,22 @@ const applyCrop = async () => {
 
     applying.value = true;
     loadError.value = '';
+    let objectUrl = '';
 
     try {
+        const loaded = await loadDrawableImage(props.imageUrl);
+        objectUrl = loaded.objectUrl;
+        const source = loaded.img;
+
         const box = crop.value;
-        const sx = Math.round(box.x * scaleX.value);
-        const sy = Math.round(box.y * scaleY.value);
-        const sw = Math.max(1, Math.round(box.width * scaleX.value));
-        const sh = Math.max(1, Math.round(box.height * scaleY.value));
+        const srcW = naturalWidth.value || source.naturalWidth || 1;
+        const srcH = naturalHeight.value || source.naturalHeight || 1;
+        const toSourceX = displayWidth.value > 0 ? srcW / displayWidth.value : 1;
+        const toSourceY = displayHeight.value > 0 ? srcH / displayHeight.value : 1;
+        const sx = Math.min(srcW - 1, Math.max(0, Math.round(box.x * toSourceX)));
+        const sy = Math.min(srcH - 1, Math.max(0, Math.round(box.y * toSourceY)));
+        const sw = Math.max(1, Math.min(srcW - sx, Math.round(box.width * toSourceX)));
+        const sh = Math.max(1, Math.min(srcH - sy, Math.round(box.height * toSourceY)));
 
         const canvas = document.createElement('canvas');
         canvas.width = sw;
@@ -202,7 +269,7 @@ const applyCrop = async () => {
             throw new Error('Could not crop this image in the browser.');
         }
 
-        ctx.drawImage(imageRef.value, sx, sy, sw, sh, 0, 0, sw, sh);
+        ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
 
         const blob = await new Promise((resolve, reject) => {
             canvas.toBlob((result) => {
@@ -219,8 +286,14 @@ const applyCrop = async () => {
         const file = new File([blob], `diagram-crop-${Date.now()}.png`, { type: 'image/png' });
         emit('cropped', file);
     } catch (error) {
-        loadError.value = error?.message || 'Crop failed. Try Replace figure with a cropped image instead.';
+        const raw = error?.message || '';
+        loadError.value = /tainted|security/i.test(raw)
+            ? 'The browser blocked saving this crop. Reload the page and try again.'
+            : (raw || 'Crop failed. Try Replace figure with a cropped image instead.');
     } finally {
+        if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+        }
         applying.value = false;
     }
 };
