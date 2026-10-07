@@ -16,6 +16,7 @@ const props = defineProps({
     routes: { type: Object, required: true },
     pdfPages: { type: Array, default: () => [] },
     pdfPagesAvailable: { type: Boolean, default: false },
+    reviewTask: { type: Object, default: null },
 });
 
 const page = usePage();
@@ -58,6 +59,7 @@ const saveForm = useForm({
 });
 
 const approveForm = useForm({});
+const publishForm = useForm({});
 const resetForm = useForm({});
 
 const syncCardsFromProps = (saved) => {
@@ -734,6 +736,37 @@ const togglePagePicker = (index) => {
                 </div>
                 <div v-if="page.props.flash?.warning" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                     {{ page.props.flash.warning }}
+                </div>
+
+                <div
+                    v-if="reviewTask && !uploaderMode"
+                    class="rounded-lg border border-violet-300 bg-violet-50 p-4"
+                >
+                    <p class="text-sm font-semibold text-violet-950">
+                        Concept builder · {{ reviewTask.status_label }}
+                    </p>
+                    <p class="mt-1 text-sm text-violet-900">
+                        Review the concept cards on this page. This job does not use MCQ sets or Gemini question check.
+                        <span v-if="reviewTask.assignee_name"> Uploader: {{ reviewTask.assignee_name }}.</span>
+                    </p>
+                    <div class="mt-3 flex flex-wrap items-center gap-3">
+                        <PrimaryButton
+                            v-if="reviewTask.can_publish"
+                            type="button"
+                            class="!bg-emerald-700 hover:!bg-emerald-800"
+                            :disabled="publishForm.processing"
+                            @click="publishForm.post(reviewTask.publish_url)"
+                        >
+                            {{ publishForm.processing ? 'Publishing…' : 'Publish concept path' }}
+                        </PrimaryButton>
+                        <Link
+                            v-if="reviewTask.tasks_url"
+                            :href="reviewTask.tasks_url"
+                            class="text-sm font-medium text-violet-800 hover:underline"
+                        >
+                            Back to content tasks
+                        </Link>
+                    </div>
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm">

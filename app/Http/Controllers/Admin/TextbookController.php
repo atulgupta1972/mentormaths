@@ -1080,6 +1080,7 @@ class TextbookController extends Controller
             'conceptPath' => $conceptPathPayload,
             'pdfPages' => $this->conceptPath->cachedChapterPdfPages($textbookChapter),
             'pdfPagesAvailable' => app(\App\Services\PdfPageImageService::class)->isAvailable(),
+            'reviewTask' => $uploaderMode ? null : $this->conceptPathReviewTask($textbookChapter),
             'routes' => [
                 'preview' => $uploaderMode
                     ? route('content.textbooks.concept-path.preview', $textbookChapter)
@@ -1119,6 +1120,37 @@ class TextbookController extends Controller
                     : route('admin.textbooks.concept-path.append-turn-clock', $textbookChapter),
             ],
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function conceptPathReviewTask(TextbookChapter $textbookChapter): ?array
+    {
+        $job = ContentUploadTask::query()
+            ->with('assignee:id,name')
+            ->where('textbook_chapter_id', $textbookChapter->id)
+            ->where('work_type', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->latest('id')
+            ->first();
+
+        if (! $job) {
+            return null;
+        }
+
+        return [
+            'id' => $job->id,
+            'status' => $job->status,
+            'status_label' => $job->statusLabel(),
+            'assignee_name' => $job->assignee?->name,
+            'can_publish' => in_array($job->status, [
+                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                ContentUploadTask::STATUS_VERIFIED,
+            ], true),
+            'publish_url' => route('admin.content-tasks.publish', $job),
+            'tasks_url' => route('admin.content-tasks.index'),
+        ];
     }
 
     public function appendConceptPathAngleMap(TextbookChapter $textbookChapter): RedirectResponse

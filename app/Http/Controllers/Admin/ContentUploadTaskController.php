@@ -637,8 +637,17 @@ class ContentUploadTaskController extends Controller
             ]);
     }
 
-    public function show(Request $request, ContentUploadTask $contentTask): Response
+    public function show(Request $request, ContentUploadTask $contentTask): Response|RedirectResponse
     {
+        $contentTask->loadMissing('textbookChapter');
+
+        // Concept jobs have cards, not MCQ sets. Review & publish opens the concept path.
+        if ($contentTask->isConceptPathBuild()
+            && ! $request->boolean('manage')
+            && filled($contentTask->textbookChapter?->pdf_path)) {
+            return redirect()->route('admin.textbooks.concept-path', $contentTask->textbookChapter);
+        }
+
         $contentTask->load([
             'assignee:id,name,email',
             'assigner:id,name',
@@ -1069,9 +1078,11 @@ class ContentUploadTaskController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', $contentTask->isFillBlankConversion()
-            ? 'Fill-in-blank and written sets published.'
-            : 'Task marked published.');
+        return back()->with('success', match (true) {
+            $contentTask->isFillBlankConversion() => 'Fill-in-blank and written sets published.',
+            $contentTask->isConceptPathBuild() => 'Concept path published.',
+            default => 'Task marked published.',
+        });
     }
 
     public function clearConversionRows(Request $request, ContentUploadTask $contentTask): RedirectResponse
@@ -1293,6 +1304,9 @@ class ContentUploadTaskController extends Controller
                 'grade_name' => $chapter->textbook?->gradeLevel?->name,
                 'has_pdf' => $this->bookService->hasStoredPdf($chapter),
                 'pdf_url' => $chapter->pdfUrl(),
+                'concept_path_url' => $this->bookService->hasStoredPdf($chapter)
+                    ? route('admin.textbooks.concept-path', $chapter)
+                    : null,
             ] : null,
         ];
 
@@ -1300,13 +1314,13 @@ class ContentUploadTaskController extends Controller
             $data['duplicate_override_reason'] = $task->duplicate_override_reason;
             $data['admin_notes'] = $task->admin_notes;
             $data['assigner'] = $task->assigner?->only(['id', 'name']);
-            $data['can_return_for_reverification'] = ! $task->isFillBlankConversion() && in_array($task->status, [
+            $data['can_return_for_reverification'] = ! $task->isFillBlankConversion() && ! $task->isConceptPathBuild() && in_array($task->status, [
                 ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
                 ContentUploadTask::STATUS_VERIFIED,
                 ContentUploadTask::STATUS_PUBLISHED,
                 ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
             ], true);
-            $data['can_verify_questions'] = ! $task->isFillBlankConversion() && in_array($task->status, [
+            $data['can_verify_questions'] = ! $task->isFillBlankConversion() && ! $task->isConceptPathBuild() && in_array($task->status, [
                 ContentUploadTask::STATUS_UPLOADED,
                 ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
                 ContentUploadTask::STATUS_VERIFIED,
@@ -1336,7 +1350,7 @@ class ContentUploadTaskController extends Controller
      */
     private function verificationPayload(ContentUploadTask $task, User $user): ?array
     {
-        if ($task->isFillBlankConversion()) {
+        if ($task->isFillBlankConversion() || $task->isConceptPathBuild()) {
             return null;
         }
 

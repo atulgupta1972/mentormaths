@@ -745,6 +745,64 @@ class ConceptBuilderTest extends TestCase
             );
     }
 
+    public function test_reviewing_a_submitted_concept_job_opens_the_concept_cards(): void
+    {
+        $this->withoutVite();
+
+        [$admin, , , $upload] = $this->seedConceptBuilder(withPdf: true);
+        $uploader = User::factory()->create();
+
+        $upload->update([
+            'concept_path_status' => 'approved',
+            'concept_path_items' => [
+                'chapter_title' => 'Large numbers',
+                'cards' => [
+                    [
+                        'step' => 1,
+                        'type' => 'teach',
+                        'title' => 'Place value',
+                        'body' => 'Each place is ten times the one on its right.',
+                        'approved' => true,
+                    ],
+                ],
+            ],
+        ]);
+
+        $task = ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $upload->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'offered_amount_inr' => 50,
+            'agreed_amount_inr' => 50,
+            'agreed_at' => now(),
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertRedirect(route('admin.textbooks.concept-path', $upload));
+
+        $this->actingAs($admin)
+            ->get(route('admin.textbooks.concept-path', $upload))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Textbooks/ConceptPath')
+                ->where('reviewTask.id', $task->id)
+                ->where('reviewTask.can_publish', true)
+                ->where('reviewTask.status', ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH));
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', ['contentTask' => $task, 'manage' => 1]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/ContentTasks/Show')
+                ->where('task.is_concept_path_build', true)
+                ->where('verification', null)
+                ->where('task.can_verify_questions', false));
+    }
+
     /**
      * @return array{0: User, 1: GradeLevel, 2: SyllabusChapter, 3: TextbookChapter}
      */

@@ -294,6 +294,14 @@ const setGeminiFilter = (bucket) => {
     }), { preserveState: true, replace: true, preserveScroll: true });
 };
 
+const reviewHref = (row) => {
+    if (row.is_concept_path_build && row.chapter?.id) {
+        return route('admin.textbooks.concept-path', row.chapter.id);
+    }
+
+    return route('admin.content-tasks.show', row.id);
+};
+
 const actionLinkLabel = (row) => {
     if (row.can_review_and_publish) {
         return 'Review & publish';
@@ -722,7 +730,7 @@ watch(
                                         <td class="sticky left-0 z-10 border-r border-slate-100 bg-white px-2 py-2 sm:static sm:z-auto sm:border-r-0 sm:px-3">
                                             <div class="flex min-w-[5.5rem] flex-col gap-1">
                                                 <Link
-                                                    :href="route('admin.content-tasks.show', row.id)"
+                                                    :href="reviewHref(row)"
                                                     class="text-xs font-semibold hover:underline"
                                                     :class="row.can_review_and_publish ? 'text-violet-700' : 'text-indigo-600'"
                                                 >

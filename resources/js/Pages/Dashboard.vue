@@ -90,6 +90,14 @@ const sendBackForRecheck = (item) => {
     });
 };
 
+const publishReviewHref = (item) => {
+    if (item.is_concept_path_build && item.chapter_id) {
+        return route('admin.textbooks.concept-path', item.chapter_id);
+    }
+
+    return route('admin.content-tasks.show', item.id);
+};
+
 const geminiPendingItems = computed(() =>
     (props.contentRecheckQueue || []).filter((item) =>
         item.gemini_progress?.can_gemini && (item.gemini_progress.pending ?? 0) > 0,
@@ -767,7 +775,7 @@ const formatHelpDate = (value) => {
                                     >
                                         {{ returningTaskId === item.id ? 'Sending…' : 'Send back to check' }}
                                     </button>
-                                    <Link :href="route('admin.content-tasks.show', item.id)" class="text-indigo-600 hover:underline">
+                                    <Link :href="publishReviewHref(item)" class="text-indigo-600 hover:underline">
                                         Review →
                                     </Link>
                                 </div>

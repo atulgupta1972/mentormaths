@@ -445,7 +445,32 @@ const formatDuration = (seconds) => {
                     </div>
                 </div>
 
-                <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+                <div v-if="task.is_concept_path_build" class="rounded-lg border border-violet-300 bg-violet-50 p-4">
+                    <p class="text-sm font-semibold text-violet-950">Concept builder</p>
+                    <p class="mt-1 text-sm text-violet-900">
+                        This job is a concept path. Review the cards, then publish. MCQ sets and Gemini question check do not apply.
+                    </p>
+                    <div class="mt-3 flex flex-wrap items-center gap-3">
+                        <PrimaryButton
+                            v-if="task.can_publish"
+                            type="button"
+                            class="!bg-emerald-700 hover:!bg-emerald-800"
+                            :disabled="publishForm.processing"
+                            @click="publishForm.post(safeRoute('admin.content-tasks.publish', task.id, adminTaskPath('/publish')))"
+                        >
+                            {{ publishForm.processing ? 'Publishing…' : 'Publish concept path' }}
+                        </PrimaryButton>
+                        <Link
+                            v-if="task.chapter?.concept_path_url"
+                            :href="task.chapter.concept_path_url"
+                            class="text-sm font-semibold text-violet-800 hover:underline"
+                        >
+                            Open concept cards →
+                        </Link>
+                    </div>
+                </div>
+
+                <div v-if="!task.is_concept_path_build" class="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
                     <p class="text-sm text-indigo-950">
                         Review questions in batches of 10. Tick OK to verify, or flag with a remark to send back — one email when you finish.
                     </p>
@@ -714,7 +739,7 @@ const formatDuration = (seconds) => {
                 </div>
 
                 <div
-                    v-if="task.can_publish"
+                    v-if="task.can_publish && !task.is_concept_path_build"
                     class="rounded-lg border border-emerald-300 bg-emerald-50 p-4"
                 >
                     <p class="text-sm font-semibold text-emerald-950">Ready to publish</p>
@@ -733,7 +758,7 @@ const formatDuration = (seconds) => {
                     </PrimaryButton>
                 </div>
 
-                <div v-else-if="task.status === 'submitted_for_publish'" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <div v-else-if="task.status === 'submitted_for_publish' && !task.is_concept_path_build" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                     <p class="text-sm text-emerald-900">Uploader submitted this chapter for publish.</p>
                     <div class="mt-3 flex flex-wrap gap-3">
                         <PrimaryButton type="button" :disabled="publishForm.processing" @click="publishForm.post(route('admin.content-tasks.publish', task.id))">

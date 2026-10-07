@@ -559,6 +559,8 @@ class DashboardService
     {
         return [
             'id' => $task->id,
+            'is_concept_path_build' => $task->isConceptPathBuild(),
+            'chapter_id' => $task->textbook_chapter_id,
             'status' => $task->status,
             'status_label' => $task->statusLabel(),
             'assignee_name' => $task->assignee?->name,
