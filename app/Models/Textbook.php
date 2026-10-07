@@ -43,20 +43,18 @@ class Textbook extends Model
     {
         $name = strtolower(trim((string) $this->name));
         $code = strtolower(trim((string) $this->code));
-        $source = strtoupper(trim((string) ($this->source_ref ?? '')));
 
-        if ($source !== '' && str_starts_with($source, 'RDS')) {
-            return true;
-        }
+        $codeIsRd = $code === 'rds'
+            || $code === 'rdsharma'
+            || str_starts_with($code, 'rds-')
+            || str_starts_with($code, 'rds_');
 
-        if ($code === 'rds' || $code === 'rdsharma' || str_starts_with($code, 'rds-') || str_starts_with($code, 'rds_')) {
-            return true;
-        }
-
-        return str_contains($name, 'rd sharma')
+        $nameIsRd = str_contains($name, 'rd sharma')
             || str_contains($name, 'r.d. sharma')
             || str_contains($name, 'r.d.sharma')
             || preg_match('/\brds\b/', $name) === 1;
+
+        return $codeIsRd || $nameIsRd;
     }
 
     /**

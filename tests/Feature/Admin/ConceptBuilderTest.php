@@ -803,6 +803,67 @@ class ConceptBuilderTest extends TestCase
                 ->where('task.can_verify_questions', false));
     }
 
+    public function test_part_two_school_book_is_listed_for_concept_upload(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $grade] = $this->seedConceptBuilder(withPdf: true);
+        $board = Board::query()->first();
+        $subject = Subject::query()->where('code', 'MATHS')->first();
+        $otherYear = AcademicYear::query()->create([
+            'name' => '2025-26',
+            'starts_on' => '2025-03-01',
+            'ends_on' => '2026-02-28',
+            'is_active' => false,
+        ]);
+        $partTwo = SyllabusVersion::query()->create([
+            'academic_year_id' => $otherYear->id,
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'subject_id' => $subject->id,
+        ]);
+        $syllabusChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $partTwo->id,
+            'name' => 'Two Variables, One Line',
+            'chapter_number' => 'p2-ch5',
+            'sort_order' => 5,
+        ]);
+        $book = Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'board_id' => $board->id,
+            'code' => 'gm2',
+            'name' => 'GANITA MANJARI -2',
+            'source_ref' => 'RDS-C9',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        TextbookChapter::query()->create([
+            'textbook_id' => $book->id,
+            'syllabus_chapter_id' => $syllabusChapter->id,
+            'chapter_number' => 5,
+            'title' => 'Two Variables, One Line',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->assertFalse($book->looksLikeRdSharma());
+
+        $this->actingAs($admin)
+            ->withSession([AdminGradeContext::SESSION_KEY => $grade->id])
+            ->get(route('admin.concept-builder.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/ConceptBuilder/Index')
+                ->where('books', fn ($books) => collect($books)->contains(
+                    fn ($row) => $row['id'] === $book->id && $row['is_rd_sharma'] === false
+                ))
+                ->where('chapters', fn ($chapters) => collect($chapters)->contains(
+                    fn ($row) => ($row['chapter_number'] ?? null) === 'p2-ch5'
+                        && collect($row['uploads'])->contains(fn ($upload) => $upload['textbook_id'] === $book->id)
+                ))
+            );
+    }
+
     /**
      * @return array{0: User, 1: GradeLevel, 2: SyllabusChapter, 3: TextbookChapter}
      */

@@ -68,97 +68,128 @@ class ConceptBuilderController extends Controller
 
             $syllabusChapterIds = $versions->flatMap(fn ($v) => $v->chapters->pluck('id'))->all();
 
-            $textbookChapters = TextbookChapter::query()
-                ->with(['textbook:id,name,code,grade_level_id,source_ref,practice_line', 'syllabusChapter:id,name,chapter_number'])
-                ->whereIn('syllabus_chapter_id', $syllabusChapterIds ?: [-1])
+            // School books for this class can be linked to syllabus chapters that are not
+            // on the active-year list (for example Ganita Manjari Part II). Still show them.
+            $gradeBookChapters = TextbookChapter::query()
+                ->with([
+                    'textbook:id,name,code,grade_level_id,source_ref,practice_line',
+                    'syllabusChapter:id,name,chapter_number,syllabus_version_id',
+                    'syllabusChapter.syllabusVersion:id,board_id,grade_level_id',
+                    'syllabusChapter.syllabusVersion.board:id,code,name',
+                ])
+                ->where(function ($query) use ($gradeLevel, $syllabusChapterIds) {
+                    $query->whereHas('textbook', fn ($inner) => $inner->where('grade_level_id', $gradeLevel->id))
+                        ->orWhereIn('syllabus_chapter_id', $syllabusChapterIds ?: [-1]);
+                })
                 ->get()
                 ->each(function (TextbookChapter $row) {
                     $row->syncDisplayFromSyllabus();
-                })
+                });
+
+            $extraSyllabusChapters = SyllabusChapter::query()
+                ->with('syllabusVersion.board:id,code,name')
+                ->whereIn('id', $gradeBookChapters->pluck('syllabus_chapter_id')->filter()->unique()->diff($syllabusChapterIds)->all() ?: [-1])
+                ->get()
+                ->keyBy('id');
+
+            $textbookChapters = $gradeBookChapters
+                ->filter(fn (TextbookChapter $row) => filled($row->syllabus_chapter_id))
                 ->groupBy('syllabus_chapter_id');
 
             $conceptJobs = \App\Models\ContentUploadTask::query()
                 ->with('assignee:id,name')
-                ->whereIn('textbook_chapter_id', $textbookChapters->flatten()->pluck('id')->all() ?: [-1])
+                ->whereIn('textbook_chapter_id', $gradeBookChapters->pluck('id')->all() ?: [-1])
                 ->where('work_type', \App\Models\ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD)
                 ->where('status', '!=', \App\Models\ContentUploadTask::STATUS_CANCELLED)
                 ->get()
                 ->keyBy('textbook_chapter_id');
 
+            $mapUploads = function (SyllabusChapter $syllabusChapter) use ($uploaderMode, $conceptJobs, $textbookChapters): array {
+                return ($textbookChapters->get($syllabusChapter->id) ?? collect())
+                    ->map(function (TextbookChapter $upload) use ($uploaderMode, $conceptJobs) {
+                        $hasPdf = filled($upload->pdf_path);
+                        $isApproved = $upload->concept_path_status === ConceptPathStatus::APPROVED;
+                        $cardCount = is_array($upload->concept_path_items['cards'] ?? null)
+                            ? count(array_filter(
+                                $upload->concept_path_items['cards'],
+                                fn ($card) => is_array($card) && ($card['approved'] ?? true),
+                            ))
+                            : 0;
+
+                        $job = $conceptJobs->get($upload->id);
+
+                        return [
+                            'id' => $upload->id,
+                            'book_name' => $upload->textbook?->name,
+                            'book_code' => $upload->textbook?->code,
+                            'textbook_id' => $upload->textbook_id,
+                            'is_rd_sharma' => $upload->textbook?->looksLikeRdSharma() ?? false,
+                            'has_pdf' => $hasPdf,
+                            'status_label' => $upload->statusLabel(),
+                            'concept_path_status' => $upload->concept_path_status,
+                            'concept_path_status_label' => ConceptPathStatus::label($upload->concept_path_status),
+                            'concept_path_card_count' => $cardCount,
+                            'is_approved' => $isApproved && $cardCount > 0,
+                            'concept_path_url' => $hasPdf
+                                ? ($uploaderMode
+                                    ? route('content.textbooks.concept-path', $upload)
+                                    : route('admin.textbooks.concept-path', $upload))
+                                : null,
+                            'run_url' => ($isApproved && $cardCount > 0)
+                                ? ($uploaderMode
+                                    ? route('content.textbooks.concept-path.play', $upload)
+                                    : route('admin.textbooks.concept-path.play', $upload))
+                                : null,
+                            'upload_url' => $uploaderMode
+                                ? route('content.textbooks.show', $upload)
+                                : route('admin.textbooks.show', $upload),
+                            'concept_job' => $job ? [
+                                'id' => $job->id,
+                                'status' => $job->status,
+                                'status_label' => $job->statusLabel(),
+                                'assignee_name' => $job->assignee?->name,
+                                'amount_inr' => $job->rateUnitInr(),
+                                'task_url' => route('admin.content-tasks.show', $job),
+                            ] : null,
+                            'can_assign_concept' => ! $uploaderMode && ! $job,
+                        ];
+                    })
+                    ->values()
+                    ->all();
+            };
+
+            $pushChapter = function (SyllabusChapter $syllabusChapter, ?int $boardId, ?string $boardCode, ?string $boardName) use (&$chapters, $mapUploads): void {
+                $uploads = $mapUploads($syllabusChapter);
+                $readyUploads = collect($uploads)->where('has_pdf', true)->values();
+                $approvedUpload = collect($uploads)->firstWhere('is_approved', true);
+                $linkedTextbookIds = collect($uploads)->pluck('textbook_id')->filter()->values()->all();
+
+                $chapters[] = [
+                    'syllabus_chapter_id' => $syllabusChapter->id,
+                    'board_id' => $boardId,
+                    'board_code' => $boardCode,
+                    'board_name' => $boardName,
+                    'label' => $this->chapterLabel($syllabusChapter),
+                    'chapter_number' => $syllabusChapter->chapter_number,
+                    'name' => $syllabusChapter->name,
+                    'uploads' => $uploads,
+                    'has_pdf' => $readyUploads->isNotEmpty(),
+                    'is_approved' => $approvedUpload !== null,
+                    'run_url' => $approvedUpload['run_url'] ?? null,
+                    'linked_textbook_ids' => $linkedTextbookIds,
+                    'needs_upload' => $readyUploads->isEmpty(),
+                ];
+            };
+
             foreach ($versions as $version) {
                 foreach ($version->chapters as $syllabusChapter) {
-                    $uploads = ($textbookChapters->get($syllabusChapter->id) ?? collect())
-                        ->map(function (TextbookChapter $upload) use ($uploaderMode, $conceptJobs) {
-                            $hasPdf = filled($upload->pdf_path);
-                            $isApproved = $upload->concept_path_status === ConceptPathStatus::APPROVED;
-                            $cardCount = is_array($upload->concept_path_items['cards'] ?? null)
-                                ? count(array_filter(
-                                    $upload->concept_path_items['cards'],
-                                    fn ($card) => is_array($card) && ($card['approved'] ?? true),
-                                ))
-                                : 0;
-
-                            $job = $conceptJobs->get($upload->id);
-
-                            return [
-                                'id' => $upload->id,
-                                'book_name' => $upload->textbook?->name,
-                                'book_code' => $upload->textbook?->code,
-                                'textbook_id' => $upload->textbook_id,
-                                'is_rd_sharma' => $upload->textbook?->looksLikeRdSharma() ?? false,
-                                'has_pdf' => $hasPdf,
-                                'status_label' => $upload->statusLabel(),
-                                'concept_path_status' => $upload->concept_path_status,
-                                'concept_path_status_label' => ConceptPathStatus::label($upload->concept_path_status),
-                                'concept_path_card_count' => $cardCount,
-                                'is_approved' => $isApproved && $cardCount > 0,
-                                'concept_path_url' => $hasPdf
-                                    ? ($uploaderMode
-                                        ? route('content.textbooks.concept-path', $upload)
-                                        : route('admin.textbooks.concept-path', $upload))
-                                    : null,
-                                'run_url' => ($isApproved && $cardCount > 0)
-                                    ? ($uploaderMode
-                                        ? route('content.textbooks.concept-path.play', $upload)
-                                        : route('admin.textbooks.concept-path.play', $upload))
-                                    : null,
-                                'upload_url' => $uploaderMode
-                                    ? route('content.textbooks.show', $upload)
-                                    : route('admin.textbooks.show', $upload),
-                                'concept_job' => $job ? [
-                                    'id' => $job->id,
-                                    'status' => $job->status,
-                                    'status_label' => $job->statusLabel(),
-                                    'assignee_name' => $job->assignee?->name,
-                                    'amount_inr' => $job->rateUnitInr(),
-                                    'task_url' => route('admin.content-tasks.show', $job),
-                                ] : null,
-                                'can_assign_concept' => ! $uploaderMode && ! $job,
-                            ];
-                        })
-                        ->values()
-                        ->all();
-
-                    $readyUploads = collect($uploads)->where('has_pdf', true)->values();
-                    $approvedUpload = collect($uploads)->firstWhere('is_approved', true);
-                    $linkedTextbookIds = collect($uploads)->pluck('textbook_id')->filter()->values()->all();
-
-                    $chapters[] = [
-                        'syllabus_chapter_id' => $syllabusChapter->id,
-                        'board_id' => $version->board_id,
-                        'board_code' => $version->board?->code,
-                        'board_name' => $version->board?->name,
-                        'label' => $this->chapterLabel($syllabusChapter),
-                        'chapter_number' => $syllabusChapter->chapter_number,
-                        'name' => $syllabusChapter->name,
-                        'uploads' => $uploads,
-                        'has_pdf' => $readyUploads->isNotEmpty(),
-                        'is_approved' => $approvedUpload !== null,
-                        'run_url' => $approvedUpload['run_url'] ?? null,
-                        'linked_textbook_ids' => $linkedTextbookIds,
-                        'needs_upload' => $readyUploads->isEmpty(),
-                    ];
+                    $pushChapter($syllabusChapter, $version->board_id, $version->board?->code, $version->board?->name);
                 }
+            }
+
+            foreach ($extraSyllabusChapters as $syllabusChapter) {
+                $version = $syllabusChapter->syllabusVersion;
+                $pushChapter($syllabusChapter, $version?->board_id, $version?->board?->code, $version?->board?->name);
             }
         }
 
