@@ -308,6 +308,26 @@ class MisprintAutoQueueAndEditTest extends TestCase
         $this->assertDatabaseMissing('questions', ['id' => $question->id]);
     }
 
+    public function test_admin_can_delete_question_from_set_questions_page(): void
+    {
+        $this->withoutVite();
+
+        [, , , $question] = $this->seedPublishedFillBlankWithUploader();
+        $worksheet = $question->worksheets()->firstOrFail();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        app(UserGroupService::class)->attachGroupByCode($admin, User::ROLE_ADMIN);
+
+        $setUrl = route('admin.questions.sets.show', $worksheet);
+
+        $this->actingAs($admin)
+            ->from($setUrl)
+            ->delete(route('admin.questions.destroy', $question), ['return_to' => 'back'])
+            ->assertRedirect($setUrl);
+
+        $this->assertDatabaseMissing('questions', ['id' => $question->id]);
+        $this->assertSame(0, $worksheet->questions()->count());
+    }
+
     /**
      * @return array{0: User, 1: TextbookChapter, 2: ContentUploadTask, 3: Question}
      */

@@ -47,10 +47,35 @@ const renameForm = useForm({
 });
 
 const deleteSetForm = useForm({});
+const deleteQuestionForm = useForm({});
+const deletingQuestionId = ref(null);
 
 const tierForm = useForm({
     tier: props.practiceSet?.tier || 'starter',
 });
+
+const deleteQuestion = (question) => {
+    if (!question?.id) {
+        return;
+    }
+
+    const index = (props.questions || []).findIndex((row) => row.id === question.id);
+    const label = index >= 0 ? `Q${index + 1}` : 'this question';
+    if (!window.confirm(`Delete ${label} from this set? Use when the figure or sum is wrong and the question should not stay. This cannot be undone.`)) {
+        return;
+    }
+
+    deletingQuestionId.value = question.id;
+    deleteQuestionForm
+        .transform(() => ({ return_to: 'back' }))
+        .delete(route('admin.questions.destroy', question.id), {
+            preserveScroll: true,
+            onFinish: () => {
+                deletingQuestionId.value = null;
+                deleteQuestionForm.transform((data) => data);
+            },
+        });
+};
 
 watch(
     () => props.practiceSet?.tier,
@@ -695,20 +720,30 @@ const generateHints = () => {
                                 </td>
                                 <td class="px-4 py-3">{{ q.difficulty || '—' }}</td>
                                 <td v-if="isAdmin" class="px-4 py-3 text-right">
-                                    <Link
-                                        v-if="q.type === 'fill_in_blank'"
-                                        :href="route('admin.questions.set-code', { code: practiceSet.set_code })"
-                                        class="text-indigo-600 hover:text-indigo-800"
-                                    >
-                                        Edit answer
-                                    </Link>
-                                    <Link v-else :href="route('admin.questions.edit', q.id)" class="text-indigo-600 hover:text-indigo-800">
-                                        Edit
-                                    </Link>
+                                    <div class="flex flex-col items-end gap-1 sm:flex-row sm:justify-end sm:gap-3">
+                                        <Link
+                                            v-if="q.type === 'fill_in_blank'"
+                                            :href="route('admin.questions.set-code', { code: practiceSet.set_code })"
+                                            class="text-indigo-600 hover:text-indigo-800"
+                                        >
+                                            Edit answer
+                                        </Link>
+                                        <Link v-else :href="route('admin.questions.edit', q.id)" class="text-indigo-600 hover:text-indigo-800">
+                                            Edit
+                                        </Link>
+                                        <button
+                                            type="button"
+                                            class="text-rose-700 hover:text-rose-900 disabled:opacity-50"
+                                            :disabled="deletingQuestionId === q.id || deleteQuestionForm.processing"
+                                            @click="deleteQuestion(q)"
+                                        >
+                                            {{ deletingQuestionId === q.id ? 'Deleting…' : 'Delete' }}
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                             <tr v-if="questions.length === 0">
-                                <td :colspan="isAdmin ? (isFillInBlankSet ? 4 : 5) : 3" class="px-4 py-8 text-center text-gray-500">No questions in this set.</td>
+                                <td :colspan="isAdmin ? (isFillInBlankSet ? 5 : 6) : 4" class="px-4 py-8 text-center text-gray-500">No questions in this set.</td>
                             </tr>
                         </tbody>
                     </table>
