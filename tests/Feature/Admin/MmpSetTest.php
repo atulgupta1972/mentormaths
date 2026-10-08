@@ -188,11 +188,56 @@ class MmpSetTest extends TestCase
             ->assertSessionHas('mmp_draft_files');
 
         $prompt = session('mmp_cursor_prompt');
-        $this->assertStringContainsString('Rough draft photos', $prompt);
+        $this->assertStringContainsString('Rough draft / figure sketch', $prompt);
         $this->assertStringContainsString('ATTACH THE ROUGH DRAFT', $prompt);
+        $this->assertStringContainsString('FIGURE GENERATION FROM THE AUTHOR\'S SKETCH', $prompt);
+        $this->assertStringContainsString('q1.png', $prompt);
 
         // Drafts must stay in session after the prompt step (not flash-only).
         $this->assertCount(1, session('mmp_draft_files'));
+    }
+
+    public function test_admin_can_save_mmp_set_with_ai_generated_figures(): void
+    {
+        $this->withoutVite();
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        [$chapter, $topic, $admin] = $this->seedChapter();
+        $diagram = \Illuminate\Http\UploadedFile::fake()->image('q1.png', 400, 300);
+
+        $json = json_encode([
+            'questions' => [
+                [
+                    'type' => 'fill_in_blank',
+                    'topic' => $topic->name,
+                    'question' => 'In the figure, AH = 4 cm and BH = 3 cm. AB is ____ cm.',
+                    'needs_diagram' => true,
+                    'diagram_file' => 'q1.png',
+                    'figure_spec' => 'Right triangle ABH with legs 4 and 3.',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '5',
+                    'method_hint' => 'Use Pythagoras on the two legs.',
+                    'explanation' => 'AB = sqrt(16 + 9) = 5. Final answer = 5',
+                    'difficulty' => 'Hard',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->actingAs($admin)
+            ->post(route('admin.questions.store-mmp'), [
+                'syllabus_chapter_id' => $chapter->id,
+                'seed' => 'Sketch of right triangle AH=4 BH=3',
+                'json' => $json,
+                'diagrams' => [$diagram],
+            ])
+            ->assertRedirect();
+
+        $worksheet = Worksheet::query()->where('purpose', WorksheetPurpose::PERFECTION)->first();
+        $this->assertNotNull($worksheet);
+        $question = $worksheet->questions()->first();
+        $this->assertNotNull($question);
+        $this->assertNotNull($question->diagram_path);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($question->diagram_path);
     }
 
     /**

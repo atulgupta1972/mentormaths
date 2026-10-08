@@ -484,9 +484,22 @@ class QuestionController extends Controller
             'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
             'seed' => ['nullable', 'string', 'max:20000'],
             'json' => ['required', 'string'],
+            'diagrams' => ['nullable', 'array', 'max:12'],
+            'diagrams.*' => ['file', 'max:8192', 'extensions:jpg,jpeg,png,webp'],
+        ], [
+            'diagrams.*.extensions' => 'AI figure files must be JPG, PNG, or WebP.',
+            'diagrams.*.max' => 'Each AI figure must be smaller than 8 MB.',
         ]);
 
         $chapter = SyllabusChapter::query()->with('topics')->findOrFail($validated['syllabus_chapter_id']);
+
+        $diagramsByName = [];
+        foreach ($request->file('diagrams', []) as $file) {
+            if (! $file instanceof \Illuminate\Http\UploadedFile) {
+                continue;
+            }
+            $diagramsByName[strtolower($file->getClientOriginalName())] = $file;
+        }
 
         try {
             $rows = $this->mmpImportService->parseJson($validated['json']);
@@ -495,6 +508,7 @@ class QuestionController extends Controller
                 $rows,
                 $request->user()->id,
                 filled($validated['seed'] ?? null) ? trim((string) $validated['seed']) : null,
+                $diagramsByName,
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage())->withInput();
@@ -503,9 +517,14 @@ class QuestionController extends Controller
         $worksheet = $result['worksheet'];
         $this->forgetMmpDraftSession($request->user()->id);
 
+        $message = count($result['questions']).' Mentormaths Perfection sums saved as '.$worksheet->set_code.'.';
+        if (($result['diagram_count'] ?? 0) > 0) {
+            $message .= ' '.$result['diagram_count'].' AI-generated figure(s) attached.';
+        }
+
         return redirect()
             ->route('admin.questions.sets.show', $worksheet)
-            ->with('success', count($result['questions']).' Mentormaths Perfection sums saved as '.$worksheet->set_code.'.');
+            ->with('success', $message);
     }
 
     public function previewFillBlankImport(Request $request): RedirectResponse

@@ -52,9 +52,14 @@ const saveForm = useForm({
     syllabus_chapter_id: props.selectedChapterId || '',
     seed: props.seedDraft || '',
     json: '',
+    diagrams: [],
 });
 
+const figureFiles = ref([]);
+const figureInput = ref(null);
+
 const hasDrafts = computed(() => (props.draftFiles || []).length > 0);
+const figureNeedingCount = computed(() => previewRows.value.filter((row) => row.needs_diagram).length);
 
 watch(chapterFilter, (value) => {
     if (!value) {
@@ -117,6 +122,9 @@ const parsePreview = () => {
                 if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) {
                     throw new Error(`Question ${index + 1} has an invalid correct_index.`);
                 }
+                const needsDiagram = Boolean(item.needs_diagram)
+                    || Boolean(item.diagram_file)
+                    || /in the figure|in the diagram/i.test(questionText);
                 return {
                     type: 'mcq',
                     topic: item.topic || item.topic_name || '',
@@ -125,6 +133,9 @@ const parsePreview = () => {
                     correct_index: correctIndex,
                     correct_answer: options[correctIndex],
                     difficulty: item.difficulty || 'Hard',
+                    needs_diagram: needsDiagram,
+                    diagram_file: item.diagram_file || (needsDiagram ? `q${index + 1}.png` : ''),
+                    figure_spec: item.figure_spec || '',
                 };
             }
 
@@ -135,6 +146,9 @@ const parsePreview = () => {
             if (!questionText.includes('____')) {
                 throw new Error(`Question ${index + 1} must include ____ or use type mcq.`);
             }
+            const needsDiagram = Boolean(item.needs_diagram)
+                || Boolean(item.diagram_file)
+                || /in the figure|in the diagram/i.test(questionText);
             return {
                 type: 'fill_in_blank',
                 topic: item.topic || item.topic_name || '',
@@ -142,6 +156,9 @@ const parsePreview = () => {
                 answer_format: item.answer_format || 'integer',
                 correct_answer: correctAnswer,
                 difficulty: item.difficulty || 'Hard',
+                needs_diagram: needsDiagram,
+                diagram_file: item.diagram_file || (needsDiagram ? `q${index + 1}.png` : ''),
+                figure_spec: item.figure_spec || '',
             };
         });
     } catch (error) {
@@ -229,6 +246,10 @@ const copyPrompt = async () => {
     }
 };
 
+const onFigureFilesSelected = (event) => {
+    figureFiles.value = Array.from(event.target.files || []);
+};
+
 const saveSet = () => {
     if (!chapterFilter.value) {
         window.alert('Choose a chapter first.');
@@ -241,10 +262,24 @@ const saveSet = () => {
         }
     }
 
-    saveForm.syllabus_chapter_id = chapterFilter.value;
-    saveForm.seed = seed.value.trim();
-    saveForm.json = stripMarkdownFences(jsonInput.value);
-    saveForm.post(route('admin.questions.store-mmp'));
+    const formData = new FormData();
+    formData.append('syllabus_chapter_id', String(chapterFilter.value));
+    formData.append('seed', seed.value.trim());
+    formData.append('json', stripMarkdownFences(jsonInput.value));
+    figureFiles.value.forEach((file) => {
+        formData.append('diagrams[]', file);
+    });
+
+    saveForm.processing = true;
+    router.post(route('admin.questions.store-mmp'), formData, {
+        forceFormData: true,
+        onError: (errors) => {
+            saveForm.setError('json', errors.json || errors.diagrams || errors['diagrams.0'] || '');
+        },
+        onFinish: () => {
+            saveForm.processing = false;
+        },
+    });
 };
 
 const fillBlankCount = computed(() => previewRows.value.filter((row) => row.type === 'fill_in_blank').length);
@@ -416,6 +451,11 @@ watch(
                             {{ copied ? 'Copied' : 'Copy prompt' }}
                         </SecondaryButton>
                     </div>
+                    <p v-if="hasDrafts" class="mt-2 text-xs text-indigo-900">
+                        Attach your sketch photo(s) with this prompt. Ask Gemini/Cursor to
+                        <span class="font-semibold">redraw clean textbook figures</span>
+                        (q1.png, q2.png, …) from your sketch — not the rough photo itself.
+                    </p>
                     <textarea
                         ref="promptBox"
                         class="mt-3 h-56 w-full rounded-md border-indigo-200 bg-white font-mono text-xs text-slate-800"
@@ -425,7 +465,7 @@ watch(
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                    <p class="text-sm font-semibold text-slate-900">3. Paste AI JSON and save MMP set</p>
+                    <p class="text-sm font-semibold text-slate-900">3. Paste AI JSON, attach generated figures, save</p>
                     <textarea
                         v-model="jsonInput"
                         rows="12"
@@ -433,6 +473,28 @@ watch(
                         placeholder='{ "questions": [ ... ] }'
                     />
                     <InputError class="mt-1" :message="previewError || saveForm.errors.json" />
+
+                    <div class="mt-4">
+                        <InputLabel value="AI-generated figures (optional but required for geometry sketches)" />
+                        <input
+                            ref="figureInput"
+                            type="file"
+                            multiple
+                            accept="image/png,image/jpeg,image/webp"
+                            class="mt-1 block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-indigo-900 hover:file:bg-indigo-200"
+                            @change="onFigureFilesSelected"
+                        >
+                        <p class="mt-1 text-xs text-gray-500">
+                            Upload the clean PNGs from AI as <span class="font-mono">q1.png</span>,
+                            <span class="font-mono">q2.png</span>, … (names must match JSON diagram_file).
+                        </p>
+                        <p v-if="figureFiles.length" class="mt-1 text-xs font-medium text-indigo-800">
+                            {{ figureFiles.length }} figure file(s) ready:
+                            {{ figureFiles.map((f) => f.name).join(', ') }}
+                        </p>
+                        <InputError class="mt-1" :message="saveForm.errors.diagrams || saveForm.errors['diagrams.0']" />
+                    </div>
+
                     <div class="mt-3 flex flex-wrap gap-2">
                         <SecondaryButton type="button" :disabled="!jsonInput.trim()" @click="parsePreview">
                             Preview
@@ -450,6 +512,7 @@ watch(
                     <div v-if="previewRows.length" class="mt-4 space-y-3">
                         <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
                             {{ previewRows.length }} sums · {{ fillBlankCount }} fill-blank · {{ mcqCount }} MCQ
+                            <span v-if="figureNeedingCount"> · {{ figureNeedingCount }} need figure</span>
                         </p>
                         <div
                             v-for="(row, index) in previewRows"
@@ -460,8 +523,10 @@ watch(
                                 Q{{ index + 1 }} · {{ row.type === 'mcq' ? 'MCQ' : 'Fill-blank' }}
                                 <span v-if="row.topic"> · {{ row.topic }}</span>
                                 · {{ row.difficulty }}
+                                <span v-if="row.needs_diagram" class="text-indigo-700"> · figure {{ row.diagram_file || `q${index + 1}.png` }}</span>
                             </p>
                             <p class="mt-1 text-slate-900">{{ row.question_text }}</p>
+                            <p v-if="row.figure_spec" class="mt-1 text-xs text-slate-600">Figure: {{ row.figure_spec }}</p>
                             <p class="mt-1 font-mono text-xs text-emerald-800">
                                 Answer: {{ row.correct_answer }}
                                 <span v-if="row.answer_format"> ({{ row.answer_format }})</span>

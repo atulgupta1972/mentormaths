@@ -7,9 +7,11 @@ use App\Models\QuestionBlankAnswer;
 use App\Models\QuestionOption;
 use App\Models\SyllabusChapter;
 use App\Models\Worksheet;
+use App\Support\DiagramQuestionSupport;
 use App\Support\FillBlankAnswerConsistency;
 use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -18,6 +20,7 @@ class MmpImportService
     public function __construct(
         private FillBlankImportService $fillBlankImport,
         private PracticeSetService $practiceSets,
+        private QuestionDiagramService $diagrams,
     ) {}
 
     /**
@@ -72,25 +75,51 @@ class MmpImportService
             : '';
 
         $draftBlock = '';
+        $figureGenBlock = '';
         if ($draftCount > 0) {
             $nameLine = $draftNames !== []
                 ? ' Files: '.implode(', ', $draftNames).'.'
                 : '';
-            $draftBlock = "\nRough draft photos / scans attached by the author ({$draftCount} file".($draftCount === 1 ? '' : 's').").{$nameLine}\n"
-                ."IMPORTANT: Read the attached handwritten / rough draft image(s) carefully. Extract the full situation, givens, diagram labels, and the questions asked. That extracted seed must become Q1 (rewritten as a clear self-contained sum). Then invent variants.\n";
+            $draftBlock = "\nRough draft / figure sketch photos attached by the author ({$draftCount} file".($draftCount === 1 ? '' : 's').").{$nameLine}\n"
+                ."IMPORTANT — READ THE SKETCH(ES):\n"
+                ."- Extract the full situation, givens, diagram labels, markings (equal sides, angles, parallel lines), and every question asked.\n"
+                ."- That extracted seed becomes Q1 (rewritten as a clear self-contained sum).\n"
+                ."- Then invent variants that keep the same geometry structure.\n";
+
+            $figureGenBlock = <<<'FIG'
+
+FIGURE GENERATION FROM THE AUTHOR'S SKETCH (required):
+- The attached image(s) are ROUGH HAND-DRAWN sketches. Do NOT reuse the sketch as-is for students.
+- GENERATE a clean, textbook-quality diagram image for EVERY question that needs a figure (usually all {$total} questions).
+- Redraw the author's sketch: straight lines, clear vertex labels, standard CBSE markings (ticks for equal sides, arcs for equal angles, arrows for parallel lines). White background, high contrast, no handwriting, no photo noise.
+- For Q1: redraw the seed sketch faithfully (same shape and labels; fix proportion/neatness only).
+- For Q2–variants: redraw the SAME figure style with the variant's changed lengths/angles/labels so each sum has its own matching diagram.
+- Save each generated diagram as a PNG named q1.png, q2.png, … matching question order.
+- Also return JSON (below). The admin will upload your generated PNGs with the JSON.
+- In every figure question set: "needs_diagram": true, "diagram_file": "qN.png", and "figure_spec" (short plain-English drawing brief: shapes, labels, equal marks, given lengths) so the figure can be regenerated if needed.
+- Start figure stems with "In the figure, …"
+FIG;
+            $figureGenBlock = str_replace('{$total}', (string) $total, $figureGenBlock);
+        } elseif (DiagramQuestionSupport::looksLikeGeometryChapter($chapter)) {
+            $figureGenBlock = <<<'FIG'
+
+FIGURES (geometry chapter):
+- When a sum needs a diagram, set "needs_diagram": true, "diagram_file": "qN.png", and "figure_spec" (drawing brief).
+- Prefer generating clean PNG figures when the author supplied a sketch; otherwise describe the figure fully in the stem.
+FIG;
         }
 
         $seedBlock = $seed !== ''
             ? "Seed situation (typed notes — combine with any attached draft photos; this must become question 1 — rewritten as a complete self-contained sum):\n{$seed}\n"
-            : "Seed situation: use the attached rough draft photo(s) / scans as the only source for Q1 (rewrite clearly; do not leave facts only in the image).\n";
+            : "Seed situation: use the attached rough draft / figure sketch photo(s) as the only source for Q1 (rewrite clearly; do not leave facts only in the image).\n";
 
         return <<<PROMPT
-Create Mentormaths Perfection (MMP) maths questions for an exhaustive practice set. Return ONLY valid JSON (no markdown fences).
+Create Mentormaths Perfection (MMP) maths questions for an exhaustive practice set. Return ONLY valid JSON (no markdown fences). Also generate clean diagram PNG files when figure sketches were attached (see FIGURE GENERATION).
 
 Context:
 {$context}
 {$draftBlock}
-{$seedBlock}{$figureBlock}
+{$seedBlock}{$figureBlock}{$figureGenBlock}
 Requirements:
 - Exactly {$total} questions total (including the seed as Q1)
 - Q1 MUST be the seed rewritten as one complete question (not a reference to "the figure above" without stating the facts)
@@ -115,6 +144,9 @@ JSON format:
       "type": "fill_in_blank",
       "topic": "Congruence of triangles",
       "question": "In the figure, AH = 4 cm, BH = 3 cm, and △ABH ≅ △FEG. The length of FE is ____ cm.",
+      "needs_diagram": true,
+      "diagram_file": "q1.png",
+      "figure_spec": "Two right triangles ABH and FEG; right angles at H and G; equal marks on AH=FG and BH=EG; label lengths AH=4, BH=3.",
       "answer_format": "integer",
       "correct_answer": "5",
       "method_hint": "Corresponding sides of congruent triangles are equal. Use Pythagoras on the right triangle when two legs are given.",
@@ -125,6 +157,9 @@ JSON format:
       "type": "mcq",
       "topic": "Congruence of triangles",
       "question": "Given the markings in the figure, which statement is true?",
+      "needs_diagram": true,
+      "diagram_file": "q2.png",
+      "figure_spec": "Same twin-triangle layout as q1 with congruence marks; no numeric lengths required.",
       "options": ["△ABH ≅ △FDG", "△ABL ≅ △FED", "△ACB ≅ △DEF", "None of these"],
       "correct_index": 0,
       "method_hint": "Match corresponding vertices from equal sides and equal angles marked on the figure.",
@@ -174,22 +209,30 @@ PROMPT;
 
     /**
      * @param  list<array<string, mixed>>  $rows
-     * @return array{worksheet: Worksheet, questions: list<Question>}
+     * @param  array<string, UploadedFile>  $diagramsByName  basename => file (e.g. q1.png)
+     * @return array{worksheet: Worksheet, questions: list<Question>, diagram_count: int}
      */
     public function saveSet(
         SyllabusChapter $chapter,
         array $rows,
         int $userId,
         ?string $seedNotes = null,
+        array $diagramsByName = [],
     ): array {
         if ($rows === []) {
             throw new InvalidArgumentException('Nothing to save — preview the JSON first.');
         }
 
-        return DB::transaction(function () use ($chapter, $rows, $userId, $seedNotes) {
-            $saved = [];
+        $diagramsByName = collect($diagramsByName)
+            ->filter(fn ($file, $name) => $file instanceof UploadedFile && is_string($name) && $name !== '')
+            ->mapWithKeys(fn (UploadedFile $file, string $name) => [strtolower(basename($name)) => $file])
+            ->all();
 
-            foreach ($rows as $row) {
+        return DB::transaction(function () use ($chapter, $rows, $userId, $seedNotes, $diagramsByName) {
+            $saved = [];
+            $diagramCount = 0;
+
+            foreach ($rows as $index => $row) {
                 $topicId = $this->fillBlankImport->resolveTopicIdForChapterRow($chapter, $row);
                 $type = ($row['type'] ?? Question::TYPE_FILL_IN_BLANK) === Question::TYPE_MCQ
                     ? Question::TYPE_MCQ
@@ -226,6 +269,12 @@ PROMPT;
                     }
                 }
 
+                $diagramFile = $this->resolveDiagramUpload($row, $index, $diagramsByName);
+                if ($diagramFile instanceof UploadedFile) {
+                    $this->diagrams->attach($question, $diagramFile);
+                    $diagramCount++;
+                }
+
                 $saved[] = $question->fresh(['blankAnswer', 'options']);
             }
 
@@ -240,8 +289,35 @@ PROMPT;
             return [
                 'worksheet' => $worksheet,
                 'questions' => $saved,
+                'diagram_count' => $diagramCount,
             ];
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, UploadedFile>  $diagramsByName
+     */
+    private function resolveDiagramUpload(array $row, int $index, array $diagramsByName): ?UploadedFile
+    {
+        $candidates = [];
+        $named = strtolower(basename(trim((string) ($row['diagram_file'] ?? ''))));
+        if ($named !== '') {
+            $candidates[] = $named;
+        }
+        $n = $index + 1;
+        $candidates[] = "q{$n}.png";
+        $candidates[] = "q{$n}.jpg";
+        $candidates[] = "q{$n}.jpeg";
+        $candidates[] = "q{$n}.webp";
+
+        foreach ($candidates as $name) {
+            if (isset($diagramsByName[$name])) {
+                return $diagramsByName[$name];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -279,7 +355,7 @@ PROMPT;
                 throw new InvalidArgumentException('Question '.($index + 1).' has an invalid correct_index.');
             }
 
-            return [
+            return array_merge([
                 'type' => Question::TYPE_MCQ,
                 'topic_name' => $topicName !== '' ? $topicName : null,
                 'question_text' => $questionText,
@@ -288,7 +364,7 @@ PROMPT;
                 'method_hint' => $methodHint !== '' ? $methodHint : null,
                 'explanation' => $explanation !== '' ? $explanation : null,
                 'difficulty' => $difficulty !== '' ? $difficulty : 'Hard',
-            ];
+            ], $this->diagramMeta($item));
         }
 
         $format = strtolower(trim((string) ($item['answer_format'] ?? $item['format'] ?? 'integer')));
@@ -310,7 +386,7 @@ PROMPT;
             throw new InvalidArgumentException('Question '.($index + 1).': '.$mismatch['message']);
         }
 
-        return [
+        return array_merge([
             'type' => Question::TYPE_FILL_IN_BLANK,
             'topic_name' => $topicName !== '' ? $topicName : null,
             'question_text' => $questionText,
@@ -320,6 +396,22 @@ PROMPT;
             'method_hint' => $methodHint !== '' ? $methodHint : null,
             'explanation' => $explanation !== '' ? $explanation : null,
             'difficulty' => $difficulty !== '' ? $difficulty : 'Hard',
+        ], $this->diagramMeta($item));
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array{needs_diagram: bool, diagram_file: ?string, figure_spec: ?string}
+     */
+    private function diagramMeta(array $item): array
+    {
+        $diagramFile = trim((string) ($item['diagram_file'] ?? ''));
+        $figureSpec = trim((string) ($item['figure_spec'] ?? $item['figure_notes'] ?? ''));
+
+        return [
+            'needs_diagram' => DiagramQuestionSupport::needsDiagram($item),
+            'diagram_file' => $diagramFile !== '' ? $diagramFile : null,
+            'figure_spec' => $figureSpec !== '' ? $figureSpec : null,
         ];
     }
 }
