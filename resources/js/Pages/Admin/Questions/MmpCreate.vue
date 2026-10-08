@@ -16,6 +16,7 @@ const props = defineProps({
     seedDraft: { type: String, default: null },
     figureNotes: { type: String, default: null },
     targetCount: { type: [Number, String], default: 8 },
+    draftFiles: { type: Array, default: () => [] },
     predictedSetCode: { type: String, default: null },
     pageError: { type: String, default: null },
 });
@@ -30,6 +31,7 @@ const previewError = ref('');
 const previewRows = ref([]);
 const copied = ref(false);
 const promptBox = ref(null);
+const draftInput = ref(null);
 
 const promptForm = useForm({
     syllabus_chapter_id: props.selectedChapterId || '',
@@ -38,11 +40,24 @@ const promptForm = useForm({
     total: Number(props.targetCount) || 8,
 });
 
+const uploadForm = useForm({
+    syllabus_chapter_id: props.selectedChapterId || '',
+    seed: props.seedDraft || '',
+    drafts: [],
+});
+
+const removeDraftForm = useForm({
+    syllabus_chapter_id: props.selectedChapterId || '',
+    path: '',
+});
+
 const saveForm = useForm({
     syllabus_chapter_id: props.selectedChapterId || '',
     seed: props.seedDraft || '',
     json: '',
 });
+
+const hasDrafts = computed(() => (props.draftFiles || []).length > 0);
 
 watch(chapterFilter, (value) => {
     if (!value) {
@@ -138,13 +153,44 @@ const parsePreview = () => {
     }
 };
 
+const uploadDrafts = (event) => {
+    if (!chapterFilter.value) {
+        window.alert('Choose a chapter first.');
+        event.target.value = '';
+        return;
+    }
+
+    const files = Array.from(event.target.files || []);
+    if (!files.length) {
+        return;
+    }
+
+    uploadForm.syllabus_chapter_id = chapterFilter.value;
+    uploadForm.seed = seed.value.trim();
+    uploadForm.drafts = files;
+    uploadForm.post(route('admin.questions.mmp-upload-drafts'), {
+        forceFormData: true,
+        preserveScroll: true,
+        onFinish: () => {
+            event.target.value = '';
+            uploadForm.drafts = [];
+        },
+    });
+};
+
+const removeDraft = (path) => {
+    removeDraftForm.syllabus_chapter_id = chapterFilter.value;
+    removeDraftForm.path = path;
+    removeDraftForm.post(route('admin.questions.mmp-remove-draft'), { preserveScroll: true });
+};
+
 const generatePrompt = () => {
     if (!chapterFilter.value) {
         window.alert('Choose a chapter first.');
         return;
     }
-    if (seed.value.trim().length < 20) {
-        window.alert('Paste a fuller seed situation (at least a short paragraph of givens and what to ask).');
+    if (!hasDrafts.value && seed.value.trim().length < 20) {
+        window.alert('Upload a rough draft photo/PDF, or paste a fuller seed situation.');
         return;
     }
 
@@ -224,7 +270,7 @@ watch(
                     </Link>
                     <h2 class="mt-1 text-xl font-semibold text-gray-800">Mentormaths Perfection (MMP)</h2>
                     <p class="mt-1 text-sm text-gray-600">
-                        Seed one rich sum → AI builds 5–12 exhaustive variants → save as
+                        Upload a rough handwritten draft (or paste text) → AI builds 5–12 exhaustive variants → save as
                         <span class="font-mono font-semibold text-rose-800">{{ predictedSetCode || 'MMP…' }}</span>
                     </p>
                 </div>
@@ -234,6 +280,12 @@ watch(
         <div class="py-8">
             <div class="mx-auto max-w-4xl space-y-6 sm:px-6 lg:px-8">
                 <div
+                    v-if="page.props.flash?.success"
+                    class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+                >
+                    {{ page.props.flash.success }}
+                </div>
+                <div
                     v-if="page.props.flash?.error || pageError"
                     class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
                 >
@@ -241,9 +293,9 @@ watch(
                 </div>
 
                 <div class="rounded-lg border border-rose-200 bg-white p-5 shadow-sm">
-                    <p class="text-sm font-semibold text-rose-950">1. Chapter and seed</p>
+                    <p class="text-sm font-semibold text-rose-950">1. Chapter and rough draft</p>
                     <p class="mt-1 text-xs text-gray-600">
-                        Paste your draft situation (parallels, heights, twin triangles, what to find). Fill-in-blank is preferred; MCQ only when a blank is impossible.
+                        Upload notebook photos / PDF of your rough sum, or paste typed notes. Then build the prompt and attach the same photos in Cursor/Gemini.
                     </p>
 
                     <div class="mt-4">
@@ -257,12 +309,54 @@ watch(
                     </div>
 
                     <div class="mt-4">
-                        <InputLabel value="Seed situation" />
+                        <InputLabel value="Upload rough draft (photos / PDF / TXT)" />
+                        <input
+                            ref="draftInput"
+                            type="file"
+                            multiple
+                            accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.md,.txt"
+                            class="mt-1 block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-rose-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-rose-900 hover:file:bg-rose-200"
+                            :disabled="uploadForm.processing || !chapterFilter"
+                            @change="uploadDrafts"
+                        >
+                        <p class="mt-1 text-xs text-gray-500">JPG / PNG / WebP / PDF / TXT · up to 8 files · 12 MB each</p>
+                        <InputError class="mt-1" :message="uploadForm.errors.drafts || uploadForm.errors['drafts.0']" />
+                    </div>
+
+                    <div v-if="hasDrafts" class="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div
+                            v-for="file in draftFiles"
+                            :key="file.path"
+                            class="rounded-md border border-rose-200 bg-rose-50/60 p-3"
+                        >
+                            <img
+                                v-if="file.is_image"
+                                :src="file.url"
+                                :alt="file.name"
+                                class="mb-2 max-h-40 w-full rounded object-contain bg-white"
+                            >
+                            <p class="truncate text-xs font-semibold text-rose-950">{{ file.name }}</p>
+                            <div class="mt-2 flex flex-wrap gap-3 text-xs">
+                                <a :href="file.url" target="_blank" class="font-medium text-indigo-700 hover:underline">Open</a>
+                                <button
+                                    type="button"
+                                    class="font-medium text-rose-700 hover:underline"
+                                    :disabled="removeDraftForm.processing"
+                                    @click="removeDraft(file.path)"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <InputLabel value="Typed seed notes (optional if photos uploaded)" />
                         <textarea
                             v-model="seed"
-                            rows="8"
+                            rows="6"
                             class="mt-1 w-full rounded-md border-gray-300 font-mono text-sm"
-                            placeholder="l ∥ m ∥ n, AC ∥ DF, AB ∥ EF, AH = GF, angles at A are 30° and 45°… Find ∠BCA, ∠BAC, …"
+                            placeholder="Optional typed notes, or leave blank and rely on the uploaded rough draft photos."
                         />
                     </div>
 

@@ -21,7 +21,13 @@ class MmpImportService
     ) {}
 
     /**
-     * @param  array{total?: int, seed?: string, figure_notes?: string}  $options
+     * @param  array{
+     *     total?: int,
+     *     seed?: string,
+     *     figure_notes?: string,
+     *     draft_count?: int,
+     *     draft_names?: list<string>
+     * }  $options
      */
     public function cursorPrompt(SyllabusChapter $chapter, array $options = []): string
     {
@@ -36,9 +42,15 @@ class MmpImportService
         $total = max(5, min(12, (int) ($options['total'] ?? 8)));
         $seed = trim((string) ($options['seed'] ?? ''));
         $figureNotes = trim((string) ($options['figure_notes'] ?? ''));
+        $draftCount = max(0, (int) ($options['draft_count'] ?? 0));
+        /** @var list<string> $draftNames */
+        $draftNames = array_values(array_filter(array_map(
+            fn ($name) => trim((string) $name),
+            is_array($options['draft_names'] ?? null) ? $options['draft_names'] : [],
+        )));
 
-        if ($seed === '') {
-            throw new InvalidArgumentException('Paste a seed situation before generating the MMP prompt.');
+        if ($seed === '' && $draftCount <= 0) {
+            throw new InvalidArgumentException('Upload a rough draft photo/PDF, or paste a seed situation, before generating the MMP prompt.');
         }
 
         $context = collect([
@@ -59,15 +71,26 @@ class MmpImportService
             ? "\nFigure / diagram notes from the author:\n{$figureNotes}\n"
             : '';
 
+        $draftBlock = '';
+        if ($draftCount > 0) {
+            $nameLine = $draftNames !== []
+                ? ' Files: '.implode(', ', $draftNames).'.'
+                : '';
+            $draftBlock = "\nRough draft photos / scans attached by the author ({$draftCount} file".($draftCount === 1 ? '' : 's').").{$nameLine}\n"
+                ."IMPORTANT: Read the attached handwritten / rough draft image(s) carefully. Extract the full situation, givens, diagram labels, and the questions asked. That extracted seed must become Q1 (rewritten as a clear self-contained sum). Then invent variants.\n";
+        }
+
+        $seedBlock = $seed !== ''
+            ? "Seed situation (typed notes — combine with any attached draft photos; this must become question 1 — rewritten as a complete self-contained sum):\n{$seed}\n"
+            : "Seed situation: use the attached rough draft photo(s) / scans as the only source for Q1 (rewrite clearly; do not leave facts only in the image).\n";
+
         return <<<PROMPT
 Create Mentormaths Perfection (MMP) maths questions for an exhaustive practice set. Return ONLY valid JSON (no markdown fences).
 
 Context:
 {$context}
-
-Seed situation (this must become question 1 — rewritten as a complete self-contained sum):
-{$seed}
-{$figureBlock}
+{$draftBlock}
+{$seedBlock}{$figureBlock}
 Requirements:
 - Exactly {$total} questions total (including the seed as Q1)
 - Q1 MUST be the seed rewritten as one complete question (not a reference to "the figure above" without stating the facts)

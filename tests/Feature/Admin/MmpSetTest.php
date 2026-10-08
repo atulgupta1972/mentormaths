@@ -138,7 +138,7 @@ class MmpSetTest extends TestCase
             );
     }
 
-    public function test_mmp_prompt_requires_seed(): void
+    public function test_mmp_prompt_requires_seed_or_draft(): void
     {
         $this->withoutVite();
 
@@ -152,7 +152,43 @@ class MmpSetTest extends TestCase
                 'total' => 8,
             ])
             ->assertRedirect()
-            ->assertSessionHasErrors('seed');
+            ->assertSessionHas('error');
+    }
+
+    public function test_admin_can_upload_rough_draft_photo_then_build_prompt(): void
+    {
+        $this->withoutVite();
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        [$chapter, , $admin] = $this->seedChapter();
+        $file = \Illuminate\Http\UploadedFile::fake()->image('geometric-twins-draft.jpg', 800, 600);
+
+        $this->actingAs($admin)
+            ->post(route('admin.questions.mmp-upload-drafts'), [
+                'syllabus_chapter_id' => $chapter->id,
+                'drafts' => [$file],
+            ])
+            ->assertRedirect(route('admin.questions.create-mmp', ['syllabus_chapter_id' => $chapter->id]))
+            ->assertSessionHas('mmp_draft_files');
+
+        $drafts = session('mmp_draft_files');
+        $this->assertIsArray($drafts);
+        $this->assertCount(1, $drafts);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($drafts[0]['path']);
+
+        $this->actingAs($admin)
+            ->withSession(['mmp_draft_files' => $drafts])
+            ->post(route('admin.questions.mmp-prompt'), [
+                'syllabus_chapter_id' => $chapter->id,
+                'seed' => '',
+                'total' => 8,
+            ])
+            ->assertRedirect(route('admin.questions.create-mmp', ['syllabus_chapter_id' => $chapter->id]))
+            ->assertSessionHas('mmp_cursor_prompt');
+
+        $prompt = session('mmp_cursor_prompt');
+        $this->assertStringContainsString('Rough draft photos', $prompt);
+        $this->assertStringContainsString('ATTACH THE ROUGH DRAFT', $prompt);
     }
 
     /**

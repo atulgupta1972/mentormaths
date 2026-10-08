@@ -303,6 +303,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/questions/create', [QuestionController::class, 'create'])->name('questions.create');
     Route::get('/questions/create-fill-in-blank', [QuestionController::class, 'createFillInBlank'])->name('questions.create-fill-in-blank');
     Route::get('/questions/create-mmp', [QuestionController::class, 'createMmp'])->name('questions.create-mmp');
+    Route::post('/questions/mmp-upload-drafts', [QuestionController::class, 'uploadMmpDrafts'])->name('questions.mmp-upload-drafts');
+    Route::post('/questions/mmp-remove-draft', [QuestionController::class, 'removeMmpDraft'])->name('questions.mmp-remove-draft');
     Route::post('/questions/mmp-prompt', [QuestionController::class, 'mmpPrompt'])->name('questions.mmp-prompt');
     Route::post('/questions/store-mmp', [QuestionController::class, 'storeMmp'])->name('questions.store-mmp');
     Route::post('/questions/preview-fill-blank-import', [QuestionController::class, 'previewFillBlankImport'])->name('questions.preview-fill-blank-import');
