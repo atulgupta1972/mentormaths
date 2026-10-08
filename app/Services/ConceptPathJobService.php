@@ -301,6 +301,8 @@ class ConceptPathJobService
         $task->update([
             'status' => ContentUploadTask::STATUS_IN_PROGRESS,
             'submitted_at' => null,
+            'published_at' => null,
+            'published_by' => null,
             'admin_notes' => $notes !== '' ? $notes : null,
         ]);
 

@@ -867,6 +867,8 @@ class ConceptBuilderTest extends TestCase
         );
         $this->assertSame(ContentUploadTask::STATUS_IN_PROGRESS, $task->status);
         $this->assertNull($task->submitted_at);
+        $this->assertNull($task->published_at);
+        $this->assertFalse($task->isPayable());
         $this->assertStringContainsString('No pictures are there', (string) $task->admin_notes);
 
         \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\ContentConceptPathReturnedUploader::class);

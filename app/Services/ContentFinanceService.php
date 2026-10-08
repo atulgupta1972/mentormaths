@@ -21,11 +21,23 @@ class ContentFinanceService
     public function unpaidPayableTasks(): Collection
     {
         return ContentUploadTask::query()
-            ->whereIn('status', [
-                ContentUploadTask::STATUS_VERIFIED,
-                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
-                ContentUploadTask::STATUS_PUBLISHED,
-            ])
+            ->where(function ($query) {
+                // MCQ / conversion: payable once verified or submitted.
+                $query->where(function ($mcq) {
+                    $mcq->where(function ($type) {
+                        $type->whereNull('work_type')
+                            ->orWhere('work_type', '!=', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD);
+                    })->whereIn('status', [
+                        ContentUploadTask::STATUS_VERIFIED,
+                        ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                        ContentUploadTask::STATUS_PUBLISHED,
+                    ]);
+                })->orWhere(function ($concept) {
+                    // Concept builder: only after admin publishes (returned work is unpaid).
+                    $concept->where('work_type', ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD)
+                        ->where('status', ContentUploadTask::STATUS_PUBLISHED);
+                });
+            })
             ->where(function ($query) {
                 $query->where('agreed_amount_inr', '>', 0)
                     ->orWhere(function ($inner) {

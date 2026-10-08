@@ -189,6 +189,53 @@ class ContentFinanceTest extends TestCase
         $this->assertSame(1, ContentUploaderPayment::query()->count());
     }
 
+    public function test_concept_builder_is_not_payable_until_published(): void
+    {
+        $this->withoutVite();
+
+        [$admin, $uploader, , , , , $chapter] = $this->seedBase(chapterNumber: 8);
+
+        $task = ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $chapter->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'rate_basis' => ContentRateCard::BASIS_PER_SET,
+            'offered_amount_inr' => 50,
+            'agreed_amount_inr' => 50,
+            'agreed_at' => now(),
+            'submitted_at' => now(),
+        ]);
+
+        $this->assertFalse($task->isPayable());
+
+        $this->actingAs($admin)
+            ->get(route('admin.finance.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Finance/Index')
+                ->where('unpaid_chapter_count', 0)
+                ->where('unpaid_total_inr', 0));
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_PUBLISHED,
+            'published_at' => now(),
+            'published_by' => $admin->id,
+        ]);
+
+        $this->assertTrue($task->fresh()->isPayable());
+
+        $this->actingAs($admin)
+            ->get(route('admin.finance.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Finance/Index')
+                ->where('unpaid_chapter_count', 1)
+                ->where('unpaid_total_inr', 50)
+                ->where('unpaid_groups.0.tasks.0.id', $task->id));
+    }
+
     /**
      * @return array{0: User, 1: User, 2: ContentUploadTask}
      */

@@ -269,11 +269,20 @@ class ContentUploadTask extends Model
 
     public function isPayable(): bool
     {
+        if ($this->payableAmountInr() <= 0) {
+            return false;
+        }
+
+        // Concept builder pay only after admin publishes (returned / rework stays unpaid).
+        if ($this->isConceptPathBuild()) {
+            return $this->status === self::STATUS_PUBLISHED;
+        }
+
         return in_array($this->status, [
             self::STATUS_VERIFIED,
             self::STATUS_SUBMITTED_FOR_PUBLISH,
             self::STATUS_PUBLISHED,
-        ], true) && $this->payableAmountInr() > 0;
+        ], true);
     }
 
     public function isFillBlankConversion(): bool
