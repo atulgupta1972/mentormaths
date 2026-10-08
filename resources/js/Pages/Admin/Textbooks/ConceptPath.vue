@@ -62,8 +62,12 @@ const approveForm = useForm({});
 const publishForm = useForm({});
 const resetForm = useForm({});
 const returnCardIndex = ref(null);
+const showReturnPath = ref(false);
 const returnCardForm = useForm({
     card_index: 0,
+    remark: '',
+});
+const returnPathForm = useForm({
     remark: '',
 });
 
@@ -73,7 +77,14 @@ const canReturnCard = computed(() =>
     && Boolean(props.reviewTask?.can_return_card),
 );
 
+const canReturnPath = computed(() =>
+    !props.uploaderMode
+    && Boolean(props.routes?.return_path)
+    && Boolean(props.reviewTask?.can_return_path),
+);
+
 const openReturnCard = (index) => {
+    showReturnPath.value = false;
     returnCardIndex.value = index;
     returnCardForm.card_index = index;
     returnCardForm.remark = cards.value[index]?.admin_return_remark || '';
@@ -84,6 +95,19 @@ const cancelReturnCard = () => {
     returnCardIndex.value = null;
     returnCardForm.reset();
     returnCardForm.clearErrors();
+};
+
+const openReturnPath = () => {
+    returnCardIndex.value = null;
+    showReturnPath.value = true;
+    returnPathForm.remark = props.conceptPath?.admin_return_remark || '';
+    returnPathForm.clearErrors();
+};
+
+const cancelReturnPath = () => {
+    showReturnPath.value = false;
+    returnPathForm.reset();
+    returnPathForm.clearErrors();
 };
 
 const submitReturnCard = () => {
@@ -103,6 +127,26 @@ const submitReturnCard = () => {
         preserveScroll: true,
         onSuccess: () => {
             cancelReturnCard();
+        },
+    });
+};
+
+const submitReturnPath = () => {
+    if (!canReturnPath.value) {
+        return;
+    }
+
+    const remark = returnPathForm.remark.trim();
+    if (!remark) {
+        window.alert('Add a short remark for the full concept builder (for example: regenerate all cards with figures).');
+        return;
+    }
+
+    returnPathForm.remark = remark;
+    returnPathForm.post(props.routes.return_path, {
+        preserveScroll: true,
+        onSuccess: () => {
+            cancelReturnPath();
         },
     });
 };
@@ -794,6 +838,13 @@ const togglePagePicker = (index) => {
                         Review the concept cards on this page. This job does not use MCQ sets or Gemini question check.
                         <span v-if="reviewTask.assignee_name"> Uploader: {{ reviewTask.assignee_name }}.</span>
                     </p>
+                    <div
+                        v-if="conceptPath.admin_return_remark"
+                        class="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                    >
+                        <p class="text-[11px] font-bold uppercase tracking-wide text-amber-800">Full path returned</p>
+                        <p class="mt-1">{{ conceptPath.admin_return_remark }}</p>
+                    </div>
                     <div class="mt-3 flex flex-wrap items-center gap-3">
                         <PrimaryButton
                             v-if="reviewTask.can_publish"
@@ -804,6 +855,14 @@ const togglePagePicker = (index) => {
                         >
                             {{ publishForm.processing ? 'Publishing…' : 'Publish concept path' }}
                         </PrimaryButton>
+                        <SecondaryButton
+                            v-if="canReturnPath"
+                            type="button"
+                            class="!border-amber-400 !text-amber-900"
+                            @click="openReturnPath"
+                        >
+                            Return full path to uploader
+                        </SecondaryButton>
                         <Link
                             v-if="reviewTask.tasks_url"
                             :href="reviewTask.tasks_url"
@@ -811,6 +870,37 @@ const togglePagePicker = (index) => {
                         >
                             Back to content tasks
                         </Link>
+                    </div>
+                    <div
+                        v-if="canReturnPath && showReturnPath"
+                        class="mt-3 rounded-md border border-amber-300 bg-amber-50/80 p-3"
+                    >
+                        <p class="text-xs font-semibold text-amber-950">
+                            Return the full concept builder to {{ reviewTask?.assignee_name || 'the uploader' }}
+                        </p>
+                        <p class="mt-1 text-xs text-amber-900">
+                            Use this when the whole set of cards needs rework (not one card). Job stays unpaid until you publish again.
+                        </p>
+                        <textarea
+                            v-model="returnPathForm.remark"
+                            rows="3"
+                            class="mt-2 w-full rounded-md border-amber-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                            placeholder="Example: Please regenerate the full concept path with clear figures on every teach card."
+                        />
+                        <InputError class="mt-1" :message="returnPathForm.errors.remark" />
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <PrimaryButton
+                                type="button"
+                                class="!bg-amber-700 hover:!bg-amber-800"
+                                :disabled="returnPathForm.processing"
+                                @click="submitReturnPath"
+                            >
+                                {{ returnPathForm.processing ? 'Sending…' : 'Send full path back' }}
+                            </PrimaryButton>
+                            <SecondaryButton type="button" :disabled="returnPathForm.processing" @click="cancelReturnPath">
+                                Cancel
+                            </SecondaryButton>
+                        </div>
                     </div>
                 </div>
 

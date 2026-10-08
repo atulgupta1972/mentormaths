@@ -1121,6 +1121,9 @@ class TextbookController extends Controller
                 'return_card' => $uploaderMode
                     ? null
                     : route('admin.textbooks.concept-path.return-card', $textbookChapter),
+                'return_path' => $uploaderMode
+                    ? null
+                    : route('admin.textbooks.concept-path.return-path', $textbookChapter),
             ],
         ]);
     }
@@ -1153,6 +1156,8 @@ class TextbookController extends Controller
             ], true),
             'can_return_card' => $job->status !== ContentUploadTask::STATUS_PENDING_AGREEMENT
                 && filled($job->assigned_to_user_id),
+            'can_return_path' => $job->status !== ContentUploadTask::STATUS_PENDING_AGREEMENT
+                && filled($job->assigned_to_user_id),
             'publish_url' => route('admin.content-tasks.publish', $job),
             'tasks_url' => route('admin.content-tasks.index'),
         ];
@@ -1183,6 +1188,32 @@ class TextbookController extends Controller
         return back()->with(
             'success',
             'Card returned to the uploader with your remarks. Path is draft again until they fix and re-approve.',
+        );
+    }
+
+    public function returnConceptPath(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        if ($this->isContentUploaderContext($request)) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'remark' => ['required', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $this->conceptPathJobs->returnPath(
+                $textbookChapter,
+                $request->user(),
+                $validated['remark'],
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with(
+            'success',
+            'Full concept builder returned to the uploader. Not payable until you publish again after they fix and re-submit.',
         );
     }
 

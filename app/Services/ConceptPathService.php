@@ -409,17 +409,28 @@ PROMPT;
             }
         }
 
+        $existingItems = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+        $pathItems = [
+            'chapter_title' => $normalized['chapter_title'] ?: $chapter->title,
+            'cards' => $normalized['cards'],
+            'teach_count' => $normalized['teach_count'],
+            'check_count' => $normalized['check_count'],
+            'angle_map_count' => $normalized['angle_map_count'] ?? 0,
+            'turn_clock_count' => $normalized['turn_clock_count'] ?? 0,
+            'question_count' => $normalized['question_count'],
+            'saved_at' => now()->toIso8601String(),
+        ];
+
+        $pathReturnRemark = trim((string) ($existingItems['admin_return_remark'] ?? ''));
+        if ($pathReturnRemark !== '') {
+            $pathItems['admin_return_remark'] = $pathReturnRemark;
+            if (is_string($existingItems['admin_returned_at'] ?? null) && $existingItems['admin_returned_at'] !== '') {
+                $pathItems['admin_returned_at'] = $existingItems['admin_returned_at'];
+            }
+        }
+
         $chapter->update([
-            'concept_path_items' => [
-                'chapter_title' => $normalized['chapter_title'] ?: $chapter->title,
-                'cards' => $normalized['cards'],
-                'teach_count' => $normalized['teach_count'],
-                'check_count' => $normalized['check_count'],
-                'angle_map_count' => $normalized['angle_map_count'] ?? 0,
-                'turn_clock_count' => $normalized['turn_clock_count'] ?? 0,
-                'question_count' => $normalized['question_count'],
-                'saved_at' => now()->toIso8601String(),
-            ],
+            'concept_path_items' => $pathItems,
             'concept_path_status' => ConceptPathStatus::DRAFT,
             'concept_path_approved_at' => null,
             'concept_path_approved_by' => null,
@@ -462,6 +473,7 @@ PROMPT;
 
             return $card;
         }, $included, array_keys($included)));
+        unset($items['admin_return_remark'], $items['admin_returned_at']);
 
         $chapter->update([
             'concept_path_items' => $items,
@@ -806,6 +818,12 @@ PROMPT;
             'has_turn_clock' => collect($cards)->contains(fn ($c) => is_array($c) && ($c['type'] ?? '') === 'turn_clock'),
             'approved_at' => $chapter->concept_path_approved_at?->toIso8601String(),
             'has_pdf' => filled($chapter->pdf_path),
+            'admin_return_remark' => filled($items['admin_return_remark'] ?? null)
+                ? (string) $items['admin_return_remark']
+                : null,
+            'admin_returned_at' => is_string($items['admin_returned_at'] ?? null)
+                ? $items['admin_returned_at']
+                : null,
             'prompt' => $prompt,
         ];
     }

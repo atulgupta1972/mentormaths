@@ -449,6 +449,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/append-angle-map', [TextbookController::class, 'appendConceptPathAngleMap'])->name('textbooks.concept-path.append-angle-map');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/append-turn-clock', [TextbookController::class, 'appendConceptPathTurnClock'])->name('textbooks.concept-path.append-turn-clock');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/return-card', [TextbookController::class, 'returnConceptPathCard'])->name('textbooks.concept-path.return-card');
+    Route::post('/textbooks/chapters/{textbookChapter}/concept-path/return-path', [TextbookController::class, 'returnConceptPath'])->name('textbooks.concept-path.return-path');
     Route::post('/textbooks/chapters/{textbookChapter}/publish-fill-blank-written', [TextbookController::class, 'publishFillBlankAndWritten'])->name('textbooks.publish-fill-blank-written');
     Route::get('/textbooks/chapters/{textbookChapter}/mcq-reference', [TextbookController::class, 'downloadMcqReference'])->name('textbooks.mcq-reference');
     Route::post('/textbooks/chapters/{textbookChapter}/reset-import', [TextbookController::class, 'resetImport'])->name('textbooks.reset-import');

@@ -246,6 +246,47 @@ class ConceptPathJobService
     }
 
     /**
+     * Send the full concept builder job back to the uploader with remarks.
+     */
+    public function returnPath(
+        TextbookChapter $chapter,
+        User $admin,
+        string $remark,
+        bool $notify = true,
+    ): ContentUploadTask {
+        $remark = trim($remark);
+        if ($remark === '') {
+            throw new InvalidArgumentException('Add a short remark so the uploader knows what to fix.');
+        }
+
+        $task = $this->assertOpenAssignableTask($chapter);
+
+        $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+        $items['admin_return_remark'] = $remark;
+        $items['admin_returned_at'] = now()->toIso8601String();
+
+        $stamp = now()->format('Y-m-d H:i');
+        $block = "[Full concept path returned {$stamp} by {$admin->name}]\n• {$remark}";
+
+        $this->reopenAsDraft($chapter, $task, $items, $block);
+
+        $fresh = $task->fresh([
+            'assignee',
+            'textbookChapter.textbook.gradeLevel',
+        ]);
+
+        if ($notify && $fresh) {
+            ContentOperationsMailer::notifyConceptPathReturned($fresh, [[
+                'step' => null,
+                'title' => 'Full concept path',
+                'remark' => $remark,
+            ]]);
+        }
+
+        return $fresh ?? $task;
+    }
+
+    /**
      * Send one concept card back to the assigned uploader with admin remarks.
      * Un-approves the path so the uploader can regenerate / add figures and re-run.
      */
@@ -261,14 +302,7 @@ class ConceptPathJobService
             throw new InvalidArgumentException('Add a short remark so the uploader knows what to fix.');
         }
 
-        $task = $this->openTaskForChapter($chapter);
-        if (! $task || ! $task->assigned_to_user_id) {
-            throw new InvalidArgumentException('Assign a concept builder for this chapter before returning a card.');
-        }
-
-        if ($task->status === ContentUploadTask::STATUS_PENDING_AGREEMENT) {
-            throw new InvalidArgumentException('Uploader has not agreed the concept-builder rate yet.');
-        }
+        $task = $this->assertOpenAssignableTask($chapter);
 
         $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
         $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
@@ -288,23 +322,8 @@ class ConceptPathJobService
         $stamp = now()->format('Y-m-d H:i');
         $label = $title !== '' ? "Step {$step} — {$title}" : "Step {$step}";
         $block = "[Concept card returned {$stamp} by {$admin->name}]\n• {$label}: {$remark}";
-        $notes = trim((string) ($task->admin_notes ?? ''));
-        $notes = trim($notes."\n\n".$block);
 
-        $chapter->update([
-            'concept_path_items' => $items,
-            'concept_path_status' => ConceptPathStatus::DRAFT,
-            'concept_path_approved_at' => null,
-            'concept_path_approved_by' => null,
-        ]);
-
-        $task->update([
-            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
-            'submitted_at' => null,
-            'published_at' => null,
-            'published_by' => null,
-            'admin_notes' => $notes !== '' ? $notes : null,
-        ]);
+        $this->reopenAsDraft($chapter, $task, $items, $block);
 
         $fresh = $task->fresh([
             'assignee',
@@ -320,6 +339,48 @@ class ConceptPathJobService
         }
 
         return $fresh ?? $task;
+    }
+
+    private function assertOpenAssignableTask(TextbookChapter $chapter): ContentUploadTask
+    {
+        $task = $this->openTaskForChapter($chapter);
+        if (! $task || ! $task->assigned_to_user_id) {
+            throw new InvalidArgumentException('Assign a concept builder for this chapter before returning work.');
+        }
+
+        if ($task->status === ContentUploadTask::STATUS_PENDING_AGREEMENT) {
+            throw new InvalidArgumentException('Uploader has not agreed the concept-builder rate yet.');
+        }
+
+        return $task;
+    }
+
+    /**
+     * @param  array<string, mixed>  $items
+     */
+    private function reopenAsDraft(
+        TextbookChapter $chapter,
+        ContentUploadTask $task,
+        array $items,
+        string $notesBlock,
+    ): void {
+        $notes = trim((string) ($task->admin_notes ?? ''));
+        $notes = trim($notes."\n\n".$notesBlock);
+
+        $chapter->update([
+            'concept_path_items' => $items,
+            'concept_path_status' => ConceptPathStatus::DRAFT,
+            'concept_path_approved_at' => null,
+            'concept_path_approved_by' => null,
+        ]);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'submitted_at' => null,
+            'published_at' => null,
+            'published_by' => null,
+            'admin_notes' => $notes !== '' ? $notes : null,
+        ]);
     }
 
     private function markSubmitted(ContentUploadTask $task, bool $notify): ContentUploadTask
