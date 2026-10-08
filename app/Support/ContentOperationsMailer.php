@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Mail\ContentConceptPathReturnedUploader;
 use App\Mail\ContentTaskGeminiPendingUploader;
 use App\Mail\ContentTaskAgreementAdmin;
 use App\Mail\ContentTaskAssignedUploader;
@@ -159,6 +160,38 @@ class ContentOperationsMailer
             return true;
         } catch (\Throwable $e) {
             Log::error('Failed to send content task returned uploader email.', [
+                'content_upload_task_id' => $task->id,
+                'uploader_id' => $uploader->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * @param  list<array{step?: int|null, title?: string|null, remark: string}>  $items
+     */
+    public static function notifyConceptPathReturned(ContentUploadTask $task, array $items = []): bool
+    {
+        $uploader = $task->assignee;
+
+        if (! $uploader || ! str_contains($uploader->email, '@')) {
+            return false;
+        }
+
+        try {
+            Mail::to($uploader->email)->send(new ContentConceptPathReturnedUploader(
+                $task->fresh([
+                    'assignee',
+                    'textbookChapter.textbook.gradeLevel',
+                ]),
+                $items,
+            ));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Failed to send concept path returned uploader email.', [
                 'content_upload_task_id' => $task->id,
                 'uploader_id' => $uploader->id,
                 'error' => $e->getMessage(),

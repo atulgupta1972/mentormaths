@@ -393,6 +393,20 @@ PROMPT;
             } elseif (array_key_exists('figure_cleared', $incoming) && ! $incoming['figure_cleared']) {
                 unset($normalized['cards'][$index]['figure_cleared']);
             }
+
+            // Keep admin return remarks across draft saves until approve clears them.
+            $existingCards = is_array($chapter->concept_path_items['cards'] ?? null)
+                ? $chapter->concept_path_items['cards']
+                : [];
+            $existing = is_array($existingCards[$index] ?? null) ? $existingCards[$index] : [];
+            $returnRemark = trim((string) ($incoming['admin_return_remark'] ?? $existing['admin_return_remark'] ?? ''));
+            if ($returnRemark !== '') {
+                $normalized['cards'][$index]['admin_return_remark'] = $returnRemark;
+                $returnedAt = $incoming['admin_returned_at'] ?? $existing['admin_returned_at'] ?? null;
+                if (is_string($returnedAt) && $returnedAt !== '') {
+                    $normalized['cards'][$index]['admin_returned_at'] = $returnedAt;
+                }
+            }
         }
 
         $chapter->update([
@@ -444,6 +458,7 @@ PROMPT;
         $items['cards'] = array_values(array_map(function (array $card, int $index) {
             $card['step'] = $index + 1;
             $card['approved'] = true;
+            unset($card['admin_return_remark'], $card['admin_returned_at']);
 
             return $card;
         }, $included, array_keys($included)));

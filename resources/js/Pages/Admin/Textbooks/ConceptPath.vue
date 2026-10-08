@@ -61,6 +61,51 @@ const saveForm = useForm({
 const approveForm = useForm({});
 const publishForm = useForm({});
 const resetForm = useForm({});
+const returnCardIndex = ref(null);
+const returnCardForm = useForm({
+    card_index: 0,
+    remark: '',
+});
+
+const canReturnCard = computed(() =>
+    !props.uploaderMode
+    && Boolean(props.routes?.return_card)
+    && Boolean(props.reviewTask?.can_return_card),
+);
+
+const openReturnCard = (index) => {
+    returnCardIndex.value = index;
+    returnCardForm.card_index = index;
+    returnCardForm.remark = cards.value[index]?.admin_return_remark || '';
+    returnCardForm.clearErrors();
+};
+
+const cancelReturnCard = () => {
+    returnCardIndex.value = null;
+    returnCardForm.reset();
+    returnCardForm.clearErrors();
+};
+
+const submitReturnCard = () => {
+    if (!canReturnCard.value || returnCardIndex.value === null) {
+        return;
+    }
+
+    const remark = returnCardForm.remark.trim();
+    if (!remark) {
+        window.alert('Add a short remark (for example: no figures — regenerate with diagrams).');
+        return;
+    }
+
+    returnCardForm.card_index = returnCardIndex.value;
+    returnCardForm.remark = remark;
+    returnCardForm.post(props.routes.return_card, {
+        preserveScroll: true,
+        onSuccess: () => {
+            cancelReturnCard();
+        },
+    });
+};
 
 const syncCardsFromProps = (saved) => {
     if (!saved?.length) {
@@ -971,9 +1016,54 @@ const togglePagePicker = (index) => {
                                     <input v-model="card.approved" type="checkbox" class="rounded border-slate-300 text-indigo-600">
                                     Include
                                 </label>
+                                <button
+                                    v-if="canReturnCard"
+                                    type="button"
+                                    class="text-xs font-semibold text-amber-800 hover:underline"
+                                    @click="openReturnCard(index)"
+                                >
+                                    Return to uploader
+                                </button>
                                 <button type="button" class="text-xs font-semibold text-rose-700 hover:underline" @click="removeCard(index)">
                                     Remove
                                 </button>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="card.admin_return_remark"
+                            class="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                        >
+                            <p class="text-[11px] font-bold uppercase tracking-wide text-amber-800">Returned to uploader</p>
+                            <p class="mt-1">{{ card.admin_return_remark }}</p>
+                        </div>
+
+                        <div
+                            v-if="canReturnCard && returnCardIndex === index"
+                            class="mt-3 rounded-md border border-amber-300 bg-amber-50/80 p-3"
+                        >
+                            <p class="text-xs font-semibold text-amber-950">
+                                Return step {{ card.step }} to {{ reviewTask?.assignee_name || 'the uploader' }} with remarks
+                            </p>
+                            <textarea
+                                v-model="returnCardForm.remark"
+                                rows="3"
+                                class="mt-2 w-full rounded-md border-amber-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                                placeholder="Example: No figures on this card — please regenerate with diagrams from the textbook page."
+                            />
+                            <InputError class="mt-1" :message="returnCardForm.errors.remark" />
+                            <div class="mt-2 flex flex-wrap gap-2">
+                                <PrimaryButton
+                                    type="button"
+                                    class="!bg-amber-700 hover:!bg-amber-800"
+                                    :disabled="returnCardForm.processing"
+                                    @click="submitReturnCard"
+                                >
+                                    {{ returnCardForm.processing ? 'Sending…' : 'Send back with remarks' }}
+                                </PrimaryButton>
+                                <SecondaryButton type="button" :disabled="returnCardForm.processing" @click="cancelReturnCard">
+                                    Cancel
+                                </SecondaryButton>
                             </div>
                         </div>
 

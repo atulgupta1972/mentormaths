@@ -245,6 +245,81 @@ class ConceptPathJobService
         return $moved;
     }
 
+    /**
+     * Send one concept card back to the assigned uploader with admin remarks.
+     * Un-approves the path so the uploader can regenerate / add figures and re-run.
+     */
+    public function returnCard(
+        TextbookChapter $chapter,
+        User $admin,
+        int $cardIndex,
+        string $remark,
+        bool $notify = true,
+    ): ContentUploadTask {
+        $remark = trim($remark);
+        if ($remark === '') {
+            throw new InvalidArgumentException('Add a short remark so the uploader knows what to fix.');
+        }
+
+        $task = $this->openTaskForChapter($chapter);
+        if (! $task || ! $task->assigned_to_user_id) {
+            throw new InvalidArgumentException('Assign a concept builder for this chapter before returning a card.');
+        }
+
+        if ($task->status === ContentUploadTask::STATUS_PENDING_AGREEMENT) {
+            throw new InvalidArgumentException('Uploader has not agreed the concept-builder rate yet.');
+        }
+
+        $items = is_array($chapter->concept_path_items) ? $chapter->concept_path_items : [];
+        $cards = is_array($items['cards'] ?? null) ? $items['cards'] : [];
+
+        if (! isset($cards[$cardIndex]) || ! is_array($cards[$cardIndex])) {
+            throw new InvalidArgumentException('That concept card was not found.');
+        }
+
+        $card = $cards[$cardIndex];
+        $step = (int) ($card['step'] ?? ($cardIndex + 1));
+        $title = trim((string) ($card['title'] ?? ''));
+
+        $cards[$cardIndex]['admin_return_remark'] = $remark;
+        $cards[$cardIndex]['admin_returned_at'] = now()->toIso8601String();
+        $items['cards'] = array_values($cards);
+
+        $stamp = now()->format('Y-m-d H:i');
+        $label = $title !== '' ? "Step {$step} — {$title}" : "Step {$step}";
+        $block = "[Concept card returned {$stamp} by {$admin->name}]\n• {$label}: {$remark}";
+        $notes = trim((string) ($task->admin_notes ?? ''));
+        $notes = trim($notes."\n\n".$block);
+
+        $chapter->update([
+            'concept_path_items' => $items,
+            'concept_path_status' => ConceptPathStatus::DRAFT,
+            'concept_path_approved_at' => null,
+            'concept_path_approved_by' => null,
+        ]);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'submitted_at' => null,
+            'admin_notes' => $notes !== '' ? $notes : null,
+        ]);
+
+        $fresh = $task->fresh([
+            'assignee',
+            'textbookChapter.textbook.gradeLevel',
+        ]);
+
+        if ($notify && $fresh) {
+            ContentOperationsMailer::notifyConceptPathReturned($fresh, [[
+                'step' => $step,
+                'title' => $title !== '' ? $title : null,
+                'remark' => $remark,
+            ]]);
+        }
+
+        return $fresh ?? $task;
+    }
+
     private function markSubmitted(ContentUploadTask $task, bool $notify): ContentUploadTask
     {
         if (in_array($task->status, [

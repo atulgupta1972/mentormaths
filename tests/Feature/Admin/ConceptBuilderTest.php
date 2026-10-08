@@ -803,6 +803,75 @@ class ConceptBuilderTest extends TestCase
                 ->where('task.can_verify_questions', false));
     }
 
+    public function test_admin_can_return_concept_card_to_uploader_with_remarks(): void
+    {
+        $this->withoutVite();
+        \Illuminate\Support\Facades\Mail::fake();
+
+        [$admin, , , $upload] = $this->seedConceptBuilder(withPdf: true);
+        $uploader = User::factory()->create(['email' => 'concept-return@example.com']);
+
+        $upload->update([
+            'concept_path_status' => 'approved',
+            'concept_path_approved_at' => now(),
+            'concept_path_items' => [
+                'chapter_title' => 'Data handling',
+                'cards' => [
+                    [
+                        'step' => 1,
+                        'type' => 'teach',
+                        'title' => 'Collecting and Recording Data',
+                        'body' => 'Data is a collection of facts.',
+                        'approved' => true,
+                    ],
+                    [
+                        'step' => 2,
+                        'type' => 'check',
+                        'title' => 'Quick check',
+                        'prompt' => 'How many tallies?',
+                        'accepted_answers' => ['4'],
+                        'approved' => true,
+                    ],
+                ],
+            ],
+        ]);
+
+        $task = ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $upload->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_CONCEPT_PATH_BUILD,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $admin->id,
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'offered_amount_inr' => 50,
+            'agreed_amount_inr' => 50,
+            'agreed_at' => now(),
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->from(route('admin.textbooks.concept-path', $upload))
+            ->post(route('admin.textbooks.concept-path.return-card', $upload), [
+                'card_index' => 0,
+                'remark' => 'No pictures are there — please regenerate with figures from the textbook page.',
+            ])
+            ->assertRedirect(route('admin.textbooks.concept-path', $upload));
+
+        $upload->refresh();
+        $task->refresh();
+
+        $this->assertSame('draft', $upload->concept_path_status);
+        $this->assertNull($upload->concept_path_approved_at);
+        $this->assertSame(
+            'No pictures are there — please regenerate with figures from the textbook page.',
+            $upload->concept_path_items['cards'][0]['admin_return_remark'] ?? null,
+        );
+        $this->assertSame(ContentUploadTask::STATUS_IN_PROGRESS, $task->status);
+        $this->assertNull($task->submitted_at);
+        $this->assertStringContainsString('No pictures are there', (string) $task->admin_notes);
+
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\ContentConceptPathReturnedUploader::class);
+    }
+
     public function test_part_two_school_book_is_listed_for_concept_upload(): void
     {
         $this->withoutVite();
