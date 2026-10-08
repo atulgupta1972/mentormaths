@@ -240,6 +240,13 @@ class QuestionHubController extends Controller
             ? Worksheet::query()
                 ->where('scope', PracticeSetScope::CHAPTER)
                 ->where('syllabus_chapter_id', $chapter->id)
+                ->where(function (Builder $query) {
+                    $query->whereNull('purpose')
+                        ->orWhereNotIn('purpose', [
+                            WorksheetPurpose::FORMULA,
+                            WorksheetPurpose::PERFECTION,
+                        ]);
+                })
                 ->when($browseOnly, fn ($q) => $q->where('status', Worksheet::STATUS_PUBLISHED))
                 ->withCount('questions')
                 ->when($schema['set_number'], fn (Builder $q) => $q->orderBy('set_number'))
@@ -258,7 +265,7 @@ class QuestionHubController extends Controller
             ->all();
 
         $chapterTests = $chapterTests
-            ->reject(fn (Worksheet $set) => in_array((int) $set->id, $textbookWorksheetIds, true))
+            ->reject(fn (Worksheet $set) => in_array((int) $set->id, $textbookWorksheetIds, true) || $set->isPerfection())
             ->map(fn (Worksheet $set) => [
                 'type' => 'chapter_test',
                 'id' => $set->id,
@@ -268,6 +275,30 @@ class QuestionHubController extends Controller
                 'questions_count' => $set->questions_count,
                 'status' => $set->status,
             ]);
+
+        $perfectionSets = ($schema['scope'] && $schema['syllabus_chapter_id'])
+            ? Worksheet::query()
+                ->where('scope', PracticeSetScope::CHAPTER)
+                ->where('syllabus_chapter_id', $chapter->id)
+                ->where(function (Builder $query) {
+                    $query->where('purpose', WorksheetPurpose::PERFECTION)
+                        ->orWhere('set_code', 'like', 'MMP%');
+                })
+                ->withCount('questions')
+                ->when($browseOnly, fn ($q) => $q->where('status', Worksheet::STATUS_PUBLISHED))
+                ->orderBy('set_number')
+                ->orderBy('id')
+                ->get()
+                ->map(fn (Worksheet $set) => [
+                    'id' => $set->id,
+                    'set_code' => $set->set_code,
+                    'set_number' => $set->set_number,
+                    'questions_count' => $set->questions_count,
+                    'status' => $set->status,
+                ])
+                ->values()
+                ->all()
+            : [];
 
         $topicsQuery = $chapter->topics()->withCount('questions');
 
@@ -468,6 +499,7 @@ class QuestionHubController extends Controller
             'activeYear' => $chapter->syllabusVersion?->academicYear?->only(['id', 'name']),
             'setCards' => $setCards->values()->all(),
             'chapterTests' => $chapterTests->values()->all(),
+            'perfectionSets' => $perfectionSets,
             'bookContent' => $bookContent,
             'contentUploaders' => User::query()
                 ->whereHas('groups', fn ($q) => $q->where('code', User::ROLE_CONTENT_UPLOADER))

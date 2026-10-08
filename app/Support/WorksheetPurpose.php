@@ -12,6 +12,8 @@ class WorksheetPurpose
 
     public const EXAM_PREP = 'exam_prep';
 
+    public const PERFECTION = 'perfection';
+
     public static function all(): array
     {
         return [
@@ -19,6 +21,7 @@ class WorksheetPurpose
             self::CATCH_UP,
             self::FORMULA,
             self::EXAM_PREP,
+            self::PERFECTION,
         ];
     }
 
@@ -28,6 +31,7 @@ class WorksheetPurpose
             self::CATCH_UP => 'Catch-up',
             self::FORMULA => 'Formula / concept',
             self::EXAM_PREP => 'Exam prep',
+            self::PERFECTION => 'Mentormaths Perfection',
             default => 'Practice',
         };
     }

@@ -15,6 +15,7 @@ const props = defineProps({
     chapterTests: Array,
     writtenSheets: { type: Array, default: () => [] },
     formulaSets: { type: Array, default: () => [] },
+    perfectionSets: { type: Array, default: () => [] },
     bookContent: { type: Array, default: () => [] },
     contentUploaders: { type: Array, default: () => [] },
     stats: Object,
@@ -186,7 +187,7 @@ const clearBank = (card) => {
                     {{ boardCode }} {{ gradeLevel?.name }} · Ch {{ chapter.chapter_number }} · {{ chapter.name }}
                 </p>
                 <h2 class="text-xl font-semibold text-gray-800">Practice sets & chapter tests</h2>
-                <p class="mt-1 text-xs text-gray-500">Book sets: C5-MM-CH01-M / F1 / W1 · S821 = MCQ practice · SF821 = fill-in-blank · T821 = chapter test · S821-W = written · F711 = formula</p>
+                <p class="mt-1 text-xs text-gray-500">Book sets: C5-MM-CH01-M / F1 / W1 · S821 = MCQ practice · SF821 = fill-in-blank · T821 = chapter test · S821-W = written · F711 = formula · MMP711 = Mentormaths Perfection</p>
             </div>
             <div class="flex flex-wrap gap-2">
                 <Link
@@ -202,6 +203,13 @@ const clearBank = (card) => {
                     class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
                 >
                     Add fill in the blanks
+                </Link>
+                <Link
+                    v-if="isAdmin"
+                    :href="route('admin.questions.create-mmp', { syllabus_chapter_id: chapter.id })"
+                    class="rounded-md border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-950 hover:bg-rose-100"
+                >
+                    Add Mentormaths Perfection
                 </Link>
                 <Link
                     v-if="isAdmin"
@@ -296,6 +304,40 @@ const clearBank = (card) => {
                     <p class="mt-1 text-[11px] text-indigo-800">
                         Used when you package practice banks or chapter tests below.
                     </p>
+                </div>
+
+                <div v-if="perfectionSets?.length" class="space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h3 class="text-sm font-semibold uppercase tracking-wide text-rose-800">Mentormaths Perfection (MMP)</h3>
+                        <Link
+                            v-if="isAdmin"
+                            :href="route('admin.questions.create-mmp', { syllabus_chapter_id: chapter.id })"
+                            class="text-xs font-medium text-rose-800 hover:underline"
+                        >
+                            Add another MMP set
+                        </Link>
+                    </div>
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <Link
+                            v-for="set in perfectionSets"
+                            :key="`mmp-${set.id}`"
+                            :href="route('admin.questions.sets.show', set.id)"
+                            class="rounded-xl border border-rose-300 bg-rose-50 p-5 shadow-sm transition hover:border-rose-500"
+                        >
+                            <p class="font-mono text-3xl font-bold tracking-wide text-rose-900">{{ set.set_code }}</p>
+                            <p class="mt-2 text-sm font-semibold text-gray-900">Perfection set {{ set.set_number }}</p>
+                            <p class="mt-2 text-sm text-gray-800">{{ set.questions_count }} exhaustive sums</p>
+                        </Link>
+                    </div>
+                </div>
+                <div v-else-if="isAdmin" class="rounded-lg border border-dashed border-rose-300 bg-rose-50/40 p-4 text-sm text-rose-950">
+                    No Mentormaths Perfection sets in this chapter yet.
+                    <Link
+                        :href="route('admin.questions.create-mmp', { syllabus_chapter_id: chapter.id })"
+                        class="ml-1 font-medium text-rose-900 underline"
+                    >
+                        Add Mentormaths Perfection
+                    </Link>
                 </div>
 
                 <div v-if="formulaSets?.length" class="space-y-3">

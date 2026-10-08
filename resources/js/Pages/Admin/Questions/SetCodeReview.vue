@@ -159,7 +159,7 @@ onMounted(() => {
                             Look up
                         </button>
                     </div>
-                    <p class="mt-2 text-xs text-gray-500">SF = fill-in-blank practice · S = MCQ practice · T = chapter test</p>
+                    <p class="mt-2 text-xs text-gray-500">SF = fill-in-blank · S = MCQ · T = chapter test · MMP = Mentormaths Perfection</p>
                 </form>
 
                 <div v-if="page.props.flash?.success" class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">

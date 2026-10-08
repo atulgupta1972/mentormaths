@@ -8,6 +8,7 @@ use App\Models\Worksheet;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetMasterProfile;
 use App\Support\PracticeSetTier;
+use App\Support\WorksheetPurpose;
 
 class PracticeSetService
 {
@@ -128,6 +129,51 @@ class PracticeSetService
             'scope' => PracticeSetScope::CHAPTER,
             'syllabus_chapter_id' => $chapter->id,
             'syllabus_topic_id' => null,
+            'status' => $status,
+            'created_by' => $userId,
+        ]);
+
+        foreach ($questionIds as $index => $questionId) {
+            $practiceSet->questions()->attach($questionId, ['sort_order' => $index + 1]);
+        }
+
+        $practiceSet = $practiceSet->loadCount('questions');
+        if ($status === Worksheet::STATUS_PUBLISHED) {
+            $this->coverageService->assignNewWorksheetDueToday($practiceSet);
+        }
+
+        return $practiceSet;
+    }
+
+    /**
+     * Mentormaths Perfection set — exhaustive seed + variants (MMP codes).
+     *
+     * @param  list<int>  $questionIds
+     */
+    public function createChapterMmpSet(
+        SyllabusChapter $chapter,
+        array $questionIds,
+        int $userId,
+        string $status = Worksheet::STATUS_PUBLISHED,
+        ?string $notes = null,
+    ): Worksheet {
+        if ($questionIds === []) {
+            throw new \InvalidArgumentException('Add at least one question before saving an MMP set.');
+        }
+
+        $setNumber = $this->nextChapterSetNumber($chapter->id);
+        $setCode = $this->codeService->generateChapterMmp($chapter);
+
+        $practiceSet = Worksheet::create([
+            'title' => "{$setCode} — Mentormaths Perfection (".count($questionIds).' sums)',
+            'set_number' => $setNumber,
+            'set_code' => $setCode,
+            'tier' => PracticeSetTier::CHAMPION,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $chapter->id,
+            'syllabus_topic_id' => null,
+            'purpose' => WorksheetPurpose::PERFECTION,
+            'notes' => $notes,
             'status' => $status,
             'created_by' => $userId,
         ]);

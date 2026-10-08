@@ -65,6 +65,47 @@ class PracticeSetCodeService
         return $this->allocateChapterTierCode($chapter, $tier, $fillInBlank);
     }
 
+    /**
+     * Format: MMP711 = Mentormaths Perfection · Class 7 · Chapter 1 · Set 1.
+     */
+    public function generateChapterMmp(SyllabusChapter $chapter): string
+    {
+        $chapter->loadMissing('syllabusVersion.gradeLevel');
+
+        if (! $chapter->syllabusVersion?->gradeLevel) {
+            throw new \InvalidArgumentException('Chapter must belong to a syllabus version and class.');
+        }
+
+        $stem = $this->mmpCodeStem($chapter);
+        $seq = Worksheet::query()
+            ->where('syllabus_chapter_id', $chapter->id)
+            ->where(function ($query) use ($stem) {
+                $query->where('purpose', \App\Support\WorksheetPurpose::PERFECTION)
+                    ->orWhere('set_code', 'like', $stem.'%');
+            })
+            ->count() + 1;
+
+        $code = $stem.$seq;
+        while (Worksheet::query()->where('set_code', $code)->exists()) {
+            $seq++;
+            $code = $stem.$seq;
+        }
+
+        return $code;
+    }
+
+    private function mmpCodeStem(SyllabusChapter $chapter): string
+    {
+        $chapter->loadMissing('syllabusVersion.gradeLevel');
+        $grade = $chapter->syllabusVersion?->gradeLevel;
+
+        if (! $grade) {
+            throw new \InvalidArgumentException('Chapter must belong to a syllabus version and class.');
+        }
+
+        return 'MMP'.$grade->sort_order.$this->chapterNumber($chapter);
+    }
+
     public function backfillAll(): void
     {
         $grouped = Worksheet::query()

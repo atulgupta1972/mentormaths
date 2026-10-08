@@ -98,6 +98,15 @@ class Worksheet extends Model
         return ($this->purpose ?? WorksheetPurpose::STANDARD) === WorksheetPurpose::FORMULA;
     }
 
+    public function isPerfection(): bool
+    {
+        if (($this->purpose ?? WorksheetPurpose::STANDARD) === WorksheetPurpose::PERFECTION) {
+            return true;
+        }
+
+        return str_starts_with(strtoupper((string) $this->set_code), 'MMP');
+    }
+
     public function isExamPrep(): bool
     {
         return ($this->purpose ?? WorksheetPurpose::STANDARD) === WorksheetPurpose::EXAM_PREP;

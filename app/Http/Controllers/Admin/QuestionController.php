@@ -12,6 +12,7 @@ use App\Services\AdminGradeContext;
 use App\Services\BookBasisPromptService;
 use App\Services\FillBlankImportService;
 use App\Services\McqImportService;
+use App\Services\MmpImportService;
 use App\Services\PdfPageImageService;
 use App\Services\PdfTextExtractionService;
 use App\Services\PdfWorksheetImportService;
@@ -34,6 +35,7 @@ class QuestionController extends Controller
     public function __construct(
         private McqImportService $importService,
         private FillBlankImportService $fillBlankImportService,
+        private MmpImportService $mmpImportService,
         private PdfTextExtractionService $pdfService,
         private AdminGradeContext $gradeContext,
         private QuestionMethodHintService $methodHintService,
@@ -216,6 +218,101 @@ class QuestionController extends Controller
     public function createFillInBlank(Request $request): Response
     {
         return $this->renderFillInBlankCreate($request);
+    }
+
+    public function createMmp(Request $request): Response
+    {
+        $grade = $this->gradeContext->resolve($request);
+        $chapterId = $request->integer('syllabus_chapter_id') ?: null;
+        $chapters = $this->chapterOptions($grade?->id);
+        $chapter = $chapterId
+            ? SyllabusChapter::query()
+                ->with(['syllabusVersion.board', 'syllabusVersion.gradeLevel', 'syllabusVersion.academicYear', 'topics'])
+                ->find($chapterId)
+            : null;
+
+        return Inertia::render('Admin/Questions/MmpCreate', [
+            'chapters' => $chapters,
+            'selectedChapterId' => $chapterId,
+            'selectedGrade' => $grade?->only(['id', 'name']),
+            'chapter' => $chapter ? [
+                'id' => $chapter->id,
+                'chapter_number' => $chapter->chapter_number,
+                'name' => $chapter->name,
+                'board_code' => $chapter->syllabusVersion?->board?->code,
+                'grade_name' => $chapter->syllabusVersion?->gradeLevel?->name,
+                'topics' => $chapter->topics->map(fn (SyllabusTopic $topic) => [
+                    'id' => $topic->id,
+                    'name' => $topic->name,
+                ])->values()->all(),
+            ] : null,
+            'cursorPrompt' => session('mmp_cursor_prompt'),
+            'seedDraft' => session('mmp_seed_draft'),
+            'figureNotes' => session('mmp_figure_notes'),
+            'targetCount' => session('mmp_target_count', 8),
+            'predictedSetCode' => $chapter
+                ? app(\App\Services\PracticeSetCodeService::class)->generateChapterMmp($chapter)
+                : null,
+            'pageError' => session('error'),
+        ]);
+    }
+
+    public function mmpPrompt(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'seed' => ['required', 'string', 'min:20', 'max:20000'],
+            'figure_notes' => ['nullable', 'string', 'max:5000'],
+            'total' => ['nullable', 'integer', 'min:5', 'max:12'],
+        ]);
+
+        $chapter = SyllabusChapter::query()->findOrFail($validated['syllabus_chapter_id']);
+
+        try {
+            $prompt = $this->mmpImportService->cursorPrompt($chapter, [
+                'seed' => $validated['seed'],
+                'figure_notes' => $validated['figure_notes'] ?? '',
+                'total' => $validated['total'] ?? 8,
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage())->withInput();
+        }
+
+        return redirect()
+            ->route('admin.questions.create-mmp', ['syllabus_chapter_id' => $chapter->id])
+            ->with('mmp_cursor_prompt', $prompt)
+            ->with('mmp_seed_draft', $validated['seed'])
+            ->with('mmp_figure_notes', $validated['figure_notes'] ?? '')
+            ->with('mmp_target_count', (int) ($validated['total'] ?? 8));
+    }
+
+    public function storeMmp(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'seed' => ['nullable', 'string', 'max:20000'],
+            'json' => ['required', 'string'],
+        ]);
+
+        $chapter = SyllabusChapter::query()->with('topics')->findOrFail($validated['syllabus_chapter_id']);
+
+        try {
+            $rows = $this->mmpImportService->parseJson($validated['json']);
+            $result = $this->mmpImportService->saveSet(
+                $chapter,
+                $rows,
+                $request->user()->id,
+                filled($validated['seed'] ?? null) ? trim((string) $validated['seed']) : null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage())->withInput();
+        }
+
+        $worksheet = $result['worksheet'];
+
+        return redirect()
+            ->route('admin.questions.sets.show', $worksheet)
+            ->with('success', count($result['questions']).' Mentormaths Perfection sums saved as '.$worksheet->set_code.'.');
     }
 
     public function previewFillBlankImport(Request $request): RedirectResponse
