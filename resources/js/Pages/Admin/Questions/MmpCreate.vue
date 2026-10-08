@@ -40,11 +40,8 @@ const promptForm = useForm({
     total: Number(props.targetCount) || 8,
 });
 
-const uploadForm = useForm({
-    syllabus_chapter_id: props.selectedChapterId || '',
-    seed: props.seedDraft || '',
-    drafts: [],
-});
+const uploadingDrafts = ref(false);
+const uploadError = ref('');
 
 const removeDraftForm = useForm({
     syllabus_chapter_id: props.selectedChapterId || '',
@@ -154,6 +151,7 @@ const parsePreview = () => {
 };
 
 const uploadDrafts = (event) => {
+    uploadError.value = '';
     if (!chapterFilter.value) {
         window.alert('Choose a chapter first.');
         event.target.value = '';
@@ -165,15 +163,28 @@ const uploadDrafts = (event) => {
         return;
     }
 
-    uploadForm.syllabus_chapter_id = chapterFilter.value;
-    uploadForm.seed = seed.value.trim();
-    uploadForm.drafts = files;
-    uploadForm.post(route('admin.questions.mmp-upload-drafts'), {
+    const formData = new FormData();
+    formData.append('syllabus_chapter_id', String(chapterFilter.value));
+    formData.append('seed', seed.value.trim());
+    files.forEach((file) => {
+        formData.append('drafts[]', file);
+    });
+
+    uploadingDrafts.value = true;
+    router.post(route('admin.questions.mmp-upload-drafts'), formData, {
         forceFormData: true,
         preserveScroll: true,
+        onError: (errors) => {
+            uploadError.value =
+                errors.drafts
+                || errors['drafts.0']
+                || errors['drafts.1']
+                || Object.values(errors || {})[0]
+                || 'Upload failed. Try JPG/PNG/PDF under 12 MB.';
+        },
         onFinish: () => {
+            uploadingDrafts.value = false;
             event.target.value = '';
-            uploadForm.drafts = [];
         },
     });
 };
@@ -309,18 +320,20 @@ watch(
                     </div>
 
                     <div class="mt-4">
-                        <InputLabel value="Upload rough draft (photos / PDF / TXT)" />
+                        <InputLabel value="Upload rough draft / figures (photos / PDF / TXT)" />
                         <input
                             ref="draftInput"
                             type="file"
                             multiple
-                            accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.md,.txt"
+                            accept="image/*,.heic,.heif,application/pdf,text/plain,.md,.txt"
                             class="mt-1 block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-rose-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-rose-900 hover:file:bg-rose-200"
-                            :disabled="uploadForm.processing || !chapterFilter"
+                            :disabled="uploadingDrafts || !chapterFilter"
                             @change="uploadDrafts"
                         >
-                        <p class="mt-1 text-xs text-gray-500">JPG / PNG / WebP / PDF / TXT · up to 8 files · 12 MB each</p>
-                        <InputError class="mt-1" :message="uploadForm.errors.drafts || uploadForm.errors['drafts.0']" />
+                        <p class="mt-1 text-xs text-gray-500">
+                            {{ uploadingDrafts ? 'Uploading…' : 'JPG / PNG / WebP / HEIC / PDF / TXT · up to 8 files · 12 MB each' }}
+                        </p>
+                        <InputError class="mt-1" :message="uploadError" />
                     </div>
 
                     <div v-if="hasDrafts" class="mt-4 grid gap-3 sm:grid-cols-2">

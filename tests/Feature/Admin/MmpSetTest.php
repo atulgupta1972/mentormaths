@@ -184,11 +184,15 @@ class MmpSetTest extends TestCase
                 'total' => 8,
             ])
             ->assertRedirect(route('admin.questions.create-mmp', ['syllabus_chapter_id' => $chapter->id]))
-            ->assertSessionHas('mmp_cursor_prompt');
+            ->assertSessionHas('mmp_cursor_prompt')
+            ->assertSessionHas('mmp_draft_files');
 
         $prompt = session('mmp_cursor_prompt');
         $this->assertStringContainsString('Rough draft photos', $prompt);
         $this->assertStringContainsString('ATTACH THE ROUGH DRAFT', $prompt);
+
+        // Drafts must stay in session after the prompt step (not flash-only).
+        $this->assertCount(1, session('mmp_draft_files'));
     }
 
     /**

@@ -265,10 +265,10 @@ class QuestionController extends Controller
         $validated = $request->validate([
             'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
             'drafts' => ['required', 'array', 'min:1', 'max:8'],
-            'drafts.*' => ['file', 'max:12288', 'mimes:jpg,jpeg,png,webp,pdf,txt,md'],
+            'drafts.*' => ['file', 'max:12288', 'extensions:jpg,jpeg,png,webp,gif,bmp,heic,heif,pdf,txt,md'],
         ], [
-            'drafts.required' => 'Choose at least one rough draft photo, PDF, or text file.',
-            'drafts.*.mimes' => 'Use JPG, PNG, WebP, PDF, or TXT/MD for rough drafts.',
+            'drafts.required' => 'Choose at least one rough draft photo, figure, PDF, or text file.',
+            'drafts.*.extensions' => 'Use JPG, PNG, WebP, HEIC, GIF, PDF, or TXT/MD for rough drafts / figures.',
             'drafts.*.max' => 'Each draft file must be smaller than 12 MB.',
         ]);
 
@@ -278,26 +278,35 @@ class QuestionController extends Controller
             ->values();
 
         if ($existing->count() + count($validated['drafts']) > 8) {
-            return back()->with('error', 'You can attach at most 8 rough draft files.');
+            return back()->with('error', 'You can attach at most 8 rough draft / figure files.');
         }
 
         $folder = 'mmp-drafts/'.$request->user()->id.'/'.Str::uuid()->toString();
         $seedExtras = [];
+        $stored = 0;
 
         foreach ($validated['drafts'] as $file) {
             /** @var UploadedFile $file */
             $path = $file->store($folder, 'public');
+            if (! is_string($path) || $path === '' || ! Storage::disk('public')->exists($path)) {
+                return back()->with('error', 'Could not store "'.$file->getClientOriginalName().'". Check disk permissions / storage:link.');
+            }
+
             $mime = (string) ($file->getMimeType() ?? '');
+            $extension = strtolower((string) $file->getClientOriginalExtension());
             $name = (string) $file->getClientOriginalName();
+            $isImage = str_starts_with($mime, 'image/')
+                || in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic', 'heif'], true);
 
             $existing->push([
                 'path' => $path,
                 'name' => $name,
-                'mime' => $mime,
-                'is_image' => str_starts_with($mime, 'image/'),
+                'mime' => $mime !== '' ? $mime : ($isImage ? 'image/'.$extension : 'application/octet-stream'),
+                'is_image' => $isImage,
             ]);
+            $stored++;
 
-            if (str_starts_with($mime, 'text/') || in_array(strtolower($file->getClientOriginalExtension()), ['txt', 'md'], true)) {
+            if (str_starts_with($mime, 'text/') || in_array($extension, ['txt', 'md'], true)) {
                 $text = trim((string) Storage::disk('public')->get($path));
                 if ($text !== '') {
                     $seedExtras[] = $text;
@@ -310,14 +319,15 @@ class QuestionController extends Controller
             $seed = trim($seed.($seed !== '' ? "\n\n" : '').implode("\n\n", $seedExtras));
         }
 
+        // Persist across later prompt/save steps (flash alone is cleared after one redirect).
+        session([
+            'mmp_draft_files' => $existing->all(),
+            'mmp_seed_draft' => $seed !== '' ? $seed : session('mmp_seed_draft'),
+        ]);
+
         return redirect()
             ->route('admin.questions.create-mmp', ['syllabus_chapter_id' => $chapterId])
-            ->with('mmp_draft_files', $existing->all())
-            ->with('mmp_seed_draft', $seed !== '' ? $seed : session('mmp_seed_draft'))
-            ->with('mmp_figure_notes', session('mmp_figure_notes'))
-            ->with('mmp_target_count', session('mmp_target_count', 8))
-            ->with('mmp_cursor_prompt', session('mmp_cursor_prompt'))
-            ->with('success', count($validated['drafts']).' rough draft file(s) attached. Build the prompt next (attach the same photos in Cursor/Gemini).');
+            ->with('success', $stored.' rough draft / figure file(s) attached. Build the prompt next (attach the same photos in Cursor/Gemini).');
     }
 
     public function removeMmpDraft(Request $request): RedirectResponse
@@ -341,13 +351,10 @@ class QuestionController extends Controller
             Storage::disk('public')->delete($path);
         }
 
+        session(['mmp_draft_files' => $remaining]);
+
         return redirect()
             ->route('admin.questions.create-mmp', ['syllabus_chapter_id' => $validated['syllabus_chapter_id']])
-            ->with('mmp_draft_files', $remaining)
-            ->with('mmp_seed_draft', session('mmp_seed_draft'))
-            ->with('mmp_figure_notes', session('mmp_figure_notes'))
-            ->with('mmp_target_count', session('mmp_target_count', 8))
-            ->with('mmp_cursor_prompt', session('mmp_cursor_prompt'))
             ->with('success', 'Rough draft removed.');
     }
 
@@ -394,13 +401,15 @@ class QuestionController extends Controller
                 ."\n\n".$prompt;
         }
 
+        session([
+            'mmp_cursor_prompt' => $prompt,
+            'mmp_seed_draft' => $seed,
+            'mmp_figure_notes' => $validated['figure_notes'] ?? '',
+            'mmp_target_count' => (int) ($validated['total'] ?? 8),
+        ]);
+
         return redirect()
-            ->route('admin.questions.create-mmp', ['syllabus_chapter_id' => $chapter->id])
-            ->with('mmp_cursor_prompt', $prompt)
-            ->with('mmp_seed_draft', $seed)
-            ->with('mmp_figure_notes', $validated['figure_notes'] ?? '')
-            ->with('mmp_target_count', (int) ($validated['total'] ?? 8))
-            ->with('mmp_draft_files', session('mmp_draft_files', []));
+            ->route('admin.questions.create-mmp', ['syllabus_chapter_id' => $chapter->id]);
     }
 
     /**
@@ -409,17 +418,64 @@ class QuestionController extends Controller
      */
     private function serializeMmpDraftFiles(array $rows): array
     {
-        return collect($rows)
-            ->filter(fn ($row) => is_array($row) && filled($row['path'] ?? null) && Storage::disk('public')->exists($row['path']))
-            ->map(fn (array $row) => [
-                'path' => (string) $row['path'],
-                'name' => (string) ($row['name'] ?? basename((string) $row['path'])),
+        $kept = [];
+        foreach ($rows as $row) {
+            if (! is_array($row) || ! filled($row['path'] ?? null)) {
+                continue;
+            }
+            $path = (string) $row['path'];
+            if (! Storage::disk('public')->exists($path)) {
+                continue;
+            }
+            $kept[] = [
+                'path' => $path,
+                'name' => (string) ($row['name'] ?? basename($path)),
                 'mime' => (string) ($row['mime'] ?? ''),
-                'url' => Storage::disk('public')->url($row['path']),
+                'url' => Storage::disk('public')->url($path),
                 'is_image' => (bool) ($row['is_image'] ?? str_starts_with((string) ($row['mime'] ?? ''), 'image/')),
-            ])
-            ->values()
-            ->all();
+            ];
+        }
+
+        // Drop missing paths from the persistent session so the UI stays accurate.
+        if (count($kept) !== count($rows)) {
+            session(['mmp_draft_files' => array_map(
+                static fn (array $row) => [
+                    'path' => $row['path'],
+                    'name' => $row['name'],
+                    'mime' => $row['mime'],
+                    'is_image' => $row['is_image'],
+                ],
+                $kept
+            )]);
+        }
+
+        return $kept;
+    }
+
+    private function forgetMmpDraftSession(?int $userId = null): void
+    {
+        $paths = collect(session('mmp_draft_files', []))
+            ->pluck('path')
+            ->filter()
+            ->values();
+
+        foreach ($paths as $path) {
+            $path = ltrim(str_replace('\\', '/', (string) $path), '/');
+            if ($userId && ! str_starts_with($path, 'mmp-drafts/'.$userId.'/')) {
+                continue;
+            }
+            if (Storage::disk('public')->exists($path)) {
+                Storage::disk('public')->delete($path);
+            }
+        }
+
+        session()->forget([
+            'mmp_draft_files',
+            'mmp_seed_draft',
+            'mmp_figure_notes',
+            'mmp_target_count',
+            'mmp_cursor_prompt',
+        ]);
     }
 
     public function storeMmp(Request $request): RedirectResponse
@@ -445,6 +501,7 @@ class QuestionController extends Controller
         }
 
         $worksheet = $result['worksheet'];
+        $this->forgetMmpDraftSession($request->user()->id);
 
         return redirect()
             ->route('admin.questions.sets.show', $worksheet)
