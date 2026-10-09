@@ -473,9 +473,8 @@ class SetAttemptService
             'message' => $isCorrect
                 ? 'Correct! Well done.'
                 : 'Not quite — try again.',
-            'correct_answer' => $isCorrect
-                ? AttemptResultSummary::correctAnswerForQuestion($question)
-                : null,
+            // Never return answer keys — students were copying them for re-attempts.
+            'correct_answer' => null,
         ];
     }
 

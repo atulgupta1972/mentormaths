@@ -85,6 +85,7 @@ const correctCount = () => props.questions.filter((q) => q.attempts?.some((row) 
                     <h3 class="text-sm font-semibold text-gray-800">Sum-wise result</h3>
                     <p class="mt-1 text-xs text-gray-500">
                         {{ correctCount() }} correct · {{ questions.length - correctCount() }} incorrect
+                        · red = wrong (correct answers not shown)
                     </p>
                     <div class="mt-4 flex flex-wrap gap-2">
                         <span

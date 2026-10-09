@@ -22,7 +22,8 @@ class AttemptResultSummary
             'assignment.enrollment.student',
         ]);
 
-        $summary = self::build($attempt, includeCorrect: true);
+        // Build without answer keys — student review must not leak keys in any payload field.
+        $summary = self::build($attempt, includeCorrect: false);
 
         if ($attempt->isGuided()) {
             $summary['questions'] = self::guidedReviewRows($attempt);
@@ -40,6 +41,11 @@ class AttemptResultSummary
 
             return ($left['number'] ?? 0) <=> ($right['number'] ?? 0);
         });
+
+        $summary['wrong_questions'] = array_values(array_filter(
+            $summary['questions'],
+            fn (array $row) => ($row['needs_practice_retry'] ?? false) === true,
+        ));
 
         return $summary;
     }
@@ -69,7 +75,8 @@ class AttemptResultSummary
                     'method_hint' => ($guided->used_early_hint || $guided->corrected_after_help)
                         ? QuestionMethodHint::forStudent($question)
                         : null,
-                    'correct_answer' => self::correctAnswerLabel($question),
+                    // Never send answer keys to the browser — students were copying them for re-attempts.
+                    'correct_answer' => null,
                     'attempts' => self::guidedReviewAttempts($guided, $question),
                     ...self::practiceRetryMeta($question, $guided->final_is_correct ?? false),
                 ];
@@ -200,7 +207,8 @@ class AttemptResultSummary
                 'diagram_url' => $question->diagram_url,
                 'type' => $question->type,
                 'method_hint' => null,
-                'correct_answer' => self::correctAnswerLabel($question),
+                // Never send answer keys to the browser — students were copying them for re-attempts.
+                'correct_answer' => null,
                 'attempts' => $attempts,
                 ...self::practiceRetryMeta($question, (bool) ($answer?->is_correct ?? false)),
             ];

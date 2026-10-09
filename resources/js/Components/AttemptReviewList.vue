@@ -55,16 +55,6 @@ const answerPlaceholder = (question) => {
     return 'Enter your answer';
 };
 
-const showCorrectAnswer = (question) => {
-    const state = getPracticeState(question.question_id);
-
-    if (state.status === 'correct') {
-        return state.correct_answer || question.correct_answer;
-    }
-
-    return !question.needs_practice_retry ? question.correct_answer : null;
-};
-
 const submitPracticeRetry = async (question, { optionId = null, answerText = null } = {}) => {
     if (!props.allowPracticeRetry || !props.attemptId) {
         return;
@@ -83,7 +73,6 @@ const submitPracticeRetry = async (question, { optionId = null, answerText = nul
         practiceState[key] = {
             status: data.correct ? 'correct' : 'wrong',
             message: data.message,
-            correct_answer: data.correct_answer ?? null,
         };
     } catch (error) {
         practiceState[key] = {
@@ -116,10 +105,10 @@ const submitBlankRetry = (question) => {
             <h3 class="text-sm font-semibold text-gray-800">Review sums</h3>
             <p class="mt-1 text-xs text-gray-500">
                 <template v-if="allowPracticeRetry && wrongQuestions.length">
-                    Wrong sums are listed first — read the question, pick an option, and try again. Your original score stays the same.
+                    Wrong sums are listed first — try them again yourself. Correct answers are not shown (so you solve, not copy). Your original score stays the same.
                 </template>
                 <template v-else>
-                    Wrong tries are shown first, then the correct answer in order.
+                    Wrong sums are listed first. Correct answers are not revealed after the sheet.
                 </template>
             </p>
         </div>
@@ -213,11 +202,6 @@ const submitBlankRetry = (question) => {
                 class="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
             >
                 <p class="font-semibold">{{ getPracticeState(question.question_id).message }}</p>
-            </div>
-
-            <div v-if="showCorrectAnswer(question)" class="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-800">
-                <p class="font-semibold text-slate-900">Correct answer</p>
-                <p class="mt-1 whitespace-pre-wrap">{{ showCorrectAnswer(question) }}</p>
             </div>
 
             <div v-if="question.method_hint" class="mt-3 rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
