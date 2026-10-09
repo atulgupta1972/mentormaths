@@ -911,7 +911,7 @@ const togglePagePicker = (index) => {
                             <a :href="chapter.download_url" class="font-medium text-indigo-700 hover:underline">Download the chapter PDF</a>
                             and open it in Cursor / Claude / Gemini.
                         </li>
-                        <li>Copy the concept-path prompt below and paste it with the PDF.</li>
+                        <li>Copy the concept-path prompt below and paste it with the PDF. Aim for <strong>at least 25 cards</strong> (add easy check variants if the chapter is short).</li>
                         <li>Paste JSON → <strong>Preview cards</strong> — the app pulls figure pages from the chapter PDF automatically when <code>figure_page</code> is set.</li>
                         <li>The prompt attaches the <strong>full textbook page</strong>. Check each figure and <strong>Edit / crop</strong> it so only the diagram for that card remains, then approve.</li>
                     </ol>

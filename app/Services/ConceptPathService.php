@@ -85,7 +85,9 @@ Pedagogy rules:
 - Use "topic" matching a syllabus topic name when possible.
 - When a textbook figure is essential, mention it by name in example/body (e.g. "See Fig 5.14") AND set "figure_page" to the 1-based PDF page number where that figure appears. Do NOT invent ASCII art — Mentormaths will auto-attach that PDF page for cropping.
 - If no figure is needed, set "figure_page": null.
-- Aim for 12–28 cards total (teach + check). Do not exceed 36.
+- MINIMUM SIZE (required): at least 25 cards total (teach + check, counting any final angle_map / turn_clock). Mentormaths treats each card as one concept set for the chapter.
+- If the chapter PDF has fewer distinct ideas than needed, still reach 25 cards by adding more easy check cards (extra tiny variants of the same idea: change numbers, flip the wording, ask the common mistake) and short reinforce teach cards. Do NOT invent off-syllabus topics — stay on this chapter’s foundations.
+- Prefer about 28–32 cards when the chapter is rich. Soft maximum 40. Never deliver fewer than 25.
 - Do NOT create long word problems, exam-level sums, or written-sheet style questions.
 - For Parallel and Intersecting Lines chapters: AFTER the teach/check flow, add ONE final "angle_map" card with 10–16 easy tap prompts covering corresponding, vertically opposite, adjacent/linear pair, alternate interior, alternate exterior, and co-interior.
 - For Angles as Turns chapters: AFTER the teach/check flow, add ONE final "turn_clock" card pairing turn ↔ angle (1/4↔90°, 1/2↔180°, 3/4↔270°, full↔360°).

@@ -42,6 +42,8 @@ class ConceptPathServiceTest extends TestCase
         $this->assertStringContainsString('"type": "angle_map"', $prompt);
         $this->assertStringContainsString('Algebraic Expressions', $prompt);
         $this->assertStringContainsString('Variables', $prompt);
+        $this->assertStringContainsString('at least 25 cards', $prompt);
+        $this->assertStringContainsString('Never deliver fewer than 25', $prompt);
     }
 
     public function test_parse_and_approve_concept_path(): void
