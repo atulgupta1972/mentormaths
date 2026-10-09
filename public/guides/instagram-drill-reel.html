@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mentor Maths — Daily drill reel</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { margin: 0; height: 100%; }
+        body {
+            font-family: "Segoe UI", system-ui, sans-serif;
+            background: #071820;
+            color: #e2e8f0;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            flex: 0 0 auto;
+            padding: 12px 16px 10px;
+            text-align: center;
+            background: #0b2a32;
+            border-bottom: 1px solid #1e4a55;
+        }
+        header h1 {
+            margin: 0 0 8px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+        }
+        button, a.btn {
+            appearance: none;
+            border: 0;
+            border-radius: 999px;
+            padding: 10px 16px;
+            font: inherit;
+            font-weight: 800;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            color: #072f39;
+            background: #f4c46b;
+        }
+        button.ghost, a.ghost {
+            background: #1e293b;
+            color: #e2e8f0;
+        }
+        .meta { margin: 8px 0 0; font-size: 13px; color: #94a3b8; }
+        .howto {
+            max-width: 40rem;
+            margin: 10px auto 0;
+            text-align: left;
+            font-size: 13px;
+            line-height: 1.45;
+            color: #cbd5e1;
+        }
+        .howto strong { color: #fff; }
+        .stage {
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            min-height: 0;
+        }
+        .stage img {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            border-radius: 16px;
+            box-shadow: 0 16px 48px rgba(0,0,0,.45);
+            background: #0f4c5c;
+        }
+        .err {
+            max-width: 36rem;
+            padding: 20px;
+            line-height: 1.5;
+            color: #fecaca;
+        }
+        .err a { color: #fde68a; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Mentor Maths · Daily drill reel</h1>
+        <div class="row">
+            <button type="button" id="prev" class="ghost">Previous</button>
+            <button type="button" id="play">Play reel</button>
+            <button type="button" id="next" class="ghost">Next</button>
+            <a class="btn" id="mp4" href="instagram-drill/mentor-maths-daily-drill-reel.mp4" download>Save reel (MP4)</a>
+            <a class="ghost btn" id="dlSlide" href="instagram-drill/slides/01.png" download="01.png">Save this slide</a>
+            <a class="ghost btn" id="zip" href="instagram-drill/slides-01-to-08.zip" download>Save all 8 slides</a>
+            <a class="ghost btn" id="pptx" href="instagram-drill/mentor-maths-daily-drill.pptx" download>Save PPT</a>
+        </div>
+        <p class="meta">Slide <span id="num">1</span> / 8</p>
+        <div class="howto">
+            <strong>Reel:</strong> Save reel (MP4) → send the file to your phone → Instagram → <strong>+</strong> → Reel → add the video → add music → paste caption → Share.<br>
+            <strong>Carousel:</strong> Save all 8 slides → unzip on your phone → Instagram → <strong>+</strong> → Post → pick 01.png to 08.png in order → Share.
+        </div>
+    </header>
+    <main class="stage">
+        <img id="frame" alt="Daily drill slide 1">
+        <p class="err" id="err" hidden>
+            Slides did not load from this location.
+            Open <a href="https://mentormaths.in/guides/instagram-drill-reel.html">mentormaths.in/guides/instagram-drill-reel.html</a>
+            or download <code>public/guides/instagram-drill-reel.html</code> together with the
+            <code>instagram-drill/slides</code> folder.
+        </p>
+    </main>
+    <script>
+        const TOTAL = 8;
+        const pad = (n) => String(n).padStart(2, "0");
+        const frame = document.getElementById("frame");
+        const err = document.getElementById("err");
+        const num = document.getElementById("num");
+        const playBtn = document.getElementById("play");
+        let index = 1;
+        let playing = false;
+        let timer = null;
+        let source = 0;
+
+        const GH = "https://github.com/atulgupta1972/mentormaths/raw/cursor/instagram-drill-reel-f353/public/guides/instagram-drill/";
+        const onSite = /mentormaths\.in$/.test(location.hostname) || location.hostname === "127.0.0.1" || location.hostname === "localhost";
+        const asset = (path) => onSite ? ("instagram-drill/" + path) : (GH + path);
+
+        document.getElementById("mp4").href = asset("mentor-maths-daily-drill-reel.mp4");
+        document.getElementById("zip").href = asset("slides-01-to-08.zip");
+        document.getElementById("pptx").href = asset("mentor-maths-daily-drill.pptx");
+
+        const folders = [
+            "instagram-drill/slides/",
+            "/guides/instagram-drill/slides/",
+            GH + "slides/",
+            "https://raw.githubusercontent.com/atulgupta1972/mentormaths/main/public/guides/instagram-drill/slides/",
+        ];
+
+        function srcFor(n) {
+            return folders[source] + pad(n) + ".png";
+        }
+
+        function show(n) {
+            index = ((n - 1 + TOTAL) % TOTAL) + 1;
+            num.textContent = String(index);
+            frame.alt = "Daily drill slide " + index;
+            frame.src = srcFor(index);
+            const slideName = pad(index) + ".png";
+            const slideLink = document.getElementById("dlSlide");
+            slideLink.href = asset("slides/" + slideName);
+            slideLink.setAttribute("download", slideName);
+        }
+
+        frame.addEventListener("error", () => {
+            if (source < folders.length - 1) {
+                source += 1;
+                show(index);
+                return;
+            }
+            frame.hidden = true;
+            err.hidden = false;
+        });
+
+        frame.addEventListener("load", () => {
+            err.hidden = true;
+            frame.hidden = false;
+        });
+
+        function stopPlay() {
+            playing = false;
+            playBtn.textContent = "Play reel";
+            clearInterval(timer);
+            timer = null;
+        }
+
+        function startPlay() {
+            playing = true;
+            playBtn.textContent = "Stop";
+            clearInterval(timer);
+            timer = setInterval(() => show(index + 1), 2500);
+        }
+
+        document.getElementById("prev").addEventListener("click", () => { stopPlay(); show(index - 1); });
+        document.getElementById("next").addEventListener("click", () => { stopPlay(); show(index + 1); });
+        playBtn.addEventListener("click", () => playing ? stopPlay() : startPlay());
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowRight") { stopPlay(); show(index + 1); }
+            if (e.key === "ArrowLeft") { stopPlay(); show(index - 1); }
+            if (e.key === " ") { e.preventDefault(); playing ? stopPlay() : startPlay(); }
+            if (e.key === "Escape") stopPlay();
+        });
+
+        show(1);
+    </script>
+</body>
+</html>
