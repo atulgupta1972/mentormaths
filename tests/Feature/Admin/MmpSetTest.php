@@ -240,7 +240,7 @@ class MmpSetTest extends TestCase
         \Illuminate\Support\Facades\Storage::disk('public')->assertExists($question->diagram_path);
     }
 
-    public function test_admin_can_attach_up_to_sixteen_mmp_figures(): void
+    public function test_admin_can_attach_up_to_twenty_mmp_figures(): void
     {
         $this->withoutVite();
         \Illuminate\Support\Facades\Storage::fake('public');
@@ -249,7 +249,7 @@ class MmpSetTest extends TestCase
 
         $questions = [];
         $diagrams = [];
-        for ($i = 1; $i <= 14; $i++) {
+        for ($i = 1; $i <= 17; $i++) {
             $name = "q{$i}.png";
             $diagrams[] = \Illuminate\Http\UploadedFile::fake()->image($name, 200, 150);
             $questions[] = [
@@ -278,9 +278,9 @@ class MmpSetTest extends TestCase
 
         $worksheet = Worksheet::query()->where('purpose', WorksheetPurpose::PERFECTION)->first();
         $this->assertNotNull($worksheet);
-        $this->assertSame(14, $worksheet->questions()->count());
+        $this->assertSame(17, $worksheet->questions()->count());
         $this->assertSame(
-            14,
+            17,
             $worksheet->questions()->whereNotNull('diagram_path')->count()
         );
     }

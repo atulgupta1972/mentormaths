@@ -364,7 +364,7 @@ class QuestionController extends Controller
             'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
             'seed' => ['nullable', 'string', 'max:20000'],
             'figure_notes' => ['nullable', 'string', 'max:5000'],
-            'total' => ['nullable', 'integer', 'min:5', 'max:16'],
+            'total' => ['nullable', 'integer', 'min:5', 'max:20'],
         ]);
 
         $chapter = SyllabusChapter::query()->findOrFail($validated['syllabus_chapter_id']);
@@ -484,10 +484,10 @@ class QuestionController extends Controller
             'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
             'seed' => ['nullable', 'string', 'max:20000'],
             'json' => ['required', 'string'],
-            'diagrams' => ['nullable', 'array', 'max:16'],
+            'diagrams' => ['nullable', 'array', 'max:20'],
             'diagrams.*' => ['file', 'max:8192', 'extensions:jpg,jpeg,png,webp'],
         ], [
-            'diagrams.max' => 'You can attach at most 16 AI figure files (one per sum).',
+            'diagrams.max' => 'You can attach at most 20 AI figure files (one per sum).',
             'diagrams.*.extensions' => 'AI figure files must be JPG, PNG, or WebP.',
             'diagrams.*.max' => 'Each AI figure must be smaller than 8 MB.',
         ]);
