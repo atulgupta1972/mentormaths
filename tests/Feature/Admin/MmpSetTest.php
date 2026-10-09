@@ -240,6 +240,51 @@ class MmpSetTest extends TestCase
         \Illuminate\Support\Facades\Storage::disk('public')->assertExists($question->diagram_path);
     }
 
+    public function test_admin_can_attach_up_to_sixteen_mmp_figures(): void
+    {
+        $this->withoutVite();
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        [$chapter, $topic, $admin] = $this->seedChapter();
+
+        $questions = [];
+        $diagrams = [];
+        for ($i = 1; $i <= 14; $i++) {
+            $name = "q{$i}.png";
+            $diagrams[] = \Illuminate\Http\UploadedFile::fake()->image($name, 200, 150);
+            $questions[] = [
+                'type' => 'fill_in_blank',
+                'topic' => $topic->name,
+                'question' => "In the figure, value {$i} gives blank ____ .",
+                'needs_diagram' => true,
+                'diagram_file' => $name,
+                'answer_format' => 'integer',
+                'correct_answer' => (string) $i,
+                'method_hint' => 'Read the figure value.',
+                'explanation' => "Final answer = {$i}",
+                'difficulty' => 'Hard',
+            ];
+        }
+
+        $this->actingAs($admin)
+            ->post(route('admin.questions.store-mmp'), [
+                'syllabus_chapter_id' => $chapter->id,
+                'seed' => 'Fourteen parallelogram variants from sketch.',
+                'json' => json_encode(['questions' => $questions], JSON_THROW_ON_ERROR),
+                'diagrams' => $diagrams,
+            ])
+            ->assertRedirect()
+            ->assertSessionMissing('errors');
+
+        $worksheet = Worksheet::query()->where('purpose', WorksheetPurpose::PERFECTION)->first();
+        $this->assertNotNull($worksheet);
+        $this->assertSame(14, $worksheet->questions()->count());
+        $this->assertSame(
+            14,
+            $worksheet->questions()->whereNotNull('diagram_path')->count()
+        );
+    }
+
     /**
      * @return array{0: SyllabusChapter, 1: SyllabusTopic, 2: User}
      */

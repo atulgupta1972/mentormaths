@@ -42,7 +42,7 @@ class MmpImportService
         ]);
 
         $version = $chapter->syllabusVersion;
-        $total = max(5, min(12, (int) ($options['total'] ?? 8)));
+        $total = max(5, min(16, (int) ($options['total'] ?? 8)));
         $seed = trim((string) ($options['seed'] ?? ''));
         $figureNotes = trim((string) ($options['figure_notes'] ?? ''));
         $draftCount = max(0, (int) ($options['draft_count'] ?? 0));

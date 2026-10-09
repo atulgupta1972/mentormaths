@@ -225,7 +225,7 @@ const generatePrompt = () => {
     promptForm.syllabus_chapter_id = chapterFilter.value;
     promptForm.seed = seed.value.trim();
     promptForm.figure_notes = figureNotes.value.trim();
-    promptForm.total = Math.max(5, Math.min(12, Number(total.value) || 8));
+    promptForm.total = Math.max(5, Math.min(16, Number(total.value) || 8));
     promptForm.post(route('admin.questions.mmp-prompt'), { preserveScroll: true });
 };
 
@@ -316,7 +316,7 @@ watch(
                     </Link>
                     <h2 class="mt-1 text-xl font-semibold text-gray-800">Mentormaths Perfection (MMP)</h2>
                     <p class="mt-1 text-sm text-gray-600">
-                        Upload a rough handwritten draft (or paste text) → AI builds 5–12 exhaustive variants → save as
+                        Upload a rough handwritten draft (or paste text) → AI builds 5–16 exhaustive variants → save as
                         <span class="font-mono font-semibold text-rose-800">{{ predictedSetCode || 'MMP…' }}</span>
                     </p>
                 </div>
@@ -424,10 +424,10 @@ watch(
                                 v-model.number="total"
                                 type="number"
                                 min="5"
-                                max="12"
+                                max="16"
                                 class="mt-1 w-full rounded-md border-gray-300 text-sm"
                             >
-                            <p class="mt-1 text-xs text-gray-500">Default 8 · allowed 5–12</p>
+                            <p class="mt-1 text-xs text-gray-500">Default 8 · allowed 5–16</p>
                         </div>
                     </div>
 
