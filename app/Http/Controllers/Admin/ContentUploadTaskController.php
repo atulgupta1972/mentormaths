@@ -158,10 +158,7 @@ class ContentUploadTaskController extends Controller
             $selectedBoard = collect($boards)->firstWhere('id', $selectedBoardId);
             $syllabus = $this->classAssignment->syllabusForGrade($gradeLevel, $selectedBoardId);
 
-            $syllabusChapterIds = $syllabus
-                ? $syllabus->chapters()->orderBy('sort_order')->pluck('id')
-                : collect();
-
+            // All books for this class + board (include unmapped / empty books so admins can pick or add).
             $textbooks = Textbook::query()
                 ->where('grade_level_id', $gradeLevel->id)
                 ->when(
@@ -171,12 +168,6 @@ class ContentUploadTaskController extends Controller
                     }),
                 )
                 ->orderBy('name')
-                ->when($syllabusChapterIds->isNotEmpty(), function ($query) use ($syllabusChapterIds) {
-                    $query->where(function ($inner) use ($syllabusChapterIds) {
-                        $inner->whereDoesntHave('chapters')
-                            ->orWhereHas('chapters', fn ($chapters) => $chapters->whereIn('syllabus_chapter_id', $syllabusChapterIds));
-                    });
-                })
                 ->get(['id', 'name', 'code', 'board_id'])
                 ->map(fn (Textbook $book) => [
                     'id' => $book->id,
