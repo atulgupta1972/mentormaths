@@ -158,25 +158,50 @@ class ContentUploadTaskController extends Controller
             $selectedBoard = collect($boards)->firstWhere('id', $selectedBoardId);
             $syllabus = $this->classAssignment->syllabusForGrade($gradeLevel, $selectedBoardId);
 
-            // All books for this class + board (include unmapped / empty books so admins can pick or add).
+            // All books for this class (any board). Board filter hid existing masters when
+            // board_id was set differently from the selected board.
+            $boardCodeById = collect($boards)
+                ->mapWithKeys(fn (array $board) => [(int) $board['id'] => (string) ($board['code'] ?? $board['name'] ?? '')]);
+
             $textbooks = Textbook::query()
                 ->where('grade_level_id', $gradeLevel->id)
-                ->when(
-                    $selectedBoardId,
-                    fn ($q) => $q->where(function ($inner) use ($selectedBoardId) {
-                        $inner->where('board_id', $selectedBoardId)->orWhereNull('board_id');
-                    }),
-                )
+                ->with('board:id,code,name')
                 ->orderBy('name')
-                ->get(['id', 'name', 'code', 'board_id'])
-                ->map(fn (Textbook $book) => [
-                    'id' => $book->id,
-                    'name' => $book->name,
-                    'code' => $book->code,
-                    'board_id' => $book->board_id,
-                    'label' => "{$book->name} ({$book->code})",
-                ])
+                ->get(['id', 'name', 'code', 'board_id', 'practice_line'])
+                ->sortBy(function (Textbook $book) use ($selectedBoardId) {
+                    $boardId = $book->board_id ? (int) $book->board_id : null;
+                    if ($selectedBoardId && $boardId === (int) $selectedBoardId) {
+                        return '0-'.$book->name;
+                    }
+                    if ($boardId === null) {
+                        return '1-'.$book->name;
+                    }
+
+                    return '2-'.$book->name;
+                })
                 ->values()
+                ->map(function (Textbook $book) use ($boardCodeById, $selectedBoardId) {
+                    $boardCode = $book->board?->code
+                        ?: ($book->board_id ? ($boardCodeById[(int) $book->board_id] ?? '') : '');
+                    $suffix = $book->code;
+                    if ($boardCode !== '') {
+                        $suffix .= ' · '.$boardCode;
+                    }
+                    if ($selectedBoardId && $book->board_id && (int) $book->board_id !== (int) $selectedBoardId) {
+                        $suffix .= ' · other board';
+                    }
+
+                    return [
+                        'id' => $book->id,
+                        'name' => $book->name,
+                        'code' => $book->code,
+                        'board_id' => $book->board_id,
+                        'matches_selected_board' => ! $book->board_id
+                            || ! $selectedBoardId
+                            || (int) $book->board_id === (int) $selectedBoardId,
+                        'label' => "{$book->name} ({$suffix})",
+                    ];
+                })
                 ->all();
 
             if ($syllabus) {
@@ -485,10 +510,20 @@ class ContentUploadTaskController extends Controller
             if ($textbook->grade_level_id !== $gradeLevel->id) {
                 return back()->with('error', 'Selected textbook does not belong to the current class.');
             }
+            // Book listed under another board: resolve/create the same name+code for this board.
             if ($textbook->board_id && (int) $textbook->board_id !== $boardId) {
-                return back()->with('error', 'Selected textbook belongs to a different board. Pick or create a book for this board.');
-            }
-            if (! $textbook->board_id) {
+                try {
+                    $textbook = $this->bookService->resolveTextbookForBoard(
+                        $gradeLevel->id,
+                        $boardId,
+                        (string) $textbook->name,
+                        (string) $textbook->code,
+                        $request->user()->id,
+                    );
+                } catch (\InvalidArgumentException $e) {
+                    return back()->withInput()->with('error', $e->getMessage());
+                }
+            } elseif (! $textbook->board_id) {
                 $textbook->update(['board_id' => $boardId]);
             }
         } else {

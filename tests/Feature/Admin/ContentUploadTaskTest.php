@@ -1091,6 +1091,43 @@ class ContentUploadTaskTest extends TestCase
                 ->where('syllabusChapters', fn ($chapters) => collect($chapters)->pluck('id')->map(fn ($id) => (int) $id)->all() === [(int) $icseChapter->id]));
     }
 
+    public function test_assign_form_lists_all_class_books_even_when_board_differs(): void
+    {
+        $this->withoutVite();
+
+        [$grade, $cbseChapter, $admin] = $this->seedGradeAndAdmin();
+        $cbseId = $cbseChapter->syllabusVersion->board_id;
+
+        $icse = Board::query()->create(['code' => 'ICSE', 'name' => 'ICSE', 'is_active' => true]);
+
+        Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'board_id' => $icse->id,
+            'name' => 'Ganita Prakash Part I',
+            'code' => 'gp',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        Textbook::query()->create([
+            'grade_level_id' => $grade->id,
+            'board_id' => null,
+            'name' => 'MentorMaths 1',
+            'code' => 'mm1',
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->withSession(['admin_grade_level_id' => $grade->id])
+            ->get(route('admin.content-tasks.create', ['board_id' => $cbseId]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ContentTasks/Create')
+                ->has('textbooks', 2)
+                ->where('textbooks', fn ($books) => collect($books)->pluck('code')->sort()->values()->all() === ['gp', 'mm1']));
+    }
+
     public function test_assign_form_collapses_duplicate_syllabus_headings_and_uses_current_names(): void
     {
         $this->withoutVite();

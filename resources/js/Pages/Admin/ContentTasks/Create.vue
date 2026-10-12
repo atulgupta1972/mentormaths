@@ -460,13 +460,21 @@ watch(() => form.offered_amount_inr, () => {
                             v-model="bookSelect"
                             class="mt-1 block w-full rounded-md border-gray-300 text-sm"
                         >
+                            <option v-if="textbooks.length === 0" value="" disabled>
+                                No books yet for {{ gradeLevel.name }}
+                            </option>
                             <option v-for="book in textbooks" :key="book.id" :value="String(book.id)">
                                 {{ book.label }}
                             </option>
                             <option :value="NEW_BOOK">+ Add new book…</option>
                         </select>
                         <p class="mt-1 text-xs text-gray-500">
-                            Choose an existing book, or add a new book master (name + code).
+                            <template v-if="textbooks.length">
+                                {{ textbooks.length }} book{{ textbooks.length === 1 ? '' : 's' }} for {{ gradeLevel.name }} listed — pick one, or add a new book master.
+                            </template>
+                            <template v-else>
+                                No existing books for this class yet. Add a new book master (name + code).
+                            </template>
                         </p>
 
                         <div v-if="useNewBook" class="mt-3 grid gap-3 rounded-md border border-indigo-200 bg-indigo-50/40 p-3 sm:grid-cols-2">
