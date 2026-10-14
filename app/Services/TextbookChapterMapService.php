@@ -39,10 +39,8 @@ class TextbookChapterMapService
             throw new \InvalidArgumentException('Each syllabus chapter can only be mapped once per book.');
         }
 
-        $bookNumbers = $rows->pluck('book_chapter_number')->unique();
-        if ($bookNumbers->count() !== $rows->count()) {
-            throw new \InvalidArgumentException('Each book chapter number must be unique within this book.');
-        }
+        // Book chapter numbers follow the syllabus line and may repeat (e.g. "1", "Ch 1").
+        // Uniqueness is by syllabus chapter per book, not by book chapter number.
 
         $keptIds = [];
 
