@@ -27,6 +27,7 @@ class QuestionZipImportService
     ) {}
 
     /**
+     * @param  list<int>|null  $keepIndices  0-based indices to keep; null keeps all
      * @return array{type: string, saved: list<Question>, diagram_count: int, missing_diagram_count: int, temp_dir: string}
      */
     public function importPack(
@@ -35,10 +36,19 @@ class QuestionZipImportService
         ?SyllabusTopic $topic,
         ?SyllabusChapter $chapter,
         string $bankPurpose = QuestionBankPurpose::PRACTICE_SET,
+        ?array $keepIndices = null,
     ): array {
         $extracted = $this->extract($zip);
 
         try {
+            if ($keepIndices !== null) {
+                $extracted = $this->filterExtracted($extracted, $keepIndices);
+            }
+
+            if ($extracted['rows'] === []) {
+                throw new InvalidArgumentException('No questions left to import. Keep at least one question in the preview.');
+            }
+
             $saved = match (true) {
                 $extracted['type'] === self::TYPE_FILL_IN_BLANK && $chapter !== null
                     => $this->fillBlankImport->saveChapterRows(
@@ -105,6 +115,56 @@ class QuestionZipImportService
         } finally {
             $this->cleanup($extracted['temp_dir']);
         }
+    }
+
+    /**
+     * @param  array{
+     *     type: string,
+     *     rows: list<array<string, mixed>>,
+     *     diagram_paths: array<int, string|null>,
+     *     items: list<array<string, mixed>>,
+     *     temp_dir: string
+     * }  $extracted
+     * @param  list<int>  $keepIndices
+     * @return array{
+     *     type: string,
+     *     rows: list<array<string, mixed>>,
+     *     diagram_paths: array<int, string|null>,
+     *     items: list<array<string, mixed>>,
+     *     temp_dir: string
+     * }
+     */
+    private function filterExtracted(array $extracted, array $keepIndices): array
+    {
+        $total = count($extracted['rows']);
+        $normalized = [];
+
+        foreach ($keepIndices as $index) {
+            $index = (int) $index;
+            if ($index < 0 || $index >= $total) {
+                throw new InvalidArgumentException("Keep index {$index} is out of range for this zip pack.");
+            }
+            $normalized[$index] = $index;
+        }
+
+        $ordered = array_values($normalized);
+        sort($ordered);
+
+        $rows = [];
+        $items = [];
+        $diagramPaths = [];
+
+        foreach ($ordered as $index) {
+            $rows[] = $extracted['rows'][$index];
+            $items[] = $extracted['items'][$index] ?? [];
+            $diagramPaths[] = $extracted['diagram_paths'][$index] ?? null;
+        }
+
+        $extracted['rows'] = $rows;
+        $extracted['items'] = $items;
+        $extracted['diagram_paths'] = $diagramPaths;
+
+        return $extracted;
     }
 
     /**

@@ -62,6 +62,62 @@ class QuestionZipImportServiceTest extends TestCase
         $this->assertTrue($question->isFillInBlank());
     }
 
+    public function test_import_pack_keeps_only_selected_question_indices(): void
+    {
+        [$chapter, $topic, $user] = $this->seedChapterContext();
+
+        $zipPath = $this->createSampleZip([
+            'questions' => [
+                [
+                    'topic' => $topic->name,
+                    'question' => 'First blank ____.',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '1',
+                    'explanation' => 'Final answer = 1',
+                    'difficulty' => 'Easy',
+                ],
+                [
+                    'topic' => $topic->name,
+                    'question' => 'In the figure, second blank ____.',
+                    'needs_diagram' => true,
+                    'diagram_file' => 'q2.png',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '2',
+                    'explanation' => 'Final answer = 2',
+                    'difficulty' => 'Hard',
+                ],
+                [
+                    'topic' => $topic->name,
+                    'question' => 'Third blank ____.',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '3',
+                    'explanation' => 'Final answer = 3',
+                    'difficulty' => 'Medium',
+                ],
+            ],
+        ], [
+            'q2.png' => base64_decode(
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+                true,
+            ) ?: '',
+        ]);
+
+        $file = new UploadedFile($zipPath, 'pack.zip', 'application/zip', null, true);
+
+        $result = app(QuestionZipImportService::class)->importPack(
+            $file,
+            $user,
+            null,
+            $chapter,
+            keepIndices: [1],
+        );
+
+        $this->assertCount(1, $result['saved']);
+        $this->assertSame(1, $result['diagram_count']);
+        $this->assertSame('In the figure, second blank ____.', $result['saved'][0]->question_text);
+        $this->assertSame(1, Question::query()->count());
+    }
+
     public function test_preview_pack_returns_questions_and_diagram_data_urls_without_saving(): void
     {
         $zipPath = $this->createSampleZip([

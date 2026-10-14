@@ -127,12 +127,39 @@ const zipImportForm = useForm({
     scope: scopeMode.value,
     syllabus_chapter_id: '',
     syllabus_topic_id: '',
+    keep_indices: [],
 });
+
+const refreshZipPreviewCounts = () => {
+    if (!zipPreview.value) {
+        return;
+    }
+
+    const questions = zipPreview.value.questions || [];
+    zipPreview.value.question_count = questions.length;
+    zipPreview.value.diagram_count = questions.filter((q) => q.has_diagram).length;
+    zipPreview.value.missing_diagram_count = questions.filter((q) => q.needs_diagram && !q.has_diagram).length;
+};
+
+const removeZipPreviewQuestion = (sourceIndex) => {
+    if (!zipPreview.value?.questions?.length) {
+        return;
+    }
+
+    zipPreview.value.questions = zipPreview.value.questions.filter((q) => q.index !== sourceIndex);
+    refreshZipPreviewCounts();
+
+    if (!zipPreview.value.questions.length) {
+        previewError.value = 'All questions removed from preview. Choose the zip again, or cancel.';
+        clearZipPreview();
+    }
+};
 
 const clearZipPreview = () => {
     zipPreviewFile.value = null;
     zipPreview.value = null;
     zipImportForm.pack = null;
+    zipImportForm.keep_indices = [];
     zipImportForm.clearErrors();
     if (zipPackInput.value) {
         zipPackInput.value.value = '';
@@ -202,6 +229,12 @@ const confirmZipImport = () => {
         return;
     }
 
+    if (!zipPreview.value?.questions?.length) {
+        previewError.value = 'No questions left to save. Remove cancelled — choose the zip again.';
+
+        return;
+    }
+
     if (!chapterFilter.value) {
         previewError.value = 'Select a chapter first.';
 
@@ -214,15 +247,23 @@ const confirmZipImport = () => {
         return;
     }
 
+    // Preview `index` is 1-based position in the original zip; convert to 0-based keep list.
+    const keepIndices = zipPreview.value.questions.map((q) => Number(q.index) - 1);
+
     zipImportForm.pack = zipPreviewFile.value;
     zipImportForm.scope = scopeMode.value;
     zipImportForm.syllabus_chapter_id = isChapterScope.value ? chapterFilter.value : '';
     zipImportForm.syllabus_topic_id = isTopicScope.value ? selectedTopic.value : '';
+    zipImportForm.keep_indices = keepIndices;
 
     zipImportForm.post(route('admin.questions.import-zip-pack'), {
         forceFormData: true,
         onError: (errors) => {
-            previewError.value = errors.pack || errors.syllabus_chapter_id || errors.syllabus_topic_id || 'Could not import zip pack.';
+            previewError.value = errors.pack
+                || errors.keep_indices
+                || errors.syllabus_chapter_id
+                || errors.syllabus_topic_id
+                || 'Could not import zip pack.';
         },
         onSuccess: () => {
             clearZipPreview();
@@ -660,6 +701,9 @@ onMounted(() => {
                                 · {{ zipPreview.diagram_count }} diagram(s)
                                 <span v-if="zipPreviewFile" class="text-gray-500"> · {{ zipPreviewFile.name }}</span>
                             </p>
+                            <p class="mt-1 text-xs text-gray-500">
+                                Remove any question you do not want before saving. Only the remaining questions are published to the bank.
+                            </p>
                             <p
                                 v-if="zipPreview.missing_diagram_count > 0"
                                 class="mt-1 text-sm text-amber-800"
@@ -673,7 +717,7 @@ onMounted(() => {
                             </SecondaryButton>
                             <PrimaryButton
                                 type="button"
-                                :disabled="zipImportForm.processing || (isTopicScope && !selectedTopic)"
+                                :disabled="zipImportForm.processing || !zipPreview.question_count || (isTopicScope && !selectedTopic)"
                                 @click="confirmZipImport"
                             >
                                 {{ zipImportForm.processing ? 'Saving…' : `Save ${zipPreview.question_count} to bank` }}
@@ -683,13 +727,16 @@ onMounted(() => {
 
                     <div class="space-y-4">
                         <div
-                            v-for="q in zipPreview.questions"
+                            v-for="(q, previewPos) in zipPreview.questions"
                             :key="q.index"
                             class="rounded-lg border border-gray-200 p-4"
                         >
                             <div class="flex flex-wrap items-center justify-between gap-2">
-                                <p class="text-sm font-semibold text-gray-800">Q{{ q.index }}</p>
-                                <div class="flex flex-wrap gap-2 text-xs">
+                                <p class="text-sm font-semibold text-gray-800">
+                                    Q{{ previewPos + 1 }}
+                                    <span class="font-normal text-gray-400">(zip #{{ q.index }})</span>
+                                </p>
+                                <div class="flex flex-wrap items-center gap-2 text-xs">
                                     <span v-if="q.difficulty" class="rounded bg-slate-100 px-2 py-0.5 text-slate-700">{{ q.difficulty }}</span>
                                     <span v-if="q.topic_name" class="rounded bg-indigo-50 px-2 py-0.5 text-indigo-800">{{ q.topic_name }}</span>
                                     <span
@@ -700,6 +747,14 @@ onMounted(() => {
                                         v-else-if="q.needs_diagram"
                                         class="rounded bg-amber-50 px-2 py-0.5 text-amber-800"
                                     >diagram missing</span>
+                                    <DangerButton
+                                        type="button"
+                                        class="!px-2 !py-1 text-xs"
+                                        :disabled="zipImportForm.processing"
+                                        @click="removeZipPreviewQuestion(q.index)"
+                                    >
+                                        Remove
+                                    </DangerButton>
                                 </div>
                             </div>
 
@@ -736,7 +791,7 @@ onMounted(() => {
                         </SecondaryButton>
                         <PrimaryButton
                             type="button"
-                            :disabled="zipImportForm.processing || (isTopicScope && !selectedTopic)"
+                            :disabled="zipImportForm.processing || !zipPreview.question_count || (isTopicScope && !selectedTopic)"
                             @click="confirmZipImport"
                         >
                             {{ zipImportForm.processing ? 'Saving…' : `Confirm & save ${zipPreview.question_count} question(s)` }}

@@ -582,10 +582,13 @@ class QuestionController extends Controller
             'after_import' => ['nullable', 'in:written_sheet'],
             'written_sheet_kind' => ['nullable', 'in:practice,test'],
             'written_topic_scope' => ['nullable', 'in:one,multiple'],
+            'keep_indices' => ['nullable', 'array', 'min:1'],
+            'keep_indices.*' => ['integer', 'min:0'],
         ], [
             'pack.required' => 'Choose a .zip file containing questions.json and diagram images.',
             'pack.mimes' => 'Upload a .zip file (questions.json + JPG/PNG images).',
             'pack.max' => 'Zip file must be smaller than 50 MB.',
+            'keep_indices.min' => 'Keep at least one question before saving.',
         ]);
 
         $topic = ! empty($validated['syllabus_topic_id'])
@@ -595,6 +598,10 @@ class QuestionController extends Controller
             ? SyllabusChapter::query()->with('topics')->findOrFail($validated['syllabus_chapter_id'])
             : null;
 
+        $keepIndices = array_key_exists('keep_indices', $validated)
+            ? array_values(array_map('intval', $validated['keep_indices'] ?? []))
+            : null;
+
         try {
             $result = $this->zipImportService->importPack(
                 $request->file('pack'),
@@ -602,6 +609,7 @@ class QuestionController extends Controller
                 $topic,
                 $chapter,
                 QuestionBankPurpose::normalize($validated['bank_purpose'] ?? QuestionBankPurpose::PRACTICE_SET),
+                $keepIndices,
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
