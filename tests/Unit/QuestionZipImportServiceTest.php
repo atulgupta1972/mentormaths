@@ -62,6 +62,39 @@ class QuestionZipImportServiceTest extends TestCase
         $this->assertTrue($question->isFillInBlank());
     }
 
+    public function test_preview_pack_returns_questions_and_diagram_data_urls_without_saving(): void
+    {
+        $zipPath = $this->createSampleZip([
+            'questions' => [[
+                'topic' => 'Solving Equations',
+                'question' => 'In the figure, solve the equation. The value of x is ____.',
+                'needs_diagram' => true,
+                'diagram_file' => 'q1.png',
+                'answer_format' => 'integer',
+                'correct_answer' => '45',
+                'method_hint' => 'Multiply both sides by 5.',
+                'explanation' => 'x = 45. Final answer = 45',
+                'difficulty' => 'Hard',
+            ]],
+        ], [
+            'q1.png' => base64_decode(
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+                true,
+            ) ?: '',
+        ]);
+
+        $file = new UploadedFile($zipPath, 'pack.zip', 'application/zip', null, true);
+        $preview = app(QuestionZipImportService::class)->previewPack($file);
+
+        $this->assertSame(QuestionZipImportService::TYPE_FILL_IN_BLANK, $preview['type']);
+        $this->assertSame(1, $preview['question_count']);
+        $this->assertSame(1, $preview['diagram_count']);
+        $this->assertSame(0, $preview['missing_diagram_count']);
+        $this->assertTrue($preview['questions'][0]['has_diagram']);
+        $this->assertStringStartsWith('data:image/png;base64,', (string) $preview['questions'][0]['diagram_preview_url']);
+        $this->assertSame(0, Question::query()->count());
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @param  array<string, string>  $images

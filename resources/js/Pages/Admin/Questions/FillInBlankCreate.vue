@@ -118,6 +118,10 @@ const saveForm = useForm({
 });
 
 const zipPackInput = ref(null);
+const zipPreviewRef = ref(null);
+const zipPreviewing = ref(false);
+const zipPreviewFile = ref(null);
+const zipPreview = ref(null);
 const zipImportForm = useForm({
     pack: null,
     scope: scopeMode.value,
@@ -125,7 +129,17 @@ const zipImportForm = useForm({
     syllabus_topic_id: '',
 });
 
-const onZipPackSelected = (event) => {
+const clearZipPreview = () => {
+    zipPreviewFile.value = null;
+    zipPreview.value = null;
+    zipImportForm.pack = null;
+    zipImportForm.clearErrors();
+    if (zipPackInput.value) {
+        zipPackInput.value.value = '';
+    }
+};
+
+const onZipPackSelected = async (event) => {
     const file = event.target.files?.[0];
     if (!file) {
         return;
@@ -145,7 +159,62 @@ const onZipPackSelected = (event) => {
         return;
     }
 
-    zipImportForm.pack = file;
+    previewError.value = '';
+    zipPreviewing.value = true;
+    zipPreviewFile.value = file;
+    zipPreview.value = null;
+
+    const body = new FormData();
+    body.append('pack', file);
+
+    try {
+        const { data } = await window.axios.post(route('admin.questions.preview-zip-pack'), body, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        if (data.type !== 'fill_in_blank') {
+            previewError.value = `This zip looks like ${data.type_label || 'MCQ'} questions. Use the MCQ create page for that pack, or upload a fill-in-the-blank zip.`;
+            clearZipPreview();
+
+            return;
+        }
+
+        zipPreview.value = data;
+        nextTick(() => {
+            zipPreviewRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    } catch (error) {
+        const message = error?.response?.data?.message
+            || error?.response?.data?.errors?.pack?.[0]
+            || 'Could not read the zip pack.';
+        previewError.value = message;
+        clearZipPreview();
+    } finally {
+        zipPreviewing.value = false;
+        event.target.value = '';
+    }
+};
+
+const confirmZipImport = () => {
+    if (!zipPreviewFile.value) {
+        previewError.value = 'Choose a .zip pack first.';
+
+        return;
+    }
+
+    if (!chapterFilter.value) {
+        previewError.value = 'Select a chapter first.';
+
+        return;
+    }
+
+    if (isTopicScope.value && !selectedTopic.value) {
+        previewError.value = 'Select a topic first.';
+
+        return;
+    }
+
+    zipImportForm.pack = zipPreviewFile.value;
     zipImportForm.scope = scopeMode.value;
     zipImportForm.syllabus_chapter_id = isChapterScope.value ? chapterFilter.value : '';
     zipImportForm.syllabus_topic_id = isTopicScope.value ? selectedTopic.value : '';
@@ -155,9 +224,10 @@ const onZipPackSelected = (event) => {
         onError: (errors) => {
             previewError.value = errors.pack || errors.syllabus_chapter_id || errors.syllabus_topic_id || 'Could not import zip pack.';
         },
+        onSuccess: () => {
+            clearZipPreview();
+        },
     });
-
-    event.target.value = '';
 };
 
 const difficultySum = computed(
@@ -552,19 +622,19 @@ onMounted(() => {
                 <div v-if="chapterFilter" class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
                     <h3 class="font-semibold text-emerald-950">Quick import — one .zip file</h3>
                     <p class="mt-1 text-sm text-emerald-900">
-                        Upload a zip containing <strong>questions.json</strong> plus diagram images (<strong>q1.jpg</strong>, <strong>q2.jpg</strong>, … or names in <strong>diagram_file</strong>).
-                        Questions and diagrams are saved to the bank in one step.
+                        Upload a zip containing <strong>questions.json</strong> plus diagram images (<strong>q1.png</strong>, <strong>q2.jpg</strong>, … or names in <strong>diagram_file</strong>).
+                        First review what is in the pack, then save to the bank.
                     </p>
                     <p class="mt-2 text-xs text-emerald-800">
-                        Example zip layout: <span class="font-mono">questions.json, q1.jpg, q2.jpg, …</span>
+                        Example zip layout: <span class="font-mono">questions.json, q1.png, q2.png, …</span>
                     </p>
                     <div class="mt-4 flex flex-wrap items-center gap-3">
                         <PrimaryButton
                             type="button"
-                            :disabled="zipImportForm.processing || (isTopicScope && !selectedTopic)"
+                            :disabled="zipPreviewing || zipImportForm.processing || (isTopicScope && !selectedTopic)"
                             @click="zipPackInput?.click()"
                         >
-                            {{ zipImportForm.processing ? 'Importing…' : 'Upload .zip pack → save to bank' }}
+                            {{ zipPreviewing ? 'Reading zip…' : (zipPreview ? 'Choose another .zip' : 'Upload .zip pack → preview') }}
                         </PrimaryButton>
                         <InputError :message="zipImportForm.errors.pack" />
                     </div>
@@ -575,6 +645,103 @@ onMounted(() => {
                         class="hidden"
                         @change="onZipPackSelected"
                     />
+                </div>
+
+                <div
+                    v-if="zipPreview"
+                    ref="zipPreviewRef"
+                    class="rounded-lg border border-emerald-200 bg-white p-6 shadow-sm space-y-4"
+                >
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Zip preview — review before saving</h3>
+                            <p class="mt-1 text-sm text-gray-600">
+                                {{ zipPreview.question_count }} {{ zipPreview.type_label }} question(s)
+                                · {{ zipPreview.diagram_count }} diagram(s)
+                                <span v-if="zipPreviewFile" class="text-gray-500"> · {{ zipPreviewFile.name }}</span>
+                            </p>
+                            <p
+                                v-if="zipPreview.missing_diagram_count > 0"
+                                class="mt-1 text-sm text-amber-800"
+                            >
+                                Warning: {{ zipPreview.missing_diagram_count }} question(s) expect a diagram but no matching image was found in the zip.
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <SecondaryButton type="button" :disabled="zipImportForm.processing" @click="clearZipPreview">
+                                Cancel
+                            </SecondaryButton>
+                            <PrimaryButton
+                                type="button"
+                                :disabled="zipImportForm.processing || (isTopicScope && !selectedTopic)"
+                                @click="confirmZipImport"
+                            >
+                                {{ zipImportForm.processing ? 'Saving…' : `Save ${zipPreview.question_count} to bank` }}
+                            </PrimaryButton>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div
+                            v-for="q in zipPreview.questions"
+                            :key="q.index"
+                            class="rounded-lg border border-gray-200 p-4"
+                        >
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p class="text-sm font-semibold text-gray-800">Q{{ q.index }}</p>
+                                <div class="flex flex-wrap gap-2 text-xs">
+                                    <span v-if="q.difficulty" class="rounded bg-slate-100 px-2 py-0.5 text-slate-700">{{ q.difficulty }}</span>
+                                    <span v-if="q.topic_name" class="rounded bg-indigo-50 px-2 py-0.5 text-indigo-800">{{ q.topic_name }}</span>
+                                    <span
+                                        v-if="q.has_diagram"
+                                        class="rounded bg-emerald-50 px-2 py-0.5 text-emerald-800"
+                                    >diagram: {{ q.diagram_file }}</span>
+                                    <span
+                                        v-else-if="q.needs_diagram"
+                                        class="rounded bg-amber-50 px-2 py-0.5 text-amber-800"
+                                    >diagram missing</span>
+                                </div>
+                            </div>
+
+                            <div class="mt-3 grid gap-4 lg:grid-cols-2">
+                                <div class="space-y-2">
+                                    <p class="whitespace-pre-wrap text-sm text-gray-900">{{ q.question_text }}</p>
+                                    <p class="text-sm text-gray-700">
+                                        Answer
+                                        <span class="font-mono font-semibold text-emerald-900">({{ q.answer_format }})</span>:
+                                        <span class="font-mono font-semibold">{{ q.correct_answer }}</span>
+                                    </p>
+                                    <p v-if="q.method_hint" class="text-xs text-gray-500">Hint: {{ q.method_hint }}</p>
+                                </div>
+                                <div v-if="q.diagram_preview_url" class="rounded-md border border-gray-100 bg-slate-50 p-2">
+                                    <img
+                                        :src="q.diagram_preview_url"
+                                        :alt="`Diagram for question ${q.index}`"
+                                        class="mx-auto max-h-64 w-auto object-contain"
+                                    />
+                                </div>
+                                <div
+                                    v-else-if="q.needs_diagram"
+                                    class="flex items-center justify-center rounded-md border border-dashed border-amber-300 bg-amber-50 p-6 text-sm text-amber-900"
+                                >
+                                    Diagram expected but not found in zip
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4">
+                        <SecondaryButton type="button" :disabled="zipImportForm.processing" @click="clearZipPreview">
+                            Cancel
+                        </SecondaryButton>
+                        <PrimaryButton
+                            type="button"
+                            :disabled="zipImportForm.processing || (isTopicScope && !selectedTopic)"
+                            @click="confirmZipImport"
+                        >
+                            {{ zipImportForm.processing ? 'Saving…' : `Confirm & save ${zipPreview.question_count} question(s)` }}
+                        </PrimaryButton>
+                    </div>
                 </div>
 
                 <ChapterQuestionPlan

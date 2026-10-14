@@ -23,6 +23,7 @@ use App\Services\QuestionSaveConfirmation;
 use App\Services\QuestionZipImportService;
 use App\Support\PracticeSetMasterProfile;
 use App\Support\QuestionBankPurpose;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -549,6 +550,25 @@ class QuestionController extends Controller
                     ->value('syllabus_chapter_id'),
             ]))
             ->with('import_rows', $rows);
+    }
+
+    public function previewZipPack(Request $request): JsonResponse
+    {
+        $request->validate([
+            'pack' => ['required', 'file', 'mimes:zip', 'max:51200'],
+        ], [
+            'pack.required' => 'Choose a .zip file containing questions.json and diagram images.',
+            'pack.mimes' => 'Upload a .zip file (questions.json + JPG/PNG images).',
+            'pack.max' => 'Zip file must be smaller than 50 MB.',
+        ]);
+
+        try {
+            $preview = $this->zipImportService->previewPack($request->file('pack'));
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($preview);
     }
 
     public function importZipPack(Request $request): RedirectResponse

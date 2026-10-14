@@ -108,6 +108,94 @@ class QuestionZipImportService
     }
 
     /**
+     * Parse a zip pack for UI preview without saving questions.
+     *
+     * @return array{
+     *     type: string,
+     *     type_label: string,
+     *     question_count: int,
+     *     diagram_count: int,
+     *     missing_diagram_count: int,
+     *     questions: list<array<string, mixed>>
+     * }
+     */
+    public function previewPack(UploadedFile $zip): array
+    {
+        $extracted = $this->extract($zip);
+
+        try {
+            $questions = [];
+            $diagramCount = 0;
+            $missingDiagramCount = 0;
+
+            foreach ($extracted['rows'] as $index => $row) {
+                $rawItem = $extracted['items'][$index] ?? [];
+                $path = $extracted['diagram_paths'][$index] ?? null;
+                $needsDiagram = DiagramQuestionSupport::needsDiagram($rawItem)
+                    || ! empty($row['needs_diagram']);
+                $hasDiagram = is_string($path) && is_file($path);
+                $diagramPreviewUrl = null;
+                $diagramFile = null;
+
+                if ($hasDiagram) {
+                    $diagramCount++;
+                    $diagramFile = basename($path);
+                    $diagramPreviewUrl = $this->diagramDataUrl($path);
+                } elseif ($needsDiagram) {
+                    $missingDiagramCount++;
+                }
+
+                if ($extracted['type'] === self::TYPE_FILL_IN_BLANK) {
+                    $questions[] = [
+                        'index' => $index + 1,
+                        'question_text' => (string) ($row['question_text'] ?? ''),
+                        'topic_name' => (string) ($row['topic_name'] ?? ''),
+                        'answer_format' => (string) ($row['answer_format'] ?? ''),
+                        'correct_answer' => (string) ($row['correct_answer'] ?? ''),
+                        'difficulty' => (string) ($row['difficulty'] ?? ''),
+                        'method_hint' => (string) ($row['method_hint'] ?? ''),
+                        'explanation' => (string) ($row['explanation'] ?? ''),
+                        'needs_diagram' => $needsDiagram,
+                        'has_diagram' => $hasDiagram,
+                        'diagram_file' => $diagramFile,
+                        'diagram_preview_url' => $diagramPreviewUrl,
+                    ];
+
+                    continue;
+                }
+
+                $questions[] = [
+                    'index' => $index + 1,
+                    'question_text' => (string) ($row['question_text'] ?? ''),
+                    'topic_name' => (string) ($row['topic_name'] ?? ''),
+                    'options' => array_values($row['options'] ?? []),
+                    'correct_index' => $row['correct_index'] ?? null,
+                    'difficulty' => (string) ($row['difficulty'] ?? ''),
+                    'method_hint' => (string) ($row['method_hint'] ?? ''),
+                    'explanation' => (string) ($row['explanation'] ?? ''),
+                    'needs_diagram' => $needsDiagram,
+                    'has_diagram' => $hasDiagram,
+                    'diagram_file' => $diagramFile,
+                    'diagram_preview_url' => $diagramPreviewUrl,
+                ];
+            }
+
+            return [
+                'type' => $extracted['type'],
+                'type_label' => $extracted['type'] === self::TYPE_FILL_IN_BLANK
+                    ? 'fill-in-the-blank'
+                    : 'MCQ',
+                'question_count' => count($questions),
+                'diagram_count' => $diagramCount,
+                'missing_diagram_count' => $missingDiagramCount,
+                'questions' => $questions,
+            ];
+        } finally {
+            $this->cleanup($extracted['temp_dir']);
+        }
+    }
+
+    /**
      * @return array{
      *     type: string,
      *     rows: list<array<string, mixed>>,
@@ -331,6 +419,28 @@ class QuestionZipImportService
         }
 
         return preg_replace('/^```(?:json)?\s*/i', '', preg_replace('/\s*```$/', '', $json) ?? $json) ?? $json;
+    }
+
+    private function diagramDataUrl(string $path): ?string
+    {
+        $bytes = @file_get_contents($path);
+        if ($bytes === false || $bytes === '') {
+            return null;
+        }
+
+        // Keep preview payloads modest for browser JSON responses.
+        if (strlen($bytes) > 2_500_000) {
+            return null;
+        }
+
+        $mime = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            default => 'application/octet-stream',
+        };
+
+        return 'data:'.$mime.';base64,'.base64_encode($bytes);
     }
 
     private function cleanup(string $directory): void

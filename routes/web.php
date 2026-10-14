@@ -310,6 +310,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/questions/preview-fill-blank-import', [QuestionController::class, 'previewFillBlankImport'])->name('questions.preview-fill-blank-import');
     Route::post('/questions/bulk-store-fill-blank', [QuestionController::class, 'storeBulkFillBlank'])->name('questions.bulk-store-fill-blank');
     Route::post('/questions/preview-import', [QuestionController::class, 'previewImport'])->name('questions.preview-import');
+    Route::post('/questions/preview-zip-pack', [QuestionController::class, 'previewZipPack'])->name('questions.preview-zip-pack');
     Route::post('/questions/import-zip-pack', [QuestionController::class, 'importZipPack'])->name('questions.import-zip-pack');
     Route::post('/questions/extract-pdf', [QuestionController::class, 'extractPdf'])->name('questions.extract-pdf');
     Route::post('/questions/extract-pdf-worksheet', [QuestionController::class, 'extractPdfWorksheet'])->name('questions.extract-pdf-worksheet');
