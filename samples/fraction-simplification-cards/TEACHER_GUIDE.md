@@ -14,7 +14,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 - **Result:** `9/4`
 - **MCQ:** `Steps (2) and (3) are both correct`
 
-## Card 2. Same trap with a matching addend (Class 6+)
+## Card 2. Matching addend trap (Class 6+)
 
 - **Hook:** `(44+11)/11`
 - **Wrong cancel:** Cancel the two 11s → 44+1 = 45 (wrong).
@@ -22,7 +22,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 - **Result:** `5`
 - **MCQ:** `Steps (2) and (3) are both correct`
 
-## Card 3. Subtraction — same rule (Class 6+)
+## Card 3. Same idea with subtraction (Class 6+)
 
 - **Hook:** `(15-5)/5`
 - **Wrong cancel:** Cancel both 5s → 14 or 1 (both wrong).
@@ -30,7 +30,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 - **Result:** `2`
 - **MCQ:** `Steps (2) and (3) are both correct`
 
-## Card 4. Denominator divides every term (Class 6+)
+## Card 4. Cut must hit every term (Class 6+)
 
 - **Hook:** `(12+8)/4`
 - **Wrong cancel:** Cancel only 12 with 4 → 11 (wrong).
@@ -38,7 +38,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 - **Result:** `5`
 - **MCQ:** `Steps (2) and (3) are both correct`
 
-## Card 5. Three terms — cancel still illegal (Class 6–7)
+## Card 5. Three terms (Class 6–7)
 
 - **Hook:** `(6+9+3)/3`
 - **Wrong cancel:** Cancel the last 3 → 15 (wrong).
@@ -46,7 +46,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 - **Result:** `6`
 - **MCQ:** `Steps (2) and (3) are both correct`
 
-## Card 6. Golden rule — when cancel IS allowed (Class 6–7)
+## Card 6. When cutting is allowed (Class 6–7)
 
 - **Hook:** `2(7+1)/2 vs (2+7)/2`
 - **Wrong cancel:** Illegal cancel in a sum vs legal cancel of a factor.
@@ -54,7 +54,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 - **Result:** `8 vs 9/2`
 - **MCQ:** `Steps (1), (3) and (4) are correct; (2) is wrong`
 
-## Card 7. Algebra — split the fraction (Class 7–8)
+## Card 7. Algebra — split (Class 7–8)
 
 - **Hook:** `(4x+2)/2`
 - **Wrong cancel:** Cancel only the +2 → 4x+1 (wrong).
@@ -62,7 +62,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 - **Result:** `2x+1`
 - **MCQ:** `Steps (2) and (3) are both correct`
 
-## Card 8. Algebra — never cancel a variable in a sum (Class 7–8)
+## Card 8. Algebra — do not cut x in a sum (Class 7–8)
 
 - **Hook:** `(4x+2)/x`
 - **Wrong cancel:** Cancel x in 4x → claim 6 (classic trap).
@@ -70,7 +70,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 - **Result:** `4 + 2/x`
 - **MCQ:** `Steps (2) and (4) are correct; (1) and (3) are wrong`
 
-## Card 9. Algebra subtraction + factor path (Class 7–8)
+## Card 9. Algebra — subtract then factor (Class 7–8)
 
 - **Hook:** `(6x-3)/3`
 - **Wrong cancel:** Cancel only −3 → 6x−1 (wrong).
@@ -78,7 +78,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 - **Result:** `2x-1`
 - **MCQ:** `Steps (2) and (3) are both correct`
 
-## Card 10. Master card — factor vs illegal cancel (Class 8+)
+## Card 10. Master — factor then cut (Class 8+)
 
 - **Hook:** `(2x+2)/(x+1)`
 - **Wrong cancel:** Piece-cancel +2, or cancel x carelessly.
