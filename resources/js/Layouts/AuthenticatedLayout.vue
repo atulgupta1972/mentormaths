@@ -152,8 +152,15 @@ const contentGroup = computed(() => ({
         || route().current('admin.content-rate-cards.*')
         || route().current('admin.formula-bank.*')
         || route().current('admin.basics-drill.*')
-        || route().current('admin.mensuration-match.*'),
+        || route().current('admin.mensuration-match.*')
+        || route().current('admin.algebra-cards.*'),
     items: [
+        {
+            label: 'Algebra card',
+            href: safeRoute('admin.algebra-cards.index', undefined, '/admin/algebra-cards'),
+            active: route().current('admin.algebra-cards.*'),
+            show: isAdmin.value && route().has('admin.algebra-cards.index'),
+        },
         {
             label: 'Content coverage',
             href: route('admin.questions.coverage'),

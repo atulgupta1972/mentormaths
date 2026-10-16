@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AccessCodeController;
 use App\Http\Controllers\Admin\CoachingClassController;
 use App\Http\Controllers\Admin\AcademicYearController;
 use App\Http\Controllers\Admin\BasicsDrillSettingsController;
+use App\Http\Controllers\Admin\AlgebraCardController;
 use App\Http\Controllers\Admin\MensurationMatchSettingsController;
 use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ChapterHeadController;
@@ -479,6 +480,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::put('/mensuration-match/sheet', [MensurationMatchSettingsController::class, 'updateSheet'])->name('mensuration-match.sheet');
     Route::get('/mensuration-match/preview/{gradeLevel}', [MensurationMatchSettingsController::class, 'preview'])->name('mensuration-match.preview');
     Route::post('/mensuration-match/preview/answer', [MensurationMatchSettingsController::class, 'previewAnswer'])->name('mensuration-match.preview-answer');
+    Route::get('/algebra-cards', [AlgebraCardController::class, 'index'])->name('algebra-cards.index');
+    Route::get('/algebra-cards/{pack}/figures/{figure}', [AlgebraCardController::class, 'figure'])
+        ->where('figure', 'q([1-9]|10)\\.png')
+        ->name('algebra-cards.figure');
     Route::get('/formula-bank/classes/{grade}', [FormulaBankController::class, 'classShow'])->name('formula-bank.classes.show');
     Route::get('/formula-bank/topics/{topic}', [FormulaBankController::class, 'topicShow'])->name('formula-bank.topics.show');
     Route::post('/formula-bank/topics/{topic}/prompt', [FormulaBankController::class, 'topicPrompt'])->name('formula-bank.topics.prompt');
