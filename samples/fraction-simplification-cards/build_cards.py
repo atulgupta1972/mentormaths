@@ -530,12 +530,12 @@ def section_label(draw, x: int, y: int, step: str, title: str, color: str):
 
 
 def check_line_text(item: tuple) -> str:
-    """Plain text for quiz screen — full working, not only the final number."""
-    label = item[0]
+    """Plain text for quiz screen — always keep (1)/(2)/(3)/(4) prefix."""
+    label = str(item[0]).strip()
     result = item[-2] if isinstance(item[-2], str) else ""
-    # Avoid double label if result already starts with (n)
     text = result.strip()
-    if text.startswith("("):
+    # Only skip re-adding label if the line already begins with that exact step tag.
+    if text.startswith(f"{label} ") or text == label:
         return text
     return f"{label}  {text}".strip()
 
