@@ -199,6 +199,13 @@ const clearBank = (card) => {
                 </Link>
                 <Link
                     v-if="isAdmin"
+                    :href="route('admin.questions.pack-upload', { syllabus_chapter_id: chapter.id })"
+                    class="rounded-md border border-teal-300 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-950 hover:bg-teal-100"
+                >
+                    Upload pack
+                </Link>
+                <Link
+                    v-if="isAdmin"
                     :href="route('admin.questions.create-fill-in-blank', { syllabus_chapter_id: chapter.id })"
                     class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
                 >
@@ -635,6 +642,7 @@ const clearBank = (card) => {
                 <div v-if="!topicSetCards.length && !chapterPracticeBankCards.length && !chapterBankCards.length && !chapterTests?.length && !writtenSheets?.length" class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
                     No questions or sets in this chapter yet.
                     <span v-if="isAdmin">
+                        <Link :href="route('admin.questions.pack-upload', { syllabus_chapter_id: chapter.id })" class="text-teal-700 hover:underline">Upload pack</Link>
                         <Link :href="route('admin.questions.create-fill-in-blank', { syllabus_chapter_id: chapter.id })" class="text-emerald-700 hover:underline">Add fill in the blanks</Link>
                         or
                         <Link :href="route('admin.questions.create', { syllabus_chapter_id: chapter.id })" class="text-indigo-600 hover:underline">Add MCQs</Link>

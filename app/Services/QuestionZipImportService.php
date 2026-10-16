@@ -28,7 +28,7 @@ class QuestionZipImportService
 
     /**
      * @param  list<int>|null  $keepIndices  0-based indices to keep; null keeps all
-     * @return array{type: string, saved: list<Question>, diagram_count: int, missing_diagram_count: int, temp_dir: string}
+     * @return array{type: string, saved: list<Question>, diagram_count: int, missing_diagram_count: int, sheet_pdf_path: ?string, temp_dir: string}
      */
     public function importPack(
         UploadedFile $zip,
@@ -39,6 +39,7 @@ class QuestionZipImportService
         ?array $keepIndices = null,
     ): array {
         $extracted = $this->extract($zip);
+        $persistedPdfPath = null;
 
         try {
             if ($keepIndices !== null) {
@@ -105,13 +106,22 @@ class QuestionZipImportService
                 }
             }
 
+            $persistedPdfPath = $this->persistSheetPdf($extracted['sheet_pdf_path'] ?? null);
+
             return [
                 'type' => $extracted['type'],
                 'saved' => $saved,
                 'diagram_count' => $diagramCount,
                 'missing_diagram_count' => $missingDiagramCount,
+                'sheet_pdf_path' => $persistedPdfPath,
                 'temp_dir' => $extracted['temp_dir'],
             ];
+        } catch (\Throwable $e) {
+            if ($persistedPdfPath && is_file($persistedPdfPath)) {
+                @unlink($persistedPdfPath);
+            }
+
+            throw $e;
         } finally {
             $this->cleanup($extracted['temp_dir']);
         }
@@ -240,16 +250,18 @@ class QuestionZipImportService
                 ];
             }
 
-            return [
-                'type' => $extracted['type'],
-                'type_label' => $extracted['type'] === self::TYPE_FILL_IN_BLANK
-                    ? 'fill-in-the-blank'
-                    : 'MCQ',
-                'question_count' => count($questions),
-                'diagram_count' => $diagramCount,
-                'missing_diagram_count' => $missingDiagramCount,
-                'questions' => $questions,
-            ];
+        return [
+            'type' => $extracted['type'],
+            'type_label' => $extracted['type'] === self::TYPE_FILL_IN_BLANK
+                ? 'fill-in-the-blank'
+                : 'MCQ',
+            'question_count' => count($questions),
+            'diagram_count' => $diagramCount,
+            'missing_diagram_count' => $missingDiagramCount,
+            'has_sheet_pdf' => is_string($extracted['sheet_pdf_path'] ?? null)
+                && is_file($extracted['sheet_pdf_path']),
+            'questions' => $questions,
+        ];
         } finally {
             $this->cleanup($extracted['temp_dir']);
         }
@@ -261,6 +273,7 @@ class QuestionZipImportService
      *     rows: list<array<string, mixed>>,
      *     diagram_paths: array<int, string|null>,
      *     items: list<array<string, mixed>>,
+     *     sheet_pdf_path: ?string,
      *     temp_dir: string
      * }
      */
@@ -351,8 +364,66 @@ class QuestionZipImportService
             'rows' => $rows,
             'diagram_paths' => $diagramPaths,
             'items' => $rawItems,
+            'sheet_pdf_path' => $this->findSheetPdf($tempDir),
             'temp_dir' => $tempDir,
         ];
+    }
+
+    private function findSheetPdf(string $directory): ?string
+    {
+        $preferredNames = [
+            'sheet.pdf',
+            'worksheet.pdf',
+            'questions.pdf',
+            'written.pdf',
+            'paper.pdf',
+        ];
+
+        $pdfFiles = [];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+        );
+
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || strtolower($file->getExtension()) !== 'pdf') {
+                continue;
+            }
+
+            $pdfFiles[] = $file->getPathname();
+        }
+
+        if ($pdfFiles === []) {
+            return null;
+        }
+
+        foreach ($preferredNames as $name) {
+            foreach ($pdfFiles as $path) {
+                if (strtolower(basename($path)) === $name) {
+                    return $path;
+                }
+            }
+        }
+
+        usort($pdfFiles, fn (string $a, string $b) => strlen(basename($a)) <=> strlen(basename($b)));
+
+        return $pdfFiles[0];
+    }
+
+    private function persistSheetPdf(?string $sourcePath): ?string
+    {
+        if (! is_string($sourcePath) || ! is_file($sourcePath)) {
+            return null;
+        }
+
+        $destDir = storage_path('app/temp/written-pdf-import');
+        File::ensureDirectoryExists($destDir);
+        $destPath = $destDir.DIRECTORY_SEPARATOR.Str::uuid().'.pdf';
+
+        if (! @copy($sourcePath, $destPath)) {
+            return null;
+        }
+
+        return $destPath;
     }
 
     /**

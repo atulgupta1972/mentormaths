@@ -109,6 +109,45 @@ class PracticeSetService
     /**
      * @param  list<int>  $questionIds
      */
+    /**
+     * @param  list<int>  $questionIds
+     */
+    public function createTopicPracticeSet(
+        SyllabusTopic $topic,
+        array $questionIds,
+        int $userId,
+        string $tier = PracticeSetTier::STARTER,
+        string $status = Worksheet::STATUS_PUBLISHED,
+        bool $fillInBlank = false,
+    ): Worksheet {
+        $topic->loadMissing('chapter');
+        $tier = PracticeSetMasterProfile::isValid($tier) ? $tier : PracticeSetTier::STARTER;
+        $meta = $this->prepareForCreate($topic, $tier, count($questionIds), $fillInBlank);
+
+        $practiceSet = Worksheet::create([
+            'title' => $meta['title'],
+            'set_number' => $meta['set_number'],
+            'set_code' => $meta['set_code'],
+            'tier' => $tier,
+            'scope' => PracticeSetScope::TOPIC,
+            'syllabus_topic_id' => $topic->id,
+            'syllabus_chapter_id' => null,
+            'status' => $status,
+            'created_by' => $userId,
+        ]);
+
+        foreach ($questionIds as $index => $questionId) {
+            $practiceSet->questions()->attach($questionId, ['sort_order' => $index + 1]);
+        }
+
+        $practiceSet = $practiceSet->loadCount('questions');
+        if ($status === Worksheet::STATUS_PUBLISHED) {
+            $this->coverageService->assignNewWorksheetDueToday($practiceSet);
+        }
+
+        return $practiceSet;
+    }
+
     public function createChapterPracticeSet(
         SyllabusChapter $chapter,
         array $questionIds,
@@ -117,6 +156,7 @@ class PracticeSetService
         string $status = Worksheet::STATUS_PUBLISHED,
         bool $fillInBlank = false,
     ): Worksheet {
+        $tier = PracticeSetMasterProfile::isValid($tier) ? $tier : PracticeSetTier::STARTER;
         $setNumber = $this->nextChapterSetNumber($chapter->id);
         $setCode = $this->codeService->generateChapterPractice($chapter, $tier, $fillInBlank);
         $label = PracticeSetTier::label($tier);

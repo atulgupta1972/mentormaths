@@ -36,6 +36,7 @@ use App\Http\Controllers\Admin\TeacherRegistrationRequestController as AdminTeac
 use App\Http\Controllers\Admin\ConceptBuilderController;
 use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\PackUploadController;
 use App\Http\Controllers\Admin\WrittenSheetController;
 use App\Http\Controllers\Admin\WrittenReviewController;
 use App\Http\Controllers\ContentUploader\ChapterLibraryController;
@@ -302,6 +303,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/questions/create', [QuestionController::class, 'create'])->name('questions.create');
     Route::get('/questions/create-fill-in-blank', [QuestionController::class, 'createFillInBlank'])->name('questions.create-fill-in-blank');
+    Route::get('/questions/pack-upload', [PackUploadController::class, 'create'])->name('questions.pack-upload');
+    Route::post('/questions/pack-upload', [PackUploadController::class, 'store'])->name('questions.pack-upload.store');
     Route::get('/questions/create-mmp', [QuestionController::class, 'createMmp'])->name('questions.create-mmp');
     Route::post('/questions/mmp-upload-drafts', [QuestionController::class, 'uploadMmpDrafts'])->name('questions.mmp-upload-drafts');
     Route::post('/questions/mmp-remove-draft', [QuestionController::class, 'removeMmpDraft'])->name('questions.mmp-remove-draft');
