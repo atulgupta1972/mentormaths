@@ -28,6 +28,16 @@ const loadPackHref = computed(() => {
         sample_pack: props.selectedPack.sample_pack_key,
     });
 });
+
+const tryHref = computed(() => {
+    if (!props.selectedPack?.key) {
+        return null;
+    }
+    return route('admin.algebra-cards.try', {
+        pack: props.selectedPack.key,
+        restart: 1,
+    });
+});
 </script>
 
 <template>
@@ -90,17 +100,26 @@ const loadPackHref = computed(() => {
                                     <h3 class="text-lg font-semibold text-slate-900">{{ selectedPack.label }}</h3>
                                     <p class="mt-1 text-sm text-slate-600">{{ selectedPack.description }}</p>
                                 </div>
-                                <Link
-                                    v-if="loadPackHref"
-                                    :href="loadPackHref"
-                                    class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
-                                >
-                                    Load into question bank
-                                </Link>
+                                <div class="flex flex-wrap gap-2">
+                                    <Link
+                                        v-if="tryHref"
+                                        :href="tryHref"
+                                        class="rounded-md bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800"
+                                    >
+                                        Try as student
+                                    </Link>
+                                    <Link
+                                        v-if="loadPackHref"
+                                        :href="loadPackHref"
+                                        class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
+                                    >
+                                        Load into question bank
+                                    </Link>
+                                </div>
                             </div>
                             <p class="mt-3 text-xs text-slate-500">
-                                Preview the cards below. Use <span class="font-medium">Load into question bank</span>
-                                to import as an MCQ practice set on a chapter.
+                                Red diagonal marks = illegal cutting (as in your notebook). Green marks = legal factor cancel.
+                                Use <span class="font-medium">Try as student</span> to run the pack the way a student will see it.
                             </p>
                         </div>
 

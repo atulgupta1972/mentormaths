@@ -112,9 +112,68 @@ class AlgebraCardPack
                 'card_count' => 10,
                 'sample_pack_key' => SampleQuestionPack::FRACTION_SIMPLIFICATION_CARDS,
                 'diagrams_relative' => 'samples/fraction-simplification-cards/diagrams',
+                'questions_relative' => 'samples/fraction-simplification-cards/questions.json',
                 'guide_relative' => 'samples/fraction-simplification-cards/TEACHER_GUIDE.md',
             ],
         ];
+    }
+
+    /**
+     * Student-style playable cards (MCQ + figure) for admin try mode.
+     *
+     * @return list<array{
+     *     id: int,
+     *     title: string,
+     *     question: string,
+     *     options: list<string>,
+     *     correct_index: int,
+     *     explanation: string,
+     *     method_hint: string,
+     *     diagram_url: string|null
+     * }>
+     */
+    public static function playableCards(string $key): array
+    {
+        $pack = self::find($key);
+        if ($pack === null) {
+            return [];
+        }
+
+        $jsonPath = base_path((string) ($pack['questions_relative'] ?? ''));
+        if (! is_file($jsonPath)) {
+            return [];
+        }
+
+        $decoded = json_decode((string) file_get_contents($jsonPath), true);
+        $items = is_array($decoded['questions'] ?? null) ? $decoded['questions'] : [];
+        $cards = [];
+
+        foreach (array_values($items) as $index => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $id = $index + 1;
+            $filename = strtolower(basename((string) ($item['diagram_file'] ?? "q{$id}.png")));
+            $options = array_values(array_filter(array_map(
+                fn ($option) => trim((string) $option),
+                is_array($item['options'] ?? null) ? $item['options'] : [],
+            ), fn ($option) => $option !== ''));
+
+            $cards[] = [
+                'id' => $id,
+                'title' => self::cardTitle($key, $id),
+                'question' => trim((string) ($item['question'] ?? '')),
+                'options' => $options,
+                'correct_index' => (int) ($item['correct_index'] ?? 0),
+                'explanation' => trim((string) ($item['explanation'] ?? '')),
+                'method_hint' => trim((string) ($item['method_hint'] ?? '')),
+                'diagram_url' => self::figurePath($key, $filename)
+                    ? route('admin.algebra-cards.figure', ['pack' => $key, 'figure' => $filename])
+                    : null,
+            ];
+        }
+
+        return $cards;
     }
 
     /**

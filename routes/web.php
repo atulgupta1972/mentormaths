@@ -484,6 +484,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/algebra-cards/{pack}/figures/{figure}', [AlgebraCardController::class, 'figure'])
         ->where('figure', 'q([1-9]|10)\\.png')
         ->name('algebra-cards.figure');
+    Route::get('/algebra-cards/{pack}/try', [AlgebraCardController::class, 'tryPack'])->name('algebra-cards.try');
+    Route::post('/algebra-cards/{pack}/try', [AlgebraCardController::class, 'tryAnswer'])->name('algebra-cards.try-answer');
     Route::get('/formula-bank/classes/{grade}', [FormulaBankController::class, 'classShow'])->name('formula-bank.classes.show');
     Route::get('/formula-bank/topics/{topic}', [FormulaBankController::class, 'topicShow'])->name('formula-bank.topics.show');
     Route::post('/formula-bank/topics/{topic}/prompt', [FormulaBankController::class, 'topicPrompt'])->name('formula-bank.topics.prompt');
