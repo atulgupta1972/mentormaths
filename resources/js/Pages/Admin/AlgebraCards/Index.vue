@@ -118,8 +118,8 @@ const tryHref = computed(() => {
                                 </div>
                             </div>
                             <p class="mt-3 text-xs text-slate-500">
-                                Red diagonal marks = illegal cutting (as in your notebook). Green marks = legal factor cancel.
-                                Use <span class="font-medium">Try as student</span> to run the pack the way a student will see it.
+                                Each card: first Wrong &amp; Right, then the question.
+                                Use <span class="font-medium">Try as student</span> to run that flow.
                             </p>
                         </div>
 

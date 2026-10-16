@@ -18,6 +18,16 @@ const submitting = ref(false);
 const feedback = computed(() => props.play?.feedback || null);
 const showFeedback = computed(() => Boolean(feedback.value));
 const awaitingNext = computed(() => showFeedback.value && props.play?.status === 'in_progress');
+const isTeach = computed(() => props.play?.phase === 'teach');
+const isQuiz = computed(() => props.play?.phase === 'quiz');
+
+const goToQuiz = () => {
+    router.get(
+        route('admin.algebra-cards.try', { pack: props.pack.key }),
+        { to_quiz: 1 },
+        { preserveScroll: true },
+    );
+};
 
 const submitAnswer = () => {
     if (selected.value === null || selected.value === undefined) {
@@ -60,7 +70,7 @@ const continueNext = () => {
         <div class="py-8">
             <div class="mx-auto max-w-3xl space-y-5 px-4 sm:px-6 lg:px-8">
                 <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                    Admin check mode — this is how the student run looks. Answers are not saved to any student.
+                    Admin check mode — first Wrong &amp; Right, then the question. Not saved to any student.
                 </div>
 
                 <p v-if="flash.error" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
@@ -72,6 +82,8 @@ const continueNext = () => {
                         <p class="text-sm font-semibold text-slate-900">
                             <span v-if="play.status === 'completed'">Pack complete</span>
                             <span v-else>Card {{ play.index }} of {{ play.total }}</span>
+                            <span v-if="isTeach" class="ml-2 font-normal text-indigo-700">· Step 1: Learn</span>
+                            <span v-else-if="isQuiz" class="ml-2 font-normal text-indigo-700">· Step 2: Question</span>
                         </p>
                         <p class="text-sm text-slate-600">
                             Score {{ play.score }} / {{ play.answered || 0 }}
@@ -94,7 +106,7 @@ const continueNext = () => {
                     </div>
                 </div>
 
-                <!-- Feedback for previous answer -->
+                <!-- Feedback -->
                 <div
                     v-if="showFeedback"
                     class="rounded-xl border px-5 py-4 shadow-sm"
@@ -114,9 +126,6 @@ const continueNext = () => {
                     <p v-if="feedback.method_hint" class="mt-2 text-sm text-slate-700">
                         {{ feedback.method_hint }}
                     </p>
-                    <p v-if="feedback.explanation" class="mt-2 text-xs text-slate-600">
-                        {{ feedback.explanation }}
-                    </p>
                     <button
                         v-if="awaitingNext"
                         type="button"
@@ -133,7 +142,6 @@ const continueNext = () => {
                     class="rounded-xl border border-emerald-200 bg-white p-6 text-center shadow-sm"
                 >
                     <p class="text-lg font-semibold text-emerald-900">Done — {{ play.score }} / {{ play.total }}</p>
-                    <p class="mt-1 text-sm text-slate-600">This is the end of the student-style run for this pack.</p>
                     <div class="mt-4 flex flex-wrap justify-center gap-2">
                         <Link
                             :href="restart_url"
@@ -150,30 +158,61 @@ const continueNext = () => {
                     </div>
                 </div>
 
-                <!-- Current card (hide while reviewing feedback before continue, or show always) -->
+                <!-- STEP 1: Wrong + Right only -->
                 <div
-                    v-if="play.card && !awaitingNext"
+                    v-if="play.card && isTeach && !awaitingNext"
                     class="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
                 >
                     <div>
                         <p class="text-xs font-bold uppercase tracking-wide text-slate-500">
                             Card {{ play.card.id }} · {{ play.card.title }}
                         </p>
-                        <p class="mt-2 text-base text-slate-900">{{ play.card.question }}</p>
+                        <p class="mt-1 text-sm text-slate-600">
+                            First see what is wrong, then how to do it correctly.
+                        </p>
                     </div>
 
-                    <a
+                    <img
                         v-if="play.card.diagram_url"
-                        :href="play.card.diagram_url"
-                        target="_blank"
-                        class="block overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-2"
+                        :src="play.card.diagram_url"
+                        :alt="play.card.title"
+                        class="mx-auto w-full max-w-2xl rounded-lg border border-slate-100 object-contain"
                     >
-                        <img
-                            :src="play.card.diagram_url"
-                            :alt="play.card.title"
-                            class="mx-auto max-h-[28rem] w-full object-contain"
+
+                    <div class="flex justify-end">
+                        <button
+                            type="button"
+                            class="rounded-md bg-indigo-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-800"
+                            @click="goToQuiz"
                         >
-                    </a>
+                            Next: question →
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 2: MCQ on the same card -->
+                <div
+                    v-if="play.card && isQuiz && !awaitingNext"
+                    class="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Card {{ play.card.id }} · Question
+                        </p>
+                        <p class="mt-2 text-base font-medium text-slate-900">{{ play.card.question }}</p>
+                    </div>
+
+                    <div
+                        v-if="play.card.check_lines?.length"
+                        class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+                    >
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Steps to judge</p>
+                        <ul class="mt-2 space-y-1.5 text-sm text-slate-800">
+                            <li v-for="(line, i) in play.card.check_lines" :key="i" class="font-mono">
+                                {{ line }}
+                            </li>
+                        </ul>
+                    </div>
 
                     <div class="space-y-2">
                         <label
@@ -198,7 +237,14 @@ const continueNext = () => {
                         </label>
                     </div>
 
-                    <div class="flex justify-end">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <button
+                            type="button"
+                            class="text-sm font-medium text-slate-600 hover:text-slate-900"
+                            @click="router.get(route('admin.algebra-cards.try', { pack: pack.key }), { to_teach: 1 }, { preserveScroll: true })"
+                        >
+                            ← Back to wrong / right
+                        </button>
                         <button
                             type="button"
                             class="rounded-md bg-indigo-700 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-800 disabled:opacity-50"

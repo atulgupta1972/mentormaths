@@ -71,7 +71,16 @@ class AlgebraCardTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/AlgebraCards/Try')
                 ->where('play.status', 'in_progress')
+                ->where('play.phase', 'teach')
                 ->where('play.total', count($cards))
+                ->has('play.card.diagram_url')
+            );
+
+        $this->actingAs($admin)
+            ->get(route('admin.algebra-cards.try', ['pack' => $pack, 'to_quiz' => 1]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('play.phase', 'quiz')
                 ->has('play.card.options')
             );
 

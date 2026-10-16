@@ -34,7 +34,6 @@ class AlgebraCardController extends Controller
 
         return response()->file($path, [
             'Content-Type' => 'image/png',
-            // Bust browser cache when card art is regenerated.
             'Cache-Control' => 'public, max-age=300, must-revalidate',
         ]);
     }
@@ -56,31 +55,35 @@ class AlgebraCardController extends Controller
         }
 
         if ($request->boolean('restart') || ! $this->sessionMatches($request, $pack, count($cards))) {
-            $state = [
-                'pack' => $pack,
-                'index' => 0,
-                'score' => 0,
-                'answered' => 0,
-                'total' => count($cards),
-                'last_feedback' => null,
-            ];
+            $state = $this->freshState($pack, count($cards));
             $request->session()->put(self::PREVIEW_SESSION_KEY, $state);
         } else {
             $state = $request->session()->get(self::PREVIEW_SESSION_KEY);
-            if ($request->boolean('continue') && is_array($state)) {
+            if (! is_array($state)) {
+                $state = $this->freshState($pack, count($cards));
+                $request->session()->put(self::PREVIEW_SESSION_KEY, $state);
+            }
+
+            if ($request->boolean('to_quiz') && ($state['phase'] ?? '') === 'teach') {
+                $state['phase'] = 'quiz';
                 $state['last_feedback'] = null;
+                $request->session()->put(self::PREVIEW_SESSION_KEY, $state);
+            }
+
+            if ($request->boolean('to_teach') && ($state['phase'] ?? '') === 'quiz') {
+                $state['phase'] = 'teach';
+                $state['last_feedback'] = null;
+                $request->session()->put(self::PREVIEW_SESSION_KEY, $state);
+            }
+
+            if ($request->boolean('continue')) {
+                $state['last_feedback'] = null;
+                $state['phase'] = 'teach';
                 $request->session()->put(self::PREVIEW_SESSION_KEY, $state);
             }
         }
 
-        return $this->renderTry($meta, $cards, is_array($state) ? $state : [
-            'pack' => $pack,
-            'index' => 0,
-            'score' => 0,
-            'answered' => 0,
-            'total' => count($cards),
-            'last_feedback' => null,
-        ]);
+        return $this->renderTry($meta, $cards, $state);
     }
 
     public function tryAnswer(Request $request, string $pack): RedirectResponse
@@ -95,6 +98,10 @@ class AlgebraCardController extends Controller
         if (! is_array($state) || ($state['pack'] ?? null) !== $pack || $cards === []) {
             return redirect()
                 ->route('admin.algebra-cards.try', ['pack' => $pack, 'restart' => 1]);
+        }
+
+        if (($state['phase'] ?? '') !== 'quiz') {
+            return redirect()->route('admin.algebra-cards.try', ['pack' => $pack, 'to_quiz' => 1]);
         }
 
         $index = (int) ($state['index'] ?? 0);
@@ -120,9 +127,26 @@ class AlgebraCardController extends Controller
             'card_id' => $card['id'],
         ];
         $state['index'] = $index + 1;
+        $state['phase'] = 'teach';
         $request->session()->put(self::PREVIEW_SESSION_KEY, $state);
 
         return redirect()->route('admin.algebra-cards.try', ['pack' => $pack]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function freshState(string $pack, int $total): array
+    {
+        return [
+            'pack' => $pack,
+            'index' => 0,
+            'phase' => 'teach',
+            'score' => 0,
+            'answered' => 0,
+            'total' => $total,
+            'last_feedback' => null,
+        ];
     }
 
     /**
@@ -135,9 +159,9 @@ class AlgebraCardController extends Controller
         $index = (int) ($state['index'] ?? 0);
         $done = $index >= count($cards);
         $current = $done ? null : $cards[$index];
+        $phase = (string) ($state['phase'] ?? 'teach');
         $feedback = $state['last_feedback'] ?? null;
 
-        // After answering, show feedback against the card just completed.
         $feedbackCard = null;
         if (is_array($feedback) && isset($feedback['card_id'])) {
             $feedbackCard = collect($cards)->firstWhere('id', (int) $feedback['card_id']);
@@ -151,6 +175,7 @@ class AlgebraCardController extends Controller
             ],
             'play' => [
                 'status' => $done ? 'completed' : 'in_progress',
+                'phase' => $done ? 'done' : $phase,
                 'index' => min($index + 1, count($cards)),
                 'total' => count($cards),
                 'score' => (int) ($state['score'] ?? 0),
@@ -159,6 +184,7 @@ class AlgebraCardController extends Controller
                     'id' => $current['id'],
                     'title' => $current['title'],
                     'question' => $current['question'],
+                    'check_lines' => $current['check_lines'] ?? [],
                     'options' => $current['options'],
                     'diagram_url' => $current['diagram_url'],
                     'method_hint' => $current['method_hint'],

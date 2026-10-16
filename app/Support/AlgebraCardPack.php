@@ -125,6 +125,7 @@ class AlgebraCardPack
      *     id: int,
      *     title: string,
      *     question: string,
+     *     check_lines: list<string>,
      *     options: list<string>,
      *     correct_index: int,
      *     explanation: string,
@@ -158,11 +159,16 @@ class AlgebraCardPack
                 fn ($option) => trim((string) $option),
                 is_array($item['options'] ?? null) ? $item['options'] : [],
             ), fn ($option) => $option !== ''));
+            $checkLines = array_values(array_filter(array_map(
+                fn ($line) => trim((string) $line),
+                is_array($item['check_lines'] ?? null) ? $item['check_lines'] : [],
+            ), fn ($line) => $line !== ''));
 
             $cards[] = [
                 'id' => $id,
                 'title' => self::cardTitle($key, $id),
                 'question' => trim((string) ($item['question'] ?? '')),
+                'check_lines' => $checkLines,
                 'options' => $options,
                 'correct_index' => (int) ($item['correct_index'] ?? 0),
                 'explanation' => trim((string) ($item['explanation'] ?? '')),
