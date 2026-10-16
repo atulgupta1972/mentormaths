@@ -62,7 +62,7 @@ class AlgebraCardPack
                 'id' => $i,
                 'title' => self::cardTitle($key, $i),
                 'diagram_url' => is_file($path)
-                    ? route('admin.algebra-cards.figure', ['pack' => $key, 'figure' => $filename])
+                    ? route('admin.algebra-cards.figure', ['pack' => $key, 'figure' => $filename]).'?v='.filemtime($path)
                     : null,
             ];
         }
@@ -167,8 +167,8 @@ class AlgebraCardPack
                 'correct_index' => (int) ($item['correct_index'] ?? 0),
                 'explanation' => trim((string) ($item['explanation'] ?? '')),
                 'method_hint' => trim((string) ($item['method_hint'] ?? '')),
-                'diagram_url' => self::figurePath($key, $filename)
-                    ? route('admin.algebra-cards.figure', ['pack' => $key, 'figure' => $filename])
+                'diagram_url' => ($figPath = self::figurePath($key, $filename))
+                    ? route('admin.algebra-cards.figure', ['pack' => $key, 'figure' => $filename]).'?v='.filemtime($figPath)
                     : null,
             ];
         }

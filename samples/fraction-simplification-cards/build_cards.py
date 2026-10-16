@@ -442,11 +442,15 @@ def text_size(draw: ImageDraw.ImageDraw, text: str, fnt) -> tuple[int, int]:
     return box[2] - box[0], box[3] - box[1]
 
 
-def strike_box(draw: ImageDraw.ImageDraw, x0: int, y0: int, x1: int, y1: int, color: str, width: int = 3):
-    """Diagonal cancel mark through a glyph box (notebook style)."""
-    pad = 2
-    draw.line([(x0 - pad, y1 + pad), (x1 + pad, y0 - pad)], fill=color, width=width)
-    draw.line([(x0 - pad + 2, y1 + pad), (x1 + pad + 2, y0 - pad)], fill=color, width=1)
+def strike_box(draw: ImageDraw.ImageDraw, x0: int, y0: int, x1: int, y1: int, color: str, width: int = 6):
+    """Thick pen slash through a digit — how students cut/cancel in notebooks."""
+    # Extend past the digit so the cut is unmistakable.
+    pad_x, pad_y = 8, 10
+    a = (x0 - pad_x, y1 + pad_y)
+    b = (x1 + pad_x, y0 - pad_y)
+    # Main stroke + slight parallel stroke (felt-pen look)
+    draw.line([a, b], fill=color, width=width)
+    draw.line([(a[0] + 3, a[1]), (b[0] + 3, b[1])], fill=color, width=max(2, width - 3))
 
 
 def draw_fraction_with_cancels(
@@ -459,6 +463,7 @@ def draw_fraction_with_cancels(
     strike_color: str = "#dc2626",
     fnt=None,
     label: str = "",
+    strike_width: int = 6,
 ) -> int:
     """Draw a fraction; True parts get diagonal cancel strikes. Returns right edge x."""
     fnt = fnt or font(34)
@@ -474,7 +479,7 @@ def draw_fraction_with_cancels(
         return x + text_size(draw, result, fnt)[0]
 
     # measure numerator
-    gap = 4
+    gap = 6
     num_w = 0
     parts_meta = []
     for text, cancel in num_parts:
@@ -485,7 +490,7 @@ def draw_fraction_with_cancels(
 
     den_text, den_cancel = den if den else ("", False)
     den_w, den_h = text_size(draw, den_text, fnt) if den_text else (0, 0)
-    bar_w = max(num_w, den_w) + 12
+    bar_w = max(num_w, den_w) + 16
 
     # numerator
     nx = x + (bar_w - num_w) // 2
@@ -493,20 +498,20 @@ def draw_fraction_with_cancels(
     for text, cancel, tw, th in parts_meta:
         draw.text((nx, ny), text, fill="#0f172a", font=fnt)
         if cancel:
-            strike_box(draw, nx, ny + 4, nx + tw, ny + th - 2, strike_color, width=4)
+            strike_box(draw, nx, ny + 2, nx + tw, ny + th - 2, strike_color, width=strike_width)
         nx += tw + gap
 
     # bar
-    bar_y = y + max(th for *_, th in parts_meta) + 6
-    draw.line([(x, bar_y), (x + bar_w, bar_y)], fill="#0f172a", width=3)
+    bar_y = y + max(th for *_, th in parts_meta) + 8
+    draw.line([(x, bar_y), (x + bar_w, bar_y)], fill="#0f172a", width=4)
 
     # denominator
     dx = x + (bar_w - den_w) // 2
-    dy = bar_y + 8
+    dy = bar_y + 10
     if den_text:
         draw.text((dx, dy), den_text, fill="#0f172a", font=fnt)
         if den_cancel:
-            strike_box(draw, dx, dy + 4, dx + den_w, dy + den_h - 2, strike_color, width=4)
+            strike_box(draw, dx, dy + 2, dx + den_w, dy + den_h - 2, strike_color, width=strike_width)
 
     rx = x + bar_w + 16
     if result:
@@ -532,44 +537,53 @@ def draw_card_figure(card: dict, path: Path) -> None:
     draw.text((40, 28), f"Card {card['id']}: {card['title']}", fill="#0f172a", font=title_f)
     draw.text((40, 68), "Fraction simplification — wrong / right steps", fill="#64748b", font=small)
 
-    # WRONG panel
-    rounded_rect(draw, (28, 100, W - 28, 340), "#fef2f2", "#b91c1c", width=3)
-    draw.text((48, 118), "WRONG cancel  —  see the cutting marks", fill="#b91c1c", font=font_bold(22))
-    draw.text((48, 150), "Students cross numbers like this (illegal when + or − is between):", fill="#7f1d1d", font=small)
+    # WRONG panel — huge fraction with thick cut marks (student pen style)
+    rounded_rect(draw, (28, 100, W - 28, 360), "#fef2f2", "#b91c1c", width=3)
+    draw.text((48, 118), "WRONG — students cut the numbers like this", fill="#b91c1c", font=font_bold(24))
+    draw.text(
+        (48, 152),
+        "See the red lines through the digits (illegal when + or − is between them).",
+        fill="#7f1d1d",
+        font=small,
+    )
 
+    huge = font(56)
     draw_fraction_with_cancels(
-        draw, (80, 200),
+        draw, (100, 200),
         v["wrong_num"], v["wrong_den"],
         result=v.get("wrong_result", ""),
         strike_color="#dc2626",
-        fnt=big,
+        fnt=huge,
+        strike_width=9,
     )
+    draw.text((100, 320), "← cut / cancel marks (do NOT do this)", fill="#b91c1c", font=font_bold(20))
     # Big red X
-    draw.line([(W - 140, 180), (W - 70, 300)], fill="#dc2626", width=8)
-    draw.line([(W - 70, 180), (W - 140, 300)], fill="#dc2626", width=8)
+    draw.line([(W - 150, 190), (W - 70, 320)], fill="#dc2626", width=10)
+    draw.line([(W - 70, 190), (W - 150, 320)], fill="#dc2626", width=10)
 
     # RIGHT panel
-    rounded_rect(draw, (28, 360, W - 28, 620), "#f0fdf4", "#15803d", width=3)
-    draw.text((48, 378), "RIGHT ways", fill="#15803d", font=font_bold(22))
-    draw.text((48, 420), v["right_a"], fill="#14532d", font=body)
-    draw.text((48, 460), v["right_b"], fill="#14532d", font=body)
+    rounded_rect(draw, (28, 380, W - 28, 640), "#f0fdf4", "#15803d", width=3)
+    draw.text((48, 398), "RIGHT ways", fill="#15803d", font=font_bold(22))
+    draw.text((48, 440), v["right_a"], fill="#14532d", font=body)
+    draw.text((48, 480), v["right_b"], fill="#14532d", font=body)
 
     # Optional legal cancel demo
     if v.get("legal_num") and v.get("legal_den"):
-        draw.text((48, 510), "Legal cutting (common FACTOR of whole top):", fill="#166534", font=small)
+        draw.text((48, 530), "Legal cutting (common FACTOR of whole top):", fill="#166534", font=small)
         draw_fraction_with_cancels(
-            draw, (80, 545),
+            draw, (80, 565),
             v["legal_num"], v["legal_den"],
             result=v.get("legal_result", ""),
             strike_color="#16a34a",
-            fnt=font(32),
+            fnt=font(36),
+            strike_width=7,
         )
 
     # CHECK panel
-    rounded_rect(draw, (28, 640, W - 28, H - 70), "#eff6ff", "#1e3a8a", width=2)
-    draw.text((48, 658), f"Based on this, check true / false for {card['hook_plain']}", fill="#1e3a8a", font=font_bold(20))
+    rounded_rect(draw, (28, 660, W - 28, H - 70), "#eff6ff", "#1e3a8a", width=2)
+    draw.text((48, 678), f"Based on this, check true / false for {card['hook_plain']}", fill="#1e3a8a", font=font_bold(20))
 
-    y = 710
+    y = 730
     for item in v["checks"]:
         # support optional extra trailing strings in tuple
         label = item[0]
@@ -587,7 +601,7 @@ def draw_card_figure(card: dict, path: Path) -> None:
                 num, den_t,
                 result=result,
                 strike_color="#dc2626",
-                fnt=font(28),
+                fnt=font(30),
             )
         else:
             draw.text((100, y), result, fill="#0f172a", font=body)

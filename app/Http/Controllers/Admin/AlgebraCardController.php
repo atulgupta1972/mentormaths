@@ -34,7 +34,8 @@ class AlgebraCardController extends Controller
 
         return response()->file($path, [
             'Content-Type' => 'image/png',
-            'Cache-Control' => 'public, max-age=86400',
+            // Bust browser cache when card art is regenerated.
+            'Cache-Control' => 'public, max-age=300, must-revalidate',
         ]);
     }
 
