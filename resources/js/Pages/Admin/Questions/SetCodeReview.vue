@@ -24,7 +24,7 @@ const lookup = () => {
     router.get(route('admin.questions.set-code'), {
         code: searchCode.value.trim().toUpperCase(),
     }, {
-        preserveState: true,
+        preserveState: false,
         replace: true,
     });
 };
@@ -187,6 +187,8 @@ onMounted(() => {
                             <div class="text-right text-sm">
                                 <p class="font-semibold text-gray-800">{{ result.questions_count }} questions</p>
                                 <p v-if="result.is_fill_in_blank" class="mt-1 text-emerald-700">Fill-in-blank set</p>
+                                <p v-else-if="result.is_written" class="mt-1 text-amber-800">Written sheet</p>
+                                <p v-else class="mt-1 text-indigo-700">MCQ set</p>
                                 <Link
                                     v-if="result.review_url"
                                     :href="result.review_url"
@@ -194,11 +196,47 @@ onMounted(() => {
                                 >
                                     Open in question hub →
                                 </Link>
+                                <a
+                                    v-if="result.written_pdf_url"
+                                    :href="result.written_pdf_url"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="mt-1 block text-indigo-600 hover:underline"
+                                >
+                                    Open written PDF →
+                                </a>
                             </div>
                         </div>
                     </div>
 
-                    <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
+                    <div
+                        v-if="result.questions_restored"
+                        class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950"
+                    >
+                        This set was packaged with no questions attached. Matching questions from the topic bank are shown below and have been linked to
+                        <span class="font-mono font-semibold">{{ result.set_code }}</span>.
+                    </div>
+
+                    <div
+                        v-if="result.sibling_set"
+                        class="rounded-lg border border-indigo-100 bg-white px-4 py-3 text-sm text-gray-700"
+                    >
+                        <template v-if="result.is_fill_in_blank">
+                            MCQ practice for this chapter is
+                        </template>
+                        <template v-else>
+                            Fill-in-blank practice for this chapter is
+                        </template>
+                        <Link
+                            :href="route('admin.questions.set-code', { code: result.sibling_set.set_code })"
+                            class="font-mono font-semibold text-indigo-700 hover:underline"
+                        >
+                            {{ result.sibling_set.set_code }}
+                        </Link>
+                        ({{ result.sibling_set.questions_count }} questions).
+                    </div>
+
+                    <div class="overflow-x-auto bg-white shadow-sm sm:rounded-lg">
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="bg-gray-50">
                                 <tr>
@@ -214,7 +252,11 @@ onMounted(() => {
                                     <tr :id="`question-${question.id}`">
                                         <td class="px-4 py-3 align-top text-gray-500">{{ index + 1 }}</td>
                                         <td class="px-4 py-3 align-top">
-                                            <QuestionBody :question-text="question.question_text" :compact="true" />
+                                            <QuestionBody
+                                                :question-text="question.question_text"
+                                                :diagram-url="question.diagram_url"
+                                                :compact="true"
+                                            />
                                         </td>
                                         <td class="px-4 py-3 align-top">
                                             <span
@@ -346,6 +388,15 @@ onMounted(() => {
                                         </td>
                                     </tr>
                                 </template>
+                                <tr v-if="visibleQuestions.length === 0">
+                                    <td colspan="5" class="px-4 py-10 text-center text-sm text-gray-500">
+                                        <p class="font-medium text-gray-700">No questions in this set.</p>
+                                        <p class="mt-1">
+                                            Package questions from the chapter hub, or check the sibling set code
+                                            (SF for fill-in-blank, S for MCQ).
+                                        </p>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>

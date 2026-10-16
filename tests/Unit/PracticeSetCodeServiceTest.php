@@ -86,6 +86,18 @@ class PracticeSetCodeServiceTest extends TestCase
         $this->assertSame('T711', $service->generateChapterTest($chapter));
     }
 
+    public function test_code_looks_fill_in_blank_and_sibling_helpers(): void
+    {
+        $this->assertTrue(PracticeSetTier::codeLooksFillInBlank('SF721'));
+        $this->assertTrue(PracticeSetTier::codeLooksFillInBlank('bf721'));
+        $this->assertFalse(PracticeSetTier::codeLooksFillInBlank('S721'));
+        $this->assertFalse(PracticeSetTier::codeLooksFillInBlank('SW721'));
+        $this->assertTrue(PracticeSetTier::codeLooksWritten('SW721'));
+        $this->assertFalse(PracticeSetTier::codeLooksWritten('S721'));
+        $this->assertSame('SF721', PracticeSetTier::siblingFillBlankCode('S721'));
+        $this->assertSame('S721', PracticeSetTier::siblingFillBlankCode('SF721'));
+    }
+
     public function test_question_ids_are_all_fill_in_blank_helper(): void
     {
         [$chapter, $topic] = $this->seedChapterWithTopic();
