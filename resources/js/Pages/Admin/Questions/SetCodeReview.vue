@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import QuestionBody from '@/Components/QuestionBody.vue';
+import QuestionDiagram from '@/Components/QuestionDiagram.vue';
 import McqOptionLine from '@/Components/McqOptionLine.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
@@ -214,7 +215,15 @@ onMounted(() => {
                                     <tr :id="`question-${question.id}`">
                                         <td class="px-4 py-3 align-top text-gray-500">{{ index + 1 }}</td>
                                         <td class="px-4 py-3 align-top">
-                                            <QuestionBody :question-text="question.question_text" :compact="true" />
+                                            <QuestionBody
+                                                :question-text="question.question_text"
+                                                :diagram-url="question.diagram_url"
+                                                :compact="true"
+                                                :allow-zoom="true"
+                                            />
+                                            <p v-if="!question.diagram_url" class="mt-1 text-xs text-amber-700">
+                                                No figure attached
+                                            </p>
                                         </td>
                                         <td class="px-4 py-3 align-top">
                                             <span
@@ -265,6 +274,26 @@ onMounted(() => {
                                     </tr>
                                     <tr v-if="editingId === question.id && question.type === 'fill_in_blank'">
                                         <td colspan="5" class="bg-emerald-50 px-4 py-4">
+                                            <div
+                                                v-if="question.diagram_url"
+                                                class="mb-4 rounded-lg border border-emerald-200 bg-white p-3"
+                                            >
+                                                <p class="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                                                    Figure for this sum (click to enlarge)
+                                                </p>
+                                                <QuestionDiagram
+                                                    :url="question.diagram_url"
+                                                    size="md"
+                                                    :allow-zoom="true"
+                                                    class="mt-2"
+                                                />
+                                            </div>
+                                            <p
+                                                v-else
+                                                class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                                            >
+                                                No figure is attached to this question. Re-upload the zip with matching qN.png files if the equation should appear as an image.
+                                            </p>
                                             <div class="grid gap-4 lg:grid-cols-2">
                                                 <div class="space-y-3">
                                                     <div>

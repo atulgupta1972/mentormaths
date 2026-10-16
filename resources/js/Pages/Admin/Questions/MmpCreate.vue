@@ -267,6 +267,30 @@ const onFigureFilesSelected = (event) => {
     figureFiles.value = Array.from(event.target.files || []);
 };
 
+const figurePreviewByName = computed(() => {
+    const map = {};
+    figureFiles.value.forEach((file) => {
+        map[String(file.name || '').toLowerCase()] = URL.createObjectURL(file);
+    });
+    return map;
+});
+
+const previewDiagramUrl = (row, index) => {
+    const named = String(row.diagram_file || `q${index + 1}.png`).toLowerCase();
+    if (figurePreviewByName.value[named]) {
+        return figurePreviewByName.value[named];
+    }
+    const fallback = `q${index + 1}.png`;
+    return figurePreviewByName.value[fallback] || null;
+};
+
+const openFigurePreview = (row, index) => {
+    const url = previewDiagramUrl(row, index);
+    if (url) {
+        window.open(url, '_blank');
+    }
+};
+
 const saveSet = () => {
     if (!chapterFilter.value) {
         window.alert('Choose a chapter first.');
@@ -583,6 +607,21 @@ watch(
                                 <span v-if="row.needs_diagram" class="text-indigo-700"> · figure {{ row.diagram_file || `q${index + 1}.png` }}</span>
                             </p>
                             <p class="mt-1 text-slate-900">{{ row.question_text }}</p>
+                            <div v-if="previewDiagramUrl(row, index)" class="mt-2 rounded-md border border-white bg-white p-2">
+                                <p class="text-[11px] font-semibold uppercase text-indigo-800">Figure preview</p>
+                                <img
+                                    :src="previewDiagramUrl(row, index)"
+                                    :alt="row.diagram_file || `q${index + 1}`"
+                                    class="mt-1 max-h-48 max-w-full cursor-zoom-in rounded border border-slate-200 object-contain"
+                                    @click="openFigurePreview(row, index)"
+                                >
+                            </div>
+                            <p
+                                v-else-if="row.needs_diagram"
+                                class="mt-2 text-xs font-medium text-amber-800"
+                            >
+                                Figure needed ({{ row.diagram_file || `q${index + 1}.png` }}) — attach it above to preview here.
+                            </p>
                             <p v-if="row.figure_spec" class="mt-1 text-xs text-slate-600">Figure: {{ row.figure_spec }}</p>
                             <p class="mt-1 font-mono text-xs text-emerald-800">
                                 Answer: {{ row.correct_answer }}

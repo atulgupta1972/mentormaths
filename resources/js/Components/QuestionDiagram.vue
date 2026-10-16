@@ -20,6 +20,11 @@ const props = defineProps({
         default: 'md',
         validator: (value) => ['sm', 'md', 'lg'].includes(value),
     },
+    /** Admin review: click any size to enlarge */
+    allowZoom: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const zoomOpen = ref(false);
@@ -32,10 +37,12 @@ const resolvedSize = () => {
     return props.size;
 };
 
+const canZoom = () => props.allowZoom || resolvedSize() === 'lg';
+
 const sizeClass = () => {
     switch (resolvedSize()) {
     case 'sm':
-        return 'max-h-32 max-w-full';
+        return 'max-h-40 max-w-full';
     case 'lg':
         return 'max-h-[min(70vh,640px)] w-full cursor-zoom-in';
     default:
@@ -44,7 +51,7 @@ const sizeClass = () => {
 };
 
 const openZoom = () => {
-    if (resolvedSize() === 'lg') {
+    if (canZoom()) {
         zoomOpen.value = true;
     }
 };
@@ -57,7 +64,7 @@ const closeZoom = () => {
 <template>
     <figure v-if="url" class="my-3">
         <button
-            v-if="resolvedSize() === 'lg'"
+            v-if="canZoom()"
             type="button"
             class="block w-full text-left"
             @click="openZoom"
@@ -66,7 +73,7 @@ const closeZoom = () => {
                 :src="url"
                 :alt="alt"
                 class="rounded-lg border border-gray-200 bg-white object-contain shadow-sm transition hover:ring-2 hover:ring-indigo-200"
-                :class="sizeClass()"
+                :class="[sizeClass(), canZoom() ? 'cursor-zoom-in' : '']"
             />
         </button>
         <img
@@ -76,8 +83,8 @@ const closeZoom = () => {
             class="rounded-lg border border-gray-200 bg-white object-contain shadow-sm"
             :class="sizeClass()"
         />
-        <figcaption v-if="resolvedSize() === 'lg'" class="mt-1 text-xs text-gray-500">
-            Tap chart to enlarge
+        <figcaption v-if="canZoom()" class="mt-1 text-xs text-gray-500">
+            Click figure to enlarge
         </figcaption>
     </figure>
 

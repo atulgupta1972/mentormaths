@@ -140,6 +140,7 @@ class SetCodeLookupService
         return [
             'id' => $question->id,
             'question_text' => $question->question_text,
+            'diagram_url' => $question->diagram_url,
             'type' => $question->type,
             'type_label' => $question->isFillInBlank() ? 'Fill in blank' : 'MCQ',
             'answer_format' => $question->blankAnswer?->answer_format,

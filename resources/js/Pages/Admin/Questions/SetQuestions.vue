@@ -688,7 +688,13 @@ const generateHints = () => {
                             <tr v-for="(q, index) in questions" :key="q.id">
                                 <td class="px-4 py-3 text-gray-500">{{ index + 1 }}</td>
                                 <td class="px-4 py-3">
-                                    <QuestionBody :question-text="q.question_text" :diagram-url="q.diagram_url" :compact="true" />
+                                    <QuestionBody
+                                        :question-text="q.question_text"
+                                        :diagram-url="q.diagram_url"
+                                        :compact="true"
+                                        :allow-zoom="true"
+                                    />
+                                    <p v-if="!q.diagram_url" class="mt-1 text-xs text-amber-700">No figure</p>
                                     <p class="mt-1 text-xs text-gray-500">
                                         <span
                                             class="rounded-full px-1.5 py-0.5 font-medium"
@@ -723,10 +729,10 @@ const generateHints = () => {
                                     <div class="flex flex-col items-end gap-1 sm:flex-row sm:justify-end sm:gap-3">
                                         <Link
                                             v-if="q.type === 'fill_in_blank'"
-                                            :href="route('admin.questions.set-code', { code: practiceSet.set_code })"
+                                            :href="route('admin.questions.set-code', { code: practiceSet.set_code, question_id: q.id })"
                                             class="text-indigo-600 hover:text-indigo-800"
                                         >
-                                            Edit answer
+                                            Edit / view figure
                                         </Link>
                                         <Link v-else :href="route('admin.questions.edit', q.id)" class="text-indigo-600 hover:text-indigo-800">
                                             Edit

@@ -21,6 +21,11 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    /** Admin review: click diagram to enlarge */
+    allowZoom: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const stripEmbeddedChartTable = (text) => {
@@ -54,7 +59,12 @@ const diagramSize = computed(() => {
 
 <template>
     <div>
-        <QuestionDiagram :url="diagramUrl" :compact="compact" :size="diagramSize" />
+        <QuestionDiagram
+            :url="diagramUrl"
+            :compact="compact"
+            :size="diagramSize"
+            :allow-zoom="allowZoom || enlargeDiagram"
+        />
         <p
             v-if="displayQuestionText"
             class="whitespace-pre-wrap font-medium text-gray-900 [&_sup]:relative [&_sup]:top-[-0.35em] [&_sup]:text-[0.75em]"
