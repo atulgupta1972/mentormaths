@@ -14,8 +14,11 @@ use App\Services\QuestionZipImportService;
 use App\Services\WrittenSheetService;
 use App\Support\PracticeSetMasterProfile;
 use App\Support\QuestionBankPurpose;
+use App\Support\SampleQuestionPack;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -39,6 +42,7 @@ class PackUploadController extends Controller
         }
 
         $chapters = $this->chapterOptions($grade?->id);
+        $samplePackKey = (string) $request->query('sample_pack', '');
 
         return Inertia::render('Admin/Questions/PackUpload', [
             'chapters' => $chapters,
@@ -50,23 +54,34 @@ class PackUploadController extends Controller
             'selectedTopicId' => $topicId,
             'selectedGrade' => $grade?->only(['id', 'name']),
             'masterProfiles' => PracticeSetMasterProfile::options(),
+            'samplePacks' => SampleQuestionPack::options(),
+            'selectedSamplePack' => SampleQuestionPack::find($samplePackKey)['key'] ?? '',
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $sampleKeys = SampleQuestionPack::keys();
+
         $validated = $request->validate([
-            'pack' => ['required', 'file', 'mimes:zip', 'max:51200'],
+            'pack' => ['nullable', 'required_without:sample_pack', 'file', 'mimes:zip', 'max:51200'],
+            'sample_pack' => [
+                'nullable',
+                'required_without:pack',
+                'string',
+                $sampleKeys === [] ? 'prohibited' : Rule::in($sampleKeys),
+            ],
             'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
             'syllabus_topic_id' => ['nullable', 'exists:syllabus_topics,id'],
-            'output_type' => ['required', 'in:fill_in_blank,written'],
+            'output_type' => ['required', 'in:mcq,fill_in_blank,written'],
             'master_profile' => ['required', 'in:'.implode(',', PracticeSetMasterProfile::keys())],
             'notes' => ['nullable', 'string', 'max:2000'],
         ], [
-            'pack.required' => 'Choose a .zip with questions.json (and pictures / PDF if needed).',
+            'pack.required_without' => 'Choose a ready pack from the dropdown, or upload a .zip.',
+            'sample_pack.required_without' => 'Choose a ready pack from the dropdown, or upload a .zip.',
             'pack.mimes' => 'Upload a .zip file.',
             'master_profile.required' => 'Choose Learner, Achiever, or Expert.',
-            'output_type.required' => 'Choose fill-in-blank or written PDF.',
+            'output_type.required' => 'Choose MCQ, fill-in-blank, or written PDF.',
         ]);
 
         $chapter = SyllabusChapter::query()->with('topics')->findOrFail($validated['syllabus_chapter_id']);
@@ -80,13 +95,28 @@ class PackUploadController extends Controller
             }
         }
 
+        // Ready packs use teaching topic labels that won't match syllabus names —
+        // pin them to the chosen topic (or the chapter's first topic).
+        if ($topic === null && filled($validated['sample_pack'] ?? null)) {
+            $topic = $chapter->topics->sortBy('sort_order')->values()->first();
+            if (! $topic) {
+                return back()->with('error', 'Add at least one topic in this chapter before loading a ready pack.');
+            }
+        }
+
         $tier = $validated['master_profile'];
         $outputType = $validated['output_type'];
         $tierLabel = PracticeSetMasterProfile::profile($tier)['label'] ?? PracticeSetMasterProfile::options()[0]['label'] ?? $tier;
 
         try {
+            $packFile = $this->resolvePackFile($request, $validated['sample_pack'] ?? null);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        try {
             $result = $this->zipImportService->importPack(
-                $request->file('pack'),
+                $packFile,
                 $request->user(),
                 $topic,
                 $topic ? null : $chapter,
@@ -105,14 +135,19 @@ class PackUploadController extends Controller
             return back()->with('error', 'No questions could be imported from the zip.');
         }
 
-        if ($outputType === 'fill_in_blank') {
-            $nonFill = collect($saved)->first(fn (Question $question) => ! $question->isFillInBlank());
-            if ($nonFill) {
+        if ($outputType === 'mcq' || $outputType === 'fill_in_blank') {
+            $wantFill = $outputType === 'fill_in_blank';
+            $mismatch = collect($saved)->first(
+                fn (Question $question) => $wantFill ? ! $question->isFillInBlank() : ! $question->isMcq()
+            );
+            if ($mismatch) {
                 $this->forgetPersistedPdf($result['sheet_pdf_path'] ?? null);
 
                 return back()->with(
                     'error',
-                    'This zip is not fill-in-blank JSON. For fill-in-blank sets, each sum needs correct_answer (and answer_format).',
+                    $wantFill
+                        ? 'This zip is not fill-in-blank JSON. For fill-in-blank sets, each sum needs correct_answer (and answer_format).'
+                        : 'This zip is not MCQ JSON. For MCQ sets, each sum needs options and correct_index.',
                 );
             }
 
@@ -123,14 +158,14 @@ class PackUploadController extends Controller
                         $questionIds,
                         $request->user()->id,
                         $tier,
-                        fillInBlank: true,
+                        fillInBlank: $wantFill,
                     )
                     : $this->practiceSetService->createChapterPracticeSet(
                         $chapter,
                         $questionIds,
                         $request->user()->id,
                         $tier,
-                        fillInBlank: true,
+                        fillInBlank: $wantFill,
                     );
             } catch (\InvalidArgumentException $e) {
                 $this->forgetPersistedPdf($result['sheet_pdf_path'] ?? null);
@@ -140,10 +175,15 @@ class PackUploadController extends Controller
 
             $this->forgetPersistedPdf($result['sheet_pdf_path'] ?? null);
 
+            $formatLabel = $wantFill ? 'fill-in-blank' : 'MCQ';
             $message = count($questionIds).' sum(s) uploaded into '.$worksheet->set_code
-                ." ({$tierLabel} fill-in-blank).";
+                ." ({$tierLabel} {$formatLabel}).";
             if (($result['diagram_count'] ?? 0) > 0) {
                 $message .= " {$result['diagram_count']} diagram(s) attached.";
+            }
+            if (! empty($validated['sample_pack'])) {
+                $sampleLabel = SampleQuestionPack::find((string) $validated['sample_pack'])['label'] ?? 'Ready pack';
+                $message = $sampleLabel.': '.$message;
             }
 
             return redirect()
@@ -208,6 +248,28 @@ class PackUploadController extends Controller
         if (is_string($path) && is_file($path)) {
             @unlink($path);
         }
+    }
+
+    /**
+     * @throws \InvalidArgumentException
+     */
+    private function resolvePackFile(Request $request, ?string $samplePackKey): UploadedFile
+    {
+        if ($request->hasFile('pack')) {
+            return $request->file('pack');
+        }
+
+        $key = trim((string) $samplePackKey);
+        if ($key === '') {
+            throw new \InvalidArgumentException('Choose a ready pack from the dropdown, or upload a .zip.');
+        }
+
+        $path = SampleQuestionPack::absolutePath($key);
+        if ($path === null) {
+            throw new \InvalidArgumentException('That ready pack is missing on the server. Pull latest samples and try again.');
+        }
+
+        return new UploadedFile($path, basename($path), 'application/zip', null, true);
     }
 
     /**

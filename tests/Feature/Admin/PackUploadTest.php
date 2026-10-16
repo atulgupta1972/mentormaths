@@ -14,9 +14,11 @@ use App\Models\User;
 use App\Models\Worksheet;
 use App\Services\AdminGradeContext;
 use App\Support\PracticeSetTier;
+use App\Support\SampleQuestionPack;
 use App\Support\WorksheetDeliveryMode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 use ZipArchive;
@@ -39,7 +41,39 @@ class PackUploadTest extends TestCase
                 ->component('Admin/Questions/PackUpload')
                 ->where('selectedChapterId', $chapter->id)
                 ->has('masterProfiles', 3)
+                ->has('samplePacks')
             );
+    }
+
+    public function test_admin_can_load_fraction_simplification_ready_pack_as_mcq_set(): void
+    {
+        $this->withoutVite();
+        Storage::fake('public');
+
+        $zipPath = SampleQuestionPack::absolutePath(SampleQuestionPack::FRACTION_SIMPLIFICATION_CARDS);
+        if ($zipPath === null) {
+            $this->markTestSkipped('Fraction simplification sample zip is not present.');
+        }
+
+        [$admin, $grade, $chapter, $topic] = $this->seedContext();
+
+        $response = $this->actingAs($admin)
+            ->withSession([AdminGradeContext::SESSION_KEY => $grade->id])
+            ->post(route('admin.questions.pack-upload.store'), [
+                'sample_pack' => SampleQuestionPack::FRACTION_SIMPLIFICATION_CARDS,
+                'syllabus_chapter_id' => $chapter->id,
+                'syllabus_topic_id' => $topic->id,
+                'output_type' => 'mcq',
+                'master_profile' => PracticeSetTier::STARTER,
+            ]);
+
+        $worksheet = Worksheet::query()->first();
+        $this->assertNotNull($worksheet);
+        $this->assertSame(10, $worksheet->questions()->count());
+        $this->assertSame(10, Question::query()->where('type', Question::TYPE_MCQ)->count());
+        $this->assertGreaterThan(0, $worksheet->questions()->whereNotNull('diagram_path')->count());
+
+        $response->assertRedirect(route('admin.questions.sets.show', $worksheet));
     }
 
     public function test_admin_can_upload_fill_blank_pack_as_learner_set(): void

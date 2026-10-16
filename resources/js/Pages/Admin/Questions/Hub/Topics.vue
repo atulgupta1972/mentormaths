@@ -21,9 +21,21 @@ const props = defineProps({
     stats: Object,
     board: Object,
     masterProfiles: { type: Array, default: () => [] },
+    samplePacks: { type: Array, default: () => [] },
 });
 
 const isAdmin = computed(() => usePage().props.auth?.isAdmin ?? false);
+const readyPackKey = ref('');
+
+const goToReadyPack = () => {
+    if (!readyPackKey.value || !props.chapter?.id) {
+        return;
+    }
+    router.get(route('admin.questions.pack-upload', {
+        syllabus_chapter_id: props.chapter.id,
+        sample_pack: readyPackKey.value,
+    }));
+};
 const classListUrl = computed(() => questionHubClassUrl(props.gradeLevel?.id, props.board?.id));
 const formulaBankHref = computed(() => route('admin.formula-bank.chapters.show', props.chapter.id));
 const page = usePage();
@@ -189,7 +201,7 @@ const clearBank = (card) => {
                 <h2 class="text-xl font-semibold text-gray-800">Practice sets & chapter tests</h2>
                 <p class="mt-1 text-xs text-gray-500">Book sets: C5-MM-CH01-M / F1 / W1 · S821 = MCQ practice · SF821 = fill-in-blank · T821 = chapter test · S821-W = written · F711 = formula · MMP711 = Mentormaths Perfection</p>
             </div>
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <Link
                     v-if="isAdmin"
                     :href="route('admin.questions.set-code')"
@@ -197,6 +209,32 @@ const clearBank = (card) => {
                 >
                     Look up set code
                 </Link>
+                <div
+                    v-if="isAdmin && samplePacks.length"
+                    class="flex flex-wrap items-center gap-2 rounded-md border border-teal-300 bg-teal-50 px-2 py-1.5"
+                >
+                    <select
+                        v-model="readyPackKey"
+                        class="rounded-md border-teal-200 bg-white text-sm text-teal-950"
+                    >
+                        <option value="">Ready pack — first run…</option>
+                        <option
+                            v-for="pack in samplePacks"
+                            :key="pack.key"
+                            :value="pack.key"
+                        >
+                            {{ pack.label }}
+                        </option>
+                    </select>
+                    <button
+                        type="button"
+                        class="rounded-md bg-teal-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50"
+                        :disabled="!readyPackKey"
+                        @click="goToReadyPack"
+                    >
+                        Open
+                    </button>
+                </div>
                 <Link
                     v-if="isAdmin"
                     :href="route('admin.questions.pack-upload', { syllabus_chapter_id: chapter.id })"

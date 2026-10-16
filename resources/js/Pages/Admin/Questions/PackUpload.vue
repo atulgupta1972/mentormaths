@@ -14,20 +14,35 @@ const props = defineProps({
     selectedTopicId: { type: [Number, String, null], default: null },
     selectedGrade: { type: Object, default: null },
     masterProfiles: { type: Array, default: () => [] },
+    samplePacks: { type: Array, default: () => [] },
+    selectedSamplePack: { type: String, default: '' },
 });
 
 const page = usePage();
 const packInput = ref(null);
 const selectedPackName = ref('');
 
+const initialSample = props.selectedSamplePack || '';
+const initialSampleMeta = (props.samplePacks || []).find((pack) => pack.key === initialSample) || null;
+
 const form = useForm({
     pack: null,
+    sample_pack: initialSample,
     syllabus_chapter_id: props.selectedChapterId || '',
     syllabus_topic_id: props.selectedTopicId || '',
-    output_type: 'fill_in_blank',
+    output_type: initialSampleMeta?.default_output_type || 'fill_in_blank',
     master_profile: props.masterProfiles[0]?.value || '',
     notes: '',
 });
+
+const activeSamplePack = computed(
+    () => (props.samplePacks || []).find((pack) => pack.key === form.sample_pack) || null,
+);
+
+const canSubmit = computed(() => (
+    Boolean(form.syllabus_chapter_id)
+    && (Boolean(form.pack) || Boolean(form.sample_pack))
+));
 
 const topics = computed(() => {
     if (!form.syllabus_chapter_id) {
@@ -65,13 +80,32 @@ const onPackSelected = (event) => {
     const file = event.target.files?.[0] || null;
     form.pack = file;
     selectedPackName.value = file?.name || '';
+    if (file) {
+        form.sample_pack = '';
+    }
 };
+
+watch(() => form.sample_pack, (key) => {
+    const pack = (props.samplePacks || []).find((row) => row.key === key);
+    if (!pack) {
+        return;
+    }
+    form.pack = null;
+    selectedPackName.value = '';
+    if (packInput.value) {
+        packInput.value.value = '';
+    }
+    if (pack.default_output_type) {
+        form.output_type = pack.default_output_type;
+    }
+});
 
 const submit = () => {
     form.post(route('admin.questions.pack-upload.store'), {
         forceFormData: true,
         onSuccess: () => {
             form.pack = null;
+            form.sample_pack = '';
             selectedPackName.value = '';
             if (packInput.value) {
                 packInput.value.value = '';
@@ -90,7 +124,8 @@ const submit = () => {
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">Upload pack</h2>
                     <p class="mt-1 text-sm text-gray-500">
-                        Zip your JSON (+ pictures / PDF if needed). Choose fill-in-blank or written, pick Learner / Achiever / Expert — only the sums you upload are saved.
+                        Pick a ready pack from the dropdown (e.g. Fraction simplification cards), or upload your own zip.
+                        Choose MCQ / fill-in-blank / written, then Learner / Achiever / Expert.
                     </p>
                 </div>
                 <Link
@@ -161,8 +196,43 @@ const submit = () => {
                     </div>
 
                     <div>
+                        <InputLabel value="Ready pack (first run)" />
+                        <select
+                            v-model="form.sample_pack"
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                        >
+                            <option value="">None — upload my own zip</option>
+                            <option
+                                v-for="pack in samplePacks"
+                                :key="pack.key"
+                                :value="pack.key"
+                            >
+                                {{ pack.label }} ({{ pack.question_count }} sums)
+                            </option>
+                        </select>
+                        <p v-if="activeSamplePack" class="mt-1 text-xs text-teal-800">
+                            {{ activeSamplePack.description }}
+                            · Save as will default to {{ activeSamplePack.default_output_type === 'mcq' ? 'MCQ' : activeSamplePack.default_output_type }}.
+                        </p>
+                        <p v-else class="mt-1 text-xs text-gray-500">
+                            Use this to load built-in teaching packs without finding the zip file.
+                        </p>
+                        <InputError class="mt-1" :message="form.errors.sample_pack" />
+                    </div>
+
+                    <div>
                         <InputLabel value="Save as" />
-                        <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                        <div class="mt-2 grid gap-3 sm:grid-cols-3">
+                            <label
+                                class="flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3"
+                                :class="form.output_type === 'mcq' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200'"
+                            >
+                                <input v-model="form.output_type" type="radio" value="mcq" class="mt-1" />
+                                <span>
+                                    <span class="block text-sm font-semibold text-gray-900">MCQ set</span>
+                                    <span class="mt-0.5 block text-xs text-gray-600">Online — pick an option</span>
+                                </span>
+                            </label>
                             <label
                                 class="flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3"
                                 :class="form.output_type === 'fill_in_blank' ? 'border-emerald-400 bg-emerald-50' : 'border-gray-200'"
@@ -170,7 +240,7 @@ const submit = () => {
                                 <input v-model="form.output_type" type="radio" value="fill_in_blank" class="mt-1" />
                                 <span>
                                     <span class="block text-sm font-semibold text-gray-900">Fill-in-blank set</span>
-                                    <span class="mt-0.5 block text-xs text-gray-600">Online practice — students type answers</span>
+                                    <span class="mt-0.5 block text-xs text-gray-600">Online — type answers</span>
                                 </span>
                             </label>
                             <label
@@ -179,8 +249,8 @@ const submit = () => {
                             >
                                 <input v-model="form.output_type" type="radio" value="written" class="mt-1" />
                                 <span>
-                                    <span class="block text-sm font-semibold text-gray-900">Written PDF sheet</span>
-                                    <span class="mt-0.5 block text-xs text-gray-600">Print / upload work — uses your PDF if in the zip</span>
+                                    <span class="block text-sm font-semibold text-gray-900">Written PDF</span>
+                                    <span class="mt-0.5 block text-xs text-gray-600">Print / upload work</span>
                                 </span>
                             </label>
                         </div>
@@ -209,17 +279,20 @@ const submit = () => {
                     </div>
 
                     <div>
-                        <InputLabel value="Zip pack" />
+                        <InputLabel value="Or upload your own zip" />
                         <div class="mt-2 flex flex-wrap items-center gap-3">
                             <button
                                 type="button"
                                 class="rounded-md border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-900 hover:bg-indigo-100"
+                                :disabled="Boolean(form.sample_pack)"
                                 @click="packInput?.click()"
                             >
                                 Choose .zip
                             </button>
                             <span class="text-sm text-gray-600">
-                                {{ selectedPackName || 'No file chosen' }}
+                                {{ form.sample_pack
+                                    ? `Using ready pack: ${activeSamplePack?.label || form.sample_pack}`
+                                    : (selectedPackName || 'No file chosen') }}
                             </span>
                         </div>
                         <input
@@ -249,8 +322,8 @@ const submit = () => {
                     </div>
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
-                        <PrimaryButton :disabled="form.processing || !form.pack || !form.syllabus_chapter_id">
-                            {{ form.processing ? 'Uploading…' : 'Upload sums' }}
+                        <PrimaryButton :disabled="form.processing || !canSubmit">
+                            {{ form.processing ? 'Uploading…' : (form.sample_pack ? 'Load ready pack' : 'Upload sums') }}
                         </PrimaryButton>
                     </div>
                 </form>
