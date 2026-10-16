@@ -1,0 +1,184 @@
+{
+  "questions": [
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 1 — Cancel trap — numbers in a sum. Study the figure for (4+5)/4. Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q1.png",
+      "figure_spec": "Teaching card: illegal cancel for (4+5)/4, two correct methods, four check lines. Wrong: Cancel both 4s → left with 5 (illegal).",
+      "options": [
+        "Only step (1) is correct",
+        "Only step (2) is correct",
+        "Steps (2) and (3) are both correct",
+        "Steps (1) and (4) are both correct"
+      ],
+      "correct_index": 2,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "The bar means the whole numerator is divided by 4. So (4+5)/4 = 4/4 + 5/4 = 1 + 5/4 = 9/4, not 5. True steps: [2, 3]. False traps: [1, 4]. Simplified result: 9/4. Final answer = option C",
+      "difficulty": "Easy"
+    },
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 2 — Same trap with a matching addend. Study the figure for (44+11)/11. Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q2.png",
+      "figure_spec": "Teaching card: illegal cancel for (44+11)/11, two correct methods, four check lines. Wrong: Cancel the two 11s → 44+1 = 45 (very common, still wrong).",
+      "options": [
+        "Steps (1) and (4) are wrong; only (2) is correct",
+        "Only step (2) is correct",
+        "Steps (2) and (3) are both correct",
+        "All four steps are correct"
+      ],
+      "correct_index": 2,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "11 divides the whole sum 44+11. Correct: 55/11 = 5, or 44/11 + 11/11 = 4+1 = 5. Never 45. True steps: [2, 3]. False traps: [1, 4]. Simplified result: 5. Final answer = option C",
+      "difficulty": "Easy"
+    },
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 3 — Subtraction — same rule. Study the figure for (15-5)/5. Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q3.png",
+      "figure_spec": "Teaching card: illegal cancel for (15-5)/5, two correct methods, four check lines. Wrong: Cancel both 5s → 15−1 = 14, or just 1 (both wrong).",
+      "options": [
+        "Only step (1) is correct",
+        "Steps (2) and (3) are both correct",
+        "Only step (4) is correct",
+        "Steps (1) and (4) are both correct"
+      ],
+      "correct_index": 1,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "Minus does not allow cancel of a single term. (15−5)/5 = 10/5 = 2, or 15/5 − 5/5 = 3−1 = 2. True steps: [2, 3]. False traps: [1, 4]. Simplified result: 2. Final answer = option B",
+      "difficulty": "Easy"
+    },
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 4 — Denominator divides every term. Study the figure for (12+8)/4. Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q4.png",
+      "figure_spec": "Teaching card: illegal cancel for (12+8)/4, two correct methods, four check lines. Wrong: Cancel only 12 with 4 → 3+8 = 11 (wrong).",
+      "options": [
+        "Steps (1) and (4) are correct",
+        "Only step (2) is correct",
+        "Steps (2) and (3) are both correct",
+        "Only step (3) is correct"
+      ],
+      "correct_index": 2,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "4 must divide both 12 and 8. 12/4 + 8/4 = 3+2 = 5, or (12+8)/4 = 20/4 = 5. True steps: [2, 3]. False traps: [1, 4]. Simplified result: 5. Final answer = option C",
+      "difficulty": "Easy"
+    },
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 5 — Three terms — cancel still illegal. Study the figure for (6+9+3)/3. Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q5.png",
+      "figure_spec": "Teaching card: illegal cancel for (6+9+3)/3, two correct methods, four check lines. Wrong: Cancel the last 3 with the denominator → 6+9 = 15 (wrong).",
+      "options": [
+        "Only step (1) is correct",
+        "Steps (2) and (3) are both correct",
+        "Only step (4) is correct",
+        "All steps are correct"
+      ],
+      "correct_index": 1,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "Every term is divided by 3: 6/3 + 9/3 + 3/3 = 2+3+1 = 6. Or add first: 18/3 = 6. True steps: [2, 3]. False traps: [1, 4]. Simplified result: 6. Final answer = option B",
+      "difficulty": "Medium"
+    },
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 6 — Golden rule — when cancel IS allowed. Study the figure for 2(7+1)/2 vs (2+7)/2. Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q6.png",
+      "figure_spec": "Teaching card: illegal cancel for 2(7+1)/2 vs (2+7)/2, two correct methods, four check lines. Wrong: Students mix factor-cancel with sum-cancel.",
+      "options": [
+        "Only step (1) is correct",
+        "Steps (1), (3) and (4) are correct; (2) is wrong",
+        "Steps (1) and (2) are both correct",
+        "Only step (2) is correct"
+      ],
+      "correct_index": 1,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "Cancel only a common FACTOR of the whole top and bottom. 2(7+1)/2 → cancel factor 2 → 8 is legal. (2+7)/2 cannot cancel the 2; correct value is 9/2. True steps: [1, 3, 4]. False traps: [2]. Simplified result: 8 vs 9/2. Final answer = option B",
+      "difficulty": "Medium"
+    },
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 7 — Algebra — split the fraction. Study the figure for (4x+2)/2. Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q7.png",
+      "figure_spec": "Teaching card: illegal cancel for (4x+2)/2, two correct methods, four check lines. Wrong: Cancel only the +2 with denominator 2 → 4x+1 (wrong).",
+      "options": [
+        "Only step (1) is correct",
+        "Steps (2) and (3) are both correct",
+        "Only step (4) is correct",
+        "Steps (1) and (2) are both correct"
+      ],
+      "correct_index": 1,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "Split: 4x/2 + 2/2 = 2x + 1. Or factor: 2(2x+1)/2 = 2x+1. Cancelling only one term is illegal. True steps: [2, 3]. False traps: [1, 4]. Simplified result: 2x+1. Final answer = option B",
+      "difficulty": "Medium"
+    },
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 8 — Algebra — never cancel a variable in a sum. Study the figure for (4x+2)/x. Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q8.png",
+      "figure_spec": "Teaching card: illegal cancel for (4x+2)/x, two correct methods, four check lines. Wrong: Cancel x in 4x with denominator x → 4+2 = 6 (classic trap).",
+      "options": [
+        "Only step (1) is correct",
+        "Steps (2) and (4) are correct; (1) and (3) are wrong",
+        "Only step (3) is correct",
+        "All four steps are correct"
+      ],
+      "correct_index": 1,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "x is not a factor of the whole numerator. Correct: 4x/x + 2/x = 4 + 2/x. Not 6. Check x=2: left side is 5, so '6' fails. True steps: [2, 4]. False traps: [1, 3]. Simplified result: 4 + 2/x. Final answer = option B",
+      "difficulty": "Medium"
+    },
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 9 — Algebra subtraction + factor path. Study the figure for (6x-3)/3. Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q9.png",
+      "figure_spec": "Teaching card: illegal cancel for (6x-3)/3, two correct methods, four check lines. Wrong: Cancel only −3 with 3 → 6x−1 (wrong).",
+      "options": [
+        "Only step (1) is correct",
+        "Steps (2) and (3) are both correct",
+        "Only step (4) is correct",
+        "Steps (1) and (4) are both correct"
+      ],
+      "correct_index": 1,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "Split: 6x/3 − 3/3 = 2x − 1. Or factor: 3(2x−1)/3 = 2x−1. True steps: [2, 3]. False traps: [1, 4]. Simplified result: 2x-1. Final answer = option B",
+      "difficulty": "Medium"
+    },
+    {
+      "type": "mcq",
+      "topic": "Fraction simplification (cancel traps)",
+      "question": "Card 10 — Master card — factor vs illegal cancel. Study the figure for (2x+2)/(x+1). Which statement about steps (1)–(4) is correct?",
+      "needs_diagram": true,
+      "diagram_file": "q10.png",
+      "figure_spec": "Teaching card: illegal cancel for (2x+2)/(x+1), two correct methods, four check lines. Wrong: Piece-cancel the +2, or cancel x terms carelessly.",
+      "options": [
+        "Only step (1) is correct",
+        "Steps (2) and (3) are correct; (1) is wrong; (4) method is illegal",
+        "All four steps use legal methods",
+        "Only step (4) is a safe method"
+      ],
+      "correct_index": 1,
+      "method_hint": "Cancel only a common factor of the WHOLE numerator and denominator. If the numerator is a sum/difference, split the fraction or factor first.",
+      "explanation": "Factor numerator: 2(x+1)/(x+1) = 2 (for x ≠ −1). You may cancel the common factor (x+1), not random pieces of the sum. Cancelling x terms 'to get 2' is illegal method (fails at x=0). True steps: [2, 3]. False traps: [1, 4]. Simplified result: 2. Final answer = option B",
+      "difficulty": "Hard"
+    }
+  ]
+}
