@@ -487,16 +487,43 @@ class QuestionController extends Controller
         ]);
     }
 
+    public function unpackMmpPack(Request $request): JsonResponse
+    {
+        $request->validate([
+            'pack' => ['required', 'file', 'mimes:zip', 'max:51200'],
+        ], [
+            'pack.required' => 'Choose a .zip with questions.json and q1.png… figures.',
+            'pack.mimes' => 'Upload a .zip file (questions.json + PNG/JPG figures).',
+            'pack.max' => 'Zip file must be smaller than 50 MB.',
+        ]);
+
+        try {
+            $preview = $this->mmpImportService->unpackPackForPreview($request->file('pack'));
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Could not read the zip pack.'], 422);
+        }
+
+        return response()->json($preview);
+    }
+
     public function storeMmp(Request $request): RedirectResponse
     {
         $validated = $request->validate([
             'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
             'seed' => ['nullable', 'string', 'max:20000'],
-            'json' => ['required', 'string'],
+            'json' => ['nullable', 'required_without:pack', 'string'],
+            'pack' => ['nullable', 'file', 'mimes:zip', 'max:51200'],
             'question_format' => ['nullable', 'in:'.implode(',', \App\Services\MmpImportService::formats())],
             'diagrams' => ['nullable', 'array', 'max:20'],
             'diagrams.*' => ['file', 'max:8192', 'extensions:jpg,jpeg,png,webp'],
         ], [
+            'json.required_without' => 'Paste the AI JSON, or upload a pack zip that contains questions.json.',
+            'pack.mimes' => 'Upload a .zip file (questions.json + PNG/JPG figures).',
+            'pack.max' => 'Zip file must be smaller than 50 MB.',
             'diagrams.max' => 'You can attach at most 20 AI figure files (one per sum).',
             'diagrams.*.extensions' => 'AI figure files must be JPG, PNG, or WebP.',
             'diagrams.*.max' => 'Each AI figure must be smaller than 8 MB.',
@@ -516,8 +543,20 @@ class QuestionController extends Controller
             $diagramsByName[strtolower($file->getClientOriginalName())] = $file;
         }
 
+        $packTempDir = null;
+
         try {
-            $rows = $this->mmpImportService->parseJson($validated['json']);
+            $json = (string) ($validated['json'] ?? '');
+            if ($request->hasFile('pack')) {
+                $unpacked = $this->mmpImportService->unpackPack($request->file('pack'));
+                $packTempDir = $unpacked['temp_dir'];
+                $json = $unpacked['json'];
+                foreach ($unpacked['diagrams_by_name'] as $name => $file) {
+                    $diagramsByName[strtolower($name)] = $file;
+                }
+            }
+
+            $rows = $this->mmpImportService->parseJson($json);
             $result = $this->mmpImportService->saveSet(
                 $chapter,
                 $rows,
@@ -527,12 +566,17 @@ class QuestionController extends Controller
                 $questionFormat,
             );
         } catch (\InvalidArgumentException $e) {
+            $this->mmpImportService->cleanupPackTemp($packTempDir);
+
             return back()->with('error', $e->getMessage())->withInput();
         } catch (\Throwable $e) {
+            $this->mmpImportService->cleanupPackTemp($packTempDir);
             report($e);
 
             return back()->with('error', 'Could not save the MMP set. '.$e->getMessage())->withInput();
         }
+
+        $this->mmpImportService->cleanupPackTemp($packTempDir);
 
         $worksheet = $result['worksheet'];
         $this->forgetMmpDraftSession($request->user()->id);

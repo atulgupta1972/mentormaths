@@ -5,7 +5,8 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, nextTick, ref, watch } from 'vue';
+import axios from 'axios';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 const props = defineProps({
     chapters: { type: Array, default: () => [] },
@@ -66,6 +67,12 @@ const saveForm = useForm({
 
 const figureFiles = ref([]);
 const figureInput = ref(null);
+const packFile = ref(null);
+const packInput = ref(null);
+const diagramUrlByName = ref({});
+const packBusy = ref(false);
+const packError = ref('');
+const objectUrls = ref([]);
 
 const hasDrafts = computed(() => (props.draftFiles || []).length > 0);
 const figureNeedingCount = computed(() => previewRows.value.filter((row) => row.needs_diagram).length);
@@ -263,26 +270,78 @@ const copyPrompt = async () => {
     }
 };
 
-const onFigureFilesSelected = (event) => {
-    figureFiles.value = Array.from(event.target.files || []);
+const revokeObjectUrls = () => {
+    objectUrls.value.forEach((url) => URL.revokeObjectURL(url));
+    objectUrls.value = [];
 };
 
-const figurePreviewByName = computed(() => {
-    const map = {};
+const rebuildDiagramUrlMap = (packUrls = {}) => {
+    revokeObjectUrls();
+    const map = { ...packUrls };
     figureFiles.value.forEach((file) => {
-        map[String(file.name || '').toLowerCase()] = URL.createObjectURL(file);
+        const url = URL.createObjectURL(file);
+        objectUrls.value.push(url);
+        map[String(file.name || '').toLowerCase()] = url;
     });
-    return map;
-});
+    diagramUrlByName.value = map;
+};
+
+const onFigureFilesSelected = (event) => {
+    figureFiles.value = Array.from(event.target.files || []);
+    const packOnly = Object.fromEntries(
+        Object.entries(diagramUrlByName.value).filter(([, url]) => String(url).startsWith('data:')),
+    );
+    rebuildDiagramUrlMap(packOnly);
+};
+
+const onPackSelected = async (event) => {
+    packError.value = '';
+    const file = (event.target.files || [])[0] || null;
+    packFile.value = file;
+    if (!file) {
+        rebuildDiagramUrlMap({});
+        return;
+    }
+
+    packBusy.value = true;
+    try {
+        const formData = new FormData();
+        formData.append('pack', file);
+        const { data } = await axios.post(route('admin.questions.mmp-unpack-pack'), formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        jsonInput.value = typeof data?.json === 'string' ? data.json : '';
+        const packUrls = data?.diagrams && typeof data.diagrams === 'object' ? data.diagrams : {};
+        rebuildDiagramUrlMap(packUrls);
+        parsePreview();
+        if (!previewRows.value.length && !previewError.value) {
+            previewError.value = 'Zip loaded, but no questions were found.';
+        }
+    } catch (error) {
+        packError.value = error?.response?.data?.message
+            || error?.response?.data?.errors?.pack?.[0]
+            || 'Could not read the zip pack.';
+        packFile.value = null;
+        rebuildDiagramUrlMap({});
+        if (packInput.value) {
+            packInput.value.value = '';
+        }
+    } finally {
+        packBusy.value = false;
+    }
+};
 
 const previewDiagramUrl = (row, index) => {
     const named = String(row.diagram_file || `q${index + 1}.png`).toLowerCase();
-    if (figurePreviewByName.value[named]) {
-        return figurePreviewByName.value[named];
+    if (diagramUrlByName.value[named]) {
+        return diagramUrlByName.value[named];
     }
-    const fallback = `q${index + 1}.png`;
-    return figurePreviewByName.value[fallback] || null;
+    return diagramUrlByName.value[`q${index + 1}.png`] || null;
 };
+
+const missingFigureCount = computed(() => previewRows.value.filter((row, index) => (
+    row.needs_diagram && !previewDiagramUrl(row, index)
+)).length);
 
 const openFigurePreview = (row, index) => {
     const url = previewDiagramUrl(row, index);
@@ -298,16 +357,28 @@ const saveSet = () => {
     }
     if (!previewRows.value.length) {
         parsePreview();
-        if (!previewRows.value.length) {
+        if (!previewRows.value.length && !packFile.value) {
             return;
         }
+    }
+
+    if (missingFigureCount.value > 0 && !packFile.value) {
+        window.alert(
+            `${missingFigureCount.value} sum(s) need figures. Upload the pack zip (questions.json + q1.png…) or attach the PNG files first.`,
+        );
+        return;
     }
 
     const formData = new FormData();
     formData.append('syllabus_chapter_id', String(chapterFilter.value));
     formData.append('seed', seed.value.trim());
-    formData.append('json', stripMarkdownFences(jsonInput.value));
     formData.append('question_format', questionFormat.value);
+    if (packFile.value) {
+        formData.append('pack', packFile.value);
+    }
+    if (jsonInput.value.trim()) {
+        formData.append('json', stripMarkdownFences(jsonInput.value));
+    }
     figureFiles.value.forEach((file) => {
         formData.append('diagrams[]', file);
     });
@@ -316,13 +387,20 @@ const saveSet = () => {
     router.post(route('admin.questions.store-mmp'), formData, {
         forceFormData: true,
         onError: (errors) => {
-            saveForm.setError('json', errors.json || errors.diagrams || errors['diagrams.0'] || '');
+            saveForm.setError(
+                'json',
+                errors.json || errors.pack || errors.diagrams || errors['diagrams.0'] || '',
+            );
         },
         onFinish: () => {
             saveForm.processing = false;
         },
     });
 };
+
+onBeforeUnmount(() => {
+    revokeObjectUrls();
+});
 
 const fillBlankCount = computed(() => previewRows.value.filter((row) => row.type === 'fill_in_blank').length);
 const mcqCount = computed(() => previewRows.value.filter((row) => row.type === 'mcq').length);
@@ -546,17 +624,41 @@ watch(
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                    <p class="text-sm font-semibold text-slate-900">3. Paste AI JSON, attach generated figures, save</p>
+                    <p class="text-sm font-semibold text-slate-900">3. Upload pack zip (recommended) or paste JSON + PNGs</p>
+                    <p class="mt-1 text-xs text-gray-600">
+                        Prefer the ready zip with <span class="font-mono">questions.json</span> and
+                        <span class="font-mono">q1.png</span>… — figures show in preview and are saved with the set.
+                        Equation text stays in the PNG only; the stem is just “solve the equation”.
+                    </p>
+
+                    <div class="mt-4">
+                        <InputLabel value="Pack zip (questions.json + figures)" />
+                        <input
+                            ref="packInput"
+                            type="file"
+                            accept=".zip,application/zip"
+                            class="mt-1 block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-emerald-900 hover:file:bg-emerald-200"
+                            :disabled="packBusy"
+                            @change="onPackSelected"
+                        >
+                        <p v-if="packBusy" class="mt-1 text-xs font-medium text-emerald-800">Reading zip…</p>
+                        <p v-else-if="packFile" class="mt-1 text-xs font-medium text-emerald-800">
+                            Pack ready: {{ packFile.name }}
+                            · {{ Object.keys(diagramUrlByName).filter((k) => String(diagramUrlByName[k]).startsWith('data:')).length || Object.keys(diagramUrlByName).length }} figure(s)
+                        </p>
+                        <InputError class="mt-1" :message="packError || saveForm.errors.pack" />
+                    </div>
+
                     <textarea
                         v-model="jsonInput"
-                        rows="12"
-                        class="mt-3 w-full rounded-md border-slate-300 font-mono text-xs"
-                        placeholder='{ "questions": [ ... ] }'
+                        rows="10"
+                        class="mt-4 w-full rounded-md border-slate-300 font-mono text-xs"
+                        placeholder='Or paste { "questions": [ ... ] } if not using a zip'
                     />
                     <InputError class="mt-1" :message="previewError || saveForm.errors.json" />
 
                     <div class="mt-4">
-                        <InputLabel value="AI-generated figures (optional but required for geometry sketches)" />
+                        <InputLabel value="Or attach individual figure PNGs" />
                         <input
                             ref="figureInput"
                             type="file"
@@ -566,8 +668,8 @@ watch(
                             @change="onFigureFilesSelected"
                         >
                         <p class="mt-1 text-xs text-gray-500">
-                            Upload the clean PNGs from AI as <span class="font-mono">q1.png</span>,
-                            <span class="font-mono">q2.png</span>, … (names must match JSON diagram_file).
+                            Names must match JSON <span class="font-mono">diagram_file</span>
+                            (<span class="font-mono">q1.png</span>, <span class="font-mono">q2.png</span>, …).
                         </p>
                         <p v-if="figureFiles.length" class="mt-1 text-xs font-medium text-indigo-800">
                             {{ figureFiles.length }} figure file(s) ready:
@@ -583,12 +685,18 @@ watch(
                         <PrimaryButton
                             type="button"
                             class="!bg-rose-700 hover:!bg-rose-800"
-                            :disabled="saveForm.processing || !jsonInput.trim()"
+                            :disabled="saveForm.processing || (!jsonInput.trim() && !packFile)"
                             @click="saveSet"
                         >
                             {{ saveButtonLabel }}
                         </PrimaryButton>
                     </div>
+                    <p
+                        v-if="previewRows.length && missingFigureCount"
+                        class="mt-2 text-xs font-medium text-amber-800"
+                    >
+                        {{ missingFigureCount }} sum(s) still missing figures — upload the pack zip or PNGs before saving.
+                    </p>
 
                     <div v-if="previewRows.length" class="mt-4 space-y-3">
                         <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -620,9 +728,8 @@ watch(
                                 v-else-if="row.needs_diagram"
                                 class="mt-2 text-xs font-medium text-amber-800"
                             >
-                                Figure needed ({{ row.diagram_file || `q${index + 1}.png` }}) — attach it above to preview here.
+                                Figure needed ({{ row.diagram_file || `q${index + 1}.png` }}) — upload the pack zip or attach that PNG above.
                             </p>
-                            <p v-if="row.figure_spec" class="mt-1 text-xs text-slate-600">Figure: {{ row.figure_spec }}</p>
                             <p class="mt-1 font-mono text-xs text-emerald-800">
                                 Answer: {{ row.correct_answer }}
                                 <span v-if="row.answer_format"> ({{ row.answer_format }})</span>

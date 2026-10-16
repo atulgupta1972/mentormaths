@@ -309,6 +309,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/questions/mmp-upload-drafts', [QuestionController::class, 'uploadMmpDrafts'])->name('questions.mmp-upload-drafts');
     Route::post('/questions/mmp-remove-draft', [QuestionController::class, 'removeMmpDraft'])->name('questions.mmp-remove-draft');
     Route::post('/questions/mmp-prompt', [QuestionController::class, 'mmpPrompt'])->name('questions.mmp-prompt');
+    Route::post('/questions/mmp-unpack-pack', [QuestionController::class, 'unpackMmpPack'])->name('questions.mmp-unpack-pack');
     Route::post('/questions/store-mmp', [QuestionController::class, 'storeMmp'])->name('questions.store-mmp');
     Route::post('/questions/preview-fill-blank-import', [QuestionController::class, 'previewFillBlankImport'])->name('questions.preview-fill-blank-import');
     Route::post('/questions/bulk-store-fill-blank', [QuestionController::class, 'storeBulkFillBlank'])->name('questions.bulk-store-fill-blank');

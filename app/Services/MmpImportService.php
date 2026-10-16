@@ -15,7 +15,10 @@ use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
+use ZipArchive;
 
 class MmpImportService
 {
@@ -357,6 +360,11 @@ JSON;
                 if ($diagramFile instanceof UploadedFile) {
                     $this->diagrams->attach($question, $diagramFile);
                     $diagramCount++;
+                } elseif (! empty($row['diagram_file'])) {
+                    $expected = basename((string) $row['diagram_file']);
+                    throw new InvalidArgumentException(
+                        'Question '.($index + 1)." needs figure {$expected}. Upload the pack zip (questions.json + PNGs) or attach that file.",
+                    );
                 }
 
                 $saved[] = $question->fresh(['blankAnswer', 'options']);
@@ -424,6 +432,150 @@ JSON;
                 );
             }
         }
+    }
+
+    /**
+     * Unpack an MMP zip (questions.json + qN.png figures).
+     *
+     * @return array{json: string, diagrams_by_name: array<string, UploadedFile>, temp_dir: string}
+     */
+    public function unpackPack(UploadedFile $zip): array
+    {
+        if (! class_exists(ZipArchive::class)) {
+            throw new InvalidArgumentException('Zip support is not enabled on this server (ZipArchive missing).');
+        }
+
+        $tempDir = storage_path('app/temp/mmp-pack-'.Str::uuid());
+        File::ensureDirectoryExists($tempDir);
+
+        $archive = new ZipArchive;
+        $opened = $archive->open($zip->getRealPath());
+        if ($opened !== true) {
+            File::deleteDirectory($tempDir);
+            throw new InvalidArgumentException('Could not open the zip file.');
+        }
+
+        if (! $archive->extractTo($tempDir)) {
+            $archive->close();
+            File::deleteDirectory($tempDir);
+            throw new InvalidArgumentException('Could not extract the zip file.');
+        }
+        $archive->close();
+
+        $jsonPath = $this->findPackJson($tempDir);
+        if ($jsonPath === null) {
+            File::deleteDirectory($tempDir);
+            throw new InvalidArgumentException('Zip must contain questions.json.');
+        }
+
+        $json = file_get_contents($jsonPath);
+        if ($json === false || trim($json) === '') {
+            File::deleteDirectory($tempDir);
+            throw new InvalidArgumentException('Could not read questions.json from the zip.');
+        }
+
+        $diagramsByName = [];
+        foreach ($this->collectPackImages($tempDir) as $basename => $path) {
+            $diagramsByName[$basename] = new UploadedFile(
+                $path,
+                $basename,
+                mime_content_type($path) ?: 'image/png',
+                null,
+                true,
+            );
+        }
+
+        return [
+            'json' => $json,
+            'diagrams_by_name' => $diagramsByName,
+            'temp_dir' => $tempDir,
+        ];
+    }
+
+    /**
+     * @return array{json: string, diagrams: array<string, string>}
+     */
+    public function unpackPackForPreview(UploadedFile $zip): array
+    {
+        $unpacked = $this->unpackPack($zip);
+
+        try {
+            $diagrams = [];
+            foreach ($unpacked['diagrams_by_name'] as $name => $file) {
+                $bytes = file_get_contents($file->getRealPath() ?: '');
+                if ($bytes === false) {
+                    continue;
+                }
+                $mime = $file->getMimeType() ?: 'image/png';
+                $diagrams[strtolower($name)] = 'data:'.$mime.';base64,'.base64_encode($bytes);
+            }
+
+            return [
+                'json' => $unpacked['json'],
+                'diagrams' => $diagrams,
+            ];
+        } finally {
+            File::deleteDirectory($unpacked['temp_dir']);
+        }
+    }
+
+    public function cleanupPackTemp(?string $tempDir): void
+    {
+        if (is_string($tempDir) && $tempDir !== '' && is_dir($tempDir)) {
+            File::deleteDirectory($tempDir);
+        }
+    }
+
+    private function findPackJson(string $directory): ?string
+    {
+        $preferred = $directory.DIRECTORY_SEPARATOR.'questions.json';
+        if (is_file($preferred)) {
+            return $preferred;
+        }
+
+        $found = null;
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+        );
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || strtolower($file->getExtension()) !== 'json') {
+                continue;
+            }
+            $basename = strtolower($file->getBasename());
+            if ($basename === 'questions.json') {
+                return $file->getPathname();
+            }
+            if ($found === null) {
+                $found = $file->getPathname();
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * @return array<string, string> basename (lower) => absolute path
+     */
+    private function collectPackImages(string $directory): array
+    {
+        $images = [];
+        $allowed = ['jpg', 'jpeg', 'png', 'webp'];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+        );
+
+        foreach ($iterator as $file) {
+            if (! $file->isFile()) {
+                continue;
+            }
+            $ext = strtolower($file->getExtension());
+            if (! in_array($ext, $allowed, true)) {
+                continue;
+            }
+            $images[strtolower($file->getBasename())] = $file->getPathname();
+        }
+
+        return $images;
     }
 
     /**

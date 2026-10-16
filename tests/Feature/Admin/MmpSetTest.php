@@ -263,6 +263,103 @@ class MmpSetTest extends TestCase
         $this->assertCount(1, session('mmp_draft_files'));
     }
 
+    public function test_admin_can_unpack_mmp_pack_for_preview(): void
+    {
+        $this->withoutVite();
+
+        [, , $admin] = $this->seedChapter();
+
+        $tempZip = sys_get_temp_dir().DIRECTORY_SEPARATOR.'mmp-pack-'.uniqid('', true).'.zip';
+        $zip = new \ZipArchive;
+        $this->assertTrue($zip->open($tempZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE));
+        $zip->addFromString('questions.json', json_encode([
+            'questions' => [
+                [
+                    'type' => 'fill_in_blank',
+                    'topic' => 'Solving Equations',
+                    'question' => 'In the figure, solve the equation. The value of x is ____.',
+                    'needs_diagram' => true,
+                    'diagram_file' => 'q1.png',
+                    'figure_spec' => 'Clean equation for AI only.',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '5',
+                    'difficulty' => 'Hard',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR));
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+        $this->assertNotFalse($png);
+        $zip->addFromString('q1.png', $png);
+        $zip->close();
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.questions.mmp-unpack-pack'), [
+                'pack' => new \Illuminate\Http\UploadedFile($tempZip, 'pack.zip', 'application/zip', null, true),
+            ]);
+
+        @unlink($tempZip);
+
+        $response->assertOk()
+            ->assertJsonStructure(['json', 'diagrams']);
+        $diagrams = $response->json('diagrams');
+        $this->assertIsArray($diagrams);
+        $this->assertArrayHasKey('q1.png', $diagrams);
+        $this->assertIsString($diagrams['q1.png']);
+        $this->assertStringStartsWith('data:image/', $diagrams['q1.png']);
+    }
+
+    public function test_admin_can_save_mmp_set_from_pack_zip(): void
+    {
+        $this->withoutVite();
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        [$chapter, $topic, $admin] = $this->seedChapter();
+
+        $tempZip = sys_get_temp_dir().DIRECTORY_SEPARATOR.'mmp-save-'.uniqid('', true).'.zip';
+        $zip = new \ZipArchive;
+        $this->assertTrue($zip->open($tempZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE));
+        $zip->addFromString('questions.json', json_encode([
+            'questions' => [
+                [
+                    'type' => 'fill_in_blank',
+                    'topic' => $topic->name,
+                    'question' => 'In the figure, solve the equation. The value of x is ____.',
+                    'needs_diagram' => true,
+                    'diagram_file' => 'q1.png',
+                    'figure_spec' => 'Do not show this text to students.',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '5',
+                    'method_hint' => 'Read the figure.',
+                    'explanation' => 'Final answer = 5',
+                    'difficulty' => 'Hard',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR));
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+        $this->assertNotFalse($png);
+        $zip->addFromString('diagrams/q1.png', $png);
+        $zip->close();
+
+        $this->actingAs($admin)
+            ->post(route('admin.questions.store-mmp'), [
+                'syllabus_chapter_id' => $chapter->id,
+                'seed' => 'Linear equations pack',
+                'pack' => new \Illuminate\Http\UploadedFile($tempZip, 'pack.zip', 'application/zip', null, true),
+            ])
+            ->assertRedirect();
+
+        @unlink($tempZip);
+
+        $worksheet = Worksheet::query()->where('purpose', WorksheetPurpose::PERFECTION)->first();
+        $this->assertNotNull($worksheet);
+        $question = $worksheet->questions()->first();
+        $this->assertNotNull($question);
+        $this->assertSame('In the figure, solve the equation. The value of x is ____.', $question->question_text);
+        $this->assertStringNotContainsString('Do not show', (string) $question->question_text);
+        $this->assertNotNull($question->diagram_path);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($question->diagram_path);
+    }
+
     public function test_admin_can_save_mmp_set_with_ai_generated_figures(): void
     {
         $this->withoutVite();
