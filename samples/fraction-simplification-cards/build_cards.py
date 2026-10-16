@@ -86,10 +86,10 @@ CARDS = [
             "right_a": "(4 + 5) / 4  =  9 / 4",
             "right_b": "4/4 + 5/4  =  1 + 5/4  =  9/4",
             "checks": [
-                ("(1)", [("4", True), ("+", False), ("5", False)], ("4", True), "= 5", False),
-                ("(2)", [("9", False)], ("4", False), "= 9/4", True),
-                ("(3)", None, None, "4/4 + 5/4 = 9/4", True),
-                ("(4)", [("45", False)], ("4", True), "partial cut", False),
+                ("(1)", None, None, "cut both 4s → left with 5", False),
+                ("(2)", None, None, "(4+5)=9, then 9/4", True),
+                ("(3)", None, None, "split: 4/4 + 5/4 = 1 + 5/4 = 9/4", True),
+                ("(4)", None, None, "partial cut on digits → wrong", False),
             ],
         },
     },
@@ -122,10 +122,10 @@ CARDS = [
             "right_a": "(44 + 11) / 11  =  55 / 11  =  5",
             "right_b": "44/11 + 11/11  =  4 + 1  =  5",
             "checks": [
-                ("(1)", [("44", False), ("+", False), ("11", True)], ("11", True), "= 45", False),
-                ("(2)", [("55", False)], ("11", False), "= 5", True),
-                ("(3)", None, None, "44/11 + 11/11 = 5", True),
-                ("(4)", [("4", True), ("4", False), ("+", False), ("11", False)], ("11", True), "= 15", False),
+                ("(1)", None, None, "cut both 11s → 44+1 = 45", False),
+                ("(2)", None, None, "(44+11)=55, then 55/11 = 5", True),
+                ("(3)", None, None, "split: 44/11 + 11/11 = 4 + 1 = 5", True),
+                ("(4)", None, None, "partial cut on 44 → 4+11 = 15", False),
             ],
         },
     },
@@ -158,10 +158,10 @@ CARDS = [
             "right_a": "(15 − 5) / 5  =  10 / 5  =  2",
             "right_b": "15/5 − 5/5  =  3 − 1  =  2",
             "checks": [
-                ("(1)", [("15", False), ("−", False), ("5", True)], ("5", True), "= 14", False),
-                ("(2)", [("10", False)], ("5", False), "= 2", True),
-                ("(3)", None, None, "15/5 − 5/5 = 2", True),
-                ("(4)", [("15", False), ("−", False), ("5", True)], ("5", True), "= 1", False),
+                ("(1)", None, None, "cut both 5s → 15−1 = 14", False),
+                ("(2)", None, None, "(15−5)=10, then 10/5 = 2", True),
+                ("(3)", None, None, "split: 15/5 − 5/5 = 3 − 1 = 2", True),
+                ("(4)", None, None, "cut both 5s → claim 1", False),
             ],
         },
     },
@@ -194,10 +194,10 @@ CARDS = [
             "right_a": "(12 + 8) / 4  =  20 / 4  =  5",
             "right_b": "12/4 + 8/4  =  3 + 2  =  5",
             "checks": [
-                ("(1)", [("12", True), ("+", False), ("8", False)], ("4", True), "= 11", False),
-                ("(2)", [("20", False)], ("4", False), "= 5", True),
-                ("(3)", None, None, "12/4 + 8/4 = 5", True),
-                ("(4)", [("12", False), ("+", False), ("8", True)], ("4", True), "= 14", False),
+                ("(1)", None, None, "cut 12 with 4 → 3+8 = 11", False),
+                ("(2)", None, None, "(12+8)=20, then 20/4 = 5", True),
+                ("(3)", None, None, "split: 12/4 + 8/4 = 3 + 2 = 5", True),
+                ("(4)", None, None, "cut 8 with 4 → 12+2 = 14", False),
             ],
         },
     },
@@ -230,10 +230,10 @@ CARDS = [
             "right_a": "(6 + 9 + 3) / 3  =  18 / 3  =  6",
             "right_b": "6/3 + 9/3 + 3/3  =  2 + 3 + 1  =  6",
             "checks": [
-                ("(1)", [("6", False), ("+", False), ("9", False), ("+", False), ("3", True)], ("3", True), "= 15", False),
-                ("(2)", [("18", False)], ("3", False), "= 6", True),
-                ("(3)", None, None, "2 + 3 + 1 = 6", True),
-                ("(4)", [("6", True), ("+", False), ("9", False), ("+", False), ("3", False)], ("3", True), "= 5", False),
+                ("(1)", None, None, "cut last 3 → 6+9 = 15", False),
+                ("(2)", None, None, "(6+9+3)=18, then 18/3 = 6", True),
+                ("(3)", None, None, "split: 6/3 + 9/3 + 3/3 = 2+3+1 = 6", True),
+                ("(4)", None, None, "random cut → claim 5", False),
             ],
         },
     },
@@ -269,10 +269,10 @@ CARDS = [
             "right_a": "Factor form: cut the 2 → 7 + 1 = 8",
             "right_b": "Sum form: (2 + 7) / 2  =  9 / 2",
             "checks": [
-                ("(1)", [("2", True), ("(7+1)", False)], ("2", True), "= 8", True),
-                ("(2)", [("2", True), ("+", False), ("7", False)], ("2", True), "= 7", False),
-                ("(3)", None, None, "(2+7)/2 = 9/2", True),
-                ("(4)", None, None, "2(7+1)/2 = 16/2 = 8", True),
+                ("(1)", None, None, "factor form: cut 2 → (7+1)=8", True),
+                ("(2)", None, None, "cut 2 in the sum (2+7)/2 → claim 7", False),
+                ("(3)", None, None, "sum first: (2+7)=9, then 9/2", True),
+                ("(4)", None, None, "expand: 2(7+1)=16, then 16/2 = 8", True),
             ],
         },
     },
@@ -308,10 +308,10 @@ CARDS = [
             "legal_den": ("2", True),
             "legal_result": "= 2x + 1",
             "checks": [
-                ("(1)", [("4x", False), ("+", False), ("2", True)], ("2", True), "= 4x+1", False),
-                ("(2)", None, None, "4x/2 + 2/2 = 2x+1", True),
-                ("(3)", [("2", True), ("(2x+1)", False)], ("2", True), "= 2x+1", True),
-                ("(4)", None, None, "leave as 4x+2", False),
+                ("(1)", None, None, "cut only the +2 → claim 4x+1", False),
+                ("(2)", None, None, "split: 4x/2 + 2/2 = 2x + 1", True),
+                ("(3)", None, None, "factor 2(2x+1)/2, cut 2 → 2x+1", True),
+                ("(4)", None, None, "leave as 4x+2 (not simplified)", False),
             ],
         },
     },
@@ -344,10 +344,10 @@ CARDS = [
             "right_a": "4x/x + 2/x  =  4 + 2/x",
             "right_b": "Check: if x = 2, value is 5  (not 6)",
             "checks": [
-                ("(1)", [("4", False), ("x", True), ("+", False), ("2", False)], ("x", True), "= 6", False),
-                ("(2)", None, None, "4 + 2/x", True),
-                ("(3)", [("4", False), ("x", True), ("+", False), ("2", False)], ("x", True), "= 4", False),
-                ("(4)", None, None, "x = 2 → 5, so 6 fails", True),
+                ("(1)", None, None, "cut x → claim 4+2 = 6", False),
+                ("(2)", None, None, "split: 4x/x + 2/x = 4 + 2/x", True),
+                ("(3)", None, None, "cut x → claim only 4", False),
+                ("(4)", None, None, "check x=2: (8+2)/2 = 5, so 6 fails", True),
             ],
         },
     },
@@ -383,10 +383,10 @@ CARDS = [
             "legal_den": ("3", True),
             "legal_result": "= 2x − 1",
             "checks": [
-                ("(1)", [("6x", False), ("−", False), ("3", True)], ("3", True), "= 6x−1", False),
-                ("(2)", None, None, "2x − 1", True),
-                ("(3)", [("3", True), ("(2x−1)", False)], ("3", True), "= 2x−1", True),
-                ("(4)", None, None, "answer is 6x", False),
+                ("(1)", None, None, "cut only −3 → claim 6x−1", False),
+                ("(2)", None, None, "split: 6x/3 − 3/3 = 2x − 1", True),
+                ("(3)", None, None, "factor 3(2x−1)/3, cut 3 → 2x−1", True),
+                ("(4)", None, None, "claim answer is 6x", False),
             ],
         },
     },
@@ -422,10 +422,10 @@ CARDS = [
             "legal_den": ("(x+1)", True),
             "legal_result": "= 2",
             "checks": [
-                ("(1)", [("2x", False), ("+", False), ("2", True)], ("x+1", False), "piece cut", False),
-                ("(2)", [("2", False), ("(x+1)", True)], ("(x+1)", True), "= 2", True),
-                ("(3)", None, None, "x = 3 → 8/4 = 2", True),
-                ("(4)", [("2", False), ("x", True), ("+", False), ("2", False)], ("x", True), "cut x", False),
+                ("(1)", None, None, "piece-cut the +2 → leave 2x/(x+1)", False),
+                ("(2)", None, None, "factor: 2(x+1)/(x+1), cut (x+1) → 2", True),
+                ("(3)", None, None, "check x=3: (6+2)/4 = 8/4 = 2", True),
+                ("(4)", None, None, "cut x terms (illegal method)", False),
             ],
         },
     },
@@ -530,10 +530,14 @@ def section_label(draw, x: int, y: int, step: str, title: str, color: str):
 
 
 def check_line_text(item: tuple) -> str:
-    """Plain text for quiz screen step list."""
+    """Plain text for quiz screen — full working, not only the final number."""
     label = item[0]
     result = item[-2] if isinstance(item[-2], str) else ""
-    return f"{label}  {result}".strip()
+    # Avoid double label if result already starts with (n)
+    text = result.strip()
+    if text.startswith("("):
+        return text
+    return f"{label}  {text}".strip()
 
 
 def draw_card_figure(card: dict, path: Path) -> None:
