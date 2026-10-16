@@ -19,6 +19,7 @@ const props = defineProps({
     draftFiles: { type: Array, default: () => [] },
     predictedSetCode: { type: String, default: null },
     pageError: { type: String, default: null },
+    questionFormat: { type: String, default: 'fill_in_blank' },
 });
 
 const page = usePage();
@@ -26,6 +27,7 @@ const chapterFilter = ref(props.selectedChapterId || '');
 const seed = ref(props.seedDraft || '');
 const figureNotes = ref(props.figureNotes || '');
 const total = ref(Number(props.targetCount) || 8);
+const questionFormat = ref(props.questionFormat || 'fill_in_blank');
 const jsonInput = ref('');
 const previewError = ref('');
 const previewRows = ref([]);
@@ -33,11 +35,18 @@ const copied = ref(false);
 const promptBox = ref(null);
 const draftInput = ref(null);
 
+const formatOptions = [
+    { value: 'fill_in_blank', label: 'Fill in the blank', hint: 'Online — students type the answer' },
+    { value: 'mcq', label: 'MCQ', hint: 'Online — students pick an option' },
+    { value: 'written', label: 'Written', hint: 'Printable PDF — students write on paper' },
+];
+
 const promptForm = useForm({
     syllabus_chapter_id: props.selectedChapterId || '',
     seed: props.seedDraft || '',
     figure_notes: props.figureNotes || '',
     total: Number(props.targetCount) || 8,
+    question_format: props.questionFormat || 'fill_in_blank',
 });
 
 const uploadingDrafts = ref(false);
@@ -113,6 +122,13 @@ const parsePreview = () => {
             const isMcq = ['mcq', 'multiple_choice'].includes(typeRaw)
                 || (Array.isArray(item.options) && item.options.length > 0);
 
+            if (questionFormat.value === 'mcq' && !isMcq) {
+                throw new Error(`Question ${index + 1} must be MCQ (you chose MCQ above).`);
+            }
+            if (['fill_in_blank', 'written'].includes(questionFormat.value) && isMcq) {
+                throw new Error(`Question ${index + 1} must be fill-in-blank (you chose ${questionFormat.value === 'written' ? 'written' : 'fill-in-blank'} above).`);
+            }
+
             if (isMcq) {
                 const options = (item.options || []).map((o) => String(o).trim()).filter(Boolean);
                 if (options.length < 2) {
@@ -144,7 +160,7 @@ const parsePreview = () => {
                 throw new Error(`Question ${index + 1} is missing correct_answer.`);
             }
             if (!questionText.includes('____')) {
-                throw new Error(`Question ${index + 1} must include ____ or use type mcq.`);
+                throw new Error(`Question ${index + 1} must include ____.`);
             }
             const needsDiagram = Boolean(item.needs_diagram)
                 || Boolean(item.diagram_file)
@@ -226,6 +242,7 @@ const generatePrompt = () => {
     promptForm.seed = seed.value.trim();
     promptForm.figure_notes = figureNotes.value.trim();
     promptForm.total = Math.max(5, Math.min(20, Number(total.value) || 8));
+    promptForm.question_format = questionFormat.value;
     promptForm.post(route('admin.questions.mmp-prompt'), { preserveScroll: true });
 };
 
@@ -266,6 +283,7 @@ const saveSet = () => {
     formData.append('syllabus_chapter_id', String(chapterFilter.value));
     formData.append('seed', seed.value.trim());
     formData.append('json', stripMarkdownFences(jsonInput.value));
+    formData.append('question_format', questionFormat.value);
     figureFiles.value.forEach((file) => {
         formData.append('diagrams[]', file);
     });
@@ -284,6 +302,27 @@ const saveSet = () => {
 
 const fillBlankCount = computed(() => previewRows.value.filter((row) => row.type === 'fill_in_blank').length);
 const mcqCount = computed(() => previewRows.value.filter((row) => row.type === 'mcq').length);
+const selectedFormatLabel = computed(
+    () => formatOptions.find((option) => option.value === questionFormat.value)?.label || 'Fill in the blank',
+);
+const saveButtonLabel = computed(() => {
+    if (saveForm.processing) {
+        return 'Saving…';
+    }
+    if (questionFormat.value === 'written') {
+        return 'Save as written sheet';
+    }
+    return `Save as ${props.predictedSetCode || 'MMP set'} (${selectedFormatLabel.value})`;
+});
+
+watch(
+    () => props.questionFormat,
+    (value) => {
+        if (value) {
+            questionFormat.value = value;
+        }
+    },
+);
 
 const focusPrompt = async () => {
     await nextTick();
@@ -352,6 +391,24 @@ watch(
                                 {{ ch.label || `${ch.chapter_number} — ${ch.name}` }}
                             </option>
                         </select>
+                    </div>
+
+                    <div class="mt-4">
+                        <InputLabel value="Generate as" />
+                        <select v-model="questionFormat" class="mt-1 w-full rounded-md border-gray-300 text-sm">
+                            <option
+                                v-for="option in formatOptions"
+                                :key="option.value"
+                                :value="option.value"
+                            >
+                                {{ option.label }}
+                            </option>
+                        </select>
+                        <p class="mt-1 text-xs text-gray-500">
+                            {{ formatOptions.find((option) => option.value === questionFormat)?.hint }}
+                            · Rebuild the prompt after changing this.
+                        </p>
+                        <InputError class="mt-1" :message="promptForm.errors.question_format" />
                     </div>
 
                     <div class="mt-4">
@@ -505,7 +562,7 @@ watch(
                             :disabled="saveForm.processing || !jsonInput.trim()"
                             @click="saveSet"
                         >
-                            {{ saveForm.processing ? 'Saving…' : `Save as ${predictedSetCode || 'MMP set'}` }}
+                            {{ saveButtonLabel }}
                         </PrimaryButton>
                     </div>
 

@@ -65,16 +65,6 @@ class MmpSetTest extends TestCase
                     'difficulty' => 'Hard',
                 ],
                 [
-                    'type' => 'mcq',
-                    'topic' => $topic->name,
-                    'question' => 'Which congruence statement matches the equal sides marked in the figure?',
-                    'options' => ['△ABH ≅ △FDG', '△ABL ≅ △FED', 'None of these'],
-                    'correct_index' => 0,
-                    'method_hint' => 'Match corresponding vertices from equal sides.',
-                    'explanation' => 'Corresponding vertices give △ABH ≅ △FDG. Final answer = △ABH ≅ △FDG',
-                    'difficulty' => 'Hard',
-                ],
-                [
                     'type' => 'fill_in_blank',
                     'topic' => $topic->name,
                     'question' => 'If AH = GF = 6 cm and BH = 8 cm, AB is ____ cm.',
@@ -92,6 +82,7 @@ class MmpSetTest extends TestCase
                 'syllabus_chapter_id' => $chapter->id,
                 'seed' => 'AH = 4, BH = 3, find AB and the twin triangle side.',
                 'json' => $json,
+                'question_format' => 'fill_in_blank',
             ])
             ->assertRedirect();
 
@@ -99,12 +90,82 @@ class MmpSetTest extends TestCase
         $this->assertNotNull($worksheet);
         $this->assertSame('MMP711', $worksheet->set_code);
         $this->assertTrue($worksheet->isPerfection());
-        $this->assertSame(3, $worksheet->questions()->count());
+        $this->assertSame(2, $worksheet->questions()->count());
         $this->assertSame(2, $worksheet->questions()->where('type', Question::TYPE_FILL_IN_BLANK)->count());
-        $this->assertSame(1, $worksheet->questions()->where('type', Question::TYPE_MCQ)->count());
 
         $first = $worksheet->questions()->orderByPivot('sort_order')->first();
         $this->assertStringContainsString('AH = 4 cm', $first->question_text);
+    }
+
+    public function test_admin_can_save_mmp_as_mcq_set(): void
+    {
+        $this->withoutVite();
+
+        [$chapter, $topic, $admin] = $this->seedChapter();
+
+        $json = json_encode([
+            'questions' => [
+                [
+                    'type' => 'mcq',
+                    'topic' => $topic->name,
+                    'question' => 'Which congruence statement matches the equal sides marked in the figure?',
+                    'options' => ['△ABH ≅ △FDG', '△ABL ≅ △FED', '△ACB ≅ △DEF', 'None of these'],
+                    'correct_index' => 0,
+                    'method_hint' => 'Match corresponding vertices from equal sides.',
+                    'explanation' => 'Corresponding vertices give △ABH ≅ △FDG. Final answer = △ABH ≅ △FDG',
+                    'difficulty' => 'Hard',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $this->actingAs($admin)
+            ->post(route('admin.questions.store-mmp'), [
+                'syllabus_chapter_id' => $chapter->id,
+                'seed' => 'Twin triangles with congruence marks — pick the true statement.',
+                'json' => $json,
+                'question_format' => 'mcq',
+            ])
+            ->assertRedirect();
+
+        $worksheet = Worksheet::query()->where('purpose', WorksheetPurpose::PERFECTION)->first();
+        $this->assertNotNull($worksheet);
+        $this->assertSame(1, $worksheet->questions()->where('type', Question::TYPE_MCQ)->count());
+    }
+
+    public function test_admin_can_save_mmp_as_written_sheet(): void
+    {
+        $this->withoutVite();
+
+        [$chapter, $topic, $admin] = $this->seedChapter();
+
+        $json = json_encode([
+            'questions' => [
+                [
+                    'type' => 'fill_in_blank',
+                    'topic' => $topic->name,
+                    'question' => 'AH = 4 cm and BH = 3 cm. AB is ____ cm.',
+                    'answer_format' => 'integer',
+                    'correct_answer' => '5',
+                    'method_hint' => 'Use Pythagoras.',
+                    'explanation' => 'AB = 5. Final answer = 5',
+                    'difficulty' => 'Hard',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.questions.store-mmp'), [
+                'syllabus_chapter_id' => $chapter->id,
+                'seed' => 'AH = 4, BH = 3, find AB for a written perfection sheet.',
+                'json' => $json,
+                'question_format' => 'written',
+            ]);
+
+        $worksheet = Worksheet::query()->where('delivery_mode', \App\Support\WorksheetDeliveryMode::WRITTEN)->first();
+        $this->assertNotNull($worksheet);
+        $this->assertSame(1, $worksheet->questions()->count());
+        $this->assertNotNull($worksheet->written_pdf_path);
+        $response->assertRedirect(route('admin.written-sheets.show', $worksheet));
     }
 
     public function test_chapter_page_lists_mmp_sets(): void
@@ -150,6 +211,7 @@ class MmpSetTest extends TestCase
                 'syllabus_chapter_id' => $chapter->id,
                 'seed' => 'too short',
                 'total' => 8,
+                'question_format' => 'fill_in_blank',
             ])
             ->assertRedirect()
             ->assertSessionHas('error');
@@ -182,16 +244,20 @@ class MmpSetTest extends TestCase
                 'syllabus_chapter_id' => $chapter->id,
                 'seed' => '',
                 'total' => 8,
+                'question_format' => 'mcq',
             ])
             ->assertRedirect(route('admin.questions.create-mmp', ['syllabus_chapter_id' => $chapter->id]))
             ->assertSessionHas('mmp_cursor_prompt')
-            ->assertSessionHas('mmp_draft_files');
+            ->assertSessionHas('mmp_draft_files')
+            ->assertSessionHas('mmp_question_format', 'mcq');
 
         $prompt = session('mmp_cursor_prompt');
         $this->assertStringContainsString('Rough draft / figure sketch', $prompt);
         $this->assertStringContainsString('ATTACH THE ROUGH DRAFT', $prompt);
         $this->assertStringContainsString('FIGURE GENERATION FROM THE AUTHOR\'S SKETCH', $prompt);
         $this->assertStringContainsString('q1.png', $prompt);
+        $this->assertStringContainsString('ALL questions MUST be type "mcq"', $prompt);
+        $this->assertStringContainsString('MCQ (multiple choice)', $prompt);
 
         // Drafts must stay in session after the prompt step (not flash-only).
         $this->assertCount(1, session('mmp_draft_files'));

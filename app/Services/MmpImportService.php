@@ -6,9 +6,11 @@ use App\Models\Question;
 use App\Models\QuestionBlankAnswer;
 use App\Models\QuestionOption;
 use App\Models\SyllabusChapter;
+use App\Models\User;
 use App\Models\Worksheet;
 use App\Support\DiagramQuestionSupport;
 use App\Support\FillBlankAnswerConsistency;
+use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
 use App\Support\QuestionMethodHint;
 use Illuminate\Http\UploadedFile;
@@ -21,7 +23,35 @@ class MmpImportService
         private FillBlankImportService $fillBlankImport,
         private PracticeSetService $practiceSets,
         private QuestionDiagramService $diagrams,
+        private WrittenSheetService $writtenSheets,
     ) {}
+
+    public const FORMAT_FILL_IN_BLANK = 'fill_in_blank';
+
+    public const FORMAT_MCQ = 'mcq';
+
+    public const FORMAT_WRITTEN = 'written';
+
+    /**
+     * @return list<string>
+     */
+    public static function formats(): array
+    {
+        return [
+            self::FORMAT_FILL_IN_BLANK,
+            self::FORMAT_MCQ,
+            self::FORMAT_WRITTEN,
+        ];
+    }
+
+    public static function normalizeFormat(?string $format): string
+    {
+        $value = strtolower(trim((string) $format));
+
+        return in_array($value, self::formats(), true)
+            ? $value
+            : self::FORMAT_FILL_IN_BLANK;
+    }
 
     /**
      * @param  array{
@@ -29,7 +59,8 @@ class MmpImportService
      *     seed?: string,
      *     figure_notes?: string,
      *     draft_count?: int,
-     *     draft_names?: list<string>
+     *     draft_names?: list<string>,
+     *     question_format?: string
      * }  $options
      */
     public function cursorPrompt(SyllabusChapter $chapter, array $options = []): string
@@ -46,6 +77,7 @@ class MmpImportService
         $seed = trim((string) ($options['seed'] ?? ''));
         $figureNotes = trim((string) ($options['figure_notes'] ?? ''));
         $draftCount = max(0, (int) ($options['draft_count'] ?? 0));
+        $questionFormat = self::normalizeFormat($options['question_format'] ?? null);
         /** @var list<string> $draftNames */
         $draftNames = array_values(array_filter(array_map(
             fn ($name) => trim((string) $name),
@@ -56,6 +88,12 @@ class MmpImportService
             throw new InvalidArgumentException('Upload a rough draft photo/PDF, or paste a seed situation, before generating the MMP prompt.');
         }
 
+        $formatLabel = match ($questionFormat) {
+            self::FORMAT_MCQ => 'MCQ (multiple choice)',
+            self::FORMAT_WRITTEN => 'Written sheet (print / upload work) — fill-in-blank answer key JSON',
+            default => 'Fill-in-the-blank (online typing)',
+        };
+
         $context = collect([
             $version ? "Board: {$version->board->code}" : null,
             $version ? "Class: {$version->gradeLevel->name}" : null,
@@ -63,6 +101,7 @@ class MmpImportService
             $version ? "Academic year: {$version->academicYear->name}" : null,
             "Chapter: {$chapter->chapter_number} — {$chapter->name}",
             'Set type: Mentormaths Perfection (MMP) — exhaustive word-problem variants',
+            "Output format chosen by admin: {$formatLabel}",
         ])->filter()->implode("\n");
 
         $topics = $chapter->topics->pluck('name')->filter()->values()->all();
@@ -113,6 +152,9 @@ FIG;
             ? "Seed situation (typed notes — combine with any attached draft photos; this must become question 1 — rewritten as a complete self-contained sum):\n{$seed}\n"
             : "Seed situation: use the attached rough draft / figure sketch photo(s) as the only source for Q1 (rewrite clearly; do not leave facts only in the image).\n";
 
+        $formatRequirements = $this->formatRequirementsBlock($questionFormat);
+        $jsonExample = $this->formatJsonExample($questionFormat);
+
         return <<<PROMPT
 Create Mentormaths Perfection (MMP) maths questions for an exhaustive practice set. Return ONLY valid JSON (no markdown fences). Also generate clean diagram PNG files when figure sketches were attached (see FIGURE GENERATION).
 
@@ -124,20 +166,71 @@ Requirements:
 - Exactly {$total} questions total (including the seed as Q1)
 - Q1 MUST be the seed rewritten as one complete question (not a reference to "the figure above" without stating the facts)
 - Questions 2–{$total} are variants of the same skill: change numbers, angles, labels, or a little of the setup, but keep Class-appropriate CBSE difficulty
-- Prefer fill-in-the-blank: ONE blank shown as "____" in the question text
-- Use answer formats "integer", "decimal", or "fraction" for fill-in-blank
-- "correct_answer" must match the blank exactly (examples: "42", "-3.5", "3/4", "65")
-- The final number in "explanation" MUST be identical to "correct_answer" (including sign) — end with Final answer = {{correct_answer}}
+{$formatRequirements}
 - Include "method_hint": theory/rules ONLY — no final numeric answer
 - Include "explanation": full teacher-only working with the final answer
 - Include "difficulty": Easy, Medium, or Hard (lean Hard for perfection)
 - Include "topic" with a short topic name from the chapter when possible{$topicLine}
-- Use type "fill_in_blank" by default
-- Use type "mcq" ONLY when a numeric/fraction blank is impossible (e.g. true/false congruence statements). For MCQ include "options" (2–6 strings) and "correct_index" (0-based)
 - Each stem must be self-contained (do not say "using the previous question" or "as above")
 - Do NOT invent topics outside this chapter's skill
 
 JSON format:
+{$jsonExample}
+PROMPT;
+    }
+
+    private function formatRequirementsBlock(string $questionFormat): string
+    {
+        return match ($questionFormat) {
+            self::FORMAT_MCQ => <<<'REQ'
+- ALL questions MUST be type "mcq" (no fill-in-blank)
+- Each MCQ needs "options" (exactly 4 clear strings) and "correct_index" (0-based)
+- Options must be plausible; only one is correct
+- Do not use "____" blanks or "correct_answer" / "answer_format"
+REQ,
+            self::FORMAT_WRITTEN => <<<'REQ'
+- This pack will become a WRITTEN PDF sheet (students write on paper)
+- ALL questions MUST be type "fill_in_blank" with ONE blank shown as "____"
+- Use answer formats "integer", "decimal", or "fraction"
+- "correct_answer" must match the blank exactly (examples: "42", "-3.5", "3/4", "65")
+- The final number in "explanation" MUST be identical to "correct_answer" (including sign) — end with Final answer = {{correct_answer}}
+- Do NOT use type "mcq" or options
+REQ,
+            default => <<<'REQ'
+- ALL questions MUST be type "fill_in_blank" with ONE blank shown as "____"
+- Use answer formats "integer", "decimal", or "fraction"
+- "correct_answer" must match the blank exactly (examples: "42", "-3.5", "3/4", "65")
+- The final number in "explanation" MUST be identical to "correct_answer" (including sign) — end with Final answer = {{correct_answer}}
+- Do NOT use type "mcq" or options
+REQ,
+        };
+    }
+
+    private function formatJsonExample(string $questionFormat): string
+    {
+        if ($questionFormat === self::FORMAT_MCQ) {
+            return <<<'JSON'
+{
+  "questions": [
+    {
+      "type": "mcq",
+      "topic": "Congruence of triangles",
+      "question": "Given the markings in the figure, which statement is true?",
+      "needs_diagram": true,
+      "diagram_file": "q1.png",
+      "figure_spec": "Twin right triangles with congruence marks.",
+      "options": ["△ABH ≅ △FDG", "△ABL ≅ △FED", "△ACB ≅ △DEF", "None of these"],
+      "correct_index": 0,
+      "method_hint": "Match corresponding vertices from equal sides and equal angles marked on the figure.",
+      "explanation": "Equal sides and included angle map A→F, B→D, H→G, so △ABH ≅ △FDG. Final answer = △ABH ≅ △FDG",
+      "difficulty": "Hard"
+    }
+  ]
+}
+JSON;
+        }
+
+        return <<<'JSON'
 {
   "questions": [
     {
@@ -152,23 +245,10 @@ JSON format:
       "method_hint": "Corresponding sides of congruent triangles are equal. Use Pythagoras on the right triangle when two legs are given.",
       "explanation": "AH and BH are legs of a right triangle, so AB = sqrt(16+9) = 5. Under congruence FE corresponds to AB, so FE = 5. Final answer = 5",
       "difficulty": "Hard"
-    },
-    {
-      "type": "mcq",
-      "topic": "Congruence of triangles",
-      "question": "Given the markings in the figure, which statement is true?",
-      "needs_diagram": true,
-      "diagram_file": "q2.png",
-      "figure_spec": "Same twin-triangle layout as q1 with congruence marks; no numeric lengths required.",
-      "options": ["△ABH ≅ △FDG", "△ABL ≅ △FED", "△ACB ≅ △DEF", "None of these"],
-      "correct_index": 0,
-      "method_hint": "Match corresponding vertices from equal sides and equal angles marked on the figure.",
-      "explanation": "Equal sides and included angle map A→F, B→D, H→G, so △ABH ≅ △FDG. Final answer = △ABH ≅ △FDG",
-      "difficulty": "Hard"
     }
   ]
 }
-PROMPT;
+JSON;
     }
 
     /**
@@ -210,7 +290,7 @@ PROMPT;
     /**
      * @param  list<array<string, mixed>>  $rows
      * @param  array<string, UploadedFile>  $diagramsByName  basename => file (e.g. q1.png)
-     * @return array{worksheet: Worksheet, questions: list<Question>, diagram_count: int}
+     * @return array{worksheet: Worksheet, questions: list<Question>, diagram_count: int, output_format: string}
      */
     public function saveSet(
         SyllabusChapter $chapter,
@@ -218,17 +298,21 @@ PROMPT;
         int $userId,
         ?string $seedNotes = null,
         array $diagramsByName = [],
+        string $questionFormat = self::FORMAT_FILL_IN_BLANK,
     ): array {
         if ($rows === []) {
             throw new InvalidArgumentException('Nothing to save — preview the JSON first.');
         }
+
+        $questionFormat = self::normalizeFormat($questionFormat);
+        $this->assertRowsMatchFormat($rows, $questionFormat);
 
         $diagramsByName = collect($diagramsByName)
             ->filter(fn ($file, $name) => $file instanceof UploadedFile && is_string($name) && $name !== '')
             ->mapWithKeys(fn (UploadedFile $file, string $name) => [strtolower(basename($name)) => $file])
             ->all();
 
-        return DB::transaction(function () use ($chapter, $rows, $userId, $seedNotes, $diagramsByName) {
+        return DB::transaction(function () use ($chapter, $rows, $userId, $seedNotes, $diagramsByName, $questionFormat) {
             $saved = [];
             $diagramCount = 0;
 
@@ -278,20 +362,68 @@ PROMPT;
                 $saved[] = $question->fresh(['blankAnswer', 'options']);
             }
 
-            $worksheet = $this->practiceSets->createChapterMmpSet(
-                $chapter,
-                collect($saved)->pluck('id')->all(),
-                $userId,
-                Worksheet::STATUS_PUBLISHED,
-                $seedNotes,
-            );
+            $questionIds = collect($saved)->pluck('id')->all();
+
+            if ($questionFormat === self::FORMAT_WRITTEN) {
+                $creator = User::query()->findOrFail($userId);
+                $notes = trim(collect([
+                    'Mentormaths Perfection (written)',
+                    $seedNotes,
+                ])->filter()->implode("\n\n"));
+
+                $worksheet = $this->writtenSheets->createChapterTest(
+                    $chapter,
+                    $questionIds,
+                    $creator,
+                    $notes !== '' ? $notes : null,
+                    PracticeSetTier::CHAMPION,
+                );
+                $this->writtenSheets->generatePdf($worksheet);
+            } else {
+                $worksheet = $this->practiceSets->createChapterMmpSet(
+                    $chapter,
+                    $questionIds,
+                    $userId,
+                    Worksheet::STATUS_PUBLISHED,
+                    $seedNotes,
+                );
+            }
 
             return [
-                'worksheet' => $worksheet,
+                'worksheet' => $worksheet->fresh(),
                 'questions' => $saved,
                 'diagram_count' => $diagramCount,
+                'output_format' => $questionFormat,
             ];
         });
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function assertRowsMatchFormat(array $rows, string $questionFormat): void
+    {
+        foreach ($rows as $index => $row) {
+            $type = ($row['type'] ?? Question::TYPE_FILL_IN_BLANK) === Question::TYPE_MCQ
+                ? Question::TYPE_MCQ
+                : Question::TYPE_FILL_IN_BLANK;
+
+            if ($questionFormat === self::FORMAT_MCQ && $type !== Question::TYPE_MCQ) {
+                throw new InvalidArgumentException(
+                    'Question '.($index + 1).' must be MCQ because you chose MCQ for this MMP set.',
+                );
+            }
+
+            if (
+                in_array($questionFormat, [self::FORMAT_FILL_IN_BLANK, self::FORMAT_WRITTEN], true)
+                && $type !== Question::TYPE_FILL_IN_BLANK
+            ) {
+                $label = $questionFormat === self::FORMAT_WRITTEN ? 'written' : 'fill-in-blank';
+                throw new InvalidArgumentException(
+                    'Question '.($index + 1)." must be fill-in-blank because you chose {$label} for this MMP set.",
+                );
+            }
+        }
     }
 
     /**

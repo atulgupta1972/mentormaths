@@ -253,6 +253,9 @@ class QuestionController extends Controller
             'seedDraft' => session('mmp_seed_draft'),
             'figureNotes' => session('mmp_figure_notes'),
             'targetCount' => session('mmp_target_count', 8),
+            'questionFormat' => \App\Services\MmpImportService::normalizeFormat(
+                session('mmp_question_format', \App\Services\MmpImportService::FORMAT_FILL_IN_BLANK)
+            ),
             'draftFiles' => $this->serializeMmpDraftFiles(session('mmp_draft_files', [])),
             'predictedSetCode' => $chapter
                 ? app(\App\Services\PracticeSetCodeService::class)->generateChapterMmp($chapter)
@@ -366,11 +369,13 @@ class QuestionController extends Controller
             'seed' => ['nullable', 'string', 'max:20000'],
             'figure_notes' => ['nullable', 'string', 'max:5000'],
             'total' => ['nullable', 'integer', 'min:5', 'max:20'],
+            'question_format' => ['required', 'in:'.implode(',', \App\Services\MmpImportService::formats())],
         ]);
 
         $chapter = SyllabusChapter::query()->findOrFail($validated['syllabus_chapter_id']);
         $drafts = $this->serializeMmpDraftFiles(session('mmp_draft_files', []));
         $seed = trim((string) ($validated['seed'] ?? ''));
+        $questionFormat = \App\Services\MmpImportService::normalizeFormat($validated['question_format']);
 
         if ($seed === '' && $drafts === []) {
             return back()
@@ -391,6 +396,7 @@ class QuestionController extends Controller
                 'total' => $validated['total'] ?? 8,
                 'draft_count' => count($drafts),
                 'draft_names' => array_column($drafts, 'name'),
+                'question_format' => $questionFormat,
             ]);
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage())->withInput();
@@ -407,6 +413,7 @@ class QuestionController extends Controller
             'mmp_seed_draft' => $seed,
             'mmp_figure_notes' => $validated['figure_notes'] ?? '',
             'mmp_target_count' => (int) ($validated['total'] ?? 8),
+            'mmp_question_format' => $questionFormat,
         ]);
 
         return redirect()
@@ -475,6 +482,7 @@ class QuestionController extends Controller
             'mmp_seed_draft',
             'mmp_figure_notes',
             'mmp_target_count',
+            'mmp_question_format',
             'mmp_cursor_prompt',
         ]);
     }
@@ -485,6 +493,7 @@ class QuestionController extends Controller
             'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
             'seed' => ['nullable', 'string', 'max:20000'],
             'json' => ['required', 'string'],
+            'question_format' => ['nullable', 'in:'.implode(',', \App\Services\MmpImportService::formats())],
             'diagrams' => ['nullable', 'array', 'max:20'],
             'diagrams.*' => ['file', 'max:8192', 'extensions:jpg,jpeg,png,webp'],
         ], [
@@ -494,6 +503,10 @@ class QuestionController extends Controller
         ]);
 
         $chapter = SyllabusChapter::query()->with('topics')->findOrFail($validated['syllabus_chapter_id']);
+        $questionFormat = \App\Services\MmpImportService::normalizeFormat(
+            $validated['question_format']
+                ?? session('mmp_question_format', \App\Services\MmpImportService::FORMAT_FILL_IN_BLANK)
+        );
 
         $diagramsByName = [];
         foreach ($request->file('diagrams', []) as $file) {
@@ -511,17 +524,34 @@ class QuestionController extends Controller
                 $request->user()->id,
                 filled($validated['seed'] ?? null) ? trim((string) $validated['seed']) : null,
                 $diagramsByName,
+                $questionFormat,
             );
         } catch (\InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage())->withInput();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Could not save the MMP set. '.$e->getMessage())->withInput();
         }
 
         $worksheet = $result['worksheet'];
         $this->forgetMmpDraftSession($request->user()->id);
 
-        $message = count($result['questions']).' Mentormaths Perfection sums saved as '.$worksheet->set_code.'.';
+        $formatLabel = match ($result['output_format'] ?? $questionFormat) {
+            \App\Services\MmpImportService::FORMAT_MCQ => 'MCQ',
+            \App\Services\MmpImportService::FORMAT_WRITTEN => 'written',
+            default => 'fill-in-blank',
+        };
+
+        $message = count($result['questions'])." Mentormaths Perfection {$formatLabel} sums saved as {$worksheet->set_code}.";
         if (($result['diagram_count'] ?? 0) > 0) {
             $message .= ' '.$result['diagram_count'].' AI-generated figure(s) attached.';
+        }
+
+        if (($result['output_format'] ?? null) === \App\Services\MmpImportService::FORMAT_WRITTEN) {
+            return redirect()
+                ->route('admin.written-sheets.show', $worksheet)
+                ->with('success', $message);
         }
 
         return redirect()
