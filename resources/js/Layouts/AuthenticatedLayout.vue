@@ -145,6 +145,7 @@ const contentGroup = computed(() => ({
         route().current('admin.questions.*')
         || route().current('admin.question-audit.*')
         || route().current('admin.chapter-heads.*')
+        || route().current('admin.concept-overview.*')
         || route().current('admin.syllabus.*')
         || route().current('admin.textbooks.*')
         || route().current('admin.concept-builder.*')
@@ -186,6 +187,14 @@ const contentGroup = computed(() => ({
                 && !route().current('admin.questions.coverage')
                 && !route().current('admin.questions.set-code'),
             show: true,
+        },
+        {
+            label: 'Concept overview',
+            href: route().has('admin.concept-overview.index')
+                ? route('admin.concept-overview.index')
+                : '/admin/concept-overview',
+            active: route().current('admin.concept-overview.*'),
+            show: isAdmin.value && route().has('admin.concept-overview.index'),
         },
         {
             label: 'Chapter heads',

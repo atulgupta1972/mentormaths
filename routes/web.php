@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\AlgebraCardController;
 use App\Http\Controllers\Admin\MensurationMatchSettingsController;
 use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ChapterHeadController;
+use App\Http\Controllers\Admin\ConceptOverviewController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
 use App\Http\Controllers\Admin\ClassAssignmentController;
 use App\Http\Controllers\Admin\ClassHubController;
@@ -302,6 +303,9 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'show'])->name('chapter-heads.show');
     Route::put('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'update'])->name('chapter-heads.update');
     Route::delete('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'destroy'])->name('chapter-heads.destroy');
+
+    Route::get('/concept-overview', [ConceptOverviewController::class, 'index'])->name('concept-overview.index');
+    Route::get('/concept-overview/{chapterHead}', [ConceptOverviewController::class, 'show'])->name('concept-overview.show');
 
     Route::get('/questions/create', [QuestionController::class, 'create'])->name('questions.create');
     Route::get('/questions/create-fill-in-blank', [QuestionController::class, 'createFillInBlank'])->name('questions.create-fill-in-blank');

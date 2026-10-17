@@ -33,7 +33,10 @@ const submit = () => {
                         <span v-if="activeYear"> · {{ activeYear.name }}</span>
                     </p>
                 </div>
-                <Link :href="route('admin.syllabus.index')" class="text-sm text-indigo-600">← Syllabus</Link>
+                <div class="flex flex-wrap gap-3 text-sm">
+                    <Link :href="route('admin.concept-overview.index')" class="font-medium text-teal-700">Concept overview map →</Link>
+                    <Link :href="route('admin.syllabus.index')" class="text-indigo-600">← Syllabus</Link>
+                </div>
             </div>
         </template>
 

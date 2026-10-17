@@ -24,6 +24,12 @@ defineProps({
                         <span v-if="activeYear"> · {{ activeYear.name }}</span>
                     </p>
                 </div>
+                <Link
+                    :href="route('admin.concept-overview.show', chapterHead.id)"
+                    class="rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800"
+                >
+                    Progressive concept map →
+                </Link>
             </div>
         </template>
 
