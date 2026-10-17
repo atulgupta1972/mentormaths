@@ -26,6 +26,88 @@ class ConceptOverviewTest extends TestCase
         $this->withoutVite();
     }
 
+    public function test_student_can_view_overview_and_run_concepts_but_not_manage(): void
+    {
+        $student = User::factory()->create(['role' => User::ROLE_STUDENT]);
+
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+        $cbse = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
+        $class7 = GradeLevel::query()->create(['name' => 'Class 7', 'sort_order' => 7, 'is_active' => true]);
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
+        $head = ChapterHead::query()->create([
+            'name' => 'Triangles',
+            'branch' => 'geometry',
+            'sort_order' => 1,
+        ]);
+        $sv = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'board_id' => $cbse->id,
+            'grade_level_id' => $class7->id,
+            'subject_id' => $subject->id,
+            'status' => SyllabusVersion::STATUS_DRAFT,
+        ]);
+        $ch = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $sv->id,
+            'chapter_head_id' => $head->id,
+            'chapter_number' => 'P2- Ch 1',
+            'name' => 'Geometric Twins',
+            'sort_order' => 1,
+        ]);
+        $textbook = Textbook::query()->create([
+            'name' => 'Demo Book',
+            'code' => 'DEMO',
+            'board_id' => $cbse->id,
+            'grade_level_id' => $class7->id,
+            'is_active' => true,
+            'created_by' => $student->id,
+        ]);
+        $tbChapter = TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $ch->id,
+            'chapter_number' => 1,
+            'title' => 'Geometric Twins',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'concept_path_status' => ConceptPathStatus::APPROVED,
+            'concept_path_items' => [
+                'chapter_title' => 'Geometric Twins',
+                'cards' => [
+                    [
+                        'step' => 1,
+                        'type' => 'teach',
+                        'title' => 'Congruence',
+                        'approved' => true,
+                        'body' => 'Same shape and size.',
+                    ],
+                ],
+            ],
+            'created_by' => $student->id,
+        ]);
+
+        $this->actingAs($student)
+            ->get(route('admin.concept-overview.index', ['class' => 7, 'board' => $cbse->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ConceptOverview/Index')
+                ->where('can_manage', false)
+                ->where('class_cards.0.play_url', route('concepts.play', $tbChapter))
+                ->where('class_cards.0.concept_url', null)
+                ->where('class_cards.0.syllabus_url', null));
+
+        $this->actingAs($student)
+            ->get(route('concepts.play', $tbChapter))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Textbooks/ConceptPathPlay')
+                ->where('runOnly', true)
+                ->where('chapter.builder_url', null)
+                ->has('path.cards', 1));
+    }
+
     public function test_admin_sees_concept_overview_matrix_and_drill_down(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);

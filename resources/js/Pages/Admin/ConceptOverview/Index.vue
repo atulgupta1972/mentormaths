@@ -16,6 +16,7 @@ const props = defineProps({
     summary: { type: Object, default: () => ({}) },
     untagged_chapters: { type: Array, default: () => [] },
     orphan_tagged_chapters: { type: Array, default: () => [] },
+    can_manage: { type: Boolean, default: false },
     filters: { type: Object, default: () => ({}) },
 });
 
@@ -113,11 +114,12 @@ const boardEntries = (classCell, code) => {
                     <p class="text-xs font-semibold uppercase tracking-wide text-teal-700">USP · Progressive learning map</p>
                     <h2 class="mt-1 text-xl font-semibold text-gray-900">Concept overview</h2>
                     <p class="mt-1 max-w-2xl text-sm text-gray-600">
-                        Pick Class 7 + CBSE to see one concept card per syllabus chapter (e.g. Geometric Twins).
-                        Or browse the progressive map by branch across classes.
+                        Pick a class and board to see concept cards. Ready cards can be run by anyone signed in.
+                        <span v-if="can_manage">Admins can still open create/edit tools from here.</span>
                     </p>
                 </div>
                 <Link
+                    v-if="can_manage"
                     :href="route('admin.chapter-heads.index')"
                     class="text-sm font-medium text-teal-700 hover:text-teal-900"
                 >
@@ -191,7 +193,7 @@ const boardEntries = (classCell, code) => {
                 </div>
 
                 <div
-                    v-if="untagged_chapters.length"
+                    v-if="can_manage && untagged_chapters.length"
                     class="rounded-2xl border border-rose-200 bg-rose-50/80 px-5 py-4 text-sm text-rose-950"
                 >
                     <p class="font-semibold">{{ untagged_chapters.length }} chapter{{ untagged_chapters.length === 1 ? '' : 's' }} without a chapter head</p>
@@ -206,7 +208,7 @@ const boardEntries = (classCell, code) => {
                 </div>
 
                 <div
-                    v-if="orphan_tagged_chapters.length"
+                    v-if="can_manage && orphan_tagged_chapters.length"
                     class="rounded-2xl border border-amber-200 bg-amber-50/80 px-5 py-4 text-sm text-amber-950"
                 >
                     <p class="font-semibold">{{ orphan_tagged_chapters.length }} tagged chapter{{ orphan_tagged_chapters.length === 1 ? '' : 's' }} not landing on the map</p>
@@ -255,6 +257,13 @@ const boardEntries = (classCell, code) => {
                             </p>
                             <p class="mt-2 text-xs font-medium">{{ card.status_label }}</p>
                             <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                                <a
+                                    v-if="card.play_url"
+                                    :href="card.play_url"
+                                    class="rounded-md bg-white/20 px-2 py-1 underline opacity-90 hover:opacity-100"
+                                >
+                                    Run concepts
+                                </a>
                                 <Link
                                     v-if="card.head_url"
                                     :href="card.head_url"
@@ -263,14 +272,14 @@ const boardEntries = (classCell, code) => {
                                     Ladder
                                 </Link>
                                 <a
-                                    v-if="card.syllabus_url"
+                                    v-if="can_manage && card.syllabus_url"
                                     :href="card.syllabus_url"
                                     class="underline opacity-90 hover:opacity-100"
                                 >
                                     Syllabus
                                 </a>
                                 <a
-                                    v-if="card.concept_url"
+                                    v-if="can_manage && card.concept_url"
                                     :href="card.concept_url"
                                     class="underline opacity-90 hover:opacity-100"
                                 >
@@ -317,9 +326,14 @@ const boardEntries = (classCell, code) => {
                 </div>
 
                 <p v-if="!branches.length" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                    No chapter heads in this view yet. Tag syllabus chapters with a
-                    <Link :href="route('admin.chapter-heads.index')" class="font-semibold underline">chapter head + branch</Link>,
-                    then this map fills in.
+                    <template v-if="can_manage">
+                        No chapter heads in this view yet. Tag syllabus chapters with a
+                        <Link :href="route('admin.chapter-heads.index')" class="font-semibold underline">chapter head + branch</Link>,
+                        then this map fills in.
+                    </template>
+                    <template v-else>
+                        No concepts are mapped yet. Ask your mentor when the concept map is ready.
+                    </template>
                 </p>
 
                 <!-- One matrix table per branch -->

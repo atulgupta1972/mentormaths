@@ -706,7 +706,7 @@ class ConceptOverviewService
                     'title' => (string) $tb->title,
                     'concept_url' => route('admin.textbooks.concept-path', $tb),
                     'play_url' => $status === ConceptPathStatus::APPROVED
-                        ? route('admin.textbooks.concept-path.play', $tb)
+                        ? route('concepts.play', $tb)
                         : null,
                 ];
             });

@@ -193,8 +193,9 @@ const contentGroup = computed(() => ({
             href: route().has('admin.concept-overview.index')
                 ? route('admin.concept-overview.index')
                 : '/admin/concept-overview',
-            active: route().current('admin.concept-overview.*'),
-            show: isAdmin.value && route().has('admin.concept-overview.index'),
+            active: route().current('admin.concept-overview.*')
+                || route().current('concepts.play'),
+            show: route().has('admin.concept-overview.index'),
         },
         {
             label: 'Chapter heads',

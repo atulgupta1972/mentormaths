@@ -31,8 +31,11 @@ class ConceptOverviewController extends Controller
             $classNumber ?: null,
         );
 
+        $canManage = (bool) $request->user()?->isAdmin();
+
         return Inertia::render('Admin/ConceptOverview/Index', [
-            ...$payload,
+            ...$this->sanitizeForViewer($payload, $canManage),
+            'can_manage' => $canManage,
             'filters' => [
                 'year' => $yearId ?: ($payload['year']['id'] ?? null),
                 'board' => $boardId ?: null,
@@ -59,9 +62,11 @@ class ConceptOverviewController extends Controller
     {
         $yearId = $request->integer('year') ?: null;
         $payload = $this->overview->progression($chapterHead, $yearId ?: null);
+        $canManage = (bool) $request->user()?->isAdmin();
 
         return Inertia::render('Admin/ConceptOverview/Show', [
-            ...$payload,
+            ...$this->sanitizeProgressionForViewer($payload, $canManage),
+            'can_manage' => $canManage,
             'filters' => [
                 'year' => $yearId ?: ($payload['year']['id'] ?? null),
             ],
@@ -77,5 +82,77 @@ class ConceptOverviewController extends Controller
                 'year' => $yearId ?: null,
             ])),
         ]);
+    }
+
+    /**
+     * Strip create/edit URLs for non-admin viewers (run-only).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function sanitizeForViewer(array $payload, bool $canManage): array
+    {
+        if ($canManage) {
+            return $payload;
+        }
+
+        $stripCell = function (array $cell) use (&$stripCell): array {
+            $cell['concept_url'] = null;
+            $cell['syllabus_url'] = null;
+            if (isset($cell['entries']) && is_array($cell['entries'])) {
+                $cell['entries'] = array_map($stripCell, $cell['entries']);
+            }
+
+            return $cell;
+        };
+
+        foreach ($payload['branches'] ?? [] as $bi => $branch) {
+            foreach ($branch['rows'] ?? [] as $ri => $row) {
+                foreach ($row['cells'] ?? [] as $classKey => $classCell) {
+                    foreach ($classCell['boards'] ?? [] as $code => $boardCell) {
+                        $payload['branches'][$bi]['rows'][$ri]['cells'][$classKey]['boards'][$code] = $stripCell($boardCell);
+                    }
+                }
+            }
+        }
+
+        foreach ($payload['rows'] ?? [] as $ri => $row) {
+            foreach ($row['cells'] ?? [] as $classKey => $classCell) {
+                foreach ($classCell['boards'] ?? [] as $code => $boardCell) {
+                    $payload['rows'][$ri]['cells'][$classKey]['boards'][$code] = $stripCell($boardCell);
+                }
+            }
+        }
+
+        foreach ($payload['class_cards'] ?? [] as $i => $card) {
+            $payload['class_cards'][$i]['concept_url'] = null;
+            $payload['class_cards'][$i]['syllabus_url'] = null;
+        }
+
+        $payload['untagged_chapters'] = [];
+        $payload['orphan_tagged_chapters'] = [];
+
+        return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function sanitizeProgressionForViewer(array $payload, bool $canManage): array
+    {
+        if ($canManage) {
+            return $payload;
+        }
+
+        foreach ($payload['ladder'] ?? [] as $li => $rung) {
+            foreach ($rung['boards'] ?? [] as $bi => $board) {
+                $payload['ladder'][$li]['boards'][$bi]['concept_url'] = null;
+                $payload['ladder'][$li]['boards'][$bi]['syllabus_url'] = null;
+                $payload['ladder'][$li]['boards'][$bi]['topics'] = [];
+            }
+        }
+
+        return $payload;
     }
 }

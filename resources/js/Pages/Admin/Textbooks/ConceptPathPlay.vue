@@ -11,6 +11,7 @@ import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     uploaderMode: { type: Boolean, default: false },
+    runOnly: { type: Boolean, default: false },
     singleCard: { type: Boolean, default: false },
     jobCompletedFlash: { type: String, default: null },
     chapter: { type: Object, required: true },
@@ -248,7 +249,20 @@ const clockDemoTurn = computed(() => {
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-3 text-sm">
-                    <Link :href="chapter.edit_url" class="text-indigo-600 hover:underline">Edit path</Link>
+                    <Link
+                        v-if="!runOnly && chapter.edit_url"
+                        :href="chapter.edit_url"
+                        class="text-indigo-600 hover:underline"
+                    >
+                        Edit path
+                    </Link>
+                    <Link
+                        v-if="runOnly && chapter.overview_url"
+                        :href="chapter.overview_url"
+                        class="text-indigo-600 hover:underline"
+                    >
+                        Concept overview
+                    </Link>
                     <Link
                         v-if="singleCard && chapter.can_run_full && chapter.play_url"
                         :href="chapter.play_url"
@@ -256,7 +270,13 @@ const clockDemoTurn = computed(() => {
                     >
                         Run all concepts
                     </Link>
-                    <Link :href="chapter.builder_url" class="text-indigo-600 hover:underline">Concept builder</Link>
+                    <Link
+                        v-if="!runOnly && chapter.builder_url"
+                        :href="chapter.builder_url"
+                        class="text-indigo-600 hover:underline"
+                    >
+                        Concept builder
+                    </Link>
                 </div>
             </div>
         </template>
@@ -299,8 +319,10 @@ const clockDemoTurn = computed(() => {
                         >
                             <SecondaryButton type="button">Run all concepts</SecondaryButton>
                         </Link>
-                        <Link :href="chapter.edit_url">
-                            <SecondaryButton type="button">Back to cards</SecondaryButton>
+                        <Link :href="runOnly ? (chapter.overview_url || chapter.edit_url) : chapter.edit_url">
+                            <SecondaryButton type="button">
+                                {{ runOnly ? 'Back to overview' : 'Back to cards' }}
+                            </SecondaryButton>
                         </Link>
                     </div>
                 </div>

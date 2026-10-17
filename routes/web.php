@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\MensurationMatchSettingsController;
 use App\Http\Controllers\Admin\CatchUpSetController;
 use App\Http\Controllers\Admin\ChapterHeadController;
 use App\Http\Controllers\Admin\ConceptOverviewController;
+use App\Http\Controllers\ConceptPlayController;
 use App\Http\Controllers\Admin\ChapterPracticeSetController;
 use App\Http\Controllers\Admin\ClassAssignmentController;
 use App\Http\Controllers\Admin\ClassHubController;
@@ -133,6 +134,16 @@ Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(
     Route::get('/questions/topics/{topic}', [QuestionController::class, 'topicIndex'])->name('questions.topics.show');
     // Browse-only for students: Q&A redacted in controller. Admin import stays under admin middleware.
     Route::get('/formula-bank/sets/{worksheet}', [FormulaBankController::class, 'setShow'])->name('formula-bank.sets.show');
+
+    // Browse + run concepts — all signed-in roles. Create/edit stays under admin middleware.
+    Route::get('/concept-overview', [ConceptOverviewController::class, 'index'])->name('concept-overview.index');
+    Route::get('/concept-overview/{chapterHead}', [ConceptOverviewController::class, 'show'])->name('concept-overview.show');
+});
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/concepts/{textbookChapter}/play', [ConceptPlayController::class, 'play'])
+        ->whereNumber('textbookChapter')
+        ->name('concepts.play');
 });
 
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
@@ -303,9 +314,6 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'show'])->name('chapter-heads.show');
     Route::put('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'update'])->name('chapter-heads.update');
     Route::delete('/chapter-heads/{chapterHead}', [ChapterHeadController::class, 'destroy'])->name('chapter-heads.destroy');
-
-    Route::get('/concept-overview', [ConceptOverviewController::class, 'index'])->name('concept-overview.index');
-    Route::get('/concept-overview/{chapterHead}', [ConceptOverviewController::class, 'show'])->name('concept-overview.show');
 
     Route::get('/questions/create', [QuestionController::class, 'create'])->name('questions.create');
     Route::get('/questions/create-fill-in-blank', [QuestionController::class, 'createFillInBlank'])->name('questions.create-fill-in-blank');

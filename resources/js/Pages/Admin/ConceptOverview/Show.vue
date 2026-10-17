@@ -10,6 +10,7 @@ const props = defineProps({
     boards: { type: Array, default: () => [] },
     ladder: { type: Array, default: () => [] },
     compare_hint: { type: String, default: '' },
+    can_manage: { type: Boolean, default: false },
     filters: { type: Object, default: () => ({}) },
     back_url: { type: String, required: true },
 });
@@ -131,10 +132,10 @@ const statusClass = (status) => ({
                                                 ? 'bg-white text-[#0b2a5b] hover:bg-slate-100'
                                                 : 'bg-teal-700 text-white hover:bg-teal-800'"
                                         >
-                                            Play concept cards
+                                            Run concepts
                                         </a>
                                         <a
-                                            v-else-if="board.concept_url"
+                                            v-else-if="can_manage && board.concept_url"
                                             :href="board.concept_url"
                                             class="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800"
                                         >
@@ -144,10 +145,10 @@ const statusClass = (status) => ({
                                             v-else
                                             class="rounded-md border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-800"
                                         >
-                                            To be uploaded
+                                            {{ can_manage ? 'To be uploaded' : 'Not ready yet' }}
                                         </span>
                                         <a
-                                            v-if="board.syllabus_url"
+                                            v-if="can_manage && board.syllabus_url"
                                             :href="board.syllabus_url"
                                             class="rounded-md border px-3 py-1.5 text-xs font-medium"
                                             :class="board.status === 'ready'
@@ -157,6 +158,7 @@ const statusClass = (status) => ({
                                             Syllabus
                                         </a>
                                         <Link
+                                            v-if="can_manage"
                                             :href="route('admin.concept-builder.index')"
                                             class="rounded-md border px-3 py-1.5 text-xs font-medium"
                                             :class="board.status === 'ready'
@@ -168,7 +170,7 @@ const statusClass = (status) => ({
                                     </div>
 
                                     <ul
-                                        v-if="board.topics?.length"
+                                        v-if="can_manage && board.topics?.length"
                                         class="mt-3 space-y-1 border-t pt-3"
                                         :class="board.status === 'ready' ? 'border-white/20' : 'border-black/5'"
                                     >
