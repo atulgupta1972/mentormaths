@@ -86,12 +86,20 @@ const tallyScopeLabel = computed(() => {
     return parts.length ? parts.join(' · ') : 'Class 4–10';
 });
 
-const cellChapterName = (cell, code) => {
-    if (!cell) return null;
-    if (code) return cell.boards?.[code]?.chapter_name || null;
-    const boards = cell.boards || {};
-    const first = Object.values(boards).find((b) => b?.chapter_name);
-    return first?.chapter_name || null;
+const boardEntries = (classCell, code) => {
+    if (!classCell) return [];
+    if (code) {
+        const board = classCell.boards?.[code];
+        if (!board) return [];
+        if (Array.isArray(board.entries) && board.entries.length) return board.entries;
+        return board.present ? [board] : [];
+    }
+    const boards = classCell.boards || {};
+    return Object.values(boards).flatMap((board) => {
+        if (!board) return [];
+        if (Array.isArray(board.entries) && board.entries.length) return board.entries;
+        return board.present ? [board] : [];
+    });
 };
 </script>
 
@@ -367,35 +375,49 @@ const cellChapterName = (cell, code) => {
                                             class="flex min-w-[6.5rem] flex-col gap-1"
                                         >
                                             <template v-if="compare && boardCodes.length > 1">
-                                                <div
-                                                    v-for="code in boardCodes"
-                                                    :key="code"
-                                                    class="rounded-md border px-1.5 py-1 text-center text-[10px] font-semibold leading-tight"
-                                                    :class="statusClass(row.cells[String(cls.number)].boards[code]?.status || 'empty')"
-                                                >
-                                                    <span class="opacity-70">{{ code }}</span>
-                                                    <span class="ml-1">{{ shortLabel(row.cells[String(cls.number)].boards[code]?.status || 'empty') }}</span>
-                                                    <p
-                                                        v-if="cellChapterName(row.cells[String(cls.number)], code)"
-                                                        class="mt-0.5 truncate text-[9px] font-normal opacity-80"
+                                                <template v-for="code in boardCodes" :key="code">
+                                                    <div
+                                                        v-for="(entry, idx) in (boardEntries(row.cells[String(cls.number)], code).length
+                                                            ? boardEntries(row.cells[String(cls.number)], code)
+                                                            : [{ status: 'empty', chapter_name: null }])"
+                                                        :key="`${code}-${entry.chapter_id || idx}`"
+                                                        class="rounded-md border px-1.5 py-1 text-center text-[10px] font-semibold leading-tight"
+                                                        :class="statusClass(entry.status || 'empty')"
                                                     >
-                                                        {{ cellChapterName(row.cells[String(cls.number)], code) }}
+                                                        <span class="opacity-70">{{ code }}</span>
+                                                        <span class="ml-1">{{ shortLabel(entry.status || 'empty') }}</span>
+                                                        <p
+                                                            v-if="entry.chapter_name"
+                                                            class="mt-0.5 line-clamp-2 text-[9px] font-normal opacity-80"
+                                                        >
+                                                            {{ entry.chapter_name }}
+                                                        </p>
+                                                    </div>
+                                                </template>
+                                            </template>
+                                            <template v-else>
+                                                <div
+                                                    v-for="(entry, idx) in boardEntries(row.cells[String(cls.number)])"
+                                                    :key="entry.chapter_id || idx"
+                                                    class="rounded-md border px-2 py-2 text-center text-[11px] font-semibold"
+                                                    :class="statusClass(entry.status)"
+                                                >
+                                                    {{ shortLabel(entry.status) }}
+                                                    <p
+                                                        v-if="entry.chapter_name"
+                                                        class="mt-0.5 line-clamp-2 text-[9px] font-normal opacity-80"
+                                                    >
+                                                        {{ entry.chapter_name }}
                                                     </p>
                                                 </div>
-                                            </template>
-                                            <div
-                                                v-else
-                                                class="rounded-md border px-2 py-2 text-center text-[11px] font-semibold"
-                                                :class="statusClass(row.cells[String(cls.number)].best_status)"
-                                            >
-                                                {{ shortLabel(row.cells[String(cls.number)].best_status) }}
-                                                <p
-                                                    v-if="cellChapterName(row.cells[String(cls.number)])"
-                                                    class="mt-0.5 truncate text-[9px] font-normal opacity-80"
+                                                <div
+                                                    v-if="!boardEntries(row.cells[String(cls.number)]).length"
+                                                    class="rounded-md border px-2 py-2 text-center text-[11px] font-semibold"
+                                                    :class="statusClass('empty')"
                                                 >
-                                                    {{ cellChapterName(row.cells[String(cls.number)]) }}
-                                                </p>
-                                            </div>
+                                                    —
+                                                </div>
+                                            </template>
                                         </div>
                                         <div
                                             v-else

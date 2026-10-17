@@ -46,13 +46,10 @@ class ConceptOverviewService
             ? ConceptBranch::normalize($branchKey)
             : null;
 
-        // Draft + published loaded; then keep one preferred syllabus version per class×board
-        // (draft wins — same truth as the syllabus editor).
+        // Draft + published; merge sibling Class-7 grades, keep distinct chapter titles
+        // (so Triangles can show both Geometric Twins and A Tale of Three Intersecting Lines).
         $allLoaded = $this->loadChapters($year?->id, taggedOnly: false);
-        $preferredVersionIds = $this->preferredVersionIds($allLoaded);
-        $allYearChapters = $allLoaded
-            ->filter(fn (SyllabusChapter $ch) => in_array((int) $ch->syllabus_version_id, $preferredVersionIds, true))
-            ->values();
+        $allYearChapters = $this->dedupeChaptersForOverview($allLoaded);
         $chapters = $allYearChapters
             ->filter(fn (SyllabusChapter $ch) => $ch->chapter_head_id !== null)
             ->values();
@@ -135,29 +132,39 @@ class ConceptOverviewService
 
                     $boardMatches = $classChapters
                         ->filter(fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id'])
+                        ->sortBy(fn (SyllabusChapter $ch) => [(int) $ch->sort_order, (string) $ch->chapter_number, (string) $ch->name])
                         ->values();
 
                     foreach ($boardMatches as $match) {
                         $mappedChapterIds[(int) $match->id] = true;
                     }
 
-                    $boardChapter = $boardMatches->first();
+                    $entries = $boardMatches->map(
+                        fn (SyllabusChapter $ch) => $this->buildCell($ch, $board, $conceptBySyllabus, $practiceCounts)
+                    )->all();
 
-                    $cell = $this->buildCell(
-                        $boardChapter,
-                        $board,
-                        $conceptBySyllabus,
-                        $practiceCounts,
-                    );
+                    $cell = $this->buildBoardGroupCell($board, $entries);
                     $byBoard[$board['code']] = $cell;
-                    $this->tallySummary($summary, $cell);
+                    foreach ($entries as $entry) {
+                        $this->tallySummary($summary, $entry);
+                    }
+                }
+
+                $allStatuses = [];
+                foreach ($byBoard as $boardCell) {
+                    foreach ($boardCell['entries'] ?? [] as $entry) {
+                        $allStatuses[] = $entry['status'] ?? 'empty';
+                    }
+                    if (($boardCell['entries'] ?? []) === [] && isset($boardCell['status'])) {
+                        $allStatuses[] = $boardCell['status'];
+                    }
                 }
 
                 $cells[(string) $class['number']] = [
                     'class_number' => $class['number'],
                     'class_name' => $class['name'],
                     'boards' => $byBoard,
-                    'best_status' => $this->bestStatus(array_column($byBoard, 'status')),
+                    'best_status' => $this->bestStatus($allStatuses),
                 ];
             }
 
@@ -238,10 +245,7 @@ class ConceptOverviewService
         $allLoaded = $this->loadChapters($year?->id, taggedOnly: true)
             ->where('chapter_head_id', $head->id)
             ->values();
-        $preferredVersionIds = $this->preferredVersionIds($allLoaded);
-        $chapters = $allLoaded
-            ->filter(fn (SyllabusChapter $ch) => in_array((int) $ch->syllabus_version_id, $preferredVersionIds, true))
-            ->values();
+        $chapters = $this->dedupeChaptersForOverview($allLoaded);
 
         $conceptBySyllabus = $this->conceptPathsBySyllabusChapter($chapters->pluck('id')->all());
         $practiceCounts = $this->practiceCountsBySyllabusChapter($chapters->pluck('id')->all());
@@ -257,29 +261,29 @@ class ConceptOverviewService
 
             $boardCards = [];
             foreach ($boards as $board) {
-                $chapter = $classChapters->first(
-                    fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id']
-                );
-                if (! $chapter) {
-                    continue;
+                $matches = $classChapters
+                    ->filter(fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id'])
+                    ->sortBy(fn (SyllabusChapter $ch) => [(int) $ch->sort_order, (string) $ch->chapter_number, (string) $ch->name])
+                    ->values();
+
+                foreach ($matches as $chapter) {
+                    $cell = $this->buildCell($chapter, $board, $conceptBySyllabus, $practiceCounts);
+                    $topics = $chapter->topics
+                        ->sortBy('sort_order')
+                        ->values()
+                        ->map(fn ($topic) => [
+                            'id' => $topic->id,
+                            'name' => $topic->name,
+                            'difficulty' => $topic->difficulty,
+                            'practice_url' => route('admin.practice-sets.topics.show', $topic),
+                        ])
+                        ->all();
+
+                    $boardCards[] = array_merge($cell, [
+                        'topics' => $topics,
+                        'topic_count' => count($topics),
+                    ]);
                 }
-
-                $cell = $this->buildCell($chapter, $board, $conceptBySyllabus, $practiceCounts);
-                $topics = $chapter->topics
-                    ->sortBy('sort_order')
-                    ->values()
-                    ->map(fn ($topic) => [
-                        'id' => $topic->id,
-                        'name' => $topic->name,
-                        'difficulty' => $topic->difficulty,
-                        'practice_url' => route('admin.practice-sets.topics.show', $topic),
-                    ])
-                    ->all();
-
-                $boardCards[] = array_merge($cell, [
-                    'topics' => $topics,
-                    'topic_count' => count($topics),
-                ]);
             }
 
             if ($boardCards === []) {
@@ -395,12 +399,13 @@ class ConceptOverviewService
     }
 
     /**
-     * One syllabus version per class × board — draft (editor) beats published.
+     * Merge draft/published and sibling grades for the same class×board.
+     * Keep every distinct chapter title (e.g. two Triangles chapters), drop only true duplicates.
      *
      * @param  Collection<int, SyllabusChapter>  $chapters
-     * @return list<int>
+     * @return Collection<int, SyllabusChapter>
      */
-    private function preferredVersionIds(Collection $chapters): array
+    private function dedupeChaptersForOverview(Collection $chapters): Collection
     {
         return $chapters
             ->filter(fn (SyllabusChapter $ch) => $ch->syllabusVersion !== null)
@@ -410,30 +415,58 @@ class ConceptOverviewService
 
                 return $n.'|'.$boardId;
             })
-            ->map(function (Collection $group) {
-                $versions = $group
-                    ->map(fn (SyllabusChapter $ch) => $ch->syllabusVersion)
-                    ->unique('id')
+            ->flatMap(function (Collection $group) {
+                return $group
+                    ->groupBy(function (SyllabusChapter $ch) {
+                        $num = mb_strtolower(trim((string) $ch->chapter_number));
+                        $name = mb_strtolower(trim((string) $ch->name));
+
+                        return $num.'|'.$name;
+                    })
+                    ->map(fn (Collection $dupes) => $dupes->sortByDesc(
+                        fn (SyllabusChapter $ch) => $this->chapterPreferenceScore($ch)
+                    )->first())
                     ->values();
-
-                $best = $versions->sortByDesc(function (SyllabusVersion $sv) {
-                    $gradeName = trim((string) ($sv->gradeLevel?->name ?? ''));
-                    $n = $this->classNumber($sv->gradeLevel);
-                    $canonical = preg_match('/^class\s*'.$n.'$/i', $gradeName) ? 2 : 0;
-                    $statusRank = match ($sv->status) {
-                        SyllabusVersion::STATUS_DRAFT => 2,
-                        SyllabusVersion::STATUS_PUBLISHED => 1,
-                        default => 0,
-                    };
-
-                    // Prefer real "Class 7" over "Class 7 Debug", then draft (editor) over published.
-                    return ($canonical * 1_000_000_000) + ($statusRank * 1_000_000) + (int) $sv->id;
-                })->first();
-
-                return (int) $best->id;
             })
-            ->values()
-            ->all();
+            ->values();
+    }
+
+    private function chapterPreferenceScore(SyllabusChapter $ch): int
+    {
+        $sv = $ch->syllabusVersion;
+        $gradeName = trim((string) ($sv?->gradeLevel?->name ?? ''));
+        $n = $this->classNumber($sv?->gradeLevel);
+        $canonical = preg_match('/^class\s*'.$n.'$/i', $gradeName) ? 2 : 0;
+        $statusRank = match ($sv?->status) {
+            SyllabusVersion::STATUS_DRAFT => 2,
+            SyllabusVersion::STATUS_PUBLISHED => 1,
+            default => 0,
+        };
+
+        return ($canonical * 1_000_000_000) + ($statusRank * 1_000_000) + (int) $ch->id;
+    }
+
+    /**
+     * @param  array{id: int, code: string, name: string}  $board
+     * @param  list<array<string, mixed>>  $entries
+     * @return array<string, mixed>
+     */
+    private function buildBoardGroupCell(array $board, array $entries): array
+    {
+        if ($entries === []) {
+            return array_merge($this->buildCell(null, $board, [], []), [
+                'entries' => [],
+            ]);
+        }
+
+        $best = $this->bestStatus(array_column($entries, 'status'));
+        $primary = collect($entries)->first(fn (array $e) => ($e['status'] ?? '') === $best) ?: $entries[0];
+
+        return array_merge($primary, [
+            'status' => $best,
+            'status_label' => $primary['status_label'] ?? $best,
+            'entries' => array_values($entries),
+        ]);
     }
 
     /**

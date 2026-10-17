@@ -237,9 +237,67 @@ class ConceptOverviewTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/ConceptOverview/Index')
-                ->where('summary.chapters_total', 1)
-                ->has('class_cards', 1)
-                ->where('class_cards.0.chapter_name', 'Geometric Twins')
-                ->where('rows.0.cells.7.boards.CBSE.chapter_name', 'Geometric Twins'));
+                // Distinct titles from sibling Class-7 grades both stay on the map.
+                ->where('summary.chapters_total', 2)
+                ->has('class_cards', 2)
+                ->where('rows.0.cells.7.boards.CBSE.entries', fn ($entries) => collect($entries)->contains(
+                    fn ($e) => ($e['chapter_name'] ?? null) === 'Geometric Twins'
+                )));
+    }
+
+    public function test_two_triangles_chapters_both_appear_in_class7_cell(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+        $cbse = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
+        $class7 = GradeLevel::query()->create(['name' => 'Class 7', 'sort_order' => 7, 'is_active' => true]);
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
+        $head = ChapterHead::query()->create([
+            'name' => 'Triangles',
+            'branch' => 'geometry',
+            'sort_order' => 1,
+        ]);
+
+        $sv = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'board_id' => $cbse->id,
+            'grade_level_id' => $class7->id,
+            'subject_id' => $subject->id,
+            'status' => SyllabusVersion::STATUS_DRAFT,
+        ]);
+        SyllabusChapter::query()->create([
+            'syllabus_version_id' => $sv->id,
+            'chapter_head_id' => $head->id,
+            'chapter_number' => 'P2- Ch 1',
+            'name' => 'Geometric Twins',
+            'sort_order' => 1,
+        ]);
+        SyllabusChapter::query()->create([
+            'syllabus_version_id' => $sv->id,
+            'chapter_head_id' => $head->id,
+            'chapter_number' => 'P1- Ch 3',
+            'name' => 'A Tale of Three Intersecting Lines',
+            'sort_order' => 2,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.concept-overview.index', [
+                'class' => 7,
+                'board' => $cbse->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ConceptOverview/Index')
+                ->where('summary.chapters_total', 2)
+                ->has('class_cards', 2)
+                ->has('rows.0.cells.7.boards.CBSE.entries', 2)
+                ->where('rows.0.cells.7.boards.CBSE.entries.0.chapter_name', 'Geometric Twins')
+                ->where('rows.0.cells.7.boards.CBSE.entries.1.chapter_name', 'A Tale of Three Intersecting Lines'));
     }
 }

@@ -68,7 +68,7 @@ const statusClass = (status) => ({
         <div class="py-8">
             <div class="mx-auto max-w-5xl space-y-8 px-4 sm:px-6 lg:px-8">
                 <p v-if="!ladder.length" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                    No published syllabus chapters use this chapter head yet.
+                    No syllabus chapters use this chapter head yet.
                 </p>
 
                 <ol class="relative space-y-6 border-l-2 border-teal-200 pl-6">
