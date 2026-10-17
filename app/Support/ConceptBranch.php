@@ -54,17 +54,19 @@ class ConceptBranch
     {
         $n = mb_strtolower(trim($name));
 
+        // Algebra before Geometry so "Linear Equations" is not caught by a bare "line" needle.
         $rules = [
             'trigonometry' => ['trigo', 'trigonometr', 'sin ', 'cos ', 'tan ', 'identit'],
             'mensuration' => ['mensurat', 'surface area', 'volume', 'perimeter', 'area and', 'areas and'],
-            'geometry' => [
-                'geometr', 'triangle', 'circle', 'quadrilateral', 'line', 'angle',
-                'construction', 'congruen', 'similar', 'coordinate', 'locus', 'symmetry',
-                'polyhedra', 'polygon', 'parallel', 'transversal',
-            ],
             'algebra' => [
                 'algebra', 'equation', 'expression', 'linear', 'quadratic', 'polynomial',
                 'factoris', 'factoriz', 'identity', 'inequalit', 'simultaneous',
+            ],
+            'geometry' => [
+                'geometr', 'triangle', 'circle', 'quadrilateral', 'line segment', 'straight line',
+                'lines and', 'angles', 'angle ',
+                'construction', 'congruen', 'similar', 'coordinate', 'locus', 'symmetry',
+                'polyhedra', 'polygon', 'parallel', 'transversal',
             ],
             'statistics' => ['statist', 'data handl', 'probability', 'graph', 'pie chart', 'mean', 'median', 'mode'],
             'commercial' => [
