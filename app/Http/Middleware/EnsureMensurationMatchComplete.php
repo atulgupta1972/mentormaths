@@ -2,8 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\StudentSeriesActivityDay;
 use App\Services\FormulaDrillSessionService;
-use App\Services\MensurationMatchService;
+use App\Services\SeriesActivityService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -12,7 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
 class EnsureMensurationMatchComplete
 {
     public function __construct(
-        private MensurationMatchService $mensuration,
+        private SeriesActivityService $series,
         private FormulaDrillSessionService $formulaService,
     ) {}
 
@@ -24,7 +25,8 @@ class EnsureMensurationMatchComplete
             return $next($request);
         }
 
-        if (! Schema::hasTable('mensuration_match_sessions')) {
+        if (! Schema::hasTable('mensuration_match_sessions')
+            && ! Schema::hasTable('student_series_activity_days')) {
             return $next($request);
         }
 
@@ -43,8 +45,18 @@ class EnsureMensurationMatchComplete
             return $next($request);
         }
 
-        if ($this->mensuration->gatePassed($student)) {
+        if ($this->series->gatePassed($student)) {
             return $next($request);
+        }
+
+        $kind = $this->series->todaysKind($student);
+
+        if ($kind === StudentSeriesActivityDay::KIND_ALGEBRA) {
+            if ($request->routeIs('student.algebra-cards.*')) {
+                return $next($request);
+            }
+
+            return redirect()->route('student.algebra-cards.show');
         }
 
         if ($request->routeIs('student.mensuration-match.*')) {
@@ -59,6 +71,8 @@ class EnsureMensurationMatchComplete
         return $request->routeIs(
             'student.formula-drill.*',
             'student.mensuration-match.*',
+            'student.algebra-cards.*',
+            'student.series-practice.*',
             'student.school-study-plan.*',
             'student.worksheets.self-assign',
             'student.worksheets.correction-practice',

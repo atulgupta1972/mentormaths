@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FormulaDrillItem;
 use App\Services\BasicsDrillSessionService;
 use App\Services\FormulaDrillSessionService;
-use App\Services\MensurationMatchService;
+use App\Services\SeriesActivityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +17,7 @@ class FormulaDrillController extends Controller
 {
     public function __construct(
         private FormulaDrillSessionService $sessionService,
-        private MensurationMatchService $mensuration,
+        private SeriesActivityService $series,
         private BasicsDrillSessionService $basics,
     ) {}
 
@@ -137,8 +137,8 @@ class FormulaDrillController extends Controller
 
     private function nextAfterFormulaRoute($student): string
     {
-        if (! $this->mensuration->gatePassed($student)) {
-            return 'student.mensuration-match.show';
+        if (! $this->series->gatePassed($student)) {
+            return $this->series->showRouteName($student);
         }
 
         if (! $this->basics->gatePassed($student)) {

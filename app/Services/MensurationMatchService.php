@@ -27,9 +27,22 @@ class MensurationMatchService
     }
 
     /**
-     * Daily series gate: after the 5 formulas, before basics — when class has match enabled.
+     * Daily series gate: after formulas, before basics — algebra cards OR mensuration (alternating).
      */
     public function gatePassed(Student $student): bool
+    {
+        return app(SeriesActivityService::class)->gatePassed($student);
+    }
+
+    public function isRequiredToday(Student $student): bool
+    {
+        return app(SeriesActivityService::class)->isRequiredToday($student);
+    }
+
+    /**
+     * Mensuration boards only (ignores algebra rotation).
+     */
+    public function boardsCompletedToday(Student $student): bool
     {
         if (! Schema::hasTable('mensuration_match_sessions')) {
             return true;
@@ -62,31 +75,6 @@ class MensurationMatchService
         }
 
         return true;
-    }
-
-    public function isRequiredToday(Student $student): bool
-    {
-        if (! Schema::hasTable('mensuration_match_sessions')) {
-            return false;
-        }
-
-        if (! $this->formulaService->drillsUnlocked($student)) {
-            return false;
-        }
-
-        $enrollment = $student->currentEnrollment();
-        if (! $enrollment) {
-            $enrollment = $student->enrollments()->with('gradeLevel')->latest('id')->first();
-        } else {
-            $enrollment->loadMissing('gradeLevel');
-        }
-
-        if (! $enrollment?->gradeLevel) {
-            return false;
-        }
-
-        return $this->boardsForEnrollment($enrollment) !== []
-            && ! $this->gatePassed($student);
     }
 
     public function classNumber(GradeLevel $grade): int
@@ -467,7 +455,12 @@ class MensurationMatchService
      */
     public function sessionForAutoPlay(Student $student, StudentEnrollment $enrollment): ?MensurationMatchSession
     {
-        if (! $this->isRequiredToday($student)) {
+        $series = app(SeriesActivityService::class);
+        if ($series->todaysKind($student) !== \App\Models\StudentSeriesActivityDay::KIND_MENSURATION) {
+            return null;
+        }
+
+        if ($this->boardsCompletedToday($student)) {
             return null;
         }
 

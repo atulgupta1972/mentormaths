@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
 use App\Models\MensurationMatchSession;
+use App\Models\StudentSeriesActivityDay;
 use App\Services\BasicsDrillSessionService;
 use App\Services\MensurationMatchService;
+use App\Services\SeriesActivityService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,6 +18,7 @@ class MensurationMatchController extends Controller
     public function __construct(
         private MensurationMatchService $mensuration,
         private BasicsDrillSessionService $basics,
+        private SeriesActivityService $series,
     ) {}
 
     public function show(Request $request): Response|RedirectResponse
@@ -30,12 +33,17 @@ class MensurationMatchController extends Controller
             return redirect()->route('dashboard')->with('error', 'Student enrollment required for Mensuration Match.');
         }
 
+        if ($this->series->todaysKind($student) === StudentSeriesActivityDay::KIND_ALGEBRA) {
+            return redirect()->route('student.algebra-cards.show');
+        }
+
         $boards = $this->mensuration->boardsForEnrollment($enrollment);
         $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
 
         // Stay on the completion screen — do not auto-kick to dashboard (iPad users
         // reported being dropped onto the site front page mid-flow).
         if ($allDone) {
+            $this->series->markMensurationComplete($student);
             $settings = $enrollment->gradeLevel
                 ? $this->mensuration->settingsForGrade($enrollment->gradeLevel)
                 : null;
@@ -90,6 +98,11 @@ class MensurationMatchController extends Controller
 
     public function start(Request $request): RedirectResponse
     {
+        $student = $request->user()?->student;
+        if ($student && $this->series->todaysKind($student) === StudentSeriesActivityDay::KIND_ALGEBRA) {
+            return redirect()->route('student.algebra-cards.show');
+        }
+
         $validated = $request->validate([
             'board' => ['required', 'string', 'in:perimeter_area,volume'],
             'ready' => ['accepted'],
@@ -122,6 +135,11 @@ class MensurationMatchController extends Controller
 
     public function play(Request $request, MensurationMatchSession $session): Response|RedirectResponse
     {
+        $student = $request->user()?->student;
+        if ($student && $this->series->todaysKind($student) === StudentSeriesActivityDay::KIND_ALGEBRA) {
+            return redirect()->route('student.algebra-cards.show');
+        }
+
         $user = $request->user();
         $student = $user?->student;
         abort_unless($student && (int) $session->student_id === (int) $student->id, 403);
@@ -193,6 +211,8 @@ class MensurationMatchController extends Controller
                 $allDone = $boards !== [] && collect($boards)->every(fn (array $b) => ! empty($b['completed_today']));
 
                 if ($allDone) {
+                    $this->series->markMensurationComplete($student);
+
                     return redirect()
                         ->route('student.mensuration-match.show')
                         ->with('success', 'Mensuration Match complete — tap Continue when you are ready.');

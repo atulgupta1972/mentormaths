@@ -48,6 +48,7 @@ use App\Http\Controllers\MentorTrialSignupController;
 use App\Http\Controllers\Mentor\ClassHubController as MentorClassHubController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationRequestController;
+use App\Http\Controllers\Student\AlgebraCardController as StudentAlgebraCardController;
 use App\Http\Controllers\Student\BasicsDrillController;
 use App\Http\Controllers\Student\MensurationMatchController;
 use App\Http\Controllers\Student\ClassCoverageController;
@@ -568,6 +569,13 @@ Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->nam
     Route::post('/mensuration-match/start', [MensurationMatchController::class, 'start'])->name('mensuration-match.start');
     Route::get('/mensuration-match/sessions/{session}', [MensurationMatchController::class, 'play'])->name('mensuration-match.play');
     Route::post('/mensuration-match/sessions/{session}/answer', [MensurationMatchController::class, 'answer'])->name('mensuration-match.answer');
+
+    Route::get('/series-practice', [StudentAlgebraCardController::class, 'entry'])->name('series-practice.show');
+    Route::get('/algebra-cards', [StudentAlgebraCardController::class, 'show'])->name('algebra-cards.show');
+    Route::post('/algebra-cards/answer', [StudentAlgebraCardController::class, 'answer'])->name('algebra-cards.answer');
+    Route::get('/algebra-cards/{pack}/figures/{figure}', [StudentAlgebraCardController::class, 'figure'])
+        ->where('figure', 'q([1-9]|10)\\.png')
+        ->name('algebra-cards.figure');
 });
 
 Route::middleware(['auth', 'verified', 'formula.drill', 'mensuration.drill'])->prefix('student')->name('student.')->group(function () {

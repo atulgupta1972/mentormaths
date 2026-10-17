@@ -297,7 +297,9 @@ const resourcesGroup = computed(() => ({
     label: 'Resources',
     active: route().current('student.resources.*')
         || route().current('student.written-assignments.*')
-        || route().current('student.mensuration-match.*'),
+        || route().current('student.mensuration-match.*')
+        || route().current('student.algebra-cards.*')
+        || route().current('student.series-practice.*'),
     items: [
         {
             label: 'Formulas',
@@ -308,12 +310,19 @@ const resourcesGroup = computed(() => ({
             show: isStudent.value && route().has('student.resources.formulas.index'),
         },
         {
-            label: 'Mensuration match',
-            href: route().has('student.mensuration-match.show')
-                ? route('student.mensuration-match.show')
-                : '/student/mensuration-match',
-            active: route().current('student.mensuration-match.*'),
-            show: isStudent.value && route().has('student.mensuration-match.show'),
+            label: 'Match / Algebra',
+            href: route().has('student.series-practice.show')
+                ? route('student.series-practice.show')
+                : (route().has('student.mensuration-match.show')
+                    ? route('student.mensuration-match.show')
+                    : '/student/series-practice'),
+            active: route().current('student.mensuration-match.*')
+                || route().current('student.algebra-cards.*')
+                || route().current('student.series-practice.*'),
+            show: isStudent.value && (
+                route().has('student.series-practice.show')
+                || route().has('student.mensuration-match.show')
+            ),
         },
         {
             label: 'Written tests',

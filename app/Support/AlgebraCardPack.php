@@ -45,7 +45,7 @@ class AlgebraCardPack
     /**
      * @return list<array{id: int, title: string, diagram_url: string|null}>
      */
-    public static function cardsFor(string $key): array
+    public static function cardsFor(string $key, string $figureRoute = 'admin.algebra-cards.figure'): array
     {
         $pack = self::find($key);
         if ($pack === null) {
@@ -62,12 +62,33 @@ class AlgebraCardPack
                 'id' => $i,
                 'title' => self::cardTitle($key, $i),
                 'diagram_url' => is_file($path)
-                    ? route('admin.algebra-cards.figure', ['pack' => $key, 'figure' => $filename]).'?v='.filemtime($path)
+                    ? route($figureRoute, ['pack' => $key, 'figure' => $filename]).'?v='.filemtime($path)
                     : null,
             ];
         }
 
         return $cards;
+    }
+
+    public static function hasPlayableCards(string $key): bool
+    {
+        $pack = self::find($key);
+        if ($pack === null) {
+            return false;
+        }
+
+        $dir = base_path($pack['diagrams_relative']);
+        if (! is_dir($dir)) {
+            return false;
+        }
+
+        for ($i = 1; $i <= (int) $pack['card_count']; $i++) {
+            if (is_file($dir.DIRECTORY_SEPARATOR."q{$i}.png")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static function figurePath(string $packKey, string $figure): ?string
@@ -119,7 +140,7 @@ class AlgebraCardPack
     }
 
     /**
-     * Student-style playable cards (MCQ + figure) for admin try mode.
+     * Student-style playable cards (MCQ + figure) for try / student play.
      *
      * @return list<array{
      *     id: int,
@@ -133,7 +154,7 @@ class AlgebraCardPack
      *     diagram_url: string|null
      * }>
      */
-    public static function playableCards(string $key): array
+    public static function playableCards(string $key, string $figureRoute = 'admin.algebra-cards.figure'): array
     {
         $pack = self::find($key);
         if ($pack === null) {
@@ -174,7 +195,7 @@ class AlgebraCardPack
                 'explanation' => trim((string) ($item['explanation'] ?? '')),
                 'method_hint' => trim((string) ($item['method_hint'] ?? '')),
                 'diagram_url' => ($figPath = self::figurePath($key, $filename))
-                    ? route('admin.algebra-cards.figure', ['pack' => $key, 'figure' => $filename]).'?v='.filemtime($figPath)
+                    ? route($figureRoute, ['pack' => $key, 'figure' => $filename]).'?v='.filemtime($figPath)
                     : null,
             ];
         }

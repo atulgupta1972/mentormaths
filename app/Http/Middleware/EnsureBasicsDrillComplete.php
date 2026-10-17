@@ -4,7 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Services\BasicsDrillSessionService;
 use App\Services\FormulaDrillSessionService;
-use App\Services\MensurationMatchService;
+use App\Services\SeriesActivityService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -15,7 +15,7 @@ class EnsureBasicsDrillComplete
     public function __construct(
         private BasicsDrillSessionService $basicsService,
         private FormulaDrillSessionService $formulaService,
-        private MensurationMatchService $mensuration,
+        private SeriesActivityService $series,
     ) {}
 
     public function handle(Request $request, Closure $next): Response
@@ -44,7 +44,7 @@ class EnsureBasicsDrillComplete
             return $next($request);
         }
 
-        if (! $this->mensuration->gatePassed($student)) {
+        if (! $this->series->gatePassed($student)) {
             return $next($request);
         }
 
@@ -64,6 +64,8 @@ class EnsureBasicsDrillComplete
         return $request->routeIs(
             'student.formula-drill.*',
             'student.mensuration-match.*',
+            'student.algebra-cards.*',
+            'student.series-practice.*',
             'student.basics-drill.*',
             'student.school-study-plan.*',
             'student.worksheets.self-assign',

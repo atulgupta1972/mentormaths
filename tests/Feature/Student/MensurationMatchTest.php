@@ -9,6 +9,7 @@ use App\Models\GradeLevel;
 use App\Models\MensurationMatchSession;
 use App\Models\MensurationMatchSetting;
 use App\Models\Student;
+use App\Models\StudentSeriesActivityDay;
 use App\Models\StudentChapterCoverage;
 use App\Models\StudentEnrollment;
 use App\Models\Subject;
@@ -92,6 +93,15 @@ class MensurationMatchTest extends TestCase
             'questions_completed' => 1,
             'pool_size' => 1,
             'completed_at' => now(),
+        ]);
+
+        // Class 6+ alternates algebra ↔ mensuration; seed yesterday as algebra so today is mensuration.
+        StudentSeriesActivityDay::query()->create([
+            'student_id' => $student->id,
+            'activity_date' => now(config('formula_drill.timezone', 'Asia/Kolkata'))->subDay()->toDateString(),
+            'kind' => StudentSeriesActivityDay::KIND_ALGEBRA,
+            'pack_key' => 'fraction_simplification',
+            'completed_at' => now()->subDay(),
         ]);
 
         return compact('user', 'student', 'enrollment', 'grade');
@@ -247,18 +257,17 @@ class MensurationMatchTest extends TestCase
     {
         ['user' => $user] = $this->seedStudent();
 
+        // No mensuration boards enabled → Class 7+ series slot is algebra instead.
         $this->actingAs($user)
             ->get(route('student.mensuration-match.show'))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('enabled', false)->has('boards', 0));
+            ->assertRedirect(route('student.algebra-cards.show'));
 
         $this->actingAs($user)
-            ->from(route('student.mensuration-match.show'))
             ->post(route('student.mensuration-match.start'), [
                 'board' => 'perimeter_area',
                 'ready' => true,
             ])
-            ->assertRedirect(route('student.mensuration-match.show'));
+            ->assertRedirect(route('student.algebra-cards.show'));
     }
 
     public function test_admin_can_try_board_without_student_session(): void
