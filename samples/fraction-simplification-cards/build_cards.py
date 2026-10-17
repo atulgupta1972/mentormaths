@@ -21,7 +21,7 @@ DIAG = ROOT / "diagrams"
 OUT_JSON = ROOT / "questions.json"
 OUT_ZIP = ROOT / "fraction-simplification-cards.zip"
 
-W, H = 900, 620
+W, H = 900, 680
 
 
 def font(size: int = 22):
@@ -80,8 +80,8 @@ CARDS = [
         "answer_value": "9/4",
         "difficulty": "Easy",
         "visual": {
-            "wrong_num": [("4", True), ("+", False), ("5", False)],
-            "wrong_den": ("4", True),
+            "wrong_num": [("4", True, "1"), ("+", False), ("5", False)],
+            "wrong_den": ("4", True, "1"),
             "wrong_result": "= 5",
             "right_a": "(4 + 5) / 4  =  9 / 4",
             "right_b": "4/4 + 5/4  =  1 + 5/4  =  9/4",
@@ -116,8 +116,8 @@ CARDS = [
         "answer_value": "5",
         "difficulty": "Easy",
         "visual": {
-            "wrong_num": [("44", False), ("+", False), ("11", True)],
-            "wrong_den": ("11", True),
+            "wrong_num": [("44", False), ("+", False), ("11", True, "1")],
+            "wrong_den": ("11", True, "1"),
             "wrong_result": "= 45",
             "right_a": "(44 + 11) / 11  =  55 / 11  =  5",
             "right_b": "44/11 + 11/11  =  4 + 1  =  5",
@@ -152,8 +152,8 @@ CARDS = [
         "answer_value": "2",
         "difficulty": "Easy",
         "visual": {
-            "wrong_num": [("15", False), ("−", False), ("5", True)],
-            "wrong_den": ("5", True),
+            "wrong_num": [("15", False), ("−", False), ("5", True, "1")],
+            "wrong_den": ("5", True, "1"),
             "wrong_result": "= 14",
             "right_a": "(15 − 5) / 5  =  10 / 5  =  2",
             "right_b": "15/5 − 5/5  =  3 − 1  =  2",
@@ -188,8 +188,8 @@ CARDS = [
         "answer_value": "5",
         "difficulty": "Easy",
         "visual": {
-            "wrong_num": [("12", True), ("+", False), ("8", False)],
-            "wrong_den": ("4", True),
+            "wrong_num": [("12", True, "3"), ("+", False), ("8", False)],
+            "wrong_den": ("4", True, "1"),
             "wrong_result": "= 11",
             "right_a": "(12 + 8) / 4  =  20 / 4  =  5",
             "right_b": "12/4 + 8/4  =  3 + 2  =  5",
@@ -224,8 +224,8 @@ CARDS = [
         "answer_value": "6",
         "difficulty": "Medium",
         "visual": {
-            "wrong_num": [("6", False), ("+", False), ("9", False), ("+", False), ("3", True)],
-            "wrong_den": ("3", True),
+            "wrong_num": [("6", False), ("+", False), ("9", False), ("+", False), ("3", True, "1")],
+            "wrong_den": ("3", True, "1"),
             "wrong_result": "= 15",
             "right_a": "(6 + 9 + 3) / 3  =  18 / 3  =  6",
             "right_b": "6/3 + 9/3 + 3/3  =  2 + 3 + 1  =  6",
@@ -260,11 +260,11 @@ CARDS = [
         "answer_value": "8 vs 9/2",
         "difficulty": "Medium",
         "visual": {
-            "wrong_num": [("2", True), ("+", False), ("7", False)],
-            "wrong_den": ("2", True),
+            "wrong_num": [("2", True, "1"), ("+", False), ("7", False)],
+            "wrong_den": ("2", True, "1"),
             "wrong_result": "= 7",
-            "legal_num": [("2", True), ("(7+1)", False)],
-            "legal_den": ("2", True),
+            "legal_num": [("2", True, "1"), ("(7+1)", False)],
+            "legal_den": ("2", True, "1"),
             "legal_result": "= 8",
             "right_a": "Factor form: cut the 2 → 7 + 1 = 8",
             "right_b": "Sum form: (2 + 7) / 2  =  9 / 2",
@@ -299,13 +299,13 @@ CARDS = [
         "answer_value": "2x+1",
         "difficulty": "Medium",
         "visual": {
-            "wrong_num": [("4x", False), ("+", False), ("2", True)],
-            "wrong_den": ("2", True),
+            "wrong_num": [("4x", False), ("+", False), ("2", True, "1")],
+            "wrong_den": ("2", True, "1"),
             "wrong_result": "= 4x + 1",
             "right_a": "4x/2 + 2/2  =  2x + 1",
             "right_b": "Or factor, then cut the 2:",
-            "legal_num": [("2", True), ("(2x+1)", False)],
-            "legal_den": ("2", True),
+            "legal_num": [("2", True, "1"), ("(2x+1)", False)],
+            "legal_den": ("2", True, "1"),
             "legal_result": "= 2x + 1",
             "checks": [
                 ("(1)", None, None, "cut only the +2 → claim 4x+1", False),
@@ -338,8 +338,8 @@ CARDS = [
         "answer_value": "4 + 2/x",
         "difficulty": "Medium",
         "visual": {
-            "wrong_num": [("4", False), ("x", True), ("+", False), ("2", False)],
-            "wrong_den": ("x", True),
+            "wrong_num": [("4", False), ("x", True, "1"), ("+", False), ("2", False)],
+            "wrong_den": ("x", True, "1"),
             "wrong_result": "= 6",
             "right_a": "4x/x + 2/x  =  4 + 2/x",
             "right_b": "Check: if x = 2, value is 5  (not 6)",
@@ -374,13 +374,13 @@ CARDS = [
         "answer_value": "2x-1",
         "difficulty": "Medium",
         "visual": {
-            "wrong_num": [("6x", False), ("−", False), ("3", True)],
-            "wrong_den": ("3", True),
+            "wrong_num": [("6x", False), ("−", False), ("3", True, "1")],
+            "wrong_den": ("3", True, "1"),
             "wrong_result": "= 6x − 1",
             "right_a": "6x/3 − 3/3  =  2x − 1",
             "right_b": "Or factor, then cut the 3:",
-            "legal_num": [("3", True), ("(2x−1)", False)],
-            "legal_den": ("3", True),
+            "legal_num": [("3", True, "1"), ("(2x−1)", False)],
+            "legal_den": ("3", True, "1"),
             "legal_result": "= 2x − 1",
             "checks": [
                 ("(1)", None, None, "cut only −3 → claim 6x−1", False),
@@ -413,13 +413,13 @@ CARDS = [
         "answer_value": "2",
         "difficulty": "Hard",
         "visual": {
-            "wrong_num": [("2x", False), ("+", False), ("2", True)],
+            "wrong_num": [("2x", False), ("+", False), ("2", True, "")],
             "wrong_den": ("x+1", False),
             "wrong_result": "?",
             "right_a": "Factor: 2(x + 1) / (x + 1)",
             "right_b": "Then cut (x + 1)  →  2   (x ≠ −1)",
-            "legal_num": [("2", False), ("(x+1)", True)],
-            "legal_den": ("(x+1)", True),
+            "legal_num": [("2", False), ("(x+1)", True, "1")],
+            "legal_den": ("(x+1)", True, "1"),
             "legal_result": "= 2",
             "checks": [
                 ("(1)", None, None, "piece-cut the +2 → leave 2x/(x+1)", False),
@@ -443,20 +443,54 @@ def text_size(draw: ImageDraw.ImageDraw, text: str, fnt) -> tuple[int, int]:
 
 def strike_box(draw: ImageDraw.ImageDraw, x0: int, y0: int, x1: int, y1: int, color: str, width: int = 6):
     """Thick pen slash through a digit — how students cut/cancel in notebooks."""
-    # Extend past the digit so the cut is unmistakable.
     pad_x, pad_y = 8, 10
     a = (x0 - pad_x, y1 + pad_y)
     b = (x1 + pad_x, y0 - pad_y)
-    # Main stroke + slight parallel stroke (felt-pen look)
     draw.line([a, b], fill=color, width=width)
     draw.line([(a[0] + 3, a[1]), (b[0] + 3, b[1])], fill=color, width=max(2, width - 3))
+
+
+def parse_part(part) -> tuple[str, bool, str | None]:
+    """
+    Part formats:
+      ("12", False)           → no cut
+      ("12", True)            → cut, quotient defaults to "1"
+      ("12", True, "3")       → cut, show quotient 3 (as in copy)
+      ("2", True, "")         → cut only, no quotient label
+    """
+    if not isinstance(part, (list, tuple)) or len(part) < 2:
+        return str(part), False, None
+    text = str(part[0])
+    flag = part[1]
+    if flag is False or flag is None:
+        return text, False, None
+    if len(part) >= 3:
+        raw = part[2]
+        if raw is None:
+            return text, True, "1"
+        s = str(raw).strip()
+        return text, True, (s if s else None)
+    return text, True, "1"
+
+
+def draw_quotient(
+    draw: ImageDraw.ImageDraw,
+    cx: int,
+    cy: int,
+    quotient: str,
+    color: str,
+    fnt,
+):
+    """Small number above a cut term — how students rewrite after cancelling."""
+    tw, th = text_size(draw, quotient, fnt)
+    draw.text((cx - tw // 2, cy - th - 2), quotient, fill=color, font=fnt)
 
 
 def draw_fraction_with_cancels(
     draw: ImageDraw.ImageDraw,
     origin: tuple[int, int],
-    num_parts: list[tuple[str, bool]] | None,
-    den: tuple[str, bool] | None,
+    num_parts: list | None,
+    den: tuple | list | None,
     *,
     result: str = "",
     strike_color: str = "#dc2626",
@@ -464,8 +498,14 @@ def draw_fraction_with_cancels(
     label: str = "",
     strike_width: int = 6,
 ) -> int:
-    """Draw a fraction; True parts get diagonal cancel strikes. Returns right edge x."""
+    """Draw a fraction; cancelled parts get a slash + quotient (copy style)."""
     fnt = fnt or font(34)
+    try:
+        q_size = max(18, int(getattr(fnt, "size", 34) * 0.48))
+    except Exception:
+        q_size = 20
+    q_fnt = font_bold(q_size)
+
     small = font(18)
     x, y = origin
 
@@ -477,44 +517,57 @@ def draw_fraction_with_cancels(
         draw.text((x, y + 10), result, fill="#0f172a", font=fnt)
         return x + text_size(draw, result, fnt)[0]
 
-    # measure numerator
-    gap = 6
+    # Room above numerator for quotients (e.g. 3 above cut 12).
+    y = y + 26
+
+    gap = 8
     num_w = 0
     parts_meta = []
-    for text, cancel in num_parts:
+    for part in num_parts:
+        text, cancel, quot = parse_part(part)
         tw, th = text_size(draw, text, fnt)
-        parts_meta.append((text, cancel, tw, th))
+        parts_meta.append((text, cancel, quot, tw, th))
         num_w += tw + gap
     num_w = max(0, num_w - gap)
 
-    den_text, den_cancel = den if den else ("", False)
+    den_text, den_cancel, den_quot = parse_part(den) if den else ("", False, None)
     den_w, den_h = text_size(draw, den_text, fnt) if den_text else (0, 0)
     bar_w = max(num_w, den_w) + 16
 
-    # numerator
+    # numerator — quotient sits above the cut term
     nx = x + (bar_w - num_w) // 2
     ny = y
-    for text, cancel, tw, th in parts_meta:
+    for text, cancel, quot, tw, th in parts_meta:
         draw.text((nx, ny), text, fill="#0f172a", font=fnt)
         if cancel:
             strike_box(draw, nx, ny + 2, nx + tw, ny + th - 2, strike_color, width=strike_width)
+            if quot:
+                draw_quotient(draw, nx + tw // 2, ny, quot, strike_color, q_fnt)
         nx += tw + gap
 
     # bar
     bar_y = y + max(th for *_, th in parts_meta) + 8
     draw.line([(x, bar_y), (x + bar_w, bar_y)], fill="#0f172a", width=4)
 
-    # denominator
+    # denominator — quotient sits below the cut term (notebook style)
     dx = x + (bar_w - den_w) // 2
     dy = bar_y + 10
     if den_text:
         draw.text((dx, dy), den_text, fill="#0f172a", font=fnt)
         if den_cancel:
             strike_box(draw, dx, dy + 2, dx + den_w, dy + den_h - 2, strike_color, width=strike_width)
+            if den_quot:
+                qtw, qth = text_size(draw, den_quot, q_fnt)
+                draw.text(
+                    (dx + den_w // 2 - qtw // 2, dy + den_h + 2),
+                    den_quot,
+                    fill=strike_color,
+                    font=q_fnt,
+                )
 
     rx = x + bar_w + 16
     if result:
-        draw.text((rx, y + 18), result, fill="#0f172a", font=fnt)
+        draw.text((rx, y + 8), result, fill="#0f172a", font=fnt)
         rx += text_size(draw, result, fnt)[0] + 8
 
     return rx
@@ -559,35 +612,36 @@ def draw_card_figure(card: dict, path: Path) -> None:
 
     # ----- 1. WRONG -----
     y0 = 104
-    rounded_rect(draw, (28, y0, W - 28, y0 + 220), "#fff7f7", "#fecaca", width=2, radius=16)
+    wrong_h = 248
+    rounded_rect(draw, (28, y0, W - 28, y0 + wrong_h), "#fff7f7", "#fecaca", width=2, radius=16)
     section_label(draw, 48, y0 + 16, "1", "Wrong", "#b91c1c")
 
     draw_fraction_with_cancels(
-        draw, (72, y0 + 70),
+        draw, (72, y0 + 62),
         v["wrong_num"], v["wrong_den"],
         result=v.get("wrong_result", ""),
         strike_color="#dc2626",
         fnt=math,
         strike_width=9,
     )
-    bx, by = W - 118, y0 + 85
+    bx, by = W - 118, y0 + 95
     draw.ellipse((bx, by, bx + 58, by + 58), fill="#fee2e2", outline="#dc2626", width=3)
     draw.line([(bx + 17, by + 17), (bx + 41, by + 41)], fill="#dc2626", width=5)
     draw.line([(bx + 41, by + 17), (bx + 17, by + 41)], fill="#dc2626", width=5)
 
     # ----- 2. RIGHT -----
-    y1 = y0 + 244
+    y1 = y0 + wrong_h + 20
     has_legal = bool(v.get("legal_num") and v.get("legal_den"))
     right_bottom = H - 28
     rounded_rect(draw, (28, y1, W - 28, right_bottom), "#f7fdf9", "#bbf7d0", width=2, radius=16)
     section_label(draw, 48, y1 + 16, "2", "Right", "#15803d")
 
-    draw.text((48, y1 + 58), v["right_a"], fill="#14532d", font=body)
-    draw.text((48, y1 + 98), v["right_b"], fill="#14532d", font=body)
+    draw.text((48, y1 + 52), v["right_a"], fill="#14532d", font=body)
+    draw.text((48, y1 + 88), v["right_b"], fill="#14532d", font=body)
 
     if has_legal:
         draw_fraction_with_cancels(
-            draw, (72, y1 + 150),
+            draw, (72, y1 + 128),
             v["legal_num"], v["legal_den"],
             result=v.get("legal_result", ""),
             strike_color="#16a34a",
