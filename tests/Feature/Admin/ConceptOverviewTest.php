@@ -106,7 +106,12 @@ class ConceptOverviewTest extends TestCase
                 ->where('branches.0.key', 'algebra')
                 ->where('rows.0.name', 'Algebraic Expressions')
                 ->where('summary.ready', 1)
-                ->where('summary.to_upload', 1));
+                ->where('summary.to_upload', 1)
+                ->where('summary.chapters_total', 2)
+                ->where('summary.chapters_tagged', 2)
+                ->where('summary.chapters_on_map', 2)
+                ->where('summary.chapters_untagged', 0)
+                ->where('summary.matched', true));
 
         $this->actingAs($admin)
             ->get(route('admin.concept-overview.show', $head))
@@ -115,5 +120,54 @@ class ConceptOverviewTest extends TestCase
                 ->component('Admin/ConceptOverview/Show')
                 ->where('chapter_head.name', 'Algebraic Expressions')
                 ->has('ladder', 2));
+    }
+
+    public function test_draft_class7_triangles_appears_under_geometry(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+        $cbse = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
+        // Duplicate class numbers — overview must still match the real Class 7 chapter.
+        GradeLevel::query()->create(['name' => 'Class 7 Debug', 'sort_order' => 1, 'is_active' => true]);
+        $class7 = GradeLevel::query()->create(['name' => 'Class 7', 'sort_order' => 7, 'is_active' => true]);
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
+        $head = ChapterHead::query()->create([
+            'name' => 'Triangles',
+            'branch' => 'geometry',
+            'sort_order' => 1,
+        ]);
+
+        $sv = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'board_id' => $cbse->id,
+            'grade_level_id' => $class7->id,
+            'subject_id' => $subject->id,
+            'status' => SyllabusVersion::STATUS_DRAFT,
+        ]);
+        SyllabusChapter::query()->create([
+            'syllabus_version_id' => $sv->id,
+            'chapter_head_id' => $head->id,
+            'chapter_number' => 'P2- Ch 1',
+            'name' => 'Geometric Twins',
+            'sort_order' => 1,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.concept-overview.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ConceptOverview/Index')
+                ->where('branches.0.key', 'geometry')
+                ->where('rows.0.name', 'Triangles')
+                ->where('summary.chapters_total', 1)
+                ->where('summary.chapters_on_map', 1)
+                ->where('summary.matched', true)
+                ->where('rows.0.cells.7.best_status', 'to_upload'));
     }
 }

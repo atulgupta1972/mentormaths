@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Board;
 use App\Models\ChapterHead;
 use App\Models\GradeLevel;
+use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\TextbookChapter;
@@ -38,7 +39,9 @@ class ConceptOverviewService
             ? ConceptBranch::normalize($branchKey)
             : null;
 
-        $chapters = $this->loadChapters($year?->id);
+        // Include draft + published so the map matches what you see in the syllabus editor.
+        $chapters = $this->loadChapters($year?->id, taggedOnly: true);
+        $allYearChapters = $this->loadChapters($year?->id, taggedOnly: false);
         $conceptBySyllabus = $this->conceptPathsBySyllabusChapter($chapters->pluck('id')->all());
         $practiceCounts = $this->practiceCountsBySyllabusChapter($chapters->pluck('id')->all());
 
@@ -53,16 +56,34 @@ class ConceptOverviewService
             'draft' => 0,
             'to_upload' => 0,
             'practice_only' => 0,
+            'chapters_total' => 0,
+            'chapters_tagged' => 0,
+            'chapters_untagged' => 0,
+            'chapters_on_map' => 0,
+            'matched' => false,
         ];
 
         $rows = [];
+        $mappedChapterIds = [];
+
         foreach ($heads as $head) {
             $branch = ConceptBranch::normalize($head->branch ?: ConceptBranch::guessFromName((string) $head->name));
             if ($branchFilter !== null && $branch !== $branchFilter) {
                 continue;
             }
 
-            $headChapters = $chapters->where('chapter_head_id', $head->id);
+            $headChapters = $chapters->where('chapter_head_id', $head->id)->values();
+            if ($headChapters->isEmpty()) {
+                continue;
+            }
+
+            // Keep only Class 4–10 maths rows for this map.
+            $headChapters = $headChapters->filter(function (SyllabusChapter $ch) use ($classes) {
+                $n = $this->classNumber($ch->syllabusVersion?->gradeLevel);
+
+                return $n >= 4 && $n <= 10 && collect($classes)->contains(fn ($c) => (int) $c['number'] === $n);
+            })->values();
+
             if ($headChapters->isEmpty()) {
                 continue;
             }
@@ -72,7 +93,7 @@ class ConceptOverviewService
 
             foreach ($classes as $class) {
                 $classChapters = $headChapters->filter(
-                    fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->grade_level_id) === (int) $class['id']
+                    fn (SyllabusChapter $ch) => $this->classNumber($ch->syllabusVersion?->gradeLevel) === (int) $class['number']
                 );
 
                 if ($boardId) {
@@ -87,9 +108,16 @@ class ConceptOverviewService
                         continue;
                     }
 
-                    $boardChapter = $classChapters->first(
-                        fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id']
-                    );
+                    $boardMatches = $classChapters
+                        ->filter(fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id'])
+                        ->sortByDesc(fn (SyllabusChapter $ch) => $ch->syllabusVersion?->status === SyllabusVersion::STATUS_PUBLISHED ? 1 : 0)
+                        ->values();
+
+                    foreach ($boardMatches as $match) {
+                        $mappedChapterIds[(int) $match->id] = true;
+                    }
+
+                    $boardChapter = $boardMatches->first();
 
                     $cell = $this->buildCell(
                         $boardChapter,
@@ -133,6 +161,19 @@ class ConceptOverviewService
             ];
         }
 
+        $coverage = $this->coverageTally(
+            $allYearChapters,
+            $classes,
+            $boardId,
+            $mappedChapterIds,
+            $branchFilter,
+        );
+        $summary['chapters_total'] = $coverage['chapters_total'];
+        $summary['chapters_tagged'] = $coverage['chapters_tagged'];
+        $summary['chapters_untagged'] = $coverage['chapters_untagged'];
+        $summary['chapters_on_map'] = $coverage['chapters_on_map'];
+        $summary['matched'] = $coverage['matched'];
+
         return [
             'year' => $year?->only(['id', 'name']),
             'classes' => $classes,
@@ -143,6 +184,8 @@ class ConceptOverviewService
             'branches' => $branches,
             'rows' => $rows,
             'summary' => $summary,
+            'untagged_chapters' => $coverage['untagged_list'],
+            'orphan_tagged_chapters' => $coverage['orphan_tagged_list'],
         ];
     }
 
@@ -157,7 +200,7 @@ class ConceptOverviewService
         $boards = $this->boards();
         $classes = $this->classes();
 
-        $chapters = $this->loadChapters($year?->id)
+        $chapters = $this->loadChapters($year?->id, taggedOnly: true)
             ->where('chapter_head_id', $head->id)
             ->values();
 
@@ -167,7 +210,7 @@ class ConceptOverviewService
         $ladder = [];
         foreach ($classes as $class) {
             $classChapters = $chapters->filter(
-                fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->grade_level_id) === (int) $class['id']
+                fn (SyllabusChapter $ch) => $this->classNumber($ch->syllabusVersion?->gradeLevel) === (int) $class['number']
             );
             if ($classChapters->isEmpty()) {
                 continue;
@@ -175,9 +218,10 @@ class ConceptOverviewService
 
             $boardCards = [];
             foreach ($boards as $board) {
-                $chapter = $classChapters->first(
-                    fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id']
-                );
+                $chapter = $classChapters
+                    ->filter(fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id'])
+                    ->sortByDesc(fn (SyllabusChapter $ch) => $ch->syllabusVersion?->status === SyllabusVersion::STATUS_PUBLISHED ? 1 : 0)
+                    ->first();
                 if (! $chapter) {
                     continue;
                 }
@@ -260,49 +304,180 @@ class ConceptOverviewService
      */
     private function classes(): array
     {
-        return GradeLevel::query()
+        $grades = GradeLevel::query()
             ->where('is_active', true)
             ->orderBy('sort_order')
-            ->get()
-            ->map(function (GradeLevel $grade) {
-                $number = 0;
-                if (preg_match('/(\d+)/', (string) $grade->name, $m)) {
-                    $number = (int) $m[1];
-                }
+            ->get();
+
+        return $grades
+            ->groupBy(fn (GradeLevel $grade) => $this->classNumber($grade))
+            ->filter(fn ($group, $number) => (int) $number >= 4 && (int) $number <= 10)
+            ->map(function ($group, $number) {
+                $preferred = $this->preferredGradeForClass($group);
 
                 return [
-                    'id' => $grade->id,
-                    'name' => (string) $grade->name,
-                    'number' => $number > 0 ? $number : (int) $grade->sort_order,
-                    'sort_order' => (int) $grade->sort_order,
+                    'id' => $preferred->id,
+                    'name' => (string) $preferred->name,
+                    'number' => (int) $number,
+                    'sort_order' => (int) $preferred->sort_order,
                 ];
             })
-            ->filter(fn (array $c) => $c['number'] >= 4 && $c['number'] <= 10)
-            ->unique('number')
             ->sortBy('number')
             ->values()
             ->all();
     }
 
     /**
+     * @param  \Illuminate\Support\Collection<int, GradeLevel>  $grades
+     */
+    private function preferredGradeForClass($grades): GradeLevel
+    {
+        $list = $grades instanceof Collection ? $grades->values() : collect($grades)->values();
+
+        $canonical = $list->first(function (GradeLevel $grade) {
+            $n = $this->classNumber($grade);
+
+            return (bool) preg_match('/^class\s*'.$n.'$/i', trim((string) $grade->name));
+        });
+
+        return $canonical ?: $list->sortBy('id')->first();
+    }
+
+    private function classNumber(?GradeLevel $grade): int
+    {
+        if (! $grade) {
+            return 0;
+        }
+
+        if (preg_match('/(\d+)/', (string) $grade->name, $m)) {
+            return (int) $m[1];
+        }
+
+        return (int) ($grade->sort_order ?: 0);
+    }
+
+    /**
      * @return Collection<int, SyllabusChapter>
      */
-    private function loadChapters(?int $yearId): Collection
+    private function loadChapters(?int $yearId, bool $taggedOnly = true): Collection
     {
+        $mathsIds = Subject::query()
+            ->where(function ($q) {
+                $q->where('code', 'MATHS')
+                    ->orWhere('name', 'like', 'Math%');
+            })
+            ->pluck('id')
+            ->all();
+
         return SyllabusChapter::query()
             ->with([
                 'chapterHead',
                 'topics',
                 'syllabusVersion.board',
                 'syllabusVersion.gradeLevel',
+                'syllabusVersion.subject',
             ])
-            ->whereNotNull('chapter_head_id')
-            ->when($yearId, fn ($q) => $q->whereHas('syllabusVersion', fn ($vq) => $vq
-                ->where('academic_year_id', $yearId)
-                ->where('status', SyllabusVersion::STATUS_PUBLISHED)))
-            ->when(! $yearId, fn ($q) => $q->whereHas('syllabusVersion', fn ($vq) => $vq
-                ->where('status', SyllabusVersion::STATUS_PUBLISHED)))
+            ->when($taggedOnly, fn ($q) => $q->whereNotNull('chapter_head_id'))
+            ->whereHas('syllabusVersion', function ($vq) use ($yearId, $mathsIds) {
+                // Draft + published — same chapters you see while editing the syllabus.
+                $vq->whereIn('status', [
+                    SyllabusVersion::STATUS_PUBLISHED,
+                    SyllabusVersion::STATUS_DRAFT,
+                ]);
+                if ($yearId) {
+                    $vq->where('academic_year_id', $yearId);
+                }
+                if ($mathsIds !== []) {
+                    $vq->whereIn('subject_id', $mathsIds);
+                }
+            })
             ->get();
+    }
+
+    /**
+     * @param  Collection<int, SyllabusChapter>  $allYearChapters
+     * @param  list<array{id: int, name: string, number: int, sort_order: int}>  $classes
+     * @param  array<int, true>  $mappedChapterIds
+     * @return array{
+     *     chapters_total: int,
+     *     chapters_tagged: int,
+     *     chapters_untagged: int,
+     *     chapters_on_map: int,
+     *     matched: bool,
+     *     untagged_list: list<array<string, mixed>>,
+     *     orphan_tagged_list: list<array<string, mixed>>
+     * }
+     */
+    private function coverageTally(
+        Collection $allYearChapters,
+        array $classes,
+        ?int $boardId,
+        array $mappedChapterIds,
+        ?string $branchFilter = null,
+    ): array {
+        $classNumbers = collect($classes)->pluck('number')->map(fn ($n) => (int) $n)->all();
+
+        $inScope = $allYearChapters->filter(function (SyllabusChapter $ch) use ($classNumbers, $boardId) {
+            $n = $this->classNumber($ch->syllabusVersion?->gradeLevel);
+            if (! in_array($n, $classNumbers, true)) {
+                return false;
+            }
+            if ($boardId && (int) ($ch->syllabusVersion?->board_id) !== (int) $boardId) {
+                return false;
+            }
+
+            return true;
+        })->values();
+
+        $tagged = $inScope->filter(fn (SyllabusChapter $ch) => $ch->chapter_head_id !== null)->values();
+        $untagged = $inScope->filter(fn (SyllabusChapter $ch) => $ch->chapter_head_id === null)->values();
+
+        if ($branchFilter !== null) {
+            $tagged = $tagged->filter(function (SyllabusChapter $ch) use ($branchFilter) {
+                $branch = ConceptBranch::normalize(
+                    $ch->chapterHead?->branch ?: ConceptBranch::guessFromName((string) ($ch->chapterHead?->name ?? ''))
+                );
+
+                return $branch === $branchFilter;
+            })->values();
+        }
+
+        $onMap = $tagged->filter(fn (SyllabusChapter $ch) => isset($mappedChapterIds[(int) $ch->id]))->count();
+        $orphanTagged = $tagged->filter(fn (SyllabusChapter $ch) => ! isset($mappedChapterIds[(int) $ch->id]));
+
+        $format = fn (SyllabusChapter $ch) => [
+            'id' => $ch->id,
+            'name' => $ch->name,
+            'chapter_number' => $ch->chapter_number,
+            'chapter_head' => $ch->chapterHead?->name,
+            'board_code' => $ch->syllabusVersion?->board?->code,
+            'grade_name' => $ch->syllabusVersion?->gradeLevel?->name,
+            'status' => $ch->syllabusVersion?->status,
+            'syllabus_url' => $ch->syllabus_version_id
+                ? route('admin.syllabus.show', $ch->syllabus_version_id)
+                : null,
+        ];
+
+        $fullTagged = $inScope->filter(fn (SyllabusChapter $ch) => $ch->chapter_head_id !== null);
+
+        if ($branchFilter === null) {
+            $matched = $untagged->isEmpty()
+                && $orphanTagged->isEmpty()
+                && $inScope->isNotEmpty()
+                && $onMap === $tagged->count();
+        } else {
+            $matched = $orphanTagged->isEmpty() && $onMap === $tagged->count();
+        }
+
+        return [
+            'chapters_total' => $inScope->count(),
+            'chapters_tagged' => $branchFilter === null ? $fullTagged->count() : $tagged->count(),
+            'chapters_untagged' => $untagged->count(),
+            'chapters_on_map' => $onMap,
+            'matched' => $matched,
+            'untagged_list' => $untagged->take(50)->map($format)->values()->all(),
+            'orphan_tagged_list' => $orphanTagged->take(50)->map($format)->values()->all(),
+        ];
     }
 
     /**

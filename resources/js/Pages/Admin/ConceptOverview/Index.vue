@@ -13,6 +13,8 @@ const props = defineProps({
     branches: { type: Array, default: () => [] },
     rows: { type: Array, default: () => [] },
     summary: { type: Object, default: () => ({}) },
+    untagged_chapters: { type: Array, default: () => [] },
+    orphan_tagged_chapters: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
 });
 
@@ -118,6 +120,57 @@ const selectBranch = (key) => {
                         <span class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-rose-900">{{ summary.to_upload || 0 }} to upload</span>
                         <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sky-950">{{ summary.practice_only || 0 }} practice only</span>
                     </div>
+                </div>
+
+                <!-- Chapter vs map tally -->
+                <div
+                    class="rounded-2xl border px-5 py-4 text-sm"
+                    :class="summary.matched
+                        ? 'border-teal-300 bg-teal-50 text-teal-950'
+                        : 'border-amber-300 bg-amber-50 text-amber-950'"
+                >
+                    <p class="font-semibold">
+                        Chapter tally
+                        <span v-if="summary.matched" class="ml-2 font-normal">· matched</span>
+                        <span v-else class="ml-2 font-normal">· gaps remain</span>
+                    </p>
+                    <p class="mt-1">
+                        Syllabus chapters (Class 4–10): <strong>{{ summary.chapters_total || 0 }}</strong>
+                        · tagged with chapter head: <strong>{{ summary.chapters_tagged || 0 }}</strong>
+                        · on this map: <strong>{{ summary.chapters_on_map || 0 }}</strong>
+                        · missing head: <strong>{{ summary.chapters_untagged || 0 }}</strong>
+                    </p>
+                    <p class="mt-1 text-xs opacity-80">
+                        Draft + published syllabi are included so Triangles / Geometry rows match the syllabus editor.
+                    </p>
+                </div>
+
+                <div
+                    v-if="untagged_chapters.length"
+                    class="rounded-2xl border border-rose-200 bg-rose-50/80 px-5 py-4 text-sm text-rose-950"
+                >
+                    <p class="font-semibold">{{ untagged_chapters.length }} chapter{{ untagged_chapters.length === 1 ? '' : 's' }} without a chapter head</p>
+                    <p class="mt-1 text-xs">Set the Chapter head dropdown in the syllabus editor — then they appear here under Geometry / Algebra / etc.</p>
+                    <ul class="mt-3 max-h-48 space-y-1 overflow-y-auto text-xs">
+                        <li v-for="ch in untagged_chapters" :key="ch.id" class="flex flex-wrap gap-x-2">
+                            <span class="font-medium">{{ ch.board_code }} {{ ch.grade_name }}</span>
+                            <span>Ch {{ ch.chapter_number }} · {{ ch.name }}</span>
+                            <a v-if="ch.syllabus_url" :href="ch.syllabus_url" class="underline">Open syllabus</a>
+                        </li>
+                    </ul>
+                </div>
+
+                <div
+                    v-if="orphan_tagged_chapters.length"
+                    class="rounded-2xl border border-amber-200 bg-amber-50/80 px-5 py-4 text-sm text-amber-950"
+                >
+                    <p class="font-semibold">{{ orphan_tagged_chapters.length }} tagged chapter{{ orphan_tagged_chapters.length === 1 ? '' : 's' }} not landing on the map</p>
+                    <ul class="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs">
+                        <li v-for="ch in orphan_tagged_chapters" :key="ch.id">
+                            {{ ch.board_code }} {{ ch.grade_name }} · {{ ch.chapter_head }} · Ch {{ ch.chapter_number }} {{ ch.name }}
+                            <span class="opacity-70">({{ ch.status }})</span>
+                        </li>
+                    </ul>
                 </div>
 
                 <!-- Branch chips -->
