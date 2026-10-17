@@ -37,7 +37,8 @@ const applyFilters = () => {
 const classColumns = computed(() => props.classes || []);
 
 const statusClass = (status) => ({
-    ready: 'bg-teal-100 text-teal-900 border-teal-300',
+    // Concept available — dark blue card, white letters
+    ready: 'bg-[#0b2a5b] text-white border-[#0b2a5b] shadow-sm',
     draft: 'bg-amber-100 text-amber-950 border-amber-300',
     practice_only: 'bg-sky-100 text-sky-950 border-sky-300',
     to_upload: 'bg-rose-50 text-rose-900 border-rose-200',
@@ -112,7 +113,7 @@ const selectBranch = (key) => {
                         Side-by-side board cells
                     </label>
                     <div class="ml-auto flex flex-wrap gap-2 text-xs">
-                        <span class="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-teal-900">{{ summary.ready || 0 }} ready</span>
+                        <span class="rounded-full border border-[#0b2a5b] bg-[#0b2a5b] px-3 py-1 text-white">{{ summary.ready || 0 }} ready</span>
                         <span class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-950">{{ summary.draft || 0 }} draft</span>
                         <span class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-rose-900">{{ summary.to_upload || 0 }} to upload</span>
                         <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sky-950">{{ summary.practice_only || 0 }} practice only</span>

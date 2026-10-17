@@ -27,7 +27,8 @@ const applyYear = () => {
 };
 
 const statusClass = (status) => ({
-    ready: 'border-teal-300 bg-teal-50 text-teal-950',
+    // Concept available — dark blue card, white letters
+    ready: 'border-[#0b2a5b] bg-[#0b2a5b] text-white',
     draft: 'border-amber-300 bg-amber-50 text-amber-950',
     practice_only: 'border-sky-300 bg-sky-50 text-sky-950',
     to_upload: 'border-rose-200 bg-rose-50 text-rose-950',
@@ -125,7 +126,10 @@ const statusClass = (status) => ({
                                         <a
                                             v-if="board.play_url"
                                             :href="board.play_url"
-                                            class="rounded-md bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-800"
+                                            class="rounded-md px-3 py-1.5 text-xs font-semibold"
+                                            :class="board.status === 'ready'
+                                                ? 'bg-white text-[#0b2a5b] hover:bg-slate-100'
+                                                : 'bg-teal-700 text-white hover:bg-teal-800'"
                                         >
                                             Play concept cards
                                         </a>
@@ -145,19 +149,29 @@ const statusClass = (status) => ({
                                         <a
                                             v-if="board.syllabus_url"
                                             :href="board.syllabus_url"
-                                            class="rounded-md border border-slate-300 bg-white/80 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
+                                            class="rounded-md border px-3 py-1.5 text-xs font-medium"
+                                            :class="board.status === 'ready'
+                                                ? 'border-white/40 bg-white/10 text-white hover:bg-white/20'
+                                                : 'border-slate-300 bg-white/80 text-slate-700 hover:bg-white'"
                                         >
                                             Syllabus
                                         </a>
                                         <Link
                                             :href="route('admin.concept-builder.index')"
-                                            class="rounded-md border border-slate-300 bg-white/80 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
+                                            class="rounded-md border px-3 py-1.5 text-xs font-medium"
+                                            :class="board.status === 'ready'
+                                                ? 'border-white/40 bg-white/10 text-white hover:bg-white/20'
+                                                : 'border-slate-300 bg-white/80 text-slate-700 hover:bg-white'"
                                         >
                                             Concept builder
                                         </Link>
                                     </div>
 
-                                    <ul v-if="board.topics?.length" class="mt-3 space-y-1 border-t border-black/5 pt-3">
+                                    <ul
+                                        v-if="board.topics?.length"
+                                        class="mt-3 space-y-1 border-t pt-3"
+                                        :class="board.status === 'ready' ? 'border-white/20' : 'border-black/5'"
+                                    >
                                         <li
                                             v-for="topic in board.topics"
                                             :key="topic.id"
@@ -166,7 +180,10 @@ const statusClass = (status) => ({
                                             <span>{{ topic.name }}</span>
                                             <a
                                                 :href="topic.practice_url"
-                                                class="font-semibold underline decoration-teal-600/40 hover:decoration-teal-700"
+                                                class="font-semibold underline"
+                                                :class="board.status === 'ready'
+                                                    ? 'decoration-white/50 hover:decoration-white'
+                                                    : 'decoration-teal-600/40 hover:decoration-teal-700'"
                                             >
                                                 Practice sets
                                             </a>
