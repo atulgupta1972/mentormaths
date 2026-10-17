@@ -21,15 +21,22 @@ class ConceptOverviewController extends Controller
     {
         $yearId = $request->integer('year') ?: null;
         $boardId = $request->integer('board') ?: null;
+        $classNumber = $request->integer('class') ?: null;
         $branch = trim((string) $request->query('branch', ''));
 
-        $payload = $this->overview->matrix($yearId ?: null, $boardId ?: null, $branch !== '' ? $branch : null);
+        $payload = $this->overview->matrix(
+            $yearId ?: null,
+            $boardId ?: null,
+            $branch !== '' ? $branch : null,
+            $classNumber ?: null,
+        );
 
         return Inertia::render('Admin/ConceptOverview/Index', [
             ...$payload,
             'filters' => [
                 'year' => $yearId ?: ($payload['year']['id'] ?? null),
                 'board' => $boardId ?: null,
+                'class' => $classNumber ?: null,
                 'branch' => $branch !== '' ? $branch : null,
                 'compare' => $request->boolean('compare', true),
             ],

@@ -12,6 +12,7 @@ const props = defineProps({
     branch_options: { type: Array, default: () => [] },
     branches: { type: Array, default: () => [] },
     rows: { type: Array, default: () => [] },
+    class_cards: { type: Array, default: () => [] },
     summary: { type: Object, default: () => ({}) },
     untagged_chapters: { type: Array, default: () => [] },
     orphan_tagged_chapters: { type: Array, default: () => [] },
@@ -20,6 +21,7 @@ const props = defineProps({
 
 const yearId = ref(props.filters.year || '');
 const boardId = ref(props.filters.board || '');
+const classNumber = ref(props.filters.class || '');
 const branchKey = ref(props.filters.branch || '');
 const compare = ref(props.filters.compare !== false);
 
@@ -27,6 +29,7 @@ const applyFilters = () => {
     router.get(route('admin.concept-overview.index'), {
         year: yearId.value || undefined,
         board: boardId.value || undefined,
+        class: classNumber.value || undefined,
         branch: branchKey.value || undefined,
         compare: compare.value ? 1 : 0,
     }, {
@@ -36,7 +39,12 @@ const applyFilters = () => {
     });
 };
 
-const classColumns = computed(() => props.classes || []);
+const classColumns = computed(() => {
+    if (classNumber.value) {
+        return (props.classes || []).filter((c) => String(c.number) === String(classNumber.value));
+    }
+    return props.classes || [];
+});
 
 const statusClass = (status) => ({
     // Concept available — dark blue card, white letters
@@ -67,6 +75,24 @@ const selectBranch = (key) => {
     branchKey.value = key || '';
     applyFilters();
 };
+
+const tallyScopeLabel = computed(() => {
+    const parts = [];
+    if (classNumber.value) parts.push(`Class ${classNumber.value}`);
+    if (boardId.value) {
+        const b = props.all_boards.find((x) => String(x.id) === String(boardId.value));
+        parts.push(b?.code || 'Board');
+    }
+    return parts.length ? parts.join(' · ') : 'Class 4–10';
+});
+
+const cellChapterName = (cell, code) => {
+    if (!cell) return null;
+    if (code) return cell.boards?.[code]?.chapter_name || null;
+    const boards = cell.boards || {};
+    const first = Object.values(boards).find((b) => b?.chapter_name);
+    return first?.chapter_name || null;
+};
 </script>
 
 <template>
@@ -79,8 +105,8 @@ const selectBranch = (key) => {
                     <p class="text-xs font-semibold uppercase tracking-wide text-teal-700">USP · Progressive learning map</p>
                     <h2 class="mt-1 text-xl font-semibold text-gray-900">Concept overview</h2>
                     <p class="mt-1 max-w-2xl text-sm text-gray-600">
-                        Grouped by main branch — Algebra, Geometry, Mensuration, Trigonometry, and more.
-                        Drill into a chapter head to see Class 6 → 7 → 8 progression and CBSE vs ICSE.
+                        Pick Class 7 + CBSE to see one concept card per syllabus chapter (e.g. Geometric Twins).
+                        Or browse the progressive map by branch across classes.
                     </p>
                 </div>
                 <Link
@@ -104,7 +130,14 @@ const selectBranch = (key) => {
                         </select>
                     </div>
                     <div>
-                        <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Board filter</label>
+                        <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Class</label>
+                        <select v-model="classNumber" class="mt-1 block rounded-lg border-slate-300 text-sm" @change="applyFilters">
+                            <option value="">All classes</option>
+                            <option v-for="c in classes" :key="c.id" :value="c.number">Class {{ c.number }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Board</label>
                         <select v-model="boardId" class="mt-1 block rounded-lg border-slate-300 text-sm" @change="applyFilters">
                             <option value="">All boards (compare)</option>
                             <option v-for="b in all_boards" :key="b.id" :value="b.id">{{ b.code }} — {{ b.name }}</option>
@@ -130,18 +163,22 @@ const selectBranch = (key) => {
                         : 'border-amber-300 bg-amber-50 text-amber-950'"
                 >
                     <p class="font-semibold">
-                        Chapter tally
+                        Chapter tally · {{ tallyScopeLabel }}
                         <span v-if="summary.matched" class="ml-2 font-normal">· matched</span>
                         <span v-else class="ml-2 font-normal">· gaps remain</span>
                     </p>
                     <p class="mt-1">
-                        Syllabus chapters (Class 4–10): <strong>{{ summary.chapters_total || 0 }}</strong>
+                        Syllabus chapters: <strong>{{ summary.chapters_total || 0 }}</strong>
                         · tagged with chapter head: <strong>{{ summary.chapters_tagged || 0 }}</strong>
                         · on this map: <strong>{{ summary.chapters_on_map || 0 }}</strong>
                         · missing head: <strong>{{ summary.chapters_untagged || 0 }}</strong>
+                        <template v-if="class_cards.length">
+                            · concept cards: <strong>{{ class_cards.length }}</strong>
+                        </template>
                     </p>
                     <p class="mt-1 text-xs opacity-80">
-                        Draft + published syllabi are included so Triangles / Geometry rows match the syllabus editor.
+                        Uses the draft syllabus when both draft and published exist (same as the syllabus editor).
+                        Filter Class 7 + CBSE — tally and cards should both show 15.
                     </p>
                 </div>
 
@@ -172,6 +209,78 @@ const selectBranch = (key) => {
                         </li>
                     </ul>
                 </div>
+
+                <!-- Class concept cards (syllabus chapter names) -->
+                <section
+                    v-if="class_cards.length"
+                    class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                    <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                            <h3 class="text-base font-semibold text-slate-900">
+                                Concept cards · Class {{ classNumber }}
+                                <span v-if="boardId" class="font-normal text-slate-500">
+                                    · {{ all_boards.find((b) => String(b.id) === String(boardId))?.code }}
+                                </span>
+                            </h3>
+                            <p class="mt-1 text-xs text-slate-500">
+                                {{ class_cards.length }} cards — titles match the syllabus editor (Geometric Twins, not only “Triangles”).
+                            </p>
+                        </div>
+                    </div>
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        <article
+                            v-for="card in class_cards"
+                            :key="card.id"
+                            class="rounded-xl border p-4"
+                            :class="statusClass(card.status)"
+                        >
+                            <p class="text-[10px] font-bold uppercase tracking-wide opacity-70">
+                                {{ card.board_code }} · Ch {{ card.chapter_number }}
+                                <span v-if="card.branch_label"> · {{ card.branch_label }}</span>
+                            </p>
+                            <p class="mt-1 text-sm font-semibold leading-snug">
+                                {{ card.chapter_name }}
+                            </p>
+                            <p class="mt-1 text-xs opacity-80">
+                                Head · {{ card.chapter_head || 'not set' }}
+                            </p>
+                            <p class="mt-2 text-xs font-medium">{{ card.status_label }}</p>
+                            <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                                <Link
+                                    v-if="card.head_url"
+                                    :href="card.head_url"
+                                    class="underline opacity-90 hover:opacity-100"
+                                >
+                                    Ladder
+                                </Link>
+                                <a
+                                    v-if="card.syllabus_url"
+                                    :href="card.syllabus_url"
+                                    class="underline opacity-90 hover:opacity-100"
+                                >
+                                    Syllabus
+                                </a>
+                                <a
+                                    v-if="card.concept_url"
+                                    :href="card.concept_url"
+                                    class="underline opacity-90 hover:opacity-100"
+                                >
+                                    Concept path
+                                </a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+
+                <p
+                    v-else-if="classNumber"
+                    class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                >
+                    No syllabus chapters for Class {{ classNumber }}
+                    <span v-if="boardId"> with this board</span>
+                    in the preferred (draft) syllabus. Check the syllabus editor.
+                </p>
 
                 <!-- Branch chips -->
                 <div class="flex flex-wrap gap-2">
@@ -255,7 +364,7 @@ const selectBranch = (key) => {
                                     >
                                         <div
                                             v-if="row.cells[String(cls.number)]"
-                                            class="flex min-w-[5.5rem] flex-col gap-1"
+                                            class="flex min-w-[6.5rem] flex-col gap-1"
                                         >
                                             <template v-if="compare && boardCodes.length > 1">
                                                 <div
@@ -266,6 +375,12 @@ const selectBranch = (key) => {
                                                 >
                                                     <span class="opacity-70">{{ code }}</span>
                                                     <span class="ml-1">{{ shortLabel(row.cells[String(cls.number)].boards[code]?.status || 'empty') }}</span>
+                                                    <p
+                                                        v-if="cellChapterName(row.cells[String(cls.number)], code)"
+                                                        class="mt-0.5 truncate text-[9px] font-normal opacity-80"
+                                                    >
+                                                        {{ cellChapterName(row.cells[String(cls.number)], code) }}
+                                                    </p>
                                                 </div>
                                             </template>
                                             <div
@@ -274,6 +389,12 @@ const selectBranch = (key) => {
                                                 :class="statusClass(row.cells[String(cls.number)].best_status)"
                                             >
                                                 {{ shortLabel(row.cells[String(cls.number)].best_status) }}
+                                                <p
+                                                    v-if="cellChapterName(row.cells[String(cls.number)])"
+                                                    class="mt-0.5 truncate text-[9px] font-normal opacity-80"
+                                                >
+                                                    {{ cellChapterName(row.cells[String(cls.number)]) }}
+                                                </p>
                                             </div>
                                         </div>
                                         <div

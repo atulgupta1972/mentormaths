@@ -27,11 +27,18 @@ class ConceptOverviewService
      *     branch_options: list<array{key: string, label: string}>,
      *     branches: list<array{key: string, label: string, rows: list<array<string, mixed>>}>,
      *     rows: list<array<string, mixed>>,
-     *     summary: array{heads: int, ready: int, draft: int, to_upload: int, practice_only: int}
+     *     class_cards: list<array<string, mixed>>,
+     *     summary: array<string, mixed>,
+     *     untagged_chapters: list<array<string, mixed>>,
+     *     orphan_tagged_chapters: list<array<string, mixed>>
      * }
      */
-    public function matrix(?int $yearId = null, ?int $boardId = null, ?string $branchKey = null): array
-    {
+    public function matrix(
+        ?int $yearId = null,
+        ?int $boardId = null,
+        ?string $branchKey = null,
+        ?int $classNumber = null,
+    ): array {
         $year = $this->resolveYear($yearId);
         $boards = $this->boards();
         $classes = $this->classes();
@@ -39,9 +46,17 @@ class ConceptOverviewService
             ? ConceptBranch::normalize($branchKey)
             : null;
 
-        // Include draft + published so the map matches what you see in the syllabus editor.
-        $chapters = $this->loadChapters($year?->id, taggedOnly: true);
-        $allYearChapters = $this->loadChapters($year?->id, taggedOnly: false);
+        // Draft + published loaded; then keep one preferred syllabus version per class×board
+        // (draft wins — same truth as the syllabus editor).
+        $allLoaded = $this->loadChapters($year?->id, taggedOnly: false);
+        $preferredVersionIds = $this->preferredVersionIds($allLoaded);
+        $allYearChapters = $allLoaded
+            ->filter(fn (SyllabusChapter $ch) => in_array((int) $ch->syllabus_version_id, $preferredVersionIds, true))
+            ->values();
+        $chapters = $allYearChapters
+            ->filter(fn (SyllabusChapter $ch) => $ch->chapter_head_id !== null)
+            ->values();
+
         $conceptBySyllabus = $this->conceptPathsBySyllabusChapter($chapters->pluck('id')->all());
         $practiceCounts = $this->practiceCountsBySyllabusChapter($chapters->pluck('id')->all());
 
@@ -84,6 +99,12 @@ class ConceptOverviewService
                 return $n >= 4 && $n <= 10 && collect($classes)->contains(fn ($c) => (int) $c['number'] === $n);
             })->values();
 
+            if ($classNumber) {
+                $headChapters = $headChapters->filter(
+                    fn (SyllabusChapter $ch) => $this->classNumber($ch->syllabusVersion?->gradeLevel) === (int) $classNumber
+                )->values();
+            }
+
             if ($headChapters->isEmpty()) {
                 continue;
             }
@@ -91,7 +112,11 @@ class ConceptOverviewService
             $summary['heads']++;
             $cells = [];
 
-            foreach ($classes as $class) {
+            $classLoop = $classNumber
+                ? array_values(array_filter($classes, fn ($c) => (int) $c['number'] === (int) $classNumber))
+                : $classes;
+
+            foreach ($classLoop as $class) {
                 $classChapters = $headChapters->filter(
                     fn (SyllabusChapter $ch) => $this->classNumber($ch->syllabusVersion?->gradeLevel) === (int) $class['number']
                 );
@@ -110,7 +135,6 @@ class ConceptOverviewService
 
                     $boardMatches = $classChapters
                         ->filter(fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id'])
-                        ->sortByDesc(fn (SyllabusChapter $ch) => $ch->syllabusVersion?->status === SyllabusVersion::STATUS_PUBLISHED ? 1 : 0)
                         ->values();
 
                     foreach ($boardMatches as $match) {
@@ -167,12 +191,22 @@ class ConceptOverviewService
             $boardId,
             $mappedChapterIds,
             $branchFilter,
+            $classNumber,
         );
         $summary['chapters_total'] = $coverage['chapters_total'];
         $summary['chapters_tagged'] = $coverage['chapters_tagged'];
         $summary['chapters_untagged'] = $coverage['chapters_untagged'];
         $summary['chapters_on_map'] = $coverage['chapters_on_map'];
         $summary['matched'] = $coverage['matched'];
+
+        $classCards = $this->buildClassCards(
+            $allYearChapters,
+            $conceptBySyllabus,
+            $practiceCounts,
+            $boardId,
+            $classNumber,
+            $branchFilter,
+        );
 
         return [
             'year' => $year?->only(['id', 'name']),
@@ -183,6 +217,7 @@ class ConceptOverviewService
             'branch_options' => ConceptBranch::options(),
             'branches' => $branches,
             'rows' => $rows,
+            'class_cards' => $classCards,
             'summary' => $summary,
             'untagged_chapters' => $coverage['untagged_list'],
             'orphan_tagged_chapters' => $coverage['orphan_tagged_list'],
@@ -200,8 +235,12 @@ class ConceptOverviewService
         $boards = $this->boards();
         $classes = $this->classes();
 
-        $chapters = $this->loadChapters($year?->id, taggedOnly: true)
+        $allLoaded = $this->loadChapters($year?->id, taggedOnly: true)
             ->where('chapter_head_id', $head->id)
+            ->values();
+        $preferredVersionIds = $this->preferredVersionIds($allLoaded);
+        $chapters = $allLoaded
+            ->filter(fn (SyllabusChapter $ch) => in_array((int) $ch->syllabus_version_id, $preferredVersionIds, true))
             ->values();
 
         $conceptBySyllabus = $this->conceptPathsBySyllabusChapter($chapters->pluck('id')->all());
@@ -218,10 +257,9 @@ class ConceptOverviewService
 
             $boardCards = [];
             foreach ($boards as $board) {
-                $chapter = $classChapters
-                    ->filter(fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id'])
-                    ->sortByDesc(fn (SyllabusChapter $ch) => $ch->syllabusVersion?->status === SyllabusVersion::STATUS_PUBLISHED ? 1 : 0)
-                    ->first();
+                $chapter = $classChapters->first(
+                    fn (SyllabusChapter $ch) => (int) ($ch->syllabusVersion?->board_id) === (int) $board['id']
+                );
                 if (! $chapter) {
                     continue;
                 }
@@ -357,6 +395,48 @@ class ConceptOverviewService
     }
 
     /**
+     * One syllabus version per class × board — draft (editor) beats published.
+     *
+     * @param  Collection<int, SyllabusChapter>  $chapters
+     * @return list<int>
+     */
+    private function preferredVersionIds(Collection $chapters): array
+    {
+        return $chapters
+            ->filter(fn (SyllabusChapter $ch) => $ch->syllabusVersion !== null)
+            ->groupBy(function (SyllabusChapter $ch) {
+                $n = $this->classNumber($ch->syllabusVersion?->gradeLevel);
+                $boardId = (int) ($ch->syllabusVersion?->board_id);
+
+                return $n.'|'.$boardId;
+            })
+            ->map(function (Collection $group) {
+                $versions = $group
+                    ->map(fn (SyllabusChapter $ch) => $ch->syllabusVersion)
+                    ->unique('id')
+                    ->values();
+
+                $best = $versions->sortByDesc(function (SyllabusVersion $sv) {
+                    $gradeName = trim((string) ($sv->gradeLevel?->name ?? ''));
+                    $n = $this->classNumber($sv->gradeLevel);
+                    $canonical = preg_match('/^class\s*'.$n.'$/i', $gradeName) ? 2 : 0;
+                    $statusRank = match ($sv->status) {
+                        SyllabusVersion::STATUS_DRAFT => 2,
+                        SyllabusVersion::STATUS_PUBLISHED => 1,
+                        default => 0,
+                    };
+
+                    // Prefer real "Class 7" over "Class 7 Debug", then draft (editor) over published.
+                    return ($canonical * 1_000_000_000) + ($statusRank * 1_000_000) + (int) $sv->id;
+                })->first();
+
+                return (int) $best->id;
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return Collection<int, SyllabusChapter>
      */
     private function loadChapters(?int $yearId, bool $taggedOnly = true): Collection
@@ -414,12 +494,16 @@ class ConceptOverviewService
         ?int $boardId,
         array $mappedChapterIds,
         ?string $branchFilter = null,
+        ?int $classNumber = null,
     ): array {
         $classNumbers = collect($classes)->pluck('number')->map(fn ($n) => (int) $n)->all();
 
-        $inScope = $allYearChapters->filter(function (SyllabusChapter $ch) use ($classNumbers, $boardId) {
+        $inScope = $allYearChapters->filter(function (SyllabusChapter $ch) use ($classNumbers, $boardId, $classNumber) {
             $n = $this->classNumber($ch->syllabusVersion?->gradeLevel);
             if (! in_array($n, $classNumbers, true)) {
+                return false;
+            }
+            if ($classNumber && $n !== (int) $classNumber) {
                 return false;
             }
             if ($boardId && (int) ($ch->syllabusVersion?->board_id) !== (int) $boardId) {
@@ -478,6 +562,82 @@ class ConceptOverviewService
             'untagged_list' => $untagged->take(50)->map($format)->values()->all(),
             'orphan_tagged_list' => $orphanTagged->take(50)->map($format)->values()->all(),
         ];
+    }
+
+    /**
+     * One concept card per syllabus chapter for the selected class (and board).
+     *
+     * @param  Collection<int, SyllabusChapter>  $chapters
+     * @param  array<int, array<string, mixed>>  $conceptBySyllabus
+     * @param  array<int, int>  $practiceCounts
+     * @return list<array<string, mixed>>
+     */
+    private function buildClassCards(
+        Collection $chapters,
+        array $conceptBySyllabus,
+        array $practiceCounts,
+        ?int $boardId,
+        ?int $classNumber,
+        ?string $branchFilter,
+    ): array {
+        if (! $classNumber) {
+            return [];
+        }
+
+        $scoped = $chapters
+            ->filter(function (SyllabusChapter $ch) use ($classNumber, $boardId) {
+                if ($this->classNumber($ch->syllabusVersion?->gradeLevel) !== (int) $classNumber) {
+                    return false;
+                }
+                if ($boardId && (int) ($ch->syllabusVersion?->board_id) !== (int) $boardId) {
+                    return false;
+                }
+
+                return true;
+            })
+            ->sortBy(fn (SyllabusChapter $ch) => [(int) $ch->sort_order, (string) $ch->chapter_number])
+            ->values();
+
+        $cards = [];
+        foreach ($scoped as $ch) {
+            $head = $ch->chapterHead;
+            $branch = $head
+                ? ConceptBranch::normalize($head->branch ?: ConceptBranch::guessFromName((string) $head->name))
+                : null;
+
+            if ($branchFilter !== null && $branch !== $branchFilter) {
+                continue;
+            }
+
+            $board = [
+                'id' => (int) ($ch->syllabusVersion?->board_id),
+                'code' => (string) ($ch->syllabusVersion?->board?->code ?? ''),
+                'name' => (string) ($ch->syllabusVersion?->board?->name ?? ''),
+            ];
+            $cell = $this->buildCell($ch, $board, $conceptBySyllabus, $practiceCounts);
+
+            $cards[] = [
+                'id' => $ch->id,
+                'chapter_number' => $ch->chapter_number,
+                'chapter_name' => $ch->name,
+                'chapter_head' => $head?->name,
+                'chapter_head_id' => $head?->id,
+                'branch' => $branch,
+                'branch_label' => $branch ? ConceptBranch::label($branch) : null,
+                'board_code' => $board['code'],
+                'grade_name' => $ch->syllabusVersion?->gradeLevel?->name,
+                'syllabus_status' => $ch->syllabusVersion?->status,
+                'status' => $cell['status'],
+                'status_label' => $cell['status_label'],
+                'practice_sets' => $cell['practice_sets'],
+                'concept_url' => $cell['concept_url'],
+                'play_url' => $cell['play_url'],
+                'syllabus_url' => $cell['syllabus_url'],
+                'head_url' => $head ? route('admin.concept-overview.show', $head) : null,
+            ];
+        }
+
+        return $cards;
     }
 
     /**

@@ -159,7 +159,10 @@ class ConceptOverviewTest extends TestCase
         ]);
 
         $this->actingAs($admin)
-            ->get(route('admin.concept-overview.index'))
+            ->get(route('admin.concept-overview.index', [
+                'class' => 7,
+                'board' => $cbse->id,
+            ]))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/ConceptOverview/Index')
@@ -168,6 +171,75 @@ class ConceptOverviewTest extends TestCase
                 ->where('summary.chapters_total', 1)
                 ->where('summary.chapters_on_map', 1)
                 ->where('summary.matched', true)
-                ->where('rows.0.cells.7.best_status', 'to_upload'));
+                ->where('rows.0.cells.7.best_status', 'to_upload')
+                ->where('rows.0.cells.7.boards.CBSE.chapter_name', 'Geometric Twins')
+                ->has('class_cards', 1)
+                ->where('class_cards.0.chapter_name', 'Geometric Twins')
+                ->where('class_cards.0.chapter_head', 'Triangles'));
+    }
+
+    public function test_draft_on_canonical_class7_wins_over_sibling_grade_syllabus(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+        $cbse = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
+        // Same class number, different grade rows (prod can have Class 7 Debug + Class 7).
+        $debug7 = GradeLevel::query()->create(['name' => 'Class 7 Debug', 'sort_order' => 1, 'is_active' => true]);
+        $class7 = GradeLevel::query()->create(['name' => 'Class 7', 'sort_order' => 7, 'is_active' => true]);
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
+        $head = ChapterHead::query()->create([
+            'name' => 'Triangles',
+            'branch' => 'geometry',
+            'sort_order' => 1,
+        ]);
+
+        $publishedDebug = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'board_id' => $cbse->id,
+            'grade_level_id' => $debug7->id,
+            'subject_id' => $subject->id,
+            'status' => SyllabusVersion::STATUS_PUBLISHED,
+        ]);
+        SyllabusChapter::query()->create([
+            'syllabus_version_id' => $publishedDebug->id,
+            'chapter_head_id' => $head->id,
+            'chapter_number' => '1',
+            'name' => 'Old Triangles Title',
+            'sort_order' => 1,
+        ]);
+
+        $draft = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'board_id' => $cbse->id,
+            'grade_level_id' => $class7->id,
+            'subject_id' => $subject->id,
+            'status' => SyllabusVersion::STATUS_DRAFT,
+        ]);
+        SyllabusChapter::query()->create([
+            'syllabus_version_id' => $draft->id,
+            'chapter_head_id' => $head->id,
+            'chapter_number' => 'P2- Ch 1',
+            'name' => 'Geometric Twins',
+            'sort_order' => 1,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.concept-overview.index', [
+                'class' => 7,
+                'board' => $cbse->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ConceptOverview/Index')
+                ->where('summary.chapters_total', 1)
+                ->has('class_cards', 1)
+                ->where('class_cards.0.chapter_name', 'Geometric Twins')
+                ->where('rows.0.cells.7.boards.CBSE.chapter_name', 'Geometric Twins'));
     }
 }
