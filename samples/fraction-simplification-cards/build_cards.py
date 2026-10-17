@@ -62,12 +62,13 @@ CARDS = [
         "title": "Cancel trap — numbers in a sum",
         "level": "Class 6+",
         "hook_plain": "(4+5)/4",
+        "quiz_plain": "(6+9)/6",
         "wrong_cancel": "Cancel both 4s → left with 5 (illegal).",
-        "why": "The bar means the whole numerator is divided by 4. So (4+5)/4 = 4/4 + 5/4 = 9/4, not 5.",
+        "why": "Same rule as the card: the bar divides the whole sum. For (6+9)/6, correct is 15/6 = 5/2, not 9.",
         "steps": [
-            (False, "Cancel 4s: get 5"),
-            (True, "Add first: 9/4"),
-            (True, "Split: 4/4 + 5/4 = 9/4"),
+            (False, "Cancel 6s: get 9"),
+            (True, "Add first: 15/6 = 5/2"),
+            (True, "Split: 6/6 + 9/6 = 5/2"),
             (False, "Cancel one digit only"),
         ],
         "options": [
@@ -77,7 +78,7 @@ CARDS = [
             "Steps (1) and (4) are both correct",
         ],
         "correct_index": 2,
-        "answer_value": "9/4",
+        "answer_value": "5/2",
         "difficulty": "Easy",
         "visual": {
             "wrong_num": [("4", True, "1"), ("+", False), ("5", False)],
@@ -86,9 +87,9 @@ CARDS = [
             "right_a": "(4 + 5) / 4  =  9 / 4",
             "right_b": "4/4 + 5/4  =  1 + 5/4  =  9/4",
             "checks": [
-                ("(1)", None, None, "cut both 4s → left with 5", False),
-                ("(2)", None, None, "(4+5)=9, then 9/4", True),
-                ("(3)", None, None, "split: 4/4 + 5/4 = 1 + 5/4 = 9/4", True),
+                ("(1)", None, None, "cut both 6s → left with 9", False),
+                ("(2)", None, None, "(6+9)=15, then 15/6 = 5/2", True),
+                ("(3)", None, None, "split: 6/6 + 9/6 = 1 + 3/2 = 5/2", True),
                 ("(4)", None, None, "partial cut on digits → wrong", False),
             ],
         },
@@ -98,13 +99,14 @@ CARDS = [
         "title": "Matching addend trap",
         "level": "Class 6+",
         "hook_plain": "(44+11)/11",
+        "quiz_plain": "(36+12)/12",
         "wrong_cancel": "Cancel the two 11s → 44+1 = 45 (wrong).",
-        "why": "11 divides the whole sum. Correct: 55/11 = 5, or 44/11 + 11/11 = 5. Never 45.",
+        "why": "Same trap as the card. For (36+12)/12, correct is 48/12 = 4, not 37.",
         "steps": [
-            (False, "Cancel 11s: 44+1 = 45"),
-            (True, "Add first: 55/11 = 5"),
-            (True, "Split: 44/11 + 11/11 = 5"),
-            (False, "Cancel part of 44: 4+11 = 15"),
+            (False, "Cancel 12s: 36+1 = 37"),
+            (True, "Add first: 48/12 = 4"),
+            (True, "Split: 36/12 + 12/12 = 4"),
+            (False, "Cancel part of 36: 3+12 = 15"),
         ],
         "options": [
             "Steps (1) and (4) are wrong; only (2) is correct",
@@ -113,7 +115,7 @@ CARDS = [
             "All four steps are correct",
         ],
         "correct_index": 2,
-        "answer_value": "5",
+        "answer_value": "4",
         "difficulty": "Easy",
         "visual": {
             "wrong_num": [("44", False), ("+", False), ("11", True, "1")],
@@ -122,10 +124,10 @@ CARDS = [
             "right_a": "(44 + 11) / 11  =  55 / 11  =  5",
             "right_b": "44/11 + 11/11  =  4 + 1  =  5",
             "checks": [
-                ("(1)", None, None, "cut both 11s → 44+1 = 45", False),
-                ("(2)", None, None, "(44+11)=55, then 55/11 = 5", True),
-                ("(3)", None, None, "split: 44/11 + 11/11 = 4 + 1 = 5", True),
-                ("(4)", None, None, "partial cut on 44 → 4+11 = 15", False),
+                ("(1)", None, None, "cut both 12s → 36+1 = 37", False),
+                ("(2)", None, None, "(36+12)=48, then 48/12 = 4", True),
+                ("(3)", None, None, "split: 36/12 + 12/12 = 3 + 1 = 4", True),
+                ("(4)", None, None, "partial cut on 36 → 3+12 = 15", False),
             ],
         },
     },
@@ -134,13 +136,14 @@ CARDS = [
         "title": "Same idea with subtraction",
         "level": "Class 6+",
         "hook_plain": "(15-5)/5",
+        "quiz_plain": "(21-7)/7",
         "wrong_cancel": "Cancel both 5s → 14 or 1 (both wrong).",
-        "why": "(15−5)/5 = 10/5 = 2, or 15/5 − 5/5 = 2.",
+        "why": "Same rule as the card. For (21−7)/7, correct is 14/7 = 2, not 20.",
         "steps": [
-            (False, "Cancel 5s → 14"),
-            (True, "Subtract first: 10/5 = 2"),
-            (True, "Split: 15/5 − 5/5 = 2"),
-            (False, "Cancel 5s → 1"),
+            (False, "Cancel 7s → 20"),
+            (True, "Subtract first: 14/7 = 2"),
+            (True, "Split: 21/7 − 7/7 = 2"),
+            (False, "Cancel 7s → 1"),
         ],
         "options": [
             "Only step (1) is correct",
@@ -158,10 +161,10 @@ CARDS = [
             "right_a": "(15 − 5) / 5  =  10 / 5  =  2",
             "right_b": "15/5 − 5/5  =  3 − 1  =  2",
             "checks": [
-                ("(1)", None, None, "cut both 5s → 15−1 = 14", False),
-                ("(2)", None, None, "(15−5)=10, then 10/5 = 2", True),
-                ("(3)", None, None, "split: 15/5 − 5/5 = 3 − 1 = 2", True),
-                ("(4)", None, None, "cut both 5s → claim 1", False),
+                ("(1)", None, None, "cut both 7s → 21−1 = 20", False),
+                ("(2)", None, None, "(21−7)=14, then 14/7 = 2", True),
+                ("(3)", None, None, "split: 21/7 − 7/7 = 3 − 1 = 2", True),
+                ("(4)", None, None, "cut both 7s → claim 1", False),
             ],
         },
     },
@@ -170,13 +173,14 @@ CARDS = [
         "title": "Cut must hit every term",
         "level": "Class 6+",
         "hook_plain": "(12+8)/4",
+        "quiz_plain": "(18+12)/6",
         "wrong_cancel": "Cancel only 12 with 4 → 11 (wrong).",
-        "why": "4 must divide both terms: 12/4 + 8/4 = 5, or 20/4 = 5.",
+        "why": "Same rule as the card. For (18+12)/6, every term must be divided: 3+2 = 5, not 15.",
         "steps": [
-            (False, "Cancel 12 with 4 → 11"),
-            (True, "Add first: 20/4 = 5"),
-            (True, "Split: 12/4 + 8/4 = 5"),
-            (False, "Cancel 8 with 4 → 14"),
+            (False, "Cancel 18 with 6 → 15"),
+            (True, "Add first: 30/6 = 5"),
+            (True, "Split: 18/6 + 12/6 = 5"),
+            (False, "Cancel 12 with 6 → 20"),
         ],
         "options": [
             "Steps (1) and (4) are correct",
@@ -194,10 +198,10 @@ CARDS = [
             "right_a": "(12 + 8) / 4  =  20 / 4  =  5",
             "right_b": "12/4 + 8/4  =  3 + 2  =  5",
             "checks": [
-                ("(1)", None, None, "cut 12 with 4 → 3+8 = 11", False),
-                ("(2)", None, None, "(12+8)=20, then 20/4 = 5", True),
-                ("(3)", None, None, "split: 12/4 + 8/4 = 3 + 2 = 5", True),
-                ("(4)", None, None, "cut 8 with 4 → 12+2 = 14", False),
+                ("(1)", None, None, "cut 18 with 6 → 3+12 = 15", False),
+                ("(2)", None, None, "(18+12)=30, then 30/6 = 5", True),
+                ("(3)", None, None, "split: 18/6 + 12/6 = 3 + 2 = 5", True),
+                ("(4)", None, None, "cut 12 with 6 → 18+2 = 20", False),
             ],
         },
     },
@@ -206,11 +210,12 @@ CARDS = [
         "title": "Three terms",
         "level": "Class 6–7",
         "hook_plain": "(6+9+3)/3",
+        "quiz_plain": "(8+12+4)/4",
         "wrong_cancel": "Cancel the last 3 → 15 (wrong).",
-        "why": "Every term is divided by 3: 2+3+1 = 6, or 18/3 = 6.",
+        "why": "Same rule as the card. For (8+12+4)/4, split all three: 2+3+1 = 6.",
         "steps": [
-            (False, "Cancel last 3 → 15"),
-            (True, "Add first: 18/3 = 6"),
+            (False, "Cancel last 4 → 20"),
+            (True, "Add first: 24/4 = 6"),
             (True, "Split all three: 2+3+1 = 6"),
             (False, "Random cancel → 5"),
         ],
@@ -230,9 +235,9 @@ CARDS = [
             "right_a": "(6 + 9 + 3) / 3  =  18 / 3  =  6",
             "right_b": "6/3 + 9/3 + 3/3  =  2 + 3 + 1  =  6",
             "checks": [
-                ("(1)", None, None, "cut last 3 → 6+9 = 15", False),
-                ("(2)", None, None, "(6+9+3)=18, then 18/3 = 6", True),
-                ("(3)", None, None, "split: 6/3 + 9/3 + 3/3 = 2+3+1 = 6", True),
+                ("(1)", None, None, "cut last 4 → 8+12 = 20", False),
+                ("(2)", None, None, "(8+12+4)=24, then 24/4 = 6", True),
+                ("(3)", None, None, "split: 8/4 + 12/4 + 4/4 = 2+3+1 = 6", True),
                 ("(4)", None, None, "random cut → claim 5", False),
             ],
         },
@@ -242,13 +247,14 @@ CARDS = [
         "title": "When cutting is allowed",
         "level": "Class 6–7",
         "hook_plain": "(2×7+2)/2",
+        "quiz_plain": "(3×5+3)/3",
         "wrong_cancel": "Cut only one lone 2 → claim 14 (did not take common factor).",
-        "why": "First take common: 2(7+1)/2 = 8. Cutting one single 2 from (2×7+2)/2 is illegal — both 2s belong to the common factor.",
+        "why": "Same as the card: take common first. For (3×5+3)/3, factor 3(5+1)/3 = 6. Cutting one lone 3 → 15 is wrong.",
         "steps": [
-            (True, "Take common: 2(7+1)/2 → cut 2 → 8"),
-            (False, "Cut one 2 from (2×7+2)/2 → claim 14"),
-            (True, "Expand first: 14+2=16, then 16/2 = 8"),
-            (True, "2(7+1)/2 = 16/2 = 8"),
+            (True, "Take common: 3(5+1)/3 → cut 3 → 6"),
+            (False, "Cut one 3 from (3×5+3)/3 → claim 15"),
+            (True, "Expand first: 15+3=18, then 18/3 = 6"),
+            (True, "3(5+1)/3 = 18/3 = 6"),
         ],
         "options": [
             "Only step (1) is correct",
@@ -257,10 +263,9 @@ CARDS = [
             "Only step (2) is correct",
         ],
         "correct_index": 1,
-        "answer_value": "8",
+        "answer_value": "6",
         "difficulty": "Medium",
         "visual": {
-            # Wrong: cut one lone +2 with den 2 → claim 2×7 = 14 (skipped taking common).
             "wrong_num": [("2", False), ("×", False), ("7", False), ("+", False), ("2", True, "1")],
             "wrong_den": ("2", True, "1"),
             "wrong_result": "= 14",
@@ -270,10 +275,10 @@ CARDS = [
             "right_a": "Take common first: 2(7 + 1) / 2",
             "right_b": "Then cut the common factor 2 → 7 + 1 = 8",
             "checks": [
-                ("(1)", None, None, "take common: 2(7+1)/2, cut 2 → 8", True),
-                ("(2)", None, None, "cut one lone 2 from (2×7+2)/2 → claim 14", False),
-                ("(3)", None, None, "expand first: 2×7+2=16, then 16/2 = 8", True),
-                ("(4)", None, None, "2(7+1)=16, then 16/2 = 8", True),
+                ("(1)", None, None, "take common: 3(5+1)/3, cut 3 → 6", True),
+                ("(2)", None, None, "cut one lone 3 from (3×5+3)/3 → claim 15", False),
+                ("(3)", None, None, "expand first: 3×5+3=18, then 18/3 = 6", True),
+                ("(4)", None, None, "3(5+1)=18, then 18/3 = 6", True),
             ],
         },
     },
@@ -282,13 +287,14 @@ CARDS = [
         "title": "Algebra — split",
         "level": "Class 7–8",
         "hook_plain": "(4x+2)/2",
+        "quiz_plain": "(6x+3)/3",
         "wrong_cancel": "Cancel only the +2 → 4x+1 (wrong).",
-        "why": "Split: 4x/2 + 2/2 = 2x+1. Or factor: 2(2x+1)/2 = 2x+1.",
+        "why": "Same as the card. For (6x+3)/3, split or factor: answer is 2x+1, not 6x+1.",
         "steps": [
-            (False, "Cancel the +2 → 4x+1"),
+            (False, "Cancel the +3 → 6x+1"),
             (True, "Split: 2x+1"),
             (True, "Factor cancel: 2x+1"),
-            (False, "Leave as 4x+2"),
+            (False, "Leave as 6x+3"),
         ],
         "options": [
             "Only step (1) is correct",
@@ -309,10 +315,10 @@ CARDS = [
             "legal_den": ("2", True, "1"),
             "legal_result": "= 2x + 1",
             "checks": [
-                ("(1)", None, None, "cut only the +2 → claim 4x+1", False),
-                ("(2)", None, None, "split: 4x/2 + 2/2 = 2x + 1", True),
-                ("(3)", None, None, "factor 2(2x+1)/2, cut 2 → 2x+1", True),
-                ("(4)", None, None, "leave as 4x+2 (not simplified)", False),
+                ("(1)", None, None, "cut only the +3 → claim 6x+1", False),
+                ("(2)", None, None, "split: 6x/3 + 3/3 = 2x + 1", True),
+                ("(3)", None, None, "factor 3(2x+1)/3, cut 3 → 2x+1", True),
+                ("(4)", None, None, "leave as 6x+3 (not simplified)", False),
             ],
         },
     },
@@ -321,13 +327,14 @@ CARDS = [
         "title": "Algebra — do not cut x in a sum",
         "level": "Class 7–8",
         "hook_plain": "(4x+2)/x",
+        "quiz_plain": "(6x+3)/x",
         "wrong_cancel": "Cancel x in 4x → claim 6 (classic trap).",
-        "why": "Correct: 4 + 2/x. Check x=2: left is 5, so 6 fails.",
+        "why": "Same as the card. For (6x+3)/x, correct is 6 + 3/x. Cutting x to claim 9 is wrong.",
         "steps": [
+            (False, "Cancel x → 9"),
+            (True, "Split: 6 + 3/x"),
             (False, "Cancel x → 6"),
-            (True, "Split: 4 + 2/x"),
-            (False, "Cancel x → 4"),
-            (True, "x=2 check shows 6 fails"),
+            (True, "x=2 check shows 9 fails"),
         ],
         "options": [
             "Only step (1) is correct",
@@ -336,7 +343,7 @@ CARDS = [
             "All four steps are correct",
         ],
         "correct_index": 1,
-        "answer_value": "4 + 2/x",
+        "answer_value": "6 + 3/x",
         "difficulty": "Medium",
         "visual": {
             "wrong_num": [("4", False), ("x", True, "1"), ("+", False), ("2", False)],
@@ -345,10 +352,10 @@ CARDS = [
             "right_a": "4x/x + 2/x  =  4 + 2/x",
             "right_b": "Check: if x = 2, value is 5  (not 6)",
             "checks": [
-                ("(1)", None, None, "cut x → claim 4+2 = 6", False),
-                ("(2)", None, None, "split: 4x/x + 2/x = 4 + 2/x", True),
-                ("(3)", None, None, "cut x → claim only 4", False),
-                ("(4)", None, None, "check x=2: (8+2)/2 = 5, so 6 fails", True),
+                ("(1)", None, None, "cut x → claim 6+3 = 9", False),
+                ("(2)", None, None, "split: 6x/x + 3/x = 6 + 3/x", True),
+                ("(3)", None, None, "cut x → claim only 6", False),
+                ("(4)", None, None, "check x=2: (12+3)/2 = 7.5, so 9 fails", True),
             ],
         },
     },
@@ -357,13 +364,14 @@ CARDS = [
         "title": "Algebra — subtract then factor",
         "level": "Class 7–8",
         "hook_plain": "(6x-3)/3",
+        "quiz_plain": "(30x-5)/10",
         "wrong_cancel": "Cancel only −3 → 6x−1 (wrong).",
-        "why": "Split: 2x−1. Or factor: 3(2x−1)/3 = 2x−1.",
+        "why": "Same as the card. For (30x−5)/10, split: 3x − 1/2, or factor: 5(6x−1)/10 = (6x−1)/2.",
         "steps": [
-            (False, "Cancel −3 → 6x−1"),
-            (True, "Split: 2x−1"),
-            (True, "Factor: 2x−1"),
-            (False, "Claim answer is 6x"),
+            (False, "Cancel only −5 → 3x−1"),
+            (True, "Split: 3x − 1/2"),
+            (True, "Factor: (6x−1)/2"),
+            (False, "Claim answer is 30x"),
         ],
         "options": [
             "Only step (1) is correct",
@@ -372,7 +380,7 @@ CARDS = [
             "Steps (1) and (4) are both correct",
         ],
         "correct_index": 1,
-        "answer_value": "2x-1",
+        "answer_value": "3x - 1/2",
         "difficulty": "Medium",
         "visual": {
             "wrong_num": [("6x", False), ("−", False), ("3", True, "1")],
@@ -384,10 +392,10 @@ CARDS = [
             "legal_den": ("3", True, "1"),
             "legal_result": "= 2x − 1",
             "checks": [
-                ("(1)", None, None, "cut only −3 → claim 6x−1", False),
-                ("(2)", None, None, "split: 6x/3 − 3/3 = 2x − 1", True),
-                ("(3)", None, None, "factor 3(2x−1)/3, cut 3 → 2x−1", True),
-                ("(4)", None, None, "claim answer is 6x", False),
+                ("(1)", None, None, "cut only −5 → claim 3x−1", False),
+                ("(2)", None, None, "split: 30x/10 − 5/10 = 3x − 1/2", True),
+                ("(3)", None, None, "factor 5(6x−1)/10, cut → (6x−1)/2", True),
+                ("(4)", None, None, "claim answer is 30x", False),
             ],
         },
     },
@@ -396,13 +404,14 @@ CARDS = [
         "title": "Master — factor then cut",
         "level": "Class 8+",
         "hook_plain": "(2x+2)/(x+1)",
+        "quiz_plain": "(3x+3)/(x+1)",
         "wrong_cancel": "Cut x with x → claim 2+2 = 4 (classic trap).",
-        "why": "Factor: 2(x+1)/(x+1) = 2 (x≠−1). Cancel the common factor (x+1), not the letter x inside a sum.",
+        "why": "Same as the card. For (3x+3)/(x+1), factor: 3(x+1)/(x+1) = 3 (x≠−1). Cutting x to claim 6 is wrong.",
         "steps": [
-            (False, "Cut x with x → claim 4"),
-            (True, "Factor → 2"),
-            (True, "x=3 check → 2"),
-            (False, "Piece-cancel +2 (illegal)"),
+            (False, "Cut x with x → claim 6"),
+            (True, "Factor → 3"),
+            (True, "x=2 check → 3"),
+            (False, "Piece-cancel +3 (illegal)"),
         ],
         "options": [
             "Only step (1) is correct",
@@ -411,10 +420,9 @@ CARDS = [
             "Only step (4) is a safe method",
         ],
         "correct_index": 1,
-        "answer_value": "2",
+        "answer_value": "3",
         "difficulty": "Hard",
         "visual": {
-            # Student cuts x↔x and writes 2+2=4 (wrong).
             "wrong_num": [("2", False), ("x", True, ""), ("+", False), ("2", False)],
             "wrong_den": [("x", True, ""), ("+", False), ("1", False)],
             "wrong_result": "= 4",
@@ -424,10 +432,10 @@ CARDS = [
             "legal_den": ("(x+1)", True, "1"),
             "legal_result": "= 2",
             "checks": [
-                ("(1)", None, None, "cut x with x → claim 2+2 = 4", False),
-                ("(2)", None, None, "factor: 2(x+1)/(x+1), cut (x+1) → 2", True),
-                ("(3)", None, None, "check x=3: (6+2)/4 = 8/4 = 2", True),
-                ("(4)", None, None, "piece-cut the +2 (illegal method)", False),
+                ("(1)", None, None, "cut x with x → claim 3+3 = 6", False),
+                ("(2)", None, None, "factor: 3(x+1)/(x+1), cut (x+1) → 3", True),
+                ("(3)", None, None, "check x=2: (6+3)/3 = 9/3 = 3", True),
+                ("(4)", None, None, "piece-cut the +3 (illegal method)", False),
             ],
         },
     },
@@ -680,23 +688,24 @@ def build_questions() -> list[dict]:
     for card in CARDS:
         true_ids = [i + 1 for i, (ok, _) in enumerate(card["steps"]) if ok]
         false_ids = [i + 1 for i, (ok, _) in enumerate(card["steps"]) if not ok]
+        quiz = card.get("quiz_plain") or card["hook_plain"]
         check_lines = [check_line_text(item) for item in card["visual"]["checks"]]
         rows.append({
             "type": "mcq",
             "topic": "Fraction simplification (cancel traps)",
             "question": (
-                f"For {card['hook_plain']}, which statement about steps (1)–(4) is correct?"
+                f"For {quiz}, which statement about steps (1)–(4) is correct?"
             ),
             "needs_diagram": True,
             "diagram_file": f"q{card['id']}.png",
             "figure_spec": (
-                f"Teach screen only for {card['hook_plain']}: wrong cancel with pen cuts, then right methods."
+                f"Teach screen for {card['hook_plain']}; quiz uses a fresh sum {quiz}."
             ),
             "check_lines": check_lines,
             "options": card["options"],
             "correct_index": card["correct_index"],
             "method_hint": (
-                "If the numerator is a sum/difference, split the fraction or factor first. "
+                "Use the same method as the Wrong/Right card — numbers in the question are different on purpose. "
                 "Cancel only a common factor of the whole top and bottom."
             ),
             "explanation": (
@@ -724,10 +733,12 @@ def write_teacher_guide() -> None:
     for card in CARDS:
         lines.append(f"## Card {card['id']}. {card['title']} ({card['level']})")
         lines.append("")
-        lines.append(f"- **Hook:** `{card['hook_plain']}`")
-        lines.append(f"- **Wrong cancel:** {card['wrong_cancel']}")
-        lines.append(f"- **Why:** {card['why']}")
-        lines.append(f"- **Result:** `{card['answer_value']}`")
+        quiz = card.get("quiz_plain") or card["hook_plain"]
+        lines.append(f"- **Teach figure:** `{card['hook_plain']}`")
+        lines.append(f"- **Quiz sum (different numbers):** `{quiz}`")
+        lines.append(f"- **Wrong cancel (teach):** {card['wrong_cancel']}")
+        lines.append(f"- **Why (quiz):** {card['why']}")
+        lines.append(f"- **Quiz result:** `{card['answer_value']}`")
         lines.append(f"- **MCQ:** `{card['options'][card['correct_index']]}`")
         lines.append("")
     (ROOT / "TEACHER_GUIDE.md").write_text("\n".join(lines), encoding="utf-8")
