@@ -123,15 +123,15 @@
     {
       "type": "mcq",
       "topic": "Fraction simplification (cancel traps)",
-      "question": "For 2(7+1)/2 vs (2+7)/2, which statement about steps (1)–(4) is correct?",
+      "question": "For (2×7+2)/2, which statement about steps (1)–(4) is correct?",
       "needs_diagram": true,
       "diagram_file": "q6.png",
-      "figure_spec": "Teach screen only for 2(7+1)/2 vs (2+7)/2: wrong cancel with pen cuts, then right methods.",
+      "figure_spec": "Teach screen only for (2×7+2)/2: wrong cancel with pen cuts, then right methods.",
       "check_lines": [
-        "(1)  factor form: cut 2 → (7+1)=8",
-        "(2)  cut 2 in the sum (2+7)/2 → claim 7",
-        "(3)  sum first: (2+7)=9, then 9/2",
-        "(4)  expand: 2(7+1)=16, then 16/2 = 8"
+        "(1)  take common: 2(7+1)/2, cut 2 → 8",
+        "(2)  cut one lone 2 from (2×7+2)/2 → claim 14",
+        "(3)  expand first: 2×7+2=16, then 16/2 = 8",
+        "(4)  2(7+1)=16, then 16/2 = 8"
       ],
       "options": [
         "Only step (1) is correct",
@@ -141,7 +141,7 @@
       ],
       "correct_index": 1,
       "method_hint": "If the numerator is a sum/difference, split the fraction or factor first. Cancel only a common factor of the whole top and bottom.",
-      "explanation": "Cancel only a common FACTOR of the whole top. 2(7+1)/2 → 8 is legal. (2+7)/2 cannot cancel the 2. True: [1, 3, 4]. False: [2]. Result: 8 vs 9/2. Final answer = option B",
+      "explanation": "First take common: 2(7+1)/2 = 8. Cutting one single 2 from (2×7+2)/2 is illegal — both 2s belong to the common factor. True: [1, 3, 4]. False: [2]. Result: 8. Final answer = option B",
       "difficulty": "Medium"
     },
     {

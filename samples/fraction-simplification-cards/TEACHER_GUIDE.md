@@ -48,10 +48,10 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 
 ## Card 6. When cutting is allowed (Class 6–7)
 
-- **Hook:** `2(7+1)/2 vs (2+7)/2`
-- **Wrong cancel:** Illegal cancel in a sum vs legal cancel of a factor.
-- **Why:** Cancel only a common FACTOR of the whole top. 2(7+1)/2 → 8 is legal. (2+7)/2 cannot cancel the 2.
-- **Result:** `8 vs 9/2`
+- **Hook:** `(2×7+2)/2`
+- **Wrong cancel:** Cut only one lone 2 → claim 14 (did not take common factor).
+- **Why:** First take common: 2(7+1)/2 = 8. Cutting one single 2 from (2×7+2)/2 is illegal — both 2s belong to the common factor.
+- **Result:** `8`
 - **MCQ:** `Steps (1), (3) and (4) are correct; (2) is wrong`
 
 ## Card 7. Algebra — split (Class 7–8)
