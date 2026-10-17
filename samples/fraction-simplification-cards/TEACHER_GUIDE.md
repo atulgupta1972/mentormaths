@@ -81,7 +81,7 @@ Figures show **notebook-style cutting** (diagonal strike-through) on cancelled n
 ## Card 10. Master — factor then cut (Class 8+)
 
 - **Hook:** `(2x+2)/(x+1)`
-- **Wrong cancel:** Piece-cancel +2, or cancel x carelessly.
-- **Why:** Factor: 2(x+1)/(x+1) = 2 (x≠−1). Cancel the common factor (x+1), not pieces.
+- **Wrong cancel:** Cut x with x → claim 2+2 = 4 (classic trap).
+- **Why:** Factor: 2(x+1)/(x+1) = 2 (x≠−1). Cancel the common factor (x+1), not the letter x inside a sum.
 - **Result:** `2`
-- **MCQ:** `Steps (2) and (3) are correct; (1) wrong; (4) illegal`
+- **MCQ:** `Steps (2) and (3) are correct; (1) and (4) are wrong`

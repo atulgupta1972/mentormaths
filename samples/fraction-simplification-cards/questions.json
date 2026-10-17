@@ -224,20 +224,20 @@
       "diagram_file": "q10.png",
       "figure_spec": "Teach screen only for (2x+2)/(x+1): wrong cancel with pen cuts, then right methods.",
       "check_lines": [
-        "(1)  piece-cut the +2 → leave 2x/(x+1)",
+        "(1)  cut x with x → claim 2+2 = 4",
         "(2)  factor: 2(x+1)/(x+1), cut (x+1) → 2",
         "(3)  check x=3: (6+2)/4 = 8/4 = 2",
-        "(4)  cut x terms (illegal method)"
+        "(4)  piece-cut the +2 (illegal method)"
       ],
       "options": [
         "Only step (1) is correct",
-        "Steps (2) and (3) are correct; (1) wrong; (4) illegal",
+        "Steps (2) and (3) are correct; (1) and (4) are wrong",
         "All four steps use legal methods",
         "Only step (4) is a safe method"
       ],
       "correct_index": 1,
       "method_hint": "If the numerator is a sum/difference, split the fraction or factor first. Cancel only a common factor of the whole top and bottom.",
-      "explanation": "Factor: 2(x+1)/(x+1) = 2 (x≠−1). Cancel the common factor (x+1), not pieces. True: [2, 3]. False: [1, 4]. Result: 2. Final answer = option B",
+      "explanation": "Factor: 2(x+1)/(x+1) = 2 (x≠−1). Cancel the common factor (x+1), not the letter x inside a sum. True: [2, 3]. False: [1, 4]. Result: 2. Final answer = option B",
       "difficulty": "Hard"
     }
   ]

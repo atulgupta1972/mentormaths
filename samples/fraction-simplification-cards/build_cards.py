@@ -395,17 +395,17 @@ CARDS = [
         "title": "Master — factor then cut",
         "level": "Class 8+",
         "hook_plain": "(2x+2)/(x+1)",
-        "wrong_cancel": "Piece-cancel +2, or cancel x carelessly.",
-        "why": "Factor: 2(x+1)/(x+1) = 2 (x≠−1). Cancel the common factor (x+1), not pieces.",
+        "wrong_cancel": "Cut x with x → claim 2+2 = 4 (classic trap).",
+        "why": "Factor: 2(x+1)/(x+1) = 2 (x≠−1). Cancel the common factor (x+1), not the letter x inside a sum.",
         "steps": [
-            (False, "Piece-cancel → 2x/(x+1)"),
+            (False, "Cut x with x → claim 4"),
             (True, "Factor → 2"),
             (True, "x=3 check → 2"),
-            (False, "Cancel x terms (illegal)"),
+            (False, "Piece-cancel +2 (illegal)"),
         ],
         "options": [
             "Only step (1) is correct",
-            "Steps (2) and (3) are correct; (1) wrong; (4) illegal",
+            "Steps (2) and (3) are correct; (1) and (4) are wrong",
             "All four steps use legal methods",
             "Only step (4) is a safe method",
         ],
@@ -413,19 +413,20 @@ CARDS = [
         "answer_value": "2",
         "difficulty": "Hard",
         "visual": {
-            "wrong_num": [("2x", False), ("+", False), ("2", True, "")],
-            "wrong_den": ("x+1", False),
-            "wrong_result": "?",
+            # Student cuts x↔x and writes 2+2=4 (wrong).
+            "wrong_num": [("2", False), ("x", True, ""), ("+", False), ("2", False)],
+            "wrong_den": [("x", True, ""), ("+", False), ("1", False)],
+            "wrong_result": "= 4",
             "right_a": "Factor: 2(x + 1) / (x + 1)",
             "right_b": "Then cut (x + 1)  →  2   (x ≠ −1)",
             "legal_num": [("2", False), ("(x+1)", True, "1")],
             "legal_den": ("(x+1)", True, "1"),
             "legal_result": "= 2",
             "checks": [
-                ("(1)", None, None, "piece-cut the +2 → leave 2x/(x+1)", False),
+                ("(1)", None, None, "cut x with x → claim 2+2 = 4", False),
                 ("(2)", None, None, "factor: 2(x+1)/(x+1), cut (x+1) → 2", True),
                 ("(3)", None, None, "check x=3: (6+2)/4 = 8/4 = 2", True),
-                ("(4)", None, None, "cut x terms (illegal method)", False),
+                ("(4)", None, None, "piece-cut the +2 (illegal method)", False),
             ],
         },
     },
@@ -471,6 +472,17 @@ def parse_part(part) -> tuple[str, bool, str | None]:
         s = str(raw).strip()
         return text, True, (s if s else None)
     return text, True, "1"
+
+
+def normalize_parts(parts) -> list:
+    """Accept a single part tuple or a list of part tuples."""
+    if parts is None:
+        return []
+    if isinstance(parts, (list, tuple)) and parts and isinstance(parts[0], str):
+        return [parts]
+    if isinstance(parts, (list, tuple)):
+        return list(parts)
+    return []
 
 
 def draw_quotient(
@@ -530,8 +542,16 @@ def draw_fraction_with_cancels(
         num_w += tw + gap
     num_w = max(0, num_w - gap)
 
-    den_text, den_cancel, den_quot = parse_part(den) if den else ("", False, None)
-    den_w, den_h = text_size(draw, den_text, fnt) if den_text else (0, 0)
+    den_parts = normalize_parts(den)
+    den_meta = []
+    den_w = 0
+    for part in den_parts:
+        text, cancel, quot = parse_part(part)
+        tw, th = text_size(draw, text, fnt)
+        den_meta.append((text, cancel, quot, tw, th))
+        den_w += tw + gap
+    den_w = max(0, den_w - gap) if den_meta else 0
+    den_h = max((th for *_, th in den_meta), default=0)
     bar_w = max(num_w, den_w) + 16
 
     # numerator — quotient sits above the cut term
@@ -549,21 +569,22 @@ def draw_fraction_with_cancels(
     bar_y = y + max(th for *_, th in parts_meta) + 8
     draw.line([(x, bar_y), (x + bar_w, bar_y)], fill="#0f172a", width=4)
 
-    # denominator — quotient sits below the cut term (notebook style)
+    # denominator — quotient sits below each cut term (notebook style)
     dx = x + (bar_w - den_w) // 2
     dy = bar_y + 10
-    if den_text:
-        draw.text((dx, dy), den_text, fill="#0f172a", font=fnt)
-        if den_cancel:
-            strike_box(draw, dx, dy + 2, dx + den_w, dy + den_h - 2, strike_color, width=strike_width)
-            if den_quot:
-                qtw, qth = text_size(draw, den_quot, q_fnt)
+    for text, cancel, quot, tw, th in den_meta:
+        draw.text((dx, dy), text, fill="#0f172a", font=fnt)
+        if cancel:
+            strike_box(draw, dx, dy + 2, dx + tw, dy + th - 2, strike_color, width=strike_width)
+            if quot:
+                qtw, _qth = text_size(draw, quot, q_fnt)
                 draw.text(
-                    (dx + den_w // 2 - qtw // 2, dy + den_h + 2),
-                    den_quot,
+                    (dx + tw // 2 - qtw // 2, dy + th + 2),
+                    quot,
                     fill=strike_color,
                     font=q_fnt,
                 )
+        dx += tw + gap
 
     rx = x + bar_w + 16
     if result:
