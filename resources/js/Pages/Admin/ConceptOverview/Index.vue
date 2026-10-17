@@ -9,6 +9,8 @@ const props = defineProps({
     classes: { type: Array, default: () => [] },
     boards: { type: Array, default: () => [] },
     all_boards: { type: Array, default: () => [] },
+    branch_options: { type: Array, default: () => [] },
+    branches: { type: Array, default: () => [] },
     rows: { type: Array, default: () => [] },
     summary: { type: Object, default: () => ({}) },
     filters: { type: Object, default: () => ({}) },
@@ -16,12 +18,14 @@ const props = defineProps({
 
 const yearId = ref(props.filters.year || '');
 const boardId = ref(props.filters.board || '');
+const branchKey = ref(props.filters.branch || '');
 const compare = ref(props.filters.compare !== false);
 
 const applyFilters = () => {
     router.get(route('admin.concept-overview.index'), {
         year: yearId.value || undefined,
         board: boardId.value || undefined,
+        branch: branchKey.value || undefined,
         compare: compare.value ? 1 : 0,
     }, {
         preserveState: true,
@@ -55,6 +59,11 @@ const boardCodes = computed(() => {
     }
     return (props.boards || []).map((b) => b.code);
 });
+
+const selectBranch = (key) => {
+    branchKey.value = key || '';
+    applyFilters();
+};
 </script>
 
 <template>
@@ -67,22 +76,21 @@ const boardCodes = computed(() => {
                     <p class="text-xs font-semibold uppercase tracking-wide text-teal-700">USP · Progressive learning map</p>
                     <h2 class="mt-1 text-xl font-semibold text-gray-900">Concept overview</h2>
                     <p class="mt-1 max-w-2xl text-sm text-gray-600">
-                        Chapter heads across Class 4–10. See how Algebraic Expressions grow class by class,
-                        compare CBSE vs ICSE in one snapshot, and open concept cards or mark gaps to upload.
+                        Grouped by main branch — Algebra, Geometry, Mensuration, Trigonometry, and more.
+                        Drill into a chapter head to see Class 6 → 7 → 8 progression and CBSE vs ICSE.
                     </p>
                 </div>
                 <Link
                     :href="route('admin.chapter-heads.index')"
                     class="text-sm font-medium text-teal-700 hover:text-teal-900"
                 >
-                    Manage chapter heads →
+                    Assign branches →
                 </Link>
             </div>
         </template>
 
         <div class="py-8">
             <div class="mx-auto max-w-[1400px] space-y-6 px-4 sm:px-6 lg:px-8">
-                <!-- Filters + summary -->
                 <div class="flex flex-wrap items-end gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div>
                         <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Year</label>
@@ -111,98 +119,121 @@ const boardCodes = computed(() => {
                     </div>
                 </div>
 
-                <p v-if="!rows.length" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                    No chapter heads tagged on published syllabi yet. Tag chapters with a
-                    <Link :href="route('admin.chapter-heads.index')" class="font-semibold underline">chapter head</Link>
-                    in the syllabus editor, then this map fills in.
+                <!-- Branch chips -->
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        class="rounded-full border px-3 py-1.5 text-xs font-semibold transition"
+                        :class="!branchKey
+                            ? 'border-teal-700 bg-teal-700 text-white'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-teal-400'"
+                        @click="selectBranch('')"
+                    >
+                        All branches
+                    </button>
+                    <button
+                        v-for="opt in branch_options"
+                        :key="opt.key"
+                        type="button"
+                        class="rounded-full border px-3 py-1.5 text-xs font-semibold transition"
+                        :class="branchKey === opt.key
+                            ? 'border-teal-700 bg-teal-700 text-white'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-teal-400'"
+                        @click="selectBranch(opt.key)"
+                    >
+                        {{ opt.label }}
+                    </button>
+                </div>
+
+                <p v-if="!branches.length" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                    No chapter heads in this view yet. Tag syllabus chapters with a
+                    <Link :href="route('admin.chapter-heads.index')" class="font-semibold underline">chapter head + branch</Link>,
+                    then this map fills in.
                 </p>
 
-                <!-- Matrix -->
-                <div v-else class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <table class="min-w-full border-collapse text-sm">
-                        <thead>
-                            <tr class="border-b border-slate-200 bg-slate-50">
-                                <th class="sticky left-0 z-10 bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    Concept / chapter head
-                                </th>
-                                <th
-                                    v-for="cls in classColumns"
-                                    :key="cls.id"
-                                    class="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-600"
-                                >
-                                    Class {{ cls.number }}
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in rows"
-                                :key="row.id"
-                                class="border-b border-slate-100 hover:bg-slate-50/80"
-                            >
-                                <td class="sticky left-0 z-10 bg-white px-4 py-3">
-                                    <Link
-                                        :href="row.url"
-                                        class="font-semibold text-slate-900 hover:text-teal-800"
+                <!-- One matrix table per branch -->
+                <section
+                    v-for="branch in branches"
+                    :key="branch.key"
+                    class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                >
+                    <div class="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                        <div>
+                            <h3 class="text-base font-semibold text-slate-900">{{ branch.label }}</h3>
+                            <p class="text-xs text-slate-500">{{ branch.rows.length }} concept{{ branch.rows.length === 1 ? '' : 's' }}</p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full border-collapse text-sm">
+                            <thead>
+                                <tr class="border-b border-slate-100 bg-white">
+                                    <th class="sticky left-0 z-10 bg-white px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        Chapter head
+                                    </th>
+                                    <th
+                                        v-for="cls in classColumns"
+                                        :key="cls.id"
+                                        class="px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-600"
                                     >
-                                        {{ row.name }}
-                                    </Link>
-                                    <p class="text-xs text-slate-500">Progressive ladder →</p>
-                                </td>
-                                <td
-                                    v-for="cls in classColumns"
-                                    :key="`${row.id}-${cls.number}`"
-                                    class="px-1.5 py-2 align-middle"
+                                        {{ cls.number }}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="row in branch.rows"
+                                    :key="row.id"
+                                    class="border-b border-slate-100 hover:bg-slate-50/80"
                                 >
-                                    <div
-                                        v-if="row.cells[String(cls.number)]"
-                                        class="flex min-w-[5.5rem] flex-col gap-1"
+                                    <td class="sticky left-0 z-10 bg-white px-4 py-3">
+                                        <Link
+                                            :href="row.url"
+                                            class="font-semibold text-slate-900 hover:text-teal-800"
+                                        >
+                                            {{ row.name }}
+                                        </Link>
+                                        <p class="text-xs text-slate-500">Progressive ladder →</p>
+                                    </td>
+                                    <td
+                                        v-for="cls in classColumns"
+                                        :key="`${row.id}-${cls.number}`"
+                                        class="px-1.5 py-2 align-middle"
                                     >
-                                        <template v-if="compare && boardCodes.length > 1">
+                                        <div
+                                            v-if="row.cells[String(cls.number)]"
+                                            class="flex min-w-[5.5rem] flex-col gap-1"
+                                        >
+                                            <template v-if="compare && boardCodes.length > 1">
+                                                <div
+                                                    v-for="code in boardCodes"
+                                                    :key="code"
+                                                    class="rounded-md border px-1.5 py-1 text-center text-[10px] font-semibold leading-tight"
+                                                    :class="statusClass(row.cells[String(cls.number)].boards[code]?.status || 'empty')"
+                                                >
+                                                    <span class="opacity-70">{{ code }}</span>
+                                                    <span class="ml-1">{{ shortLabel(row.cells[String(cls.number)].boards[code]?.status || 'empty') }}</span>
+                                                </div>
+                                            </template>
                                             <div
-                                                v-for="code in boardCodes"
-                                                :key="code"
-                                                class="rounded-md border px-1.5 py-1 text-center text-[10px] font-semibold leading-tight"
-                                                :class="statusClass(row.cells[String(cls.number)].boards[code]?.status || 'empty')"
+                                                v-else
+                                                class="rounded-md border px-2 py-2 text-center text-[11px] font-semibold"
+                                                :class="statusClass(row.cells[String(cls.number)].best_status)"
                                             >
-                                                <span class="opacity-70">{{ code }}</span>
-                                                <span class="ml-1">{{ shortLabel(row.cells[String(cls.number)].boards[code]?.status || 'empty') }}</span>
+                                                {{ shortLabel(row.cells[String(cls.number)].best_status) }}
                                             </div>
-                                        </template>
+                                        </div>
                                         <div
                                             v-else
-                                            class="rounded-md border px-2 py-2 text-center text-[11px] font-semibold"
-                                            :class="statusClass(row.cells[String(cls.number)].best_status)"
+                                            class="rounded-md border border-slate-100 bg-slate-50 px-2 py-2 text-center text-[11px] text-slate-300"
                                         >
-                                            {{ shortLabel(row.cells[String(cls.number)].best_status) }}
+                                            —
                                         </div>
-                                    </div>
-                                    <div
-                                        v-else
-                                        class="rounded-md border border-slate-100 bg-slate-50 px-2 py-2 text-center text-[11px] text-slate-300"
-                                    >
-                                        —
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="grid gap-3 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-teal-50/40 p-5 text-sm text-slate-700 sm:grid-cols-3">
-                    <div>
-                        <p class="font-semibold text-slate-900">For teachers</p>
-                        <p class="mt-1">Spot a strong Class 6 student on equations — open the next class rung and assign that concept path.</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-                    <div>
-                        <p class="font-semibold text-slate-900">For parents</p>
-                        <p class="mt-1">One snapshot: what ICSE vs CBSE covers for Number System / Algebra at Class 4–6.</p>
-                    </div>
-                    <div>
-                        <p class="font-semibold text-slate-900">For content</p>
-                        <p class="mt-1">Rose cells = concept learning still blank — queue those in Concept builder.</p>
-                    </div>
-                </div>
+                </section>
             </div>
         </div>
     </AuthenticatedLayout>

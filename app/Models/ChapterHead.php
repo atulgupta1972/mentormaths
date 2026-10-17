@@ -9,6 +9,7 @@ class ChapterHead extends Model
 {
     protected $fillable = [
         'name',
+        'branch',
         'sort_order',
     ];
 

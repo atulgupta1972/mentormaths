@@ -41,7 +41,11 @@ class ConceptOverviewTest extends TestCase
         $class6 = GradeLevel::query()->create(['name' => 'Class 6', 'sort_order' => 6, 'is_active' => true]);
         $class7 = GradeLevel::query()->create(['name' => 'Class 7', 'sort_order' => 7, 'is_active' => true]);
         $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
-        $head = ChapterHead::query()->create(['name' => 'Algebraic Expressions', 'sort_order' => 1]);
+        $head = ChapterHead::query()->create([
+            'name' => 'Algebraic Expressions',
+            'branch' => 'algebra',
+            'sort_order' => 1,
+        ]);
 
         $sv6 = SyllabusVersion::query()->create([
             'academic_year_id' => $year->id,
@@ -98,6 +102,8 @@ class ConceptOverviewTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/ConceptOverview/Index')
                 ->has('rows', 1)
+                ->has('branches', 1)
+                ->where('branches.0.key', 'algebra')
                 ->where('rows.0.name', 'Algebraic Expressions')
                 ->where('summary.ready', 1)
                 ->where('summary.to_upload', 1));

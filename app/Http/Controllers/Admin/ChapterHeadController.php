@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\ChapterHead;
 use App\Models\SyllabusTopic;
+use App\Support\ConceptBranch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -30,9 +32,13 @@ class ChapterHeadController extends Controller
                             ->where('academic_year_id', $activeYear->id))))
                     ->count();
 
+                $branch = ConceptBranch::normalize($head->branch ?: ConceptBranch::guessFromName((string) $head->name));
+
                 return [
                     'id' => $head->id,
                     'name' => $head->name,
+                    'branch' => $branch,
+                    'branch_label' => ConceptBranch::label($branch),
                     'sort_order' => $head->sort_order,
                     'topics_count' => $topicsCount,
                 ];
@@ -40,6 +46,7 @@ class ChapterHeadController extends Controller
 
         return Inertia::render('Admin/ChapterHeads/Index', [
             'chapterHeads' => $chapterHeads,
+            'branchOptions' => ConceptBranch::options(),
             'activeYear' => $activeYear?->only(['id', 'name']),
         ]);
     }
@@ -48,12 +55,15 @@ class ChapterHeadController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:chapter_heads,name'],
+            'branch' => ['nullable', 'string', Rule::in(ConceptBranch::keys())],
         ]);
 
+        $name = trim($validated['name']);
         $sortOrder = (int) ChapterHead::query()->max('sort_order') + 1;
 
         ChapterHead::create([
-            'name' => trim($validated['name']),
+            'name' => $name,
+            'branch' => ConceptBranch::normalize($validated['branch'] ?? ConceptBranch::guessFromName($name)),
             'sort_order' => $sortOrder,
         ]);
 
@@ -64,17 +74,20 @@ class ChapterHeadController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:chapter_heads,name'],
+            'branch' => ['nullable', 'string', Rule::in(ConceptBranch::keys())],
         ]);
 
+        $name = trim($validated['name']);
         $sortOrder = (int) ChapterHead::query()->max('sort_order') + 1;
 
         $head = ChapterHead::create([
-            'name' => trim($validated['name']),
+            'name' => $name,
+            'branch' => ConceptBranch::normalize($validated['branch'] ?? ConceptBranch::guessFromName($name)),
             'sort_order' => $sortOrder,
         ]);
 
         return response()->json([
-            'chapterHead' => $head->only(['id', 'name']),
+            'chapterHead' => $head->only(['id', 'name', 'branch']),
         ]);
     }
 
@@ -118,8 +131,16 @@ class ChapterHeadController extends Controller
             'topics' => $items->values()->all(),
         ])->values()->all();
 
+        $branch = ConceptBranch::normalize($chapterHead->branch ?: ConceptBranch::guessFromName((string) $chapterHead->name));
+
         return Inertia::render('Admin/ChapterHeads/Show', [
-            'chapterHead' => $chapterHead->only(['id', 'name']),
+            'chapterHead' => [
+                'id' => $chapterHead->id,
+                'name' => $chapterHead->name,
+                'branch' => $branch,
+                'branch_label' => ConceptBranch::label($branch),
+            ],
+            'branchOptions' => ConceptBranch::options(),
             'topics' => $topics->all(),
             'topicsByClass' => $byClass,
             'activeYear' => $activeYear?->only(['id', 'name']),
@@ -130,9 +151,14 @@ class ChapterHeadController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:chapter_heads,name,'.$chapterHead->id],
+            'branch' => ['nullable', 'string', Rule::in(ConceptBranch::keys())],
         ]);
 
-        $chapterHead->update(['name' => trim($validated['name'])]);
+        $name = trim($validated['name']);
+        $chapterHead->update([
+            'name' => $name,
+            'branch' => ConceptBranch::normalize($validated['branch'] ?? $chapterHead->branch ?? ConceptBranch::guessFromName($name)),
+        ]);
 
         return back()->with('success', 'Chapter head updated.');
     }

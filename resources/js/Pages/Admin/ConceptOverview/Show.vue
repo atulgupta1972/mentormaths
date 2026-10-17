@@ -46,6 +46,9 @@ const statusClass = (status) => ({
                         ← Concept overview
                     </Link>
                     <h2 class="mt-1 text-xl font-semibold text-gray-900">{{ chapter_head.name }}</h2>
+                    <p v-if="chapter_head.branch_label" class="mt-1 text-sm font-medium text-teal-800">
+                        Branch · {{ chapter_head.branch_label }}
+                    </p>
                     <p class="mt-1 max-w-2xl text-sm text-gray-600">
                         {{ compare_hint }}
                     </p>

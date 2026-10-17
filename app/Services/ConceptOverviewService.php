@@ -9,6 +9,7 @@ use App\Models\GradeLevel;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusVersion;
 use App\Models\TextbookChapter;
+use App\Support\ConceptBranch;
 use App\Support\ConceptPathStatus;
 use Illuminate\Support\Collection;
 
@@ -22,15 +23,20 @@ class ConceptOverviewService
      *     year: array{id: int, name: string}|null,
      *     classes: list<array{id: int, name: string, number: int, sort_order: int}>,
      *     boards: list<array{id: int, code: string, name: string}>,
+     *     branch_options: list<array{key: string, label: string}>,
+     *     branches: list<array{key: string, label: string, rows: list<array<string, mixed>>}>,
      *     rows: list<array<string, mixed>>,
      *     summary: array{heads: int, ready: int, draft: int, to_upload: int, practice_only: int}
      * }
      */
-    public function matrix(?int $yearId = null, ?int $boardId = null): array
+    public function matrix(?int $yearId = null, ?int $boardId = null, ?string $branchKey = null): array
     {
         $year = $this->resolveYear($yearId);
         $boards = $this->boards();
         $classes = $this->classes();
+        $branchFilter = $branchKey !== null && $branchKey !== ''
+            ? ConceptBranch::normalize($branchKey)
+            : null;
 
         $chapters = $this->loadChapters($year?->id);
         $conceptBySyllabus = $this->conceptPathsBySyllabusChapter($chapters->pluck('id')->all());
@@ -51,6 +57,11 @@ class ConceptOverviewService
 
         $rows = [];
         foreach ($heads as $head) {
+            $branch = ConceptBranch::normalize($head->branch ?: ConceptBranch::guessFromName((string) $head->name));
+            if ($branchFilter !== null && $branch !== $branchFilter) {
+                continue;
+            }
+
             $headChapters = $chapters->where('chapter_head_id', $head->id);
             if ($headChapters->isEmpty()) {
                 continue;
@@ -101,9 +112,24 @@ class ConceptOverviewService
             $rows[] = [
                 'id' => $head->id,
                 'name' => $head->name,
+                'branch' => $branch,
+                'branch_label' => ConceptBranch::label($branch),
                 'sort_order' => $head->sort_order,
                 'cells' => $cells,
                 'url' => route('admin.concept-overview.show', $head),
+            ];
+        }
+
+        $branches = [];
+        foreach (ConceptBranch::keys() as $key) {
+            $branchRows = array_values(array_filter($rows, fn (array $row) => $row['branch'] === $key));
+            if ($branchRows === []) {
+                continue;
+            }
+            $branches[] = [
+                'key' => $key,
+                'label' => ConceptBranch::label($key),
+                'rows' => $branchRows,
             ];
         }
 
@@ -113,6 +139,8 @@ class ConceptOverviewService
             'boards' => $boardId
                 ? array_values(array_filter($boards, fn ($b) => (int) $b['id'] === (int) $boardId))
                 : $boards,
+            'branch_options' => ConceptBranch::options(),
+            'branches' => $branches,
             'rows' => $rows,
             'summary' => $summary,
         ];
@@ -184,9 +212,16 @@ class ConceptOverviewService
             ];
         }
 
+        $branch = ConceptBranch::normalize($head->branch ?: ConceptBranch::guessFromName((string) $head->name));
+
         return [
             'year' => $year?->only(['id', 'name']),
-            'chapter_head' => $head->only(['id', 'name']),
+            'chapter_head' => [
+                'id' => $head->id,
+                'name' => $head->name,
+                'branch' => $branch,
+                'branch_label' => ConceptBranch::label($branch),
+            ],
             'boards' => $boards,
             'ladder' => $ladder,
             'compare_hint' => 'Same concept across boards — use this to show parents what ICSE vs CBSE covers at each class, and to stretch a strong student into the next rung.',
