@@ -58,12 +58,20 @@ const statusClass = (status) => ({
 }[status] || 'bg-slate-50 text-slate-400 border-slate-200');
 
 const shortLabel = (status) => ({
-    ready: 'Ready',
+    ready: 'PLAY CONCEPT',
     draft: 'Draft',
     practice_only: 'Practice',
     to_upload: 'Upload',
     empty: '—',
 }[status] || '—');
+
+/** Matrix cell on the overview dashboard — ready cells run concepts directly. */
+const matrixCellClass = (status) => {
+    if (status === 'ready') {
+        return 'bg-[#0b2a5b] text-white border-[#0b2a5b] shadow-sm hover:bg-[#0a2350]';
+    }
+    return statusClass(status);
+};
 
 const boardCodes = computed(() => {
     if (!compare.value && boardId.value) {
@@ -159,7 +167,7 @@ const boardEntries = (classCell, code) => {
                         Side-by-side board cells
                     </label>
                     <div class="ml-auto flex flex-wrap gap-2 text-xs">
-                        <span class="rounded-full border border-[#0b2a5b] bg-[#0b2a5b] px-3 py-1 text-white">{{ summary.ready || 0 }} ready</span>
+                        <span class="rounded-full border border-[#0b2a5b] bg-[#0b2a5b] px-3 py-1 text-white">{{ summary.ready || 0 }} play concept</span>
                         <span class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-950">{{ summary.draft || 0 }} draft</span>
                         <span class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-rose-900">{{ summary.to_upload || 0 }} to upload</span>
                         <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sky-950">{{ summary.practice_only || 0 }} practice only</span>
@@ -380,9 +388,9 @@ const boardEntries = (classCell, code) => {
                                 <tr
                                     v-for="row in branch.rows"
                                     :key="row.id"
-                                    class="border-b border-slate-100 hover:bg-slate-50/80"
+                                    class="border-b-2 border-slate-300/90 hover:bg-slate-50/60"
                                 >
-                                    <td class="sticky left-0 z-10 bg-white px-4 py-3">
+                                    <td class="sticky left-0 z-10 border-r border-slate-200 bg-white px-4 py-3.5">
                                         <Link
                                             :href="row.url"
                                             class="font-semibold text-slate-900 hover:text-teal-800"
@@ -394,7 +402,7 @@ const boardEntries = (classCell, code) => {
                                     <td
                                         v-for="cls in classColumns"
                                         :key="`${row.id}-${cls.number}`"
-                                        class="px-1.5 py-2 align-middle"
+                                        class="px-1.5 py-2.5 align-middle"
                                     >
                                         <div
                                             v-if="row.cells[String(cls.number)]"
@@ -402,44 +410,54 @@ const boardEntries = (classCell, code) => {
                                         >
                                             <template v-if="compare && boardCodes.length > 1">
                                                 <template v-for="code in boardCodes" :key="code">
-                                                    <div
+                                                    <component
                                                         v-for="(entry, idx) in (boardEntries(row.cells[String(cls.number)], code).length
                                                             ? boardEntries(row.cells[String(cls.number)], code)
-                                                            : [{ status: 'empty', chapter_name: null }])"
+                                                            : [{ status: 'empty', chapter_name: null, play_url: null }])"
                                                         :key="`${code}-${entry.chapter_id || idx}`"
-                                                        class="rounded-md border px-1.5 py-1 text-center text-[10px] font-semibold leading-tight"
-                                                        :class="statusClass(entry.status || 'empty')"
+                                                        :is="entry.play_url && entry.status === 'ready' ? 'a' : 'div'"
+                                                        :href="entry.play_url && entry.status === 'ready' ? entry.play_url : undefined"
+                                                        class="block rounded-md border px-1.5 py-1.5 text-center text-[10px] font-semibold leading-tight"
+                                                        :class="[
+                                                            matrixCellClass(entry.status || 'empty'),
+                                                            entry.play_url && entry.status === 'ready' ? 'cursor-pointer' : '',
+                                                        ]"
                                                     >
-                                                        <span class="opacity-70">{{ code }}</span>
-                                                        <span class="ml-1">{{ shortLabel(entry.status || 'empty') }}</span>
+                                                        <span class="opacity-80">{{ code }}</span>
+                                                        <span class="ml-1 tracking-wide">{{ shortLabel(entry.status || 'empty') }}</span>
                                                         <p
                                                             v-if="entry.chapter_name"
                                                             class="mt-0.5 line-clamp-2 text-[9px] font-normal opacity-80"
                                                         >
                                                             {{ entry.chapter_name }}
                                                         </p>
-                                                    </div>
+                                                    </component>
                                                 </template>
                                             </template>
                                             <template v-else>
-                                                <div
+                                                <component
                                                     v-for="(entry, idx) in boardEntries(row.cells[String(cls.number)])"
                                                     :key="entry.chapter_id || idx"
-                                                    class="rounded-md border px-2 py-2 text-center text-[11px] font-semibold"
-                                                    :class="statusClass(entry.status)"
+                                                    :is="entry.play_url && entry.status === 'ready' ? 'a' : 'div'"
+                                                    :href="entry.play_url && entry.status === 'ready' ? entry.play_url : undefined"
+                                                    class="block rounded-md border px-2 py-2 text-center text-[11px] font-semibold tracking-wide"
+                                                    :class="[
+                                                        matrixCellClass(entry.status),
+                                                        entry.play_url && entry.status === 'ready' ? 'cursor-pointer' : '',
+                                                    ]"
                                                 >
                                                     {{ shortLabel(entry.status) }}
                                                     <p
                                                         v-if="entry.chapter_name"
-                                                        class="mt-0.5 line-clamp-2 text-[9px] font-normal opacity-80"
+                                                        class="mt-0.5 line-clamp-2 text-[9px] font-normal tracking-normal opacity-80"
                                                     >
                                                         {{ entry.chapter_name }}
                                                     </p>
-                                                </div>
+                                                </component>
                                                 <div
                                                     v-if="!boardEntries(row.cells[String(cls.number)]).length"
                                                     class="rounded-md border px-2 py-2 text-center text-[11px] font-semibold"
-                                                    :class="statusClass('empty')"
+                                                    :class="matrixCellClass('empty')"
                                                 >
                                                     —
                                                 </div>
@@ -447,7 +465,7 @@ const boardEntries = (classCell, code) => {
                                         </div>
                                         <div
                                             v-else
-                                            class="rounded-md border border-slate-100 bg-slate-50 px-2 py-2 text-center text-[11px] text-slate-300"
+                                            class="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-center text-[11px] text-slate-300"
                                         >
                                             —
                                         </div>
