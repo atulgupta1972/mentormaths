@@ -13,6 +13,7 @@ const props = defineProps({
     branches: { type: Array, default: () => [] },
     rows: { type: Array, default: () => [] },
     class_cards: { type: Array, default: () => [] },
+    class_card_groups: { type: Array, default: () => [] },
     summary: { type: Object, default: () => ({}) },
     untagged_chapters: { type: Array, default: () => [] },
     orphan_tagged_chapters: { type: Array, default: () => [] },
@@ -220,73 +221,84 @@ const boardEntries = (classCell, code) => {
                     </ul>
                 </div>
 
-                <!-- Class concept cards (syllabus chapter names) -->
+                <!-- Class concept cards grouped by chapter head -->
                 <section
-                    v-if="class_cards.length"
-                    class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                    v-if="class_card_groups.length"
+                    class="space-y-5"
                 >
-                    <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
-                        <div>
-                            <h3 class="text-base font-semibold text-slate-900">
-                                Concept cards · Class {{ classNumber }}
-                                <span v-if="boardId" class="font-normal text-slate-500">
-                                    · {{ all_boards.find((b) => String(b.id) === String(boardId))?.code }}
-                                </span>
-                            </h3>
-                            <p class="mt-1 text-xs text-slate-500">
-                                {{ class_cards.length }} cards — titles match the syllabus editor (Geometric Twins, not only “Triangles”).
-                            </p>
-                        </div>
+                    <div class="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                        <h3 class="text-base font-semibold text-slate-900">
+                            Concept cards · Class {{ classNumber }}
+                            <span v-if="boardId" class="font-normal text-slate-500">
+                                · {{ all_boards.find((b) => String(b.id) === String(boardId))?.code }}
+                            </span>
+                        </h3>
+                        <p class="mt-1 text-xs text-slate-500">
+                            {{ class_cards.length }} cards in {{ class_card_groups.length }} chapter head{{ class_card_groups.length === 1 ? '' : 's' }}.
+                            Ready cards show when a concept path is linked (including sibling draft/published syllabi).
+                        </p>
                     </div>
-                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        <article
-                            v-for="card in class_cards"
-                            :key="card.id"
-                            class="rounded-xl border p-4"
-                            :class="statusClass(card.status)"
-                        >
-                            <p class="text-[10px] font-bold uppercase tracking-wide opacity-70">
-                                {{ card.board_code }} · Ch {{ card.chapter_number }}
-                                <span v-if="card.branch_label"> · {{ card.branch_label }}</span>
-                            </p>
-                            <p class="mt-1 text-sm font-semibold leading-snug">
-                                {{ card.chapter_name }}
-                            </p>
-                            <p class="mt-1 text-xs opacity-80">
-                                Head · {{ card.chapter_head || 'not set' }}
-                            </p>
-                            <p class="mt-2 text-xs font-medium">{{ card.status_label }}</p>
-                            <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
-                                <a
-                                    v-if="card.play_url"
-                                    :href="card.play_url"
-                                    class="rounded-md bg-white/20 px-2 py-1 underline opacity-90 hover:opacity-100"
-                                >
-                                    Run concepts
-                                </a>
-                                <Link
-                                    v-if="card.head_url"
-                                    :href="card.head_url"
-                                    class="underline opacity-90 hover:opacity-100"
-                                >
-                                    Ladder
-                                </Link>
-                                <a
-                                    v-if="can_manage && card.syllabus_url"
-                                    :href="card.syllabus_url"
-                                    class="underline opacity-90 hover:opacity-100"
-                                >
-                                    Syllabus
-                                </a>
-                                <a
-                                    v-if="can_manage && card.concept_url"
-                                    :href="card.concept_url"
-                                    class="underline opacity-90 hover:opacity-100"
-                                >
-                                    Concept path
-                                </a>
+
+                    <div
+                        v-for="group in class_card_groups"
+                        :key="group.head_id || group.head_name"
+                        class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                        <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 pb-3">
+                            <div>
+                                <h4 class="text-sm font-semibold text-slate-900">{{ group.head_name }}</h4>
+                                <p class="text-xs text-slate-500">
+                                    <span v-if="group.branch_label">{{ group.branch_label }} · </span>
+                                    {{ group.cards.length }} chapter{{ group.cards.length === 1 ? '' : 's' }}
+                                </p>
                             </div>
-                        </article>
+                            <Link
+                                v-if="group.head_id"
+                                :href="route('admin.concept-overview.show', group.head_id)"
+                                class="text-xs font-semibold text-teal-700 hover:underline"
+                            >
+                                Progressive ladder →
+                            </Link>
+                        </div>
+                        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            <article
+                                v-for="card in group.cards"
+                                :key="card.id"
+                                class="rounded-xl border p-4"
+                                :class="statusClass(card.status)"
+                            >
+                                <p class="text-[10px] font-bold uppercase tracking-wide opacity-70">
+                                    {{ card.board_code }} · Ch {{ card.chapter_number }}
+                                </p>
+                                <p class="mt-1 text-sm font-semibold leading-snug">
+                                    {{ card.chapter_name }}
+                                </p>
+                                <p class="mt-2 text-xs font-medium">{{ card.status_label }}</p>
+                                <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                                    <a
+                                        v-if="card.play_url"
+                                        :href="card.play_url"
+                                        class="rounded-md bg-white/20 px-2 py-1 underline opacity-90 hover:opacity-100"
+                                    >
+                                        Run concepts
+                                    </a>
+                                    <a
+                                        v-if="can_manage && card.syllabus_url"
+                                        :href="card.syllabus_url"
+                                        class="underline opacity-90 hover:opacity-100"
+                                    >
+                                        Syllabus
+                                    </a>
+                                    <a
+                                        v-if="can_manage && card.concept_url"
+                                        :href="card.concept_url"
+                                        class="underline opacity-90 hover:opacity-100"
+                                    >
+                                        Concept path
+                                    </a>
+                                </div>
+                            </article>
+                        </div>
                     </div>
                 </section>
 

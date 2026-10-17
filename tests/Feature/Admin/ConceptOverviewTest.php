@@ -327,6 +327,101 @@ class ConceptOverviewTest extends TestCase
                 )));
     }
 
+    public function test_concept_path_on_sibling_syllabus_row_still_shows_ready(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $year = AcademicYear::query()->create([
+            'name' => '2026-27',
+            'starts_on' => '2026-03-01',
+            'ends_on' => '2027-02-28',
+            'is_active' => true,
+        ]);
+        $cbse = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);
+        $debug5 = GradeLevel::query()->create(['name' => 'Class 5 Debug', 'sort_order' => 1, 'is_active' => true]);
+        $class5 = GradeLevel::query()->create(['name' => 'Class 5', 'sort_order' => 5, 'is_active' => true]);
+        $subject = Subject::query()->create(['code' => 'MATHS', 'name' => 'Maths', 'is_active' => true]);
+        $head = ChapterHead::query()->create([
+            'name' => 'Perimeter and Area',
+            'branch' => 'mensuration',
+            'sort_order' => 1,
+        ]);
+
+        // Overview prefers canonical Class 5 draft…
+        $canonical = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'board_id' => $cbse->id,
+            'grade_level_id' => $class5->id,
+            'subject_id' => $subject->id,
+            'status' => SyllabusVersion::STATUS_DRAFT,
+        ]);
+        $canonicalChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $canonical->id,
+            'chapter_head_id' => $head->id,
+            'chapter_number' => '5',
+            'name' => 'Far and Near',
+            'sort_order' => 5,
+        ]);
+
+        // …but approved concept path is linked to the sibling Class 5 Debug row (class hub still finds it).
+        $sibling = SyllabusVersion::query()->create([
+            'academic_year_id' => $year->id,
+            'board_id' => $cbse->id,
+            'grade_level_id' => $debug5->id,
+            'subject_id' => $subject->id,
+            'status' => SyllabusVersion::STATUS_PUBLISHED,
+        ]);
+        $siblingChapter = SyllabusChapter::query()->create([
+            'syllabus_version_id' => $sibling->id,
+            'chapter_head_id' => $head->id,
+            'chapter_number' => '5',
+            'name' => 'Far and Near',
+            'sort_order' => 5,
+        ]);
+        $textbook = Textbook::query()->create([
+            'name' => 'Math -Mela',
+            'code' => 'MM5',
+            'board_id' => $cbse->id,
+            'grade_level_id' => $debug5->id,
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        TextbookChapter::query()->create([
+            'textbook_id' => $textbook->id,
+            'syllabus_chapter_id' => $siblingChapter->id,
+            'chapter_number' => 5,
+            'title' => 'Far and Near',
+            'status' => TextbookChapter::STATUS_PUBLISHED,
+            'concept_path_status' => ConceptPathStatus::APPROVED,
+            'concept_path_items' => [
+                'chapter_title' => 'Far and Near',
+                'cards' => array_fill(0, 18, [
+                    'step' => 1,
+                    'type' => 'teach',
+                    'title' => 'Distance',
+                    'approved' => true,
+                    'body' => 'Near and far.',
+                ]),
+            ],
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.concept-overview.index', [
+                'class' => 5,
+                'board' => $cbse->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/ConceptOverview/Index')
+                ->where('class_cards.0.chapter_name', 'Far and Near')
+                ->where('class_cards.0.status', 'ready')
+                ->where('class_cards.0.status_label', 'Concept ready')
+                ->where('class_card_groups.0.head_name', 'Perimeter and Area')
+                ->has('class_card_groups.0.cards', 1)
+                ->where('class_cards.0.id', $canonicalChapter->id));
+    }
+
     public function test_two_triangles_chapters_both_appear_in_class7_cell(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);

@@ -225,6 +225,7 @@ class ConceptOverviewService
             'branches' => $branches,
             'rows' => $rows,
             'class_cards' => $classCards,
+            'class_card_groups' => $this->groupClassCardsByHead($classCards),
             'summary' => $summary,
             'untagged_chapters' => $coverage['untagged_list'],
             'orphan_tagged_chapters' => $coverage['orphan_tagged_list'],
@@ -617,7 +618,7 @@ class ConceptOverviewService
             return [];
         }
 
-        $scoped = $chapters
+            $scoped = $chapters
             ->filter(function (SyllabusChapter $ch) use ($classNumber, $boardId) {
                 if ($this->classNumber($ch->syllabusVersion?->gradeLevel) !== (int) $classNumber) {
                     return false;
@@ -628,7 +629,16 @@ class ConceptOverviewService
 
                 return true;
             })
-            ->sortBy(fn (SyllabusChapter $ch) => [(int) $ch->sort_order, (string) $ch->chapter_number])
+            ->sortBy(function (SyllabusChapter $ch) {
+                $head = $ch->chapterHead;
+
+                return [
+                    (int) ($head?->sort_order ?? 9999),
+                    mb_strtolower((string) ($head?->name ?? 'zzz')),
+                    (int) $ch->sort_order,
+                    (string) $ch->chapter_number,
+                ];
+            })
             ->values();
 
         $cards = [];
@@ -674,6 +684,36 @@ class ConceptOverviewService
     }
 
     /**
+     * @param  list<array<string, mixed>>  $cards
+     * @return list<array{head_id: int|null, head_name: string, branch: string|null, branch_label: string|null, cards: list<array<string, mixed>>}>
+     */
+    private function groupClassCardsByHead(array $cards): array
+    {
+        $groups = [];
+        foreach ($cards as $card) {
+            $key = $card['chapter_head_id'] !== null
+                ? 'h:'.$card['chapter_head_id']
+                : 'u:'.mb_strtolower((string) ($card['chapter_head'] ?? 'untagged'));
+
+            if (! isset($groups[$key])) {
+                $groups[$key] = [
+                    'head_id' => $card['chapter_head_id'],
+                    'head_name' => $card['chapter_head'] ?: 'No chapter head',
+                    'branch' => $card['branch'],
+                    'branch_label' => $card['branch_label'],
+                    'cards' => [],
+                ];
+            }
+            $groups[$key]['cards'][] = $card;
+        }
+
+        return array_values($groups);
+    }
+
+    /**
+     * Resolve concept paths for overview chapters, including sibling syllabus rows
+     * (draft vs published / Class 5 vs Class 5 Debug) that share the same title.
+     *
      * @param  list<int>  $syllabusChapterIds
      * @return array<int, array{id: int, status: string|null, title: string, concept_url: string|null, play_url: string|null}>
      */
@@ -683,35 +723,134 @@ class ConceptOverviewService
             return [];
         }
 
-        $map = [];
-        TextbookChapter::query()
-            ->whereIn('syllabus_chapter_id', $syllabusChapterIds)
+        $targets = SyllabusChapter::query()
+            ->with(['syllabusVersion.board', 'syllabusVersion.gradeLevel'])
+            ->whereIn('id', $syllabusChapterIds)
+            ->get();
+
+        if ($targets->isEmpty()) {
+            return [];
+        }
+
+        $identityByTarget = [];
+        foreach ($targets as $ch) {
+            $identityByTarget[(int) $ch->id] = $this->chapterIdentityKey($ch);
+        }
+
+        $yearIds = $targets->pluck('syllabusVersion.academic_year_id')->filter()->unique()->values()->all();
+        $boardIds = $targets->pluck('syllabusVersion.board_id')->filter()->unique()->values()->all();
+
+        $siblings = SyllabusChapter::query()
+            ->with(['syllabusVersion.gradeLevel'])
+            ->whereHas('syllabusVersion', function ($vq) use ($yearIds, $boardIds) {
+                $vq->whereIn('status', [
+                    SyllabusVersion::STATUS_PUBLISHED,
+                    SyllabusVersion::STATUS_DRAFT,
+                ]);
+                if ($yearIds !== []) {
+                    $vq->whereIn('academic_year_id', $yearIds);
+                }
+                if ($boardIds !== []) {
+                    $vq->whereIn('board_id', $boardIds);
+                }
+            })
+            ->get();
+
+        $idsByIdentity = [];
+        foreach ($siblings as $ch) {
+            $key = $this->chapterIdentityKey($ch);
+            $idsByIdentity[$key][] = (int) $ch->id;
+        }
+
+        $allIds = collect($identityByTarget)
+            ->flatMap(fn (string $key) => $idsByIdentity[$key] ?? [])
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($allIds === []) {
+            $allIds = $syllabusChapterIds;
+        }
+
+        $textbookBySyllabusId = TextbookChapter::query()
+            ->whereIn('syllabus_chapter_id', $allIds)
             ->orderByDesc('id')
             ->get()
-            ->each(function (TextbookChapter $tb) use (&$map) {
-                $sid = (int) $tb->syllabus_chapter_id;
-                if (isset($map[$sid])) {
-                    return;
-                }
+            ->groupBy(fn (TextbookChapter $tb) => (int) $tb->syllabus_chapter_id);
 
-                $hasItems = is_array($tb->concept_path_items) && $tb->concept_path_items !== [];
-                $status = $tb->concept_path_status;
-                if (! $hasItems && ! $status) {
-                    $status = null;
-                }
+        $map = [];
+        foreach ($targets as $ch) {
+            $sid = (int) $ch->id;
+            $key = $identityByTarget[$sid];
+            $candidateIds = $idsByIdentity[$key] ?? [$sid];
+            $candidates = collect($candidateIds)
+                ->flatMap(fn (int $id) => $textbookBySyllabusId->get($id, collect()))
+                ->values();
 
-                $map[$sid] = [
-                    'id' => $tb->id,
-                    'status' => $status,
-                    'title' => (string) $tb->title,
-                    'concept_url' => route('admin.textbooks.concept-path', $tb),
-                    'play_url' => $status === ConceptPathStatus::APPROVED
-                        ? route('concepts.play', $tb)
-                        : null,
-                ];
-            });
+            $best = $this->preferTextbookChapter($candidates);
+            if (! $best) {
+                continue;
+            }
+
+            $hasItems = is_array($best->concept_path_items) && $best->concept_path_items !== [];
+            $cards = is_array($best->concept_path_items['cards'] ?? null)
+                ? $best->concept_path_items['cards']
+                : [];
+            $hasCards = $cards !== [];
+            $status = $best->concept_path_status;
+            if (! $hasItems && ! $status) {
+                continue;
+            }
+            if ($hasCards && ! $status) {
+                $status = ConceptPathStatus::DRAFT;
+            }
+
+            $map[$sid] = [
+                'id' => $best->id,
+                'status' => $status,
+                'title' => (string) $best->title,
+                'concept_url' => route('admin.textbooks.concept-path', $best),
+                'play_url' => $status === ConceptPathStatus::APPROVED
+                    ? route('concepts.play', $best)
+                    : null,
+            ];
+        }
 
         return $map;
+    }
+
+    private function chapterIdentityKey(SyllabusChapter $ch): string
+    {
+        $year = (int) ($ch->syllabusVersion?->academic_year_id ?? 0);
+        $board = (int) ($ch->syllabusVersion?->board_id ?? 0);
+        $class = $this->classNumber($ch->syllabusVersion?->gradeLevel);
+        $num = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $ch->chapter_number)) ?? '');
+        $name = mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $ch->name)) ?? '');
+
+        return $year.'|'.$board.'|'.$class.'|'.$num.'|'.$name;
+    }
+
+    /**
+     * @param  Collection<int, TextbookChapter>  $chapters
+     */
+    private function preferTextbookChapter(Collection $chapters): ?TextbookChapter
+    {
+        if ($chapters->isEmpty()) {
+            return null;
+        }
+
+        return $chapters->sortByDesc(function (TextbookChapter $tb) {
+            $cards = is_array($tb->concept_path_items['cards'] ?? null)
+                ? $tb->concept_path_items['cards']
+                : [];
+            $statusRank = match ($tb->concept_path_status) {
+                ConceptPathStatus::APPROVED => 3,
+                ConceptPathStatus::DRAFT => 2,
+                default => $cards !== [] ? 1 : 0,
+            };
+
+            return ($statusRank * 1_000_000_000) + (count($cards) * 1_000) + (int) $tb->id;
+        })->first();
     }
 
     /**

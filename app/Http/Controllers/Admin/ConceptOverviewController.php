@@ -129,6 +129,13 @@ class ConceptOverviewController extends Controller
             $payload['class_cards'][$i]['syllabus_url'] = null;
         }
 
+        foreach ($payload['class_card_groups'] ?? [] as $gi => $group) {
+            foreach ($group['cards'] ?? [] as $ci => $card) {
+                $payload['class_card_groups'][$gi]['cards'][$ci]['concept_url'] = null;
+                $payload['class_card_groups'][$gi]['cards'][$ci]['syllabus_url'] = null;
+            }
+        }
+
         $payload['untagged_chapters'] = [];
         $payload['orphan_tagged_chapters'] = [];
 
