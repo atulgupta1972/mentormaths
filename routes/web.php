@@ -105,7 +105,7 @@ Route::post('/teachers/register/profile/{token}', [TeacherRegistrationRequestCon
     ->name('teacher-registration.profile.update');
 
 Route::get('/dashboard', DashboardController::class)
-    ->middleware(['auth', 'verified', 'formula.drill', 'mensuration.drill', 'basics.drill'])
+    ->middleware(['auth', 'verified', 'exam.marks', 'formula.drill', 'mensuration.drill', 'basics.drill'])
     ->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->prefix('mentor')->name('mentor.')->group(function () {
@@ -565,13 +565,19 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 });
 
 Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->group(function () {
+    // Exams / Term 1 marks — available before drills so students can unblock themselves.
+    Route::get('/exams', [StudentExamPlanController::class, 'index'])->name('exams.index');
+    Route::post('/exam-plans', [StudentExamPlanController::class, 'store'])->name('exam-plans.store');
+    Route::put('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'update'])->name('exam-plans.update');
+    Route::delete('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'destroy'])->name('exam-plans.destroy');
+
     Route::get('/resources/formulas', [FormulaResourceController::class, 'index'])
         ->name('resources.formulas.index');
     Route::get('/resources/formulas/chapters/{syllabusChapter}', [FormulaResourceController::class, 'chapter'])
         ->name('resources.formulas.chapter');
 });
 
-Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->name('student.')->group(function () {
+Route::middleware(['auth', 'verified', 'exam.marks', 'formula.drill'])->prefix('student')->name('student.')->group(function () {
     Route::get('/formula-drill', [FormulaDrillController::class, 'show'])->name('formula-drill.show');
     Route::post('/formula-drill/items/{item}/answer', [FormulaDrillController::class, 'submitAnswer'])->name('formula-drill.answer');
     Route::post('/formula-drill/items/{item}/request-help', [FormulaDrillController::class, 'requestTeacherHelp'])->name('formula-drill.request-help');
@@ -590,7 +596,7 @@ Route::middleware(['auth', 'verified', 'formula.drill'])->prefix('student')->nam
         ->name('algebra-cards.figure');
 });
 
-Route::middleware(['auth', 'verified', 'formula.drill', 'mensuration.drill'])->prefix('student')->name('student.')->group(function () {
+Route::middleware(['auth', 'verified', 'exam.marks', 'formula.drill', 'mensuration.drill'])->prefix('student')->name('student.')->group(function () {
     Route::get('/basics-drill', [BasicsDrillController::class, 'show'])->name('basics-drill.show');
     Route::post('/basics-drill/sessions/{session}/start', [BasicsDrillController::class, 'start'])->name('basics-drill.start');
     Route::post('/basics-drill/items/{item}/answer', [BasicsDrillController::class, 'submitAnswer'])->name('basics-drill.answer');
@@ -598,12 +604,7 @@ Route::middleware(['auth', 'verified', 'formula.drill', 'mensuration.drill'])->p
     Route::post('/basics-drill/items/{item}/acknowledge', [BasicsDrillController::class, 'acknowledge'])->name('basics-drill.acknowledge');
 });
 
-Route::middleware(['auth', 'verified', 'formula.drill', 'mensuration.drill', 'basics.drill'])->prefix('student')->name('student.')->group(function () {
-    Route::get('/exams', [StudentExamPlanController::class, 'index'])->name('exams.index');
-    Route::post('/exam-plans', [StudentExamPlanController::class, 'store'])->name('exam-plans.store');
-    Route::put('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'update'])->name('exam-plans.update');
-    Route::delete('/exam-plans/{examPlan}', [StudentExamPlanController::class, 'destroy'])->name('exam-plans.destroy');
-
+Route::middleware(['auth', 'verified', 'exam.marks', 'formula.drill', 'mensuration.drill', 'basics.drill'])->prefix('student')->name('student.')->group(function () {
     Route::put('/class-coverage/{syllabusChapter}', [ClassCoverageController::class, 'update'])
         ->name('class-coverage.update');
     Route::post('/assignments/{assignment}/study-chapter', [ClassCoverageController::class, 'updateAssignmentChapter'])

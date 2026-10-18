@@ -12,6 +12,7 @@ use App\Models\SyllabusVersion;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Support\AssignmentProgress;
+use App\Support\ExamMarksMailer;
 use App\Support\PracticeSetScope;
 use App\Support\ScoreLabel;
 use App\Support\WorksheetPurpose;
@@ -152,6 +153,9 @@ class ExamPlanService
      */
     public function create(StudentEnrollment $enrollment, User $creator, array $data, array $selections): ExamPlan
     {
+        $hadMarks = false;
+        $marks = $this->normalizeMarks($data);
+
         $plan = ExamPlan::create([
             'student_enrollment_id' => $enrollment->id,
             'exam_date' => $data['exam_date'],
@@ -160,12 +164,17 @@ class ExamPlanService
             'notes' => $data['notes'] ?? null,
             ...$this->marksPayload($data, null),
             'created_by' => $creator->id,
-            'status' => $this->statusForMarks($data['exam_date'], $this->normalizeMarks($data)),
+            'status' => $this->statusForMarks($data['exam_date'], $marks),
         ]);
 
         $this->syncChapterSelections($plan, $selections, $enrollment);
+        $plan = $plan->load(['chapters', 'topics']);
 
-        return $plan->load(['chapters', 'topics']);
+        if ($marks !== null && ! $hadMarks) {
+            ExamMarksMailer::notifyAdmin($plan);
+        }
+
+        return $plan;
     }
 
     /**
@@ -174,6 +183,9 @@ class ExamPlanService
      */
     public function update(ExamPlan $plan, array $data, array $selections): ExamPlan
     {
+        $hadMarksBefore = $plan->hasMarks();
+        $previousObtained = $plan->obtained_marks;
+        $previousTotal = $plan->total_marks;
         $marks = $this->normalizeMarks($data);
 
         $plan->update([
@@ -186,8 +198,19 @@ class ExamPlanService
         ]);
 
         $this->syncChapterSelections($plan, $selections, $plan->enrollment);
+        $plan = $plan->fresh(['chapters', 'topics']);
 
-        return $plan->fresh(['chapters', 'topics']);
+        $marksChanged = $plan->hasMarks() && (
+            ! $hadMarksBefore
+            || (int) $previousObtained !== (int) $plan->obtained_marks
+            || (int) $previousTotal !== (int) $plan->total_marks
+        );
+
+        if ($marksChanged) {
+            ExamMarksMailer::notifyAdmin($plan);
+        }
+
+        return $plan;
     }
 
     public function formatPlan(ExamPlan $plan, bool $includePrep = true, bool $includeAssignables = false): array
@@ -548,7 +571,7 @@ class ExamPlanService
     {
         return [
             ['value' => ExamPlan::TYPE_UNIT_TEST, 'label' => 'Unit test'],
-            ['value' => ExamPlan::TYPE_HALF_YEARLY, 'label' => 'Half yearly'],
+            ['value' => ExamPlan::TYPE_HALF_YEARLY, 'label' => 'Half yearly (Term 1)'],
             ['value' => ExamPlan::TYPE_FINAL, 'label' => 'Final exam'],
             ['value' => ExamPlan::TYPE_OTHER, 'label' => 'Other'],
         ];

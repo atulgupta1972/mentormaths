@@ -81,7 +81,7 @@ class ExamPlan extends Model
     {
         return match ($this->exam_type) {
             self::TYPE_UNIT_TEST => 'Unit test',
-            self::TYPE_HALF_YEARLY => 'Half yearly',
+            self::TYPE_HALF_YEARLY => 'Half yearly (Term 1)',
             self::TYPE_FINAL => 'Final exam',
             default => 'Other',
         };

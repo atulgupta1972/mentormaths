@@ -5,12 +5,17 @@ namespace App\Http\Controllers\Student;
 use App\Http\Controllers\Controller;
 use App\Models\ExamPlan;
 use App\Services\ExamPlanService;
+use App\Services\FirstTermMarksGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class ExamPlanController extends Controller
 {
-    public function __construct(private ExamPlanService $examPlanService) {}
+    public function __construct(
+        private ExamPlanService $examPlanService,
+        private FirstTermMarksGate $firstTermMarksGate,
+    ) {}
 
     public function store(Request $request): RedirectResponse
     {
@@ -82,6 +87,7 @@ class ExamPlanController extends Controller
             'allPlans' => $allPlans,
             'syllabusChapters' => $syllabusChapters,
             'examTypeOptions' => $examTypeOptions,
+            'firstTermMarksGate' => $this->firstTermMarksGate->statusForEnrollment($enrollment),
             'studyPlanContext' => [
                 'grade_name' => $enrollment?->gradeLevel?->name,
                 'board_name' => $enrollment?->board?->name,
@@ -108,7 +114,7 @@ class ExamPlanController extends Controller
     {
         $this->normalizeMarkInput($request);
 
-        return $request->validate([
+        $validated = $request->validate([
             'exam_date' => ['required', 'date'],
             'title' => ['required', 'string', 'max:255'],
             'exam_type' => ['required', 'in:unit_test,half_yearly,final,other'],
@@ -123,6 +129,19 @@ class ExamPlanController extends Controller
             'obtained_marks.required_with' => 'Enter both marks obtained and total marks.',
             'total_marks.required_with' => 'Enter both marks obtained and total marks.',
         ]);
+
+        $isPastFirstTerm = $validated['exam_type'] === $this->firstTermMarksGate->examType()
+            && $validated['exam_date'] <= now()->toDateString();
+
+        if ($this->firstTermMarksGate->isRequired() && $isPastFirstTerm
+            && (! $request->filled('obtained_marks') || ! $request->filled('total_marks'))) {
+            throw ValidationException::withMessages([
+                'obtained_marks' => 'Term 1 (Half yearly) is over — enter marks obtained and total marks.',
+                'total_marks' => 'Term 1 (Half yearly) is over — enter marks obtained and total marks.',
+            ]);
+        }
+
+        return $validated;
     }
 
     private function normalizeMarkInput(Request $request): void

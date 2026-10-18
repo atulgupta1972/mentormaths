@@ -18,6 +18,10 @@ const props = defineProps({
         type: Object,
         default: () => ({ grade_name: null, board_name: null }),
     },
+    firstTermMarksGate: {
+        type: Object,
+        default: () => ({ required: false, satisfied: true, message: null }),
+    },
 });
 
 const page = usePage();
@@ -26,6 +30,7 @@ const editingPlanId = ref(null);
 
 const upcoming = computed(() => props.examPlans.upcoming || []);
 const past = computed(() => props.examPlans.past || []);
+const marksGateBlocking = computed(() => props.firstTermMarksGate?.required && !props.firstTermMarksGate?.satisfied);
 
 const subtitle = computed(() => {
     const parts = [props.studyPlanContext?.grade_name, props.studyPlanContext?.board_name].filter(Boolean);
@@ -127,6 +132,19 @@ const isEditingRow = (planId) => String(editingPlanId.value) === String(planId);
                 </div>
                 <div v-if="page.props.flash?.error" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
                     {{ page.props.flash.error }}
+                </div>
+
+                <div
+                    v-if="marksGateBlocking"
+                    class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                >
+                    <p class="font-semibold">Term 1 marks required</p>
+                    <p class="mt-1">
+                        {{ firstTermMarksGate.message || 'Enter your Half yearly (Term 1) school marks before drills or tests unlock.' }}
+                    </p>
+                    <p class="mt-1 text-xs opacity-90">
+                        Add or edit a <strong>Half yearly (Term 1)</strong> exam below and fill marks obtained / total.
+                    </p>
                 </div>
 
                 <div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">

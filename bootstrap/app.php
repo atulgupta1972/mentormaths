@@ -25,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'content.uploader' => \App\Http\Middleware\EnsureContentUploader::class,
             'content.uploader.gemini-check' => \App\Http\Middleware\EnsureUploaderGeminiCheckComplete::class,
             'content.chapter' => \App\Http\Middleware\EnsureTextbookChapterAccess::class,
+            'exam.marks' => \App\Http\Middleware\EnsureFirstTermMarksEntered::class,
             'formula.drill' => \App\Http\Middleware\EnsureFormulaDrillComplete::class,
             'mensuration.drill' => \App\Http\Middleware\EnsureMensurationMatchComplete::class,
             'basics.drill' => \App\Http\Middleware\EnsureBasicsDrillComplete::class,
