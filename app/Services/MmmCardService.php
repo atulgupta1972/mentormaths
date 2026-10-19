@@ -88,7 +88,7 @@ class MmmCardService
     /**
      * @return array<string, mixed>
      */
-    public function playPayload(MmmCard $card, ?User $learner = null): array
+    public function playPayload(MmmCard $card, ?User $learner = null, ?int $exerciseIndex = null): array
     {
         $card->loadMissing('exercises');
         $progress = $learner
@@ -98,10 +98,16 @@ class MmmCardService
                 ->first()
             : null;
 
-        $exerciseIndex = min(
-            (int) ($progress?->exercises_completed ?? 0),
-            max(0, $card->exercises->count() - 1),
-        );
+        $count = $card->exercises->count();
+        $maxIndex = max(0, $count - 1);
+
+        if ($exerciseIndex === null) {
+            $exerciseIndex = min((int) ($progress?->exercises_completed ?? 0), $maxIndex);
+        } else {
+            $exerciseIndex = max(0, min($exerciseIndex, $maxIndex));
+        }
+
+        $completed = (int) ($progress?->exercises_completed ?? 0);
 
         return [
             'card' => [
@@ -112,12 +118,14 @@ class MmmCardService
                 'accent' => $card->accent ?: 'teal',
                 'method_blurb' => $card->method_blurb,
                 'table_schema' => $card->table_schema,
-                'exercises_total' => $card->exercises->count(),
+                'exercises_total' => $count,
             ],
             'exercise' => $this->exercisePayload($card->exercises[$exerciseIndex] ?? $card->exercises->first()),
             'exercise_index' => $exerciseIndex,
+            'has_next' => $exerciseIndex < $maxIndex,
+            'all_done' => $count > 0 && $completed >= $count,
             'progress' => [
-                'exercises_completed' => (int) ($progress?->exercises_completed ?? 0),
+                'exercises_completed' => $completed,
                 'status' => $progress?->status ?? StudentMmmProgress::STATUS_NOT_STARTED,
             ],
         ];

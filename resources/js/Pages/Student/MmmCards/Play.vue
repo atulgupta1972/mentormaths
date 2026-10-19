@@ -2,7 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import axios from 'axios';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -10,6 +10,8 @@ const props = defineProps({
     card: { type: Object, required: true },
     exercise: { type: Object, default: null },
     exercise_index: { type: Number, default: 0 },
+    has_next: { type: Boolean, default: false },
+    all_done: { type: Boolean, default: false },
     progress: { type: Object, default: () => ({}) },
     check_url: { type: String, required: true },
     back_url: { type: String, required: true },
@@ -86,6 +88,15 @@ const resetTable = () => {
     cellResults.value = {};
     message.value = '';
     allCorrect.value = false;
+};
+
+const goNext = () => {
+    const next = props.exercise_index + 2; // 1-based query param
+    router.get(
+        window.location.pathname,
+        { exercise: next },
+        { preserveScroll: true },
+    );
 };
 
 const accentRing = computed(() => ({
@@ -256,6 +267,13 @@ const accentBg = computed(() => ({
                         {{ submitting ? 'Checking…' : 'Submit table' }}
                     </PrimaryButton>
                     <SecondaryButton type="button" @click="resetTable">Clear</SecondaryButton>
+                    <PrimaryButton
+                        v-if="allCorrect && has_next"
+                        type="button"
+                        @click="goNext"
+                    >
+                        Next sum
+                    </PrimaryButton>
                 </div>
 
                 <p
@@ -264,6 +282,12 @@ const accentBg = computed(() => ({
                     :class="allCorrect ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'"
                 >
                     {{ message }}
+                </p>
+                <p
+                    v-if="allCorrect && !has_next"
+                    class="mt-2 text-sm font-semibold text-teal-900"
+                >
+                    You finished all sums on this method card.
                 </p>
             </section>
         </div>

@@ -20,8 +20,26 @@ class MmmCardServiceTest extends TestCase
 
         $this->assertNotNull($card);
         $this->assertTrue($card->isPublished());
-        $this->assertSame(1, $card->exercises()->count());
-        $this->assertTrue((bool) $card->exercises()->first()?->is_demo);
+        $this->assertSame(6, $card->exercises()->count());
+        $this->assertTrue((bool) $card->exercises()->orderBy('sort_order')->first()?->is_demo);
+    }
+
+    public function test_derived_wrong_count_exercise_checks_out(): void
+    {
+        $card = MmmCard::query()->where('slug', 'marks-scoring-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 5)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        // Kabir: 5 correct, attempted 7 → 2 wrong; +2 / −1 → total 8
+        $result = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'correct' => ['marks' => '2', 'count' => '5', 'total' => '10'],
+                'wrong' => ['marks' => '-1', 'count' => '2', 'total' => '-2'],
+            ],
+            'grand_total' => '8',
+        ]);
+
+        $this->assertTrue($result['ok']);
     }
 
     public function test_check_submission_marks_wrong_cells(): void

@@ -13,7 +13,7 @@ class MmmCardController extends Controller
 {
     public function __construct(private MmmCardService $mmmCards) {}
 
-    public function show(MmmCard $mmmCard): Response
+    public function show(Request $request, MmmCard $mmmCard): Response
     {
         abort_unless($mmmCard->isPublished(), 404);
 
@@ -28,8 +28,12 @@ class MmmCardController extends Controller
             'This MentorMaths method is not linked to a chapter yet.',
         );
 
+        $exerciseIndex = $request->filled('exercise')
+            ? max(0, $request->integer('exercise') - 1)
+            : null;
+
         return Inertia::render('Student/MmmCards/Play', [
-            ...$this->mmmCards->playPayload($mmmCard, $user),
+            ...$this->mmmCards->playPayload($mmmCard, $user, $exerciseIndex),
             'check_url' => route('student.mmm-cards.check', $mmmCard),
             'back_url' => route('student.dashboard'),
             'is_staff_preview' => false,

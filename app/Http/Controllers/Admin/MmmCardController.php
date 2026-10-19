@@ -113,12 +113,16 @@ class MmmCardController extends Controller
         return back()->with('success', 'Chapter unlinked.');
     }
 
-    public function play(MmmCard $mmmCard): Response
+    public function play(Request $request, MmmCard $mmmCard): Response
     {
         abort_unless($mmmCard->isPublished() || auth()->user()?->isAdmin(), 404);
 
+        $exerciseIndex = $request->filled('exercise')
+            ? max(0, $request->integer('exercise') - 1)
+            : 0;
+
         return Inertia::render('Student/MmmCards/Play', [
-            ...$this->mmmCards->playPayload($mmmCard, auth()->user()),
+            ...$this->mmmCards->playPayload($mmmCard, null, $exerciseIndex),
             'check_url' => route('admin.mmm-cards.check', $mmmCard),
             'back_url' => route('admin.mmm-cards.show', $mmmCard),
             'is_staff_preview' => true,
