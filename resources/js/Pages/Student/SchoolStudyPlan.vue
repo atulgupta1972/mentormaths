@@ -15,6 +15,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    chapterTermMapGate: {
+        type: Object,
+        default: () => ({ required: false, satisfied: true, message: null }),
+    },
     context: {
         type: Object,
         default: null,
@@ -32,6 +36,10 @@ const needsTicks = computed(() => {
 
     return chapters.length > 0 && !chapters.some((chapter) => chapter.studied || chapter.under_study);
 });
+
+const termsGateBlocking = computed(() => (
+    props.chapterTermMapGate?.required && !props.chapterTermMapGate?.satisfied
+));
 </script>
 
 <template>
@@ -56,8 +64,30 @@ const needsTicks = computed(() => {
                 <div v-if="page.props.flash?.error" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
                     {{ page.props.flash.error }}
                 </div>
+
                 <section
-                    v-if="needsTicks"
+                    v-if="termsGateBlocking"
+                    class="rounded-xl border-2 border-amber-400 bg-amber-50 p-4"
+                >
+                    <p class="text-xs font-semibold uppercase tracking-wide text-amber-950">Map Term 1 &amp; Term 2 — required</p>
+                    <p class="mt-1 text-sm text-amber-950">
+                        {{ chapterTermMapGate.message || 'Tag every chapter as Term 1 or Term 2 before drills and sums unlock.' }}
+                    </p>
+                    <p class="mt-2 text-xs text-amber-900/90">
+                        Mapped {{ chapterTermMapGate.mapped_chapters || 0 }}/{{ chapterTermMapGate.total_chapters || 0 }}
+                        · Term 1: {{ chapterTermMapGate.term1_count || 0 }}
+                        · Term 2: {{ chapterTermMapGate.term2_count || 0 }}
+                        <span v-if="chapterTermMapGate.unmapped_chapters">
+                            · Untagged: {{ chapterTermMapGate.unmapped_chapters }}
+                        </span>
+                    </p>
+                    <p class="mt-1 text-xs text-amber-900/80">
+                        Use the Term 1 / Term 2 filters below, or set the last 1st-term chapter and apply the split.
+                    </p>
+                </section>
+
+                <section
+                    v-if="needsTicks && !termsGateBlocking"
                     class="rounded-xl border-2 border-sky-400 bg-sky-50 p-4"
                 >
                     <p class="text-xs font-semibold uppercase tracking-wide text-sky-950">Tick your chapters before drills</p>

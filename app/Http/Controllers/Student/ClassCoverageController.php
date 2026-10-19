@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Student;
 use App\Http\Controllers\Controller;
 use App\Models\SetAssignment;
 use App\Models\SyllabusChapter;
+use App\Services\ChapterTermMapGate;
 use App\Services\ClassCoverageService;
 use App\Services\ExamPlanService;
 use App\Services\SetAssignmentService;
@@ -19,6 +20,7 @@ class ClassCoverageController extends Controller
         private ClassCoverageService $coverageService,
         private ExamPlanService $examPlanService,
         private SetAssignmentService $assignmentService,
+        private ChapterTermMapGate $chapterTermMapGate,
     ) {}
 
     public function show(Request $request): Response
@@ -38,6 +40,7 @@ class ClassCoverageController extends Controller
         return Inertia::render('Student/SchoolStudyPlan', [
             'classCoverage' => $this->coverageService->forEnrollment($enrollment),
             'upcomingExams' => $examPlans['upcoming'],
+            'chapterTermMapGate' => $this->chapterTermMapGate->statusForEnrollment($enrollment),
             'context' => [
                 'grade_name' => $enrollment?->gradeLevel?->name,
                 'board_name' => $enrollment?->board?->name,
@@ -86,6 +89,15 @@ class ClassCoverageController extends Controller
         ]);
 
         $this->coverageService->setChapterTerms($enrollment, $validated['items']);
+
+        $gate = $this->chapterTermMapGate->statusForEnrollment($enrollment);
+        if ($gate['required'] && $gate['satisfied']) {
+            return back()->with('success', 'All chapters mapped to Term 1 and Term 2 — you can start sums now.');
+        }
+
+        if ($gate['required'] && ! $gate['satisfied']) {
+            return back()->with('success', 'Chapter terms saved. '.$gate['message']);
+        }
 
         return back()->with('success', 'Chapter terms saved.');
     }

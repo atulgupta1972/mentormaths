@@ -105,7 +105,7 @@ Route::post('/teachers/register/profile/{token}', [TeacherRegistrationRequestCon
     ->name('teacher-registration.profile.update');
 
 Route::get('/dashboard', DashboardController::class)
-    ->middleware(['auth', 'verified', 'exam.marks', 'formula.drill', 'mensuration.drill', 'basics.drill'])
+    ->middleware(['auth', 'verified', 'exam.marks', 'chapter.terms', 'formula.drill', 'mensuration.drill', 'basics.drill'])
     ->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->prefix('mentor')->name('mentor.')->group(function () {
@@ -577,7 +577,17 @@ Route::middleware(['auth', 'verified'])->prefix('student')->name('student.')->gr
         ->name('resources.formulas.chapter');
 });
 
-Route::middleware(['auth', 'verified', 'exam.marks', 'formula.drill'])->prefix('student')->name('student.')->group(function () {
+// After Term 1 marks: map every chapter to Term 1 / Term 2 before sums unlock.
+Route::middleware(['auth', 'verified', 'exam.marks'])->prefix('student')->name('student.')->group(function () {
+    Route::get('/school-study-plan', [ClassCoverageController::class, 'show'])
+        ->name('school-study-plan.show');
+    Route::put('/school-study-plan/terms', [ClassCoverageController::class, 'updateTerms'])
+        ->name('school-study-plan.terms');
+    Route::put('/class-coverage/{syllabusChapter}', [ClassCoverageController::class, 'update'])
+        ->name('class-coverage.update');
+});
+
+Route::middleware(['auth', 'verified', 'exam.marks', 'chapter.terms', 'formula.drill'])->prefix('student')->name('student.')->group(function () {
     Route::get('/formula-drill', [FormulaDrillController::class, 'show'])->name('formula-drill.show');
     Route::post('/formula-drill/items/{item}/answer', [FormulaDrillController::class, 'submitAnswer'])->name('formula-drill.answer');
     Route::post('/formula-drill/items/{item}/request-help', [FormulaDrillController::class, 'requestTeacherHelp'])->name('formula-drill.request-help');
@@ -596,7 +606,7 @@ Route::middleware(['auth', 'verified', 'exam.marks', 'formula.drill'])->prefix('
         ->name('algebra-cards.figure');
 });
 
-Route::middleware(['auth', 'verified', 'exam.marks', 'formula.drill', 'mensuration.drill'])->prefix('student')->name('student.')->group(function () {
+Route::middleware(['auth', 'verified', 'exam.marks', 'chapter.terms', 'formula.drill', 'mensuration.drill'])->prefix('student')->name('student.')->group(function () {
     Route::get('/basics-drill', [BasicsDrillController::class, 'show'])->name('basics-drill.show');
     Route::post('/basics-drill/sessions/{session}/start', [BasicsDrillController::class, 'start'])->name('basics-drill.start');
     Route::post('/basics-drill/items/{item}/answer', [BasicsDrillController::class, 'submitAnswer'])->name('basics-drill.answer');
@@ -604,15 +614,9 @@ Route::middleware(['auth', 'verified', 'exam.marks', 'formula.drill', 'mensurati
     Route::post('/basics-drill/items/{item}/acknowledge', [BasicsDrillController::class, 'acknowledge'])->name('basics-drill.acknowledge');
 });
 
-Route::middleware(['auth', 'verified', 'exam.marks', 'formula.drill', 'mensuration.drill', 'basics.drill'])->prefix('student')->name('student.')->group(function () {
-    Route::put('/class-coverage/{syllabusChapter}', [ClassCoverageController::class, 'update'])
-        ->name('class-coverage.update');
+Route::middleware(['auth', 'verified', 'exam.marks', 'chapter.terms', 'formula.drill', 'mensuration.drill', 'basics.drill'])->prefix('student')->name('student.')->group(function () {
     Route::post('/assignments/{assignment}/study-chapter', [ClassCoverageController::class, 'updateAssignmentChapter'])
         ->name('assignments.study-chapter');
-    Route::get('/school-study-plan', [ClassCoverageController::class, 'show'])
-        ->name('school-study-plan.show');
-    Route::put('/school-study-plan/terms', [ClassCoverageController::class, 'updateTerms'])
-        ->name('school-study-plan.terms');
 
     Route::get('/concept-path/{textbookChapter}', [\App\Http\Controllers\Student\ConceptPathController::class, 'show'])
         ->name('concept-path.show');
