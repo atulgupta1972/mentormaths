@@ -422,6 +422,35 @@ class MmmCardService
         $text = str_replace(['×', '⋅'], '*', $text);
         $text = preg_replace('/(\d)\(/', '$1*(', $text) ?? $text;
 
+        // 6*(x+2) → 6x+12 ; 3*(2-x) → 6-3x
+        $text = preg_replace_callback(
+            '/(\d+)\*\((x)([+-])(\d+)\)/',
+            static function (array $m): string {
+                $n = (int) $m[1];
+                $sign = $m[3] === '-' ? -1 : 1;
+                $c = (int) $m[4];
+                $xPart = $n === 1 ? 'x' : $n.'x';
+                $constant = $n * $sign * $c;
+
+                return $constant >= 0 ? $xPart.'+'.$constant : $xPart.$constant;
+            },
+            $text,
+        ) ?? $text;
+        $text = preg_replace_callback(
+            '/(\d+)\*\((\d+)([+-])(x)\)/',
+            static function (array $m): string {
+                $n = (int) $m[1];
+                $a = (int) $m[2];
+                $sign = $m[3] === '-' ? -1 : 1;
+                $constant = $n * $a;
+                $xCoeff = $n * $sign;
+                $xPart = $xCoeff === 1 ? '+x' : ($xCoeff === -1 ? '-x' : (($xCoeff > 0 ? '+' : '').$xCoeff.'x'));
+
+                return $constant.$xPart;
+            },
+            $text,
+        ) ?? $text;
+
         // -1*(20-x) or -(20-x) → -20+x
         $text = preg_replace_callback(
             '/-(\d*)\*\((\d+)-x\)/',
@@ -435,6 +464,8 @@ class MmmCardService
             $text,
         ) ?? $text;
         $text = preg_replace('/-\((\d+)-x\)/', '-$1+x', $text) ?? $text;
+        // -(x-2) → -x+2
+        $text = preg_replace('/-\((x)-(\d+)\)/', '-x+$2', $text) ?? $text;
 
         $text = str_replace('*', '', $text);
 

@@ -20,8 +20,44 @@ class MmmCardServiceTest extends TestCase
 
         $this->assertNotNull($card);
         $this->assertTrue($card->isPublished());
-        $this->assertSame(7, $card->exercises()->count());
+        $this->assertSame(11, $card->exercises()->count());
         $this->assertTrue((bool) $card->exercises()->orderBy('sort_order')->first()?->is_demo);
+    }
+
+    public function test_variable_twist_correct_marks_as_x(): void
+    {
+        $card = MmmCard::query()->where('slug', 'marks-scoring-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 8)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $result = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'correct' => ['marks' => 'x', 'count' => '8', 'total' => '8x'],
+                'wrong' => ['marks' => '-1', 'count' => '4', 'total' => '-4'],
+            ],
+            'grand_total' => '20',
+            'x_value' => '3',
+        ]);
+
+        $this->assertTrue($result['ok'], json_encode($result['cell_results']));
+    }
+
+    public function test_variable_twist_correct_is_two_more_than_wrong(): void
+    {
+        $card = MmmCard::query()->where('slug', 'marks-scoring-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 9)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $result = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'correct' => ['marks' => 'x+2', 'count' => '6', 'total' => '6(x+2)'],
+                'wrong' => ['marks' => '-x', 'count' => '4', 'total' => '-4x'],
+            ],
+            'grand_total' => '20',
+            'x_value' => '4',
+        ]);
+
+        $this->assertTrue($result['ok'], json_encode($result['cell_results']));
     }
 
     public function test_variable_sample_accepts_x_table_without_typed_equation(): void
