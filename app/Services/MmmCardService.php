@@ -140,12 +140,21 @@ class MmmCardService
             return null;
         }
 
+        $answers = is_array($exercise->answers) ? $exercise->answers : [];
+        $usesVariable = ($answers['mode'] ?? null) === 'variable'
+            || ! empty($answers['variable_tip']);
+
         return [
             'id' => $exercise->id,
             'difficulty' => $exercise->difficulty,
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
+            'uses_variable' => $usesVariable,
+            'variable_tip' => $answers['variable_tip'] ?? null,
+            'ask_equation' => array_key_exists('equation', $answers),
+            'ask_x_value' => array_key_exists('x_value', $answers),
+            'x_prompt' => $answers['x_prompt'] ?? 'Value of x (correct answers)',
         ];
     }
 
@@ -172,9 +181,10 @@ class MmmCardService
             }
             foreach (['marks', 'count', 'total'] as $field) {
                 $cellKey = "{$rowKey}.{$field}";
-                $want = $this->normalizeNumber($expected[$rowKey][$field] ?? null);
-                $got = $this->normalizeNumber(data_get($submission, "rows.{$rowKey}.{$field}"));
-                $ok = $want !== null && $got !== null && $want === $got;
+                $ok = $this->valueMatches(
+                    $expected[$rowKey][$field] ?? null,
+                    data_get($submission, "rows.{$rowKey}.{$field}"),
+                );
                 $cellResults[$cellKey] = $ok;
                 if (! $ok) {
                     $allOk = false;
@@ -183,20 +193,38 @@ class MmmCardService
         }
 
         if (! empty($schema['show_grand_total'])) {
-            $want = $this->normalizeNumber($expected['grand_total'] ?? null);
-            $got = $this->normalizeNumber($submission['grand_total'] ?? null);
-            $ok = $want !== null && $got !== null && $want === $got;
+            $ok = $this->valueMatches($expected['grand_total'] ?? null, $submission['grand_total'] ?? null);
             $cellResults['grand_total'] = $ok;
             if (! $ok) {
                 $allOk = false;
             }
         }
 
+        if (array_key_exists('equation', $expected)) {
+            $ok = $this->valueMatches($expected['equation'], $submission['equation'] ?? null, isEquation: true);
+            $cellResults['equation'] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        if (array_key_exists('x_value', $expected)) {
+            $ok = $this->valueMatches($expected['x_value'], $submission['x_value'] ?? null);
+            $cellResults['x_value'] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        $asksEquation = array_key_exists('equation', $expected);
+
         return [
             'ok' => $allOk,
             'cell_results' => $cellResults,
             'message' => $allOk
-                ? 'Table looks good — well done.'
+                ? ($asksEquation
+                    ? 'Table and equation look good — well done.'
+                    : 'Table looks good — well done.')
                 : 'Some cells are wrong (highlighted). Fix them and submit again.',
         ];
     }
@@ -272,6 +300,35 @@ class MmmCardService
             ]);
     }
 
+    private function valueMatches(mixed $expected, mixed $got, bool $isEquation = false): bool
+    {
+        $candidates = is_array($expected) ? $expected : [$expected];
+        foreach ($candidates as $candidate) {
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+
+            $wantNum = $this->normalizeNumber($candidate);
+            $gotNum = $this->normalizeNumber($got);
+            if ($wantNum !== null && $gotNum !== null && $wantNum === $gotNum) {
+                return true;
+            }
+
+            $wantExpr = $isEquation
+                ? $this->normalizeEquation($candidate)
+                : $this->normalizeExpression($candidate);
+            $gotExpr = $isEquation
+                ? $this->normalizeEquation($got)
+                : $this->normalizeExpression($got);
+
+            if ($wantExpr !== null && $gotExpr !== null && $wantExpr === $gotExpr) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function normalizeNumber(mixed $value): ?string
     {
         if ($value === null || $value === '') {
@@ -292,5 +349,50 @@ class MmmCardService
         }
 
         return rtrim(rtrim(sprintf('%.6F', $number), '0'), '.');
+    }
+
+    private function normalizeExpression(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $text = strtolower(trim((string) $value));
+        if ($text === '') {
+            return null;
+        }
+
+        $text = str_replace(['−', '–', '—'], '-', $text);
+        $text = preg_replace('/\s+/', '', $text) ?? $text;
+        $text = str_replace(['×', '*'], '', $text);
+
+        // -(20-x) → -20+x
+        $text = preg_replace('/-\((\d+)-x\)/', '-$1+x', $text) ?? $text;
+
+        // Standalone x-20 → -20+x
+        if (preg_match('/^x-(\d+)$/', $text, $m)) {
+            $text = '-'.$m[1].'+x';
+        }
+
+        $text = str_replace(['(', ')'], '', $text);
+        $text = str_replace(['+-', '-+'], '-', $text);
+
+        return $text;
+    }
+
+    private function normalizeEquation(mixed $value): ?string
+    {
+        $text = $this->normalizeExpression($value);
+        if ($text === null || ! str_contains($text, '=')) {
+            return $text;
+        }
+
+        [$left, $right] = array_pad(explode('=', $text, 2), 2, '');
+
+        // Accept 3x-20=25 and 25=3x-20 as the same.
+        $forms = [($left ?? '').'='.($right ?? ''), ($right ?? '').'='.($left ?? '')];
+        sort($forms);
+
+        return $forms[0];
     }
 }

@@ -20,8 +20,27 @@ class MmmCardServiceTest extends TestCase
 
         $this->assertNotNull($card);
         $this->assertTrue($card->isPublished());
-        $this->assertSame(6, $card->exercises()->count());
+        $this->assertSame(7, $card->exercises()->count());
         $this->assertTrue((bool) $card->exercises()->orderBy('sort_order')->first()?->is_demo);
+    }
+
+    public function test_variable_sample_accepts_x_table_and_equation(): void
+    {
+        $card = MmmCard::query()->where('slug', 'marks-scoring-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 7)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $result = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'correct' => ['marks' => '2', 'count' => 'x', 'total' => '2x'],
+                'wrong' => ['marks' => '-1', 'count' => '20-x', 'total' => 'x-20'],
+            ],
+            'grand_total' => '25',
+            'equation' => '3x - 20 = 25',
+            'x_value' => '15',
+        ]);
+
+        $this->assertTrue($result['ok'], json_encode($result['cell_results']));
     }
 
     public function test_derived_wrong_count_exercise_checks_out(): void

@@ -32,6 +32,8 @@ const blankRows = () => {
 const form = reactive({
     rows: blankRows(),
     grand_total: '',
+    equation: '',
+    x_value: '',
 });
 
 const cellResults = ref({});
@@ -39,11 +41,15 @@ const message = ref('');
 const submitting = ref(false);
 const allCorrect = ref(false);
 
+const usesVariable = computed(() => !! props.exercise?.uses_variable);
+
 watch(
     () => props.exercise?.id,
     () => {
         form.rows = blankRows();
         form.grand_total = '';
+        form.equation = '';
+        form.x_value = '';
         cellResults.value = {};
         message.value = '';
         allCorrect.value = false;
@@ -70,6 +76,8 @@ const submit = async () => {
             exercise_id: props.exercise.id,
             rows: form.rows,
             grand_total: form.grand_total,
+            equation: form.equation,
+            x_value: form.x_value,
         });
         cellResults.value = data.cell_results || {};
         message.value = data.message || '';
@@ -85,6 +93,8 @@ const submit = async () => {
 const resetTable = () => {
     form.rows = blankRows();
     form.grand_total = '';
+    form.equation = '';
+    form.x_value = '';
     cellResults.value = {};
     message.value = '';
     allCorrect.value = false;
@@ -209,8 +219,18 @@ const canGoNext = computed(() => {
                 <p class="mt-3 text-base font-medium leading-relaxed text-slate-900">
                     {{ exercise.question_text }}
                 </p>
-                <p class="mt-2 text-xs text-slate-500">
+                <p
+                    v-if="exercise.variable_tip"
+                    class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950"
+                >
+                    {{ exercise.variable_tip }}
+                </p>
+                <p v-else class="mt-2 text-xs text-slate-500">
                     Fill numbers from the question. Row headings are given. Then submit the table.
+                </p>
+                <p v-if="usesVariable" class="mt-2 text-xs text-slate-500">
+                    You may type numbers or expressions with <span class="font-mono font-semibold">x</span>
+                    (example: <span class="font-mono">20-x</span>, <span class="font-mono">2x</span>, <span class="font-mono">-20+x</span>).
                 </p>
 
                 <div class="mt-4 overflow-x-auto">
@@ -240,8 +260,8 @@ const canGoNext = computed(() => {
                                     <input
                                         v-model="form.rows[row.key][field]"
                                         type="text"
-                                        inputmode="numeric"
-                                        class="w-full min-w-[4rem] rounded border-0 bg-transparent px-1 py-1 text-center text-sm font-semibold focus:ring-0"
+                                        :inputmode="usesVariable ? 'text' : 'numeric'"
+                                        class="w-full min-w-[4.5rem] rounded border-0 bg-transparent px-1 py-1 text-center font-mono text-sm font-semibold focus:ring-0"
                                         autocomplete="off"
                                     >
                                 </td>
@@ -261,13 +281,45 @@ const canGoNext = computed(() => {
                                         v-model="form.grand_total"
                                         type="text"
                                         inputmode="numeric"
-                                        class="w-full min-w-[4rem] rounded border-0 bg-transparent px-1 py-1 text-center text-sm font-extrabold focus:ring-0"
+                                        class="w-full min-w-[4.5rem] rounded border-0 bg-transparent px-1 py-1 text-center font-mono text-sm font-extrabold focus:ring-0"
                                         autocomplete="off"
                                     >
                                 </td>
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <div v-if="exercise.ask_equation || exercise.ask_x_value" class="mt-4 space-y-3">
+                    <div v-if="exercise.ask_equation">
+                        <label class="block text-xs font-bold uppercase tracking-wide text-slate-700">
+                            Equation from the table
+                        </label>
+                        <p class="mt-0.5 text-[11px] text-slate-500">
+                            Add the Total column and set it equal to the score (example: 2x+(-20+x)=25 or 3x-20=25).
+                        </p>
+                        <input
+                            v-model="form.equation"
+                            type="text"
+                            class="mt-1 w-full max-w-xl rounded-md border px-3 py-2 font-mono text-sm font-semibold"
+                            :class="cellClass('equation')"
+                            placeholder="2x + (-20 + x) = 25"
+                            autocomplete="off"
+                        >
+                    </div>
+                    <div v-if="exercise.ask_x_value">
+                        <label class="block text-xs font-bold uppercase tracking-wide text-slate-700">
+                            {{ exercise.x_prompt || 'Value of x' }}
+                        </label>
+                        <input
+                            v-model="form.x_value"
+                            type="text"
+                            inputmode="numeric"
+                            class="mt-1 w-32 rounded-md border px-3 py-2 text-center font-mono text-sm font-extrabold"
+                            :class="cellClass('x_value')"
+                            autocomplete="off"
+                        >
+                    </div>
                 </div>
 
                 <div class="mt-4 flex flex-wrap gap-2">

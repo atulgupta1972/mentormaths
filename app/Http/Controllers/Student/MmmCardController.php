@@ -50,6 +50,8 @@ class MmmCardController extends Controller
             'exercise_id' => ['required', 'integer', 'exists:mmm_card_exercises,id'],
             'rows' => ['required', 'array'],
             'grand_total' => ['nullable'],
+            'equation' => ['nullable', 'string', 'max:200'],
+            'x_value' => ['nullable', 'string', 'max:40'],
         ]);
 
         $exercise = $mmmCard->exercises()->whereKey($validated['exercise_id'])->firstOrFail();
