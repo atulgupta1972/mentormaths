@@ -121,7 +121,7 @@ class RevisionAssignmentServiceTest extends TestCase
         $this->assertSame(1, (int) $revision->revision_number);
         $this->assertSame($assignment->id, (int) $revision->parent_assignment_id);
         $this->assertSame(SetAssignment::STATUS_ASSIGNED, $revision->status);
-        $this->assertSame(now()->toDateString(), $revision->due_date?->toDateString());
+        $this->assertNull($revision->due_date);
         $this->assertSame(3, AssignmentSumInstance::query()->where('set_assignment_id', $revision->id)->count());
     }
 
