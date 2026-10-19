@@ -72,16 +72,35 @@ const submit = async () => {
     submitting.value = true;
     message.value = '';
     try {
-        const { data } = await axios.post(props.check_url, {
+        const cleanMath = (value) => String(value ?? '')
+            .replace(/[−–—﹣－]/g, '-')
+            .replace(/[＝﹦]/g, '=')
+            .replace(/[＋﹢]/g, '+')
+            .replace(/[×⋅]/g, '*')
+            .replace(/\s+/g, '');
+
+        const payload = {
             exercise_id: props.exercise.id,
-            rows: form.rows,
-            grand_total: form.grand_total,
-            equation: form.equation,
-            x_value: form.x_value,
-        });
+            rows: Object.fromEntries(
+                Object.entries(form.rows).map(([rowKey, cells]) => [
+                    rowKey,
+                    Object.fromEntries(
+                        Object.entries(cells).map(([field, value]) => [field, cleanMath(value)]),
+                    ),
+                ]),
+            ),
+            grand_total: cleanMath(form.grand_total),
+            equation: cleanMath(form.equation),
+            x_value: cleanMath(form.x_value),
+        };
+
+        const { data } = await axios.post(props.check_url, payload);
         cellResults.value = data.cell_results || {};
         message.value = data.message || '';
         allCorrect.value = !! data.ok;
+        if (! data.ok && data.cell_results?.equation === false) {
+            message.value = `${data.message || ''} Tip: try 3x-20=25 or 2x+(x-20)=25.`.trim();
+        }
     } catch (e) {
         message.value = e?.response?.data?.message || 'Could not check the table. Try again.';
         allCorrect.value = false;

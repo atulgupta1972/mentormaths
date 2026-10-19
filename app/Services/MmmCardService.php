@@ -393,16 +393,34 @@ class MmmCardService
         }
 
         // Invisible / odd spaces and unicode lookalikes from phone keyboards.
-        $text = str_replace(["\u{00A0}", "\u{200B}", "\u{200C}", "\u{200D}", "\u{FEFF}"], '', $text);
-        $text = str_replace(['𝑥', 'ｘ', 'Χ', 'х'], 'x', $text);
+        $text = preg_replace('/[\x{00A0}\x{2000}-\x{200D}\x{202F}\x{205F}\x{3000}\x{FEFF}]/u', '', $text) ?? $text;
+        $text = str_replace(['𝑥', 'ｘ', 'Χ', 'х', 'Ⅹ'], 'x', $text);
         $text = strtolower($text);
-        $text = str_replace(['−', '–', '—', '﹣', '－'], '-', $text);
-        $text = str_replace(['＝', '﹦'], '=', $text);
+        $text = preg_replace('/\p{Pd}/u', '-', $text) ?? $text; // any dash/minus unicode
+        $text = str_replace(['−', '–', '—', '﹣', '－', '­'], '-', $text);
+        $text = str_replace(['＝', '﹦', '≟'], '=', $text);
+        $text = str_replace(['＋', '﹢'], '+', $text);
         $text = preg_replace('/\s+/u', '', $text) ?? $text;
-        $text = str_replace(['×', '*', '⋅'], '', $text);
 
-        // -(20-x) → -20+x
+        // Keep multiplication meaning before dropping the sign: -1*(20-x) and -1(20-x)
+        $text = str_replace(['×', '⋅'], '*', $text);
+        $text = preg_replace('/(\d)\(/', '$1*(', $text) ?? $text;
+
+        // -1*(20-x) or -(20-x) → -20+x
+        $text = preg_replace_callback(
+            '/-(\d*)\*\((\d+)-x\)/',
+            static function (array $m): string {
+                $n = $m[1] === '' ? 1 : (int) $m[1];
+                $constant = -1 * $n * (int) $m[2];
+                $xPart = $n === 1 ? '+x' : '+'.$n.'x';
+
+                return $constant.$xPart;
+            },
+            $text,
+        ) ?? $text;
         $text = preg_replace('/-\((\d+)-x\)/', '-$1+x', $text) ?? $text;
+
+        $text = str_replace('*', '', $text);
 
         // Standalone x-20 → -20+x
         if (preg_match('/^x-(\d+)$/', $text, $m)) {
@@ -411,10 +429,13 @@ class MmmCardService
 
         $text = str_replace(['(', ')'], '', $text);
         $text = str_replace(['+-', '-+'], '-', $text);
-        // Collapse accidental double signs from typing.
         $text = str_replace(['--', '++'], ['+', '+'], $text);
+        $text = str_replace(['+1x', '-1x'], ['+x', '-x'], $text);
 
-        return $text;
+        // Drop anything that is not part of a linear expression / equation.
+        $text = preg_replace('/[^0-9x=+\-]/', '', $text) ?? $text;
+
+        return $text === '' ? null : $text;
     }
 
     private function normalizeEquation(mixed $value): ?string
