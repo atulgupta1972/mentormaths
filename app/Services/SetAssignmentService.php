@@ -20,7 +20,7 @@ class SetAssignmentService
         Worksheet $practiceSet,
         StudentEnrollment $enrollment,
         User $assigner,
-        string $dueDate,
+        ?string $dueDate = null,
         ?string $notes = null,
         ?int $examPlanId = null,
         ?int $effectiveSyllabusChapterId = null,
@@ -76,7 +76,7 @@ class SetAssignmentService
         Worksheet $practiceSet,
         Collection $enrollments,
         User $assigner,
-        string $dueDate,
+        ?string $dueDate = null,
         ?string $notes = null,
     ): array {
         $assigned = 0;
@@ -150,7 +150,7 @@ class SetAssignmentService
     public function reassign(
         SetAssignment $assignment,
         User $assigner,
-        string $dueDate,
+        ?string $dueDate = null,
         ?string $notes = null,
         ?int $effectiveSyllabusChapterId = null,
     ): SetAssignment {

@@ -130,8 +130,16 @@ const staffAssignLabel = computed(() => {
             {{ item.status_label }}
         </span>
         <span
-            v-if="item.target_date"
+            v-if="item.status === 'done' && item.last_completed_at"
+            class="text-[10px] font-bold text-emerald-900"
+            :title="'Last completed'"
+        >
+            last {{ formatDate(item.last_completed_at) }}
+        </span>
+        <span
+            v-else-if="item.target_date && item.status !== 'done'"
             class="text-[10px] font-bold text-slate-700"
+            title="Teacher deadline"
         >
             due {{ formatDate(item.target_date) }}
         </span>

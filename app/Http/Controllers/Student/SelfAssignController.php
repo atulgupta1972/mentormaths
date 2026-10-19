@@ -64,14 +64,12 @@ class SelfAssignController extends Controller
                 ->with('success', "Revision {$revision->revision_number} is ready — open and start.");
         }
 
-        $dueDate = now()->addDays(3)->toDateString();
-
         try {
             $assignment = $this->assignmentService->assign(
                 $worksheet,
                 $enrollment,
                 $user,
-                $dueDate,
+                null,
                 'Self-assigned from chapter summary',
             );
         } catch (\InvalidArgumentException $e) {

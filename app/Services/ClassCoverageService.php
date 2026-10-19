@@ -558,6 +558,7 @@ class ClassCoverageService
             'pool_metrics' => $item['pool_metrics'] ?? null,
             'assignment_id' => $item['assignment_id'] ?? null,
             'target_date' => $item['target_date'] ?? null,
+            'last_completed_at' => $item['last_completed_at'] ?? null,
             'latest_attempt_id' => $item['latest_attempt_id'] ?? null,
             'in_progress_attempt_id' => $item['in_progress_attempt_id'] ?? null,
             'delivery_mode' => $item['delivery_mode'] ?? null,
@@ -726,7 +727,8 @@ class ClassCoverageService
     }
 
     /**
-     * Assign (or refresh due date to today) all publishable chapter sets for this student.
+     * Open publishable chapter sets for this student (no teacher deadline).
+     * Due dates are only set when a teacher/admin assigns with a target date.
      * Skips completed work and formula-only cards (daily drill covers those).
      */
     public function assignChapterContentDueToday(
@@ -742,7 +744,6 @@ class ClassCoverageService
             return 0;
         }
 
-        $dueDate = now()->toDateString();
         $assigned = 0;
 
         foreach ($this->publishableWorksheetsForChapter($chapter) as $worksheet) {
@@ -753,7 +754,8 @@ class ClassCoverageService
                 ->orderByDesc('id')
                 ->first();
 
-            if ($existing?->status === SetAssignment::STATUS_COMPLETED) {
+            // Already open or completed — never refresh/overwrite a teacher-set due date.
+            if ($existing) {
                 continue;
             }
 
@@ -762,7 +764,7 @@ class ClassCoverageService
                     $worksheet,
                     $enrollment,
                     $assigner,
-                    $dueDate,
+                    null,
                     'Auto-assigned when chapter marked Studied / Under study',
                 );
                 $assigned++;
@@ -785,8 +787,8 @@ class ClassCoverageService
     }
 
     /**
-     * When a new published set appears, assign it (due today) to every student who already
-     * marked that chapter Studied or Under study. Admin/mentor can still amend due dates later.
+     * When a new published set appears, open it (no deadline) for every student who already
+     * marked that chapter Studied or Under study. Teachers can still set a due date later.
      */
     public function assignNewWorksheetDueToday(Worksheet $worksheet, ?User $assigner = null): int
     {
@@ -811,7 +813,6 @@ class ClassCoverageService
             return 0;
         }
 
-        $dueDate = now()->toDateString();
         $assigned = 0;
 
         $coverages = StudentChapterCoverage::query()
@@ -836,7 +837,7 @@ class ClassCoverageService
                 ->orderByDesc('id')
                 ->first();
 
-            if ($existing?->status === SetAssignment::STATUS_COMPLETED) {
+            if ($existing) {
                 continue;
             }
 
@@ -845,7 +846,7 @@ class ClassCoverageService
                     $worksheet,
                     $enrollment,
                     $assigner,
-                    $dueDate,
+                    null,
                     'Auto-assigned — new set for studied chapter',
                 );
                 $assigned++;

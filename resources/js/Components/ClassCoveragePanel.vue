@@ -860,25 +860,6 @@ const performanceFromItems = (items) => {
     };
 };
 
-const chapterPerformance = (dashboard) => {
-    const perf = performanceFromItems(collectDashboardItems(dashboard));
-
-    if (
-        perf.completionPct === null
-        && perf.scorePct === null
-        && perf.revisionCompletionPct === null
-        && perf.revisionScorePct === null
-        && perf.correctionDone === 0
-        && perf.correctionPending === 0
-        && perf.openWrongs === 0
-        && perf.revisionTotal === 0
-    ) {
-        return null;
-    }
-
-    return perf;
-};
-
 /** Saved chapter % only for students — page refresh must not recompute from sets. */
 const chapterRowStats = (chapter) => {
     if (chapter.performance && typeof chapter.performance === 'object') {
@@ -1142,7 +1123,7 @@ const startRevision = (item) => {
         <p class="mb-2 text-sm leading-snug text-slate-500">
             <template v-if="isStudentView">
                 Tick each chapter you have already <strong>Studied</strong>, or the one <strong>Under study</strong>.
-                Completion and score are the last saved figures. They update only when you finish a worksheet or a revision sheet — refreshing this page does not recalculate them.
+                Sets show Done / Not done (and the last date you finished). A due date appears only when your teacher sets one.
             </template>
             <template v-else>
                 Click a chapter to see set details and scores. Tick each chapter independently — click the same box again to clear it.
@@ -1656,16 +1637,6 @@ const startRevision = (item) => {
                                         </div>
                                     </div>
 
-                                    <template
-                                        v-for="perf in [chapterPerformance(chapterDashboard(chapter))]"
-                                        :key="`perf-${chapter.id}`"
-                                    >
-                                        <ChapterPerformanceSummary
-                                            v-if="perf"
-                                            :perf="perf"
-                                            title="Chapter performance"
-                                        />
-                                    </template>
                                 </div>
 
                                 <div v-else class="space-y-2">

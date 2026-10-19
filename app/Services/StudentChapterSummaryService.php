@@ -751,6 +751,7 @@ class StudentChapterSummaryService
             'delivery_mode' => $worksheet->delivery_mode ?? WorksheetDeliveryMode::ONLINE,
             'assignment_id' => $assignment?->id,
             'target_date' => $assignment?->due_date?->toDateString(),
+            'last_completed_at' => $this->lastCompletedAt($progress),
             'latest_attempt_id' => $progress['latest_attempt_id'] ?? null,
             'in_progress_attempt_id' => $progress['in_progress_attempt_id'] ?? null,
             'status' => $statusMeta['status'],
@@ -826,6 +827,7 @@ class StudentChapterSummaryService
             'delivery_mode' => $worksheet->delivery_mode ?? WorksheetDeliveryMode::ONLINE,
             'assignment_id' => $assignment->id,
             'target_date' => $assignment->due_date?->toDateString(),
+            'last_completed_at' => $this->lastCompletedAt($progress),
             'latest_attempt_id' => $progress['latest_attempt_id'] ?? null,
             'in_progress_attempt_id' => $progress['in_progress_attempt_id'] ?? null,
             'status' => $statusMeta['status'],
@@ -982,6 +984,24 @@ class StudentChapterSummaryService
         }
 
         return $label;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $progress
+     */
+    private function lastCompletedAt(?array $progress): ?string
+    {
+        if (! $progress) {
+            return null;
+        }
+
+        $submitted = $progress['submitted_at'] ?? null;
+        if (! is_string($submitted) || $submitted === '') {
+            return null;
+        }
+
+        // Date-only for chapter chips (last time this set was finished).
+        return substr($submitted, 0, 10);
     }
 
     private function bucketForWorksheet(Worksheet $worksheet): string

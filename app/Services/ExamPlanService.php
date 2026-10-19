@@ -531,7 +531,7 @@ class ExamPlanService
     public function matchingPlanForAssignment(
         StudentEnrollment $enrollment,
         Worksheet $worksheet,
-        string $dueDate,
+        ?string $dueDate = null,
         ?int $examPlanId = null,
     ): ?ExamPlan {
         if ($examPlanId) {
@@ -549,13 +549,16 @@ class ExamPlanService
             return null;
         }
 
-        return ExamPlan::query()
+        $query = ExamPlan::query()
             ->where('student_enrollment_id', $enrollment->id)
             ->where('status', ExamPlan::STATUS_PLANNED)
-            ->where('exam_date', '>=', $dueDate)
             ->whereHas('chapters', fn ($query) => $query->where('syllabus_chapters.id', $chapterId))
-            ->orderBy('exam_date')
-            ->first();
+            ->orderBy('exam_date');
+
+        // Soft/self opens have no teacher deadline — still attach the next upcoming exam plan if any.
+        $query->where('exam_date', '>=', $dueDate ?: now()->toDateString());
+
+        return $query->first();
     }
 
     public function plansForEnrollment(StudentEnrollment $enrollment, bool $includeAssignables = false): Collection

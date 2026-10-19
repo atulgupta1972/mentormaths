@@ -118,7 +118,7 @@ class SchoolStudyPlanTest extends TestCase
         ]);
     }
 
-    public function test_marking_under_study_assigns_chapter_sets_due_today(): void
+    public function test_marking_under_study_opens_chapter_sets_without_due_date(): void
     {
         [$admin, $student, $grade, $chapters] = $this->seedAdminAndStudent();
         $worksheet = $this->seedChapterWorksheet($chapters[1], $admin);
@@ -144,7 +144,7 @@ class SchoolStudyPlanTest extends TestCase
             ->first();
 
         $this->assertNotNull($assignment);
-        $this->assertSame(now()->toDateString(), $assignment->due_date?->toDateString());
+        $this->assertNull($assignment->due_date);
     }
 
     public function test_admin_can_save_exam_plan_from_school_study_plan_page(): void
@@ -243,11 +243,13 @@ class SchoolStudyPlanTest extends TestCase
             ->assertRedirect()
             ->assertSessionHas('success');
 
-        $this->assertDatabaseHas('set_assignments', [
-            'worksheet_id' => $worksheet->id,
-            'status' => SetAssignment::STATUS_ASSIGNED,
-            'due_date' => now()->toDateString(),
-        ]);
+        $assignment = SetAssignment::query()
+            ->where('worksheet_id', $worksheet->id)
+            ->first();
+
+        $this->assertNotNull($assignment);
+        $this->assertSame(SetAssignment::STATUS_ASSIGNED, $assignment->status);
+        $this->assertSame(now()->toDateString(), $assignment->due_date?->toDateString());
     }
 
     public function test_mentor_can_open_study_plan_and_assign_worksheet(): void
@@ -407,7 +409,7 @@ class SchoolStudyPlanTest extends TestCase
 
         $this->assertNotNull($assignment);
         $this->assertSame(SetAssignment::STATUS_ASSIGNED, $assignment->status);
-        $this->assertSame(now()->toDateString(), $assignment->due_date->toDateString());
+        $this->assertNull($assignment->due_date);
     }
 
     public function test_new_set_not_auto_assigned_when_chapter_not_studied(): void

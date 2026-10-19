@@ -102,7 +102,7 @@ class RevisionAssignmentService
                 'effective_syllabus_chapter_id' => $original->effective_syllabus_chapter_id,
                 'assigned_by' => $actor?->id ?? $original->assigned_by,
                 'assigned_at' => now(),
-                'due_date' => now()->toDateString(),
+                'due_date' => null,
                 'status' => SetAssignment::STATUS_ASSIGNED,
                 'notes' => $auto
                     ? 'Auto revision after 100% score'
