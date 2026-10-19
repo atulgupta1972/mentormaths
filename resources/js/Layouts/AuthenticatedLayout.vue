@@ -149,6 +149,7 @@ const contentGroup = computed(() => ({
         || route().current('admin.syllabus.*')
         || route().current('admin.textbooks.*')
         || route().current('admin.concept-builder.*')
+        || route().current('admin.mmm-cards.*')
         || route().current('admin.content-tasks.*')
         || route().current('admin.content-rate-cards.*')
         || route().current('admin.formula-bank.*')
@@ -226,6 +227,12 @@ const contentGroup = computed(() => ({
             href: route('admin.concept-builder.index'),
             active: route().current('admin.concept-builder.*'),
             show: isAdmin.value && route().has('admin.concept-builder.index'),
+        },
+        {
+            label: 'MMM methods',
+            href: route('admin.mmm-cards.index'),
+            active: route().current('admin.mmm-cards.*'),
+            show: isAdmin.value && route().has('admin.mmm-cards.index'),
         },
         {
             label: 'Content upload tasks',

@@ -1434,11 +1434,11 @@ const startRevision = (item) => {
                         >
                             <td :colspan="columnCount" class="border-b border-slate-200 border-t border-slate-300 px-3 py-3">
                                 <div
-                                    v-if="chapter.concept_learn"
+                                    v-if="chapter.concept_learn || (chapter.mmm_cards && chapter.mmm_cards.length)"
                                     class="mb-4 flex flex-wrap justify-center gap-3"
                                 >
                                     <Link
-                                        v-if="isStudentView && chapter.concept_learn.learn_url"
+                                        v-if="isStudentView && chapter.concept_learn?.learn_url"
                                         :href="chapter.concept_learn.learn_url"
                                         class="inline-flex min-w-[240px] flex-col items-center justify-center rounded-xl bg-indigo-700 px-6 py-4 text-center shadow-md ring-2 ring-indigo-300 transition hover:bg-indigo-800"
                                     >
@@ -1459,7 +1459,7 @@ const startRevision = (item) => {
                                         </span>
                                     </Link>
                                     <Link
-                                        v-if="!isStudentView && chapter.concept_learn.staff_run_url"
+                                        v-if="!isStudentView && chapter.concept_learn?.staff_run_url"
                                         :href="chapter.concept_learn.staff_run_url"
                                         class="inline-flex min-w-[240px] flex-col items-center justify-center rounded-xl bg-fuchsia-700 px-6 py-4 text-center shadow-md ring-2 ring-fuchsia-300 transition hover:bg-fuchsia-800"
                                     >
@@ -1479,6 +1479,44 @@ const startRevision = (item) => {
                                             </template>
                                         </span>
                                     </Link>
+                                    <template v-for="mmm in (chapter.mmm_cards || [])" :key="`mmm-${mmm.id}`">
+                                        <Link
+                                            v-if="isStudentView && mmm.play_url"
+                                            :href="mmm.play_url"
+                                            class="inline-flex min-w-[240px] flex-col items-center justify-center rounded-xl bg-teal-700 px-6 py-4 text-center shadow-md ring-2 ring-teal-300 transition hover:bg-teal-800"
+                                        >
+                                            <span class="text-[10px] font-bold uppercase tracking-[0.16em] text-teal-100">
+                                                MentorMaths method
+                                            </span>
+                                            <span class="mt-1 text-sm font-extrabold uppercase tracking-[0.08em] text-white">
+                                                {{ mmm.heading }}
+                                            </span>
+                                            <span class="mt-1 text-[11px] font-medium text-teal-100">
+                                                <template v-if="mmm.status === 'completed'">Done · Practice again</template>
+                                                <template v-else-if="mmm.status === 'in_progress'">
+                                                    Continue · {{ mmm.exercises_completed }}/{{ mmm.exercises_total }}
+                                                </template>
+                                                <template v-else>
+                                                    {{ mmm.exercises_total }} guided table{{ mmm.exercises_total === 1 ? '' : 's' }}
+                                                </template>
+                                            </span>
+                                        </Link>
+                                        <Link
+                                            v-else-if="!isStudentView && mmm.admin_url"
+                                            :href="mmm.admin_url"
+                                            class="inline-flex min-w-[240px] flex-col items-center justify-center rounded-xl bg-teal-700 px-6 py-4 text-center shadow-md ring-2 ring-teal-300 transition hover:bg-teal-800"
+                                        >
+                                            <span class="text-[10px] font-bold uppercase tracking-[0.16em] text-teal-100">
+                                                MentorMaths method
+                                            </span>
+                                            <span class="mt-1 text-sm font-extrabold uppercase tracking-[0.08em] text-white">
+                                                {{ mmm.heading }}
+                                            </span>
+                                            <span class="mt-1 text-[11px] font-medium text-teal-100">
+                                                Linked · open admin card
+                                            </span>
+                                        </Link>
+                                    </template>
                                 </div>
 
                                 <div

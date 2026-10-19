@@ -27,6 +27,7 @@ class ClassCoverageService
         private FormulaBankService $formulaBank,
         private SetAssignmentService $assignmentService,
         private StudentConceptPathService $conceptPathLearn,
+        private MmmCardService $mmmCards,
     ) {}
 
     /**
@@ -74,12 +75,14 @@ class ClassCoverageService
 
         $enrollment->loadMissing(['student.user']);
         $learner = $enrollment->student?->user;
+        $syllabusChapterIds = $chapterOptions->pluck('id')->map(fn ($id) => (int) $id)->all();
         $conceptLearnByChapter = $this->conceptPathLearn->learnCtasForSyllabusChapters(
             $learner,
             $enrollment,
-            $chapterOptions->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            $syllabusChapterIds,
             (int) $enrollment->student_id,
         );
+        $mmmByChapter = $this->mmmCards->ctasForSyllabusChapters($learner, $syllabusChapterIds);
 
         $chapters = $chapterOptions->values()->map(function (array $chapter) use (
             $coverages,
@@ -88,6 +91,7 @@ class ClassCoverageService
             $summaryById,
             $availabilityColumns,
             $conceptLearnByChapter,
+            $mmmByChapter,
             &$underStudyId,
         ) {
             $coverage = $coverages->get($chapter['id']);
@@ -129,6 +133,7 @@ class ClassCoverageService
                 'items' => $this->formatDetailItems($rawItems),
                 'performance' => $chapterMetrics->get($chapter['id'])?->performance,
                 'concept_learn' => $conceptLearnByChapter[(int) $chapter['id']] ?? null,
+                'mmm_cards' => $mmmByChapter[(int) $chapter['id']] ?? [],
             ];
         })->sort(function (array $left, array $right) {
             $byNumber = strcmp(
