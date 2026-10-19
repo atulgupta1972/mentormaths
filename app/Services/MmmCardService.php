@@ -152,7 +152,8 @@ class MmmCardService
             'sort_order' => $exercise->sort_order,
             'uses_variable' => $usesVariable,
             'variable_tip' => $answers['variable_tip'] ?? null,
-            'ask_equation' => array_key_exists('equation', $answers),
+            // Equation is built automatically from the Total column — shown, not typed/checked.
+            'show_auto_equation' => $usesVariable || array_key_exists('equation', $answers),
             'ask_x_value' => array_key_exists('x_value', $answers),
             'x_prompt' => $answers['x_prompt'] ?? 'Value of x (correct answers)',
         ];
@@ -200,13 +201,7 @@ class MmmCardService
             }
         }
 
-        if (array_key_exists('equation', $expected)) {
-            $ok = $this->equationMatchesExpected($expected, $submission);
-            $cellResults['equation'] = $ok;
-            if (! $ok) {
-                $allOk = false;
-            }
-        }
+        // Equation is auto-built in the UI from the Total column — do not mark students wrong for it.
 
         if (array_key_exists('x_value', $expected)) {
             $ok = $this->valueMatches($expected['x_value'], $submission['x_value'] ?? null);
@@ -216,15 +211,11 @@ class MmmCardService
             }
         }
 
-        $asksEquation = array_key_exists('equation', $expected);
-
         return [
             'ok' => $allOk,
             'cell_results' => $cellResults,
             'message' => $allOk
-                ? ($asksEquation
-                    ? 'Table and equation look good — well done.'
-                    : 'Table looks good — well done.')
+                ? 'Table looks good — well done.'
                 : 'Some cells are wrong (highlighted). Fix them and submit again.',
         ];
     }

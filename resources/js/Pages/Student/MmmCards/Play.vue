@@ -43,6 +43,31 @@ const allCorrect = ref(false);
 
 const usesVariable = computed(() => !! props.exercise?.uses_variable);
 
+const formatEqPart = (value) => {
+    const text = String(value ?? '').trim();
+    if (! text) {
+        return '…';
+    }
+    // Wrap if it starts with a minus so 2x+(-20+x) reads clearly.
+    if (text.startsWith('-')) {
+        return `(${text})`;
+    }
+
+    return text;
+};
+
+/** Built from the Total column — student does not type this. */
+const autoEquation = computed(() => {
+    const correctTotal = form.rows?.correct?.total;
+    const wrongTotal = form.rows?.wrong?.total;
+    const score = form.grand_total;
+    if (! String(correctTotal || '').trim() && ! String(wrongTotal || '').trim() && ! String(score || '').trim()) {
+        return '';
+    }
+
+    return `${formatEqPart(correctTotal)} + ${formatEqPart(wrongTotal)} = ${String(score || '').trim() || '…'}`;
+});
+
 watch(
     () => props.exercise?.id,
     () => {
@@ -90,7 +115,6 @@ const submit = async () => {
                 ]),
             ),
             grand_total: cleanMath(form.grand_total),
-            equation: cleanMath(form.equation),
             x_value: cleanMath(form.x_value),
         };
 
@@ -100,9 +124,6 @@ const submit = async () => {
         cellResults.value = data.cell_results || {};
         message.value = data.message || '';
         allCorrect.value = !! data.ok;
-        if (! data.ok && data.cell_results?.equation === false) {
-            message.value = `${data.message || ''} Tip: try 3x-20=25 or 2x+(x-20)=25.`.trim();
-        }
     } catch (e) {
         message.value = e?.response?.data?.message || 'Could not check the table. Try again.';
         allCorrect.value = false;
@@ -311,22 +332,20 @@ const canGoNext = computed(() => {
                     </table>
                 </div>
 
-                <div v-if="exercise.ask_equation || exercise.ask_x_value" class="mt-4 space-y-3">
-                    <div v-if="exercise.ask_equation">
+                <div
+                    v-if="exercise.show_auto_equation || exercise.ask_x_value"
+                    class="mt-4 space-y-3"
+                >
+                    <div v-if="exercise.show_auto_equation">
                         <label class="block text-xs font-bold uppercase tracking-wide text-slate-700">
                             Equation from the table
                         </label>
                         <p class="mt-0.5 text-[11px] text-slate-500">
-                            Add the Total column and set it equal to the score (example: 2x+(-20+x)=25 or 3x-20=25).
+                            Built automatically by adding the Total column. Fill the totals correctly — you do not need to type the equation.
                         </p>
-                        <input
-                            v-model="form.equation"
-                            type="text"
-                            class="mt-1 w-full max-w-xl rounded-md border px-3 py-2 font-mono text-sm font-semibold"
-                            :class="cellClass('equation')"
-                            placeholder="2x + (-20 + x) = 25"
-                            autocomplete="off"
-                        >
+                        <div class="mt-1 w-full max-w-xl rounded-md border border-teal-200 bg-teal-50 px-3 py-2 font-mono text-sm font-semibold text-teal-950">
+                            {{ autoEquation || '… + … = …' }}
+                        </div>
                     </div>
                     <div v-if="exercise.ask_x_value">
                         <label class="block text-xs font-bold uppercase tracking-wide text-slate-700">
