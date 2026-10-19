@@ -94,7 +94,9 @@ const submit = async () => {
             x_value: cleanMath(form.x_value),
         };
 
-        const { data } = await axios.post(props.check_url, payload);
+        const { data } = await axios.post(props.check_url, payload, {
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        });
         cellResults.value = data.cell_results || {};
         message.value = data.message || '';
         allCorrect.value = !! data.ok;

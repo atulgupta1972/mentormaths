@@ -201,7 +201,7 @@ class MmmCardService
         }
 
         if (array_key_exists('equation', $expected)) {
-            $ok = $this->valueMatches($expected['equation'], $submission['equation'] ?? null, isEquation: true);
+            $ok = $this->equationMatchesExpected($expected, $submission);
             $cellResults['equation'] = $ok;
             if (! $ok) {
                 $allOk = false;
@@ -300,12 +300,8 @@ class MmmCardService
             ]);
     }
 
-    private function valueMatches(mixed $expected, mixed $got, bool $isEquation = false): bool
+    private function valueMatches(mixed $expected, mixed $got): bool
     {
-        if ($isEquation) {
-            return $this->equationMatches($expected, $got);
-        }
-
         $candidates = is_array($expected) ? $expected : [$expected];
         foreach ($candidates as $candidate) {
             if ($candidate === null || $candidate === '') {
@@ -329,29 +325,58 @@ class MmmCardService
         return false;
     }
 
-    private function equationMatches(mixed $expected, mixed $got): bool
+    /**
+     * Accept any linear equation equivalent to (correct total)+(wrong total)=(score),
+     * or to any listed sample form in the exercise answers.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     */
+    private function equationMatchesExpected(array $expected, array $submission): bool
     {
+        $got = $submission['equation'] ?? null;
         $gotCanon = $this->equationCanonical($got);
         if ($gotCanon === null) {
             return false;
         }
 
-        $candidates = is_array($expected) ? $expected : [$expected];
+        // Primary: build target from the (already checked) table totals + score.
+        $correctTotal = data_get($submission, 'rows.correct.total');
+        $wrongTotal = data_get($submission, 'rows.wrong.total');
+        $score = $submission['grand_total'] ?? null;
+        if ($correctTotal !== null && $wrongTotal !== null && $score !== null && $score !== '') {
+            $fromTable = $this->equationCanonical(
+                '('.$correctTotal.')+('.$wrongTotal.')='.$score
+            );
+            if ($fromTable !== null && $fromTable === $gotCanon) {
+                return true;
+            }
+
+            // Same with explicit leading + on a negative wrong total: 2x+(-20+x)=25
+            $fromTableParen = $this->equationCanonical(
+                $correctTotal.'+('.$wrongTotal.')='.$score
+            );
+            if ($fromTableParen !== null && $fromTableParen === $gotCanon) {
+                return true;
+            }
+        }
+
+        // Fallback: listed acceptable strings in the exercise.
+        $candidates = $expected['equation'] ?? [];
+        if (! is_array($candidates)) {
+            $candidates = [$candidates];
+        }
         foreach ($candidates as $candidate) {
             if ($candidate === null || $candidate === '') {
                 continue;
             }
-
-            // Exact normalized string match (legacy).
+            $wantCanon = $this->equationCanonical($candidate);
+            if ($wantCanon !== null && $wantCanon === $gotCanon) {
+                return true;
+            }
             $wantExpr = $this->normalizeEquation($candidate);
             $gotExpr = $this->normalizeEquation($got);
             if ($wantExpr !== null && $gotExpr !== null && $wantExpr === $gotExpr) {
-                return true;
-            }
-
-            // Algebraic equivalence: any form of the same linear equation.
-            $wantCanon = $this->equationCanonical($candidate);
-            if ($wantCanon !== null && $wantCanon === $gotCanon) {
                 return true;
             }
         }

@@ -151,6 +151,7 @@ class MmmCardController extends Controller
             ...$result,
             'has_next' => $hasNext,
             'next_exercise' => $hasNext ? (int) $index + 2 : null,
+            'received_equation' => $validated['equation'] ?? null,
         ]);
     }
 }
