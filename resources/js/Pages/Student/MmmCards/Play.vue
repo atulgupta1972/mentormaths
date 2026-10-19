@@ -91,12 +91,12 @@ const resetTable = () => {
 };
 
 const goNext = () => {
-    const next = props.exercise_index + 2; // 1-based query param
-    router.get(
-        window.location.pathname,
-        { exercise: next },
-        { preserveScroll: true },
-    );
+    const next = Number(props.exercise_index) + 2; // 1-based query param
+    const url = props.is_staff_preview
+        ? route('admin.mmm-cards.play', props.card.id)
+        : route('student.mmm-cards.show', props.card.id);
+
+    router.get(url, { exercise: next }, { preserveScroll: true });
 };
 
 const accentRing = computed(() => ({
@@ -110,6 +110,14 @@ const accentBg = computed(() => ({
     amber: 'bg-amber-700',
     rose: 'bg-rose-700',
 }[props.card.accent] || 'bg-teal-700'));
+
+// Prefer live count over server has_next (stale after submit / older builds).
+const canGoNext = computed(() => {
+    const total = Number(props.card?.exercises_total ?? 0);
+    const index = Number(props.exercise_index ?? 0);
+
+    return total > 0 && index + 1 < total;
+});
 </script>
 
 <template>
@@ -267,13 +275,6 @@ const accentBg = computed(() => ({
                         {{ submitting ? 'Checking…' : 'Submit table' }}
                     </PrimaryButton>
                     <SecondaryButton type="button" @click="resetTable">Clear</SecondaryButton>
-                    <PrimaryButton
-                        v-if="allCorrect && has_next"
-                        type="button"
-                        @click="goNext"
-                    >
-                        Next sum
-                    </PrimaryButton>
                 </div>
 
                 <p
@@ -283,8 +284,24 @@ const accentBg = computed(() => ({
                 >
                     {{ message }}
                 </p>
+
+                <div
+                    v-if="allCorrect && canGoNext"
+                    class="mt-3 flex flex-wrap items-center gap-3 rounded-lg border-2 border-teal-400 bg-teal-50 px-4 py-3"
+                >
+                    <p class="text-sm font-semibold text-teal-950">
+                        Correct — continue to sum {{ exercise_index + 2 }} of {{ card.exercises_total }}.
+                    </p>
+                    <button
+                        type="button"
+                        class="rounded-md bg-teal-700 px-4 py-2 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-teal-800"
+                        @click="goNext"
+                    >
+                        Next sum →
+                    </button>
+                </div>
                 <p
-                    v-if="allCorrect && !has_next"
+                    v-else-if="allCorrect && !canGoNext"
                     class="mt-2 text-sm font-semibold text-teal-900"
                 >
                     You finished all sums on this method card.

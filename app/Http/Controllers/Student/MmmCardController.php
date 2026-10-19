@@ -59,6 +59,15 @@ class MmmCardController extends Controller
             $this->mmmCards->recordExercisePassed($user, $mmmCard, $exercise);
         }
 
-        return response()->json($result);
+        $mmmCard->loadMissing('exercises');
+        $orderedIds = $mmmCard->exercises->pluck('id')->values();
+        $index = $orderedIds->search((int) $exercise->id);
+        $hasNext = $index !== false && $index < $orderedIds->count() - 1;
+
+        return response()->json([
+            ...$result,
+            'has_next' => $hasNext,
+            'next_exercise' => $hasNext ? (int) $index + 2 : null,
+        ]);
     }
 }
