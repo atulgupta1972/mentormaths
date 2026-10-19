@@ -365,6 +365,57 @@ class WrittenSheetServiceTest extends TestCase
         $this->assertNotNull(Question::query()->find($question->id));
     }
 
+    public function test_delete_sheet_removes_worksheet_pdf_and_exclusive_questions(): void
+    {
+        Storage::fake('public');
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->generatePdf($service->createFromTopic($topic, [$question->id], $admin));
+        $worksheetId = $worksheet->id;
+        $questionId = $question->id;
+        $pdfPath = $worksheet->written_pdf_path;
+        Storage::disk('public')->put($pdfPath, 'pdf content');
+
+        $this->assertTrue($service->canDeleteSheet($worksheet));
+
+        $service->deleteSheet($worksheet);
+
+        $this->assertNull(Worksheet::query()->find($worksheetId));
+        $this->assertNull(Question::query()->find($questionId));
+        $this->assertFalse(Storage::disk('public')->exists($pdfPath));
+    }
+
+    public function test_cannot_delete_sheet_after_student_upload(): void
+    {
+        [$topic, $question, $admin] = $this->seedTopicQuestion();
+
+        $service = app(WrittenSheetService::class);
+        $worksheet = $service->generatePdf($service->createFromTopic($topic, [$question->id], $admin));
+        $enrollment = $this->seedEnrollment($topic);
+
+        $assignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $admin->id,
+            'assigned_at' => now(),
+            'due_date' => now()->addWeek()->toDateString(),
+            'status' => SetAssignment::STATUS_ASSIGNED,
+        ]);
+
+        WrittenSubmission::query()->create([
+            'set_assignment_id' => $assignment->id,
+            'status' => WrittenSubmission::STATUS_UPLOADED,
+            'upload_paths' => ['written-submissions/test.jpg'],
+            'uploaded_at' => now(),
+        ]);
+
+        $this->assertFalse($service->canDeleteSheet($worksheet));
+
+        $this->expectException(\InvalidArgumentException::class);
+        $service->deleteSheet($worksheet);
+    }
+
     private function seedEnrollment(SyllabusTopic $topic): StudentEnrollment
     {
         $student = Student::query()->create([

@@ -499,6 +499,34 @@ class WrittenSheetService
         return $worksheet->written_pdf_path !== null || $worksheet->questions()->exists();
     }
 
+    public function canDeleteSheet(Worksheet $worksheet): bool
+    {
+        return $worksheet->isWritten() && ! $this->hasStudentSubmissions($worksheet);
+    }
+
+    public function deleteSheet(Worksheet $worksheet): void
+    {
+        if (! $worksheet->isWritten()) {
+            throw new \InvalidArgumentException('This is not a written sheet.');
+        }
+
+        if ($this->hasStudentSubmissions($worksheet)) {
+            throw new \InvalidArgumentException(
+                'Cannot delete this sheet after a student has uploaded their written work.',
+            );
+        }
+
+        if ($worksheet->written_pdf_path) {
+            Storage::disk('public')->delete($worksheet->written_pdf_path);
+        }
+
+        Storage::disk('public')->deleteDirectory('written-sheets/'.$worksheet->id);
+
+        $this->deleteQuestionsExclusiveToWorksheet($worksheet);
+
+        $worksheet->delete();
+    }
+
     /**
      * @return array{type: string, saved: list<Question>, diagram_count: int, missing_diagram_count: int}
      */
@@ -947,6 +975,7 @@ class WrittenSheetService
             'can_reimport_zip' => $this->canReimportZip($worksheet),
             'can_reimport_json' => $this->canReimportZip($worksheet),
             'can_reset_sheet' => $this->canResetSheet($worksheet),
+            'can_delete_sheet' => $this->canDeleteSheet($worksheet),
             'can_edit_questions' => $this->canEditQuestions($worksheet),
             'can_update_answers' => $this->canUpdateAnswers($worksheet),
             'can_split' => $this->canSplit($worksheet),

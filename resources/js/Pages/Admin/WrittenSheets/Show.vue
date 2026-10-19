@@ -47,6 +47,7 @@ const verifyForm = useForm({
     master_profile: props.sheet.tier || 'starter',
 });
 const rejectForm = useForm({});
+const deleteForm = useForm({});
 const replacePdfForm = useForm({ pdf_import_token: '' });
 const removePdfForm = useForm({});
 const reimportZipForm = useForm({ pack: null });
@@ -562,6 +563,17 @@ const verify = () => {
 
 const reject = () => {
     rejectForm.post(route('admin.written-sheets.reject', props.sheet.id), { preserveScroll: true });
+};
+
+const deleteSheet = () => {
+    const code = props.sheet.set_code || 'this written sheet';
+    if (!window.confirm(
+        `Delete ${code} permanently? Questions used only on this sheet will be removed. This cannot be undone.`,
+    )) {
+        return;
+    }
+
+    deleteForm.delete(route('admin.written-sheets.destroy', props.sheet.id));
 };
 
 const onStudentChange = () => {
@@ -1125,7 +1137,21 @@ const progressLabel = (p) => {
                         >
                             Send back to draft
                         </DangerButton>
+                        <DangerButton
+                            v-if="sheet.can_delete_sheet"
+                            type="button"
+                            :disabled="deleteForm.processing"
+                            @click="deleteSheet"
+                        >
+                            {{ deleteForm.processing ? 'Deleting…' : 'Delete sheet' }}
+                        </DangerButton>
                     </div>
+                    <p
+                        v-if="sheet.has_student_submissions"
+                        class="mt-2 text-xs text-amber-800"
+                    >
+                        Delete is unavailable after a student has uploaded written work.
+                    </p>
 
                     <div
                         v-if="sheet.can_split && showSplitPanel"

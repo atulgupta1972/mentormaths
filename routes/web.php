@@ -400,6 +400,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::delete('/written-sheets/{worksheet}/questions/{question}', [WrittenSheetController::class, 'destroyQuestion'])->name('written-sheets.questions.destroy');
     Route::post('/written-sheets/{worksheet}/verify', [WrittenSheetController::class, 'verify'])->name('written-sheets.verify');
     Route::post('/written-sheets/{worksheet}/reject', [WrittenSheetController::class, 'reject'])->name('written-sheets.reject');
+    Route::delete('/written-sheets/{worksheet}', [WrittenSheetController::class, 'destroy'])->name('written-sheets.destroy');
     Route::get('/written-sheets/{worksheet}/download', [WrittenSheetController::class, 'download'])->name('written-sheets.download');
     Route::get('/written-sheets/{worksheet}/print', [WrittenSheetController::class, 'print'])->name('written-sheets.print');
     Route::post('/written-assignments/{assignment}/manual-grade', [WrittenSheetController::class, 'manualGrade'])->name('written-assignments.manual-grade');

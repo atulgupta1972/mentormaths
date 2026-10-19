@@ -814,6 +814,23 @@ class WrittenSheetController extends Controller
         return back()->with('success', 'Written sheet sent back to draft.');
     }
 
+    public function destroy(Worksheet $worksheet): RedirectResponse
+    {
+        abort_unless($worksheet->isWritten(), 404);
+
+        $code = $worksheet->set_code ?: 'Written sheet';
+
+        try {
+            $this->writtenSheetService->deleteSheet($worksheet);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.written-sheets.index')
+            ->with('success', "{$code} deleted.");
+    }
+
     public function replacePdf(Request $request, Worksheet $worksheet): RedirectResponse
     {
         abort_unless($worksheet->isWritten(), 404);
