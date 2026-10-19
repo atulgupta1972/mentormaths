@@ -302,6 +302,10 @@ class MmmCardService
 
     private function valueMatches(mixed $expected, mixed $got, bool $isEquation = false): bool
     {
+        if ($isEquation) {
+            return $this->equationMatches($expected, $got);
+        }
+
         $candidates = is_array($expected) ? $expected : [$expected];
         foreach ($candidates as $candidate) {
             if ($candidate === null || $candidate === '') {
@@ -314,14 +318,40 @@ class MmmCardService
                 return true;
             }
 
-            $wantExpr = $isEquation
-                ? $this->normalizeEquation($candidate)
-                : $this->normalizeExpression($candidate);
-            $gotExpr = $isEquation
-                ? $this->normalizeEquation($got)
-                : $this->normalizeExpression($got);
+            $wantExpr = $this->normalizeExpression($candidate);
+            $gotExpr = $this->normalizeExpression($got);
 
             if ($wantExpr !== null && $gotExpr !== null && $wantExpr === $gotExpr) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function equationMatches(mixed $expected, mixed $got): bool
+    {
+        $gotCanon = $this->equationCanonical($got);
+        if ($gotCanon === null) {
+            return false;
+        }
+
+        $candidates = is_array($expected) ? $expected : [$expected];
+        foreach ($candidates as $candidate) {
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+
+            // Exact normalized string match (legacy).
+            $wantExpr = $this->normalizeEquation($candidate);
+            $gotExpr = $this->normalizeEquation($got);
+            if ($wantExpr !== null && $gotExpr !== null && $wantExpr === $gotExpr) {
+                return true;
+            }
+
+            // Algebraic equivalence: any form of the same linear equation.
+            $wantCanon = $this->equationCanonical($candidate);
+            if ($wantCanon !== null && $wantCanon === $gotCanon) {
                 return true;
             }
         }
@@ -357,14 +387,19 @@ class MmmCardService
             return null;
         }
 
-        $text = strtolower(trim((string) $value));
+        $text = trim((string) $value);
         if ($text === '') {
             return null;
         }
 
-        $text = str_replace(['−', '–', '—'], '-', $text);
-        $text = preg_replace('/\s+/', '', $text) ?? $text;
-        $text = str_replace(['×', '*'], '', $text);
+        // Invisible / odd spaces and unicode lookalikes from phone keyboards.
+        $text = str_replace(["\u{00A0}", "\u{200B}", "\u{200C}", "\u{200D}", "\u{FEFF}"], '', $text);
+        $text = str_replace(['𝑥', 'ｘ', 'Χ', 'х'], 'x', $text);
+        $text = strtolower($text);
+        $text = str_replace(['−', '–', '—', '﹣', '－'], '-', $text);
+        $text = str_replace(['＝', '﹦'], '=', $text);
+        $text = preg_replace('/\s+/u', '', $text) ?? $text;
+        $text = str_replace(['×', '*', '⋅'], '', $text);
 
         // -(20-x) → -20+x
         $text = preg_replace('/-\((\d+)-x\)/', '-$1+x', $text) ?? $text;
@@ -376,6 +411,8 @@ class MmmCardService
 
         $text = str_replace(['(', ')'], '', $text);
         $text = str_replace(['+-', '-+'], '-', $text);
+        // Collapse accidental double signs from typing.
+        $text = str_replace(['--', '++'], ['+', '+'], $text);
 
         return $text;
     }
@@ -394,5 +431,88 @@ class MmmCardService
         sort($forms);
 
         return $forms[0];
+    }
+
+    /**
+     * Canonical ax+b=0 form for a linear equation in x (sign-normalized).
+     *
+     * @return array{0: int, 1: int}|null
+     */
+    private function equationCanonical(mixed $value): ?array
+    {
+        $text = $this->normalizeExpression($value);
+        if ($text === null || ! str_contains($text, '=')) {
+            return null;
+        }
+
+        [$left, $right] = array_pad(explode('=', $text, 2), 2, '');
+        $leftCoeffs = $this->linearCoeffs($left ?? '');
+        $rightCoeffs = $this->linearCoeffs($right ?? '');
+        if ($leftCoeffs === null || $rightCoeffs === null) {
+            return null;
+        }
+
+        $a = $leftCoeffs[0] - $rightCoeffs[0];
+        $b = $leftCoeffs[1] - $rightCoeffs[1];
+
+        if ($a < 0 || ($a === 0 && $b < 0)) {
+            $a = -$a;
+            $b = -$b;
+        }
+
+        return [$a, $b];
+    }
+
+    /**
+     * Parse ax+b style expression into [a, b].
+     *
+     * @return array{0: int, 1: int}|null
+     */
+    private function linearCoeffs(string $expr): ?array
+    {
+        $expr = trim($expr);
+        if ($expr === '') {
+            return [0, 0];
+        }
+
+        if (preg_match('/[^0-9x+\-]/', $expr)) {
+            return null;
+        }
+
+        if ($expr[0] !== '+' && $expr[0] !== '-') {
+            $expr = '+'.$expr;
+        }
+
+        if (! preg_match_all('/([+-])(\d*)(x?)/', $expr, $matches, PREG_SET_ORDER)) {
+            return null;
+        }
+
+        $consumed = '';
+        $a = 0;
+        $b = 0;
+
+        foreach ($matches as $match) {
+            $sign = $match[1] === '-' ? -1 : 1;
+            $digits = $match[2];
+            $hasX = $match[3] === 'x';
+
+            if ($hasX) {
+                $num = $digits === '' ? 1 : (int) $digits;
+                $a += $sign * $num;
+            } else {
+                if ($digits === '') {
+                    return null;
+                }
+                $b += $sign * (int) $digits;
+            }
+
+            $consumed .= $match[0];
+        }
+
+        if ($consumed !== $expr) {
+            return null;
+        }
+
+        return [$a, $b];
     }
 }
