@@ -514,8 +514,8 @@ const footerColspan = computed(() => {
                             {{ exercise.equation_prompt || 'Write the equation' }}
                         </label>
                         <p class="mt-0.5 text-[11px] text-slate-500">
-                            Add the <span class="font-semibold">Coins (in x)</span> column and set it equal to total coins
-                            (example: <span class="font-mono">2x+3x+4x=27</span>).
+                            Add the <span class="font-semibold">Coins (in x)</span> column and set it equal to total coins.
+                            Write the equation yourself — the system will check it.
                         </p>
                         <input
                             v-model="form.equation"
@@ -523,7 +523,7 @@ const footerColspan = computed(() => {
                             inputmode="text"
                             class="mt-1 w-full max-w-xl rounded-md border px-3 py-2 font-mono text-sm font-semibold"
                             :class="cellClass('equation')"
-                            placeholder="2x+3x+4x=27"
+                            placeholder=""
                             autocomplete="off"
                         >
                     </div>
