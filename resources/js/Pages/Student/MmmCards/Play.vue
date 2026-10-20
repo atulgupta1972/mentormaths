@@ -147,6 +147,9 @@ const submit = async () => {
             .replace(/[−–—﹣－]/g, '-')
             .replace(/[＝﹦]/g, '=')
             .replace(/[＋﹢]/g, '+')
+            // × after a digit (2×) or as a term (×+) is the variable x — not multiply.
+            .replace(/(\d)[×⋅]/g, '$1x')
+            .replace(/[×⋅](?=[+=\-)]|$)/g, 'x')
             .replace(/[×⋅]/g, '*')
             .replace(/\s+/g, '');
 

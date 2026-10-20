@@ -405,9 +405,34 @@ class MmmCardService
     private function equationMatchesExpected(array $expected, array $submission): bool
     {
         $got = $submission['equation'] ?? null;
+        // Allow equation typed into the Total coins cell by mistake.
+        if (($got === null || trim((string) $got) === '')
+            && is_string($submission['grand_count'] ?? null)
+            && str_contains((string) $submission['grand_count'], '=')) {
+            $got = $submission['grand_count'];
+        }
+
         $gotCanon = $this->equationCanonical($got);
         if ($gotCanon === null) {
             return false;
+        }
+
+        // Authoritative money target from exercise answers: 2x+3x+4x=27
+        $answerParts = [];
+        foreach ($expected as $row) {
+            if (! is_array($row) || ! array_key_exists('count_x', $row)) {
+                continue;
+            }
+            $cx = $row['count_x'];
+            $answerParts[] = is_array($cx) ? (string) ($cx[0] ?? '') : (string) $cx;
+        }
+        $answerParts = array_values(array_filter($answerParts, fn ($p) => $p !== ''));
+        if ($answerParts !== [] && array_key_exists('grand_count', $expected)) {
+            $target = implode('+', $answerParts).'='.$expected['grand_count'];
+            $targetCanon = $this->equationCanonical($target);
+            if ($targetCanon !== null && $targetCanon === $gotCanon) {
+                return true;
+            }
         }
 
         // Marks: build target from the Total column + score.
@@ -431,7 +456,7 @@ class MmmCardService
             }
         }
 
-        // Money: sum Coins (in x) column = total coins.
+        // Money: sum submitted Coins (in x) = total coins (typed or from answers).
         $countXParts = [];
         foreach ($submission['rows'] ?? [] as $cells) {
             if (! is_array($cells)) {
@@ -443,6 +468,9 @@ class MmmCardService
             }
         }
         $totalCoins = $submission['grand_count'] ?? null;
+        if (! is_string($totalCoins) || $totalCoins === '' || str_contains($totalCoins, '=')) {
+            $totalCoins = $expected['grand_count'] ?? null;
+        }
         if ($countXParts !== [] && $totalCoins !== null && $totalCoins !== '') {
             $fromCountX = $this->equationCanonical(implode('+', $countXParts).'='.$totalCoins);
             if ($fromCountX !== null && $fromCountX === $gotCanon) {
@@ -517,6 +545,14 @@ class MmmCardService
         $text = str_replace(['＝', '﹦', '≟'], '=', $text);
         $text = str_replace(['＋', '﹢'], '+', $text);
         $text = preg_replace('/\s+/u', '', $text) ?? $text;
+
+        // × / ⋅ after a digit or as a bare term is usually the variable x (2× → 2x).
+        // Remaining × are true multiplication.
+        $text = preg_replace('/(\d)[×⋅]/u', '$1x', $text) ?? $text;
+        $text = preg_replace('/[×⋅](?=[+=\-)]|$)/u', 'x', $text) ?? $text;
+        // Recover if a client already turned variable × into *: 2*+3*+4*=27 → 2x+3x+4x=27
+        $text = preg_replace('/(\d)\*(?=[+=\-]|$)/', '$1x', $text) ?? $text;
+        $text = preg_replace('/(\d)\*\+/', '$1x+', $text) ?? $text;
 
         // Keep multiplication meaning before dropping the sign: -1*(20-x) and -1(20-x)
         $text = str_replace(['×', '⋅'], '*', $text);

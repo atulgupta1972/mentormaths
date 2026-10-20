@@ -247,6 +247,33 @@ class MmmCardServiceTest extends TestCase
             'x_value' => '3',
         ]);
         $this->assertTrue($simplified['ok'], json_encode($simplified['cell_results']));
+
+        // Multiply-sign × used as variable (or client cleaned × → *) must still pass.
+        $timesAsX = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => '2x', 'count' => '6', 'total' => '12'],
+                'rs5' => ['denomination' => '5', 'count_x' => '3x', 'count' => '9', 'total' => '45'],
+                'rs10' => ['denomination' => '10', 'count_x' => '4x', 'count' => '12', 'total' => '120'],
+            ],
+            'grand_count' => '27',
+            'grand_total' => '177',
+            'equation' => '2×+3×+4×=27',
+            'x_value' => '3',
+        ]);
+        $this->assertTrue($timesAsX['ok'], json_encode($timesAsX['cell_results']));
+
+        $starArtifact = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => '2x', 'count' => '6', 'total' => '12'],
+                'rs5' => ['denomination' => '5', 'count_x' => '3x', 'count' => '9', 'total' => '45'],
+                'rs10' => ['denomination' => '10', 'count_x' => '4x', 'count' => '12', 'total' => '120'],
+            ],
+            'grand_count' => '27',
+            'grand_total' => '177',
+            'equation' => '2*+3*+4*=27',
+            'x_value' => '3',
+        ]);
+        $this->assertTrue($starArtifact['ok'], json_encode($starArtifact['cell_results']));
     }
 
     public function test_my_money_condition_sum_teaches_equation(): void
