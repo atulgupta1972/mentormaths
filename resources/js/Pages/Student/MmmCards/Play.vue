@@ -157,7 +157,8 @@ const submit = async () => {
         // Encode + / = so some hosts/WAFs do not strip or alter the equation field.
         const equationSafe = equationClean
             .replace(/\+/g, '__P__')
-            .replace(/=/g, '__E__');
+            .replace(/=/g, '__E__')
+            .replace(/\//g, '__D__');
 
         const payload = {
             exercise_id: props.exercise.id,

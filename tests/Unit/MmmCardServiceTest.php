@@ -312,7 +312,7 @@ class MmmCardServiceTest extends TestCase
 
         $this->assertStringContainsString('1/2', $exercise->question_text);
 
-        $result = $service->checkSubmission($card, $exercise, [
+        $lcmForm = $service->checkSubmission($card, $exercise, [
             'rows' => [
                 'rs2' => ['denomination' => '2', 'count_x' => '6x', 'count' => '18', 'total' => '36'],
                 'rs5' => ['denomination' => '5', 'count_x' => '4x', 'count' => '12', 'total' => '60'],
@@ -323,8 +323,20 @@ class MmmCardServiceTest extends TestCase
             'equation' => '6x+4x+3x=39',
             'x_value' => '3',
         ]);
+        $this->assertTrue($lcmForm['ok'], json_encode($lcmForm['cell_results']));
 
-        $this->assertTrue($result['ok'], json_encode($result['cell_results']));
+        $fractionForm = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => 'x/2', 'count' => '18', 'total' => '36'],
+                'rs5' => ['denomination' => '5', 'count_x' => 'x/3', 'count' => '12', 'total' => '60'],
+                'rs10' => ['denomination' => '10', 'count_x' => 'x/4', 'count' => '9', 'total' => '90'],
+            ],
+            'grand_count' => '39',
+            'grand_total' => '186',
+            'equation' => 'x/2+x/3+x/4=39',
+            'x_value' => '36',
+        ]);
+        $this->assertTrue($fractionForm['ok'], json_encode($fractionForm['cell_results']));
     }
 
     public function test_my_money_condition_sum_teaches_equation(): void

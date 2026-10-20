@@ -264,6 +264,29 @@ class MmmCardService
             }
         }
 
+        // Coins (in x) must agree with No. of coins at the chosen x (blocks 6x with x=36, etc.).
+        if (! empty($expected['check_equation']) && ($cellResults['x_value'] ?? false)) {
+            $xGot = $submission['x_value'] ?? null;
+            foreach ($rows as $row) {
+                $rowKey = (string) ($row['key'] ?? '');
+                if ($rowKey === '' || ! is_array($expected[$rowKey] ?? null)) {
+                    continue;
+                }
+                if (! array_key_exists('count_x', $expected[$rowKey]) || ! array_key_exists('count', $expected[$rowKey])) {
+                    continue;
+                }
+                $expr = data_get($submission, "rows.{$rowKey}.count_x");
+                $count = data_get($submission, "rows.{$rowKey}.count");
+                $eval = $this->evaluateExprAtX($expr, $xGot);
+                $countNum = $this->normalizeNumber($count);
+                if ($eval === null || $countNum === null || abs($eval - (float) $countNum) > 0.0001) {
+                    $cellResults["{$rowKey}.count_x"] = false;
+                    $cellResults['x_value'] = false;
+                    $allOk = false;
+                }
+            }
+        }
+
         $message = 'Table looks good — well done.';
         if (! $allOk) {
             if (($cellResults['equation'] ?? true) === false) {
@@ -424,7 +447,7 @@ class MmmCardService
             }
             $text = (string) $submission[$key];
             // Frontend may encode + / = so proxies do not mangle them.
-            $text = str_replace(['__P__', '__E__'], ['+', '='], $text);
+            $text = str_replace(['__P__', '__E__', '__D__'], ['+', '=', '/'], $text);
 
             return $text;
         }
@@ -679,13 +702,20 @@ class MmmCardService
             $text = '-'.$m[1].'+x';
         }
 
+        // Fraction forms before dropping parentheses: (1/2)x → 1/2x
+        $text = preg_replace('/\((\d+)\/(\d+)\)x/', '$1/$2x', $text) ?? $text;
         $text = str_replace(['(', ')'], '', $text);
+
+        // School forms: 1/2x → x/2 ; 3/4x → 3x/4
+        $text = preg_replace('/(?<![0-9x\/])1\/(\d+)x/', 'x/$1', $text) ?? $text;
+        $text = preg_replace('/(?<![0-9x\/])(\d+)\/(\d+)x/', '$1x/$2', $text) ?? $text;
+
         $text = str_replace(['+-', '-+'], '-', $text);
         $text = str_replace(['--', '++'], ['+', '+'], $text);
         $text = str_replace(['+1x', '-1x'], ['+x', '-x'], $text);
 
-        // Drop anything that is not part of a linear expression / equation.
-        $text = preg_replace('/[^0-9x=+\-]/', '', $text) ?? $text;
+        // Keep / for forms like x/2 and 3x/4.
+        $text = preg_replace('/[^0-9x=+\-\/]/', '', $text) ?? $text;
 
         return $text === '' ? null : $text;
     }
@@ -708,6 +738,7 @@ class MmmCardService
 
     /**
      * Canonical ax+b=0 form for a linear equation in x (sign-normalized).
+     * Supports fractions such as x/2+x/3+x/4=39.
      *
      * @return array{0: int, 1: int}|null
      */
@@ -719,6 +750,19 @@ class MmmCardService
         }
 
         [$left, $right] = array_pad(explode('=', $text, 2), 2, '');
+
+        if (str_contains($text, '/')) {
+            $leftCoeffs = $this->linearCoeffsRational($left ?? '');
+            $rightCoeffs = $this->linearCoeffsRational($right ?? '');
+            if ($leftCoeffs === null || $rightCoeffs === null) {
+                return null;
+            }
+            $a = $leftCoeffs[0] - $rightCoeffs[0];
+            $b = $leftCoeffs[1] - $rightCoeffs[1];
+
+            return $this->canonicalIntsFromFloats($a, $b);
+        }
+
         $leftCoeffs = $this->linearCoeffs($left ?? '');
         $rightCoeffs = $this->linearCoeffs($right ?? '');
         if ($leftCoeffs === null || $rightCoeffs === null) {
@@ -734,6 +778,121 @@ class MmmCardService
         }
 
         return [$a, $b];
+    }
+
+    /**
+     * @return array{0: int, 1: int}|null
+     */
+    private function canonicalIntsFromFloats(float $a, float $b): ?array
+    {
+        $scale = 1000000;
+        $ai = (int) round($a * $scale);
+        $bi = (int) round($b * $scale);
+        if ($ai === 0 && $bi === 0) {
+            return [0, 0];
+        }
+        $g = $this->gcd(abs($ai), abs($bi));
+        if ($g > 1) {
+            $ai = intdiv($ai, $g);
+            $bi = intdiv($bi, $g);
+        }
+        if ($ai < 0 || ($ai === 0 && $bi < 0)) {
+            $ai = -$ai;
+            $bi = -$bi;
+        }
+
+        return [$ai, $bi];
+    }
+
+    private function gcd(int $a, int $b): int
+    {
+        while ($b !== 0) {
+            [$a, $b] = [$b, $a % $b];
+        }
+
+        return $a === 0 ? 1 : abs($a);
+    }
+
+    /**
+     * Parse ax+b with optional fractional x terms (x/2, 3x/4) into float [a, b].
+     *
+     * @return array{0: float, 1: float}|null
+     */
+    private function linearCoeffsRational(string $expr): ?array
+    {
+        $expr = trim($expr);
+        if ($expr === '') {
+            return [0.0, 0.0];
+        }
+
+        if (preg_match('/[^0-9x+\-\/]/', $expr)) {
+            return null;
+        }
+
+        if ($expr[0] !== '+' && $expr[0] !== '-') {
+            $expr = '+'.$expr;
+        }
+
+        // +6x/4, +x/2, +6x, +12, -x
+        if (! preg_match_all('/([+-])(?:(\d*)x(?:\/(\d+))?|(\d+))/', $expr, $matches, PREG_SET_ORDER)) {
+            return null;
+        }
+
+        $consumed = '';
+        $a = 0.0;
+        $b = 0.0;
+
+        foreach ($matches as $match) {
+            $sign = $match[1] === '-' ? -1.0 : 1.0;
+            $consumed .= $match[0];
+
+            if (($match[4] ?? '') !== '') {
+                $b += $sign * (float) $match[4];
+
+                continue;
+            }
+
+            $num = ($match[2] ?? '') === '' ? 1 : (int) $match[2];
+            $den = ($match[3] ?? '') === '' ? 1 : (int) $match[3];
+            if ($den === 0) {
+                return null;
+            }
+            $a += $sign * ($num / $den);
+        }
+
+        if ($consumed !== $expr) {
+            return null;
+        }
+
+        return [$a, $b];
+    }
+
+    /**
+     * Evaluate a linear expression in x (supports 6x, x/2, (1/2)x).
+     */
+    private function evaluateExprAtX(mixed $expr, mixed $xValue): ?float
+    {
+        $xNum = $this->normalizeNumber($xValue);
+        if ($xNum === null) {
+            return null;
+        }
+        $text = $this->normalizeExpression($expr);
+        if ($text === null || str_contains($text, '=')) {
+            return null;
+        }
+
+        if (str_contains($text, '/')) {
+            $coeffs = $this->linearCoeffsRational($text);
+        } else {
+            $intCoeffs = $this->linearCoeffs($text);
+            $coeffs = $intCoeffs === null ? null : [(float) $intCoeffs[0], (float) $intCoeffs[1]];
+        }
+
+        if ($coeffs === null) {
+            return null;
+        }
+
+        return $coeffs[0] * (float) $xNum + $coeffs[1];
     }
 
     /**
