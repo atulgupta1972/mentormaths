@@ -22,6 +22,10 @@ const schema = computed(() => props.card.table_schema || {});
 const rows = computed(() => schema.value.rows || []);
 const columns = computed(() => schema.value.columns || []);
 
+const hasFixedLabelColumn = computed(() => columns.value.some(
+    (col) => col.key === 'label' && col.fixed,
+));
+
 const editableFields = computed(() => {
     const fields = columns.value
         .filter((col) => col.key && col.key !== 'label' && ! col.fixed)
@@ -29,6 +33,8 @@ const editableFields = computed(() => {
 
     return fields.length ? fields : ['marks', 'count', 'total'];
 });
+
+const fillsDenomination = computed(() => editableFields.value.includes('denomination'));
 
 /** Columns before the value columns — used for footer colspan. */
 const leadingColCount = computed(() => {
@@ -271,7 +277,10 @@ const footerColspan = computed(() => {
                         </thead>
                         <tbody>
                             <tr v-for="row in rows" :key="`sketch-${row.key}`">
-                                <td class="border border-slate-200 bg-slate-50 px-2 py-1.5 font-semibold">
+                                <td
+                                    v-if="hasFixedLabelColumn"
+                                    class="border border-slate-200 bg-slate-50 px-2 py-1.5 font-semibold"
+                                >
                                     {{ row.label }}
                                 </td>
                                 <td
@@ -335,6 +344,9 @@ const footerColspan = computed(() => {
                 >
                     {{ exercise.variable_tip }}
                 </p>
+                <p v-else-if="fillsDenomination" class="mt-2 text-xs text-slate-500">
+                    Write each denomination in ₹ (number only, e.g. 2, 5, 10), then counts and totals. Wrong cells will be highlighted.
+                </p>
                 <p v-else class="mt-2 text-xs text-slate-500">
                     Fill numbers from the question. Row headings are given. Then submit the table.
                 </p>
@@ -358,7 +370,10 @@ const footerColspan = computed(() => {
                         </thead>
                         <tbody>
                             <tr v-for="row in rows" :key="row.key">
-                                <td class="border border-slate-300 bg-slate-50 px-2 py-1.5 font-semibold text-slate-900">
+                                <td
+                                    v-if="hasFixedLabelColumn"
+                                    class="border border-slate-300 bg-slate-50 px-2 py-1.5 font-semibold text-slate-900"
+                                >
                                     {{ row.label }}
                                 </td>
                                 <td

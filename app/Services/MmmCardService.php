@@ -245,12 +245,20 @@ class MmmCardService
             }
         }
 
+        $message = 'Table looks good — well done.';
+        if (! $allOk) {
+            $denomWrong = collect($cellResults)
+                ->filter(fn ($ok, $key) => ! $ok && str_ends_with((string) $key, '.denomination'))
+                ->isNotEmpty();
+            $message = $denomWrong
+                ? 'Check Denomination (in ₹) — wrong cells are highlighted. Use the number only (e.g. 2, 5, 10).'
+                : 'Some cells are wrong (highlighted). Fix them and submit again.';
+        }
+
         return [
             'ok' => $allOk,
             'cell_results' => $cellResults,
-            'message' => $allOk
-                ? 'Table looks good — well done.'
-                : 'Some cells are wrong (highlighted). Fix them and submit again.',
+            'message' => $message,
         ];
     }
 
@@ -440,6 +448,8 @@ class MmmCardService
         $text = trim((string) $value);
         $text = str_replace([',', ' '], '', $text);
         $text = str_replace(['−', '–'], '-', $text);
+        // Allow "₹2", "Rs.5", "rs 10" for denomination cells.
+        $text = preg_replace('/^(₹|rs\.?)/iu', '', $text) ?? $text;
 
         if ($text === '' || ! is_numeric($text)) {
             return null;

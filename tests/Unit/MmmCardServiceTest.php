@@ -163,6 +163,39 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($result['ok'], json_encode($result['cell_results']));
     }
 
+    public function test_my_money_sum3_requires_student_denomination(): void
+    {
+        $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 3)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $payload = $service->playPayload($card, null, 2);
+        $this->assertSame('Denomination (in ₹)', $payload['card']['table_schema']['columns'][0]['label'] ?? null);
+        $this->assertSame('denomination', $payload['card']['table_schema']['columns'][0]['key'] ?? null);
+
+        $wrong = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '5', 'count' => '8', 'total' => '16'],
+                'rs5' => ['denomination' => '5', 'count' => '2', 'total' => '10'],
+                'rs10' => ['denomination' => '10', 'count' => '4', 'total' => '40'],
+            ],
+            'grand_total' => '66',
+        ]);
+        $this->assertFalse($wrong['ok']);
+        $this->assertFalse($wrong['cell_results']['rs2.denomination']);
+        $this->assertStringContainsString('Denomination', $wrong['message']);
+
+        $ok = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '₹2', 'count' => '8', 'total' => '16'],
+                'rs5' => ['denomination' => '5', 'count' => '2', 'total' => '10'],
+                'rs10' => ['denomination' => '10', 'count' => '4', 'total' => '40'],
+            ],
+            'grand_total' => '66',
+        ]);
+        $this->assertTrue($ok['ok'], json_encode($ok['cell_results']));
+    }
+
     public function test_my_money_ratio_exercise_checks_out(): void
     {
         $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
@@ -170,14 +203,15 @@ class MmmCardServiceTest extends TestCase
         $service = app(MmmCardService::class);
 
         $payload = $service->playPayload($card, null, 5);
+        $this->assertSame('Denomination (in ₹)', $payload['card']['table_schema']['columns'][0]['label'] ?? null);
         $this->assertSame('Ratio of coins', $payload['card']['table_schema']['columns'][1]['label'] ?? null);
         $this->assertTrue($payload['card']['table_schema']['show_grand_count'] ?? false);
 
         $result = $service->checkSubmission($card, $exercise, [
             'rows' => [
-                'rs2' => ['ratio' => '2', 'count' => '6', 'total' => '12'],
-                'rs5' => ['ratio' => '3', 'count' => '9', 'total' => '45'],
-                'rs10' => ['ratio' => '4', 'count' => '12', 'total' => '120'],
+                'rs2' => ['denomination' => '2', 'ratio' => '2', 'count' => '6', 'total' => '12'],
+                'rs5' => ['denomination' => '5', 'ratio' => '3', 'count' => '9', 'total' => '45'],
+                'rs10' => ['denomination' => '10', 'ratio' => '4', 'count' => '12', 'total' => '120'],
             ],
             'grand_count' => '27',
             'grand_total' => '177',
@@ -194,9 +228,9 @@ class MmmCardServiceTest extends TestCase
 
         $result = $service->checkSubmission($card, $exercise, [
             'rows' => [
-                'rs20' => ['ratio' => '2', 'count' => '10', 'total' => '200'],
-                'rs50' => ['ratio' => '3', 'count' => '15', 'total' => '750'],
-                'rs100' => ['ratio' => '4', 'count' => '20', 'total' => '2000'],
+                'rs20' => ['denomination' => '20', 'ratio' => '2', 'count' => '10', 'total' => '200'],
+                'rs50' => ['denomination' => '50', 'ratio' => '3', 'count' => '15', 'total' => '750'],
+                'rs100' => ['denomination' => '100', 'ratio' => '4', 'count' => '20', 'total' => '2000'],
             ],
             'grand_count' => '45',
             'grand_total' => '2950',
