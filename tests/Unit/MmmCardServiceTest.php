@@ -304,6 +304,29 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($tableProves['cell_results']['equation']);
     }
 
+    public function test_my_money_sum7_fraction_ratio(): void
+    {
+        $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 7)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $this->assertStringContainsString('1/2', $exercise->question_text);
+
+        $result = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => '6x', 'count' => '18', 'total' => '36'],
+                'rs5' => ['denomination' => '5', 'count_x' => '4x', 'count' => '12', 'total' => '60'],
+                'rs10' => ['denomination' => '10', 'count_x' => '3x', 'count' => '9', 'total' => '90'],
+            ],
+            'grand_count' => '39',
+            'grand_total' => '186',
+            'equation' => '6x+4x+3x=39',
+            'x_value' => '3',
+        ]);
+
+        $this->assertTrue($result['ok'], json_encode($result['cell_results']));
+    }
+
     public function test_my_money_condition_sum_teaches_equation(): void
     {
         $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
