@@ -52,6 +52,8 @@ class MmmCardController extends Controller
             'grand_total' => ['nullable'],
             'grand_count' => ['nullable'],
             'equation' => ['nullable', 'string', 'max:200'],
+            'coin_equation' => ['nullable', 'string', 'max:200'],
+            'eq' => ['nullable', 'string', 'max:200'],
             'x_value' => ['nullable', 'string', 'max:40'],
         ]);
 

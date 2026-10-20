@@ -274,6 +274,34 @@ class MmmCardServiceTest extends TestCase
             'x_value' => '3',
         ]);
         $this->assertTrue($starArtifact['ok'], json_encode($starArtifact['cell_results']));
+
+        // Encoded payload (WAF-safe) and missing equation field when table already proves it.
+        $encoded = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => '2x', 'count' => '6', 'total' => '12'],
+                'rs5' => ['denomination' => '5', 'count_x' => '3x', 'count' => '9', 'total' => '45'],
+                'rs10' => ['denomination' => '10', 'count_x' => '4x', 'count' => '12', 'total' => '120'],
+            ],
+            'grand_count' => '27',
+            'grand_total' => '177',
+            'coin_equation' => '2x__P__3x__P__4x__E__27',
+            'x_value' => '3',
+        ]);
+        $this->assertTrue($encoded['ok'], json_encode($encoded['cell_results']));
+
+        $tableProves = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => '2x', 'count' => '6', 'total' => '12'],
+                'rs5' => ['denomination' => '5', 'count_x' => '3x', 'count' => '9', 'total' => '45'],
+                'rs10' => ['denomination' => '10', 'count_x' => '4x', 'count' => '12', 'total' => '120'],
+            ],
+            'grand_count' => '27',
+            'grand_total' => '177',
+            // equation omitted/stripped — table already has 2x+3x+4x and 27
+            'x_value' => '3',
+        ]);
+        $this->assertTrue($tableProves['ok'], json_encode($tableProves['cell_results']));
+        $this->assertTrue($tableProves['cell_results']['equation']);
     }
 
     public function test_my_money_condition_sum_teaches_equation(): void

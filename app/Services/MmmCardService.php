@@ -239,7 +239,17 @@ class MmmCardService
         }
 
         if (! empty($expected['check_equation'])) {
+            $submission['equation'] = $this->extractSubmittedEquation($submission);
             $ok = $this->equationMatchesExpected($expected, $submission);
+            // If the typed field was stripped/unreadable in transit but Coins (in x) + total
+            // coins already match, accept. Do not accept a clearly wrong typed equation.
+            if (! $ok && $this->moneyCountXTableProvesEquation($expected, $submission)) {
+                $typed = $submission['equation'] ?? null;
+                $typedCanon = $this->equationCanonical($typed);
+                if ($typed === null || trim((string) $typed) === '' || $typedCanon === null) {
+                    $ok = true;
+                }
+            }
             $cellResults['equation'] = $ok;
             if (! $ok) {
                 $allOk = false;
@@ -402,6 +412,61 @@ class MmmCardService
      * @param  array<string, mixed>  $expected
      * @param  array<string, mixed>  $submission
      */
+    /**
+     * Pull equation text from several possible request shapes (WAFs sometimes
+     * strip a bare "equation" field that contains + or =).
+     */
+    private function extractSubmittedEquation(array $submission): ?string
+    {
+        foreach (['equation', 'coin_equation', 'eq'] as $key) {
+            if (! array_key_exists($key, $submission) || $submission[$key] === null || $submission[$key] === '') {
+                continue;
+            }
+            $text = (string) $submission[$key];
+            // Frontend may encode + / = so proxies do not mangle them.
+            $text = str_replace(['__P__', '__E__'], ['+', '='], $text);
+
+            return $text;
+        }
+
+        if (is_string($submission['grand_count'] ?? null) && str_contains((string) $submission['grand_count'], '=')) {
+            return (string) $submission['grand_count'];
+        }
+
+        return null;
+    }
+
+    /**
+     * True when every Coins (in x) cell and Total coins match the answer key.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     */
+    private function moneyCountXTableProvesEquation(array $expected, array $submission): bool
+    {
+        $seen = false;
+        foreach ($expected as $rowKey => $row) {
+            if (! is_array($row) || ! array_key_exists('count_x', $row)) {
+                continue;
+            }
+            $seen = true;
+            if (! $this->valueMatches($row['count_x'], data_get($submission, "rows.{$rowKey}.count_x"))) {
+                return false;
+            }
+        }
+
+        if (! $seen || ! array_key_exists('grand_count', $expected)) {
+            return false;
+        }
+
+        $grand = $submission['grand_count'] ?? null;
+        if (is_string($grand) && str_contains($grand, '=')) {
+            return false;
+        }
+
+        return $this->valueMatches($expected['grand_count'], $grand);
+    }
+
     private function equationMatchesExpected(array $expected, array $submission): bool
     {
         $got = $submission['equation'] ?? null;
@@ -540,11 +605,15 @@ class MmmCardService
         $text = preg_replace('/[\x{00A0}\x{2000}-\x{200D}\x{202F}\x{205F}\x{3000}\x{FEFF}]/u', '', $text) ?? $text;
         $text = str_replace(['𝑥', 'ｘ', 'Χ', 'х', 'Ⅹ'], 'x', $text);
         $text = strtolower($text);
+        // Any remaining letter is treated as the variable x (covers lookalike glyphs).
+        $text = preg_replace('/\p{L}/u', 'x', $text) ?? $text;
         $text = preg_replace('/\p{Pd}/u', '-', $text) ?? $text; // any dash/minus unicode
         $text = str_replace(['−', '–', '—', '﹣', '－', '­'], '-', $text);
-        $text = str_replace(['＝', '﹦', '≟'], '=', $text);
+        $text = str_replace(['＝', '﹦', '≟', '≡'], '=', $text);
         $text = str_replace(['＋', '﹢'], '+', $text);
         $text = preg_replace('/\s+/u', '', $text) ?? $text;
+        // Collapse xxx from multi-letter tokens back to a single x.
+        $text = preg_replace('/x+/', 'x', $text) ?? $text;
 
         // × / ⋅ after a digit or as a bare term is usually the variable x (2× → 2x).
         // Remaining × are true multiplication.

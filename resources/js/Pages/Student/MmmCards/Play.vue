@@ -153,6 +153,12 @@ const submit = async () => {
             .replace(/[×⋅]/g, '*')
             .replace(/\s+/g, '');
 
+        const equationClean = cleanMath(form.equation);
+        // Encode + / = so some hosts/WAFs do not strip or alter the equation field.
+        const equationSafe = equationClean
+            .replace(/\+/g, '__P__')
+            .replace(/=/g, '__E__');
+
         const payload = {
             exercise_id: props.exercise.id,
             rows: Object.fromEntries(
@@ -165,7 +171,8 @@ const submit = async () => {
             ),
             grand_total: cleanMath(form.grand_total),
             grand_count: cleanMath(form.grand_count),
-            equation: cleanMath(form.equation),
+            equation: equationClean,
+            coin_equation: equationSafe,
             x_value: cleanMath(form.x_value),
         };
 
