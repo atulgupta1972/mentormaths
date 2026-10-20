@@ -141,7 +141,7 @@ class MmmCardServiceTest extends TestCase
 
         $this->assertNotNull($card);
         $this->assertTrue($card->isPublished());
-        $this->assertSame(10, $card->exercises()->count());
+        $this->assertSame(11, $card->exercises()->count());
         $this->assertTrue((bool) $card->exercises()->orderBy('sort_order')->first()?->is_demo);
     }
 
@@ -196,31 +196,60 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($ok['ok'], json_encode($ok['cell_results']));
     }
 
-    public function test_my_money_ratio_exercise_checks_out(): void
+    public function test_my_money_ratio_variable_equation_checks_out(): void
     {
         $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
         $exercise = $card->exercises()->where('sort_order', 6)->firstOrFail();
         $service = app(MmmCardService::class);
 
         $payload = $service->playPayload($card, null, 5);
-        $this->assertSame('Denomination (in ₹)', $payload['card']['table_schema']['columns'][0]['label'] ?? null);
-        $this->assertSame('Ratio of coins', $payload['card']['table_schema']['columns'][1]['label'] ?? null);
-        $this->assertTrue($payload['card']['table_schema']['show_grand_count'] ?? false);
+        $this->assertSame('Coins (in x)', $payload['card']['table_schema']['columns'][1]['label'] ?? null);
+        $this->assertTrue($payload['exercise']['ask_equation'] ?? false);
+        $this->assertTrue($payload['exercise']['ask_x_value'] ?? false);
+        $this->assertFalse($payload['exercise']['show_auto_equation'] ?? true);
 
-        $result = $service->checkSubmission($card, $exercise, [
+        $wrongEq = $service->checkSubmission($card, $exercise, [
             'rows' => [
-                'rs2' => ['denomination' => '2', 'ratio' => '2', 'count' => '6', 'total' => '12'],
-                'rs5' => ['denomination' => '5', 'ratio' => '3', 'count' => '9', 'total' => '45'],
-                'rs10' => ['denomination' => '10', 'ratio' => '4', 'count' => '12', 'total' => '120'],
+                'rs2' => ['denomination' => '2', 'count_x' => '2x', 'count' => '6', 'total' => '12'],
+                'rs5' => ['denomination' => '5', 'count_x' => '3x', 'count' => '9', 'total' => '45'],
+                'rs10' => ['denomination' => '10', 'count_x' => '4x', 'count' => '12', 'total' => '120'],
             ],
             'grand_count' => '27',
             'grand_total' => '177',
+            'equation' => '2x+3x+4x=36',
+            'x_value' => '3',
         ]);
+        $this->assertFalse($wrongEq['ok']);
+        $this->assertFalse($wrongEq['cell_results']['equation']);
 
+        $result = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => '2x', 'count' => '6', 'total' => '12'],
+                'rs5' => ['denomination' => '5', 'count_x' => '3x', 'count' => '9', 'total' => '45'],
+                'rs10' => ['denomination' => '10', 'count_x' => '4x', 'count' => '12', 'total' => '120'],
+            ],
+            'grand_count' => '27',
+            'grand_total' => '177',
+            'equation' => '2x+3x+4x=27',
+            'x_value' => '3',
+        ]);
         $this->assertTrue($result['ok'], json_encode($result['cell_results']));
+
+        $simplified = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => '2x', 'count' => '6', 'total' => '12'],
+                'rs5' => ['denomination' => '5', 'count_x' => '3x', 'count' => '9', 'total' => '45'],
+                'rs10' => ['denomination' => '10', 'count_x' => '4x', 'count' => '12', 'total' => '120'],
+            ],
+            'grand_count' => '27',
+            'grand_total' => '177',
+            'equation' => '9x=27',
+            'x_value' => '3',
+        ]);
+        $this->assertTrue($simplified['ok'], json_encode($simplified['cell_results']));
     }
 
-    public function test_my_money_notes_ratio_uses_20_50_100_schema(): void
+    public function test_my_money_condition_sum_teaches_equation(): void
     {
         $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
         $exercise = $card->exercises()->where('sort_order', 10)->firstOrFail();
@@ -228,12 +257,14 @@ class MmmCardServiceTest extends TestCase
 
         $result = $service->checkSubmission($card, $exercise, [
             'rows' => [
-                'rs20' => ['denomination' => '20', 'ratio' => '2', 'count' => '10', 'total' => '200'],
-                'rs50' => ['denomination' => '50', 'ratio' => '3', 'count' => '15', 'total' => '750'],
-                'rs100' => ['denomination' => '100', 'ratio' => '4', 'count' => '20', 'total' => '2000'],
+                'rs2' => ['denomination' => '2', 'count_x' => 'x+5', 'count' => '10', 'total' => '20'],
+                'rs5' => ['denomination' => '5', 'count_x' => 'x', 'count' => '5', 'total' => '25'],
+                'rs10' => ['denomination' => '10', 'count_x' => '2x', 'count' => '10', 'total' => '100'],
             ],
-            'grand_count' => '45',
-            'grand_total' => '2950',
+            'grand_count' => '25',
+            'grand_total' => '145',
+            'equation' => '4x+5=25',
+            'x_value' => '5',
         ]);
 
         $this->assertTrue($result['ok'], json_encode($result['cell_results']));

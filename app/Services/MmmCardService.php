@@ -160,6 +160,7 @@ class MmmCardService
         $usesVariable = ($answers['mode'] ?? null) === 'variable'
             || ! empty($answers['variable_tip']);
         $tip = $answers['variable_tip'] ?? $answers['method_tip'] ?? null;
+        $askEquation = ! empty($answers['check_equation']);
 
         return [
             'id' => $exercise->id,
@@ -169,10 +170,12 @@ class MmmCardService
             'sort_order' => $exercise->sort_order,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
-            // Equation is built automatically from the Total column — shown, not typed/checked.
-            'show_auto_equation' => $usesVariable || array_key_exists('equation', $answers),
+            // Marks: auto from Total column. Money ratio/conditions: student types the equation.
+            'show_auto_equation' => ! $askEquation && ($usesVariable || array_key_exists('equation', $answers)),
+            'ask_equation' => $askEquation,
+            'equation_prompt' => $answers['equation_prompt'] ?? 'Write the equation',
             'ask_x_value' => array_key_exists('x_value', $answers),
-            'x_prompt' => $answers['x_prompt'] ?? 'Value of x (correct answers)',
+            'x_prompt' => $answers['x_prompt'] ?? 'Value of x',
         ];
     }
 
@@ -235,7 +238,13 @@ class MmmCardService
             }
         }
 
-        // Equation is auto-built in the UI from the Total column — do not mark students wrong for it.
+        if (! empty($expected['check_equation'])) {
+            $ok = $this->equationMatchesExpected($expected, $submission);
+            $cellResults['equation'] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
 
         if (array_key_exists('x_value', $expected)) {
             $ok = $this->valueMatches($expected['x_value'], $submission['x_value'] ?? null);
@@ -247,12 +256,18 @@ class MmmCardService
 
         $message = 'Table looks good — well done.';
         if (! $allOk) {
-            $denomWrong = collect($cellResults)
-                ->filter(fn ($ok, $key) => ! $ok && str_ends_with((string) $key, '.denomination'))
-                ->isNotEmpty();
-            $message = $denomWrong
-                ? 'Check Denomination (in ₹) — wrong cells are highlighted. Use the number only (e.g. 2, 5, 10).'
-                : 'Some cells are wrong (highlighted). Fix them and submit again.';
+            if (($cellResults['equation'] ?? true) === false) {
+                $message = 'Check your equation — add the Coins (in x) column and set it equal to total coins.';
+            } elseif (($cellResults['x_value'] ?? true) === false) {
+                $message = 'Equation may be right, but x is wrong. Solve again, then fill No. of coins.';
+            } else {
+                $denomWrong = collect($cellResults)
+                    ->filter(fn ($ok, $key) => ! $ok && str_ends_with((string) $key, '.denomination'))
+                    ->isNotEmpty();
+                $message = $denomWrong
+                    ? 'Check Denomination (in ₹) — wrong cells are highlighted. Use the number only (e.g. 2, 5, 10).'
+                    : 'Some cells are wrong (highlighted). Fix them and submit again.';
+            }
         }
 
         return [
@@ -395,7 +410,7 @@ class MmmCardService
             return false;
         }
 
-        // Primary: build target from the (already checked) table totals + score.
+        // Marks: build target from the Total column + score.
         $correctTotal = data_get($submission, 'rows.correct.total');
         $wrongTotal = data_get($submission, 'rows.wrong.total');
         $score = $submission['grand_total'] ?? null;
@@ -416,7 +431,26 @@ class MmmCardService
             }
         }
 
-        // Fallback: listed acceptable strings in the exercise.
+        // Money: sum Coins (in x) column = total coins.
+        $countXParts = [];
+        foreach ($submission['rows'] ?? [] as $cells) {
+            if (! is_array($cells)) {
+                continue;
+            }
+            $part = trim((string) ($cells['count_x'] ?? ''));
+            if ($part !== '') {
+                $countXParts[] = $part;
+            }
+        }
+        $totalCoins = $submission['grand_count'] ?? null;
+        if ($countXParts !== [] && $totalCoins !== null && $totalCoins !== '') {
+            $fromCountX = $this->equationCanonical(implode('+', $countXParts).'='.$totalCoins);
+            if ($fromCountX !== null && $fromCountX === $gotCanon) {
+                return true;
+            }
+        }
+
+        // Listed acceptable strings in the exercise.
         $candidates = $expected['equation'] ?? [];
         if (! is_array($candidates)) {
             $candidates = [$candidates];

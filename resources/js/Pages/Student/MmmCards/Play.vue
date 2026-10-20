@@ -162,6 +162,7 @@ const submit = async () => {
             ),
             grand_total: cleanMath(form.grand_total),
             grand_count: cleanMath(form.grand_count),
+            equation: cleanMath(form.equation),
             x_value: cleanMath(form.x_value),
         };
 
@@ -483,7 +484,7 @@ const footerColspan = computed(() => {
                 </div>
 
                 <div
-                    v-if="exercise.show_auto_equation || exercise.ask_x_value"
+                    v-if="exercise.show_auto_equation || exercise.ask_equation || exercise.ask_x_value"
                     class="mt-4 space-y-3"
                 >
                     <div v-if="exercise.show_auto_equation">
@@ -496,6 +497,24 @@ const footerColspan = computed(() => {
                         <div class="mt-1 w-full max-w-xl rounded-md border border-teal-200 bg-teal-50 px-3 py-2 font-mono text-sm font-semibold text-teal-950">
                             {{ autoEquation || '… + … = …' }}
                         </div>
+                    </div>
+                    <div v-if="exercise.ask_equation">
+                        <label class="block text-xs font-bold uppercase tracking-wide text-slate-700">
+                            {{ exercise.equation_prompt || 'Write the equation' }}
+                        </label>
+                        <p class="mt-0.5 text-[11px] text-slate-500">
+                            Add the <span class="font-semibold">Coins (in x)</span> column and set it equal to total coins
+                            (example: <span class="font-mono">2x+3x+4x=27</span>).
+                        </p>
+                        <input
+                            v-model="form.equation"
+                            type="text"
+                            inputmode="text"
+                            class="mt-1 w-full max-w-xl rounded-md border px-3 py-2 font-mono text-sm font-semibold"
+                            :class="cellClass('equation')"
+                            placeholder="2x+3x+4x=27"
+                            autocomplete="off"
+                        >
                     </div>
                     <div v-if="exercise.ask_x_value">
                         <label class="block text-xs font-bold uppercase tracking-wide text-slate-700">
