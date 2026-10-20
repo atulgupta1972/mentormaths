@@ -218,6 +218,9 @@ const canGoNext = computed(() => {
     return total > 0 && index + 1 < total;
 });
 
+/** Method sketch stays for the first three sums; from sum 4 students fill without the reminder. */
+const showMethodSketch = computed(() => Number(props.exercise_index ?? 0) < 3);
+
 const footerColspan = computed(() => {
     const cols = columns.value.length;
     if (schema.value.show_grand_count && schema.value.show_grand_total) {
@@ -253,6 +256,7 @@ const footerColspan = computed(() => {
             </p>
 
             <section
+                v-if="showMethodSketch"
                 class="rounded-xl bg-white p-4 shadow-sm ring-2"
                 :class="accentRing"
             >
