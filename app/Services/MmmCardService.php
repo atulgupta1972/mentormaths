@@ -518,7 +518,7 @@ class MmmCardService
         if ($answerParts !== [] && array_key_exists('grand_count', $expected)) {
             $target = implode('+', $answerParts).'='.$expected['grand_count'];
             $targetCanon = $this->equationCanonical($target);
-            if ($targetCanon !== null && $targetCanon === $gotCanon) {
+            if ($this->equationCanonsMatch($targetCanon, $gotCanon)) {
                 return true;
             }
         }
@@ -531,7 +531,7 @@ class MmmCardService
             $fromTable = $this->equationCanonical(
                 '('.$correctTotal.')+('.$wrongTotal.')='.$score
             );
-            if ($fromTable !== null && $fromTable === $gotCanon) {
+            if ($this->equationCanonsMatch($fromTable, $gotCanon)) {
                 return true;
             }
 
@@ -539,7 +539,7 @@ class MmmCardService
             $fromTableParen = $this->equationCanonical(
                 $correctTotal.'+('.$wrongTotal.')='.$score
             );
-            if ($fromTableParen !== null && $fromTableParen === $gotCanon) {
+            if ($this->equationCanonsMatch($fromTableParen, $gotCanon)) {
                 return true;
             }
         }
@@ -561,7 +561,7 @@ class MmmCardService
         }
         if ($countXParts !== [] && $totalCoins !== null && $totalCoins !== '') {
             $fromCountX = $this->equationCanonical(implode('+', $countXParts).'='.$totalCoins);
-            if ($fromCountX !== null && $fromCountX === $gotCanon) {
+            if ($this->equationCanonsMatch($fromCountX, $gotCanon)) {
                 return true;
             }
         }
@@ -576,7 +576,7 @@ class MmmCardService
                 continue;
             }
             $wantCanon = $this->equationCanonical($candidate);
-            if ($wantCanon !== null && $wantCanon === $gotCanon) {
+            if ($this->equationCanonsMatch($wantCanon, $gotCanon)) {
                 return true;
             }
             $wantExpr = $this->normalizeEquation($candidate);
@@ -734,6 +734,28 @@ class MmmCardService
         sort($forms);
 
         return $forms[0];
+    }
+
+    /**
+     * True when two canonical forms are the same equation (including 3x+x+x/2=45 ≡ 9x=90).
+     *
+     * @param  array{0: int, 1: int}|null  $a
+     * @param  array{0: int, 1: int}|null  $b
+     */
+    private function equationCanonsMatch(?array $a, ?array $b): bool
+    {
+        if ($a === null || $b === null) {
+            return false;
+        }
+        if ($a === $b) {
+            return true;
+        }
+        // Same root: ax+b=0 ⇒ x = -b/a
+        if ($a[0] !== 0 && $b[0] !== 0) {
+            return abs((-$a[1] / $a[0]) - (-$b[1] / $b[0])) < 0.0001;
+        }
+
+        return $a[0] === $b[0] && $a[1] === $b[1];
     }
 
     /**
