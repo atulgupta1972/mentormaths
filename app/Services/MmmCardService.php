@@ -193,8 +193,10 @@ class MmmCardService
         $schema = $this->schemaForExercise($card, $exercise);
         $rows = $schema['rows'] ?? [];
         $editableFields = $this->editableFieldKeys($schema);
+        $matchByDenomination = in_array('denomination', $editableFields, true);
         $cellResults = [];
         $allOk = true;
+        $claimedDenoms = [];
 
         foreach ($rows as $row) {
             $rowKey = (string) ($row['key'] ?? '');
@@ -202,17 +204,46 @@ class MmmCardService
                 continue;
             }
             $fixedValues = is_array($row['fixed_values'] ?? null) ? $row['fixed_values'] : [];
+            $answerRow = $this->expectedAnswerRowForSubmission(
+                $expected,
+                $rowKey,
+                $submission,
+                $matchByDenomination,
+            );
+
+            // Each denomination may appear only once when students can reorder rows.
+            if ($matchByDenomination) {
+                $denomNorm = $this->normalizeNumber(data_get($submission, "rows.{$rowKey}.denomination"));
+                if ($denomNorm !== null) {
+                    if (isset($claimedDenoms[$denomNorm])) {
+                        $cellResults["{$rowKey}.denomination"] = false;
+                        $allOk = false;
+                        $answerRow = null;
+                    } else {
+                        $claimedDenoms[$denomNorm] = $rowKey;
+                    }
+                }
+            }
+
             foreach ($editableFields as $field) {
                 if (array_key_exists($field, $fixedValues)) {
                     continue;
                 }
-                // Skip fields not present in expected answers for this exercise.
-                if (! is_array($expected[$rowKey] ?? null) || ! array_key_exists($field, $expected[$rowKey])) {
+                if ($answerRow === null || ! array_key_exists($field, $answerRow)) {
+                    // Unknown / unmatched denomination — mark denomination (and other filled fields) wrong.
+                    if ($matchByDenomination && array_key_exists($field, (array) data_get($submission, "rows.{$rowKey}", []))) {
+                        $cellResults["{$rowKey}.{$field}"] = false;
+                        $allOk = false;
+                    }
+
                     continue;
                 }
                 $cellKey = "{$rowKey}.{$field}";
+                if ($field === 'denomination' && array_key_exists($cellKey, $cellResults) && $cellResults[$cellKey] === false) {
+                    continue;
+                }
                 $ok = $this->valueMatches(
-                    $expected[$rowKey][$field] ?? null,
+                    $answerRow[$field] ?? null,
                     data_get($submission, "rows.{$rowKey}.{$field}"),
                 );
                 $cellResults[$cellKey] = $ok;
@@ -269,10 +300,18 @@ class MmmCardService
             $xGot = $submission['x_value'] ?? null;
             foreach ($rows as $row) {
                 $rowKey = (string) ($row['key'] ?? '');
-                if ($rowKey === '' || ! is_array($expected[$rowKey] ?? null)) {
+                if ($rowKey === '') {
                     continue;
                 }
-                if (! array_key_exists('count_x', $expected[$rowKey]) || ! array_key_exists('count', $expected[$rowKey])) {
+                $answerRow = $this->expectedAnswerRowForSubmission(
+                    $expected,
+                    $rowKey,
+                    $submission,
+                    $matchByDenomination,
+                );
+                if ($answerRow === null
+                    || ! array_key_exists('count_x', $answerRow)
+                    || ! array_key_exists('count', $answerRow)) {
                     continue;
                 }
                 $expr = data_get($submission, "rows.{$rowKey}.count_x");
@@ -460,6 +499,58 @@ class MmmCardService
     }
 
     /**
+     * Resolve the answer-key row for a submitted table row.
+     * When denomination is student-filled, match by denomination value (any row order).
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array<string, mixed>|null
+     */
+    private function expectedAnswerRowForSubmission(
+        array $expected,
+        string $submittedRowKey,
+        array $submission,
+        bool $matchByDenomination,
+    ): ?array {
+        if ($matchByDenomination) {
+            $denom = data_get($submission, "rows.{$submittedRowKey}.denomination");
+            $matchKey = $this->expectedRowKeyForDenomination($expected, $denom);
+            if ($matchKey === null) {
+                return null;
+            }
+
+            return is_array($expected[$matchKey] ?? null) ? $expected[$matchKey] : null;
+        }
+
+        return is_array($expected[$submittedRowKey] ?? null) ? $expected[$submittedRowKey] : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $expected
+     */
+    private function expectedRowKeyForDenomination(array $expected, mixed $denomination): ?string
+    {
+        $want = $this->normalizeNumber($denomination);
+        if ($want === null) {
+            return null;
+        }
+
+        foreach ($expected as $rowKey => $row) {
+            if (! is_array($row) || ! array_key_exists('denomination', $row)) {
+                continue;
+            }
+            $candidates = is_array($row['denomination']) ? $row['denomination'] : [$row['denomination']];
+            foreach ($candidates as $candidate) {
+                if ($this->normalizeNumber($candidate) === $want) {
+                    return (string) $rowKey;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * True when every Coins (in x) cell and Total coins match the answer key.
      *
      * @param  array<string, mixed>  $expected
@@ -473,7 +564,26 @@ class MmmCardService
                 continue;
             }
             $seen = true;
-            if (! $this->valueMatches($row['count_x'], data_get($submission, "rows.{$rowKey}.count_x"))) {
+            $submittedCells = null;
+            if (array_key_exists('denomination', $row)) {
+                $wantDenom = $this->normalizeNumber(
+                    is_array($row['denomination']) ? ($row['denomination'][0] ?? null) : $row['denomination']
+                );
+                foreach ($submission['rows'] ?? [] as $cells) {
+                    if (! is_array($cells)) {
+                        continue;
+                    }
+                    if ($this->normalizeNumber($cells['denomination'] ?? null) === $wantDenom) {
+                        $submittedCells = $cells;
+                        break;
+                    }
+                }
+            } else {
+                $submittedCells = data_get($submission, "rows.{$rowKey}");
+            }
+
+            if (! is_array($submittedCells)
+                || ! $this->valueMatches($row['count_x'], $submittedCells['count_x'] ?? null)) {
                 return false;
             }
         }

@@ -175,7 +175,7 @@ class MmmCardServiceTest extends TestCase
 
         $wrong = $service->checkSubmission($card, $exercise, [
             'rows' => [
-                'rs2' => ['denomination' => '5', 'count' => '8', 'total' => '16'],
+                'rs2' => ['denomination' => '7', 'count' => '8', 'total' => '16'],
                 'rs5' => ['denomination' => '5', 'count' => '2', 'total' => '10'],
                 'rs10' => ['denomination' => '10', 'count' => '4', 'total' => '40'],
             ],
@@ -370,6 +370,20 @@ class MmmCardServiceTest extends TestCase
             'x_value' => '5',
         ]);
         $this->assertTrue($asRs10['ok'], json_encode($asRs10['cell_results']));
+
+        // Rows reordered: 2, 10, 5 (still correct by denomination).
+        $reordered = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => '3x', 'count' => '30', 'total' => '60'],
+                'rs5' => ['denomination' => '10', 'count_x' => 'x/2', 'count' => '5', 'total' => '50'],
+                'rs10' => ['denomination' => '5', 'count_x' => 'x', 'count' => '10', 'total' => '50'],
+            ],
+            'grand_count' => '45',
+            'grand_total' => '160',
+            'equation' => '3x+x+x/2=45',
+            'x_value' => '10',
+        ]);
+        $this->assertTrue($reordered['ok'], json_encode($reordered['cell_results']));
     }
 
     public function test_my_money_condition_sum_teaches_equation(): void
