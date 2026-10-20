@@ -386,6 +386,39 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($reordered['ok'], json_encode($reordered['cell_results']));
     }
 
+    public function test_my_money_sum9_five_more_five_less(): void
+    {
+        $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 9)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $asRs5 = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => 'x+5', 'count' => '20', 'total' => '40'],
+                'rs5' => ['denomination' => '5', 'count_x' => 'x', 'count' => '15', 'total' => '75'],
+                'rs10' => ['denomination' => '10', 'count_x' => 'x-5', 'count' => '10', 'total' => '100'],
+            ],
+            'grand_count' => '45',
+            'grand_total' => '215',
+            'equation' => '(x+5)+x+(x-5)=45',
+            'x_value' => '15',
+        ]);
+        $this->assertTrue($asRs5['ok'], json_encode($asRs5['cell_results']));
+
+        $asRs10 = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'count_x' => 'x+10', 'count' => '20', 'total' => '40'],
+                'rs5' => ['denomination' => '5', 'count_x' => 'x+5', 'count' => '15', 'total' => '75'],
+                'rs10' => ['denomination' => '10', 'count_x' => 'x', 'count' => '10', 'total' => '100'],
+            ],
+            'grand_count' => '45',
+            'grand_total' => '215',
+            'equation' => '(x+10)+(x+5)+x=45',
+            'x_value' => '10',
+        ]);
+        $this->assertTrue($asRs10['ok'], json_encode($asRs10['cell_results']));
+    }
+
     public function test_my_money_condition_sum_teaches_equation(): void
     {
         $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
