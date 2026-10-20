@@ -135,6 +135,76 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue(collect($result['cell_results'])->every(fn ($ok) => $ok === true));
     }
 
+    public function test_my_money_card_is_seeded_with_basic_and_ratio_sums(): void
+    {
+        $card = MmmCard::query()->where('slug', 'my-money-table')->first();
+
+        $this->assertNotNull($card);
+        $this->assertTrue($card->isPublished());
+        $this->assertSame(10, $card->exercises()->count());
+        $this->assertTrue((bool) $card->exercises()->orderBy('sort_order')->first()?->is_demo);
+    }
+
+    public function test_my_money_demo_table_checks_out(): void
+    {
+        $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 1)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $result = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['count' => '4', 'total' => '8'],
+                'rs5' => ['count' => '3', 'total' => '15'],
+                'rs10' => ['count' => '2', 'total' => '20'],
+            ],
+            'grand_total' => '43',
+        ]);
+
+        $this->assertTrue($result['ok'], json_encode($result['cell_results']));
+    }
+
+    public function test_my_money_ratio_exercise_checks_out(): void
+    {
+        $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 6)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $payload = $service->playPayload($card, null, 5);
+        $this->assertSame('Ratio of coins', $payload['card']['table_schema']['columns'][1]['label'] ?? null);
+        $this->assertTrue($payload['card']['table_schema']['show_grand_count'] ?? false);
+
+        $result = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs2' => ['ratio' => '2', 'count' => '6', 'total' => '12'],
+                'rs5' => ['ratio' => '3', 'count' => '9', 'total' => '45'],
+                'rs10' => ['ratio' => '4', 'count' => '12', 'total' => '120'],
+            ],
+            'grand_count' => '27',
+            'grand_total' => '177',
+        ]);
+
+        $this->assertTrue($result['ok'], json_encode($result['cell_results']));
+    }
+
+    public function test_my_money_notes_ratio_uses_20_50_100_schema(): void
+    {
+        $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 10)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $result = $service->checkSubmission($card, $exercise, [
+            'rows' => [
+                'rs20' => ['ratio' => '2', 'count' => '10', 'total' => '200'],
+                'rs50' => ['ratio' => '3', 'count' => '15', 'total' => '750'],
+                'rs100' => ['ratio' => '4', 'count' => '20', 'total' => '2000'],
+            ],
+            'grand_count' => '45',
+            'grand_total' => '2950',
+        ]);
+
+        $this->assertTrue($result['ok'], json_encode($result['cell_results']));
+    }
+
     public function test_admin_can_link_card_to_syllabus_chapter(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);

@@ -20,11 +20,41 @@ const props = defineProps({
 
 const schema = computed(() => props.card.table_schema || {});
 const rows = computed(() => schema.value.rows || []);
+const columns = computed(() => schema.value.columns || []);
+
+const editableFields = computed(() => {
+    const fields = columns.value
+        .filter((col) => col.key && col.key !== 'label' && ! col.fixed)
+        .map((col) => col.key);
+
+    return fields.length ? fields : ['marks', 'count', 'total'];
+});
+
+/** Columns before the value columns — used for footer colspan. */
+const leadingColCount = computed(() => {
+    const keys = new Set(editableFields.value);
+    let n = 0;
+    for (const col of columns.value) {
+        if (keys.has(col.key)) {
+            break;
+        }
+        n += 1;
+    }
+
+    return Math.max(n, 1);
+});
 
 const blankRows = () => {
     const out = {};
     for (const row of rows.value) {
-        out[row.key] = { marks: '', count: '', total: '' };
+        const cells = {};
+        const fixedValues = row.fixed_values || {};
+        for (const field of editableFields.value) {
+            cells[field] = Object.prototype.hasOwnProperty.call(fixedValues, field)
+                ? String(fixedValues[field])
+                : '';
+        }
+        out[row.key] = cells;
     }
     return out;
 };
@@ -32,6 +62,7 @@ const blankRows = () => {
 const form = reactive({
     rows: blankRows(),
     grand_total: '',
+    grand_count: '',
     equation: '',
     x_value: '',
 });
@@ -48,7 +79,6 @@ const formatEqPart = (value) => {
     if (! text) {
         return '…';
     }
-    // Wrap if it starts with a minus so 2x+(-20+x) reads clearly.
     if (text.startsWith('-')) {
         return `(${text})`;
     }
@@ -58,21 +88,31 @@ const formatEqPart = (value) => {
 
 /** Built from the Total column — student does not type this. */
 const autoEquation = computed(() => {
-    const correctTotal = form.rows?.correct?.total;
-    const wrongTotal = form.rows?.wrong?.total;
+    const totalKey = editableFields.value.includes('total') ? 'total' : null;
+    if (! totalKey || ! rows.value.length) {
+        return '';
+    }
+    const parts = rows.value.map((row) => formatEqPart(form.rows?.[row.key]?.[totalKey]));
     const score = form.grand_total;
-    if (! String(correctTotal || '').trim() && ! String(wrongTotal || '').trim() && ! String(score || '').trim()) {
+    if (parts.every((p) => p === '…') && ! String(score || '').trim()) {
         return '';
     }
 
-    return `${formatEqPart(correctTotal)} + ${formatEqPart(wrongTotal)} = ${String(score || '').trim() || '…'}`;
+    return `${parts.join(' + ')} = ${String(score || '').trim() || '…'}`;
 });
 
+const isFixedCell = (row, field) => {
+    const fixedValues = row.fixed_values || {};
+
+    return Object.prototype.hasOwnProperty.call(fixedValues, field);
+};
+
 watch(
-    () => props.exercise?.id,
+    () => [props.exercise?.id, JSON.stringify(schema.value)],
     () => {
         form.rows = blankRows();
         form.grand_total = '';
+        form.grand_count = '';
         form.equation = '';
         form.x_value = '';
         cellResults.value = {};
@@ -115,6 +155,7 @@ const submit = async () => {
                 ]),
             ),
             grand_total: cleanMath(form.grand_total),
+            grand_count: cleanMath(form.grand_count),
             x_value: cleanMath(form.x_value),
         };
 
@@ -135,6 +176,7 @@ const submit = async () => {
 const resetTable = () => {
     form.rows = blankRows();
     form.grand_total = '';
+    form.grand_count = '';
     form.equation = '';
     form.x_value = '';
     cellResults.value = {};
@@ -163,12 +205,23 @@ const accentBg = computed(() => ({
     rose: 'bg-rose-700',
 }[props.card.accent] || 'bg-teal-700'));
 
-// Prefer live count over server has_next (stale after submit / older builds).
 const canGoNext = computed(() => {
     const total = Number(props.card?.exercises_total ?? 0);
     const index = Number(props.exercise_index ?? 0);
 
     return total > 0 && index + 1 < total;
+});
+
+const footerColspan = computed(() => {
+    const cols = columns.value.length;
+    if (schema.value.show_grand_count && schema.value.show_grand_total) {
+        return Math.max(cols - 2, 1);
+    }
+    if (schema.value.show_grand_total || schema.value.show_grand_count) {
+        return Math.max(cols - 1, 1);
+    }
+
+    return leadingColCount.value;
 });
 </script>
 
@@ -208,7 +261,7 @@ const canGoNext = computed(() => {
                         <thead>
                             <tr class="bg-teal-50">
                                 <th
-                                    v-for="col in schema.columns"
+                                    v-for="col in columns"
                                     :key="col.key"
                                     class="border border-teal-200 px-2 py-1.5 text-left text-xs font-bold uppercase text-teal-950"
                                 >
@@ -222,16 +275,31 @@ const canGoNext = computed(() => {
                                     {{ row.label }}
                                 </td>
                                 <td
-                                    v-for="field in ['marks', 'count', 'total']"
+                                    v-for="field in editableFields"
                                     :key="`sketch-${row.key}-${field}`"
                                     class="border border-slate-200 px-2 py-1.5 text-slate-400"
                                 >
                                     …
                                 </td>
                             </tr>
-                            <tr v-if="schema.show_grand_total">
+                            <tr v-if="schema.show_grand_count">
                                 <td
-                                    colspan="3"
+                                    :colspan="footerColspan"
+                                    class="border border-slate-200 bg-slate-50 px-2 py-1.5 text-right font-bold"
+                                >
+                                    {{ schema.grand_count_label || 'Total coins' }}
+                                </td>
+                                <td class="border border-slate-200 px-2 py-1.5 text-slate-400">…</td>
+                                <td
+                                    v-if="schema.show_grand_total"
+                                    class="border border-slate-200 px-2 py-1.5 text-slate-400"
+                                >
+                                    …
+                                </td>
+                            </tr>
+                            <tr v-else-if="schema.show_grand_total">
+                                <td
+                                    :colspan="footerColspan"
                                     class="border border-slate-200 bg-slate-50 px-2 py-1.5 text-right font-bold"
                                 >
                                     {{ schema.grand_total_label || 'Total' }}
@@ -280,7 +348,7 @@ const canGoNext = computed(() => {
                         <thead>
                             <tr class="bg-slate-100">
                                 <th
-                                    v-for="col in schema.columns"
+                                    v-for="col in columns"
                                     :key="col.key"
                                     class="border border-slate-300 px-2 py-1.5 text-left text-xs font-bold uppercase text-slate-800"
                                 >
@@ -294,12 +362,19 @@ const canGoNext = computed(() => {
                                     {{ row.label }}
                                 </td>
                                 <td
-                                    v-for="field in ['marks', 'count', 'total']"
+                                    v-for="field in editableFields"
                                     :key="`${row.key}-${field}`"
                                     class="border p-1"
                                     :class="cellClass(`${row.key}.${field}`)"
                                 >
+                                    <span
+                                        v-if="isFixedCell(row, field)"
+                                        class="block w-full min-w-[4.5rem] px-1 py-1 text-center font-mono text-sm font-semibold text-slate-800"
+                                    >
+                                        {{ form.rows[row.key][field] }}
+                                    </span>
                                     <input
+                                        v-else
                                         v-model="form.rows[row.key][field]"
                                         type="text"
                                         :inputmode="usesVariable ? 'text' : 'numeric'"
@@ -308,9 +383,65 @@ const canGoNext = computed(() => {
                                     >
                                 </td>
                             </tr>
-                            <tr v-if="schema.show_grand_total">
+                            <tr v-if="schema.show_grand_count && schema.show_grand_total">
                                 <td
-                                    colspan="3"
+                                    :colspan="footerColspan"
+                                    class="border border-slate-300 bg-slate-50 px-2 py-1.5 text-right font-bold"
+                                >
+                                    {{ schema.grand_count_label || 'Total coins' }}
+                                    /
+                                    {{ schema.grand_total_label || 'Total money' }}
+                                </td>
+                                <td
+                                    class="border p-1"
+                                    :class="cellClass('grand_count')"
+                                >
+                                    <input
+                                        v-model="form.grand_count"
+                                        type="text"
+                                        inputmode="numeric"
+                                        class="w-full min-w-[4.5rem] rounded border-0 bg-transparent px-1 py-1 text-center font-mono text-sm font-extrabold focus:ring-0"
+                                        autocomplete="off"
+                                        :aria-label="schema.grand_count_label || 'Total coins'"
+                                    >
+                                </td>
+                                <td
+                                    class="border p-1"
+                                    :class="cellClass('grand_total')"
+                                >
+                                    <input
+                                        v-model="form.grand_total"
+                                        type="text"
+                                        inputmode="numeric"
+                                        class="w-full min-w-[4.5rem] rounded border-0 bg-transparent px-1 py-1 text-center font-mono text-sm font-extrabold focus:ring-0"
+                                        autocomplete="off"
+                                        :aria-label="schema.grand_total_label || 'Total money'"
+                                    >
+                                </td>
+                            </tr>
+                            <tr v-else-if="schema.show_grand_count">
+                                <td
+                                    :colspan="footerColspan"
+                                    class="border border-slate-300 bg-slate-50 px-2 py-1.5 text-right font-bold"
+                                >
+                                    {{ schema.grand_count_label || 'Total coins' }}
+                                </td>
+                                <td
+                                    class="border p-1"
+                                    :class="cellClass('grand_count')"
+                                >
+                                    <input
+                                        v-model="form.grand_count"
+                                        type="text"
+                                        inputmode="numeric"
+                                        class="w-full min-w-[4.5rem] rounded border-0 bg-transparent px-1 py-1 text-center font-mono text-sm font-extrabold focus:ring-0"
+                                        autocomplete="off"
+                                    >
+                                </td>
+                            </tr>
+                            <tr v-else-if="schema.show_grand_total">
+                                <td
+                                    :colspan="footerColspan"
                                     class="border border-slate-300 bg-slate-50 px-2 py-1.5 text-right font-bold"
                                 >
                                     {{ schema.grand_total_label || 'Total' }}

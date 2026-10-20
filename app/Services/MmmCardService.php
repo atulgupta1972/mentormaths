@@ -108,6 +108,8 @@ class MmmCardService
         }
 
         $completed = (int) ($progress?->exercises_completed ?? 0);
+        $exercise = $card->exercises[$exerciseIndex] ?? $card->exercises->first();
+        $schema = $this->schemaForExercise($card, $exercise);
 
         return [
             'card' => [
@@ -117,10 +119,10 @@ class MmmCardService
                 'heading' => $card->heading,
                 'accent' => $card->accent ?: 'teal',
                 'method_blurb' => $card->method_blurb,
-                'table_schema' => $card->table_schema,
+                'table_schema' => $schema,
                 'exercises_total' => $count,
             ],
-            'exercise' => $this->exercisePayload($card->exercises[$exerciseIndex] ?? $card->exercises->first()),
+            'exercise' => $this->exercisePayload($exercise),
             'exercise_index' => $exerciseIndex,
             'has_next' => $exerciseIndex < $maxIndex,
             'all_done' => $count > 0 && $completed >= $count,
@@ -129,6 +131,20 @@ class MmmCardService
                 'status' => $progress?->status ?? StudentMmmProgress::STATUS_NOT_STARTED,
             ],
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function schemaForExercise(MmmCard $card, ?MmmCardExercise $exercise): array
+    {
+        $schema = is_array($card->table_schema) ? $card->table_schema : [];
+        $answers = is_array($exercise?->answers) ? $exercise->answers : [];
+        if (is_array($answers['table_schema'] ?? null)) {
+            return $answers['table_schema'];
+        }
+
+        return $schema;
     }
 
     /**
@@ -143,6 +159,7 @@ class MmmCardService
         $answers = is_array($exercise->answers) ? $exercise->answers : [];
         $usesVariable = ($answers['mode'] ?? null) === 'variable'
             || ! empty($answers['variable_tip']);
+        $tip = $answers['variable_tip'] ?? $answers['method_tip'] ?? null;
 
         return [
             'id' => $exercise->id,
@@ -151,7 +168,7 @@ class MmmCardService
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
             'uses_variable' => $usesVariable,
-            'variable_tip' => $answers['variable_tip'] ?? null,
+            'variable_tip' => $tip,
             // Equation is built automatically from the Total column — shown, not typed/checked.
             'show_auto_equation' => $usesVariable || array_key_exists('equation', $answers),
             'ask_x_value' => array_key_exists('x_value', $answers),
@@ -170,8 +187,9 @@ class MmmCardService
         }
 
         $expected = $exercise->answers ?? [];
-        $schema = $card->table_schema ?? [];
+        $schema = $this->schemaForExercise($card, $exercise);
         $rows = $schema['rows'] ?? [];
+        $editableFields = $this->editableFieldKeys($schema);
         $cellResults = [];
         $allOk = true;
 
@@ -180,7 +198,15 @@ class MmmCardService
             if ($rowKey === '') {
                 continue;
             }
-            foreach (['marks', 'count', 'total'] as $field) {
+            $fixedValues = is_array($row['fixed_values'] ?? null) ? $row['fixed_values'] : [];
+            foreach ($editableFields as $field) {
+                if (array_key_exists($field, $fixedValues)) {
+                    continue;
+                }
+                // Skip fields not present in expected answers for this exercise.
+                if (! is_array($expected[$rowKey] ?? null) || ! array_key_exists($field, $expected[$rowKey])) {
+                    continue;
+                }
                 $cellKey = "{$rowKey}.{$field}";
                 $ok = $this->valueMatches(
                     $expected[$rowKey][$field] ?? null,
@@ -193,9 +219,17 @@ class MmmCardService
             }
         }
 
-        if (! empty($schema['show_grand_total'])) {
+        if (! empty($schema['show_grand_total']) && array_key_exists('grand_total', $expected)) {
             $ok = $this->valueMatches($expected['grand_total'] ?? null, $submission['grand_total'] ?? null);
             $cellResults['grand_total'] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        if (! empty($schema['show_grand_count']) && array_key_exists('grand_count', $expected)) {
+            $ok = $this->valueMatches($expected['grand_count'] ?? null, $submission['grand_count'] ?? null);
+            $cellResults['grand_count'] = $ok;
             if (! $ok) {
                 $allOk = false;
             }
@@ -218,6 +252,28 @@ class MmmCardService
                 ? 'Table looks good — well done.'
                 : 'Some cells are wrong (highlighted). Fix them and submit again.',
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $schema
+     * @return list<string>
+     */
+    private function editableFieldKeys(array $schema): array
+    {
+        $fields = [];
+        foreach ($schema['columns'] ?? [] as $column) {
+            if (! is_array($column)) {
+                continue;
+            }
+            $key = (string) ($column['key'] ?? '');
+            if ($key === '' || $key === 'label' || ! empty($column['fixed'])) {
+                continue;
+            }
+            $fields[] = $key;
+        }
+
+        // Backward compatible default for older marks cards.
+        return $fields !== [] ? $fields : ['marks', 'count', 'total'];
     }
 
     public function recordExercisePassed(User $user, MmmCard $card, MmmCardExercise $exercise): StudentMmmProgress
