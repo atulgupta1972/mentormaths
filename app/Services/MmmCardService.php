@@ -295,7 +295,8 @@ class MmmCardService
             }
         }
 
-        // Coins (in x) must agree with No. of coins at the chosen x (blocks 6x with x=36, etc.).
+        // Expressions in x must agree with the numeric column at the chosen x.
+        // count_x → No. of coins/notes; value_x → Total value (note value-ratio sums).
         if (! empty($expected['check_equation']) && ($cellResults['x_value'] ?? false)) {
             $xGot = $submission['x_value'] ?? null;
             foreach ($rows as $row) {
@@ -309,17 +310,26 @@ class MmmCardService
                     $submission,
                     $matchByDenomination,
                 );
-                if ($answerRow === null
-                    || ! array_key_exists('count_x', $answerRow)
-                    || ! array_key_exists('count', $answerRow)) {
+                if ($answerRow === null) {
                     continue;
                 }
-                $expr = data_get($submission, "rows.{$rowKey}.count_x");
-                $count = data_get($submission, "rows.{$rowKey}.count");
+
+                if (array_key_exists('value_x', $answerRow) && array_key_exists('total', $answerRow)) {
+                    $exprField = 'value_x';
+                    $numericField = 'total';
+                } elseif (array_key_exists('count_x', $answerRow) && array_key_exists('count', $answerRow)) {
+                    $exprField = 'count_x';
+                    $numericField = 'count';
+                } else {
+                    continue;
+                }
+
+                $expr = data_get($submission, "rows.{$rowKey}.{$exprField}");
+                $numeric = data_get($submission, "rows.{$rowKey}.{$numericField}");
                 $eval = $this->evaluateExprAtX($expr, $xGot);
-                $countNum = $this->normalizeNumber($count);
-                if ($eval === null || $countNum === null || abs($eval - (float) $countNum) > 0.0001) {
-                    $cellResults["{$rowKey}.count_x"] = false;
+                $num = $this->normalizeNumber($numeric);
+                if ($eval === null || $num === null || abs($eval - (float) $num) > 0.0001) {
+                    $cellResults["{$rowKey}.{$exprField}"] = false;
                     $cellResults['x_value'] = false;
                     $allOk = false;
                 }
@@ -559,8 +569,13 @@ class MmmCardService
     private function moneyCountXTableProvesEquation(array $expected, array $submission): bool
     {
         $seen = false;
+        $exprKey = null;
         foreach ($expected as $rowKey => $row) {
-            if (! is_array($row) || ! array_key_exists('count_x', $row)) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $exprKey = array_key_exists('value_x', $row) ? 'value_x' : (array_key_exists('count_x', $row) ? 'count_x' : null);
+            if ($exprKey === null) {
                 continue;
             }
             $seen = true;
@@ -583,21 +598,26 @@ class MmmCardService
             }
 
             if (! is_array($submittedCells)
-                || ! $this->valueMatches($row['count_x'], $submittedCells['count_x'] ?? null)) {
+                || ! $this->valueMatches($row[$exprKey], $submittedCells[$exprKey] ?? null)) {
                 return false;
             }
         }
 
-        if (! $seen || ! array_key_exists('grand_count', $expected)) {
+        if (! $seen) {
             return false;
         }
 
-        $grand = $submission['grand_count'] ?? null;
+        $grandKey = $exprKey === 'value_x' ? 'grand_total' : 'grand_count';
+        if (! array_key_exists($grandKey, $expected)) {
+            return false;
+        }
+
+        $grand = $submission[$grandKey] ?? null;
         if (is_string($grand) && str_contains($grand, '=')) {
             return false;
         }
 
-        return $this->valueMatches($expected['grand_count'], $grand);
+        return $this->valueMatches($expected[$grandKey], $grand);
     }
 
     private function equationMatchesExpected(array $expected, array $submission): bool
@@ -615,18 +635,26 @@ class MmmCardService
             return false;
         }
 
-        // Authoritative money target from exercise answers: 2x+3x+4x=27
+        // Authoritative money target from exercise answers: 2x+3x+4x=27 or 4x+5x+6x=7500
         $answerParts = [];
+        $answerRhs = null;
         foreach ($expected as $row) {
-            if (! is_array($row) || ! array_key_exists('count_x', $row)) {
+            if (! is_array($row)) {
                 continue;
             }
-            $cx = $row['count_x'];
+            $exprKey = array_key_exists('value_x', $row) ? 'value_x' : (array_key_exists('count_x', $row) ? 'count_x' : null);
+            if ($exprKey === null) {
+                continue;
+            }
+            $cx = $row[$exprKey];
             $answerParts[] = is_array($cx) ? (string) ($cx[0] ?? '') : (string) $cx;
+            $answerRhs = $exprKey === 'value_x'
+                ? ($expected['grand_total'] ?? null)
+                : ($expected['grand_count'] ?? null);
         }
         $answerParts = array_values(array_filter($answerParts, fn ($p) => $p !== ''));
-        if ($answerParts !== [] && array_key_exists('grand_count', $expected)) {
-            $target = implode('+', $answerParts).'='.$expected['grand_count'];
+        if ($answerParts !== [] && $answerRhs !== null && $answerRhs !== '') {
+            $target = implode('+', $answerParts).'='.$answerRhs;
             $targetCanon = $this->equationCanonical($target);
             if ($this->equationCanonsMatch($targetCanon, $gotCanon)) {
                 return true;
@@ -654,24 +682,39 @@ class MmmCardService
             }
         }
 
-        // Money: sum submitted Coins (in x) = total coins (typed or from answers).
-        $countXParts = [];
+        // Money: sum submitted Coins/Value (in x) = total coins or total money.
+        $exprParts = [];
         foreach ($submission['rows'] ?? [] as $cells) {
             if (! is_array($cells)) {
                 continue;
             }
-            $part = trim((string) ($cells['count_x'] ?? ''));
+            $part = trim((string) ($cells['count_x'] ?? $cells['value_x'] ?? ''));
             if ($part !== '') {
-                $countXParts[] = $part;
+                $exprParts[] = $part;
             }
         }
-        $totalCoins = $submission['grand_count'] ?? null;
-        if (! is_string($totalCoins) || $totalCoins === '' || str_contains($totalCoins, '=')) {
-            $totalCoins = $expected['grand_count'] ?? null;
+        $rhs = $submission['grand_total'] ?? $submission['grand_count'] ?? null;
+        if (! is_string($rhs) || $rhs === '' || str_contains($rhs, '=')) {
+            $rhs = $expected['grand_total'] ?? $expected['grand_count'] ?? null;
         }
-        if ($countXParts !== [] && $totalCoins !== null && $totalCoins !== '') {
-            $fromCountX = $this->equationCanonical(implode('+', $countXParts).'='.$totalCoins);
-            if ($this->equationCanonsMatch($fromCountX, $gotCanon)) {
+        // Prefer total money as RHS when value_x is used.
+        $usesValueX = false;
+        foreach ($submission['rows'] ?? [] as $cells) {
+            if (is_array($cells) && trim((string) ($cells['value_x'] ?? '')) !== '') {
+                $usesValueX = true;
+                break;
+            }
+        }
+        if ($usesValueX) {
+            $rhs = $submission['grand_total'] ?? $expected['grand_total'] ?? $rhs;
+        } elseif (! is_string($submission['grand_count'] ?? null) || ($submission['grand_count'] ?? '') === '' || str_contains((string) $submission['grand_count'], '=')) {
+            $rhs = $expected['grand_count'] ?? $rhs;
+        } else {
+            $rhs = $submission['grand_count'];
+        }
+        if ($exprParts !== [] && $rhs !== null && $rhs !== '') {
+            $fromParts = $this->equationCanonical(implode('+', $exprParts).'='.$rhs);
+            if ($this->equationCanonsMatch($fromParts, $gotCanon)) {
                 return true;
             }
         }
