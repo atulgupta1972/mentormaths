@@ -1,6 +1,7 @@
 <script setup>
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import EquationFraction from '@/Pages/Student/MmmCards/EquationFraction.vue';
 import axios from 'axios';
 import { computed, ref, watch } from 'vue';
 
@@ -69,7 +70,6 @@ const scaleTip = computed(() => play.value.scale_tip
 const isTermFlow = computed(() => steps.value.some((step) => [
     'divide', 'multiply', 'cross', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
 ].includes(step.type)));
-const scaleOp = computed(() => (currentStep.value?.type === 'multiply' ? '×' : '÷'));
 const canCheckStep = computed(() => {
     if (currentValue.value.trim() === '') {
         return false;
@@ -101,10 +101,12 @@ const workingLines = computed(() => {
         if (v === undefined || v === null || v === '') {
             continue;
         }
-        if (step.type === 'divide' || step.type === 'multiply') {
+        if (step.type === 'multiply') {
+            continue;
+        }
+        if (step.type === 'divide') {
             const right = step.right || completed.value[step.right_from] || play.value.given_right;
-            const op = step.type === 'multiply' ? '×' : '÷';
-            lines.push(`${step.left || play.value.given_left} ${op} ${v} = ${right} ${op} ${v}`);
+            lines.push(`${step.left || play.value.given_left} ÷ ${v} = ${right} ÷ ${v}`);
         } else if (step.type === 'cross') {
             const other = completed.value[step.pair_key];
             if (other !== undefined && other !== null && other !== '') {
@@ -235,6 +237,16 @@ const onEnter = (event) => {
     event.preventDefault();
     checkStep();
 };
+
+const multiplyStep = computed(() => steps.value.find((step) => step.type === 'multiply') || null);
+const multiplyTimes = computed(() => {
+    if (! multiplyStep.value) {
+        return '';
+    }
+
+    return completed.value[multiplyStep.value.key] || '';
+});
+const showMultiplyTrail = computed(() => !! multiplyTimes.value);
 </script>
 
 <template>
@@ -252,9 +264,9 @@ const onEnter = (event) => {
             <div class="mt-3 flex items-end justify-center gap-3 sm:gap-8">
                 <div class="min-w-[8rem] flex-1 rounded-xl border-2 border-rose-200 bg-white px-3 py-4 text-center shadow-sm">
                     <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Left</p>
-                    <p class="mt-1 font-mono text-xl font-extrabold text-slate-900 sm:text-2xl">
-                        {{ play.given_left }}
-                    </p>
+                    <div class="mt-2 flex justify-center text-xl sm:text-2xl">
+                        <EquationFraction :expr="play.given_left" />
+                    </div>
                 </div>
                 <div class="mb-4 flex flex-col items-center">
                     <span class="font-mono text-2xl font-black text-rose-700">=</span>
@@ -264,9 +276,9 @@ const onEnter = (event) => {
                 </div>
                 <div class="min-w-[8rem] flex-1 rounded-xl border-2 border-rose-200 bg-white px-3 py-4 text-center shadow-sm">
                     <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Right</p>
-                    <p class="mt-1 font-mono text-xl font-extrabold text-slate-900 sm:text-2xl">
-                        {{ play.given_right }}
-                    </p>
+                    <div class="mt-2 flex justify-center text-xl sm:text-2xl">
+                        <EquationFraction :expr="play.given_right" />
+                    </div>
                 </div>
             </div>
             <p class="mt-3 text-center text-xs text-slate-600">
@@ -390,7 +402,21 @@ const onEnter = (event) => {
         </div>
         </div>
 
-        <div v-if="isTermFlow && workingLines.length" class="space-y-1 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+        <div v-if="isTermFlow && (workingLines.length || showMultiplyTrail)" class="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+            <div
+                v-if="showMultiplyTrail"
+                class="flex flex-wrap items-center justify-center gap-3"
+            >
+                <EquationFraction
+                    :expr="multiplyStep.left || play.given_left"
+                    :times="multiplyTimes"
+                />
+                <span class="font-mono text-xl font-black text-rose-700">=</span>
+                <EquationFraction
+                    :expr="multiplyStep.right || play.given_right"
+                    :times="multiplyTimes"
+                />
+            </div>
             <p
                 v-for="(line, i) in workingLines"
                 :key="`work-${i}`"
@@ -400,7 +426,7 @@ const onEnter = (event) => {
             </p>
         </div>
 
-        <div v-if="!allCorrect && (currentStep?.type === 'divide' || currentStep?.type === 'multiply')" class="space-y-3">
+        <div v-if="!allCorrect && currentStep?.type === 'divide'" class="space-y-3">
             <p
                 v-if="currentStep.rewrite_note"
                 class="text-center text-sm font-medium text-slate-700"
@@ -416,21 +442,13 @@ const onEnter = (event) => {
                 <span class="text-rose-700">=</span>
                 <span>{{ currentStep.rewrite_right }}</span>
             </div>
-            <p
-                v-if="currentStep.warning"
-                class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
-            >
-                {{ currentStep.warning }}
-            </p>
             <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
-                {{ currentStep.type === 'multiply'
-                    ? 'Multiply both sides by the same number'
-                    : 'Divide both sides by the same number' }}
+                Divide both sides by the same number
             </p>
             <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
                 <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold text-slate-900">
                     <span>{{ currentStep.left || play.given_left }}</span>
-                    <span class="text-rose-700">{{ scaleOp }}</span>
+                    <span class="text-rose-700">÷</span>
                     <input
                         v-model="currentValue"
                         type="text"
@@ -439,14 +457,14 @@ const onEnter = (event) => {
                         :class="cellClass"
                         placeholder="?"
                         autocomplete="off"
-                        :aria-label="currentStep.type === 'multiply' ? 'Multiply on the left' : 'Divide on the left'"
+                        aria-label="Divide on the left"
                         @keyup.enter="onEnter"
                     >
                 </div>
                 <span class="font-mono text-2xl font-black text-rose-700">=</span>
                 <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold text-slate-900">
                     <span>{{ divideRight }}</span>
-                    <span class="text-rose-700">{{ scaleOp }}</span>
+                    <span class="text-rose-700">÷</span>
                     <input
                         :value="currentValue"
                         type="text"
@@ -455,7 +473,7 @@ const onEnter = (event) => {
                         :class="cellClass"
                         placeholder="?"
                         autocomplete="off"
-                        :aria-label="currentStep.type === 'multiply' ? 'Multiply on the right' : 'Divide on the right'"
+                        aria-label="Divide on the right"
                         @input="currentValue = $event.target.value"
                         @keyup.enter="onEnter"
                     >
@@ -466,6 +484,61 @@ const onEnter = (event) => {
             </p>
         </div>
 
+        <div v-if="!allCorrect && currentStep?.type === 'multiply'" class="space-y-3">
+            <p
+                v-if="currentStep.warning"
+                class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+            >
+                {{ currentStep.warning }}
+            </p>
+            <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
+                Put the same number on both numerators
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <EquationFraction
+                        :expr="currentStep.left || play.given_left"
+                        show-times-slot
+                    >
+                        <input
+                            v-model="currentValue"
+                            type="text"
+                            inputmode="numeric"
+                            class="h-9 w-12 rounded-md border px-1 text-center font-mono text-lg font-extrabold focus:border-rose-400 focus:ring-rose-200"
+                            :class="cellClass"
+                            placeholder="?"
+                            autocomplete="off"
+                            aria-label="Multiply on the left numerator"
+                            @keyup.enter="onEnter"
+                        >
+                    </EquationFraction>
+                </div>
+                <span class="font-mono text-2xl font-black text-rose-700">=</span>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <EquationFraction
+                        :expr="currentStep.right || play.given_right"
+                        show-times-slot
+                    >
+                        <input
+                            :value="currentValue"
+                            type="text"
+                            inputmode="numeric"
+                            class="h-9 w-12 rounded-md border px-1 text-center font-mono text-lg font-extrabold focus:border-rose-400 focus:ring-rose-200"
+                            :class="cellClass"
+                            placeholder="?"
+                            autocomplete="off"
+                            aria-label="Multiply on the right"
+                            @input="currentValue = $event.target.value"
+                            @keyup.enter="onEnter"
+                        >
+                    </EquationFraction>
+                </div>
+            </div>
+            <p class="text-center text-[11px] text-slate-500">
+                The extra number sits on the numerator. One box fills the other.
+            </p>
+        </div>
+
         <div v-if="!allCorrect && currentStep?.type === 'cross'" class="space-y-3">
             <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
                 Cross-multiply
@@ -473,6 +546,11 @@ const onEnter = (event) => {
             <p class="text-center text-sm text-slate-700">
                 Each numerator times the other side’s denominator.
             </p>
+            <div class="flex flex-wrap items-center justify-center gap-6">
+                <EquationFraction :expr="play.given_left" />
+                <span class="font-mono text-xl font-black text-rose-700">=</span>
+                <EquationFraction :expr="play.given_right" />
+            </div>
             <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
                 <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold text-slate-900">
                     <span>{{ currentStep.left_num }}</span>
