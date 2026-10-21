@@ -74,6 +74,22 @@ const frozenNumber = computed(() => {
     return completed.value[from] ?? '';
 });
 
+const moveStep = computed(() => steps.value.find((step) => step.type === 'move') || null);
+const tidyValue = computed(() => {
+    const from = moveStep.value?.frozen_from;
+    if (! from) {
+        return frozenNumber.value;
+    }
+
+    return completed.value[from] ?? frozenNumber.value;
+});
+const moveValueSigned = computed(() => formatAdd(completed.value.move || ''));
+const showTidyTrail = computed(() => {
+    const type = currentStep.value?.type;
+
+    return type === 'move' || type === 'solve' || (allCorrect.value && !! moveStep.value);
+});
+
 const cleanMath = (value) => String(value ?? '')
     .replace(/[−–—﹣－]/g, '-')
     .replace(/[＋﹢]/g, '+')
@@ -334,58 +350,77 @@ const onEnter = (event) => {
             </div>
         </div>
 
-        <div v-if="!allCorrect && currentStep?.type === 'move'" class="space-y-3">
+        <div v-if="showTidyTrail" class="space-y-3">
             <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-sm text-slate-500">
                 <span class="line-through decoration-slate-300">{{ play.given_left }}</span>
                 <span>=</span>
                 <span class="line-through decoration-slate-300">{{ play.given_right }}</span>
             </div>
             <div
-                v-if="currentStep.rewrite_left"
+                v-if="moveStep?.rewrite_left"
                 class="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-mono text-lg font-extrabold text-emerald-950"
             >
                 <span class="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Now it is</span>
-                <span>{{ currentStep.rewrite_left }}</span>
+                <span>{{ moveStep.rewrite_left }}</span>
                 <span class="text-rose-700">=</span>
-                <span>{{ frozenNumber || '…' }}</span>
+                <span>{{ tidyValue || '…' }}</span>
             </div>
-            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
-                Add the opposite so x is alone
-            </p>
-            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
+            <div
+                v-if="!allCorrect && currentStep?.type === 'move'"
+                class="space-y-2"
+            >
+                <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                    Add the opposite so x is alone
+                </p>
+                <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
+                    <span>x</span>
+                    <span class="text-rose-700">=</span>
+                    <span class="rounded-md bg-emerald-50 px-2 py-1 text-emerald-900">{{ tidyValue || '…' }}</span>
+                    <span>{{ currentStep.op || '+' }}</span>
+                    <input
+                        v-model="currentValue"
+                        type="text"
+                        inputmode="text"
+                        class="w-20 rounded-md border px-2 py-1 text-center font-mono text-lg font-extrabold"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        aria-label="Number to add to free x"
+                        @keyup.enter="onEnter"
+                    >
+                </div>
+            </div>
+            <div
+                v-else-if="completed.move"
+                class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold text-slate-700"
+            >
                 <span>x</span>
                 <span class="text-rose-700">=</span>
-                <span class="rounded-md bg-emerald-50 px-2 py-1 text-emerald-900">{{ frozenNumber || '…' }}</span>
-                <span>{{ currentStep.op || '+' }}</span>
-                <input
-                    v-model="currentValue"
-                    type="text"
-                    inputmode="text"
-                    class="w-20 rounded-md border px-2 py-1 text-center font-mono text-lg font-extrabold"
-                    :class="cellClass"
-                    placeholder="?"
-                    autocomplete="off"
-                    aria-label="Number to add to free x"
-                    @keyup.enter="onEnter"
-                >
+                <span class="rounded-md bg-emerald-50 px-2 py-1 text-emerald-900">{{ tidyValue }}</span>
+                <span class="rounded-md bg-emerald-50 px-2 py-1 text-emerald-900">{{ moveValueSigned }}</span>
             </div>
-        </div>
-
-        <div v-if="!allCorrect && currentStep?.type === 'solve'" class="space-y-2">
-            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-2xl font-extrabold">
-                <span>x</span>
-                <span class="text-rose-700">=</span>
-                <input
-                    v-model="currentValue"
-                    type="text"
-                    inputmode="numeric"
-                    class="w-24 rounded-md border px-2 py-1 text-center font-mono text-2xl font-black"
-                    :class="cellClass"
-                    placeholder="?"
-                    autocomplete="off"
-                    aria-label="Value of x"
-                    @keyup.enter="onEnter"
-                >
+            <div
+                v-if="!allCorrect && currentStep?.type === 'solve'"
+                class="space-y-2"
+            >
+                <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                    Now write x
+                </p>
+                <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-2xl font-extrabold">
+                    <span>x</span>
+                    <span class="text-rose-700">=</span>
+                    <input
+                        v-model="currentValue"
+                        type="text"
+                        inputmode="numeric"
+                        class="w-24 rounded-md border px-2 py-1 text-center font-mono text-2xl font-black"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        aria-label="Value of x"
+                        @keyup.enter="onEnter"
+                    >
+                </div>
             </div>
         </div>
 
