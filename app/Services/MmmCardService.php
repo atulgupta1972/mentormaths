@@ -164,6 +164,7 @@ class MmmCardService
         $tip = $answers['variable_tip'] ?? $answers['method_tip'] ?? null;
         $askEquation = ! empty($answers['check_equation']);
         $isBalance = ($answers['mode'] ?? '') === 'balance';
+        $isFillPage = ($answers['mode'] ?? '') === 'fill_page';
 
         return [
             'id' => $exercise->id,
@@ -171,8 +172,9 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isBalance ? 'balance' : 'table',
+            'play_kind' => $isFillPage ? 'fill_page' : ($isBalance ? 'balance' : 'table'),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
+            'fill_page' => $isFillPage ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
             // Marks: auto from Total column. Money ratio/conditions: student types the equation.
@@ -198,6 +200,9 @@ class MmmCardService
         $expected = $exercise->answers ?? [];
         if (($expected['mode'] ?? '') === 'balance') {
             return $this->checkBalanceSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'fill_page') {
+            return $this->checkFillPageSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -468,6 +473,81 @@ class MmmCardService
                 'board' => $chapter->syllabusVersion?->board?->code,
                 'class' => $chapter->syllabusVersion?->gradeLevel?->name,
             ]);
+    }
+
+    /**
+     * One-page fill-in-the-blanks: check one x at a time; all_ok only when every sum is right.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkFillPageSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $items = is_array($expected['play']['items'] ?? null) ? $expected['play']['items'] : [];
+        $stepKeys = [];
+        foreach ($items as $item) {
+            if (is_array($item) && ($item['key'] ?? '') !== '') {
+                $stepKeys[] = (string) $item['key'];
+            }
+        }
+        if ($stepKeys === []) {
+            $stepKeys = array_map('strval', array_keys($check));
+        }
+
+        $stepKey = $submission['step_key'] ?? null;
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        if ($stepKey !== null && $stepKey !== '' && ! array_key_exists($stepKey, $values)) {
+            $values[$stepKey] = $submission['value'] ?? null;
+        }
+
+        $cellResults = [];
+        $allOk = true;
+        $keysToCheck = ($stepKey !== null && $stepKey !== '') ? [$stepKey] : $stepKeys;
+
+        foreach ($keysToCheck as $key) {
+            $key = (string) $key;
+            if (! array_key_exists($key, $check)) {
+                $cellResults[$key] = false;
+                $allOk = false;
+
+                continue;
+            }
+            $ok = $this->integerTokenMatches($check[$key], $values[$key] ?? null);
+            $cellResults[$key] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        $finished = false;
+        if ($allOk && $stepKey === null && $keysToCheck === $stepKeys && $stepKeys !== []) {
+            $finished = true;
+        } elseif (count($values) >= count($stepKeys) && $stepKeys !== []) {
+            $finished = true;
+            foreach ($stepKeys as $key) {
+                if (! $this->integerTokenMatches($check[$key] ?? null, $values[$key] ?? null)) {
+                    $finished = false;
+                    break;
+                }
+            }
+        }
+
+        $message = 'Right.';
+        if (! $allOk) {
+            $message = 'Not yet. Work it in your copy — BODMAS on the numbers first, then keep the x-term together.';
+        } elseif ($finished) {
+            $message = 'All five are right. Well done.';
+        }
+
+        return [
+            'ok' => $allOk,
+            'all_ok' => $finished,
+            'cell_results' => $cellResults,
+            'message' => $message,
+            'step_key' => $stepKey,
+        ];
     }
 
     /**

@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import EquationBalancePlay from '@/Pages/Student/MmmCards/EquationBalancePlay.vue';
+import EquationFillPagePlay from '@/Pages/Student/MmmCards/EquationFillPagePlay.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import axios from 'axios';
 import { computed, reactive, ref, watch } from 'vue';
@@ -81,7 +82,8 @@ const allCorrect = ref(false);
 
 const usesVariable = computed(() => !! props.exercise?.uses_variable);
 const usesValueX = computed(() => columns.value.some((col) => col.key === 'value_x'));
-const isBalance = computed(() => props.exercise?.play_kind === 'balance' || props.card?.kind === 'balance_equation');
+const isBalance = computed(() => props.exercise?.play_kind === 'balance');
+const isFillPage = computed(() => props.exercise?.play_kind === 'fill_page' || props.card?.kind === 'fill_page');
 
 const formatEqPart = (value) => {
     const text = String(value ?? '').trim();
@@ -266,13 +268,26 @@ const footerColspan = computed(() => {
             </div>
         </template>
 
-        <div class="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
+        <div class="mx-auto space-y-4 p-4 sm:p-6" :class="isFillPage ? 'max-w-4xl' : 'max-w-3xl'">
             <p v-if="is_staff_preview" class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
                 Staff preview — checking does not save student progress.
             </p>
 
             <section
-                v-if="showMethodSketch && isBalance"
+                v-if="isFillPage"
+                class="rounded-xl bg-white p-4 shadow-sm ring-2"
+                :class="accentRing"
+            >
+                <h3 class="text-sm font-extrabold uppercase tracking-wide text-rose-900">
+                    Solve in your copy
+                </h3>
+                <p class="mt-2 text-sm leading-relaxed text-slate-700">
+                    {{ card.method_blurb }}
+                </p>
+            </section>
+
+            <section
+                v-else-if="showMethodSketch && isBalance"
                 class="rounded-xl bg-white p-4 shadow-sm ring-2"
                 :class="accentRing"
             >
@@ -365,14 +380,21 @@ const footerColspan = computed(() => {
                         {{ exercise.is_demo ? 'Demo' : exercise.difficulty }}
                     </span>
                     <span class="text-xs font-semibold text-slate-500">
-                        Sum {{ exercise_index + 1 }} / {{ card.exercises_total }}
+                        <template v-if="isFillPage">5 sums on this page</template>
+                        <template v-else>Sum {{ exercise_index + 1 }} / {{ card.exercises_total }}</template>
                     </span>
                 </div>
                 <p class="mt-3 text-base font-medium leading-relaxed text-slate-900">
                     {{ exercise.question_text }}
                 </p>
+                <EquationFillPagePlay
+                    v-if="isFillPage"
+                    :key="exercise.id"
+                    :exercise="exercise"
+                    :check_url="check_url"
+                />
                 <EquationBalancePlay
-                    v-if="isBalance"
+                    v-else-if="isBalance"
                     :key="exercise.id"
                     :exercise="exercise"
                     :card="card"
@@ -386,7 +408,7 @@ const footerColspan = computed(() => {
                 >
                     {{ exercise.variable_tip }}
                 </p>
-                <template v-if="!isBalance">
+                <template v-if="!isBalance && !isFillPage">
                 <p v-if="fillsDenomination" class="mt-2 text-xs text-slate-500">
                     Write each denomination in ₹ (number only, e.g. 2, 5, 10), then counts and totals. Wrong cells will be highlighted.
                 </p>
