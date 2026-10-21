@@ -102,16 +102,32 @@ const unlink = (chapterId) => {
 
             <section class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">
                 <h3 class="text-sm font-semibold text-gray-900">Exercises</h3>
+                <p class="mt-1 text-xs text-slate-500">
+                    Preview any sum to check the table without saving student progress.
+                </p>
                 <ul class="mt-2 space-y-2">
                     <li
-                        v-for="ex in card.exercises"
+                        v-for="(ex, index) in card.exercises"
                         :key="ex.id"
-                        class="rounded border border-slate-200 px-3 py-2 text-sm"
+                        class="flex flex-wrap items-start justify-between gap-2 rounded border border-slate-200 px-3 py-2 text-sm"
                     >
-                        <span class="rounded bg-slate-100 px-1.5 py-px text-[10px] font-bold uppercase text-slate-700">
-                            {{ ex.is_demo ? 'Demo' : ex.difficulty }}
-                        </span>
-                        <p class="mt-1 text-slate-800">{{ ex.question_text }}</p>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="rounded bg-teal-50 px-1.5 py-px text-[10px] font-bold uppercase text-teal-800">
+                                    Sum {{ ex.sort_order || (index + 1) }}
+                                </span>
+                                <span class="rounded bg-slate-100 px-1.5 py-px text-[10px] font-bold uppercase text-slate-700">
+                                    {{ ex.is_demo ? 'Demo' : ex.difficulty }}
+                                </span>
+                            </div>
+                            <p class="mt-1 text-slate-800">{{ ex.question_text }}</p>
+                        </div>
+                        <Link
+                            :href="route('admin.mmm-cards.play', { mmmCard: card.id, exercise: index + 1 })"
+                            class="shrink-0 rounded-md border border-teal-700 px-2.5 py-1 text-xs font-semibold text-teal-800 hover:bg-teal-50"
+                        >
+                            Preview card
+                        </Link>
                     </li>
                 </ul>
             </section>

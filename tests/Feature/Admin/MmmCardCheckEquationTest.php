@@ -31,4 +31,21 @@ class MmmCardCheckEquationTest extends TestCase
             ->assertJsonPath('ok', true)
             ->assertJsonMissingPath('cell_results.equation');
     }
+
+    public function test_admin_can_preview_a_specific_exercise(): void
+    {
+        $this->withoutVite();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 12)->firstOrFail();
+
+        $this->actingAs($admin)
+            ->get(route('admin.mmm-cards.play', ['mmmCard' => $card, 'exercise' => 12]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Student/MmmCards/Play')
+                ->where('exercise.id', $exercise->id)
+                ->where('exercise.sort_order', 12)
+                ->where('is_staff_preview', true));
+    }
 }
