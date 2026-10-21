@@ -554,6 +554,7 @@ class MmmCardService
                 'simplify_right' => 'First work out the numbers on the right of = .',
                 'simplify_left' => 'First work out the numbers on the left of = .',
                 'move' => 'Add the opposite of the number stuck to x.',
+                'impact' => 'The x side is now x + 0. Only fill the number box on the other side.',
                 'solve' => 'x is alone now. Work out the number.',
                 default => 'Check that number and try again.',
             };

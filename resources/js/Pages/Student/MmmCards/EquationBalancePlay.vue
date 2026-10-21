@@ -60,6 +60,10 @@ const formatAdd = (raw) => {
 };
 
 const displayAdd = computed(() => formatAdd(currentValue.value));
+const addedSigned = computed(() => formatAdd(completed.value.add || (currentStep.value?.type === 'balance' ? currentValue.value : '')));
+const xValue = computed(() => completed.value.impact || completed.value.x || '');
+
+const showFrozenBalance = computed(() => !! completed.value.add);
 
 const frozenNumber = computed(() => {
     const from = currentStep.value?.frozen_from;
@@ -195,6 +199,7 @@ const onEnter = (event) => {
             {{ currentStep.hint }}
         </p>
 
+        <div class="space-y-3">
         <div v-if="!allCorrect && currentStep?.type === 'balance'" class="space-y-3">
             <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
                 Add the same number on both sides
@@ -239,7 +244,59 @@ const onEnter = (event) => {
             </p>
         </div>
 
-        <div v-else-if="!allCorrect && currentStep?.type === 'simplify_right'" class="space-y-2">
+        <div
+            v-if="showFrozenBalance && currentStep?.type === 'impact'"
+            class="flex flex-wrap items-center justify-center gap-2 font-mono text-base font-semibold text-slate-500"
+        >
+            <span>{{ play.given_left }}</span>
+            <span class="text-rose-600">+</span>
+            <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-800">({{ addedSigned }})</span>
+            <span class="text-rose-700">=</span>
+            <span>{{ play.given_right }}</span>
+            <span class="text-rose-600">+</span>
+            <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-800">({{ addedSigned }})</span>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'impact'" class="space-y-2">
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                Impact — only fill the empty box
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-xl font-extrabold">
+                <template v-if="currentStep.box_side === 'left'">
+                    <input
+                        v-model="currentValue"
+                        type="text"
+                        inputmode="numeric"
+                        class="w-20 rounded-md border px-2 py-1 text-center font-mono text-xl font-black"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        aria-label="Number on the left"
+                        @keyup.enter="onEnter"
+                    >
+                    <span class="text-rose-700">=</span>
+                    <span class="rounded-lg bg-slate-100 px-3 py-1 text-slate-800">{{ currentStep.x_expr }}</span>
+                </template>
+                <template v-else>
+                    <span class="rounded-lg bg-slate-100 px-3 py-1 text-slate-800">{{ currentStep.x_expr }}</span>
+                    <span class="text-rose-700">=</span>
+                    <input
+                        v-model="currentValue"
+                        type="text"
+                        inputmode="numeric"
+                        class="w-20 rounded-md border px-2 py-1 text-center font-mono text-xl font-black"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        aria-label="Number on the right"
+                        @keyup.enter="onEnter"
+                    >
+                </template>
+            </div>
+        </div>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'simplify_right'" class="space-y-2">
             <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
                 <span>{{ play.given_left }}</span>
                 <span class="text-rose-700">=</span>
@@ -258,7 +315,7 @@ const onEnter = (event) => {
             </div>
         </div>
 
-        <div v-else-if="!allCorrect && currentStep?.type === 'simplify_left'" class="space-y-2">
+        <div v-if="!allCorrect && currentStep?.type === 'simplify_left'" class="space-y-2">
             <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
                 <span class="text-slate-400 line-through">{{ play.given_left }}</span>
                 <input
@@ -277,7 +334,7 @@ const onEnter = (event) => {
             </div>
         </div>
 
-        <div v-else-if="!allCorrect && currentStep?.type === 'move'" class="space-y-2">
+        <div v-if="!allCorrect && currentStep?.type === 'move'" class="space-y-2">
             <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
                 <span>x</span>
                 <span class="text-rose-700">=</span>
@@ -297,7 +354,7 @@ const onEnter = (event) => {
             </div>
         </div>
 
-        <div v-else-if="!allCorrect && currentStep?.type === 'solve'" class="space-y-2">
+        <div v-if="!allCorrect && currentStep?.type === 'solve'" class="space-y-2">
             <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-2xl font-extrabold">
                 <span>x</span>
                 <span class="text-rose-700">=</span>
@@ -335,7 +392,7 @@ const onEnter = (event) => {
             class="space-y-3 rounded-xl border-2 border-emerald-400 bg-emerald-50 px-4 py-4"
         >
             <p class="font-mono text-2xl font-black text-emerald-950">
-                x = {{ completed.x }}
+                x = {{ xValue }}
             </p>
             <p v-if="play.tally" class="text-sm font-medium text-emerald-900">
                 {{ play.tally }}

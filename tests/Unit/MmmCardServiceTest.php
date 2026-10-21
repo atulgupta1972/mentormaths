@@ -620,12 +620,12 @@ class MmmCardServiceTest extends TestCase
         ]);
         $this->assertFalse($plusFiveRejected['ok']);
 
-        $x = $service->checkSubmission($card, $sum1, [
-            'step_key' => 'x',
+        $impact = $service->checkSubmission($card, $sum1, [
+            'step_key' => 'impact',
             'value' => '5',
         ]);
-        $this->assertTrue($x['ok']);
-        $this->assertTrue($x['all_ok']);
+        $this->assertTrue($impact['ok']);
+        $this->assertTrue($impact['all_ok']);
 
         $sum2 = $card->exercises()->where('sort_order', 2)->firstOrFail();
         $addPlus = $service->checkSubmission($card, $sum2, [
@@ -641,7 +641,7 @@ class MmmCardServiceTest extends TestCase
         ]);
         $this->assertTrue($right['ok'], json_encode($right));
         $xRight = $service->checkSubmission($card, $sum7, [
-            'step_key' => 'x',
+            'step_key' => 'impact',
             'value' => '-10',
         ]);
         $this->assertTrue($xRight['all_ok']);
