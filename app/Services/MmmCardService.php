@@ -580,6 +580,18 @@ class MmmCardService
         $cellResults = [];
         $allOk = true;
         $keysToCheck = ($stepKey !== null && $stepKey !== '') ? [$stepKey] : $stepKeys;
+        if ($stepKey !== null && $stepKey !== '') {
+            foreach ($playSteps as $step) {
+                if (! is_array($step) || (string) ($step['key'] ?? '') !== (string) $stepKey) {
+                    continue;
+                }
+                $pairKey = (string) ($step['pair_key'] ?? '');
+                if ($pairKey !== '' && ! in_array($pairKey, $keysToCheck, true)) {
+                    $keysToCheck[] = $pairKey;
+                }
+                break;
+            }
+        }
 
         foreach ($keysToCheck as $key) {
             $key = (string) $key;
@@ -641,6 +653,8 @@ class MmmCardService
                 'open_bracket' => 'Open the bracket first.',
                 'rhs_value' => 'Now work out the right-hand side.',
                 'take_number' => 'Take the loose number across. Keep the x-term together.',
+                'multiply' => 'Multiply both sides by the same number (the denominator) so it cancels.',
+                'cross' => 'Cross-multiply: each numerator times the other side’s denominator.',
                 'solve' => 'x is alone now. Work out the number.',
                 default => 'Check that number and try again.',
             };

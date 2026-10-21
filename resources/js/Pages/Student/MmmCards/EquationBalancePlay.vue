@@ -17,6 +17,7 @@ const play = computed(() => props.exercise?.balance || {});
 const steps = computed(() => play.value.steps || []);
 const currentIndex = ref(0);
 const currentValue = ref('');
+const crossRight = ref('');
 const completed = ref({});
 const submitting = ref(false);
 const message = ref('');
@@ -40,6 +41,7 @@ watch(
     () => {
         currentIndex.value = 0;
         currentValue.value = '';
+        crossRight.value = '';
         completed.value = {};
         message.value = '';
         allCorrect.value = false;
@@ -65,8 +67,19 @@ const xValue = computed(() => completed.value.x || completed.value.impact || '')
 const scaleTip = computed(() => play.value.scale_tip
     || 'Both pans already match. Whatever you add on the left, add the same on the right.');
 const isTermFlow = computed(() => steps.value.some((step) => [
-    'divide', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
+    'divide', 'multiply', 'cross', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
 ].includes(step.type)));
+const scaleOp = computed(() => (currentStep.value?.type === 'multiply' ? '×' : '÷'));
+const canCheckStep = computed(() => {
+    if (currentValue.value.trim() === '') {
+        return false;
+    }
+    if (currentStep.value?.type === 'cross' && crossRight.value.trim() === '') {
+        return false;
+    }
+
+    return true;
+});
 const divideRight = computed(() => {
     const step = currentStep.value;
     if (! step) {
@@ -88,9 +101,15 @@ const workingLines = computed(() => {
         if (v === undefined || v === null || v === '') {
             continue;
         }
-        if (step.type === 'divide') {
+        if (step.type === 'divide' || step.type === 'multiply') {
             const right = step.right || completed.value[step.right_from] || play.value.given_right;
-            lines.push(`${step.left || play.value.given_left} ÷ ${v} = ${right} ÷ ${v}`);
+            const op = step.type === 'multiply' ? '×' : '÷';
+            lines.push(`${step.left || play.value.given_left} ${op} ${v} = ${right} ${op} ${v}`);
+        } else if (step.type === 'cross') {
+            const other = completed.value[step.pair_key];
+            if (other !== undefined && other !== null && other !== '') {
+                lines.push(`${step.left_num} × ${v} = ${step.right_num} × ${other}`);
+            }
         } else if (step.type === 'isolate_term' || step.type === 'take_number') {
             lines.push(`${step.keep} = ${step.frozen} ${step.op || '−'} ${v}`);
         } else if (step.type === 'term_value' || step.type === 'rhs_value') {
@@ -149,27 +168,39 @@ const checkStep = async () => {
     message.value = '';
     stepOk.value = false;
     try {
-        const { data } = await axios.post(props.check_url, {
+        const payload = {
             exercise_id: props.exercise.id,
             step_key: currentKey.value,
             value: cleanMath(currentValue.value),
-        }, {
+        };
+        if (currentStep.value?.type === 'cross' && currentStep.value.pair_key) {
+            payload.values = {
+                [currentKey.value]: cleanMath(currentValue.value),
+                [currentStep.value.pair_key]: cleanMath(crossRight.value),
+            };
+        }
+        const { data } = await axios.post(props.check_url, payload, {
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         });
         const ok = !! data.ok;
         stepOk.value = ok;
         message.value = data.message || '';
         if (ok) {
-            completed.value = {
+            const nextCompleted = {
                 ...completed.value,
                 [currentKey.value]: cleanMath(currentValue.value),
             };
+            if (currentStep.value?.type === 'cross' && currentStep.value.pair_key) {
+                nextCompleted[currentStep.value.pair_key] = cleanMath(crossRight.value);
+            }
+            completed.value = nextCompleted;
             if (data.all_ok) {
                 allCorrect.value = true;
             } else {
                 window.setTimeout(() => {
                     currentIndex.value += 1;
                     currentValue.value = '';
+                    crossRight.value = '';
                     stepOk.value = false;
                     message.value = '';
                 }, 550);
@@ -186,6 +217,7 @@ const checkStep = async () => {
 const reset = () => {
     currentIndex.value = 0;
     currentValue.value = '';
+    crossRight.value = '';
     completed.value = {};
     message.value = '';
     allCorrect.value = false;
@@ -368,7 +400,7 @@ const onEnter = (event) => {
             </p>
         </div>
 
-        <div v-if="!allCorrect && currentStep?.type === 'divide'" class="space-y-3">
+        <div v-if="!allCorrect && (currentStep?.type === 'divide' || currentStep?.type === 'multiply')" class="space-y-3">
             <p
                 v-if="currentStep.rewrite_note"
                 class="text-center text-sm font-medium text-slate-700"
@@ -384,13 +416,21 @@ const onEnter = (event) => {
                 <span class="text-rose-700">=</span>
                 <span>{{ currentStep.rewrite_right }}</span>
             </div>
+            <p
+                v-if="currentStep.warning"
+                class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+            >
+                {{ currentStep.warning }}
+            </p>
             <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
-                Divide both sides by the same number
+                {{ currentStep.type === 'multiply'
+                    ? 'Multiply both sides by the same number'
+                    : 'Divide both sides by the same number' }}
             </p>
             <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
                 <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold text-slate-900">
                     <span>{{ currentStep.left || play.given_left }}</span>
-                    <span class="text-rose-700">÷</span>
+                    <span class="text-rose-700">{{ scaleOp }}</span>
                     <input
                         v-model="currentValue"
                         type="text"
@@ -399,14 +439,14 @@ const onEnter = (event) => {
                         :class="cellClass"
                         placeholder="?"
                         autocomplete="off"
-                        aria-label="Divide on the left"
+                        :aria-label="currentStep.type === 'multiply' ? 'Multiply on the left' : 'Divide on the left'"
                         @keyup.enter="onEnter"
                     >
                 </div>
                 <span class="font-mono text-2xl font-black text-rose-700">=</span>
                 <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold text-slate-900">
                     <span>{{ divideRight }}</span>
-                    <span class="text-rose-700">÷</span>
+                    <span class="text-rose-700">{{ scaleOp }}</span>
                     <input
                         :value="currentValue"
                         type="text"
@@ -415,7 +455,7 @@ const onEnter = (event) => {
                         :class="cellClass"
                         placeholder="?"
                         autocomplete="off"
-                        aria-label="Divide on the right"
+                        :aria-label="currentStep.type === 'multiply' ? 'Multiply on the right' : 'Divide on the right'"
                         @input="currentValue = $event.target.value"
                         @keyup.enter="onEnter"
                     >
@@ -424,6 +464,48 @@ const onEnter = (event) => {
             <p class="text-center text-[11px] text-slate-500">
                 One box fills the other — the scale stays level.
             </p>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'cross'" class="space-y-3">
+            <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
+                Cross-multiply
+            </p>
+            <p class="text-center text-sm text-slate-700">
+                Each numerator times the other side’s denominator.
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+                <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold text-slate-900">
+                    <span>{{ currentStep.left_num }}</span>
+                    <span class="text-rose-700">×</span>
+                    <input
+                        v-model="currentValue"
+                        type="text"
+                        inputmode="numeric"
+                        class="w-16 rounded-md border px-1 py-1 text-center font-mono text-lg font-extrabold focus:border-rose-400 focus:ring-rose-200"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        aria-label="Times the other denominator on the left"
+                        @keyup.enter="onEnter"
+                    >
+                </div>
+                <span class="font-mono text-2xl font-black text-rose-700">=</span>
+                <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold text-slate-900">
+                    <span>{{ currentStep.right_num }}</span>
+                    <span class="text-rose-700">×</span>
+                    <input
+                        v-model="crossRight"
+                        type="text"
+                        inputmode="numeric"
+                        class="w-16 rounded-md border px-1 py-1 text-center font-mono text-lg font-extrabold focus:border-rose-400 focus:ring-rose-200"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        aria-label="Times the other denominator on the right"
+                        @keyup.enter="onEnter"
+                    >
+                </div>
+            </div>
         </div>
 
         <div v-if="!allCorrect && (currentStep?.type === 'isolate_term' || currentStep?.type === 'take_number')" class="space-y-2">
@@ -634,7 +716,7 @@ const onEnter = (event) => {
         </div>
 
         <div v-if="!allCorrect" class="flex flex-wrap gap-2">
-            <PrimaryButton type="button" :disabled="submitting || currentValue.trim() === ''" @click="checkStep">
+            <PrimaryButton type="button" :disabled="submitting || !canCheckStep" @click="checkStep">
                 {{ submitting ? 'Checking…' : 'Check this step' }}
             </PrimaryButton>
             <SecondaryButton type="button" @click="reset">Start again</SecondaryButton>
