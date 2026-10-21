@@ -336,12 +336,20 @@ class MmmCardService
             }
         }
 
+        $usesValueX = collect($expected)->contains(
+            fn ($row) => is_array($row) && array_key_exists('value_x', $row),
+        );
+
         $message = 'Table looks good — well done.';
         if (! $allOk) {
             if (($cellResults['equation'] ?? true) === false) {
-                $message = 'Check your equation — add the Coins (in x) column and set it equal to total coins.';
+                $message = $usesValueX
+                    ? 'Check your equation — add the Value (in x) column and set it equal to total money.'
+                    : 'Check your equation — add the Coins (in x) column and set it equal to total coins.';
             } elseif (($cellResults['x_value'] ?? true) === false) {
-                $message = 'Equation may be right, but x is wrong. Solve again, then fill No. of coins.';
+                $message = $usesValueX
+                    ? 'Equation may be right, but x is wrong. Solve again, then fill Total value and No. of coins.'
+                    : 'Equation may be right, but x is wrong. Solve again, then fill No. of coins.';
             } else {
                 $denomWrong = collect($cellResults)
                     ->filter(fn ($ok, $key) => ! $ok && str_ends_with((string) $key, '.denomination'))
@@ -854,6 +862,55 @@ class MmmCardService
         if (preg_match('/^x-(\d+)$/', $text, $m)) {
             $text = '-'.$m[1].'+x';
         }
+
+        // (x+100)/2 → x/2+50 ; (2x-100)/2 → x-50  (before dropping parentheses)
+        $text = preg_replace_callback(
+            '/\((\d*)x([+-]\d+)\)\/(\d+)/',
+            static function (array $m): string {
+                $coeff = $m[1] === '' ? 1 : (int) $m[1];
+                $const = (int) $m[2];
+                $den = (int) $m[3];
+                if ($den === 0 || $const % $den !== 0) {
+                    return $m[0];
+                }
+                $c = intdiv($const, $den);
+                if ($coeff % $den === 0) {
+                    $k = intdiv($coeff, $den);
+                    $xPart = $k === 1 ? 'x' : $k.'x';
+                } else {
+                    $xPart = $coeff === 1 ? 'x/'.$den : $coeff.'x/'.$den;
+                }
+
+                return $c === 0 ? $xPart : ($c > 0 ? $xPart.'+'.$c : $xPart.$c);
+            },
+            $text,
+        ) ?? $text;
+
+        // 1/2*(x+100) → x/2+50
+        $text = preg_replace_callback(
+            '/(\d+)\/(\d+)\*\((\d*)x([+-])(\d+)\)/',
+            static function (array $m): string {
+                $num = (int) $m[1];
+                $den = (int) $m[2];
+                $coeff = $m[3] === '' ? 1 : (int) $m[3];
+                $sign = $m[4] === '-' ? -1 : 1;
+                $c = (int) $m[5];
+                if ($den === 0 || ($num * $sign * $c) % $den !== 0) {
+                    return $m[0];
+                }
+                $const = intdiv($num * $sign * $c, $den);
+                $xNum = $num * $coeff;
+                if ($xNum % $den === 0) {
+                    $k = intdiv($xNum, $den);
+                    $xPart = $k === 1 ? 'x' : $k.'x';
+                } else {
+                    $xPart = $xNum === 1 ? 'x/'.$den : $xNum.'x/'.$den;
+                }
+
+                return $const === 0 ? $xPart : ($const > 0 ? $xPart.'+'.$const : $xPart.$const);
+            },
+            $text,
+        ) ?? $text;
 
         // Fraction forms before dropping parentheses: (1/2)x → 1/2x
         $text = preg_replace('/\((\d+)\/(\d+)\)x/', '$1/$2x', $text) ?? $text;

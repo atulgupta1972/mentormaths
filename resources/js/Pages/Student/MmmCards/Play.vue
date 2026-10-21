@@ -79,6 +79,7 @@ const submitting = ref(false);
 const allCorrect = ref(false);
 
 const usesVariable = computed(() => !! props.exercise?.uses_variable);
+const usesValueX = computed(() => columns.value.some((col) => col.key === 'value_x'));
 
 const formatEqPart = (value) => {
     const text = String(value ?? '').trim();
@@ -514,7 +515,10 @@ const footerColspan = computed(() => {
                             {{ exercise.equation_prompt || 'Write the equation' }}
                         </label>
                         <p class="mt-0.5 text-[11px] text-slate-500">
-                            Add the <span class="font-semibold">Coins (in x)</span> column and set it equal to total coins.
+                            Add the
+                            <span class="font-semibold">{{ usesValueX ? 'Value (in x)' : 'Coins (in x)' }}</span>
+                            column and set it equal to
+                            {{ usesValueX ? 'total money' : 'total coins' }}.
                             Write the equation yourself — the system will check it.
                         </p>
                         <input

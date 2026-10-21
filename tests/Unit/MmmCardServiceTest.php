@@ -141,7 +141,7 @@ class MmmCardServiceTest extends TestCase
 
         $this->assertNotNull($card);
         $this->assertTrue($card->isPublished());
-        $this->assertSame(12, $card->exercises()->count());
+        $this->assertSame(15, $card->exercises()->count());
         $this->assertTrue((bool) $card->exercises()->orderBy('sort_order')->first()?->is_demo);
     }
 
@@ -462,6 +462,65 @@ class MmmCardServiceTest extends TestCase
             'x_value' => '600',
         ]);
         $this->assertTrue($sum12['ok'], json_encode($sum12['cell_results']));
+    }
+
+    public function test_my_money_value_relation_sums_accept_flexible_x(): void
+    {
+        $card = MmmCard::query()->where('slug', 'my-money-table')->firstOrFail();
+        $service = app(MmmCardService::class);
+        $sum13 = $card->exercises()->where('sort_order', 13)->firstOrFail();
+
+        $asRs5 = $service->checkSubmission($card, $sum13, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'value_x' => 'x/2', 'count' => '175', 'total' => '350'],
+                'rs5' => ['denomination' => '5', 'value_x' => 'x', 'count' => '140', 'total' => '700'],
+                'rs10' => ['denomination' => '10', 'value_x' => 'x-100', 'count' => '60', 'total' => '600'],
+            ],
+            'grand_count' => '375',
+            'grand_total' => '1650',
+            'equation' => 'x/2+x+(x-100)=1650',
+            'x_value' => '700',
+        ]);
+        $this->assertTrue($asRs5['ok'], json_encode($asRs5['cell_results']));
+
+        $asRs10 = $service->checkSubmission($card, $sum13, [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'value_x' => '(x+100)/2', 'count' => '175', 'total' => '350'],
+                'rs5' => ['denomination' => '5', 'value_x' => 'x+100', 'count' => '140', 'total' => '700'],
+                'rs10' => ['denomination' => '10', 'value_x' => 'x', 'count' => '60', 'total' => '600'],
+            ],
+            'grand_count' => '375',
+            'grand_total' => '1650',
+            'equation' => '(x+100)/2+(x+100)+x=1650',
+            'x_value' => '600',
+        ]);
+        $this->assertTrue($asRs10['ok'], json_encode($asRs10['cell_results']));
+
+        $sum14 = $service->checkSubmission($card, $card->exercises()->where('sort_order', 14)->firstOrFail(), [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'value_x' => 'x-150', 'count' => '225', 'total' => '450'],
+                'rs5' => ['denomination' => '5', 'value_x' => 'x', 'count' => '120', 'total' => '600'],
+                'rs10' => ['denomination' => '10', 'value_x' => 'x/2', 'count' => '30', 'total' => '300'],
+            ],
+            'grand_count' => '375',
+            'grand_total' => '1350',
+            'equation' => '(x-150)+x+x/2=1350',
+            'x_value' => '600',
+        ]);
+        $this->assertTrue($sum14['ok'], json_encode($sum14['cell_results']));
+
+        $sum15 = $service->checkSubmission($card, $card->exercises()->where('sort_order', 15)->firstOrFail(), [
+            'rows' => [
+                'rs2' => ['denomination' => '2', 'value_x' => 'x', 'count' => '400', 'total' => '800'],
+                'rs5' => ['denomination' => '5', 'value_x' => 'x/2', 'count' => '80', 'total' => '400'],
+                'rs10' => ['denomination' => '10', 'value_x' => 'x-200', 'count' => '60', 'total' => '600'],
+            ],
+            'grand_count' => '540',
+            'grand_total' => '1800',
+            'equation' => 'x+x/2+(x-200)=1800',
+            'x_value' => '800',
+        ]);
+        $this->assertTrue($sum15['ok'], json_encode($sum15['cell_results']));
     }
 
     public function test_admin_can_link_card_to_syllabus_chapter(): void
