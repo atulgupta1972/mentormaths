@@ -3,7 +3,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import EquationFraction from '@/Pages/Student/MmmCards/EquationFraction.vue';
 import axios from 'axios';
-import { computed, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps({
     exercise: { type: Object, required: true },
@@ -19,6 +19,7 @@ const steps = computed(() => play.value.steps || []);
 const currentIndex = ref(0);
 const currentValue = ref('');
 const crossRight = ref('');
+const frac = reactive({ n1: '', n2: '', d1: '', d2: '' });
 const completed = ref({});
 const submitting = ref(false);
 const message = ref('');
@@ -43,6 +44,10 @@ watch(
         currentIndex.value = 0;
         currentValue.value = '';
         crossRight.value = '';
+        frac.n1 = '';
+        frac.n2 = '';
+        frac.d1 = '';
+        frac.d2 = '';
         completed.value = {};
         message.value = '';
         allCorrect.value = false;
@@ -68,13 +73,16 @@ const xValue = computed(() => completed.value.x || completed.value.impact || '')
 const scaleTip = computed(() => play.value.scale_tip
     || 'Both pans already match. Whatever you add on the left, add the same on the right.');
 const isTermFlow = computed(() => steps.value.some((step) => [
-    'divide', 'multiply', 'cross', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
+    'divide', 'multiply', 'cross', 'write_frac', 'cut', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
 ].includes(step.type)));
 const canCheckStep = computed(() => {
+    if (currentStep.value?.type === 'write_frac') {
+        return frac.n1.trim() !== '' && frac.n2.trim() !== '' && frac.d1.trim() !== '' && frac.d2.trim() !== '';
+    }
     if (currentValue.value.trim() === '') {
         return false;
     }
-    if (currentStep.value?.type === 'cross' && crossRight.value.trim() === '') {
+    if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && crossRight.value.trim() === '') {
         return false;
     }
 
@@ -107,6 +115,8 @@ const workingLines = computed(() => {
         if (step.type === 'divide') {
             const right = step.right || completed.value[step.right_from] || play.value.given_right;
             lines.push(`${step.left || play.value.given_left} ÷ ${v} = ${right} ÷ ${v}`);
+        } else if (step.type === 'write_frac' || step.type === 'cut') {
+            continue;
         } else if (step.type === 'cross') {
             const other = completed.value[step.pair_key];
             if (other !== undefined && other !== null && other !== '') {
@@ -175,7 +185,15 @@ const checkStep = async () => {
             step_key: currentKey.value,
             value: cleanMath(currentValue.value),
         };
-        if (currentStep.value?.type === 'cross' && currentStep.value.pair_key) {
+        if (currentStep.value?.type === 'write_frac') {
+            payload.values = {
+                n1: cleanMath(frac.n1),
+                n2: cleanMath(frac.n2),
+                d1: cleanMath(frac.d1),
+                d2: cleanMath(frac.d2),
+            };
+        }
+        if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
             payload.values = {
                 [currentKey.value]: cleanMath(currentValue.value),
                 [currentStep.value.pair_key]: cleanMath(crossRight.value),
@@ -192,7 +210,13 @@ const checkStep = async () => {
                 ...completed.value,
                 [currentKey.value]: cleanMath(currentValue.value),
             };
-            if (currentStep.value?.type === 'cross' && currentStep.value.pair_key) {
+            if (currentStep.value?.type === 'write_frac') {
+                nextCompleted.n1 = cleanMath(frac.n1);
+                nextCompleted.n2 = cleanMath(frac.n2);
+                nextCompleted.d1 = cleanMath(frac.d1);
+                nextCompleted.d2 = cleanMath(frac.d2);
+            }
+            if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
                 nextCompleted[currentStep.value.pair_key] = cleanMath(crossRight.value);
             }
             completed.value = nextCompleted;
@@ -220,6 +244,10 @@ const reset = () => {
     currentIndex.value = 0;
     currentValue.value = '';
     crossRight.value = '';
+    frac.n1 = '';
+    frac.n2 = '';
+    frac.d1 = '';
+    frac.d2 = '';
     completed.value = {};
     message.value = '';
     allCorrect.value = false;
@@ -247,6 +275,10 @@ const multiplyTimes = computed(() => {
     return completed.value[multiplyStep.value.key] || '';
 });
 const showMultiplyTrail = computed(() => !! multiplyTimes.value);
+const showFracTrail = computed(() => !! (completed.value.n1 && completed.value.n2 && completed.value.d1 && completed.value.d2));
+const cutStep = computed(() => steps.value.find((step) => step.type === 'cut') || null);
+const cutLeftValue = computed(() => (cutStep.value ? completed.value[cutStep.value.key] : '') || '');
+const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[cutStep.value.pair_key] : '') || '');
 </script>
 
 <template>
@@ -402,7 +434,7 @@ const showMultiplyTrail = computed(() => !! multiplyTimes.value);
         </div>
         </div>
 
-        <div v-if="isTermFlow && (workingLines.length || showMultiplyTrail)" class="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+        <div v-if="isTermFlow && (workingLines.length || showMultiplyTrail || showFracTrail)" class="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
             <div
                 v-if="showMultiplyTrail"
                 class="flex flex-wrap items-center justify-center gap-3"
@@ -416,6 +448,30 @@ const showMultiplyTrail = computed(() => !! multiplyTimes.value);
                     :expr="multiplyStep.right || play.given_right"
                     :times="multiplyTimes"
                 />
+            </div>
+            <div
+                v-if="showFracTrail"
+                class="flex flex-wrap items-center justify-center gap-3 font-mono font-extrabold text-emerald-950"
+            >
+                <span>x</span>
+                <span class="text-rose-700">=</span>
+                <span class="inline-flex flex-col items-center leading-none">
+                    <span>
+                        <span :class="cutLeftValue ? 'line-through decoration-slate-400' : ''">{{ completed.n1 }}</span>
+                        ×
+                        <span :class="cutRightValue ? 'line-through decoration-slate-400' : ''">{{ completed.n2 }}</span>
+                    </span>
+                    <span class="my-1 h-[2px] w-full min-w-[4.5rem] rounded-full bg-emerald-800" />
+                    <span>
+                        <span :class="cutLeftValue ? 'line-through decoration-slate-400' : ''">{{ completed.d1 }}</span>
+                        ×
+                        <span :class="cutRightValue ? 'line-through decoration-slate-400' : ''">{{ completed.d2 }}</span>
+                    </span>
+                </span>
+                <template v-if="cutLeftValue && cutRightValue">
+                    <span class="text-slate-400">→</span>
+                    <span>{{ cutLeftValue }} × {{ cutRightValue }}</span>
+                </template>
             </div>
             <p
                 v-for="(line, i) in workingLines"
@@ -537,6 +593,115 @@ const showMultiplyTrail = computed(() => !! multiplyTimes.value);
             <p class="text-center text-[11px] text-slate-500">
                 The extra number sits on the numerator. One box fills the other.
             </p>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'write_frac'" class="space-y-3">
+            <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
+                Write x as a fraction — do not multiply yet
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-4">
+                <span class="font-mono text-2xl font-black text-slate-900">x</span>
+                <span class="font-mono text-2xl font-black text-rose-700">=</span>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
+                        <div class="flex items-center gap-1">
+                            <input
+                                v-model="frac.n1"
+                                type="text"
+                                inputmode="numeric"
+                                class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                                :class="cellClass"
+                                placeholder="?"
+                                autocomplete="off"
+                                aria-label="First number on top"
+                                @keyup.enter="onEnter"
+                            >
+                            <span class="text-rose-700">×</span>
+                            <input
+                                v-model="frac.n2"
+                                type="text"
+                                inputmode="numeric"
+                                class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                                :class="cellClass"
+                                placeholder="?"
+                                autocomplete="off"
+                                aria-label="Second number on top"
+                                @keyup.enter="onEnter"
+                            >
+                        </div>
+                        <span class="my-1 h-[2px] w-full min-w-[6.5rem] rounded-full bg-slate-800" />
+                        <div class="flex items-center gap-1">
+                            <input
+                                v-model="frac.d1"
+                                type="text"
+                                inputmode="numeric"
+                                class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                                :class="cellClass"
+                                placeholder="?"
+                                autocomplete="off"
+                                aria-label="First number on the bottom"
+                                @keyup.enter="onEnter"
+                            >
+                            <span class="text-rose-700">×</span>
+                            <input
+                                v-model="frac.d2"
+                                type="text"
+                                inputmode="numeric"
+                                class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                                :class="cellClass"
+                                placeholder="?"
+                                autocomplete="off"
+                                aria-label="Second number on the bottom"
+                                @keyup.enter="onEnter"
+                            >
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="text-center text-[11px] text-slate-500">
+                Top: other numerator × this denominator. Bottom: number in front of x × other denominator.
+            </p>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'cut'" class="space-y-3">
+            <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
+                Cut matching numbers
+            </p>
+            <p class="text-center text-sm text-slate-700">
+                Cancel a top with a bottom. Write what each pair becomes.
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-6">
+                <div class="flex items-center gap-2 font-mono text-lg font-extrabold">
+                    <span>{{ currentStep.cut_left }}</span>
+                    <span class="text-rose-700">=</span>
+                    <input
+                        v-model="currentValue"
+                        type="text"
+                        inputmode="numeric"
+                        class="h-9 w-14 rounded-md border px-1 text-center font-mono text-lg font-extrabold focus:border-rose-400 focus:ring-rose-200"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        :aria-label="currentStep.cut_left"
+                        @keyup.enter="onEnter"
+                    >
+                </div>
+                <div class="flex items-center gap-2 font-mono text-lg font-extrabold">
+                    <span>{{ currentStep.cut_right }}</span>
+                    <span class="text-rose-700">=</span>
+                    <input
+                        v-model="crossRight"
+                        type="text"
+                        inputmode="numeric"
+                        class="h-9 w-14 rounded-md border px-1 text-center font-mono text-lg font-extrabold focus:border-rose-400 focus:ring-rose-200"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        :aria-label="currentStep.cut_right"
+                        @keyup.enter="onEnter"
+                    >
+                </div>
+            </div>
         </div>
 
         <div v-if="!allCorrect && currentStep?.type === 'cross'" class="space-y-3">
@@ -664,9 +829,19 @@ const showMultiplyTrail = computed(() => !! multiplyTimes.value);
             <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
                 Now write x
             </p>
+            <p
+                v-if="currentStep.rewrite_note"
+                class="text-center text-sm font-medium text-slate-700"
+            >
+                {{ currentStep.rewrite_note }}
+            </p>
             <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-2xl font-extrabold">
                 <span>x</span>
                 <span class="text-rose-700">=</span>
+                <template v-if="cutLeftValue && cutRightValue">
+                    <span>{{ cutLeftValue }} × {{ cutRightValue }}</span>
+                    <span class="text-slate-400">=</span>
+                </template>
                 <input
                     v-model="currentValue"
                     type="text"

@@ -577,6 +577,29 @@ class MmmCardService
             $values[$stepKey] = $submission['value'] ?? null;
         }
 
+        $playStep = null;
+        foreach ($playSteps as $step) {
+            if (is_array($step) && (string) ($step['key'] ?? '') === (string) $stepKey) {
+                $playStep = $step;
+                break;
+            }
+        }
+        if (($playStep['type'] ?? '') === 'write_frac') {
+            $numOk = $this->factorPairMatches($check['frac_num'] ?? [], $values, $playStep['num_keys'] ?? ['n1', 'n2']);
+            $denOk = $this->factorPairMatches($check['frac_den'] ?? [], $values, $playStep['den_keys'] ?? ['d1', 'd2']);
+            $ok = $numOk && $denOk;
+
+            return [
+                'ok' => $ok,
+                'all_ok' => false,
+                'cell_results' => ['frac' => $ok],
+                'message' => $ok
+                    ? 'That step is right. Continue.'
+                    : $this->balanceStepHint($stepKey, $playSteps),
+                'step_key' => $stepKey,
+            ];
+        }
+
         $cellResults = [];
         $allOk = true;
         $keysToCheck = ($stepKey !== null && $stepKey !== '') ? [$stepKey] : $stepKeys;
@@ -655,12 +678,49 @@ class MmmCardService
                 'take_number' => 'Take the loose number across. Keep the x-term together.',
                 'multiply' => 'Multiply both sides by the same number (the denominator) so it cancels.',
                 'cross' => 'Cross-multiply: each numerator times the other side’s denominator.',
+                'write_frac' => 'Write x as a fraction: other-side top × this-side bottom, over (number in front of x) × other-side bottom. Do not multiply the products yet.',
+                'cut' => 'Cancel a top number with a bottom number. Write what each pair becomes.',
                 'solve' => 'x is alone now. Work out the number.',
                 default => 'Check that number and try again.',
             };
         }
 
         return 'Check that number and try again.';
+    }
+
+    /**
+     * @param  list<mixed>  $expected
+     * @param  array<string, mixed>  $values
+     * @param  list<string>  $keys
+     */
+    private function factorPairMatches(array $expected, array $values, array $keys): bool
+    {
+        $got = [];
+        foreach ($keys as $key) {
+            $got[] = $values[$key] ?? null;
+        }
+        if (count($got) !== count($expected)) {
+            return false;
+        }
+        $used = array_fill(0, count($expected), false);
+        foreach ($got as $value) {
+            $found = false;
+            foreach ($expected as $i => $want) {
+                if ($used[$i]) {
+                    continue;
+                }
+                if ($this->integerTokenMatches($want, $value)) {
+                    $used[$i] = true;
+                    $found = true;
+                    break;
+                }
+            }
+            if (! $found) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function integerTokenMatches(mixed $expected, mixed $got): bool
