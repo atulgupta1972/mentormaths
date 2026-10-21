@@ -471,7 +471,7 @@ class MmmCardService
     }
 
     /**
-     * Stepwise check for Balance the equation (add/subtract integers).
+     * Stepwise check for Balance the equation (integers, terms, and divide).
      *
      * @param  array<string, mixed>  $expected
      * @param  array<string, mixed>  $submission
@@ -555,6 +555,12 @@ class MmmCardService
                 'simplify_left' => 'First work out the numbers on the left of = .',
                 'move' => 'Add the opposite of the number stuck to x.',
                 'impact' => 'The x side is now x + 0. Only fill the number box on the other side.',
+                'divide' => 'Divide both sides by the same number (the coefficient of x).',
+                'isolate_term' => '2x is one term. Move the extra number so you have 2x = something.',
+                'term_value' => 'Work out that number. Keep 2x together.',
+                'open_bracket' => 'Open the bracket first.',
+                'rhs_value' => 'Now work out the right-hand side.',
+                'take_number' => 'Take the loose number across. Keep the x-term together.',
                 'solve' => 'x is alone now. Work out the number.',
                 default => 'Check that number and try again.',
             };
@@ -586,7 +592,34 @@ class MmmCardService
             $wantText = substr($wantText, 1);
         }
 
+        $wantF = $this->tokenToFloat($expected);
+        $gotF = $this->tokenToFloat($got);
+        if ($wantF !== null && $gotF !== null && abs($wantF - $gotF) < 0.0001) {
+            return true;
+        }
+
         return $wantText !== '' && $gotText === $wantText;
+    }
+
+    private function tokenToFloat(mixed $value): ?float
+    {
+        $text = trim(str_replace(['−', '–', '—', ' ', '(', ')'], ['-', '-', '-', '', '', ''], (string) $value));
+        if ($text === '' || $text[0] === '+') {
+            $text = ltrim($text, '+');
+        }
+        if (preg_match('/^(-?\d+)\/(-?\d+)$/', $text, $m)) {
+            $den = (int) $m[2];
+            if ($den === 0) {
+                return null;
+            }
+
+            return ((int) $m[1]) / $den;
+        }
+        if ($text === '' || ! is_numeric($text)) {
+            return null;
+        }
+
+        return (float) $text;
     }
 
     private function valueMatches(mixed $expected, mixed $got): bool
@@ -600,6 +633,11 @@ class MmmCardService
             $wantNum = $this->normalizeNumber($candidate);
             $gotNum = $this->normalizeNumber($got);
             if ($wantNum !== null && $gotNum !== null && $wantNum === $gotNum) {
+                return true;
+            }
+            $wantF = $this->tokenToFloat($candidate);
+            $gotF = $this->tokenToFloat($got);
+            if ($wantF !== null && $gotF !== null && abs($wantF - $gotF) < 0.0001) {
                 return true;
             }
 

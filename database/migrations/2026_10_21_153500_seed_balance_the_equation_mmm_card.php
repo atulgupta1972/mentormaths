@@ -14,12 +14,12 @@ return new class extends Migration
         $now = now();
         $cardId = DB::table('mmm_cards')->insertGetId([
             'slug' => 'balance-the-equation',
-            'title' => 'Balance the equation',
-            'heading' => 'Balance the equation',
+            'title' => 'Balance the equation — Basic 1',
+            'heading' => 'Balance the equation — Basic 1',
             'kind' => 'balance_equation',
             'status' => 'published',
             'accent' => 'rose',
-            'method_blurb' => 'An equation is a balance scale: left side = right side. Whatever you add or subtract on one side, do the same on the other so it stays level. To free x, add the opposite of the number stuck to x, cancel, then read x.',
+            'method_blurb' => 'An equation is a balance scale: left side = right side. Whatever you add or subtract on one side, do the same on the other so it stays level. To free x, add the opposite of the number stuck to x, cancel, then read x. This card is + and − with integers. Next, Basic 2 uses terms and divide.',
             'table_schema' => json_encode(['columns' => [], 'rows' => []]),
             'sort_order' => 3,
             'created_by' => null,

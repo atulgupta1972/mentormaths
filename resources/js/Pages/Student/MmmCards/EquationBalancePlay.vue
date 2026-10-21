@@ -61,7 +61,49 @@ const formatAdd = (raw) => {
 
 const displayAdd = computed(() => formatAdd(currentValue.value));
 const addedSigned = computed(() => formatAdd(completed.value.add || (currentStep.value?.type === 'balance' ? currentValue.value : '')));
-const xValue = computed(() => completed.value.impact || completed.value.x || '');
+const xValue = computed(() => completed.value.x || completed.value.impact || '');
+const scaleTip = computed(() => play.value.scale_tip
+    || 'Both pans already match. Whatever you add on the left, add the same on the right.');
+const isTermFlow = computed(() => steps.value.some((step) => [
+    'divide', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
+].includes(step.type)));
+const divideRight = computed(() => {
+    const step = currentStep.value;
+    if (! step) {
+        return '';
+    }
+    if (step.right) {
+        return step.right;
+    }
+    if (step.right_from) {
+        return completed.value[step.right_from] ?? '';
+    }
+
+    return play.value.given_right || '';
+});
+const workingLines = computed(() => {
+    const lines = [];
+    for (const step of steps.value) {
+        const v = completed.value[step.key];
+        if (v === undefined || v === null || v === '') {
+            continue;
+        }
+        if (step.type === 'divide') {
+            const right = step.right || completed.value[step.right_from] || play.value.given_right;
+            lines.push(`${step.left || play.value.given_left} ÷ ${v} = ${right} ÷ ${v}`);
+        } else if (step.type === 'isolate_term' || step.type === 'take_number') {
+            lines.push(`${step.keep} = ${step.frozen} ${step.op || '−'} ${v}`);
+        } else if (step.type === 'term_value' || step.type === 'rhs_value') {
+            lines.push(`${step.keep} = ${v}`);
+        } else if (step.type === 'open_bracket') {
+            lines.push(`(${step.expression}) = ${v}`);
+        } else if (step.type === 'solve') {
+            lines.push(`x = ${v}`);
+        }
+    }
+
+    return lines;
+});
 
 const showFrozenBalance = computed(() => !! completed.value.add);
 
@@ -86,9 +128,13 @@ const tidyValue = computed(() => {
 const moveValueSigned = computed(() => formatAdd(completed.value.move || ''));
 const showTidyTrail = computed(() => {
     const type = currentStep.value?.type;
+    if (! moveStep.value) {
+        return false;
+    }
 
-    return type === 'move' || type === 'solve' || (allCorrect.value && !! moveStep.value);
+    return type === 'move' || type === 'solve' || allCorrect.value;
 });
+const showTermSolve = computed(() => ! moveStep.value && currentStep.value?.type === 'solve' && ! allCorrect.value);
 
 const cleanMath = (value) => String(value ?? '')
     .replace(/[−–—﹣－]/g, '-')
@@ -192,7 +238,7 @@ const onEnter = (event) => {
                 </div>
             </div>
             <p class="mt-3 text-center text-xs text-slate-600">
-                Both pans already match. Whatever you add on the left, add the same on the right.
+                {{ scaleTip }}
             </p>
         </div>
 
@@ -310,6 +356,169 @@ const onEnter = (event) => {
                 </template>
             </div>
         </div>
+        </div>
+
+        <div v-if="isTermFlow && workingLines.length" class="space-y-1 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+            <p
+                v-for="(line, i) in workingLines"
+                :key="`work-${i}`"
+                class="text-center font-mono text-sm font-semibold text-emerald-950"
+            >
+                {{ line }}
+            </p>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'divide'" class="space-y-3">
+            <p
+                v-if="currentStep.rewrite_note"
+                class="text-center text-sm font-medium text-slate-700"
+            >
+                {{ currentStep.rewrite_note }}
+            </p>
+            <div
+                v-if="currentStep.rewrite_left"
+                class="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-mono text-lg font-extrabold text-emerald-950"
+            >
+                <span class="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Now it is</span>
+                <span>{{ currentStep.rewrite_left }}</span>
+                <span class="text-rose-700">=</span>
+                <span>{{ currentStep.rewrite_right }}</span>
+            </div>
+            <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
+                Divide both sides by the same number
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+                <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold text-slate-900">
+                    <span>{{ currentStep.left || play.given_left }}</span>
+                    <span class="text-rose-700">÷</span>
+                    <input
+                        v-model="currentValue"
+                        type="text"
+                        inputmode="numeric"
+                        class="w-16 rounded-md border px-1 py-1 text-center font-mono text-lg font-extrabold focus:border-rose-400 focus:ring-rose-200"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        aria-label="Divide on the left"
+                        @keyup.enter="onEnter"
+                    >
+                </div>
+                <span class="font-mono text-2xl font-black text-rose-700">=</span>
+                <div class="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold text-slate-900">
+                    <span>{{ divideRight }}</span>
+                    <span class="text-rose-700">÷</span>
+                    <input
+                        :value="currentValue"
+                        type="text"
+                        inputmode="numeric"
+                        class="w-16 rounded-md border px-1 py-1 text-center font-mono text-lg font-extrabold focus:border-rose-400 focus:ring-rose-200"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        aria-label="Divide on the right"
+                        @input="currentValue = $event.target.value"
+                        @keyup.enter="onEnter"
+                    >
+                </div>
+            </div>
+            <p class="text-center text-[11px] text-slate-500">
+                One box fills the other — the scale stays level.
+            </p>
+        </div>
+
+        <div v-if="!allCorrect && (currentStep?.type === 'isolate_term' || currentStep?.type === 'take_number')" class="space-y-2">
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                {{ currentStep.type === 'take_number' ? 'Take the number across' : 'Keep the x-term together' }}
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
+                <span>{{ currentStep.keep }}</span>
+                <span class="text-rose-700">=</span>
+                <span class="rounded-md bg-emerald-50 px-2 py-1 text-emerald-900">{{ currentStep.frozen }}</span>
+                <span>{{ currentStep.op || '−' }}</span>
+                <input
+                    v-model="currentValue"
+                    type="text"
+                    inputmode="numeric"
+                    class="w-20 rounded-md border px-2 py-1 text-center font-mono text-lg font-extrabold"
+                    :class="cellClass"
+                    placeholder="?"
+                    autocomplete="off"
+                    :aria-label="currentStep.type === 'take_number' ? 'Number to take across' : 'Number to take off the x-term'"
+                    @keyup.enter="onEnter"
+                >
+            </div>
+        </div>
+
+        <div v-if="!allCorrect && (currentStep?.type === 'term_value' || currentStep?.type === 'rhs_value')" class="space-y-2">
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                {{ currentStep.type === 'rhs_value' ? 'Work out the right-hand side' : 'Work out that number' }}
+            </p>
+            <div
+                v-if="currentStep.working"
+                class="flex flex-wrap items-center justify-center gap-2 font-mono text-sm text-slate-500"
+            >
+                <span>{{ currentStep.keep }}</span>
+                <span>=</span>
+                <span class="line-through decoration-slate-300">{{ currentStep.struck || play.given_right }}</span>
+                <span>{{ currentStep.working }}</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
+                <span>{{ currentStep.keep }}</span>
+                <span class="text-rose-700">=</span>
+                <input
+                    v-model="currentValue"
+                    type="text"
+                    inputmode="text"
+                    class="w-20 rounded-md border px-2 py-1 text-center font-mono text-lg font-extrabold"
+                    :class="cellClass"
+                    placeholder="?"
+                    autocomplete="off"
+                    aria-label="Value of this side"
+                    @keyup.enter="onEnter"
+                >
+            </div>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'open_bracket'" class="space-y-2">
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                Open the bracket first
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
+                <span>({{ currentStep.expression }})</span>
+                <span class="text-rose-700">=</span>
+                <input
+                    v-model="currentValue"
+                    type="text"
+                    inputmode="numeric"
+                    class="w-20 rounded-md border px-2 py-1 text-center font-mono text-lg font-extrabold"
+                    :class="cellClass"
+                    placeholder="?"
+                    autocomplete="off"
+                    aria-label="Value inside the bracket"
+                    @keyup.enter="onEnter"
+                >
+            </div>
+        </div>
+
+        <div v-if="showTermSolve" class="space-y-2">
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                Now write x
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-2xl font-extrabold">
+                <span>x</span>
+                <span class="text-rose-700">=</span>
+                <input
+                    v-model="currentValue"
+                    type="text"
+                    inputmode="text"
+                    class="w-24 rounded-md border px-2 py-1 text-center font-mono text-2xl font-black"
+                    :class="cellClass"
+                    placeholder="?"
+                    autocomplete="off"
+                    aria-label="Value of x"
+                    @keyup.enter="onEnter"
+                >
+            </div>
         </div>
 
         <div v-if="!allCorrect && currentStep?.type === 'simplify_right'" class="space-y-2">
