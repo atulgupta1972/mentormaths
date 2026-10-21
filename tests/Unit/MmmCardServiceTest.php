@@ -662,7 +662,8 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($card->isPublished());
         $this->assertSame(MmmCard::KIND_BALANCE_EQUATION, $card->kind);
         $this->assertSame('Balance the equation — Basic 2', $card->heading);
-        $this->assertSame(3, $card->exercises()->count());
+        $this->assertSame(4, $card->exercises()->count());
+        $this->assertNull(MmmCard::query()->where('slug', 'balance-equation-basic-3')->first());
     }
 
     public function test_balance_equation_basic_2_divide_then_term_then_bracket(): void
@@ -699,19 +700,12 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($decimal['all_ok']);
     }
 
-    public function test_balance_equation_basic_3_fill_page_checks_each_x(): void
+    public function test_balance_equation_basic_2_fill_page_checks_each_x(): void
     {
-        $card = MmmCard::query()->where('slug', 'balance-equation-basic-3')->first();
-
-        $this->assertNotNull($card);
-        $this->assertTrue($card->isPublished());
-        $this->assertSame(MmmCard::KIND_FILL_PAGE, $card->kind);
-        $this->assertSame('Balance the equation — Basic 3', $card->heading);
-        $this->assertSame(1, $card->exercises()->count());
-
+        $card = MmmCard::query()->where('slug', 'balance-equation-basic-2')->firstOrFail();
         $service = app(MmmCardService::class);
-        $exercise = $card->exercises()->firstOrFail();
-        $payload = $service->playPayload($card, null, 0);
+        $exercise = $card->exercises()->where('sort_order', 4)->firstOrFail();
+        $payload = $service->playPayload($card, null, 3);
         $this->assertSame('fill_page', $payload['exercise']['play_kind']);
         $this->assertCount(5, $payload['exercise']['fill_page']['items']);
         $this->assertArrayNotHasKey('check', $payload['exercise']);

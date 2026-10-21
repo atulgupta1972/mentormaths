@@ -83,7 +83,8 @@ const allCorrect = ref(false);
 const usesVariable = computed(() => !! props.exercise?.uses_variable);
 const usesValueX = computed(() => columns.value.some((col) => col.key === 'value_x'));
 const isBalance = computed(() => props.exercise?.play_kind === 'balance');
-const isFillPage = computed(() => props.exercise?.play_kind === 'fill_page' || props.card?.kind === 'fill_page');
+const isFillPage = computed(() => props.exercise?.play_kind === 'fill_page');
+const fillPageBlurb = computed(() => props.exercise?.fill_page?.page_blurb || props.card?.method_blurb);
 
 const formatEqPart = (value) => {
     const text = String(value ?? '').trim();
@@ -282,7 +283,7 @@ const footerColspan = computed(() => {
                     Solve in your copy
                 </h3>
                 <p class="mt-2 text-sm leading-relaxed text-slate-700">
-                    {{ card.method_blurb }}
+                    {{ fillPageBlurb }}
                 </p>
             </section>
 
