@@ -48,19 +48,25 @@ class MmmCardController extends Controller
 
         $validated = $request->validate([
             'exercise_id' => ['required', 'integer', 'exists:mmm_card_exercises,id'],
-            'rows' => ['required', 'array'],
+            'rows' => ['nullable', 'array'],
             'grand_total' => ['nullable'],
             'grand_count' => ['nullable'],
             'equation' => ['nullable', 'string', 'max:200'],
             'coin_equation' => ['nullable', 'string', 'max:200'],
             'eq' => ['nullable', 'string', 'max:200'],
             'x_value' => ['nullable', 'string', 'max:40'],
+            'step_key' => ['nullable', 'string', 'max:40'],
+            'value' => ['nullable', 'string', 'max:40'],
+            'values' => ['nullable', 'array'],
         ]);
 
         $exercise = $mmmCard->exercises()->whereKey($validated['exercise_id'])->firstOrFail();
         $result = $this->mmmCards->checkSubmission($mmmCard, $exercise, $validated);
 
-        if ($result['ok']) {
+        $passed = array_key_exists('all_ok', $result)
+            ? ! empty($result['all_ok'])
+            : ! empty($result['ok']);
+        if ($passed) {
             $this->mmmCards->recordExercisePassed($user, $mmmCard, $exercise);
         }
 

@@ -76,6 +76,7 @@ class MmmCardService
             'slug' => $card->slug,
             'heading' => $card->heading,
             'title' => $card->title,
+            'kind' => $card->kind,
             'accent' => $card->accent ?: 'teal',
             'exercises_total' => $total,
             'exercises_completed' => $done,
@@ -117,6 +118,7 @@ class MmmCardService
                 'slug' => $card->slug,
                 'title' => $card->title,
                 'heading' => $card->heading,
+                'kind' => $card->kind,
                 'accent' => $card->accent ?: 'teal',
                 'method_blurb' => $card->method_blurb,
                 'table_schema' => $schema,
@@ -161,6 +163,7 @@ class MmmCardService
             || ! empty($answers['variable_tip']);
         $tip = $answers['variable_tip'] ?? $answers['method_tip'] ?? null;
         $askEquation = ! empty($answers['check_equation']);
+        $isBalance = ($answers['mode'] ?? '') === 'balance';
 
         return [
             'id' => $exercise->id,
@@ -168,6 +171,8 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
+            'play_kind' => $isBalance ? 'balance' : 'table',
+            'balance' => $isBalance ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
             // Marks: auto from Total column. Money ratio/conditions: student types the equation.
@@ -191,6 +196,10 @@ class MmmCardService
         }
 
         $expected = $exercise->answers ?? [];
+        if (($expected['mode'] ?? '') === 'balance') {
+            return $this->checkBalanceSubmission($expected, $submission);
+        }
+
         $schema = $this->schemaForExercise($card, $exercise);
         $rows = $schema['rows'] ?? [];
         $editableFields = $this->editableFieldKeys($schema);
@@ -459,6 +468,124 @@ class MmmCardService
                 'board' => $chapter->syllabusVersion?->board?->code,
                 'class' => $chapter->syllabusVersion?->gradeLevel?->name,
             ]);
+    }
+
+    /**
+     * Stepwise check for Balance the equation (add/subtract integers).
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkBalanceSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $playSteps = is_array($expected['play']['steps'] ?? null) ? $expected['play']['steps'] : [];
+        $stepKeys = [];
+        foreach ($playSteps as $step) {
+            if (is_array($step) && ($step['key'] ?? '') !== '') {
+                $stepKeys[] = (string) $step['key'];
+            }
+        }
+        if ($stepKeys === []) {
+            $stepKeys = array_map('strval', array_keys($check));
+        }
+
+        $stepKey = $submission['step_key'] ?? null;
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        if ($stepKey !== null && $stepKey !== '' && ! array_key_exists($stepKey, $values)) {
+            $values[$stepKey] = $submission['value'] ?? null;
+        }
+
+        $cellResults = [];
+        $allOk = true;
+        $keysToCheck = ($stepKey !== null && $stepKey !== '') ? [$stepKey] : $stepKeys;
+
+        foreach ($keysToCheck as $key) {
+            $key = (string) $key;
+            if (! array_key_exists($key, $check)) {
+                $cellResults[$key] = false;
+                $allOk = false;
+
+                continue;
+            }
+            $ok = $this->integerTokenMatches($check[$key], $values[$key] ?? null);
+            $cellResults[$key] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        $lastKey = $stepKeys !== [] ? (string) $stepKeys[array_key_last($stepKeys)] : null;
+        $finished = $allOk && $stepKey !== null && $stepKey === $lastKey;
+        if ($stepKey === null && $allOk && $keysToCheck === $stepKeys) {
+            $finished = true;
+        }
+
+        $message = 'That step is right. Continue.';
+        if (! $allOk) {
+            $message = $this->balanceStepHint($stepKey, $playSteps);
+        } elseif ($finished) {
+            $message = 'x is correct — well done. Both sides stay equal.';
+        }
+
+        return [
+            'ok' => $allOk,
+            'all_ok' => $finished,
+            'cell_results' => $cellResults,
+            'message' => $message,
+            'step_key' => $stepKey,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $playSteps
+     */
+    private function balanceStepHint(?string $stepKey, array $playSteps): string
+    {
+        foreach ($playSteps as $step) {
+            if (! is_array($step) || (string) ($step['key'] ?? '') !== (string) $stepKey) {
+                continue;
+            }
+            $type = (string) ($step['type'] ?? '');
+
+            return match ($type) {
+                'balance' => 'Do the same on both sides. Add the opposite of the number stuck to x (include the minus if you need it).',
+                'simplify_right' => 'First work out the numbers on the right of = .',
+                'simplify_left' => 'First work out the numbers on the left of = .',
+                'move' => 'Add the opposite of the number stuck to x.',
+                'solve' => 'x is alone now. Work out the number.',
+                default => 'Check that number and try again.',
+            };
+        }
+
+        return 'Check that number and try again.';
+    }
+
+    private function integerTokenMatches(mixed $expected, mixed $got): bool
+    {
+        if ($this->valueMatches($expected, $got)) {
+            return true;
+        }
+
+        $want = $this->normalizeNumber($expected);
+        $gotNum = $this->normalizeNumber($got);
+        if ($want !== null && $gotNum !== null && $want === $gotNum) {
+            return true;
+        }
+
+        $gotText = strtolower(trim((string) $got));
+        $gotText = str_replace(['−', '–', '—', '(', ')', ' '], ['-', '-', '-', '', '', ''], $gotText);
+        if ($gotText !== '' && $gotText[0] === '+') {
+            $gotText = substr($gotText, 1);
+        }
+        $wantText = strtolower(trim((string) $expected));
+        $wantText = str_replace(['−', '–', '—', '(', ')', ' '], ['-', '-', '-', '', '', ''], $wantText);
+        if ($wantText !== '' && $wantText[0] === '+') {
+            $wantText = substr($wantText, 1);
+        }
+
+        return $wantText !== '' && $gotText === $wantText;
     }
 
     private function valueMatches(mixed $expected, mixed $got): bool

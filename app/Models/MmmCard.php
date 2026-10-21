@@ -15,6 +15,8 @@ class MmmCard extends Model
 
     public const KIND_TABLE_FILL = 'table_fill';
 
+    public const KIND_BALANCE_EQUATION = 'balance_equation';
+
     protected $fillable = [
         'slug',
         'title',
