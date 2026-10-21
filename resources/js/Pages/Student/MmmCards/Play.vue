@@ -148,7 +148,8 @@ const submit = async () => {
             .replace(/[−–—﹣－]/g, '-')
             .replace(/[＝﹦]/g, '=')
             .replace(/[＋﹢]/g, '+')
-            // × after a digit (2×) or as a term (×+) is the variable x — not multiply.
+            // 50×2x is multiply; 2×+ is the variable x.
+            .replace(/(\d)[×⋅](\d)/g, '$1*$2')
             .replace(/(\d)[×⋅]/g, '$1x')
             .replace(/[×⋅](?=[+=\-)]|$)/g, 'x')
             .replace(/[×⋅]/g, '*')
@@ -515,11 +516,14 @@ const footerColspan = computed(() => {
                             {{ exercise.equation_prompt || 'Write the equation' }}
                         </label>
                         <p class="mt-0.5 text-[11px] text-slate-500">
-                            Add the
-                            <span class="font-semibold">{{ usesValueX ? 'Value (in x)' : 'Coins (in x)' }}</span>
-                            column and set it equal to
-                            {{ usesValueX ? 'total money' : 'total coins' }}.
-                            Write the equation yourself — the system will check it.
+                            <template v-if="exercise.equation_help">{{ exercise.equation_help }}</template>
+                            <template v-else>
+                                Add the
+                                <span class="font-semibold">{{ usesValueX ? 'Value (in x)' : 'Coins (in x)' }}</span>
+                                column and set it equal to
+                                {{ usesValueX ? 'total money' : 'total coins' }}.
+                                Write the equation yourself — the system will check it.
+                            </template>
                         </p>
                         <input
                             v-model="form.equation"

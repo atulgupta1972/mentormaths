@@ -174,6 +174,7 @@ class MmmCardService
             'show_auto_equation' => ! $askEquation && ($usesVariable || array_key_exists('equation', $answers)),
             'ask_equation' => $askEquation,
             'equation_prompt' => $answers['equation_prompt'] ?? 'Write the equation',
+            'equation_help' => $answers['equation_help'] ?? null,
             'ask_x_value' => array_key_exists('x_value', $answers),
             'x_prompt' => $answers['x_prompt'] ?? 'Value of x',
         ];
@@ -669,6 +670,27 @@ class MmmCardService
             }
         }
 
+        // 50*(2x)+100*(3x)+500*(5x)=5800 when notes-in-x are a ratio.
+        $moneyParts = [];
+        foreach ($expected as $row) {
+            if (! is_array($row) || ! array_key_exists('count_x', $row) || ! array_key_exists('denomination', $row)) {
+                continue;
+            }
+            $cx = $row['count_x'];
+            $cx = is_array($cx) ? (string) ($cx[0] ?? '') : (string) $cx;
+            $denom = $row['denomination'];
+            $denom = is_array($denom) ? (string) ($denom[0] ?? '') : (string) $denom;
+            if ($cx !== '' && $denom !== '') {
+                $moneyParts[] = $denom.'*('.$cx.')';
+            }
+        }
+        if ($moneyParts !== [] && ($expected['grand_total'] ?? '') !== '' && $expected['grand_total'] !== null) {
+            $moneyTarget = implode('+', $moneyParts).'='.$expected['grand_total'];
+            if ($this->equationCanonsMatch($this->equationCanonical($moneyTarget), $gotCanon)) {
+                return true;
+            }
+        }
+
         // Marks: build target from the Total column + score.
         $correctTotal = data_get($submission, 'rows.correct.total');
         $wrongTotal = data_get($submission, 'rows.wrong.total');
@@ -799,8 +821,8 @@ class MmmCardService
         // Collapse xxx from multi-letter tokens back to a single x.
         $text = preg_replace('/x+/', 'x', $text) ?? $text;
 
-        // × / ⋅ after a digit or as a bare term is usually the variable x (2× → 2x).
-        // Remaining × are true multiplication.
+        // Digit × digit is multiply (50×2x). Trailing × is the variable x (2× → 2x).
+        $text = preg_replace('/(\d)[×⋅](\d)/u', '$1*$2', $text) ?? $text;
         $text = preg_replace('/(\d)[×⋅]/u', '$1x', $text) ?? $text;
         $text = preg_replace('/[×⋅](?=[+=\-)]|$)/u', 'x', $text) ?? $text;
         // Recover if a client already turned variable × into *: 2*+3*+4*=27 → 2x+3x+4x=27
@@ -855,6 +877,27 @@ class MmmCardService
         $text = preg_replace('/-\((\d+)-x\)/', '-$1+x', $text) ?? $text;
         // -(x-2) → -x+2
         $text = preg_replace('/-\((x)-(\d+)\)/', '-x+$2', $text) ?? $text;
+
+        // 50*(2x) → 100x ; 50*2x → 100x ; 2x*50 → 100x
+        $text = preg_replace_callback(
+            '/(\d+)\*\((\d+)x\)/',
+            static fn (array $m): string => ((int) $m[1] * (int) $m[2]).'x',
+            $text,
+        ) ?? $text;
+        $text = preg_replace_callback(
+            '/(\d+)\*(\d+)x/',
+            static fn (array $m): string => ((int) $m[1] * (int) $m[2]).'x',
+            $text,
+        ) ?? $text;
+        $text = preg_replace_callback(
+            '/(\d*)x\*(\d+)/',
+            static function (array $m): string {
+                $a = $m[1] === '' ? 1 : (int) $m[1];
+
+                return ($a * (int) $m[2]).'x';
+            },
+            $text,
+        ) ?? $text;
 
         $text = str_replace('*', '', $text);
 

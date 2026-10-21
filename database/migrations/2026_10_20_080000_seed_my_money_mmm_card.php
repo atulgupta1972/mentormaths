@@ -93,6 +93,24 @@ return new class extends Migration
             'grand_total_label' => 'Total money',
         ];
 
+        $noteCountSchema = [
+            'columns' => [
+                ['key' => 'denomination', 'label' => 'Denomination (in ₹)'],
+                ['key' => 'count_x', 'label' => 'Notes (in x)'],
+                ['key' => 'count', 'label' => 'No. of notes'],
+                ['key' => 'total', 'label' => 'Total value'],
+            ],
+            'rows' => [
+                ['key' => 'rs50', 'label' => ''],
+                ['key' => 'rs100', 'label' => ''],
+                ['key' => 'rs500', 'label' => ''],
+            ],
+            'show_grand_count' => true,
+            'grand_count_label' => 'Total notes',
+            'show_grand_total' => true,
+            'grand_total_label' => 'Total money',
+        ];
+
         $coinValueSchema = [
             'columns' => [
                 ['key' => 'denomination', 'label' => 'Denomination (in ₹)'],
@@ -404,21 +422,27 @@ return new class extends Migration
                 'sort_order' => 12,
                 'difficulty' => 'hard',
                 'is_demo' => false,
-                'question_text' => 'Notes of ₹ 50, ₹ 100 and ₹ 500 are such that their total values are in the ratio 2 : 3 : 5. If the total amount is ₹ 6000, find the number of notes of each denomination.',
+                'question_text' => 'Notes of ₹ 50, ₹ 100 and ₹ 500 are in the ratio 2 : 3 : 5. If the total amount is ₹ 5800, find the number of notes of each denomination.',
                 'answers' => [
                     'mode' => 'variable',
                     'check_equation' => true,
-                    'table_schema' => $noteValueSchema,
-                    'variable_tip' => 'Values are 2x, 3x and 5x. Make the equation with total money ₹ 6000, find x, then find the number of notes of each denomination.',
+                    'table_schema' => $noteCountSchema,
+                    'variable_tip' => 'The ratio is of the number of notes. Let notes be 2x, 3x and 5x. Total money: 50×2x + 100×3x + 500×5x = 5800, i.e. 100x + 300x + 2500x = 2900x = 5800. Find x, then fill No. of notes and Total value.',
                     'equation_prompt' => 'Equation for total money',
+                    'equation_help' => 'Write 50×2x + 100×3x + 500×5x = 5800 (or 2900x = 5800).',
                     'x_prompt' => 'Value of x',
-                    'equation' => ['2x+3x+5x=6000', '10x=6000', '(2+3+5)x=6000'],
-                    'rs50' => ['denomination' => '50', 'value_x' => '2x', 'count' => '24', 'total' => '1200'],
-                    'rs100' => ['denomination' => '100', 'value_x' => '3x', 'count' => '18', 'total' => '1800'],
-                    'rs500' => ['denomination' => '500', 'value_x' => '5x', 'count' => '6', 'total' => '3000'],
-                    'grand_count' => '48',
-                    'grand_total' => '6000',
-                    'x_value' => '600',
+                    'equation' => [
+                        '50*2x+100*3x+500*5x=5800',
+                        '50(2x)+100(3x)+500(5x)=5800',
+                        '100x+300x+2500x=5800',
+                        '2900x=5800',
+                    ],
+                    'rs50' => ['denomination' => '50', 'count_x' => '2x', 'count' => '4', 'total' => '200'],
+                    'rs100' => ['denomination' => '100', 'count_x' => '3x', 'count' => '6', 'total' => '600'],
+                    'rs500' => ['denomination' => '500', 'count_x' => '5x', 'count' => '10', 'total' => '5000'],
+                    'grand_count' => '20',
+                    'grand_total' => '5800',
+                    'x_value' => '2',
                 ],
             ],
             // 13–15 — coin total-value relations (half of / N more)

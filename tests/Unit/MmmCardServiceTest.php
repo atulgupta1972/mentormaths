@@ -450,18 +450,32 @@ class MmmCardServiceTest extends TestCase
         ]);
         $this->assertTrue($sum11['ok'], json_encode($sum11['cell_results']));
 
-        $sum12 = $service->checkSubmission($card, $card->exercises()->where('sort_order', 12)->firstOrFail(), [
+        $sum12 = $card->exercises()->where('sort_order', 12)->firstOrFail();
+        $asMoneyEq = $service->checkSubmission($card, $sum12, [
             'rows' => [
-                'rs50' => ['denomination' => '50', 'value_x' => '2x', 'count' => '24', 'total' => '1200'],
-                'rs100' => ['denomination' => '100', 'value_x' => '3x', 'count' => '18', 'total' => '1800'],
-                'rs500' => ['denomination' => '500', 'value_x' => '5x', 'count' => '6', 'total' => '3000'],
+                'rs50' => ['denomination' => '50', 'count_x' => '2x', 'count' => '4', 'total' => '200'],
+                'rs100' => ['denomination' => '100', 'count_x' => '3x', 'count' => '6', 'total' => '600'],
+                'rs500' => ['denomination' => '500', 'count_x' => '5x', 'count' => '10', 'total' => '5000'],
             ],
-            'grand_count' => '48',
-            'grand_total' => '6000',
-            'equation' => '2x+3x+5x=6000',
-            'x_value' => '600',
+            'grand_count' => '20',
+            'grand_total' => '5800',
+            'equation' => '2900x=5800',
+            'x_value' => '2',
         ]);
-        $this->assertTrue($sum12['ok'], json_encode($sum12['cell_results']));
+        $this->assertTrue($asMoneyEq['ok'], json_encode($asMoneyEq['cell_results']));
+
+        $asExpanded = $service->checkSubmission($card, $sum12, [
+            'rows' => [
+                'rs50' => ['denomination' => '50', 'count_x' => '2x', 'count' => '4', 'total' => '200'],
+                'rs100' => ['denomination' => '100', 'count_x' => '3x', 'count' => '6', 'total' => '600'],
+                'rs500' => ['denomination' => '500', 'count_x' => '5x', 'count' => '10', 'total' => '5000'],
+            ],
+            'grand_count' => '20',
+            'grand_total' => '5800',
+            'equation' => '50(2x)+100(3x)+500(5x)=5800',
+            'x_value' => '2',
+        ]);
+        $this->assertTrue($asExpanded['ok'], json_encode($asExpanded['cell_results']));
     }
 
     public function test_my_money_value_relation_sums_accept_flexible_x(): void
