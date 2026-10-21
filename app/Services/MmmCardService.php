@@ -725,6 +725,10 @@ class MmmCardService
 
     private function integerTokenMatches(mixed $expected, mixed $got): bool
     {
+        if (is_array($expected)) {
+            return $this->valueMatches($expected, $got);
+        }
+
         if ($this->valueMatches($expected, $got)) {
             return true;
         }

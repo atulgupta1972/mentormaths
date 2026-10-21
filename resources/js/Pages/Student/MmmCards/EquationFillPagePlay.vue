@@ -1,4 +1,5 @@
 <script setup>
+import EquationFraction from '@/Pages/Student/MmmCards/EquationFraction.vue';
 import axios from 'axios';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -167,7 +168,18 @@ const askTeacher = (key) => {
                         {{ index + 1 }}
                     </span>
                     <div class="min-w-0 flex-1 space-y-2">
-                        <p class="overflow-x-auto font-mono text-base font-extrabold text-slate-900 sm:text-lg">
+                        <div
+                            v-if="item.left && item.right"
+                            class="flex flex-wrap items-center gap-3 overflow-x-auto text-lg sm:text-xl"
+                        >
+                            <EquationFraction :expr="item.left" />
+                            <span class="font-mono text-xl font-black text-rose-700">=</span>
+                            <EquationFraction :expr="item.right" />
+                        </div>
+                        <p
+                            v-else
+                            class="overflow-x-auto font-mono text-base font-extrabold text-slate-900 sm:text-lg"
+                        >
                             {{ item.equation }}
                         </p>
                         <div class="flex flex-wrap items-center gap-2">
