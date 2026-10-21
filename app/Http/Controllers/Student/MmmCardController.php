@@ -35,7 +35,7 @@ class MmmCardController extends Controller
         return Inertia::render('Student/MmmCards/Play', [
             ...$this->mmmCards->playPayload($mmmCard, $user, $exerciseIndex),
             'check_url' => route('student.mmm-cards.check', $mmmCard),
-            'back_url' => route('student.dashboard'),
+            'back_url' => route('dashboard'),
             'is_staff_preview' => false,
         ]);
     }
