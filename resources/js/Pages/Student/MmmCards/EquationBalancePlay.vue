@@ -334,7 +334,24 @@ const onEnter = (event) => {
             </div>
         </div>
 
-        <div v-if="!allCorrect && currentStep?.type === 'move'" class="space-y-2">
+        <div v-if="!allCorrect && currentStep?.type === 'move'" class="space-y-3">
+            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-sm text-slate-500">
+                <span class="line-through decoration-slate-300">{{ play.given_left }}</span>
+                <span>=</span>
+                <span class="line-through decoration-slate-300">{{ play.given_right }}</span>
+            </div>
+            <div
+                v-if="currentStep.rewrite_left"
+                class="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-mono text-lg font-extrabold text-emerald-950"
+            >
+                <span class="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Now it is</span>
+                <span>{{ currentStep.rewrite_left }}</span>
+                <span class="text-rose-700">=</span>
+                <span>{{ frozenNumber || '…' }}</span>
+            </div>
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                Add the opposite so x is alone
+            </p>
             <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
                 <span>x</span>
                 <span class="text-rose-700">=</span>
