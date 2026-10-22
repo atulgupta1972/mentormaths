@@ -36,7 +36,7 @@ const currentIndex = ref(0);
 const currentValue = ref('');
 const crossRight = ref('');
 const frac = reactive({ n1: '', n2: '', d1: '', d2: '' });
-const fracX = reactive({ top: '', result: '' });
+const fracX = reactive({ top: '', result: '', mul: '' });
 const flip = reactive({ n: '', d: '' });
 const submitting = ref(false);
 const message = ref('');
@@ -67,6 +67,7 @@ watch(
         frac.d2 = '';
         fracX.top = '';
         fracX.result = '';
+        fracX.mul = '';
         flip.n = '';
         flip.d = '';
         completed.value = {};
@@ -95,7 +96,7 @@ const scaleTip = computed(() => play.value.scale_tip
     || 'Both pans already match. Whatever you add on the left, add the same on the right.');
 const isTermFlow = computed(() => steps.value.some((step) => [
     'divide', 'multiply', 'cross', 'write_frac', 'keep_flip', 'cut', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
-    'pick_side', 'x_term', 'blank', 'frac_x',
+    'pick_side', 'x_term', 'blank', 'frac_x', 'common_den',
 ].includes(step.type)));
 const keepFlipStep = computed(() => steps.value.find((step) => step.type === 'keep_flip') || null);
 const canCheckStep = computed(() => {
@@ -107,6 +108,9 @@ const canCheckStep = computed(() => {
     }
     if (currentStep.value?.type === 'frac_x') {
         return fracX.top.trim() !== '' && fracX.result.trim() !== '';
+    }
+    if (currentStep.value?.type === 'common_den') {
+        return fracX.mul.trim() !== '' && fracX.top.trim() !== '';
     }
     if (currentStep.value?.type === 'pick_side') {
         return currentValue.value === 'lhs' || currentValue.value === 'rhs';
@@ -167,6 +171,13 @@ const workingLines = computed(() => {
             lines.push(`${step.expr} = ${v}`);
         } else if (step.type === 'blank') {
             lines.push(`${step.before || ''} ${v}${step.after ? ` ${step.after}` : ''}`.trim());
+        } else if (step.type === 'common_den') {
+            const mul = completed.value[step.mul_key];
+            const top = completed.value[step.top_key];
+            if (mul && top) {
+                const shown = String(top).replace(/^-/, '−');
+                lines.push(`${step.keep_num}/${step.keep_den} − ${shown}x/${step.keep_den} = ${step.right_a} ${step.right_op} ${step.right_b}`.replace(/ \/ /g, '/'));
+            }
         } else if (step.type === 'frac_x') {
             const result = completed.value[step.result_key];
             if (result) {
@@ -255,6 +266,12 @@ const checkStep = async () => {
                 [currentStep.value.result_key]: cleanMath(fracX.result),
             };
         }
+        if (currentStep.value?.type === 'common_den') {
+            payload.values = {
+                [currentStep.value.mul_key]: cleanMath(fracX.mul),
+                [currentStep.value.top_key]: cleanMath(fracX.top),
+            };
+        }
         if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
             payload.values = {
                 [currentKey.value]: cleanMath(currentValue.value),
@@ -290,6 +307,12 @@ const checkStep = async () => {
                 nextCompleted[currentStep.value.top_key] = cleanMath(fracX.top);
                 nextCompleted[currentStep.value.result_key] = result;
             }
+            if (currentStep.value?.type === 'common_den') {
+                const top = cleanMath(fracX.top);
+                nextCompleted[currentKey.value] = top;
+                nextCompleted[currentStep.value.mul_key] = cleanMath(fracX.mul);
+                nextCompleted[currentStep.value.top_key] = top;
+            }
             if (currentStep.value?.type === 'solve') {
                 nextCompleted.x = cleanMath(currentValue.value);
             }
@@ -308,6 +331,7 @@ const checkStep = async () => {
                     crossRight.value = '';
                     fracX.top = '';
                     fracX.result = '';
+                    fracX.mul = '';
                     stepOk.value = false;
                     message.value = '';
                 }, 550);
@@ -331,6 +355,7 @@ const reset = () => {
     frac.d2 = '';
     fracX.top = '';
     fracX.result = '';
+    fracX.mul = '';
     flip.n = '';
     flip.d = '';
     completed.value = {};
@@ -1233,6 +1258,97 @@ const showKeepFlipCuts = computed(() => {
                     @keyup.enter="onEnter"
                 >
                 <span v-if="currentStep.after">{{ currentStep.after }}</span>
+            </div>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'common_den'" class="space-y-4">
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                Signs changed
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 text-lg sm:gap-3 sm:text-xl">
+                <EquationFraction :expr="`${currentStep.keep_num} / ${currentStep.keep_den}`" />
+                <span class="font-mono text-xl font-black text-rose-700">−</span>
+                <EquationFraction :expr="`${currentStep.from_num} / ${currentStep.from_den}`" />
+                <span class="font-mono text-xl font-black text-rose-700">=</span>
+                <EquationFraction :expr="currentStep.right_a" />
+                <span class="font-mono text-xl font-black text-rose-700">{{ currentStep.right_op || '−' }}</span>
+                <EquationFraction :expr="currentStep.right_b" />
+            </div>
+            <div class="space-y-1 text-center text-sm text-slate-700">
+                <p>{{ currentStep.sign_left }}</p>
+                <p>{{ currentStep.sign_right }}</p>
+            </div>
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                Same denominator on the left
+            </p>
+            <p class="text-center text-sm text-slate-700">
+                {{ currentStep.from_num }} is {{ currentStep.from_num }}/{{ currentStep.from_den }}. Multiply the top and the bottom by the same number.
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 text-lg sm:gap-3">
+                <EquationFraction :expr="`${currentStep.keep_num} / ${currentStep.keep_den}`" />
+                <span class="font-mono text-xl font-black text-rose-700">−</span>
+                <span class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
+                    <span class="inline-flex items-center gap-1 px-1">
+                        <span>{{ currentStep.from_num }} ×</span>
+                        <input
+                            v-model="fracX.mul"
+                            type="text"
+                            inputmode="numeric"
+                            class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                            :class="cellClass"
+                            placeholder="?"
+                            autocomplete="off"
+                            aria-label="Multiply the top by"
+                            @keyup.enter="onEnter"
+                        >
+                    </span>
+                    <span class="my-1 h-[2px] w-full min-w-[5.5rem] rounded-full bg-slate-800" />
+                    <span class="inline-flex items-center gap-1 px-1">
+                        <span>{{ currentStep.from_den }} ×</span>
+                        <input
+                            v-model="fracX.mul"
+                            type="text"
+                            inputmode="numeric"
+                            class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                            :class="cellClass"
+                            placeholder="?"
+                            autocomplete="off"
+                            aria-label="Multiply the bottom by"
+                            @keyup.enter="onEnter"
+                        >
+                    </span>
+                </span>
+                <span class="font-mono text-xl font-black text-rose-700">=</span>
+                <EquationFraction :expr="currentStep.right_a" />
+                <span class="font-mono text-xl font-black text-rose-700">{{ currentStep.right_op || '−' }}</span>
+                <EquationFraction :expr="currentStep.right_b" />
+            </div>
+            <div class="flex flex-wrap items-center justify-center gap-2 text-lg sm:gap-3">
+                <span class="font-mono text-sm font-bold text-slate-500">=</span>
+                <EquationFraction :expr="`${currentStep.keep_num} / ${currentStep.keep_den}`" />
+                <span class="font-mono text-xl font-black text-rose-700">−</span>
+                <span class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
+                    <span class="inline-flex items-center gap-1 px-1">
+                        <input
+                            v-model="fracX.top"
+                            type="text"
+                            inputmode="numeric"
+                            class="h-9 w-14 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                            :class="cellClass"
+                            placeholder="?"
+                            autocomplete="off"
+                            aria-label="New numerator"
+                            @keyup.enter="onEnter"
+                        >
+                        <span>x</span>
+                    </span>
+                    <span class="my-1 h-[2px] w-full min-w-[3.5rem] rounded-full bg-slate-800" />
+                    <span>{{ currentStep.keep_den }}</span>
+                </span>
+                <span class="font-mono text-xl font-black text-rose-700">=</span>
+                <EquationFraction :expr="currentStep.right_a" />
+                <span class="font-mono text-xl font-black text-rose-700">{{ currentStep.right_op || '−' }}</span>
+                <EquationFraction :expr="currentStep.right_b" />
             </div>
         </div>
 

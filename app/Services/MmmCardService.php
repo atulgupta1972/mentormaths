@@ -601,6 +601,23 @@ class MmmCardService
                 'step_key' => $stepKey,
             ];
         }
+        if ($stepType === 'common_den') {
+            $mulKey = (string) ($playStep['mul_key'] ?? 'mul');
+            $topKey = (string) ($playStep['top_key'] ?? 'top');
+            $mulOk = $this->integerTokenMatches($check[$mulKey] ?? '', $values[$mulKey] ?? null);
+            $topOk = $this->integerTokenMatches($check[$topKey] ?? '', $values[$topKey] ?? null);
+            $ok = $mulOk && $topOk;
+
+            return [
+                'ok' => $ok,
+                'all_ok' => false,
+                'cell_results' => ['common_den' => $ok],
+                'message' => $ok
+                    ? 'Same denominator. Continue.'
+                    : $this->balanceStepHint($stepKey, $playSteps),
+                'step_key' => $stepKey,
+            ];
+        }
         if ($stepType === 'frac_x') {
             $topKey = (string) ($playStep['top_key'] ?? 'top');
             $resultKey = (string) ($playStep['result_key'] ?? 'result');
@@ -768,6 +785,7 @@ class MmmCardService
             'x_term' => 'Join the x-terms and write the single x-term, such as −x or 4x.',
             'blank' => 'Work out that number. Mind the sign.',
             'frac_x' => 'Solve the fraction the usual way, then put x on the answer. Write the whole number over the denominator first.',
+            'common_den' => '3x is 3x/1. Multiply the top and the bottom by 3. Then 3 × 3 is the new top, with x.',
             default => 'Check that number and try again.',
         };
     }
