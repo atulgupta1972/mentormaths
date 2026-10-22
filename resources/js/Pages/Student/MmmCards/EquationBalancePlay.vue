@@ -15,13 +15,29 @@ const props = defineProps({
 const emit = defineEmits(['next']);
 
 const play = computed(() => props.exercise?.balance || {});
-const steps = computed(() => play.value.steps || []);
+const completed = ref({});
+const expandSteps = (list) => {
+    const out = [];
+    for (const step of list || []) {
+        out.push(step);
+        if (step?.type === 'pick_side') {
+            const choice = completed.value[step.key];
+            const branch = step.branches?.[choice];
+            if (Array.isArray(branch)) {
+                out.push(...expandSteps(branch));
+            }
+        }
+    }
+
+    return out;
+};
+const steps = computed(() => expandSteps(play.value.steps || []));
 const currentIndex = ref(0);
 const currentValue = ref('');
 const crossRight = ref('');
 const frac = reactive({ n1: '', n2: '', d1: '', d2: '' });
+const fracX = reactive({ top: '', result: '' });
 const flip = reactive({ n: '', d: '' });
-const completed = ref({});
 const submitting = ref(false);
 const message = ref('');
 const allCorrect = ref(false);
@@ -49,6 +65,8 @@ watch(
         frac.n2 = '';
         frac.d1 = '';
         frac.d2 = '';
+        fracX.top = '';
+        fracX.result = '';
         flip.n = '';
         flip.d = '';
         completed.value = {};
@@ -77,6 +95,7 @@ const scaleTip = computed(() => play.value.scale_tip
     || 'Both pans already match. Whatever you add on the left, add the same on the right.');
 const isTermFlow = computed(() => steps.value.some((step) => [
     'divide', 'multiply', 'cross', 'write_frac', 'keep_flip', 'cut', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
+    'pick_side', 'x_term', 'blank', 'frac_x',
 ].includes(step.type)));
 const keepFlipStep = computed(() => steps.value.find((step) => step.type === 'keep_flip') || null);
 const canCheckStep = computed(() => {
@@ -85,6 +104,12 @@ const canCheckStep = computed(() => {
     }
     if (currentStep.value?.type === 'keep_flip') {
         return flip.n.trim() !== '' && flip.d.trim() !== '';
+    }
+    if (currentStep.value?.type === 'frac_x') {
+        return fracX.top.trim() !== '' && fracX.result.trim() !== '';
+    }
+    if (currentStep.value?.type === 'pick_side') {
+        return currentValue.value === 'lhs' || currentValue.value === 'rhs';
     }
     if (currentValue.value.trim() === '') {
         return false;
@@ -138,6 +163,21 @@ const workingLines = computed(() => {
             lines.push(`${step.keep} = ${v}`);
         } else if (step.type === 'open_bracket') {
             lines.push(`(${step.expression}) = ${v}`);
+        } else if (step.type === 'x_term') {
+            lines.push(`${step.expr} = ${v}`);
+        } else if (step.type === 'blank') {
+            lines.push(`${step.before || ''} ${v}${step.after ? ` ${step.after}` : ''}`.trim());
+        } else if (step.type === 'frac_x') {
+            const result = completed.value[step.result_key];
+            if (result) {
+                const shown = String(result).replace(/^-/, '−');
+                lines.push(`Fraction done. Put x → ${shown}x/${step.den}`);
+            }
+        } else if (step.type === 'pick_side') {
+            const label = (step.choices || []).find((choice) => choice.value === v)?.label;
+            if (label) {
+                lines.push(label);
+            }
         } else if (step.type === 'solve') {
             lines.push(`x = ${v}`);
         }
@@ -209,6 +249,12 @@ const checkStep = async () => {
                 flip_d: cleanMath(flip.d),
             };
         }
+        if (currentStep.value?.type === 'frac_x') {
+            payload.values = {
+                [currentStep.value.top_key]: cleanMath(fracX.top),
+                [currentStep.value.result_key]: cleanMath(fracX.result),
+            };
+        }
         if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
             payload.values = {
                 [currentKey.value]: cleanMath(currentValue.value),
@@ -238,6 +284,15 @@ const checkStep = async () => {
                 nextCompleted.flip_n = cleanMath(flip.n);
                 nextCompleted.flip_d = cleanMath(flip.d);
             }
+            if (currentStep.value?.type === 'frac_x') {
+                const result = cleanMath(fracX.result);
+                nextCompleted[currentKey.value] = result;
+                nextCompleted[currentStep.value.top_key] = cleanMath(fracX.top);
+                nextCompleted[currentStep.value.result_key] = result;
+            }
+            if (currentStep.value?.type === 'solve') {
+                nextCompleted.x = cleanMath(currentValue.value);
+            }
             if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
                 nextCompleted[currentStep.value.pair_key] = currentStep.value.type === 'cut' && keepFlipStep.value
                     ? cleanMath(currentStep.value.cut_auto || '1')
@@ -251,6 +306,8 @@ const checkStep = async () => {
                     currentIndex.value += 1;
                     currentValue.value = '';
                     crossRight.value = '';
+                    fracX.top = '';
+                    fracX.result = '';
                     stepOk.value = false;
                     message.value = '';
                 }, 550);
@@ -272,6 +329,8 @@ const reset = () => {
     frac.n2 = '';
     frac.d1 = '';
     frac.d2 = '';
+    fracX.top = '';
+    fracX.result = '';
     flip.n = '';
     flip.d = '';
     completed.value = {};
@@ -289,6 +348,14 @@ const canGoNext = computed(() => {
 
 const onEnter = (event) => {
     event.preventDefault();
+    checkStep();
+};
+
+const chooseSide = (value) => {
+    if (submitting.value || allCorrect.value) {
+        return;
+    }
+    currentValue.value = value;
     checkStep();
 };
 
@@ -314,6 +381,10 @@ const keepFlipParts = computed(() => {
 });
 const showKeepFlipCuts = computed(() => {
     if (! showKeepFlipTrail.value) {
+        return false;
+    }
+
+    if (! cutStep.value) {
         return false;
     }
 
@@ -370,6 +441,9 @@ const showKeepFlipCuts = computed(() => {
 
         <p v-if="currentStep?.hint && !allCorrect" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
             {{ currentStep.hint }}
+        </p>
+        <p v-if="currentStep?.now && !allCorrect" class="text-center font-mono text-sm font-semibold text-slate-800">
+            {{ currentStep.now }}
         </p>
 
         <div class="space-y-3">
@@ -1119,8 +1193,101 @@ const showKeepFlipCuts = computed(() => {
             </div>
         </div>
 
+        <div v-if="!allCorrect && currentStep?.type === 'pick_side'" class="space-y-3">
+            <p class="text-center text-sm font-semibold text-slate-800">
+                {{ currentStep.prompt || 'Choose a side' }}
+            </p>
+            <div class="flex flex-wrap justify-center gap-3">
+                <button
+                    v-for="choice in currentStep.choices || []"
+                    :key="choice.value"
+                    type="button"
+                    class="rounded-xl border-2 px-4 py-3 text-sm font-extrabold"
+                    :class="currentValue === choice.value
+                        ? 'border-rose-600 bg-rose-50 text-rose-900'
+                        : 'border-slate-200 bg-white text-slate-800 hover:border-rose-300'"
+                    :disabled="submitting"
+                    @click="chooseSide(choice.value)"
+                >
+                    {{ choice.label }}
+                </button>
+            </div>
+        </div>
+
+        <div v-if="!allCorrect && (currentStep?.type === 'blank' || currentStep?.type === 'x_term')" class="space-y-2">
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                {{ currentStep.type === 'x_term' ? 'Join the x-terms' : (currentStep.label || 'Work this out') }}
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
+                <span>{{ currentStep.type === 'x_term' ? currentStep.expr : currentStep.before }}</span>
+                <span v-if="currentStep.type === 'x_term'" class="text-rose-700">=</span>
+                <input
+                    v-model="currentValue"
+                    type="text"
+                    inputmode="text"
+                    class="w-28 rounded-md border px-2 py-1 text-center font-mono text-lg font-extrabold"
+                    :class="cellClass"
+                    placeholder="?"
+                    autocomplete="off"
+                    :aria-label="currentStep.type === 'x_term' ? 'Joined x-term' : 'Number for this step'"
+                    @keyup.enter="onEnter"
+                >
+                <span v-if="currentStep.after">{{ currentStep.after }}</span>
+            </div>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'frac_x'" class="space-y-3">
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-600">
+                Solve the fraction, then put x
+            </p>
+            <p class="text-center text-sm text-slate-700">
+                Ignore x for a moment. Write {{ currentStep.lead }} over {{ currentStep.den }}, then subtract. x goes on the answer.
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
+                <span>{{ currentStep.lead }}</span>
+                <span class="text-rose-700">=</span>
+                <input
+                    v-model="fracX.top"
+                    type="text"
+                    inputmode="text"
+                    class="w-16 rounded-md border px-1 py-1 text-center font-mono text-lg font-extrabold"
+                    :class="cellClass"
+                    placeholder="?"
+                    autocomplete="off"
+                    aria-label="Top when the whole number is written over the denominator"
+                    @keyup.enter="onEnter"
+                >
+                <span>/ {{ currentStep.den }}</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-center gap-2 font-mono text-lg font-semibold">
+                <template v-if="currentStep.order === 'other_first'">
+                    <span>{{ currentStep.other }}/{{ currentStep.den }}</span>
+                    <span>{{ currentStep.op || '−' }}</span>
+                    <span>{{ fracX.top || '?' }}/{{ currentStep.den }}</span>
+                </template>
+                <template v-else>
+                    <span>{{ fracX.top || '?' }}/{{ currentStep.den }}</span>
+                    <span>{{ currentStep.op || '−' }}</span>
+                    <span>{{ currentStep.other }}/{{ currentStep.den }}</span>
+                </template>
+                <span class="text-rose-700">=</span>
+                <input
+                    v-model="fracX.result"
+                    type="text"
+                    inputmode="text"
+                    class="w-16 rounded-md border px-1 py-1 text-center font-mono text-lg font-extrabold"
+                    :class="cellClass"
+                    placeholder="?"
+                    autocomplete="off"
+                    aria-label="Top of the fraction after subtracting"
+                    @keyup.enter="onEnter"
+                >
+                <span>/ {{ currentStep.den }}</span>
+            </div>
+        </div>
+
         <div v-if="!allCorrect" class="flex flex-wrap gap-2">
-            <PrimaryButton type="button" :disabled="submitting || !canCheckStep" @click="checkStep">
+            <PrimaryButton v-if="currentStep?.type !== 'pick_side'" type="button" :disabled="submitting || !canCheckStep" @click="checkStep">
                 {{ submitting ? 'Checking…' : 'Check this step' }}
             </PrimaryButton>
             <SecondaryButton type="button" @click="reset">Start again</SecondaryButton>

@@ -816,4 +816,95 @@ class MmmCardServiceTest extends TestCase
         ]);
         $this->assertTrue($done['all_ok'], json_encode($done));
     }
+
+    public function test_balance_equation_basic_4_both_sides_fractions_and_tidy(): void
+    {
+        $card = MmmCard::query()->where('slug', 'balance-equation-basic-4')->first();
+
+        $this->assertNotNull($card);
+        $this->assertTrue($card->isPublished());
+        $this->assertSame(MmmCard::KIND_BALANCE_EQUATION, $card->kind);
+        $this->assertSame('Balance the equation — Basic 4', $card->heading);
+        $this->assertSame(4, $card->exercises()->count());
+
+        $service = app(MmmCardService::class);
+        $sum1 = $card->exercises()->where('sort_order', 1)->firstOrFail();
+        $this->assertTrue($service->checkSubmission($card, $sum1, ['step_key' => 'side', 'value' => 'lhs'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum1, ['step_key' => 'side', 'value' => 'rhs'])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $sum1, ['step_key' => 'side', 'value' => 'both'])['ok']);
+
+        $this->assertTrue($service->checkSubmission($card, $sum1, ['step_key' => 'join_l', 'value' => '-x'])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $sum1, ['step_key' => 'join_l', 'value' => 'x'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum1, ['step_key' => 'take_l', 'value' => '40'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum1, ['step_key' => 'term_l', 'value' => '-90'])['ok']);
+        $left = $service->checkSubmission($card, $sum1, ['step_key' => 'x_l', 'value' => '90']);
+        $this->assertTrue($left['all_ok'], json_encode($left));
+
+        $this->assertTrue($service->checkSubmission($card, $sum1, ['step_key' => 'join_r', 'value' => 'x'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum1, ['step_key' => 'take_r', 'value' => '50'])['ok']);
+        $right = $service->checkSubmission($card, $sum1, ['step_key' => 'x_r', 'value' => '90']);
+        $this->assertTrue($right['all_ok'], json_encode($right));
+
+        $payload = $service->playPayload($card, null, 0);
+        $this->assertSame('2x + 40', $payload['exercise']['balance']['given_left']);
+        $this->assertSame('pick_side', $payload['exercise']['balance']['steps'][0]['type']);
+        $this->assertArrayHasKey('lhs', $payload['exercise']['balance']['steps'][0]['branches']);
+        $this->assertArrayNotHasKey('check', $payload['exercise']);
+
+        $sum2 = $card->exercises()->where('sort_order', 2)->firstOrFail();
+        $this->assertTrue($service->checkSubmission($card, $sum2, [
+            'step_key' => 'frac_r',
+            'values' => ['rew_r' => '9', 'joined_r' => '7'],
+        ])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $sum2, [
+            'step_key' => 'frac_l',
+            'values' => ['rew_l' => '9', 'joined_l' => '7'],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum2, [
+            'step_key' => 'frac_l',
+            'values' => ['rew_l' => '9', 'joined_l' => '-7'],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum2, ['step_key' => 'nums_r', 'value' => '90'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum2, [
+            'step_key' => 'flip',
+            'values' => ['flip_n' => '3', 'flip_d' => '7'],
+        ])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $sum2, [
+            'step_key' => 'flip',
+            'values' => ['flip_n' => '7', 'flip_d' => '3'],
+        ])['ok']);
+        $fraction = $service->checkSubmission($card, $sum2, ['step_key' => 'x', 'value' => '270/49']);
+        $this->assertTrue($fraction['all_ok'], json_encode($fraction));
+
+        $sum3 = $card->exercises()->where('sort_order', 3)->firstOrFail();
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'tidy', 'value' => 'lhs'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'tidy', 'value' => 'rhs'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'br', 'value' => '-13'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'sign', 'value' => '13'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'addn', 'value' => '25'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'rx', 'value' => '-2x'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'rnum', 'value' => '20'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'move', 'value' => 'lhs'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'join_l', 'value' => '4x'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'take_l', 'value' => '25'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'term_l', 'value' => '-5'])['ok']);
+        $tidy = $service->checkSubmission($card, $sum3, ['step_key' => 'x_l', 'value' => '-5/4']);
+        $this->assertTrue($tidy['all_ok'], json_encode($tidy));
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'x_r', 'value' => '-1.25'])['all_ok']);
+
+        $page = $card->exercises()->where('sort_order', 4)->firstOrFail();
+        $pagePayload = $service->playPayload($card, null, 3);
+        $this->assertSame('fill_page', $pagePayload['exercise']['play_kind']);
+        $this->assertCount(5, $pagePayload['exercise']['fill_page']['items']);
+        $done = $service->checkSubmission($card, $page, [
+            'values' => [
+                'q1' => '7',
+                'q2' => '6',
+                'q3' => '14',
+                'q4' => '10/3',
+                'q5' => '5',
+            ],
+        ]);
+        $this->assertTrue($done['all_ok'], json_encode($done));
+    }
 }

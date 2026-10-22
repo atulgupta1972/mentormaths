@@ -577,14 +577,48 @@ class MmmCardService
             $values[$stepKey] = $submission['value'] ?? null;
         }
 
-        $playStep = null;
-        foreach ($playSteps as $step) {
-            if (is_array($step) && (string) ($step['key'] ?? '') === (string) $stepKey) {
-                $playStep = $step;
-                break;
+        $playStep = is_string($stepKey) && $stepKey !== ''
+            ? $this->findBalanceStep($playSteps, $stepKey)
+            : null;
+        $stepType = is_array($playStep) ? (string) ($playStep['type'] ?? '') : '';
+        if ($stepType === 'pick_side') {
+            $allowed = [];
+            foreach ($playStep['choices'] ?? [] as $choice) {
+                if (is_array($choice) && ($choice['value'] ?? '') !== '') {
+                    $allowed[] = strtolower((string) $choice['value']);
+                }
             }
+            $got = strtolower(trim((string) ($values[$stepKey] ?? '')));
+            $ok = $got !== '' && in_array($got, $allowed, true);
+
+            return [
+                'ok' => $ok,
+                'all_ok' => false,
+                'cell_results' => [(string) $stepKey => $ok],
+                'message' => $ok
+                    ? 'Either side is fine. Continue.'
+                    : $this->balanceStepHint($stepKey, $playSteps),
+                'step_key' => $stepKey,
+            ];
         }
-        if (($playStep['type'] ?? '') === 'write_frac') {
+        if ($stepType === 'frac_x') {
+            $topKey = (string) ($playStep['top_key'] ?? 'top');
+            $resultKey = (string) ($playStep['result_key'] ?? 'result');
+            $topOk = $this->integerTokenMatches($check[$topKey] ?? '', $values[$topKey] ?? null);
+            $resultOk = $this->integerTokenMatches($check[$resultKey] ?? '', $values[$resultKey] ?? null);
+            $ok = $topOk && $resultOk;
+
+            return [
+                'ok' => $ok,
+                'all_ok' => false,
+                'cell_results' => ['frac_x' => $ok],
+                'message' => $ok
+                    ? 'That fraction is right. Put x on it and continue.'
+                    : $this->balanceStepHint($stepKey, $playSteps),
+                'step_key' => $stepKey,
+            ];
+        }
+        if ($stepType === 'write_frac') {
             $numOk = $this->factorPairMatches($check['frac_num'] ?? [], $values, $playStep['num_keys'] ?? ['n1', 'n2']);
             $denOk = $this->factorPairMatches($check['frac_den'] ?? [], $values, $playStep['den_keys'] ?? ['d1', 'd2']);
             $ok = $numOk && $denOk;
@@ -599,7 +633,7 @@ class MmmCardService
                 'step_key' => $stepKey,
             ];
         }
-        if (($playStep['type'] ?? '') === 'keep_flip') {
+        if ($stepType === 'keep_flip') {
             $numOk = $this->integerTokenMatches($check['flip_n'] ?? '', $values['flip_n'] ?? null);
             $denOk = $this->integerTokenMatches($check['flip_d'] ?? '', $values['flip_d'] ?? null);
             $ok = $numOk && $denOk;
@@ -618,17 +652,9 @@ class MmmCardService
         $cellResults = [];
         $allOk = true;
         $keysToCheck = ($stepKey !== null && $stepKey !== '') ? [$stepKey] : $stepKeys;
-        if ($stepKey !== null && $stepKey !== '') {
-            foreach ($playSteps as $step) {
-                if (! is_array($step) || (string) ($step['key'] ?? '') !== (string) $stepKey) {
-                    continue;
-                }
-                $pairKey = (string) ($step['pair_key'] ?? '');
-                if ($pairKey !== '' && ! in_array($pairKey, $keysToCheck, true)) {
-                    $keysToCheck[] = $pairKey;
-                }
-                break;
-            }
+        $pairKey = is_array($playStep) ? (string) ($playStep['pair_key'] ?? '') : '';
+        if ($pairKey !== '' && ! in_array($pairKey, $keysToCheck, true)) {
+            $keysToCheck[] = $pairKey;
         }
 
         foreach ($keysToCheck as $key) {
@@ -646,9 +672,8 @@ class MmmCardService
             }
         }
 
-        $lastKey = $stepKeys !== [] ? (string) $stepKeys[array_key_last($stepKeys)] : null;
-        $finished = $allOk && $stepKey !== null && $stepKey === $lastKey;
-        if ($stepKey === null && $allOk && $keysToCheck === $stepKeys) {
+        $finished = $allOk && is_string($stepKey) && $stepKey !== '' && is_array($playStep) && ! empty($playStep['_is_last']);
+        if (($stepKey === null || $stepKey === '') && $allOk && $keysToCheck === $stepKeys) {
             $finished = true;
         }
 
@@ -671,37 +696,80 @@ class MmmCardService
     /**
      * @param  list<array<string, mixed>>  $playSteps
      */
-    private function balanceStepHint(?string $stepKey, array $playSteps): string
+    /**
+     * @param  list<array<string, mixed>>  $steps
+     * @return array<string, mixed>|null
+     */
+    private function findBalanceStep(array $steps, string $key): ?array
     {
-        foreach ($playSteps as $step) {
-            if (! is_array($step) || (string) ($step['key'] ?? '') !== (string) $stepKey) {
-                continue;
-            }
-            $type = (string) ($step['type'] ?? '');
-
-            return match ($type) {
-                'balance' => 'Do the same on both sides. Add the opposite of the number stuck to x (include the minus if you need it).',
-                'simplify_right' => 'First work out the numbers on the right of = .',
-                'simplify_left' => 'First work out the numbers on the left of = .',
-                'move' => 'Add the opposite of the number stuck to x.',
-                'impact' => 'The x side is now x + 0. Only fill the number box on the other side.',
-                'divide' => 'Divide both sides by the same number (the coefficient of x).',
-                'isolate_term' => '2x is one term. Move the extra number so you have 2x = something.',
-                'term_value' => 'Work out that number. Keep 2x together.',
-                'open_bracket' => 'Open the bracket first.',
-                'rhs_value' => 'Now work out the right-hand side.',
-                'take_number' => 'Take the loose number across. Keep the x-term together.',
-                'multiply' => 'Multiply both sides by the same number (the denominator) so it cancels.',
-                'cross' => 'Cross-multiply: each numerator times the other side’s denominator.',
-                'write_frac' => 'Write x as a fraction: other-side top × this-side bottom, over (number in front of x) × other-side bottom. Do not multiply the products yet.',
-                'keep_flip' => 'Keep the other side as it is. The fraction in front of x flips when it moves across.',
-                'cut' => 'Cancel a top number with a bottom number. Write what each pair becomes.',
-                'solve' => 'x is alone now. Work out the number.',
-                default => 'Check that number and try again.',
-            };
+        if ($key === '') {
+            return null;
         }
 
-        return 'Check that number and try again.';
+        foreach ($steps as $index => $step) {
+            if (! is_array($step)) {
+                continue;
+            }
+            if ((string) ($step['key'] ?? '') === $key) {
+                $copy = $step;
+                $branches = $step['branches'] ?? null;
+                $copy['_is_last'] = $index === array_key_last($steps) && empty($branches);
+
+                return $copy;
+            }
+            $branches = is_array($step['branches'] ?? null) ? $step['branches'] : [];
+            foreach ($branches as $branchSteps) {
+                if (! is_array($branchSteps)) {
+                    continue;
+                }
+                $found = $this->findBalanceStep(array_values($branchSteps), $key);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $playSteps
+     */
+    private function balanceStepHint(?string $stepKey, array $playSteps): string
+    {
+        $step = $this->findBalanceStep($playSteps, (string) $stepKey);
+        if ($step === null) {
+            return 'Check that number and try again.';
+        }
+        if (! empty($step['miss'])) {
+            return (string) $step['miss'];
+        }
+        $type = (string) ($step['type'] ?? '');
+
+        return match ($type) {
+            'balance' => 'Do the same on both sides. Add the opposite of the number stuck to x (include the minus if you need it).',
+            'simplify_right' => 'First work out the numbers on the right of = .',
+            'simplify_left' => 'First work out the numbers on the left of = .',
+            'move' => 'Add the opposite of the number stuck to x.',
+            'impact' => 'The x side is now x + 0. Only fill the number box on the other side.',
+            'divide' => 'Divide both sides by the same number (the coefficient of x).',
+            'isolate_term' => '2x is one term. Move the extra number so you have 2x = something.',
+            'term_value' => 'Work out that number. Keep 2x together.',
+            'open_bracket' => 'Open the bracket first.',
+            'rhs_value' => 'Now work out the right-hand side.',
+            'take_number' => 'Take the loose number across. Keep the x-term together.',
+            'multiply' => 'Multiply both sides by the same number (the denominator) so it cancels.',
+            'cross' => 'Cross-multiply: each numerator times the other side’s denominator.',
+            'write_frac' => 'Write x as a fraction: other-side top × this-side bottom, over (number in front of x) × other-side bottom. Do not multiply the products yet.',
+            'keep_flip' => 'Keep the other side as it is. The fraction in front of x flips when it moves across.',
+            'cut' => 'Cancel a top number with a bottom number. Write what each pair becomes.',
+            'solve' => 'x is alone now. Work out the number.',
+            'pick_side' => 'Left or right — both are fine. Choose one side.',
+            'x_term' => 'Join the x-terms and write the single x-term, such as −x or 4x.',
+            'blank' => 'Work out that number. Mind the sign.',
+            'frac_x' => 'Solve the fraction the usual way, then put x on the answer. Write the whole number over the denominator first.',
+            default => 'Check that number and try again.',
+        };
     }
 
     /**
