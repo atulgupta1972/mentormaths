@@ -78,6 +78,7 @@ const scaleTip = computed(() => play.value.scale_tip
 const isTermFlow = computed(() => steps.value.some((step) => [
     'divide', 'multiply', 'cross', 'write_frac', 'keep_flip', 'cut', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
 ].includes(step.type)));
+const keepFlipStep = computed(() => steps.value.find((step) => step.type === 'keep_flip') || null);
 const canCheckStep = computed(() => {
     if (currentStep.value?.type === 'write_frac') {
         return frac.n1.trim() !== '' && frac.n2.trim() !== '' && frac.d1.trim() !== '' && frac.d2.trim() !== '';
@@ -88,7 +89,10 @@ const canCheckStep = computed(() => {
     if (currentValue.value.trim() === '') {
         return false;
     }
-    if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && crossRight.value.trim() === '') {
+    if (currentStep.value?.type === 'cross' && crossRight.value.trim() === '') {
+        return false;
+    }
+    if (currentStep.value?.type === 'cut' && ! keepFlipStep.value && crossRight.value.trim() === '') {
         return false;
     }
 
@@ -208,7 +212,9 @@ const checkStep = async () => {
         if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
             payload.values = {
                 [currentKey.value]: cleanMath(currentValue.value),
-                [currentStep.value.pair_key]: cleanMath(crossRight.value),
+                [currentStep.value.pair_key]: currentStep.value.type === 'cut' && keepFlipStep.value
+                    ? cleanMath(currentStep.value.cut_auto || '1')
+                    : cleanMath(crossRight.value),
             };
         }
         const { data } = await axios.post(props.check_url, payload, {
@@ -233,7 +239,9 @@ const checkStep = async () => {
                 nextCompleted.flip_d = cleanMath(flip.d);
             }
             if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
-                nextCompleted[currentStep.value.pair_key] = cleanMath(crossRight.value);
+                nextCompleted[currentStep.value.pair_key] = currentStep.value.type === 'cut' && keepFlipStep.value
+                    ? cleanMath(currentStep.value.cut_auto || '1')
+                    : cleanMath(crossRight.value);
             }
             completed.value = nextCompleted;
             if (data.all_ok) {
@@ -295,10 +303,22 @@ const multiplyTimes = computed(() => {
 const showMultiplyTrail = computed(() => !! multiplyTimes.value);
 const showFracTrail = computed(() => !! (completed.value.n1 && completed.value.n2 && completed.value.d1 && completed.value.d2));
 const showKeepFlipTrail = computed(() => !! (completed.value.flip_n && completed.value.flip_d));
-const keepFlipStep = computed(() => steps.value.find((step) => step.type === 'keep_flip') || null);
 const cutStep = computed(() => steps.value.find((step) => step.type === 'cut') || null);
 const cutLeftValue = computed(() => (cutStep.value ? completed.value[cutStep.value.key] : '') || '');
 const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[cutStep.value.pair_key] : '') || '');
+const keepFlipParts = computed(() => {
+    const keep = String(keepFlipStep.value?.keep || play.value.given_right || '');
+    const [num, den] = keep.split('/').map((part) => String(part ?? '').trim());
+
+    return { num: num || '6', den: den || '5' };
+});
+const showKeepFlipCuts = computed(() => {
+    if (! showKeepFlipTrail.value) {
+        return false;
+    }
+
+    return currentStep.value?.type === 'cut' || !! cutLeftValue.value || allCorrect.value;
+});
 </script>
 
 <template>
@@ -466,13 +486,62 @@ const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[
             </div>
             <div
                 v-if="showKeepFlipTrail"
-                class="flex flex-wrap items-center justify-center gap-3 font-mono font-extrabold text-emerald-950"
+                class="flex flex-wrap items-center justify-center gap-2 font-mono font-extrabold text-emerald-950"
             >
                 <span>x</span>
                 <span class="text-rose-700">=</span>
-                <EquationFraction :expr="keepFlipStep?.keep || play.given_right" />
+                <div class="inline-flex flex-col items-center leading-none">
+                    <span class="mb-1 h-5 text-sm font-black text-rose-700">
+                        <template v-if="currentStep?.type === 'cut' && !allCorrect">
+                            <input
+                                v-model="currentValue"
+                                type="text"
+                                inputmode="numeric"
+                                class="h-5 w-8 rounded border px-0.5 text-center text-sm font-black focus:border-rose-400 focus:ring-rose-200"
+                                :class="cellClass"
+                                placeholder="?"
+                                autocomplete="off"
+                                aria-label="Number left above 6 after cutting"
+                                @keyup.enter="onEnter"
+                            >
+                        </template>
+                        <template v-else-if="cutLeftValue">{{ cutLeftValue }}</template>
+                    </span>
+                    <span class="relative inline-flex h-7 w-7 items-center justify-center text-xl">
+                        <span :class="showKeepFlipCuts ? 'text-slate-400' : ''">{{ keepFlipParts.num }}</span>
+                        <span
+                            v-if="showKeepFlipCuts"
+                            class="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-7 -translate-x-1/2 -translate-y-1/2 rotate-[-32deg] bg-rose-500"
+                        />
+                    </span>
+                    <span class="my-0.5 h-[2px] w-8 rounded-full bg-emerald-800" />
+                    <span class="relative inline-flex h-7 w-7 items-center justify-center text-xl">
+                        <span :class="showKeepFlipCuts ? 'text-slate-400' : ''">{{ keepFlipParts.den }}</span>
+                        <span
+                            v-if="showKeepFlipCuts"
+                            class="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-7 -translate-x-1/2 -translate-y-1/2 rotate-[-32deg] bg-rose-500"
+                        />
+                    </span>
+                </div>
                 <span class="text-rose-700">×</span>
-                <EquationFraction :expr="`${completed.flip_n} / ${completed.flip_d}`" />
+                <div class="inline-flex flex-col items-center leading-none">
+                    <span class="mb-1 h-5" />
+                    <span class="relative inline-flex h-7 w-7 items-center justify-center text-xl">
+                        <span :class="showKeepFlipCuts ? 'text-slate-400' : ''">{{ completed.flip_n }}</span>
+                        <span
+                            v-if="showKeepFlipCuts"
+                            class="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-7 -translate-x-1/2 -translate-y-1/2 rotate-[-32deg] bg-rose-500"
+                        />
+                    </span>
+                    <span class="my-0.5 h-[2px] w-8 rounded-full bg-emerald-800" />
+                    <span class="relative inline-flex h-7 w-7 items-center justify-center text-xl">
+                        <span :class="showKeepFlipCuts ? 'text-slate-400' : ''">{{ completed.flip_d }}</span>
+                        <span
+                            v-if="showKeepFlipCuts"
+                            class="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-7 -translate-x-1/2 -translate-y-1/2 rotate-[-32deg] bg-rose-500"
+                        />
+                    </span>
+                </div>
             </div>
             <div
                 v-if="showFracTrail"
@@ -736,7 +805,16 @@ const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[
             </p>
         </div>
 
-        <div v-if="!allCorrect && currentStep?.type === 'cut'" class="space-y-3">
+        <div v-if="!allCorrect && currentStep?.type === 'cut' && keepFlipStep" class="space-y-2">
+            <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
+                Cut matching numbers
+            </p>
+            <p class="text-center text-sm text-slate-700">
+                Cut 5 with 5. Cut 6 with 2. Write the leftover 3 in the box above 6.
+            </p>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'cut' && !keepFlipStep" class="space-y-3">
             <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
                 Cut matching numbers
             </p>
