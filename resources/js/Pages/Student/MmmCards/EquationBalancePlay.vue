@@ -313,22 +313,17 @@ const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[
             <p class="text-center text-[10px] font-extrabold uppercase tracking-[0.18em] text-rose-800">
                 Keep the scale level
             </p>
-            <div class="mt-3 flex items-end justify-center gap-3 sm:gap-8">
-                <div class="min-w-[8rem] flex-1 rounded-xl border-2 border-rose-200 bg-white px-3 py-4 text-center shadow-sm">
+            <div class="mx-auto mt-3 flex w-fit items-center gap-3 rounded-xl border-2 border-rose-200 bg-white px-4 py-3 shadow-sm">
+                <div class="text-center">
                     <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Left</p>
-                    <div class="mt-2 flex justify-center text-xl sm:text-2xl">
+                    <div class="mt-1 flex justify-center text-xl sm:text-2xl">
                         <EquationFraction :expr="play.given_left" />
                     </div>
                 </div>
-                <div class="mb-4 flex flex-col items-center">
-                    <span class="font-mono text-2xl font-black text-rose-700">=</span>
-                    <div class="mt-2 h-1.5 w-16 rounded-full bg-rose-300" />
-                    <div class="h-8 w-0 border-l-4 border-rose-400" />
-                    <div class="h-0 w-0 border-x-8 border-t-8 border-x-transparent border-t-rose-400" />
-                </div>
-                <div class="min-w-[8rem] flex-1 rounded-xl border-2 border-rose-200 bg-white px-3 py-4 text-center shadow-sm">
+                <span class="font-mono text-2xl font-black text-rose-700">=</span>
+                <div class="text-center">
                     <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Right</p>
-                    <div class="mt-2 flex justify-center text-xl sm:text-2xl">
+                    <div class="mt-1 flex justify-center text-xl sm:text-2xl">
                         <EquationFraction :expr="play.given_right" />
                     </div>
                 </div>
@@ -629,16 +624,16 @@ const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[
             <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
                 Keep {{ currentStep.keep || play.given_right }}. Flip {{ currentStep.flip_from || 'the number in front of x' }}.
             </p>
-            <div class="flex flex-wrap items-end justify-center gap-4 sm:gap-6">
-                <span class="mb-6 font-mono text-2xl font-black text-slate-900">x</span>
-                <span class="mb-6 font-mono text-2xl font-black text-rose-700">=</span>
-                <div class="rounded-xl border-2 border-emerald-300 bg-emerald-50 px-4 py-3 text-center">
-                    <p class="mb-2 text-[10px] font-bold uppercase tracking-wide text-emerald-800">Stays</p>
+            <div class="mx-auto flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 sm:gap-3 sm:px-4">
+                <span class="font-mono text-2xl font-black text-slate-900">x</span>
+                <span class="font-mono text-2xl font-black text-rose-700">=</span>
+                <div class="text-center">
+                    <p class="mb-1 text-[10px] font-bold uppercase tracking-wide text-emerald-800">Stays</p>
                     <EquationFraction :expr="currentStep.keep || play.given_right" />
                 </div>
-                <span class="mb-6 font-mono text-2xl font-black text-rose-700">×</span>
-                <div class="rounded-xl border-2 border-rose-200 bg-white px-4 py-3 text-center">
-                    <p class="mb-2 text-[10px] font-bold uppercase tracking-wide text-rose-800">
+                <span class="font-mono text-2xl font-black text-rose-700">×</span>
+                <div class="text-center">
+                    <p class="mb-1 text-[10px] font-bold uppercase tracking-wide text-rose-800">
                         {{ currentStep.flip_from || '2 / 5' }} flips
                     </p>
                     <div class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
@@ -646,19 +641,19 @@ const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[
                             v-model="flip.n"
                             type="text"
                             inputmode="numeric"
-                            class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                            class="h-8 w-10 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
                             :class="cellClass"
                             placeholder="?"
                             autocomplete="off"
                             aria-label="Flipped numerator"
                             @keyup.enter="onEnter"
                         >
-                        <span class="my-1 h-[2px] w-full min-w-[3rem] rounded-full bg-slate-800" />
+                        <span class="my-0.5 h-[2px] w-full min-w-[2.5rem] rounded-full bg-slate-800" />
                         <input
                             v-model="flip.d"
                             type="text"
                             inputmode="numeric"
-                            class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                            class="h-8 w-10 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
                             :class="cellClass"
                             placeholder="?"
                             autocomplete="off"
