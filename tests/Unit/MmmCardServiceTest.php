@@ -877,20 +877,32 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($fraction['all_ok'], json_encode($fraction));
 
         $sum3 = $card->exercises()->where('sort_order', 3)->firstOrFail();
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'tidy', 'value' => 'lhs'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'tidy', 'value' => 'rhs'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'br', 'value' => '-13'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'sign', 'value' => '13'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'addn', 'value' => '25'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'rx', 'value' => '-2x'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'rnum', 'value' => '20'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'move', 'value' => 'lhs'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'join_l', 'value' => '4x'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'take_l', 'value' => '25'])['ok']);
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'term_l', 'value' => '-5'])['ok']);
-        $tidy = $service->checkSubmission($card, $sum3, ['step_key' => 'x_l', 'value' => '-5/4']);
+        $this->assertSame('copy_line', $sum3->answers['play']['steps'][0]['type']);
+        $this->assertFalse($service->checkSubmission($card, $sum3, [
+            'step_key' => 'open',
+            'values' => ['br' => '13', 'rx' => '-2x', 'rnum' => '20'],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, [
+            'step_key' => 'open',
+            'values' => ['br' => '-13', 'rx' => '-2x', 'rnum' => '20'],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'sign', 'values' => ['sign' => '13']])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'addn', 'values' => ['addn' => '25']])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, [
+            'step_key' => 'move',
+            'values' => ['moved_x' => '2x', 'moved_n' => '25'],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, [
+            'step_key' => 'simp',
+            'values' => ['coef' => '4x', 'rhs_n' => '-5'],
+        ])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $sum3, [
+            'step_key' => 'simp',
+            'values' => ['coef' => '4x', 'rhs_n' => '5'],
+        ])['ok']);
+        $tidy = $service->checkSubmission($card, $sum3, ['step_key' => 'x', 'values' => ['x' => '-5/4']]);
         $this->assertTrue($tidy['all_ok'], json_encode($tidy));
-        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'x_r', 'value' => '-1.25'])['all_ok']);
+        $this->assertTrue($service->checkSubmission($card, $sum3, ['step_key' => 'x', 'values' => ['x' => '-1.25']])['all_ok']);
 
         $page = $card->exercises()->where('sort_order', 4)->firstOrFail();
         $pagePayload = $service->playPayload($card, null, 3);

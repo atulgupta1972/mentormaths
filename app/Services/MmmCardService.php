@@ -601,6 +601,35 @@ class MmmCardService
                 'step_key' => $stepKey,
             ];
         }
+        if ($stepType === 'copy_line') {
+            $ok = true;
+            $cells = [];
+            foreach ($playStep['parts'] ?? [] as $part) {
+                if (! is_array($part) || empty($part['box'])) {
+                    continue;
+                }
+                $box = (string) $part['box'];
+                $cellOk = $this->integerTokenMatches($check[$box] ?? '', $values[$box] ?? null);
+                $cells[$box] = $cellOk;
+                if (! $cellOk) {
+                    $ok = false;
+                }
+            }
+            if ($cells === []) {
+                $ok = false;
+            }
+            $finished = $ok && ! empty($playStep['_is_last']);
+
+            return [
+                'ok' => $ok,
+                'all_ok' => $finished,
+                'cell_results' => $cells,
+                'message' => $ok
+                    ? ($finished ? 'x is correct — well done. Both sides stay equal.' : 'That line is right. Write the next line.')
+                    : $this->balanceStepHint($stepKey, $playSteps),
+                'step_key' => $stepKey,
+            ];
+        }
         if ($stepType === 'common_den') {
             $mulKey = (string) ($playStep['mul_key'] ?? 'mul');
             $topKey = (string) ($playStep['top_key'] ?? 'top');
@@ -786,6 +815,7 @@ class MmmCardService
             'blank' => 'Work out that number. Mind the sign.',
             'frac_x' => 'Solve the fraction the usual way, then put x on the answer. Write the whole number over the denominator first.',
             'common_den' => '3x is 3x/1. Multiply the top and the bottom by 3. Then 3 × 3 is the new top, with x.',
+            'copy_line' => 'Fill every box on this line. Simplify the left and the right together.',
             default => 'Check that number and try again.',
         };
     }

@@ -37,6 +37,12 @@ const currentValue = ref('');
 const crossRight = ref('');
 const frac = reactive({ n1: '', n2: '', d1: '', d2: '' });
 const fracX = reactive({ top: '', result: '', mul: '' });
+const copyBoxes = reactive({});
+const clearCopyBoxes = () => {
+    Object.keys(copyBoxes).forEach((key) => {
+        delete copyBoxes[key];
+    });
+};
 const flip = reactive({ n: '', d: '' });
 const submitting = ref(false);
 const message = ref('');
@@ -68,6 +74,7 @@ watch(
         fracX.top = '';
         fracX.result = '';
         fracX.mul = '';
+        clearCopyBoxes();
         flip.n = '';
         flip.d = '';
         completed.value = {};
@@ -96,7 +103,7 @@ const scaleTip = computed(() => play.value.scale_tip
     || 'Both pans already match. Whatever you add on the left, add the same on the right.');
 const isTermFlow = computed(() => steps.value.some((step) => [
     'divide', 'multiply', 'cross', 'write_frac', 'keep_flip', 'cut', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
-    'pick_side', 'x_term', 'blank', 'frac_x', 'common_den',
+    'pick_side', 'x_term', 'blank', 'frac_x', 'common_den', 'copy_line',
 ].includes(step.type)));
 const keepFlipStep = computed(() => steps.value.find((step) => step.type === 'keep_flip') || null);
 const canCheckStep = computed(() => {
@@ -111,6 +118,11 @@ const canCheckStep = computed(() => {
     }
     if (currentStep.value?.type === 'common_den') {
         return fracX.mul.trim() !== '' && fracX.top.trim() !== '';
+    }
+    if (currentStep.value?.type === 'copy_line') {
+        return (currentStep.value.parts || [])
+            .filter((part) => part.box)
+            .every((part) => String(copyBoxes[part.box] || '').trim() !== '');
     }
     if (currentStep.value?.type === 'pick_side') {
         return currentValue.value === 'lhs' || currentValue.value === 'rhs';
@@ -177,6 +189,20 @@ const workingLines = computed(() => {
             if (mul && top) {
                 const shown = String(top).replace(/^-/, '−');
                 lines.push(`${step.keep_num}/${step.keep_den} − ${shown}x/${step.keep_den} = ${step.right_a} ${step.right_op} ${step.right_b}`.replace(/ \/ /g, '/'));
+            }
+        } else if (step.type === 'copy_line') {
+            const bits = [];
+            for (const part of step.parts || []) {
+                if (part.eq) {
+                    bits.push('=');
+                } else if (part.box) {
+                    bits.push(String(completed.value[part.box] || '').replace(/^-/, '−'));
+                } else if (part.text) {
+                    bits.push(String(part.text).trim());
+                }
+            }
+            if (bits.length) {
+                lines.push(bits.filter(Boolean).join(' '));
             }
         } else if (step.type === 'frac_x') {
             const result = completed.value[step.result_key];
@@ -272,6 +298,15 @@ const checkStep = async () => {
                 [currentStep.value.top_key]: cleanMath(fracX.top),
             };
         }
+        if (currentStep.value?.type === 'copy_line') {
+            const values = {};
+            for (const part of currentStep.value.parts || []) {
+                if (part.box) {
+                    values[part.box] = cleanMath(copyBoxes[part.box] || '');
+                }
+            }
+            payload.values = values;
+        }
         if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
             payload.values = {
                 [currentKey.value]: cleanMath(currentValue.value),
@@ -313,6 +348,16 @@ const checkStep = async () => {
                 nextCompleted[currentStep.value.mul_key] = cleanMath(fracX.mul);
                 nextCompleted[currentStep.value.top_key] = top;
             }
+            if (currentStep.value?.type === 'copy_line') {
+                for (const part of currentStep.value.parts || []) {
+                    if (part.box) {
+                        nextCompleted[part.box] = cleanMath(copyBoxes[part.box] || '');
+                    }
+                }
+                if (! nextCompleted[currentKey.value]) {
+                    nextCompleted[currentKey.value] = 'ok';
+                }
+            }
             if (currentStep.value?.type === 'solve') {
                 nextCompleted.x = cleanMath(currentValue.value);
             }
@@ -332,6 +377,7 @@ const checkStep = async () => {
                     fracX.top = '';
                     fracX.result = '';
                     fracX.mul = '';
+                    clearCopyBoxes();
                     stepOk.value = false;
                     message.value = '';
                 }, 550);
@@ -356,6 +402,7 @@ const reset = () => {
     fracX.top = '';
     fracX.result = '';
     fracX.mul = '';
+    clearCopyBoxes();
     flip.n = '';
     flip.d = '';
     completed.value = {};
@@ -1399,6 +1446,36 @@ const showKeepFlipCuts = computed(() => {
                     @keyup.enter="onEnter"
                 >
                 <span>/ {{ currentStep.den }}</span>
+            </div>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'copy_line'" class="space-y-3">
+            <p
+                v-if="currentStep.from"
+                class="text-center font-mono text-base font-semibold text-slate-500"
+            >
+                {{ currentStep.from }}
+            </p>
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-emerald-800">
+                (=) next line — left and right together
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-1 font-mono text-lg font-semibold sm:gap-2 sm:text-xl">
+                <template v-for="(part, index) in currentStep.parts || []" :key="`${currentStep.key}-${index}`">
+                    <span v-if="part.eq" class="px-1 font-black text-rose-700">=</span>
+                    <input
+                        v-else-if="part.box"
+                        v-model="copyBoxes[part.box]"
+                        type="text"
+                        inputmode="text"
+                        class="w-20 rounded-md border px-1 py-1 text-center font-mono text-lg font-extrabold"
+                        :class="cellClass"
+                        placeholder="?"
+                        autocomplete="off"
+                        :aria-label="part.label || part.box"
+                        @keyup.enter="onEnter"
+                    >
+                    <span v-else>{{ part.text }}</span>
+                </template>
             </div>
         </div>
 
