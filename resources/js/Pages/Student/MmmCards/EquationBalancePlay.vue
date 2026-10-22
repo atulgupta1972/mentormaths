@@ -38,6 +38,33 @@ const crossRight = ref('');
 const frac = reactive({ n1: '', n2: '', d1: '', d2: '' });
 const fracX = reactive({ top: '', result: '', mul: '' });
 const copyBoxes = reactive({});
+const stepBoxKeys = (step) => {
+    const keys = [];
+    for (const part of step?.parts || []) {
+        if (part.box) {
+            keys.push(part.box);
+        }
+    }
+    for (const column of step?.columns || []) {
+        for (const term of column.terms || []) {
+            if (term.box) {
+                keys.push(term.box);
+            }
+        }
+        if (column.den_box) {
+            keys.push(column.den_box);
+        }
+    }
+    for (const side of [step?.left, step?.right]) {
+        for (const piece of side?.pieces || []) {
+            if (piece.box) {
+                keys.push(piece.box);
+            }
+        }
+    }
+
+    return keys;
+};
 const clearCopyBoxes = () => {
     Object.keys(copyBoxes).forEach((key) => {
         delete copyBoxes[key];
@@ -103,7 +130,7 @@ const scaleTip = computed(() => play.value.scale_tip
     || 'Both pans already match. Whatever you add on the left, add the same on the right.');
 const isTermFlow = computed(() => steps.value.some((step) => [
     'divide', 'multiply', 'cross', 'write_frac', 'keep_flip', 'cut', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
-    'pick_side', 'x_term', 'blank', 'frac_x', 'common_den', 'copy_line',
+    'pick_side', 'x_term', 'blank', 'frac_x', 'common_den', 'copy_line', 'note_next', 'frac_board', 'stacked_line',
 ].includes(step.type)));
 const keepFlipStep = computed(() => steps.value.find((step) => step.type === 'keep_flip') || null);
 const canCheckStep = computed(() => {
@@ -119,10 +146,13 @@ const canCheckStep = computed(() => {
     if (currentStep.value?.type === 'common_den') {
         return fracX.mul.trim() !== '' && fracX.top.trim() !== '';
     }
-    if (currentStep.value?.type === 'copy_line') {
-        return (currentStep.value.parts || [])
-            .filter((part) => part.box)
-            .every((part) => String(copyBoxes[part.box] || '').trim() !== '');
+    if (['copy_line', 'frac_board', 'stacked_line'].includes(currentStep.value?.type)) {
+        const keys = stepBoxKeys(currentStep.value);
+
+        return keys.length > 0 && keys.every((key) => String(copyBoxes[key] || '').trim() !== '');
+    }
+    if (currentStep.value?.type === 'note_next') {
+        return currentValue.value === (currentStep.value.value || 'ok');
     }
     if (currentStep.value?.type === 'pick_side') {
         return currentValue.value === 'lhs' || currentValue.value === 'rhs';
@@ -158,6 +188,10 @@ const workingLines = computed(() => {
     for (const step of steps.value) {
         const v = completed.value[step.key];
         if (v === undefined || v === null || v === '') {
+            continue;
+        }
+        if (step.done) {
+            lines.push(step.done);
             continue;
         }
         if (step.type === 'multiply') {
@@ -298,12 +332,10 @@ const checkStep = async () => {
                 [currentStep.value.top_key]: cleanMath(fracX.top),
             };
         }
-        if (currentStep.value?.type === 'copy_line') {
+        if (['copy_line', 'frac_board', 'stacked_line'].includes(currentStep.value?.type)) {
             const values = {};
-            for (const part of currentStep.value.parts || []) {
-                if (part.box) {
-                    values[part.box] = cleanMath(copyBoxes[part.box] || '');
-                }
+            for (const key of stepBoxKeys(currentStep.value)) {
+                values[key] = cleanMath(copyBoxes[key] || '');
             }
             payload.values = values;
         }
@@ -348,11 +380,9 @@ const checkStep = async () => {
                 nextCompleted[currentStep.value.mul_key] = cleanMath(fracX.mul);
                 nextCompleted[currentStep.value.top_key] = top;
             }
-            if (currentStep.value?.type === 'copy_line') {
-                for (const part of currentStep.value.parts || []) {
-                    if (part.box) {
-                        nextCompleted[part.box] = cleanMath(copyBoxes[part.box] || '');
-                    }
+            if (['copy_line', 'frac_board', 'stacked_line'].includes(currentStep.value?.type)) {
+                for (const key of stepBoxKeys(currentStep.value)) {
+                    nextCompleted[key] = cleanMath(copyBoxes[key] || '');
                 }
                 if (! nextCompleted[currentKey.value]) {
                     nextCompleted[currentKey.value] = 'ok';
@@ -423,6 +453,14 @@ const onEnter = (event) => {
     checkStep();
 };
 
+const confirmNote = () => {
+    if (submitting.value || allCorrect.value) {
+        return;
+    }
+    currentValue.value = currentStep.value?.value || 'ok';
+    checkStep();
+};
+
 const chooseSide = (value) => {
     if (submitting.value || allCorrect.value) {
         return;
@@ -476,7 +514,22 @@ const showKeepFlipCuts = computed(() => {
             <p class="text-center text-[10px] font-extrabold uppercase tracking-[0.18em] text-rose-800">
                 Keep the scale level
             </p>
-            <div class="mx-auto mt-3 flex w-fit items-center gap-3 rounded-xl border-2 border-rose-200 bg-white px-4 py-3 shadow-sm">
+            <div class="mx-auto mt-3 flex w-fit max-w-full flex-wrap items-center justify-center gap-3 rounded-xl border-2 border-rose-200 bg-white px-4 py-3 shadow-sm">
+                <template v-if="play.header?.length">
+                    <template v-for="(side, si) in play.header" :key="side.title || si">
+                        <span v-if="si > 0" class="font-mono text-2xl font-black text-rose-700">=</span>
+                        <div class="text-center">
+                            <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">{{ side.title }}</p>
+                            <div class="mt-1 flex flex-wrap items-center justify-center gap-1 text-lg sm:text-xl">
+                                <template v-for="(term, ti) in side.terms || []" :key="`${si}-${ti}`">
+                                    <span v-if="term.op" class="px-0.5 font-black text-rose-700">{{ term.op }}</span>
+                                    <EquationFraction :expr="`${term.num} / ${term.den}`" />
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </template>
+                <template v-else>
                 <div class="text-center">
                     <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Left</p>
                     <div class="mt-1 flex justify-center text-xl sm:text-2xl">
@@ -490,6 +543,7 @@ const showKeepFlipCuts = computed(() => {
                         <EquationFraction :expr="play.given_right" />
                     </div>
                 </div>
+                </template>
             </div>
             <p class="mt-3 text-center text-xs text-slate-600">
                 {{ scaleTip }}
@@ -1449,6 +1503,135 @@ const showKeepFlipCuts = computed(() => {
             </div>
         </div>
 
+        <div v-if="!allCorrect && currentStep?.type === 'note_next'" class="space-y-3">
+            <p class="text-center text-sm font-semibold text-slate-800">
+                First step is always: put brackets around a numerator that has + or −.
+            </p>
+            <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                <p class="text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">As written</p>
+                <div class="mt-2 flex flex-wrap items-center justify-center gap-1 text-lg">
+                    <template v-for="(term, index) in currentStep.before || []" :key="`before-${index}`">
+                        <span v-if="term.op" class="px-0.5 font-black text-slate-500">{{ term.op }}</span>
+                        <EquationFraction :expr="`${term.num} / ${term.den}`" />
+                    </template>
+                </div>
+            </div>
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-emerald-800">Brackets on</p>
+            <div class="rounded-xl border-2 border-emerald-300 bg-emerald-50 px-3 py-3">
+                <div class="flex flex-wrap items-center justify-center gap-1 text-lg">
+                    <template v-for="(term, index) in currentStep.after || []" :key="`after-${index}`">
+                        <span v-if="term.op" class="px-0.5 font-black text-rose-700">{{ term.op }}</span>
+                        <EquationFraction :expr="`${term.num} / ${term.den}`" />
+                    </template>
+                </div>
+            </div>
+            <div class="flex justify-center">
+                <PrimaryButton type="button" :disabled="submitting" @click="confirmNote">
+                    Brackets are on
+                </PrimaryButton>
+            </div>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'frac_board'" class="grid gap-3 sm:grid-cols-2">
+            <div
+                v-for="(column, ci) in currentStep.columns || []"
+                :key="`${currentStep.key}-${ci}`"
+                class="rounded-xl border border-rose-200 bg-white px-3 py-3"
+            >
+                <p class="text-center text-[10px] font-extrabold uppercase tracking-wide text-rose-800">{{ column.title }}</p>
+                <div class="mt-2 flex flex-wrap items-end justify-center gap-2">
+                    <template v-for="(term, ti) in column.terms || []" :key="`${ci}-${ti}`">
+                        <span v-if="term.op" class="mb-8 font-mono text-xl font-black text-rose-700">{{ term.op }}</span>
+                        <EquationFraction :expr="`${term.num} / ${term.den}`" show-times-slot>
+                            <input
+                                v-model="copyBoxes[term.box]"
+                                type="text"
+                                inputmode="text"
+                                class="w-12 rounded-md border px-1 py-0.5 text-center font-mono text-base font-extrabold"
+                                :class="cellClass"
+                                placeholder="?"
+                                autocomplete="off"
+                                :aria-label="term.label || term.box"
+                                @keyup.enter="onEnter"
+                            >
+                        </EquationFraction>
+                    </template>
+                </div>
+                <p class="mt-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">One denominator</p>
+                <div class="mt-1 flex justify-center font-mono text-base font-extrabold text-slate-900">
+                    <span class="inline-flex min-w-[8rem] flex-col items-center">
+                        <span class="px-2 text-center">{{ column.top }}</span>
+                        <span class="my-1 h-[2px] w-full rounded-full bg-slate-800" />
+                        <input
+                            v-model="copyBoxes[column.den_box]"
+                            type="text"
+                            inputmode="text"
+                            class="w-16 rounded-md border px-1 py-0.5 text-center font-mono text-lg font-extrabold"
+                            :class="cellClass"
+                            placeholder="?"
+                            autocomplete="off"
+                            :aria-label="column.den_label || column.den_box"
+                            @keyup.enter="onEnter"
+                        >
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'stacked_line'" class="space-y-3">
+            <p
+                v-if="currentStep.from"
+                class="text-center font-mono text-sm font-semibold text-slate-500"
+            >
+                {{ currentStep.from }}
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-3 font-mono text-lg font-extrabold text-slate-900">
+                <span class="inline-flex min-w-[8rem] flex-col items-center">
+                    <span class="flex flex-wrap items-center justify-center gap-1 px-1">
+                        <template v-for="(piece, index) in currentStep.left?.pieces || []" :key="`L-${index}`">
+                            <input
+                                v-if="piece.box"
+                                v-model="copyBoxes[piece.box]"
+                                type="text"
+                                inputmode="text"
+                                class="w-16 rounded-md border px-1 py-0.5 text-center font-mono text-lg font-extrabold"
+                                :class="cellClass"
+                                placeholder="?"
+                                autocomplete="off"
+                                :aria-label="piece.label || piece.box"
+                                @keyup.enter="onEnter"
+                            >
+                            <span v-else>{{ piece.text }}</span>
+                        </template>
+                    </span>
+                    <span class="my-1 h-[2px] w-full rounded-full bg-slate-800" />
+                    <span>{{ currentStep.left?.den }}</span>
+                </span>
+                <span class="font-black text-rose-700">=</span>
+                <span class="inline-flex min-w-[3rem] flex-col items-center">
+                    <span class="flex flex-wrap items-center justify-center gap-1 px-1">
+                        <template v-for="(piece, index) in currentStep.right?.pieces || []" :key="`R-${index}`">
+                            <input
+                                v-if="piece.box"
+                                v-model="copyBoxes[piece.box]"
+                                type="text"
+                                inputmode="text"
+                                class="w-16 rounded-md border px-1 py-0.5 text-center font-mono text-lg font-extrabold"
+                                :class="cellClass"
+                                placeholder="?"
+                                autocomplete="off"
+                                :aria-label="piece.label || piece.box"
+                                @keyup.enter="onEnter"
+                            >
+                            <span v-else>{{ piece.text }}</span>
+                        </template>
+                    </span>
+                    <span class="my-1 h-[2px] w-full rounded-full bg-slate-800" />
+                    <span>{{ currentStep.right?.den }}</span>
+                </span>
+            </div>
+        </div>
+
         <div v-if="!allCorrect && currentStep?.type === 'copy_line'" class="space-y-3">
             <p
                 v-if="currentStep.from"
@@ -1480,7 +1663,7 @@ const showKeepFlipCuts = computed(() => {
         </div>
 
         <div v-if="!allCorrect" class="flex flex-wrap gap-2">
-            <PrimaryButton v-if="currentStep?.type !== 'pick_side'" type="button" :disabled="submitting || !canCheckStep" @click="checkStep">
+            <PrimaryButton v-if="currentStep?.type !== 'pick_side' && currentStep?.type !== 'note_next'" type="button" :disabled="submitting || !canCheckStep" @click="checkStep">
                 {{ submitting ? 'Checking…' : 'Check this step' }}
             </PrimaryButton>
             <SecondaryButton type="button" @click="reset">Start again</SecondaryButton>

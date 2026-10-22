@@ -601,14 +601,11 @@ class MmmCardService
                 'step_key' => $stepKey,
             ];
         }
-        if ($stepType === 'copy_line') {
+        if (in_array($stepType, ['copy_line', 'frac_board', 'stacked_line'], true)) {
+            $boxes = $this->collectBalanceBoxes(is_array($playStep) ? $playStep : []);
             $ok = true;
             $cells = [];
-            foreach ($playStep['parts'] ?? [] as $part) {
-                if (! is_array($part) || empty($part['box'])) {
-                    continue;
-                }
-                $box = (string) $part['box'];
+            foreach ($boxes as $box) {
                 $cellOk = $this->integerTokenMatches($check[$box] ?? '', $values[$box] ?? null);
                 $cells[$box] = $cellOk;
                 if (! $cellOk) {
@@ -627,6 +624,21 @@ class MmmCardService
                 'message' => $ok
                     ? ($finished ? 'x is correct — well done. Both sides stay equal.' : 'That line is right. Write the next line.')
                     : $this->balanceStepHint($stepKey, $playSteps),
+                'step_key' => $stepKey,
+            ];
+        }
+        if ($stepType === 'note_next') {
+            $want = strtolower(trim((string) ($playStep['value'] ?? 'ok')));
+            $got = strtolower(trim((string) ($values[$stepKey] ?? '')));
+            $ok = $got !== '' && $got === $want;
+
+            return [
+                'ok' => $ok,
+                'all_ok' => false,
+                'cell_results' => [(string) $stepKey => $ok],
+                'message' => $ok
+                    ? 'Brackets are on. Continue.'
+                    : 'Put brackets around each numerator that has more than one term.',
                 'step_key' => $stepKey,
             ];
         }
@@ -740,9 +752,6 @@ class MmmCardService
     }
 
     /**
-     * @param  list<array<string, mixed>>  $playSteps
-     */
-    /**
      * @param  list<array<string, mixed>>  $steps
      * @return array<string, mixed>|null
      */
@@ -776,6 +785,46 @@ class MmmCardService
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $step
+     * @return list<string>
+     */
+    private function collectBalanceBoxes(array $step): array
+    {
+        $boxes = [];
+        foreach ($step['parts'] ?? [] as $part) {
+            if (is_array($part) && ! empty($part['box'])) {
+                $boxes[] = (string) $part['box'];
+            }
+        }
+        foreach ($step['columns'] ?? [] as $column) {
+            if (! is_array($column)) {
+                continue;
+            }
+            foreach ($column['terms'] ?? [] as $term) {
+                if (is_array($term) && ! empty($term['box'])) {
+                    $boxes[] = (string) $term['box'];
+                }
+            }
+            if (! empty($column['den_box'])) {
+                $boxes[] = (string) $column['den_box'];
+            }
+        }
+        foreach (['left', 'right'] as $side) {
+            $pieces = $step[$side]['pieces'] ?? [];
+            if (! is_array($pieces)) {
+                continue;
+            }
+            foreach ($pieces as $piece) {
+                if (is_array($piece) && ! empty($piece['box'])) {
+                    $boxes[] = (string) $piece['box'];
+                }
+            }
+        }
+
+        return $boxes;
     }
 
     /**
@@ -816,6 +865,9 @@ class MmmCardService
             'frac_x' => 'Solve the fraction the usual way, then put x on the answer. Write the whole number over the denominator first.',
             'common_den' => '3x is 3x/1. Multiply the top and the bottom by 3. Then 3 × 3 is the new top, with x.',
             'copy_line' => 'Fill every box on this line. Simplify the left and the right together.',
+            'frac_board' => 'One denominator on the left, one on the right. Write the number you multiply each fraction by, then the new denominator.',
+            'stacked_line' => 'Fill the numerator. The denominator stays.',
+            'note_next' => 'Put brackets around each numerator that has more than one term.',
             default => 'Check that number and try again.',
         };
     }
