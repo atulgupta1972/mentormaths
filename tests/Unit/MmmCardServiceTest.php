@@ -785,8 +785,12 @@ class MmmCardServiceTest extends TestCase
 
         $sum5 = $card->exercises()->where('sort_order', 5)->firstOrFail();
         $this->assertTrue($service->checkSubmission($card, $sum5, [
-            'step_key' => 'frac',
-            'values' => ['n1' => '6', 'n2' => '5', 'd1' => '2', 'd2' => '5'],
+            'step_key' => 'flip',
+            'values' => ['flip_n' => '5', 'flip_d' => '2'],
+        ])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $sum5, [
+            'step_key' => 'flip',
+            'values' => ['flip_n' => '2', 'flip_d' => '5'],
         ])['ok']);
         $this->assertTrue($service->checkSubmission($card, $sum5, [
             'step_key' => 'cut',

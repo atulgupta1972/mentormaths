@@ -599,6 +599,21 @@ class MmmCardService
                 'step_key' => $stepKey,
             ];
         }
+        if (($playStep['type'] ?? '') === 'keep_flip') {
+            $numOk = $this->integerTokenMatches($check['flip_n'] ?? '', $values['flip_n'] ?? null);
+            $denOk = $this->integerTokenMatches($check['flip_d'] ?? '', $values['flip_d'] ?? null);
+            $ok = $numOk && $denOk;
+
+            return [
+                'ok' => $ok,
+                'all_ok' => false,
+                'cell_results' => ['keep_flip' => $ok],
+                'message' => $ok
+                    ? 'That step is right. Continue.'
+                    : $this->balanceStepHint($stepKey, $playSteps),
+                'step_key' => $stepKey,
+            ];
+        }
 
         $cellResults = [];
         $allOk = true;
@@ -679,6 +694,7 @@ class MmmCardService
                 'multiply' => 'Multiply both sides by the same number (the denominator) so it cancels.',
                 'cross' => 'Cross-multiply: each numerator times the other side’s denominator.',
                 'write_frac' => 'Write x as a fraction: other-side top × this-side bottom, over (number in front of x) × other-side bottom. Do not multiply the products yet.',
+                'keep_flip' => 'Keep the other side as it is. The fraction in front of x flips when it moves across.',
                 'cut' => 'Cancel a top number with a bottom number. Write what each pair becomes.',
                 'solve' => 'x is alone now. Work out the number.',
                 default => 'Check that number and try again.',

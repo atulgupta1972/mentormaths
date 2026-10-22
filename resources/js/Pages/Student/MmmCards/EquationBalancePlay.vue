@@ -20,6 +20,7 @@ const currentIndex = ref(0);
 const currentValue = ref('');
 const crossRight = ref('');
 const frac = reactive({ n1: '', n2: '', d1: '', d2: '' });
+const flip = reactive({ n: '', d: '' });
 const completed = ref({});
 const submitting = ref(false);
 const message = ref('');
@@ -48,6 +49,8 @@ watch(
         frac.n2 = '';
         frac.d1 = '';
         frac.d2 = '';
+        flip.n = '';
+        flip.d = '';
         completed.value = {};
         message.value = '';
         allCorrect.value = false;
@@ -73,11 +76,14 @@ const xValue = computed(() => completed.value.x || completed.value.impact || '')
 const scaleTip = computed(() => play.value.scale_tip
     || 'Both pans already match. Whatever you add on the left, add the same on the right.');
 const isTermFlow = computed(() => steps.value.some((step) => [
-    'divide', 'multiply', 'cross', 'write_frac', 'cut', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
+    'divide', 'multiply', 'cross', 'write_frac', 'keep_flip', 'cut', 'isolate_term', 'term_value', 'open_bracket', 'rhs_value', 'take_number',
 ].includes(step.type)));
 const canCheckStep = computed(() => {
     if (currentStep.value?.type === 'write_frac') {
         return frac.n1.trim() !== '' && frac.n2.trim() !== '' && frac.d1.trim() !== '' && frac.d2.trim() !== '';
+    }
+    if (currentStep.value?.type === 'keep_flip') {
+        return flip.n.trim() !== '' && flip.d.trim() !== '';
     }
     if (currentValue.value.trim() === '') {
         return false;
@@ -193,6 +199,12 @@ const checkStep = async () => {
                 d2: cleanMath(frac.d2),
             };
         }
+        if (currentStep.value?.type === 'keep_flip') {
+            payload.values = {
+                flip_n: cleanMath(flip.n),
+                flip_d: cleanMath(flip.d),
+            };
+        }
         if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
             payload.values = {
                 [currentKey.value]: cleanMath(currentValue.value),
@@ -215,6 +227,10 @@ const checkStep = async () => {
                 nextCompleted.n2 = cleanMath(frac.n2);
                 nextCompleted.d1 = cleanMath(frac.d1);
                 nextCompleted.d2 = cleanMath(frac.d2);
+            }
+            if (currentStep.value?.type === 'keep_flip') {
+                nextCompleted.flip_n = cleanMath(flip.n);
+                nextCompleted.flip_d = cleanMath(flip.d);
             }
             if ((currentStep.value?.type === 'cross' || currentStep.value?.type === 'cut') && currentStep.value.pair_key) {
                 nextCompleted[currentStep.value.pair_key] = cleanMath(crossRight.value);
@@ -248,6 +264,8 @@ const reset = () => {
     frac.n2 = '';
     frac.d1 = '';
     frac.d2 = '';
+    flip.n = '';
+    flip.d = '';
     completed.value = {};
     message.value = '';
     allCorrect.value = false;
@@ -276,6 +294,8 @@ const multiplyTimes = computed(() => {
 });
 const showMultiplyTrail = computed(() => !! multiplyTimes.value);
 const showFracTrail = computed(() => !! (completed.value.n1 && completed.value.n2 && completed.value.d1 && completed.value.d2));
+const showKeepFlipTrail = computed(() => !! (completed.value.flip_n && completed.value.flip_d));
+const keepFlipStep = computed(() => steps.value.find((step) => step.type === 'keep_flip') || null);
 const cutStep = computed(() => steps.value.find((step) => step.type === 'cut') || null);
 const cutLeftValue = computed(() => (cutStep.value ? completed.value[cutStep.value.key] : '') || '');
 const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[cutStep.value.pair_key] : '') || '');
@@ -434,7 +454,7 @@ const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[
         </div>
         </div>
 
-        <div v-if="isTermFlow && (workingLines.length || showMultiplyTrail || showFracTrail)" class="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+        <div v-if="isTermFlow && (workingLines.length || showMultiplyTrail || showFracTrail || showKeepFlipTrail)" class="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
             <div
                 v-if="showMultiplyTrail"
                 class="flex flex-wrap items-center justify-center gap-3"
@@ -448,6 +468,16 @@ const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[
                     :expr="multiplyStep.right || play.given_right"
                     :times="multiplyTimes"
                 />
+            </div>
+            <div
+                v-if="showKeepFlipTrail"
+                class="flex flex-wrap items-center justify-center gap-3 font-mono font-extrabold text-emerald-950"
+            >
+                <span>x</span>
+                <span class="text-rose-700">=</span>
+                <EquationFraction :expr="keepFlipStep?.keep || play.given_right" />
+                <span class="text-rose-700">×</span>
+                <EquationFraction :expr="`${completed.flip_n} / ${completed.flip_d}`" />
             </div>
             <div
                 v-if="showFracTrail"
@@ -592,6 +622,54 @@ const cutRightValue = computed(() => (cutStep.value?.pair_key ? completed.value[
             </div>
             <p class="text-center text-[11px] text-slate-500">
                 The extra number sits on the numerator. One box fills the other.
+            </p>
+        </div>
+
+        <div v-if="!allCorrect && currentStep?.type === 'keep_flip'" class="space-y-3">
+            <p class="text-xs font-bold uppercase tracking-wide text-slate-600">
+                Keep {{ currentStep.keep || play.given_right }}. Flip {{ currentStep.flip_from || 'the number in front of x' }}.
+            </p>
+            <div class="flex flex-wrap items-end justify-center gap-4 sm:gap-6">
+                <span class="mb-6 font-mono text-2xl font-black text-slate-900">x</span>
+                <span class="mb-6 font-mono text-2xl font-black text-rose-700">=</span>
+                <div class="rounded-xl border-2 border-emerald-300 bg-emerald-50 px-4 py-3 text-center">
+                    <p class="mb-2 text-[10px] font-bold uppercase tracking-wide text-emerald-800">Stays</p>
+                    <EquationFraction :expr="currentStep.keep || play.given_right" />
+                </div>
+                <span class="mb-6 font-mono text-2xl font-black text-rose-700">×</span>
+                <div class="rounded-xl border-2 border-rose-200 bg-white px-4 py-3 text-center">
+                    <p class="mb-2 text-[10px] font-bold uppercase tracking-wide text-rose-800">
+                        {{ currentStep.flip_from || '2 / 5' }} flips
+                    </p>
+                    <div class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
+                        <input
+                            v-model="flip.n"
+                            type="text"
+                            inputmode="numeric"
+                            class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                            :class="cellClass"
+                            placeholder="?"
+                            autocomplete="off"
+                            aria-label="Flipped numerator"
+                            @keyup.enter="onEnter"
+                        >
+                        <span class="my-1 h-[2px] w-full min-w-[3rem] rounded-full bg-slate-800" />
+                        <input
+                            v-model="flip.d"
+                            type="text"
+                            inputmode="numeric"
+                            class="h-9 w-12 rounded-md border px-1 text-center text-lg focus:border-rose-400 focus:ring-rose-200"
+                            :class="cellClass"
+                            placeholder="?"
+                            autocomplete="off"
+                            aria-label="Flipped denominator"
+                            @keyup.enter="onEnter"
+                        >
+                    </div>
+                </div>
+            </div>
+            <p class="text-center text-[11px] text-slate-500">
+                {{ currentStep.keep || play.given_right }} does not move. {{ currentStep.flip_from || '2 / 5' }} crosses as its flip.
             </p>
         </div>
 
