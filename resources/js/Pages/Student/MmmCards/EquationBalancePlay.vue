@@ -530,7 +530,8 @@ const showKeepFlipCuts = computed(() => {
                             <div class="mt-1 flex flex-wrap items-center justify-center gap-1 text-lg sm:text-xl">
                                 <template v-for="(term, ti) in side.terms || []" :key="`${si}-${ti}`">
                                     <span v-if="term.op" class="px-0.5 font-black text-rose-700">{{ term.op }}</span>
-                                    <EquationFraction :expr="`${term.num} / ${term.den}`" />
+                                    <EquationFraction v-if="term.den" :expr="`${term.num} / ${term.den}`" />
+                                    <span v-else class="font-mono font-extrabold text-slate-900">{{ term.num }}</span>
                                 </template>
                             </div>
                         </div>
@@ -1531,7 +1532,7 @@ const showKeepFlipCuts = computed(() => {
 
         <div v-if="!allCorrect && currentStep?.type === 'note_next'" class="space-y-3">
             <p class="text-center text-sm font-semibold text-slate-800">
-                First step is always: put brackets around a numerator that has + or −.
+                {{ currentStep.lead || 'First step is always: put brackets around a numerator that has + or −.' }}
             </p>
             <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                 <p class="text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">As written</p>
@@ -1542,7 +1543,7 @@ const showKeepFlipCuts = computed(() => {
                     </template>
                 </div>
             </div>
-            <p class="text-center text-xs font-bold uppercase tracking-wide text-emerald-800">Brackets on</p>
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-emerald-800">{{ currentStep.mark || 'Brackets on' }}</p>
             <div class="rounded-xl border-2 border-emerald-300 bg-emerald-50 px-3 py-3">
                 <div class="flex flex-wrap items-center justify-center gap-1 text-lg">
                     <template v-for="(term, index) in currentStep.after || []" :key="`after-${index}`">
@@ -1553,7 +1554,7 @@ const showKeepFlipCuts = computed(() => {
             </div>
             <div class="flex justify-center">
                 <PrimaryButton type="button" :disabled="submitting" @click="confirmNote">
-                    Brackets are on
+                    {{ currentStep.button || 'Brackets are on' }}
                 </PrimaryButton>
             </div>
         </div>
@@ -1652,17 +1653,16 @@ const showKeepFlipCuts = computed(() => {
                             <div class="mt-1 flex flex-nowrap items-center justify-center gap-1 whitespace-nowrap text-lg">
                                 <template v-for="(term, ti) in side.terms || []" :key="`act-${si}-${ti}`">
                                     <span v-if="term.op" class="px-0.5 font-mono text-xl font-black text-rose-700">{{ term.op }}</span>
-                                    <span class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
+                                    <span v-if="term.den" class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
                                         <span class="px-1">
-                                            <span class="text-blue-600">{{ term.factor }}</span>
-                                            <span> × {{ term.num }}</span>
+                                            <span v-if="term.factor" class="text-blue-600">{{ term.factor }} × </span>{{ term.num }}
                                         </span>
-                                        <span class="my-1 h-[2px] w-full min-w-[4.5rem] rounded-full bg-slate-800" />
+                                        <span class="my-1 h-[2px] w-full min-w-[3rem] rounded-full bg-slate-800" />
                                         <span class="px-1">
-                                            <span class="text-blue-600">{{ term.factor }}</span>
-                                            <span> × {{ term.den }}</span>
+                                            <span v-if="term.factor" class="text-blue-600">{{ term.factor }} × </span>{{ term.den }}
                                         </span>
                                     </span>
+                                    <span v-else class="font-mono font-extrabold text-slate-900">{{ term.num }}</span>
                                 </template>
                             </div>
                         </div>

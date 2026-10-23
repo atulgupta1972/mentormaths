@@ -637,8 +637,8 @@ class MmmCardService
                 'all_ok' => false,
                 'cell_results' => [(string) $stepKey => $ok],
                 'message' => $ok
-                    ? 'Brackets are on. Continue.'
-                    : 'Put brackets around each numerator that has more than one term.',
+                    ? (string) ($playStep['ok_message'] ?? 'Brackets are on. Continue.')
+                    : (string) ($playStep['miss'] ?? 'Put brackets around each numerator that has more than one term.'),
                 'step_key' => $stepKey,
             ];
         }

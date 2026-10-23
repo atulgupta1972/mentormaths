@@ -1007,4 +1007,79 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($pageDone['all_ok'], json_encode($pageDone));
         $this->assertFalse($service->checkSubmission($card, $page, ['step_key' => 'q1', 'value' => '4'])['ok']);
     }
+
+    public function test_balance_equation_basic_6_cross_multiplication(): void
+    {
+        $card = MmmCard::query()->where('slug', 'balance-equation-basic-6')->first();
+
+        $this->assertNotNull($card);
+        $this->assertTrue($card->isPublished());
+        $this->assertSame('Balance the equation — Basic 6', $card->heading);
+        $this->assertSame(8, $card->sort_order);
+        $this->assertSame(6, $card->exercises()->count());
+
+        $service = app(MmmCardService::class);
+        $pure = $card->exercises()->where('sort_order', 1)->firstOrFail();
+        $this->assertTrue($service->checkSubmission($card, $pure, ['step_key' => 'rule', 'value' => 'ok'])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $pure, [
+            'step_key' => 'products',
+            'values' => ['lt' => '3x', 'rb' => '5', 'lb' => '9', 'rt' => '4'],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $pure, [
+            'step_key' => 'products',
+            'values' => ['lt' => '3x', 'rb' => '9', 'lb' => '5', 'rt' => '4'],
+        ])['ok']);
+        $done = $service->checkSubmission($card, $pure, ['step_key' => 'x', 'values' => ['x' => '20/27']]);
+        $this->assertTrue($done['all_ok'], json_encode($done));
+
+        $bracket = $card->exercises()->where('sort_order', 2)->firstOrFail();
+        $this->assertTrue($service->checkSubmission($card, $bracket, ['step_key' => 'x', 'values' => ['x' => '3/4']])['all_ok']);
+
+        $mixed = $card->exercises()->where('sort_order', 3)->firstOrFail();
+        $this->assertTrue($service->checkSubmission($card, $mixed, ['step_key' => 'join', 'values' => ['top4' => '4x']])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $mixed, ['step_key' => 'join', 'values' => ['top4' => '2x']])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $mixed, ['step_key' => 'x', 'values' => ['x' => '-1/6']])['all_ok']);
+
+        $ten = $card->exercises()->where('sort_order', 4)->firstOrFail();
+        $this->assertCount(10, $ten->answers['play']['items']);
+        $tenDone = $service->checkSubmission($card, $ten, [
+            'values' => [
+                'q1' => '20/27',
+                'q2' => '3/4',
+                'q3' => '-1/6',
+                'q4' => '7/6',
+                'q5' => '13',
+                'q6' => '13/15',
+                'q7' => '1',
+                'q8' => '4/9',
+                'q9' => '15/2',
+                'q10' => '13/8',
+            ],
+        ]);
+        $this->assertTrue($tenDone['all_ok'], json_encode($tenDone));
+
+        $same = $card->exercises()->where('sort_order', 5)->firstOrFail();
+        $this->assertTrue($service->checkSubmission($card, $same, [
+            'step_key' => 'same',
+            'values' => ['t1' => '2', 't2' => '1'],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $same, ['step_key' => 'x', 'values' => ['x' => '9/4']])['all_ok']);
+
+        $book = $card->exercises()->where('sort_order', 6)->firstOrFail();
+        $this->assertCount(8, $book->answers['play']['items']);
+        $bookDone = $service->checkSubmission($card, $book, [
+            'values' => [
+                'q1' => '1/2',
+                'q2' => '1',
+                'q3' => '1',
+                'q4' => '1',
+                'q5' => '2',
+                'q6' => '5/3',
+                'q7' => '3',
+                'q8' => '3',
+            ],
+        ]);
+        $this->assertTrue($bookDone['all_ok'], json_encode($bookDone));
+        $this->assertFalse($service->checkSubmission($card, $book, ['step_key' => 'q1', 'value' => '2'])['ok']);
+    }
 }
