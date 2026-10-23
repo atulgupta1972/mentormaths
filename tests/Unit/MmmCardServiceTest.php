@@ -943,11 +943,17 @@ class MmmCardServiceTest extends TestCase
 
         $this->assertFalse($service->checkSubmission($card, $sum, [
             'step_key' => 'denoms',
-            'values' => ['ml1' => '3', 'ml2' => '2', 'denL' => '6', 'mr1' => '5', 'mr2' => '3', 'denR' => '15'],
+            'values' => [
+                'ml1' => '2', 'ml1d' => '3', 'ml2' => '3', 'ml2d' => '3',
+                'denL' => '6', 'mr1' => '5', 'mr1d' => '5', 'mr2' => '3', 'mr2d' => '3', 'denR' => '15',
+            ],
         ])['ok']);
         $this->assertTrue($service->checkSubmission($card, $sum, [
             'step_key' => 'denoms',
-            'values' => ['ml1' => '2', 'ml2' => '3', 'denL' => '6', 'mr1' => '5', 'mr2' => '3', 'denR' => '15'],
+            'values' => [
+                'ml1' => '2', 'ml1d' => '2', 'ml2' => '3', 'ml2d' => '3',
+                'denL' => '6', 'mr1' => '5', 'mr1d' => '5', 'mr2' => '3', 'mr2d' => '3', 'denR' => '15',
+            ],
         ])['ok']);
 
         $this->assertFalse($service->checkSubmission($card, $sum, [

@@ -50,6 +50,9 @@ const stepBoxKeys = (step) => {
             if (term.box) {
                 keys.push(term.box);
             }
+            if (term.den_mul) {
+                keys.push(term.den_mul);
+            }
         }
         if (column.den_box) {
             keys.push(column.den_box);
@@ -1541,8 +1544,42 @@ const showKeepFlipCuts = computed(() => {
                 <p class="text-center text-[10px] font-extrabold uppercase tracking-wide text-rose-800">{{ column.title }}</p>
                 <div class="mt-2 flex flex-wrap items-end justify-center gap-2">
                     <template v-for="(term, ti) in column.terms || []" :key="`${ci}-${ti}`">
-                        <span v-if="term.op" class="mb-8 font-mono text-xl font-black text-rose-700">{{ term.op }}</span>
-                        <EquationFraction :expr="`${term.num} / ${term.den}`" show-times-slot>
+                        <span v-if="term.op" class="font-mono text-xl font-black text-rose-700">{{ term.op }}</span>
+                        <span
+                            v-if="term.den_mul"
+                            class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900"
+                        >
+                            <span class="inline-flex items-center gap-1 px-1">
+                                <span>{{ term.num }} ×</span>
+                                <input
+                                    v-model="copyBoxes[term.box]"
+                                    type="text"
+                                    inputmode="text"
+                                    class="h-9 w-12 rounded-md border px-1 text-center text-lg"
+                                    :class="cellClass"
+                                    placeholder="?"
+                                    autocomplete="off"
+                                    :aria-label="term.label || term.box"
+                                    @keyup.enter="onEnter"
+                                >
+                            </span>
+                            <span class="my-1 h-[2px] w-full min-w-[5.5rem] rounded-full bg-slate-800" />
+                            <span class="inline-flex items-center gap-1 px-1">
+                                <span>{{ term.den }} ×</span>
+                                <input
+                                    v-model="copyBoxes[term.den_mul]"
+                                    type="text"
+                                    inputmode="text"
+                                    class="h-9 w-12 rounded-md border px-1 text-center text-lg"
+                                    :class="cellClass"
+                                    placeholder="?"
+                                    autocomplete="off"
+                                    :aria-label="term.den_label || term.den_mul"
+                                    @keyup.enter="onEnter"
+                                >
+                            </span>
+                        </span>
+                        <EquationFraction v-else :expr="`${term.num} / ${term.den}`" show-times-slot>
                             <input
                                 v-model="copyBoxes[term.box]"
                                 type="text"

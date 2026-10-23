@@ -807,6 +807,9 @@ class MmmCardService
                 if (is_array($term) && ! empty($term['box'])) {
                     $boxes[] = (string) $term['box'];
                 }
+                if (is_array($term) && ! empty($term['den_mul'])) {
+                    $boxes[] = (string) $term['den_mul'];
+                }
             }
             if (! empty($column['den_box'])) {
                 $boxes[] = (string) $column['den_box'];
