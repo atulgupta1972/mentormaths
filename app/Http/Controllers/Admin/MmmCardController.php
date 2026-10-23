@@ -19,7 +19,11 @@ class MmmCardController extends Controller
     public function index(): Response
     {
         $cards = MmmCard::query()
-            ->withCount(['exercises', 'syllabusChapters'])
+            ->with([
+                'syllabusChapters.syllabusVersion.board',
+                'syllabusChapters.syllabusVersion.gradeLevel',
+            ])
+            ->withCount('exercises')
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
@@ -31,12 +35,43 @@ class MmmCardController extends Controller
                 'status' => $card->status,
                 'accent' => $card->accent,
                 'exercises_count' => $card->exercises_count,
-                'chapters_count' => $card->syllabus_chapters_count,
+                'places' => $this->compactChapterPlaces($card),
             ]);
 
         return Inertia::render('Admin/MmmCards/Index', [
             'cards' => $cards,
         ]);
+    }
+
+    /**
+     * @return list<array{board: ?string, class: ?string, chapters: list<string>}>
+     */
+    private function compactChapterPlaces(MmmCard $card): array
+    {
+        $groups = [];
+        $chapters = $card->syllabusChapters->sortBy(fn ($chapter) => sprintf(
+            '%05d-%05d-%05d',
+            (int) ($chapter->syllabusVersion?->gradeLevel?->sort_order ?? 0),
+            (int) ($chapter->syllabusVersion?->board?->id ?? 0),
+            (int) ($chapter->sort_order ?? 0),
+        ));
+
+        foreach ($chapters as $chapter) {
+            $board = $chapter->syllabusVersion?->board?->code;
+            $class = $chapter->syllabusVersion?->gradeLevel?->name;
+            $key = ($board ?: '').'|'.($class ?: '');
+            $groups[$key] ??= [
+                'board' => $board,
+                'class' => $class,
+                'chapters' => [],
+            ];
+            $label = trim(($chapter->chapter_number ? $chapter->chapter_number.' · ' : '').$chapter->name);
+            if ($label !== '') {
+                $groups[$key]['chapters'][] = $label;
+            }
+        }
+
+        return array_values($groups);
     }
 
     public function show(Request $request, MmmCard $mmmCard): Response
