@@ -43,6 +43,7 @@ class MmmCardPlayTest extends TestCase
             'balance-equation-basic-4',
             'balance-equation-basic-5',
             'balance-equation-basic-6',
+            'bodmas-simple-brackets',
         ] as $slug) {
             $card = MmmCard::query()->where('slug', $slug)->firstOrFail();
             $card->syllabusChapters()->syncWithoutDetaching([$chapter->id]);

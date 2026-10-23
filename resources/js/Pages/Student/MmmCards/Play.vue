@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import BodmasPlay from '@/Pages/Student/MmmCards/BodmasPlay.vue';
 import EquationBalancePlay from '@/Pages/Student/MmmCards/EquationBalancePlay.vue';
 import EquationFillPagePlay from '@/Pages/Student/MmmCards/EquationFillPagePlay.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -83,7 +84,9 @@ const allCorrect = ref(false);
 const usesVariable = computed(() => !! props.exercise?.uses_variable);
 const usesValueX = computed(() => columns.value.some((col) => col.key === 'value_x'));
 const isBalance = computed(() => props.exercise?.play_kind === 'balance');
+const isBodmas = computed(() => props.exercise?.play_kind === 'bodmas');
 const isFillPage = computed(() => props.exercise?.play_kind === 'fill_page');
+const fillCount = computed(() => props.exercise?.fill_page?.items?.length || 0);
 const fillPageBlurb = computed(() => props.exercise?.fill_page?.page_blurb || props.card?.method_blurb);
 
 const formatEqPart = (value) => {
@@ -301,6 +304,19 @@ const footerColspan = computed(() => {
             </section>
 
             <section
+                v-else-if="showMethodSketch && isBodmas"
+                class="rounded-xl bg-white p-4 shadow-sm ring-2"
+                :class="accentRing"
+            >
+                <h3 class="text-sm font-extrabold uppercase tracking-wide text-amber-900">
+                    Brackets first
+                </h3>
+                <p class="mt-2 text-sm leading-relaxed text-slate-700">
+                    {{ card.method_blurb }}
+                </p>
+            </section>
+
+            <section
                 v-else-if="showMethodSketch"
                 class="rounded-xl bg-white p-4 shadow-sm ring-2"
                 :class="accentRing"
@@ -381,7 +397,7 @@ const footerColspan = computed(() => {
                         {{ exercise.is_demo ? 'Demo' : exercise.difficulty }}
                     </span>
                     <span class="text-xs font-semibold text-slate-500">
-                        <template v-if="isFillPage">5 sums on this page</template>
+                        <template v-if="isFillPage">{{ fillCount }} sums on this page</template>
                         <template v-else>Sum {{ exercise_index + 1 }} / {{ card.exercises_total }}</template>
                     </span>
                 </div>
@@ -403,13 +419,22 @@ const footerColspan = computed(() => {
                     :check_url="check_url"
                     @next="goNext"
                 />
+                <BodmasPlay
+                    v-else-if="isBodmas"
+                    :key="exercise.id"
+                    :exercise="exercise"
+                    :card="card"
+                    :exercise_index="exercise_index"
+                    :check_url="check_url"
+                    @next="goNext"
+                />
                 <p
                     v-else-if="exercise.variable_tip"
                     class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950"
                 >
                     {{ exercise.variable_tip }}
                 </p>
-                <template v-if="!isBalance && !isFillPage">
+                <template v-if="!isBalance && !isBodmas && !isFillPage">
                 <p v-if="fillsDenomination" class="mt-2 text-xs text-slate-500">
                     Write each denomination in ₹ (number only, e.g. 2, 5, 10), then counts and totals. Wrong cells will be highlighted.
                 </p>

@@ -200,7 +200,7 @@ const askTeacher = (key) => {
                             {{ item.equation }}
                         </p>
                         <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-mono text-lg font-black text-rose-700">{{ item.variable || 'x' }} =</span>
+                            <span class="font-mono text-lg font-black text-rose-700">{{ item.label || ((item.variable || 'x') + ' =') }}</span>
                             <input
                                 :value="answers[item.key]"
                                 type="text"

@@ -17,6 +17,8 @@ class MmmCard extends Model
 
     public const KIND_BALANCE_EQUATION = 'balance_equation';
 
+    public const KIND_BODMAS = 'bodmas';
+
     public const KIND_FILL_PAGE = 'fill_page';
 
     protected $fillable = [

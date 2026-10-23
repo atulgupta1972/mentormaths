@@ -165,6 +165,7 @@ class MmmCardService
         $askEquation = ! empty($answers['check_equation']);
         $isBalance = ($answers['mode'] ?? '') === 'balance';
         $isFillPage = ($answers['mode'] ?? '') === 'fill_page';
+        $isBodmas = ($answers['mode'] ?? '') === 'bodmas';
 
         return [
             'id' => $exercise->id,
@@ -172,8 +173,9 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isFillPage ? 'fill_page' : ($isBalance ? 'balance' : 'table'),
+            'play_kind' => $isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : 'table')),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
+            'bodmas' => $isBodmas ? ($answers['play'] ?? []) : null,
             'fill_page' => $isFillPage ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
@@ -203,6 +205,9 @@ class MmmCardService
         }
         if (($expected['mode'] ?? '') === 'fill_page') {
             return $this->checkFillPageSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'bodmas') {
+            return $this->checkBodmasSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -548,6 +553,141 @@ class MmmCardService
             'message' => $message,
             'step_key' => $stepKey,
         ];
+    }
+
+    /**
+     * BODMAS: tap the part to do first, then fill the simplified line.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkBodmasSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $playSteps = is_array($expected['play']['steps'] ?? null) ? $expected['play']['steps'] : [];
+        $stepKey = (string) ($submission['step_key'] ?? '');
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        $playStep = $this->findBodmasStep($playSteps, $stepKey);
+        if ($playStep === null) {
+            return [
+                'ok' => false,
+                'all_ok' => false,
+                'cell_results' => [],
+                'message' => 'That step is not on this sum.',
+                'step_key' => $stepKey,
+            ];
+        }
+
+        $stepType = (string) ($playStep['type'] ?? '');
+        if ($stepType === 'tap') {
+            $need = array_values(array_map('strval', is_array($playStep['hits'] ?? null) ? $playStep['hits'] : []));
+            $got = $this->bodmasHits($values, $submission);
+            $cells = [];
+            foreach ($need as $id) {
+                $cells[$id] = in_array($id, $got, true);
+            }
+            foreach ($got as $id) {
+                if (! in_array($id, $need, true)) {
+                    $cells[$id] = false;
+                }
+            }
+            $ok = $need !== [] && $cells !== [] && ! in_array(false, $cells, true) && count($got) === count($need);
+
+            return [
+                'ok' => $ok,
+                'all_ok' => false,
+                'cell_results' => $cells,
+                'message' => $ok
+                    ? (string) ($playStep['ok_message'] ?? 'That is the part to do first.')
+                    : (string) ($playStep['miss'] ?? 'Tap the part BODMAS does first.'),
+                'step_key' => $stepKey,
+            ];
+        }
+
+        if ($stepType === 'next') {
+            $want = strtolower(trim((string) ($playStep['value'] ?? 'ok')));
+            $got = strtolower(trim((string) ($values[$stepKey] ?? $submission['value'] ?? '')));
+            $ok = $got !== '' && $got === $want;
+
+            return [
+                'ok' => $ok,
+                'all_ok' => false,
+                'cell_results' => [$stepKey => $ok],
+                'message' => $ok
+                    ? (string) ($playStep['ok_message'] ?? 'Continue.')
+                    : (string) ($playStep['miss'] ?? 'Continue when the line is open.'),
+                'step_key' => $stepKey,
+            ];
+        }
+
+        $cells = [];
+        foreach ($playStep['pieces'] ?? [] as $piece) {
+            if (! is_array($piece) || empty($piece['box'])) {
+                continue;
+            }
+            $box = (string) $piece['box'];
+            $cells[$box] = $this->integerTokenMatches($check[$box] ?? '', $values[$box] ?? null);
+        }
+        $ok = $cells !== [] && ! in_array(false, $cells, true);
+        $finished = $ok && ! empty($playStep['_is_last']);
+
+        return [
+            'ok' => $ok,
+            'all_ok' => $finished,
+            'cell_results' => $cells,
+            'message' => $ok
+                ? (string) ($playStep['ok_message'] ?? ($finished ? 'That is the value.' : 'That line is right.'))
+                : (string) ($playStep['miss'] ?? 'Check the number you wrote.'),
+            'step_key' => $stepKey,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $steps
+     * @return array<string, mixed>|null
+     */
+    private function findBodmasStep(array $steps, string $key): ?array
+    {
+        if ($key === '') {
+            return null;
+        }
+        foreach ($steps as $index => $step) {
+            if (! is_array($step) || (string) ($step['key'] ?? '') !== $key) {
+                continue;
+            }
+            $copy = $step;
+            $copy['_is_last'] = $index === array_key_last($steps);
+
+            return $copy;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @param  array<string, mixed>  $submission
+     * @return list<string>
+     */
+    private function bodmasHits(array $values, array $submission): array
+    {
+        $raw = $values['hits'] ?? ($submission['value'] ?? []);
+        if (is_string($raw)) {
+            $raw = $raw === '' ? [] : explode(',', $raw);
+        }
+        if (! is_array($raw)) {
+            return [];
+        }
+        $hits = [];
+        foreach ($raw as $id) {
+            $id = trim((string) $id);
+            if ($id !== '' && ! in_array($id, $hits, true)) {
+                $hits[] = $id;
+            }
+        }
+
+        return $hits;
     }
 
     /**

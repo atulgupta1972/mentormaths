@@ -1086,4 +1086,102 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($bookDone['all_ok'], json_encode($bookDone));
         $this->assertFalse($service->checkSubmission($card, $book, ['step_key' => 'q1', 'value' => '2'])['ok']);
     }
+
+    public function test_bodmas_simple_brackets_solves_inside_then_opens(): void
+    {
+        $card = MmmCard::query()->where('slug', 'bodmas-simple-brackets')->first();
+
+        $this->assertNotNull($card);
+        $this->assertTrue($card->isPublished());
+        $this->assertSame('bodmas', $card->kind);
+        $this->assertSame(9, $card->sort_order);
+        $this->assertSame(4, $card->exercises()->count());
+
+        $service = app(MmmCardService::class);
+        $payload = $service->playPayload($card, null, 0);
+        $this->assertSame('bodmas', $payload['exercise']['play_kind']);
+        $this->assertArrayNotHasKey('check', $payload['exercise']['bodmas']);
+
+        $bracket = $card->exercises()->where('sort_order', 1)->firstOrFail();
+        $this->assertFalse($service->checkSubmission($card, $bracket, [
+            'step_key' => 'tap',
+            'values' => ['hits' => ['two']],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $bracket, [
+            'step_key' => 'tap',
+            'values' => ['hits' => ['br']],
+        ])['ok']);
+        $inside = $service->checkSubmission($card, $bracket, [
+            'step_key' => 'inside',
+            'values' => ['in' => '15'],
+        ]);
+        $this->assertTrue($inside['ok']);
+        $this->assertFalse($inside['all_ok']);
+        $this->assertTrue($service->checkSubmission($card, $bracket, [
+            'step_key' => 'open',
+            'value' => 'ok',
+        ])['ok']);
+        $done = $service->checkSubmission($card, $bracket, [
+            'step_key' => 'times',
+            'values' => ['ans' => '30'],
+        ]);
+        $this->assertTrue($done['all_ok'], json_encode($done));
+
+        $plain = $card->exercises()->where('sort_order', 2)->firstOrFail();
+        $this->assertFalse($service->checkSubmission($card, $plain, [
+            'step_key' => 'divisions',
+            'values' => ['hits' => ['d1']],
+        ])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $plain, [
+            'step_key' => 'divisions',
+            'values' => ['hits' => ['d1', 'd2', 'seven']],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $plain, [
+            'step_key' => 'divisions',
+            'values' => ['hits' => ['d2', 'd1']],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $plain, [
+            'step_key' => 'quotients',
+            'values' => ['left' => '5', 'right' => '3'],
+        ])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $plain, [
+            'step_key' => 'last',
+            'values' => ['ans' => '37'],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $plain, [
+            'step_key' => 'last',
+            'values' => ['ans' => '34'],
+        ])['all_ok']);
+
+        $mixed = $card->exercises()->where('sort_order', 3)->firstOrFail();
+        $this->assertFalse($service->checkSubmission($card, $mixed, [
+            'step_key' => 'bracket',
+            'values' => ['hits' => ['d1']],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $mixed, [
+            'step_key' => 'bracket',
+            'values' => ['hits' => ['br']],
+        ])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $mixed, [
+            'step_key' => 'last',
+            'values' => ['ans' => '42'],
+        ])['all_ok']);
+
+        $page = $card->exercises()->where('sort_order', 4)->firstOrFail();
+        $this->assertSame('fill_page', $service->exercisePayload($page)['play_kind']);
+        $pageDone = $service->checkSubmission($card, $page, [
+            'values' => [
+                'q1' => '24',
+                'q2' => '11',
+                'q3' => '4',
+                'q4' => '30',
+                'q5' => '37',
+                'q6' => '4',
+                'q7' => '7',
+                'q8' => '7',
+            ],
+        ]);
+        $this->assertTrue($pageDone['all_ok'], json_encode($pageDone));
+        $this->assertFalse($service->checkSubmission($card, $page, ['step_key' => 'q1', 'value' => '12'])['ok']);
+    }
 }
