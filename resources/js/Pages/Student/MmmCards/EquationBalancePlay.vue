@@ -1535,27 +1535,26 @@ const showKeepFlipCuts = computed(() => {
             </div>
         </div>
 
-        <div v-if="!allCorrect && currentStep?.type === 'frac_board'" class="grid gap-3 sm:grid-cols-2">
-            <div
-                v-for="(column, ci) in currentStep.columns || []"
-                :key="`${currentStep.key}-${ci}`"
-                class="rounded-xl border border-rose-200 bg-white px-3 py-3"
-            >
+        <div v-if="!allCorrect && currentStep?.type === 'frac_board'" class="overflow-x-auto">
+            <div class="mx-auto flex w-max items-start justify-center gap-2">
+            <template v-for="(column, ci) in currentStep.columns || []" :key="`${currentStep.key}-${ci}`">
+            <span v-if="ci > 0" class="mt-10 font-mono text-2xl font-black text-rose-700">=</span>
+            <div class="rounded-xl border border-rose-200 bg-white px-3 py-3">
                 <p class="text-center text-[10px] font-extrabold uppercase tracking-wide text-rose-800">{{ column.title }}</p>
-                <div class="mt-2 flex flex-wrap items-end justify-center gap-2">
+                <div class="mt-2 flex flex-nowrap items-center justify-center gap-1">
                     <template v-for="(term, ti) in column.terms || []" :key="`${ci}-${ti}`">
                         <span v-if="term.op" class="font-mono text-xl font-black text-rose-700">{{ term.op }}</span>
                         <span
                             v-if="term.den_mul"
                             class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900"
                         >
-                            <span class="inline-flex items-center gap-1 px-1">
+                            <span class="inline-flex items-center gap-1 whitespace-nowrap px-1">
                                 <span>{{ term.num }} ×</span>
                                 <input
                                     v-model="copyBoxes[term.box]"
                                     type="text"
                                     inputmode="text"
-                                    class="h-9 w-12 rounded-md border px-1 text-center text-lg"
+                                    class="h-8 w-10 rounded-md border px-1 text-center text-base"
                                     :class="cellClass"
                                     placeholder="?"
                                     autocomplete="off"
@@ -1563,14 +1562,14 @@ const showKeepFlipCuts = computed(() => {
                                     @keyup.enter="onEnter"
                                 >
                             </span>
-                            <span class="my-1 h-[2px] w-full min-w-[5.5rem] rounded-full bg-slate-800" />
-                            <span class="inline-flex items-center gap-1 px-1">
+                            <span class="my-1 h-[2px] w-full min-w-[4.5rem] rounded-full bg-slate-800" />
+                            <span class="inline-flex items-center gap-1 whitespace-nowrap px-1">
                                 <span>{{ term.den }} ×</span>
                                 <input
                                     v-model="copyBoxes[term.den_mul]"
                                     type="text"
                                     inputmode="text"
-                                    class="h-9 w-12 rounded-md border px-1 text-center text-lg"
+                                    class="h-8 w-10 rounded-md border px-1 text-center text-base"
                                     :class="cellClass"
                                     placeholder="?"
                                     autocomplete="off"
@@ -1613,6 +1612,8 @@ const showKeepFlipCuts = computed(() => {
                     </span>
                 </div>
             </div>
+            </template>
+            </div>
         </div>
 
         <div v-if="!allCorrect && currentStep?.type === 'stacked_line'" class="space-y-3">
@@ -1620,12 +1621,12 @@ const showKeepFlipCuts = computed(() => {
                 v-if="currentStep.action?.length"
                 class="rounded-xl border-2 border-rose-200 bg-white px-3 py-3"
             >
-                <div class="flex flex-wrap items-center justify-center gap-3">
+                <div class="flex flex-nowrap items-center justify-center gap-3 overflow-x-auto">
                     <template v-for="(side, si) in currentStep.action" :key="`act-${si}`">
                         <span v-if="si > 0" class="font-mono text-2xl font-black text-rose-700">=</span>
                         <div class="text-center">
                             <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">{{ side.title }}</p>
-                            <div class="mt-1 flex flex-wrap items-center justify-center gap-1 text-lg">
+                            <div class="mt-1 flex flex-nowrap items-center justify-center gap-1 whitespace-nowrap text-lg">
                                 <template v-for="(term, ti) in side.terms || []" :key="`act-${si}-${ti}`">
                                     <span v-if="term.op" class="px-0.5 font-mono text-xl font-black text-rose-700">{{ term.op }}</span>
                                     <span class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
