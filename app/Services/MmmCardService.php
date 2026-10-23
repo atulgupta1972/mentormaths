@@ -612,6 +612,22 @@ class MmmCardService
                     $ok = false;
                 }
             }
+            foreach ($playStep['commute'] ?? [] as $pair) {
+                if (! is_array($pair) || count($pair) !== 2) {
+                    continue;
+                }
+                $a = (string) $pair[0];
+                $b = (string) $pair[1];
+                $direct = $this->integerTokenMatches($check[$a] ?? '', $values[$a] ?? null)
+                    && $this->integerTokenMatches($check[$b] ?? '', $values[$b] ?? null);
+                $swapped = $this->integerTokenMatches($check[$a] ?? '', $values[$b] ?? null)
+                    && $this->integerTokenMatches($check[$b] ?? '', $values[$a] ?? null);
+                if ($direct || $swapped) {
+                    $cells[$a] = true;
+                    $cells[$b] = true;
+                }
+            }
+            $ok = $cells !== [] && ! in_array(false, $cells, true);
             if ($cells === []) {
                 $ok = false;
             }

@@ -116,9 +116,10 @@ return new class extends Migration
                         [
                             'key' => 'products',
                             'type' => 'copy_line',
-                            'hint' => '3x × 9 on the left of the cross. 5 × 4 on the right of the cross.',
-                            'miss' => '3x × 9 = 5 × 4.',
+                            'hint' => '3x × 9 = 5 × 4. On each side of the cross, the two numbers can sit either way round.',
+                            'miss' => '3x × 9 = 5 × 4. 4 × 5 is the same product.',
                             'from' => '3x/5 = 4/9',
+                            'commute' => [['lt', 'rb'], ['lb', 'rt']],
                             'parts' => [
                                 ['box' => 'lt', 'label' => 'Left top, 3x'],
                                 ['text' => '×'],
@@ -196,8 +197,9 @@ return new class extends Migration
                         [
                             'key' => 'cross',
                             'type' => 'copy_line',
-                            'hint' => '2 × (2x + 1) = 5 × 1.',
-                            'miss' => '2(2x + 1) = 5 × 1.',
+                            'hint' => '2 × (2x + 1) = 5 × 1. The 5 and the 1 can sit either way round.',
+                            'miss' => '2(2x + 1) = 5 × 1. 1 × 5 is the same.',
+                            'commute' => [['k5', 'k1']],
                             'parts' => [
                                 ['box' => 'k2', 'label' => 'Right bottom'],
                                 ['text' => '(2x + 1) ='],
@@ -525,8 +527,9 @@ return new class extends Migration
                         [
                             'key' => 'cross',
                             'type' => 'copy_line',
-                            'hint' => 'Cross. 3 × 3 = 2x × 2.',
-                            'miss' => '3 × 3 = 2x × 2.',
+                            'hint' => 'Cross. 3 × 3 = 2x × 2. The 2x and the 2 can sit either way round.',
+                            'miss' => '3 × 3 = 2x × 2. 2 × 2x is the same.',
+                            'commute' => [['p2x', 'p2']],
                             'from' => '3/(2x) = 2/3',
                             'parts' => [
                                 ['box' => 'p3', 'label' => 'Left top'],

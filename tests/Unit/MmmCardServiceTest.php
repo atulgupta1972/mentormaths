@@ -1027,7 +1027,11 @@ class MmmCardServiceTest extends TestCase
         ])['ok']);
         $this->assertTrue($service->checkSubmission($card, $pure, [
             'step_key' => 'products',
-            'values' => ['lt' => '3x', 'rb' => '9', 'lb' => '5', 'rt' => '4'],
+            'values' => ['lt' => '3x', 'rb' => '9', 'lb' => '4', 'rt' => '5'],
+        ])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $pure, [
+            'step_key' => 'products',
+            'values' => ['lt' => '3x', 'rb' => '9', 'lb' => '4', 'rt' => '4'],
         ])['ok']);
         $done = $service->checkSubmission($card, $pure, ['step_key' => 'x', 'values' => ['x' => '20/27']]);
         $this->assertTrue($done['all_ok'], json_encode($done));
