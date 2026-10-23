@@ -76,7 +76,20 @@ return new class extends Migration
                                     ['op' => '=', 'num' => '2', 'den' => '3'],
                                     ['op' => '−', 'num' => '1', 'den' => '5'],
                                 ],
-                                'done' => '(x − 2)/3 − (2x − 3)/2 = 2/3 − 1/5',
+                                'done_board' => [
+                                    [
+                                        'terms' => [
+                                            ['num' => '(x − 2)', 'den' => '3'],
+                                            ['op' => '−', 'num' => '(2x − 3)', 'den' => '2'],
+                                        ],
+                                    ],
+                                    [
+                                        'terms' => [
+                                            ['num' => '2', 'den' => '3'],
+                                            ['op' => '−', 'num' => '1', 'den' => '5'],
+                                        ],
+                                    ],
+                                ],
                             ],
                             [
                                 'key' => 'denoms',
@@ -135,7 +148,20 @@ return new class extends Migration
                                         'top' => '5 × 2 − 3 × 1',
                                     ],
                                 ],
-                                'done' => 'Top and bottom multiplied. Left denominator 6, right denominator 15.',
+                                'done_board' => [
+                                    [
+                                        'terms' => [
+                                            ['factor' => '2', 'num' => '(x − 2)', 'den' => '3'],
+                                            ['op' => '−', 'factor' => '3', 'num' => '(2x − 3)', 'den' => '2'],
+                                        ],
+                                    ],
+                                    [
+                                        'terms' => [
+                                            ['factor' => '5', 'num' => '2', 'den' => '3'],
+                                            ['op' => '−', 'factor' => '3', 'num' => '1', 'den' => '5'],
+                                        ],
+                                    ],
+                                ],
                             ],
                             [
                                 'key' => 'open',
@@ -175,14 +201,39 @@ return new class extends Migration
                                         ['box' => 'seven', 'label' => '10 − 3'],
                                     ],
                                 ],
-                                'done' => '(2x − 4 − 6x + 9) / 6 = 7/15',
+                                'done_board' => [
+                                    [
+                                        'terms' => [
+                                            ['num' => '2x − 4 − 6x + 9', 'den' => '6'],
+                                        ],
+                                    ],
+                                    [
+                                        'terms' => [
+                                            ['num' => '7', 'den' => '15'],
+                                        ],
+                                    ],
+                                ],
                             ],
                             [
                                 'key' => 'combine',
                                 'type' => 'stacked_line',
                                 'hint' => 'Finish the numerator. 2x − 6x, then −4 + 9. The right side stays 7/15.',
                                 'miss' => '2x − 6x = −4x. −4 + 9 = 5.',
-                                'from' => '(2x − 4 − 6x + 9) / 6 = 7/15',
+                                'action_label' => 'Finish the numerator',
+                                'action' => [
+                                    [
+                                        'title' => 'Left',
+                                        'terms' => [
+                                            ['num' => '2x − 4 − 6x + 9', 'den' => '6'],
+                                        ],
+                                    ],
+                                    [
+                                        'title' => 'Right',
+                                        'terms' => [
+                                            ['num' => '7', 'den' => '15'],
+                                        ],
+                                    ],
+                                ],
                                 'left' => [
                                     'den' => '6',
                                     'pieces' => [
@@ -197,14 +248,39 @@ return new class extends Migration
                                         ['text' => '7'],
                                     ],
                                 ],
-                                'done' => '(−4x + 5) / 6 = 7/15',
+                                'done_board' => [
+                                    [
+                                        'terms' => [
+                                            ['num' => '−4x + 5', 'den' => '6'],
+                                        ],
+                                    ],
+                                    [
+                                        'terms' => [
+                                            ['num' => '7', 'den' => '15'],
+                                        ],
+                                    ],
+                                ],
                             ],
                             [
                                 'key' => 'cross',
                                 'type' => 'copy_line',
                                 'hint' => 'Cross. The left denominator 6 meets 7. The right denominator 15 meets (−4x + 5). Then 7 × 6.',
                                 'miss' => '15(−4x + 5) = 7 × 6, and 7 × 6 = 42.',
-                                'from' => '(−4x + 5) / 6 = 7/15',
+                                'action_label' => 'Cross',
+                                'action' => [
+                                    [
+                                        'title' => 'Left',
+                                        'terms' => [
+                                            ['num' => '−4x + 5', 'den' => '6'],
+                                        ],
+                                    ],
+                                    [
+                                        'title' => 'Right',
+                                        'terms' => [
+                                            ['num' => '7', 'den' => '15'],
+                                        ],
+                                    ],
+                                ],
                                 'parts' => [
                                     ['box' => 'crossL', 'label' => 'Right denominator crosses to the left'],
                                     ['text' => '(−4x + 5) = 7 ×'],

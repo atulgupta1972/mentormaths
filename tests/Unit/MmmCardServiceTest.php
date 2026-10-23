@@ -937,7 +937,8 @@ class MmmCardServiceTest extends TestCase
         $this->assertArrayNotHasKey('check', $payload['exercise']);
         $this->assertSame('note_next', $sum->answers['play']['steps'][0]['type']);
         $this->assertSame('frac_board', $sum->answers['play']['steps'][1]['type']);
-        $this->assertSame('2', $sum->answers['play']['steps'][2]['action'][0]['terms'][0]['factor']);
+        $this->assertSame('6', $sum->answers['play']['steps'][2]['done_board'][0]['terms'][0]['den']);
+        $this->assertSame('2x − 4 − 6x + 9', $sum->answers['play']['steps'][3]['action'][0]['terms'][0]['num']);
         $this->assertSame('3', $sum->answers['play']['steps'][2]['action'][0]['terms'][1]['factor']);
 
         $this->assertTrue($service->checkSubmission($card, $sum, ['step_key' => 'brackets', 'value' => 'ok'])['ok']);

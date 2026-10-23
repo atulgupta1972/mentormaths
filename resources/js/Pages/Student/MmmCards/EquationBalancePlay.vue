@@ -193,6 +193,10 @@ const workingLines = computed(() => {
         if (v === undefined || v === null || v === '') {
             continue;
         }
+        if (step.done_board) {
+            lines.push({ board: step.done_board });
+            continue;
+        }
         if (step.done) {
             lines.push(step.done);
             continue;
@@ -770,13 +774,32 @@ const showKeepFlipCuts = computed(() => {
                     <span>{{ cutLeftValue }} × {{ cutRightValue }}</span>
                 </template>
             </div>
-            <p
-                v-for="(line, i) in workingLines"
-                :key="`work-${i}`"
-                class="text-center font-mono text-sm font-semibold text-emerald-950"
-            >
-                {{ line }}
-            </p>
+            <template v-for="(line, i) in workingLines" :key="`work-${i}`">
+                <div v-if="line.board" class="overflow-x-auto">
+                    <div class="mx-auto flex w-max flex-nowrap items-center justify-center gap-2 font-mono text-sm font-extrabold text-emerald-950">
+                        <template v-for="(side, si) in line.board" :key="`wb-${i}-${si}`">
+                            <span v-if="si > 0" class="font-black text-rose-700">=</span>
+                            <span class="inline-flex flex-nowrap items-center gap-1">
+                                <template v-for="(term, ti) in side.terms || []" :key="`wt-${i}-${si}-${ti}`">
+                                    <span v-if="term.op" class="font-black text-rose-700">{{ term.op }}</span>
+                                    <span class="inline-flex flex-col items-center leading-none">
+                                        <span class="whitespace-nowrap px-1">
+                                            <span v-if="term.factor" class="text-blue-600">{{ term.factor }} × </span>{{ term.num }}
+                                        </span>
+                                        <span class="my-0.5 h-[2px] w-full min-w-[2.5rem] rounded-full bg-emerald-800" />
+                                        <span class="whitespace-nowrap px-1">
+                                            <span v-if="term.factor" class="text-blue-600">{{ term.factor }} × </span>{{ term.den }}
+                                        </span>
+                                    </span>
+                                </template>
+                            </span>
+                        </template>
+                    </div>
+                </div>
+                <p v-else class="text-center font-mono text-sm font-semibold text-emerald-950">
+                    {{ line }}
+                </p>
+            </template>
         </div>
 
         <div v-if="!allCorrect && currentStep?.type === 'divide'" class="space-y-3">
@@ -1653,7 +1676,7 @@ const showKeepFlipCuts = computed(() => {
                 {{ currentStep.from }}
             </p>
             <p v-if="currentStep.action?.length" class="text-center text-xs font-bold uppercase tracking-wide text-emerald-800">
-                Now open the brackets
+                {{ currentStep.action_label || 'Now open the brackets' }}
             </p>
             <div class="flex flex-wrap items-center justify-center gap-3 font-mono text-lg font-extrabold text-slate-900">
                 <span class="inline-flex min-w-[8rem] flex-col items-center">
@@ -1703,8 +1726,35 @@ const showKeepFlipCuts = computed(() => {
         </div>
 
         <div v-if="!allCorrect && currentStep?.type === 'copy_line'" class="space-y-3">
+            <div
+                v-if="currentStep.action?.length"
+                class="overflow-x-auto rounded-xl border-2 border-rose-200 bg-white px-3 py-3"
+            >
+                <div class="mx-auto flex w-max flex-nowrap items-center justify-center gap-3">
+                    <template v-for="(side, si) in currentStep.action" :key="`cact-${si}`">
+                        <span v-if="si > 0" class="font-mono text-2xl font-black text-rose-700">=</span>
+                        <div class="text-center">
+                            <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">{{ side.title }}</p>
+                            <div class="mt-1 flex flex-nowrap items-center justify-center gap-1 whitespace-nowrap text-lg">
+                                <template v-for="(term, ti) in side.terms || []" :key="`cact-${si}-${ti}`">
+                                    <span v-if="term.op" class="px-0.5 font-mono text-xl font-black text-rose-700">{{ term.op }}</span>
+                                    <span class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
+                                        <span class="px-1">
+                                            <span v-if="term.factor" class="text-blue-600">{{ term.factor }} × </span>{{ term.num }}
+                                        </span>
+                                        <span class="my-1 h-[2px] w-full min-w-[3rem] rounded-full bg-slate-800" />
+                                        <span class="px-1">
+                                            <span v-if="term.factor" class="text-blue-600">{{ term.factor }} × </span>{{ term.den }}
+                                        </span>
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
             <p
-                v-if="currentStep.from"
+                v-else-if="currentStep.from"
                 class="text-center font-mono text-base font-semibold text-slate-500"
             >
                 {{ currentStep.from }}
