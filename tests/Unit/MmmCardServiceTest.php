@@ -988,8 +988,21 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($service->checkSubmission($card, $sum, ['step_key' => 'x', 'values' => ['x' => '0.55']])['all_ok']);
 
         $page = $card->exercises()->where('sort_order', 2)->firstOrFail();
+        $this->assertCount(10, $page->answers['play']['items']);
+        $this->assertSame('−m', $page->answers['play']['items'][0]['terms'][0]['num']);
         $pageDone = $service->checkSubmission($card, $page, [
-            'values' => ['q1' => '-4', 'q2' => '5/3', 'q3' => '4/3'],
+            'values' => [
+                'q1' => '-5/7',
+                'q2' => '36/7',
+                'q3' => '5/7',
+                'q4' => '11/20',
+                'q5' => '-4',
+                'q6' => '5/3',
+                'q7' => '4/3',
+                'q8' => '-17/7',
+                'q9' => '2',
+                'q10' => '10/11',
+            ],
         ]);
         $this->assertTrue($pageDone['all_ok'], json_encode($pageDone));
         $this->assertFalse($service->checkSubmission($card, $page, ['step_key' => 'q1', 'value' => '4'])['ok']);

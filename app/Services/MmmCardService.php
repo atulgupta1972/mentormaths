@@ -538,7 +538,7 @@ class MmmCardService
         if (! $allOk) {
             $message = 'Not yet. Work it in your copy — BODMAS on the numbers first, then keep the x-term together.';
         } elseif ($finished) {
-            $message = 'All five are right. Well done.';
+            $message = 'All of them are right. Well done.';
         }
 
         return [

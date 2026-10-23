@@ -169,7 +169,24 @@ const askTeacher = (key) => {
                     </span>
                     <div class="min-w-0 flex-1 space-y-2">
                         <div
-                            v-if="item.left && item.right"
+                            v-if="item.terms?.length"
+                            class="flex flex-nowrap items-center gap-1 overflow-x-auto text-lg sm:text-xl"
+                        >
+                            <template v-for="(term, ti) in item.terms" :key="`${item.key}-${ti}`">
+                                <span v-if="term.eq" class="px-1 font-mono text-xl font-black text-rose-700">=</span>
+                                <template v-else>
+                                    <span v-if="term.op" class="px-0.5 font-mono font-black text-rose-700">{{ term.op }}</span>
+                                    <span v-if="term.den" class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
+                                        <span class="whitespace-nowrap px-1">{{ term.num }}</span>
+                                        <span class="my-1 h-[2px] w-full min-w-[1.75rem] rounded-full bg-slate-800" />
+                                        <span>{{ term.den }}</span>
+                                    </span>
+                                    <span v-else class="whitespace-nowrap font-mono font-extrabold text-slate-900">{{ term.num }}</span>
+                                </template>
+                            </template>
+                        </div>
+                        <div
+                            v-else-if="item.left && item.right"
                             class="flex flex-wrap items-center gap-3 overflow-x-auto text-lg sm:text-xl"
                         >
                             <EquationFraction :expr="item.left" />
@@ -183,7 +200,7 @@ const askTeacher = (key) => {
                             {{ item.equation }}
                         </p>
                         <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-mono text-lg font-black text-rose-700">x =</span>
+                            <span class="font-mono text-lg font-black text-rose-700">{{ item.variable || 'x' }} =</span>
                             <input
                                 :value="answers[item.key]"
                                 type="text"
@@ -192,7 +209,7 @@ const askTeacher = (key) => {
                                 :class="cellClass(item.key)"
                                 placeholder="?"
                                 autocomplete="off"
-                                :aria-label="`Value of x for sum ${index + 1}`"
+                                :aria-label="`Value of ${item.variable || 'x'} for sum ${index + 1}`"
                                 :disabled="status[item.key] === true"
                                 @input="onInput(item.key, $event)"
                                 @blur="checkItem(item.key)"
@@ -239,7 +256,7 @@ const askTeacher = (key) => {
                         >
                             <p class="font-semibold">Ask your teacher to look at your copy.</p>
                             <p class="mt-1">{{ item.hint }}</p>
-                            <p class="mt-1 text-xs">Then type x here — the box still has to be right.</p>
+                            <p class="mt-1 text-xs">Then type {{ item.variable || 'x' }} here — the box still has to be right.</p>
                         </div>
                     </div>
                 </div>
@@ -255,7 +272,7 @@ const askTeacher = (key) => {
             class="rounded-xl border-2 border-emerald-400 bg-emerald-50 px-4 py-4"
         >
             <p class="text-sm font-medium text-emerald-900">
-                All five are right. You used BODMAS on the numbers, then balanced to find x.
+                All {{ items.length }} are right. You used the same steps in your copy, then found the letter.
             </p>
         </div>
     </div>
