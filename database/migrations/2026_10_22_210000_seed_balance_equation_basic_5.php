@@ -135,14 +135,29 @@ return new class extends Migration
                                         'top' => '5 × 2 − 3 × 1',
                                     ],
                                 ],
-                                'done' => '[2(x − 2) − 3(2x − 3)] / 6 = (10 − 3) / 15',
+                                'done' => 'Top and bottom multiplied. Left denominator 6, right denominator 15.',
                             ],
                             [
                                 'key' => 'open',
                                 'type' => 'stacked_line',
                                 'hint' => 'Open the brackets. 2(x − 2) = 2x − 4. The minus in front of 3(2x − 3) flips the inside: −6x + 9. On the right, 10 − 3.',
                                 'miss' => '2 × 2 = 4. 3 × 2 = 6. 3 × 3 = 9. 10 − 3 = 7.',
-                                'from' => '[2(x − 2) − 3(2x − 3)] / 6 = (10 − 3) / 15',
+                                'action' => [
+                                    [
+                                        'title' => 'Left',
+                                        'terms' => [
+                                            ['factor' => '2', 'num' => '(x − 2)', 'den' => '3'],
+                                            ['op' => '−', 'factor' => '3', 'num' => '(2x − 3)', 'den' => '2'],
+                                        ],
+                                    ],
+                                    [
+                                        'title' => 'Right',
+                                        'terms' => [
+                                            ['factor' => '5', 'num' => '2', 'den' => '3'],
+                                            ['op' => '−', 'factor' => '3', 'num' => '1', 'den' => '5'],
+                                        ],
+                                    ],
+                                ],
                                 'left' => [
                                     'den' => '6',
                                     'pieces' => [

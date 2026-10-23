@@ -1616,11 +1616,43 @@ const showKeepFlipCuts = computed(() => {
         </div>
 
         <div v-if="!allCorrect && currentStep?.type === 'stacked_line'" class="space-y-3">
+            <div
+                v-if="currentStep.action?.length"
+                class="rounded-xl border-2 border-rose-200 bg-white px-3 py-3"
+            >
+                <div class="flex flex-wrap items-center justify-center gap-3">
+                    <template v-for="(side, si) in currentStep.action" :key="`act-${si}`">
+                        <span v-if="si > 0" class="font-mono text-2xl font-black text-rose-700">=</span>
+                        <div class="text-center">
+                            <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">{{ side.title }}</p>
+                            <div class="mt-1 flex flex-wrap items-center justify-center gap-1 text-lg">
+                                <template v-for="(term, ti) in side.terms || []" :key="`act-${si}-${ti}`">
+                                    <span v-if="term.op" class="px-0.5 font-mono text-xl font-black text-rose-700">{{ term.op }}</span>
+                                    <span class="inline-flex flex-col items-center font-mono font-extrabold leading-none text-slate-900">
+                                        <span class="px-1">
+                                            <span class="text-blue-600">{{ term.factor }}</span>
+                                            <span> × {{ term.num }}</span>
+                                        </span>
+                                        <span class="my-1 h-[2px] w-full min-w-[4.5rem] rounded-full bg-slate-800" />
+                                        <span class="px-1">
+                                            <span class="text-blue-600">{{ term.factor }}</span>
+                                            <span> × {{ term.den }}</span>
+                                        </span>
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
             <p
-                v-if="currentStep.from"
+                v-else-if="currentStep.from"
                 class="text-center font-mono text-sm font-semibold text-slate-500"
             >
                 {{ currentStep.from }}
+            </p>
+            <p v-if="currentStep.action?.length" class="text-center text-xs font-bold uppercase tracking-wide text-emerald-800">
+                Now open the brackets
             </p>
             <div class="flex flex-wrap items-center justify-center gap-3 font-mono text-lg font-extrabold text-slate-900">
                 <span class="inline-flex min-w-[8rem] flex-col items-center">
