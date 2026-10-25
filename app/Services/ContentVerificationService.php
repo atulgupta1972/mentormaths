@@ -318,8 +318,8 @@ class ContentVerificationService
         $isFillInBlank = $question->isFillInBlank();
         // Fill-in-blanks: human verify after Gemini clears the Gemini gate (no second paste).
         // MCQs on published tasks still queue a Gemini recheck when AI flagged them.
+        // A Gemini flag stays open until a later paste says Correct. A manual save does not clear it.
         $queueGeminiRecheck = ! $isFillInBlank
-            && $task->status === ContentUploadTask::STATUS_PUBLISHED
             && in_array($check->ai_verdict, [
                 ContentAiVerificationService::VERDICT_NEEDS_FIX,
                 ContentAiVerificationService::VERDICT_NEEDS_DIAGRAM,
@@ -681,7 +681,7 @@ class ContentVerificationService
         }
 
         throw new \InvalidArgumentException(
-            "Complete the Gemini check for all pending questions before submitting for admin publish ({$pending} still pending). Skipped questions count as done — use Apply Gemini review for any remaining Correct / Needs Verification rows.",
+            "Run the Gemini check before you submit ({$pending} still pending). Fix anything Gemini flags, paste Gemini again, and submit only when every question is Correct.",
         );
     }
 
@@ -830,22 +830,24 @@ class ContentVerificationService
         }
 
         $taskIds = $taskList->pluck('id')->all();
+        $ownerIds = [];
+        foreach ($taskList as $task) {
+            $ownerIds[(int) $task->id] = $this->runOwnerId($task, $user);
+        }
 
         $runs = ContentVerificationRun::query()
             ->whereIn('content_upload_task_id', $taskIds)
-            ->where('user_id', $user->id)
+            ->whereIn('user_id', array_values(array_unique($ownerIds)))
             ->orderByDesc('id')
-            ->get()
-            ->unique('content_upload_task_id')
-            ->keyBy('content_upload_task_id');
+            ->get();
 
         $out = [];
 
         foreach ($taskList as $task) {
-            $out[(int) $task->id] = $this->buildProgressSummary(
-                $task,
-                $runs->get($task->id),
-            );
+            $ownerId = $ownerIds[(int) $task->id];
+            $run = $runs->first(fn (ContentVerificationRun $candidate) => (int) $candidate->content_upload_task_id === (int) $task->id
+                && (int) $candidate->user_id === $ownerId);
+            $out[(int) $task->id] = $this->buildProgressSummary($task, $run);
         }
 
         return $out;
@@ -864,9 +866,10 @@ class ContentVerificationService
      */
     public function progressForTask(ContentUploadTask $task, User $user): array
     {
+        $owner = $this->runOwner($task, $user);
         $run = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $user->id)
+            ->where('user_id', $owner->id)
             ->orderByDesc('id')
             ->first();
 
@@ -931,7 +934,7 @@ class ContentVerificationService
 
             if ($this->isGeminiSkipped($check)) {
                 $skipped++;
-            } elseif ($this->isGeminiApproved($check) || $this->isGeminiClearedByHumanFix($check)) {
+            } elseif ($this->isGeminiApproved($check)) {
                 $verified++;
             }
         }
@@ -1046,19 +1049,10 @@ class ContentVerificationService
 
         $verdict = $row['ai_verdict'] ?? null;
 
-        if (in_array($verdict, [
+        return in_array($verdict, [
             ContentAiVerificationService::VERDICT_APPROVE,
             ContentAiVerificationService::VERDICT_SKIP,
-        ], true)) {
-            return true;
-        }
-
-        // Already human-verified after a Gemini flag — do not block submit.
-        return ! empty($row['is_verified'])
-            && in_array($verdict, [
-                ContentAiVerificationService::VERDICT_NEEDS_FIX,
-                ContentAiVerificationService::VERDICT_NEEDS_DIAGRAM,
-            ], true);
+        ], true);
     }
 
     private function questionForRun(ContentVerificationRun $run, int $questionId): Question
@@ -1164,8 +1158,39 @@ class ContentVerificationService
         ], true);
     }
 
+    /**
+     * Gemini lives on the uploader's run. An admin opening the chapter must see that
+     * run, not a blank checklist of their own.
+     */
+    private function runOwnerId(ContentUploadTask $task, User $viewer): int
+    {
+        $assigneeId = (int) $task->assigned_to_user_id;
+        if ($assigneeId > 0 && $viewer->isAdmin() && $assigneeId !== (int) $viewer->id) {
+            return $assigneeId;
+        }
+
+        return (int) $viewer->id;
+    }
+
+    private function runOwner(ContentUploadTask $task, User $viewer): User
+    {
+        $ownerId = $this->runOwnerId($task, $viewer);
+        if ($ownerId === (int) $viewer->id) {
+            return $viewer;
+        }
+
+        $assignee = $task->relationLoaded('assignee') ? $task->assignee : null;
+        if ($assignee instanceof User && (int) $assignee->id === $ownerId) {
+            return $assignee;
+        }
+
+        return User::query()->find($ownerId) ?? $viewer;
+    }
+
     private function resolveRun(ContentUploadTask $task, User $user): ContentVerificationRun
     {
+        $user = $this->runOwner($task, $user);
+
         $existing = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
             ->where('user_id', $user->id)

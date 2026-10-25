@@ -690,8 +690,15 @@ class ContentUploadTaskController extends Controller
             'textbookChapter.syllabusChapter.chapterHead',
             'textbookChapter.syllabusChapter.syllabusVersion.board',
         ]);
+        $taskPayload = $this->serializeTask($contentTask, detailed: true);
+        $geminiPending = (int) ($verification['gemini_pending_count'] ?? 0);
+        if ($geminiPending > 0 && ! $contentTask->isFillBlankConversion() && ! $contentTask->isConceptPathBuild()) {
+            $taskPayload['can_publish'] = false;
+            $taskPayload['gemini_blocks_publish'] = true;
+        }
+
         return Inertia::render('Admin/ContentTasks/Show', [
-            'task' => $this->serializeTask($contentTask, detailed: true),
+            'task' => $taskPayload,
             'verification' => $contentTask->isFillBlankConversion() ? null : $verification,
             'conversionRows' => $contentTask->isFillBlankConversion()
                 ? $this->fillBlankConversion->rows($contentTask->textbookChapter)

@@ -49,7 +49,7 @@ class HelpRequestReturnToUploaderTest extends TestCase
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $this->actingAs($admin)

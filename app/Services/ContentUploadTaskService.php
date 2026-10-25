@@ -407,6 +407,15 @@ class ContentUploadTaskService
             );
         }
 
+        if (! $task->isFillBlankConversion() && ! $task->isConceptPathBuild()) {
+            $assignee = $task->assignee ?? User::query()->find($task->assigned_to_user_id);
+            if ($assignee && $this->verificationService->geminiStillPending($task, $assignee)) {
+                throw new \InvalidArgumentException(
+                    'Gemini check is still open. Send the chapter back so the uploader runs Gemini and fixes the errors before you publish.',
+                );
+            }
+        }
+
         $task->update([
             'status' => ContentUploadTask::STATUS_PUBLISHED,
             'submitted_at' => $task->submitted_at ?? now(),

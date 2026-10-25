@@ -257,7 +257,7 @@ class GeminiPublishGateTest extends TestCase
         $this->assertSame(ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH, $task->fresh()->status);
     }
 
-    public function test_uploader_can_submit_after_human_fix_of_gemini_flagged_rows(): void
+    public function test_uploader_cannot_submit_a_gemini_flag_until_gemini_marks_it_correct(): void
     {
         Mail::fake();
         [$uploader, $chapter, $task] = $this->seedPublishedTask();
@@ -288,6 +288,20 @@ class GeminiPublishGateTest extends TestCase
                 'check_explanation' => true,
                 'check_difficulty' => true,
                 'check_diagram' => true,
+            ]);
+
+        $this->actingAs($uploader)
+            ->from(route('content.tasks.show', $task))
+            ->post(route('content.tasks.submit-for-publish', $task))
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame(ContentUploadTask::STATUS_VERIFIED, $task->fresh()->status);
+
+        ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $runId)
+            ->update([
+                'ai_verdict' => ContentAiVerificationService::VERDICT_APPROVE,
             ]);
 
         $this->actingAs($uploader)

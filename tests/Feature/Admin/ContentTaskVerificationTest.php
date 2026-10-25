@@ -52,7 +52,7 @@ class ContentTaskVerificationTest extends TestCase
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $this->actingAs($admin)
@@ -107,7 +107,7 @@ class ContentTaskVerificationTest extends TestCase
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $this->actingAs($admin)
@@ -174,7 +174,7 @@ class ContentTaskVerificationTest extends TestCase
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $this->actingAs($admin)
@@ -320,7 +320,7 @@ class ContentTaskVerificationTest extends TestCase
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
@@ -366,7 +366,7 @@ class ContentTaskVerificationTest extends TestCase
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
@@ -377,6 +377,20 @@ class ContentTaskVerificationTest extends TestCase
                 'question_ids' => [$questionId],
             ])
             ->assertRedirect();
+
+        $task->refresh();
+        $this->assertSame(ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS, $task->status);
+
+        \App\Models\ContentVerificationCheck::query()
+            ->where('content_verification_run_id', $runId)
+            ->update([
+                'ai_verdict' => \App\Services\ContentAiVerificationService::VERDICT_APPROVE,
+                'ai_reviewed_at' => now(),
+            ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk();
 
         $task->refresh();
         $this->assertSame(ContentUploadTask::STATUS_VERIFIED, $task->status);
@@ -413,7 +427,7 @@ class ContentTaskVerificationTest extends TestCase
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
@@ -713,7 +727,7 @@ class ContentTaskVerificationTest extends TestCase
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $paste = <<<'TEXT'
@@ -758,7 +772,7 @@ TEXT;
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $questionId = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0])->questions()->firstOrFail()->id;
@@ -807,7 +821,7 @@ TEXT;
 
         $runId = ContentVerificationRun::query()
             ->where('content_upload_task_id', $task->id)
-            ->where('user_id', $admin->id)
+            ->where('user_id', $uploader->id)
             ->value('id');
 
         $this->actingAs($admin)

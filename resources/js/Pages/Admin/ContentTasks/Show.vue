@@ -585,6 +585,17 @@ const formatDuration = (seconds) => {
                     No MCQ set plan saved for this chapter yet.
                 </div>
 
+                <div
+                    v-if="task.gemini_blocks_publish"
+                    class="rounded-lg border border-amber-300 bg-amber-50 p-4"
+                >
+                    <p class="text-sm font-semibold text-amber-950">Gemini check is still open</p>
+                    <p class="mt-1 text-sm text-amber-900">
+                        This chapter cannot be published yet. Send it back so the uploader runs Gemini,
+                        fixes the errors, and submits only after every question is Correct.
+                    </p>
+                </div>
+
                 <GeminiPasteReviewPanel
                     v-if="verification && task.can_verify_questions"
                     :run-id="verification.run_id"

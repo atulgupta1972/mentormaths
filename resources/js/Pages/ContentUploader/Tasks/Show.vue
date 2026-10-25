@@ -120,7 +120,7 @@ onUnmounted(() => clearInterval(pingTimer));
 
                 <div v-else-if="task.needs_review && !verification" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <p class="text-sm text-gray-700">
-                        MCQ sets are saved. Open review to check each question — fix options and explanations, then submit.
+                        MCQ sets are saved. The next step is the Gemini check. You can submit only after Gemini marks every question Correct.
                     </p>
                     <PrimaryButton
                         class="mt-4"
@@ -132,12 +132,23 @@ onUnmounted(() => clearInterval(pingTimer));
                     </PrimaryButton>
                 </div>
 
+                <div
+                    v-if="verification && verificationPendingCount > 0 && task.status !== 'published'"
+                    class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                >
+                    <p class="font-semibold">Gemini check is required before you can submit.</p>
+                    <p class="mt-1">
+                        Copy the prompt, paste Gemini’s reply, then fix anything marked Needs Verification.
+                        Paste Gemini again after those fixes. Submit stays closed until every question is Correct.
+                        {{ verificationPendingCount }} still pending.
+                    </p>
+                </div>
+
                 <div v-else-if="verification" class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-gray-200">
                     <p class="text-sm text-gray-700">
-                        One question at a time: review details, edit if needed, then
-                        <strong>Save &amp; mark verified → next</strong>.
+                        Gemini check comes first. Questions marked Correct are done.
+                        Fix the ones Gemini flags, then paste Gemini again before you submit.
                         Upload a figure when the question needs one.
-                        Or use <strong>Gemini paste review</strong> to auto-verify the correct ones.
                     </p>
                     <p v-if="task.status === 'published'" class="mt-2 text-sm text-indigo-900">
                         This chapter is published — you can still complete Gemini review for any pending questions.
