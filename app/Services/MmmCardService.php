@@ -166,6 +166,7 @@ class MmmCardService
         $isBalance = ($answers['mode'] ?? '') === 'balance';
         $isFillPage = ($answers['mode'] ?? '') === 'fill_page';
         $isBodmas = ($answers['mode'] ?? '') === 'bodmas';
+        $isCongruence = ($answers['mode'] ?? '') === 'congruence';
 
         return [
             'id' => $exercise->id,
@@ -173,9 +174,10 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : 'table')),
+            'play_kind' => $isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table'))),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
             'bodmas' => $isBodmas ? ($answers['play'] ?? []) : null,
+            'congruence' => $isCongruence ? ($answers['play'] ?? []) : null,
             'fill_page' => $isFillPage ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
@@ -208,6 +210,9 @@ class MmmCardService
         }
         if (($expected['mode'] ?? '') === 'bodmas') {
             return $this->checkBodmasSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'congruence') {
+            return $this->checkCongruenceSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -556,6 +561,135 @@ class MmmCardService
             'message' => $message,
             'step_key' => $stepKey,
         ];
+    }
+
+    /**
+     * Congruence: order the triangles, mark the figure, fill the table, name the case.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkCongruenceSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $steps = is_array($expected['play']['steps'] ?? null) ? $expected['play']['steps'] : [];
+        $stepKey = (string) ($submission['step_key'] ?? '');
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        $keys = [];
+        foreach ($steps as $step) {
+            if (is_array($step) && ($step['key'] ?? '') !== '') {
+                $keys[] = (string) $step['key'];
+            }
+        }
+        $isLast = $keys !== [] && $stepKey === $keys[array_key_last($keys)];
+
+        if ($stepKey === 'order') {
+            $want = array_map(fn ($letter) => strtoupper(trim((string) $letter)), $check['order']['letters'] ?? []);
+            $got = array_map(fn ($letter) => strtoupper(trim((string) $letter)), is_array($values['letters'] ?? null) ? $values['letters'] : []);
+            $ok = $want !== [] && $got === $want;
+
+            return $this->congruenceResult(
+                $ok,
+                $ok && $isLast,
+                $stepKey,
+                $ok ? (string) ($check['order']['ok'] ?? 'The corners are in order.') : (string) ($check['order']['miss'] ?? 'Those corners are not in matching order.'),
+            );
+        }
+
+        if ($stepKey === 'marks') {
+            $want = is_array($check['marks']['placed'] ?? null) ? $check['marks']['placed'] : [];
+            $got = is_array($values['placed'] ?? null) ? $values['placed'] : [];
+            $cells = [];
+            $ok = $want !== [];
+            foreach ($want as $part => $mark) {
+                $match = (string) ($got[$part] ?? '') === (string) $mark;
+                $cells[(string) $part] = $match;
+                if (! $match) {
+                    $ok = false;
+                }
+            }
+            foreach ($got as $part => $mark) {
+                if (! array_key_exists($part, $want)) {
+                    $cells[(string) $part] = false;
+                    $ok = false;
+                }
+            }
+
+            return $this->congruenceResult(
+                $ok,
+                $ok && $isLast,
+                $stepKey,
+                $ok ? (string) ($check['marks']['ok'] ?? 'The marks match.') : (string) ($check['marks']['miss'] ?? 'A mark is on the wrong part.'),
+                $cells,
+            );
+        }
+
+        if ($stepKey === 'table') {
+            $wantRows = is_array($check['table']['rows'] ?? null) ? array_values($check['table']['rows']) : [];
+            $gotRows = is_array($values['rows'] ?? null) ? array_values($values['rows']) : [];
+            $cells = [];
+            $ok = count($wantRows) > 0 && count($gotRows) === count($wantRows);
+            foreach ($wantRows as $index => $row) {
+                $got = is_array($gotRows[$index] ?? null) ? $gotRows[$index] : [];
+                $match = $this->congruenceSame($got['parts'] ?? '', $row['parts'] ?? '')
+                    && $this->congruenceSame($got['reason'] ?? '', $row['reason'] ?? '')
+                    && $this->congruenceSame($got['type'] ?? '', $row['type'] ?? '');
+                $cells['row'.$index] = $match;
+                if (! $match) {
+                    $ok = false;
+                }
+            }
+
+            return $this->congruenceResult(
+                $ok,
+                $ok && $isLast,
+                $stepKey,
+                $ok ? (string) ($check['table']['ok'] ?? 'The table is right.') : (string) ($check['table']['miss'] ?? 'Check the parts, the reason, and Side or Angle.'),
+                $cells,
+            );
+        }
+
+        if ($stepKey === 'case') {
+            $got = strtoupper(trim((string) ($values['case'] ?? $submission['value'] ?? '')));
+            $want = strtoupper(trim((string) ($check['case']['value'] ?? '')));
+            $ok = $want !== '' && $got === $want;
+            $wrong = is_array($check['case']['wrong'] ?? null) ? $check['case']['wrong'] : [];
+            $message = $ok
+                ? (string) ($check['case']['ok'] ?? 'That is the case.')
+                : (string) ($wrong[$got] ?? $check['case']['miss'] ?? 'Read the table again and name the case.');
+
+            return $this->congruenceResult($ok, $ok && $isLast, $stepKey, $message, [$stepKey => $ok]);
+        }
+
+        return $this->congruenceResult(false, false, $stepKey, 'That step is not on this figure.');
+    }
+
+    /**
+     * @param  array<string, bool>  $cells
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok: bool, step_key: string}
+     */
+    private function congruenceResult(bool $ok, bool $finished, string $stepKey, string $message, array $cells = []): array
+    {
+        return [
+            'ok' => $ok,
+            'all_ok' => $finished,
+            'cell_results' => $cells,
+            'message' => $message,
+            'step_key' => $stepKey,
+        ];
+    }
+
+    private function congruenceSame(mixed $got, mixed $want): bool
+    {
+        $clean = static function (mixed $value): string {
+            $text = strtolower(trim((string) $value));
+            $text = str_replace(['∠', ' '], ['angle', ''], $text);
+
+            return $text;
+        };
+
+        return $clean($got) !== '' && $clean($got) === $clean($want);
     }
 
     /**
