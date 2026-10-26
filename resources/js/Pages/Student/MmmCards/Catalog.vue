@@ -1,12 +1,41 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 defineProps({
     class_name: { type: String, default: null },
     show_classes: { type: Boolean, default: false },
     groups: { type: Array, default: () => [] },
 });
+
+const openKeys = ref({});
+
+const keyFor = (head, sub) => `${head}\0${sub}`;
+const isOpen = (head, sub) => Boolean(openKeys.value[keyFor(head, sub)]);
+const toggle = (head, sub) => {
+    const key = keyFor(head, sub);
+    openKeys.value = {
+        ...openKeys.value,
+        [key]: !openKeys.value[key],
+    };
+};
+
+const visibleMethods = (head, sub) => (
+    sub.methods.length > 1 ? (isOpen(head, sub.name) ? sub.methods : []) : sub.methods
+);
+
+const classList = (methods) => {
+    const names = [];
+    methods.forEach((method) => {
+        (method.classes || []).forEach((name) => {
+            if (!names.includes(name)) {
+                names.push(name);
+            }
+        });
+    });
+    return names.join(', ');
+};
 </script>
 
 <template>
@@ -17,17 +46,11 @@ defineProps({
             <h2 class="text-xl font-semibold text-gray-800">Learn Methods</h2>
         </template>
 
-        <div class="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
+        <div class="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
             <p class="text-sm text-gray-600">
-                <template v-if="class_name">
-                    Methods for {{ class_name }}. Open a method and work the sums one card at a time.
-                </template>
-                <template v-else-if="show_classes">
-                    Every published method. A student sees a method when their class is ticked on it.
-                </template>
-                <template v-else>
-                    Your class is not set yet, so no methods are listed.
-                </template>
+                <template v-if="class_name">Methods for {{ class_name }}. Open a sub heading to see its parts.</template>
+                <template v-else-if="show_classes">Every published method, grouped by sub heading.</template>
+                <template v-else>Your class is not set yet, so no methods are listed.</template>
             </p>
 
             <p
@@ -37,54 +60,60 @@ defineProps({
                 No methods for this class yet.
             </p>
 
-            <section v-for="group in groups" :key="group.head" class="space-y-3">
-                <h3 class="text-base font-semibold text-slate-900">{{ group.head }}</h3>
-
-                <details
-                    v-for="sub in group.subs"
-                    :key="`${group.head}-${sub.name}`"
-                    open
-                    class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200"
-                >
-                    <summary class="cursor-pointer list-none bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800">
-                        <span class="inline-flex items-center gap-2">
-                            {{ sub.name }}
-                            <span class="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                {{ sub.methods.length }}
-                            </span>
-                        </span>
-                    </summary>
-
-                    <table class="min-w-full text-sm">
-                        <thead class="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            <tr>
-                                <th class="px-3 py-2">Heading</th>
-                                <th class="px-3 py-2">About</th>
-                                <th v-if="show_classes" class="px-3 py-2">Classes</th>
-                                <th class="px-3 py-2" />
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="method in sub.methods"
-                                :key="method.id"
-                                class="border-t border-slate-100 align-top"
-                            >
-                                <td class="px-3 py-2 font-semibold text-slate-900">{{ method.heading }}</td>
-                                <td class="px-3 py-2 text-slate-600">{{ method.about }}</td>
-                                <td v-if="show_classes" class="px-3 py-2 text-slate-700">
-                                    {{ method.classes?.length ? method.classes.join(', ') : 'None yet' }}
-                                </td>
-                                <td class="px-3 py-2 text-right">
-                                    <Link :href="method.open_url" class="text-sm font-semibold text-teal-700 hover:underline">
-                                        Open
-                                    </Link>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </details>
-            </section>
+            <div v-else class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        <tr>
+                            <th class="px-3 py-2">Chapter head</th>
+                            <th class="px-3 py-2">Sub heading</th>
+                            <th class="px-3 py-2">Method</th>
+                            <th v-if="show_classes" class="px-3 py-2">Classes</th>
+                            <th class="px-3 py-2" />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template v-for="group in groups" :key="group.head">
+                            <template v-for="sub in group.subs" :key="`${group.head}-${sub.name}`">
+                                <tr
+                                    v-if="sub.methods.length > 1"
+                                    class="cursor-pointer border-t border-slate-200 bg-slate-50 hover:bg-slate-100"
+                                    @click="toggle(group.head, sub.name)"
+                                >
+                                    <td class="px-3 py-1.5 font-semibold text-slate-900">{{ group.head }}</td>
+                                    <td class="px-3 py-1.5 font-medium text-indigo-800">{{ sub.name }}</td>
+                                    <td class="px-3 py-1.5 text-slate-700">{{ sub.methods.length }} parts</td>
+                                    <td v-if="show_classes" class="px-3 py-1.5 text-xs text-teal-800">
+                                        {{ classList(sub.methods) }}
+                                    </td>
+                                    <td class="px-3 py-1.5 text-right text-xs font-semibold text-slate-500">
+                                        {{ isOpen(group.head, sub.name) ? 'Hide' : 'Show' }}
+                                    </td>
+                                </tr>
+                                <tr
+                                    v-for="method in visibleMethods(group.head, sub)"
+                                    :key="method.id"
+                                    class="border-t border-slate-100"
+                                >
+                                    <td class="px-3 py-1.5 text-slate-500">{{ sub.methods.length > 1 ? '' : group.head }}</td>
+                                    <td class="px-3 py-1.5 text-xs text-indigo-800">{{ sub.methods.length > 1 ? '' : sub.name }}</td>
+                                    <td class="px-3 py-1.5" :class="sub.methods.length > 1 ? 'pl-6' : ''">
+                                        <p class="font-medium text-slate-900">{{ method.heading }}</p>
+                                        <p v-if="method.about" class="text-xs text-slate-500">{{ method.about }}</p>
+                                    </td>
+                                    <td v-if="show_classes" class="px-3 py-1.5 text-xs text-teal-800">
+                                        {{ sub.methods.length > 1 ? '' : (method.classes?.join(', ') || 'None yet') }}
+                                    </td>
+                                    <td class="px-3 py-1.5 text-right">
+                                        <Link :href="method.open_url" class="text-sm font-semibold text-teal-700 hover:underline">
+                                            Open
+                                        </Link>
+                                    </td>
+                                </tr>
+                            </template>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </AuthenticatedLayout>
 </template>

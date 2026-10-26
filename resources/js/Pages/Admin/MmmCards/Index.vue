@@ -1,17 +1,53 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     cards: { type: Array, default: () => [] },
 });
 
-const mapped = computed(() => props.cards.filter((card) => card.places?.length));
-const unmapped = computed(() => props.cards.filter((card) => ! card.places?.length));
+const openKeys = ref({});
 
-const placeLabel = (place) => [place.board, place.class].filter(Boolean).join(' · ');
-const topicLabel = (card) => [card.chapter_head, card.sub_heading].filter(Boolean).join(' · ');
+const groups = computed(() => {
+    const buckets = [];
+    const indexByKey = new Map();
+
+    props.cards.forEach((card) => {
+        const head = card.chapter_head || 'Not classified';
+        const sub = card.sub_heading || '';
+        const key = `${head}\0${sub}`;
+        if (!indexByKey.has(key)) {
+            indexByKey.set(key, buckets.length);
+            buckets.push({
+                key,
+                head,
+                sub,
+                methods: [],
+                classes: [],
+            });
+        }
+        const group = buckets[indexByKey.get(key)];
+        group.methods.push(card);
+        (card.classes || []).forEach((name) => {
+            if (!group.classes.includes(name)) {
+                group.classes.push(name);
+            }
+        });
+    });
+
+    return buckets;
+});
+
+const isBundle = (group) => group.methods.length > 1;
+const isOpen = (group) => Boolean(openKeys.value[group.key]);
+const visibleMethods = (group) => (isBundle(group) ? (isOpen(group) ? group.methods : []) : group.methods);
+const toggle = (group) => {
+    openKeys.value = {
+        ...openKeys.value,
+        [group.key]: !openKeys.value[group.key],
+    };
+};
 </script>
 
 <template>
@@ -22,120 +58,74 @@ const topicLabel = (card) => [card.chapter_head, card.sub_heading].filter(Boolea
             <h2 class="text-xl font-semibold text-gray-800">MentorMaths methods (MMM)</h2>
         </template>
 
-        <div class="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
+        <div class="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
             <p class="text-sm text-gray-600">
-                Open a method to set its chapter head, sub heading, short description, and the classes that should see it in Learn Methods.
+                Parts that share a sub heading sit on one row. Open that row to see each part.
             </p>
 
-            <section class="space-y-2">
-                <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    Mapped
-                    <span class="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-800">{{ mapped.length }}</span>
-                </h3>
-                <div class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
-                    <table class="min-w-full text-sm">
-                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            <tr>
-                                <th class="px-3 py-2">Heading</th>
-                                <th class="px-3 py-2">Status</th>
-                                <th class="px-3 py-2">Exercises</th>
-                                <th class="px-3 py-2" />
-                            </tr>
-                        </thead>
-                        <tbody>
+            <div class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        <tr>
+                            <th class="px-3 py-2">Chapter head</th>
+                            <th class="px-3 py-2">Sub heading</th>
+                            <th class="px-3 py-2">Method</th>
+                            <th class="px-3 py-2">Classes</th>
+                            <th class="px-3 py-2">Sums</th>
+                            <th class="px-3 py-2" />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template v-for="group in groups" :key="group.key">
                             <tr
-                                v-for="card in mapped"
-                                :key="card.id"
-                                class="border-t border-slate-100 align-top"
+                                v-if="isBundle(group)"
+                                class="cursor-pointer border-t border-slate-200 bg-slate-50 hover:bg-slate-100"
+                                @click="toggle(group)"
                             >
-                                <td class="px-3 py-2">
-                                    <p class="font-semibold text-slate-900">{{ card.heading }}</p>
-                                    <p v-if="topicLabel(card)" class="mt-0.5 text-[11px] font-medium text-indigo-800">
-                                        {{ topicLabel(card) }}
-                                    </p>
-                                    <p v-if="card.classes?.length" class="text-[11px] text-teal-800">
-                                        {{ card.classes.join(', ') }}
-                                    </p>
-                                    <p
-                                        v-for="(place, index) in card.places"
-                                        :key="`${card.id}-${index}`"
-                                        class="mt-0.5 text-[11px] leading-snug text-slate-500"
-                                    >
-                                        <span class="font-semibold text-slate-700">{{ placeLabel(place) }}</span>
-                                        <span v-if="place.chapters?.length"> · {{ place.chapters.join(' · ') }}</span>
-                                    </p>
+                                <td class="px-3 py-1.5 font-semibold text-slate-900">{{ group.head }}</td>
+                                <td class="px-3 py-1.5 font-medium text-indigo-800">{{ group.sub || 'General' }}</td>
+                                <td class="px-3 py-1.5 text-slate-700">{{ group.methods.length }} parts</td>
+                                <td class="px-3 py-1.5 text-xs text-teal-800">{{ group.classes.join(', ') }}</td>
+                                <td class="px-3 py-1.5 tabular-nums text-slate-600">
+                                    {{ group.methods.reduce((sum, card) => sum + card.exercises_count, 0) }}
                                 </td>
-                                <td class="px-3 py-2 capitalize text-slate-700">{{ card.status }}</td>
-                                <td class="px-3 py-2 tabular-nums">{{ card.exercises_count }}</td>
-                                <td class="px-3 py-2 text-right">
-                                    <Link
-                                        :href="route('admin.mmm-cards.show', card.id)"
-                                        class="text-sm font-semibold text-teal-700 hover:underline"
-                                    >
-                                        Open
-                                    </Link>
+                                <td class="px-3 py-1.5 text-right text-xs font-semibold text-slate-500">
+                                    {{ isOpen(group) ? 'Hide' : 'Show' }}
                                 </td>
                             </tr>
-                            <tr v-if="!mapped.length">
-                                <td colspan="4" class="px-3 py-6 text-center text-slate-500">
-                                    No card is linked to a chapter yet.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section class="space-y-2">
-                <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    Not mapped
-                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700">{{ unmapped.length }}</span>
-                </h3>
-                <div class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
-                    <table class="min-w-full text-sm">
-                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            <tr>
-                                <th class="px-3 py-2">Heading</th>
-                                <th class="px-3 py-2">Status</th>
-                                <th class="px-3 py-2">Exercises</th>
-                                <th class="px-3 py-2" />
-                            </tr>
-                        </thead>
-                        <tbody>
                             <tr
-                                v-for="card in unmapped"
+                                v-for="card in visibleMethods(group)"
                                 :key="card.id"
                                 class="border-t border-slate-100"
                             >
-                                <td class="px-3 py-2">
-                                    <p class="font-semibold text-slate-900">{{ card.heading }}</p>
-                                    <p v-if="topicLabel(card)" class="mt-0.5 text-[11px] font-medium text-indigo-800">
-                                        {{ topicLabel(card) }}
-                                    </p>
-                                    <p v-if="card.classes?.length" class="text-[11px] text-teal-800">
-                                        {{ card.classes.join(', ') }}
-                                    </p>
+                                <td class="px-3 py-1.5 text-slate-500">{{ isBundle(group) ? '' : group.head }}</td>
+                                <td class="px-3 py-1.5 text-xs text-indigo-800">{{ isBundle(group) ? '' : group.sub }}</td>
+                                <td class="px-3 py-1.5 font-medium text-slate-900" :class="isBundle(group) ? 'pl-6' : ''">
+                                    {{ card.heading }}
                                 </td>
-                                <td class="px-3 py-2 capitalize text-slate-700">{{ card.status }}</td>
-                                <td class="px-3 py-2 tabular-nums">{{ card.exercises_count }}</td>
-                                <td class="px-3 py-2 text-right">
+                                <td class="px-3 py-1.5 text-xs text-teal-800">
+                                    {{ isBundle(group) ? '' : card.classes?.join(', ') }}
+                                </td>
+                                <td class="px-3 py-1.5 tabular-nums">{{ card.exercises_count }}</td>
+                                <td class="px-3 py-1.5 text-right">
                                     <Link
                                         :href="route('admin.mmm-cards.show', card.id)"
                                         class="text-sm font-semibold text-teal-700 hover:underline"
+                                        @click.stop
                                     >
                                         Open
                                     </Link>
                                 </td>
                             </tr>
-                            <tr v-if="!unmapped.length">
-                                <td colspan="4" class="px-3 py-6 text-center text-slate-500">
-                                    Every card is linked to a class and chapter.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+                        </template>
+                        <tr v-if="!groups.length">
+                            <td colspan="6" class="px-3 py-6 text-center text-slate-500">
+                                No methods yet.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </AuthenticatedLayout>
 </template>
