@@ -647,8 +647,28 @@ class MmmCardServiceTest extends TestCase
         $this->assertTrue($card->isPublished());
         $this->assertSame(MmmCard::KIND_BALANCE_EQUATION, $card->kind);
         $this->assertSame('Balance the equation — Basic 1', $card->heading);
-        $this->assertSame(12, $card->exercises()->count());
+        $this->assertSame(13, $card->exercises()->count());
         $this->assertTrue((bool) $card->exercises()->orderBy('sort_order')->first()?->is_demo);
+    }
+
+    public function test_balance_basic_1_ends_with_ten_fill_sums_and_the_next_part(): void
+    {
+        $card = MmmCard::query()->where('slug', 'balance-the-equation')->firstOrFail();
+        $page = $card->exercises()->where('sort_order', 13)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $this->assertSame('fill_page', $page->answers['mode'] ?? null);
+        $this->assertCount(10, $page->answers['play']['items'] ?? []);
+        $this->assertSame('balance-equation-basic-2', $service->nextPartCard($card)?->slug);
+        $this->assertNull($service->nextPartCard(
+            MmmCard::query()->where('slug', 'balance-equation-basic-6')->firstOrFail(),
+        ));
+
+        $this->assertTrue($service->checkSubmission($card, $page, ['step_key' => 'q1', 'value' => '12'])['ok']);
+        $this->assertFalse($service->checkSubmission($card, $page, ['step_key' => 'q3', 'value' => '7'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $page, ['step_key' => 'q3', 'value' => '-7'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $page, ['step_key' => 'q8', 'value' => '20'])['ok']);
+        $this->assertTrue($service->checkSubmission($card, $page, ['step_key' => 'q10', 'value' => '18'])['ok']);
     }
 
     public function test_balance_equation_play_payload_hides_answers(): void

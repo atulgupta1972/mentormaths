@@ -2,6 +2,7 @@
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import EquationFraction from '@/Pages/Student/MmmCards/EquationFraction.vue';
+import SeriesFinished from '@/Pages/Student/MmmCards/SeriesFinished.vue';
 import axios from 'axios';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -10,6 +11,7 @@ const props = defineProps({
     card: { type: Object, required: true },
     exercise_index: { type: Number, default: 0 },
     check_url: { type: String, required: true },
+    nextPart: { type: Object, default: null },
 });
 
 const emit = defineEmits(['next']);
@@ -1817,9 +1819,7 @@ const showKeepFlipCuts = computed(() => {
                 >
                     Next sum →
                 </button>
-                <p v-else class="text-sm font-semibold text-emerald-900">
-                    You finished all sums on this method card.
-                </p>
+                <SeriesFinished v-else :next-part="nextPart" />
             </div>
         </div>
     </div>

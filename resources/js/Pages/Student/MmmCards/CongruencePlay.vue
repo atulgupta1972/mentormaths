@@ -1,4 +1,5 @@
 <script setup>
+import SeriesFinished from '@/Pages/Student/MmmCards/SeriesFinished.vue';
 import axios from 'axios';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -7,6 +8,7 @@ const props = defineProps({
     card: { type: Object, required: true },
     exercise_index: { type: Number, default: 0 },
     check_url: { type: String, required: true },
+    nextPart: { type: Object, default: null },
 });
 
 const emit = defineEmits(['next']);
@@ -551,6 +553,7 @@ const continueStep = () => {
                 >
                     Next figure
                 </button>
+                <SeriesFinished v-else-if="allCorrect" :next-part="nextPart" />
             </div>
         </div>
     </div>

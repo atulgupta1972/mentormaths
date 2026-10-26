@@ -1,12 +1,17 @@
 <script setup>
 import EquationFraction from '@/Pages/Student/MmmCards/EquationFraction.vue';
+import SeriesFinished from '@/Pages/Student/MmmCards/SeriesFinished.vue';
 import axios from 'axios';
 import { computed, reactive, ref, watch } from 'vue';
 
 const props = defineProps({
     exercise: { type: Object, required: true },
     check_url: { type: String, required: true },
+    canGoNext: { type: Boolean, default: false },
+    nextPart: { type: Object, default: null },
 });
+
+const emit = defineEmits(['next']);
 
 const play = computed(() => props.exercise?.fill_page || {});
 const items = computed(() => play.value.items || []);
@@ -253,7 +258,7 @@ const askTeacher = (key) => {
                                 class="text-sm font-medium text-rose-800 hover:underline"
                                 @click="askTeacher(item.key)"
                             >
-                                I need teacher help
+                                I cannot solve this
                             </button>
                         </div>
                         <div
@@ -275,11 +280,20 @@ const askTeacher = (key) => {
 
         <div
             v-if="allCorrect"
-            class="rounded-xl border-2 border-emerald-400 bg-emerald-50 px-4 py-4"
+            class="space-y-3 rounded-xl border-2 border-emerald-400 bg-emerald-50 px-4 py-4"
         >
             <p class="text-sm font-medium text-emerald-900">
                 All {{ items.length }} are right. You used the same steps in your copy, then found the letter.
             </p>
+            <button
+                v-if="canGoNext"
+                type="button"
+                class="rounded-md bg-rose-700 px-4 py-2 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-rose-800"
+                @click="emit('next')"
+            >
+                Next sum →
+            </button>
+            <SeriesFinished v-else :next-part="nextPart" />
         </div>
     </div>
 </template>

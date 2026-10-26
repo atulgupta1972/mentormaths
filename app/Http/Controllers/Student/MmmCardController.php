@@ -54,11 +54,18 @@ class MmmCardController extends Controller
             ? max(0, $request->integer('exercise') - 1)
             : null;
 
+        $gradeId = $user->isStudent() ? $this->activeEnrollment($user)?->grade_level_id : null;
+        $next = $this->mmmCards->nextPartCard($mmmCard, $gradeId);
+
         return Inertia::render('Student/MmmCards/Play', [
             ...$this->mmmCards->playPayload($mmmCard, $user, $exerciseIndex),
             'check_url' => route('student.mmm-cards.check', $mmmCard),
             'back_url' => route('learn-methods.index'),
             'is_staff_preview' => false,
+            'next_part' => $next ? [
+                'heading' => $next->heading ?: $next->title,
+                'url' => route('student.mmm-cards.show', $next),
+            ] : null,
         ]);
     }
 

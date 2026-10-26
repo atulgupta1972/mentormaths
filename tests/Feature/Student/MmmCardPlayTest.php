@@ -41,7 +41,7 @@ class MmmCardPlayTest extends TestCase
         $this->enroll($user, $chapter);
         $gradeId = $chapter->syllabusVersion->grade_level_id;
 
-        foreach ([
+        $slugs = [
             'balance-the-equation',
             'balance-equation-basic-2',
             'balance-equation-basic-3',
@@ -49,18 +49,32 @@ class MmmCardPlayTest extends TestCase
             'balance-equation-basic-5',
             'balance-equation-basic-6',
             'bodmas-simple-brackets',
-        ] as $slug) {
+        ];
+        foreach ($slugs as $slug) {
+            MmmCard::query()->where('slug', $slug)->firstOrFail()
+                ->gradeLevels()->syncWithoutDetaching([$gradeId]);
+        }
+
+        foreach ($slugs as $slug) {
             $card = MmmCard::query()->where('slug', $slug)->firstOrFail();
-            $card->gradeLevels()->syncWithoutDetaching([$gradeId]);
 
             $this->actingAs($user)
                 ->get(route('student.mmm-cards.show', $card))
                 ->assertOk()
-                ->assertInertia(fn ($page) => $page
-                    ->component('Student/MmmCards/Play')
-                    ->where('card.slug', $slug)
-                    ->where('is_staff_preview', false)
-                    ->where('back_url', route('learn-methods.index')));
+                ->assertInertia(function ($page) use ($slug) {
+                    $page->component('Student/MmmCards/Play')
+                        ->where('card.slug', $slug)
+                        ->where('is_staff_preview', false)
+                        ->where('back_url', route('learn-methods.index'));
+                    if ($slug === 'balance-the-equation') {
+                        $next = MmmCard::query()->where('slug', 'balance-equation-basic-2')->firstOrFail();
+                        $page->where('next_part.heading', 'Balance the equation — Basic 2')
+                            ->where('next_part.url', route('student.mmm-cards.show', $next));
+                    }
+                    if ($slug === 'balance-equation-basic-6') {
+                        $page->where('next_part', null);
+                    }
+                });
         }
     }
 

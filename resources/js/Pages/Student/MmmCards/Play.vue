@@ -6,6 +6,7 @@ import BodmasPlay from '@/Pages/Student/MmmCards/BodmasPlay.vue';
 import CongruencePlay from '@/Pages/Student/MmmCards/CongruencePlay.vue';
 import EquationBalancePlay from '@/Pages/Student/MmmCards/EquationBalancePlay.vue';
 import EquationFillPagePlay from '@/Pages/Student/MmmCards/EquationFillPagePlay.vue';
+import SeriesFinished from '@/Pages/Student/MmmCards/SeriesFinished.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import axios from 'axios';
 import { computed, reactive, ref, watch } from 'vue';
@@ -20,6 +21,7 @@ const props = defineProps({
     check_url: { type: String, required: true },
     back_url: { type: String, required: true },
     is_staff_preview: { type: Boolean, default: false },
+    next_part: { type: Object, default: null },
 });
 
 const schema = computed(() => props.card.table_schema || {});
@@ -424,6 +426,9 @@ const footerColspan = computed(() => {
                     :key="exercise.id"
                     :exercise="exercise"
                     :check_url="check_url"
+                    :can-go-next="canGoNext"
+                    :next-part="next_part"
+                    @next="goNext"
                 />
                 <EquationBalancePlay
                     v-else-if="isBalance"
@@ -432,6 +437,7 @@ const footerColspan = computed(() => {
                     :card="card"
                     :exercise_index="exercise_index"
                     :check_url="check_url"
+                    :next-part="next_part"
                     @next="goNext"
                 />
                 <BodmasPlay
@@ -441,6 +447,7 @@ const footerColspan = computed(() => {
                     :card="card"
                     :exercise_index="exercise_index"
                     :check_url="check_url"
+                    :next-part="next_part"
                     @next="goNext"
                 />
                 <CongruencePlay
@@ -450,6 +457,7 @@ const footerColspan = computed(() => {
                     :card="card"
                     :exercise_index="exercise_index"
                     :check_url="check_url"
+                    :next-part="next_part"
                     @next="goNext"
                 />
                 <p
@@ -677,12 +685,9 @@ const footerColspan = computed(() => {
                         Next sum →
                     </button>
                 </div>
-                <p
-                    v-else-if="allCorrect && !canGoNext"
-                    class="mt-2 text-sm font-semibold text-teal-900"
-                >
-                    You finished all sums on this method card.
-                </p>
+                <div v-else-if="allCorrect && !canGoNext" class="mt-3">
+                    <SeriesFinished :next-part="next_part" />
+                </div>
                 </template>
             </section>
         </div>

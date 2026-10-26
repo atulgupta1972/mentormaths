@@ -136,6 +136,84 @@ class MmmCardService
     }
 
     /**
+     * The next method in this part's series: same sub heading, or the same
+     * heading before the dash (Basic 1, Basic 2, …). Students only receive a
+     * part that is ticked for their class.
+     */
+    public function nextPartCard(MmmCard $card, ?int $onlyGradeLevelId = null): ?MmmCard
+    {
+        $passedCurrent = false;
+        foreach ($this->seriesCards($card) as $other) {
+            if ((int) $other->id === (int) $card->id) {
+                $passedCurrent = true;
+
+                continue;
+            }
+            if (! $passedCurrent) {
+                continue;
+            }
+            if ($onlyGradeLevelId !== null && ! $other->gradeLevels->contains('id', $onlyGradeLevelId)) {
+                continue;
+            }
+
+            return $other;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return Collection<int, MmmCard>
+     */
+    private function seriesCards(MmmCard $card): Collection
+    {
+        $ids = [(int) $card->id];
+        $sub = trim((string) $card->sub_heading);
+        if ($sub !== '') {
+            $ids = array_merge($ids, MmmCard::query()
+                ->where('status', MmmCard::STATUS_PUBLISHED)
+                ->where('sub_heading', $sub)
+                ->pluck('id')
+                ->all());
+        }
+
+        $key = $this->seriesKey((string) ($card->heading ?: $card->title));
+        if ($key !== '') {
+            $like = $key.' — %';
+            $ids = array_merge($ids, MmmCard::query()
+                ->where('status', MmmCard::STATUS_PUBLISHED)
+                ->where(function ($query) use ($key, $like) {
+                    $query->where('heading', $key)
+                        ->orWhere('heading', 'like', $like)
+                        ->orWhere('title', $key)
+                        ->orWhere('title', 'like', $like);
+                })
+                ->pluck('id')
+                ->all());
+        }
+
+        return MmmCard::query()
+            ->with('gradeLevels')
+            ->whereIn('id', array_values(array_unique(array_map('intval', $ids))))
+            ->where('status', MmmCard::STATUS_PUBLISHED)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function seriesKey(string $label): string
+    {
+        $label = trim($label);
+        if ($label === '') {
+            return '';
+        }
+
+        $parts = preg_split('/\s+[—–]\s+|\s+-\s+/u', $label, 2);
+
+        return trim((string) ($parts[0] ?? ''));
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function schemaForExercise(MmmCard $card, ?MmmCardExercise $exercise): array

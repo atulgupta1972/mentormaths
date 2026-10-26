@@ -206,11 +206,17 @@ class MmmCardController extends Controller
             ? max(0, $request->integer('exercise') - 1)
             : 0;
 
+        $next = $this->mmmCards->nextPartCard($mmmCard);
+
         return Inertia::render('Student/MmmCards/Play', [
             ...$this->mmmCards->playPayload($mmmCard, null, $exerciseIndex),
             'check_url' => route('admin.mmm-cards.check', $mmmCard),
             'back_url' => route('admin.mmm-cards.show', $mmmCard),
             'is_staff_preview' => true,
+            'next_part' => $next ? [
+                'heading' => $next->heading ?: $next->title,
+                'url' => route('admin.mmm-cards.play', $next),
+            ] : null,
         ]);
     }
 
