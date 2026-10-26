@@ -659,10 +659,19 @@ class MmmCardServiceTest extends TestCase
 
         $this->assertSame('fill_page', $page->answers['mode'] ?? null);
         $this->assertCount(10, $page->answers['play']['items'] ?? []);
-        $this->assertSame('balance-equation-basic-2', $service->nextPartCard($card)?->slug);
-        $this->assertNull($service->nextPartCard(
-            MmmCard::query()->where('slug', 'balance-equation-basic-6')->firstOrFail(),
-        ));
+        $expected = [
+            'balance-the-equation' => 'balance-equation-basic-2',
+            'balance-equation-basic-2' => 'balance-equation-basic-3',
+            'balance-equation-basic-3' => 'balance-equation-basic-4',
+            'balance-equation-basic-4' => 'balance-equation-basic-5',
+            'balance-equation-basic-5' => 'balance-equation-basic-6',
+            'balance-equation-basic-6' => null,
+        ];
+        foreach ($expected as $slug => $nextSlug) {
+            $part = MmmCard::query()->where('slug', $slug)->firstOrFail();
+            $this->assertSame($nextSlug, $service->nextPartCard($part)?->slug, $slug);
+            $this->assertSame('Balance the equation', $service->playPayload($part)['card']['series_label']);
+        }
 
         $this->assertTrue($service->checkSubmission($card, $page, ['step_key' => 'q1', 'value' => '12'])['ok']);
         $this->assertFalse($service->checkSubmission($card, $page, ['step_key' => 'q3', 'value' => '7'])['ok']);

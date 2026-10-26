@@ -123,6 +123,7 @@ class MmmCardService
                 'method_blurb' => $card->method_blurb,
                 'table_schema' => $schema,
                 'exercises_total' => $count,
+                'series_label' => $this->seriesLabel($card),
             ],
             'exercise' => $this->exercisePayload($exercise),
             'exercise_index' => $exerciseIndex,
@@ -192,6 +193,17 @@ class MmmCardService
                 ->all());
         }
 
+        if ($this->isEquationSeries($card)) {
+            $ids = array_merge($ids, MmmCard::query()
+                ->where('status', MmmCard::STATUS_PUBLISHED)
+                ->where(function ($query) {
+                    $query->where('slug', 'balance-the-equation')
+                        ->orWhere('slug', 'like', 'balance-equation-basic-%');
+                })
+                ->pluck('id')
+                ->all());
+        }
+
         return MmmCard::query()
             ->with('gradeLevels')
             ->whereIn('id', array_values(array_unique(array_map('intval', $ids))))
@@ -211,6 +223,27 @@ class MmmCardService
         $parts = preg_split('/\s+[—–]\s+|\s+-\s+/u', $label, 2);
 
         return trim((string) ($parts[0] ?? ''));
+    }
+
+    private function seriesLabel(MmmCard $card): string
+    {
+        $sub = trim((string) $card->sub_heading);
+        if ($sub !== '') {
+            return $sub;
+        }
+        if ($this->isEquationSeries($card)) {
+            return 'Balance the equation';
+        }
+
+        $key = $this->seriesKey((string) ($card->heading ?: $card->title));
+
+        return $key !== '' ? $key : (string) ($card->heading ?: $card->title);
+    }
+
+    private function isEquationSeries(MmmCard $card): bool
+    {
+        return $card->slug === 'balance-the-equation'
+            || str_starts_with((string) $card->slug, 'balance-equation-basic-');
     }
 
     /**

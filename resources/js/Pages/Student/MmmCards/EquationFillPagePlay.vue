@@ -9,6 +9,7 @@ const props = defineProps({
     check_url: { type: String, required: true },
     canGoNext: { type: Boolean, default: false },
     nextPart: { type: Object, default: null },
+    seriesLabel: { type: String, default: '' },
 });
 
 const emit = defineEmits(['next']);
@@ -293,7 +294,7 @@ const askTeacher = (key) => {
             >
                 Next sum →
             </button>
-            <SeriesFinished v-else :next-part="nextPart" />
+            <SeriesFinished v-else :next-part="nextPart" :series-label="seriesLabel" />
         </div>
     </div>
 </template>

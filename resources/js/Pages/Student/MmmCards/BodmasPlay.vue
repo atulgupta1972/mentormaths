@@ -351,7 +351,7 @@ const checkStep = async () => {
             >
                 Next sum →
             </button>
-            <SeriesFinished v-else :next-part="nextPart" />
+            <SeriesFinished v-else :next-part="nextPart" :series-label="card.series_label" />
         </div>
     </div>
 </template>

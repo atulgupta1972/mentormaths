@@ -553,7 +553,7 @@ const continueStep = () => {
                 >
                     Next figure
                 </button>
-                <SeriesFinished v-else-if="allCorrect" :next-part="nextPart" />
+                <SeriesFinished v-else-if="allCorrect" :next-part="nextPart" :series-label="card.series_label" />
             </div>
         </div>
     </div>

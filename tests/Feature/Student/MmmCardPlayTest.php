@@ -66,13 +66,21 @@ class MmmCardPlayTest extends TestCase
                         ->where('card.slug', $slug)
                         ->where('is_staff_preview', false)
                         ->where('back_url', route('learn-methods.index'));
-                    if ($slug === 'balance-the-equation') {
-                        $next = MmmCard::query()->where('slug', 'balance-equation-basic-2')->firstOrFail();
-                        $page->where('next_part.heading', 'Balance the equation — Basic 2')
+                    $nextSlug = [
+                        'balance-the-equation' => 'balance-equation-basic-2',
+                        'balance-equation-basic-2' => 'balance-equation-basic-3',
+                        'balance-equation-basic-3' => 'balance-equation-basic-4',
+                        'balance-equation-basic-4' => 'balance-equation-basic-5',
+                        'balance-equation-basic-5' => 'balance-equation-basic-6',
+                    ][$slug] ?? null;
+                    if ($nextSlug) {
+                        $next = MmmCard::query()->where('slug', $nextSlug)->firstOrFail();
+                        $page->where('next_part.heading', $next->heading)
                             ->where('next_part.url', route('student.mmm-cards.show', $next));
                     }
                     if ($slug === 'balance-equation-basic-6') {
-                        $page->where('next_part', null);
+                        $page->where('next_part', null)
+                            ->where('card.series_label', 'Balance the equation');
                     }
                 });
         }

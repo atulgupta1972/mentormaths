@@ -428,6 +428,7 @@ const footerColspan = computed(() => {
                     :check_url="check_url"
                     :can-go-next="canGoNext"
                     :next-part="next_part"
+                    :series-label="card.series_label"
                     @next="goNext"
                 />
                 <EquationBalancePlay
@@ -686,7 +687,7 @@ const footerColspan = computed(() => {
                     </button>
                 </div>
                 <div v-else-if="allCorrect && !canGoNext" class="mt-3">
-                    <SeriesFinished :next-part="next_part" />
+                    <SeriesFinished :next-part="next_part" :series-label="card.series_label" />
                 </div>
                 </template>
             </section>
