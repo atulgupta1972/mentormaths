@@ -141,6 +141,13 @@ class MmmCardPlayTest extends TestCase
             [$six->id, $seven->id],
             $card->gradeLevels()->pluck('grade_levels.id')->map(fn ($id) => (int) $id)->all(),
         );
+
+        $this->actingAs($admin)
+            ->get(route('admin.mmm-cards.show', $card))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/MmmCards/Show')
+                ->where('sub_headings', ['Equation solving']));
     }
 
     private function makeChapter(): SyllabusChapter

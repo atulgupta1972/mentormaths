@@ -8,6 +8,7 @@ import { computed, ref, watch } from 'vue';
 const props = defineProps({
     card: { type: Object, required: true },
     chapter_heads: { type: Array, default: () => [] },
+    sub_headings: { type: Array, default: () => [] },
     boards: { type: Array, default: () => [] },
     grades: { type: Array, default: () => [] },
     picker: { type: Object, required: true },
@@ -45,6 +46,21 @@ const classify = useForm({
     heading: props.card.heading ?? '',
     method_blurb: props.card.method_blurb ?? '',
     grade_level_ids: [...(props.card.grade_level_ids ?? [])],
+});
+
+const currentSub = props.card.sub_heading ?? '';
+const subIsKnown = currentSub !== '' && props.sub_headings.includes(currentSub);
+const subChoice = ref(currentSub === '' ? '' : (subIsKnown ? currentSub : '__new'));
+const newSubHeading = ref(subIsKnown ? '' : currentSub);
+
+watch(subChoice, (value) => {
+    classify.sub_heading = value === '__new' ? newSubHeading.value : value;
+});
+
+watch(newSubHeading, (value) => {
+    if (subChoice.value === '__new') {
+        classify.sub_heading = value;
+    }
 });
 
 const gradeChecked = (id) => classify.grade_level_ids.map(Number).includes(Number(id));
@@ -125,7 +141,7 @@ const unlink = (chapterId) => {
             <section class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-teal-200">
                 <h3 class="text-sm font-semibold text-gray-900">Classify this method</h3>
                 <p class="mt-1 text-xs text-slate-500">
-                    Chapter head, the sub heading you type, the heading, and a short description. Tick every class that should see it in Learn Methods.
+                    Chapter head, a sub heading already used or a new one, the heading, and a short description. Tick every class that should see it in Learn Methods.
                     Status: <span class="font-semibold capitalize">{{ card.status }}</span>
                     · {{ card.exercises.length }} exercise(s)
                 </p>
@@ -142,12 +158,20 @@ const unlink = (chapterId) => {
                     </label>
                     <label class="block text-sm">
                         <span class="font-medium text-slate-700">Sub heading</span>
+                        <select v-model="subChoice" class="mt-1 w-full rounded border-slate-300 text-sm">
+                            <option value="">Choose a sub heading</option>
+                            <option v-for="name in sub_headings" :key="name" :value="name">
+                                {{ name }}
+                            </option>
+                            <option value="__new">Enter a new sub heading</option>
+                        </select>
                         <input
-                            v-model="classify.sub_heading"
+                            v-if="subChoice === '__new'"
+                            v-model="newSubHeading"
                             type="text"
                             maxlength="120"
-                            placeholder="Equation solving"
-                            class="mt-1 w-full rounded border-slate-300 text-sm"
+                            placeholder="Type the new sub heading"
+                            class="mt-2 w-full rounded border-slate-300 text-sm"
                         >
                     </label>
                     <label class="block text-sm sm:col-span-2">

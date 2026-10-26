@@ -121,6 +121,13 @@ class MmmCardController extends Controller
                 ])->values(),
             ],
             'chapter_heads' => ChapterHead::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
+            'sub_headings' => MmmCard::query()
+                ->whereNotNull('sub_heading')
+                ->where('sub_heading', '!=', '')
+                ->distinct()
+                ->orderBy('sub_heading')
+                ->pluck('sub_heading')
+                ->values(),
             'boards' => Board::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name']),
             'grades' => GradeLevel::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name']),
             'picker' => [
