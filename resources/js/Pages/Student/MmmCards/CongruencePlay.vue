@@ -27,6 +27,7 @@ const stepOk = ref(false);
 const submitting = ref(false);
 const cellResults = ref({});
 const allCorrect = ref(false);
+const summary = ref(null);
 
 const canGoNext = computed(() => {
     const total = Number(props.card?.exercises_total ?? 0);
@@ -40,6 +41,7 @@ watch(
         currentIndex.value = 0;
         resetStep();
         allCorrect.value = false;
+        summary.value = null;
     },
     { immediate: true },
 );
@@ -155,16 +157,48 @@ const labelPos = (figure, vertex) => {
 
 const partMark = (partId) => placed[partId] || '';
 
-const ticksFor = (figure, sideId) => {
-    const mark = partMark(sideId);
-    if (mark === '5') {
-        return [tickLine(figure, sideId, 0)].filter(Boolean);
-    }
-    if (mark === '6') {
-        return [tickLine(figure, sideId, -5), tickLine(figure, sideId, 5)].filter(Boolean);
+const tickCountFor = (mark) => {
+    const fromPlay = play.value.tick_counts?.[mark];
+    if (fromPlay) {
+        return Number(fromPlay);
     }
 
-    return [];
+    return { 5: 1, 6: 2, 7: 3 }[mark] || 0;
+};
+
+const ticksFor = (figure, sideId) => {
+    const count = tickCountFor(partMark(sideId));
+    if (! count) {
+        return [];
+    }
+    const lines = [];
+    const spread = (count - 1) * 6;
+    for (let index = 0; index < count; index += 1) {
+        const line = tickLine(figure, sideId, -spread / 2 + index * 6);
+        if (line) {
+            lines.push(line);
+        }
+    }
+
+    return lines;
+};
+
+const sideLabel = (figure, sideId) => {
+    const text = figure.lengths?.[sideId];
+    const ends = sideEnds(figure, sideId);
+    if (! text || ! ends) {
+        return null;
+    }
+    const [a, b] = ends;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+
+    return {
+        x: (a.x + b.x) / 2 + (-dy / len) * 14,
+        y: (a.y + b.y) / 2 + (dx / len) * 14,
+        text,
+    };
 };
 
 const tapPart = (partId, kind) => {
@@ -232,6 +266,7 @@ const submit = async () => {
         stepOk.value = !! data.ok;
         if (data.all_ok) {
             allCorrect.value = true;
+            summary.value = data.summary || null;
         }
     } catch (error) {
         message.value = error?.response?.data?.message || 'Could not check. Try again.';
@@ -335,6 +370,16 @@ const continueStep = () => {
                         class="cursor-pointer"
                         @click="tapPart(vertex.id, 'angle')"
                     />
+                    <text
+                        v-for="side in figure.sides.filter((id) => sideLabel(figure, id))"
+                        :key="`${side}-len`"
+                        :x="sideLabel(figure, side).x"
+                        :y="sideLabel(figure, side).y"
+                        text-anchor="middle"
+                        class="fill-teal-800 text-[11px] font-bold"
+                    >
+                        {{ sideLabel(figure, side).text }}
+                    </text>
                     <text
                         v-for="vertex in figure.vertices"
                         :key="vertex.id"
@@ -448,6 +493,37 @@ const continueStep = () => {
             >
                 {{ message }}
             </p>
+
+            <section
+                v-if="summary"
+                class="mt-4 rounded-xl border-2 border-emerald-400 bg-emerald-50 p-3"
+            >
+                <h3 class="text-sm font-extrabold uppercase tracking-wide text-emerald-900">How it is proved</h3>
+                <p class="mt-2 text-lg font-bold text-slate-900">{{ summary.statement }}</p>
+                <p class="mt-1 text-sm leading-relaxed text-slate-800">{{ summary.because }}</p>
+                <table class="mt-3 min-w-full text-sm">
+                    <thead class="text-left text-xs font-semibold uppercase tracking-wide text-emerald-900">
+                        <tr>
+                            <th class="px-2 py-1">No</th>
+                            <th class="px-2 py-1">Congruent parts</th>
+                            <th class="px-2 py-1">Reason</th>
+                            <th class="px-2 py-1">Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(row, index) in summary.rows" :key="index" class="border-t border-emerald-200">
+                            <td class="px-2 py-1 font-semibold">{{ index + 1 }}</td>
+                            <td class="px-2 py-1">{{ row.parts }}</td>
+                            <td class="px-2 py-1">{{ row.reason }}</td>
+                            <td class="px-2 py-1">{{ row.type }}</td>
+                        </tr>
+                        <tr class="border-t border-emerald-300 bg-white/70">
+                            <td class="px-2 py-1 font-semibold" colspan="3">Conclusion</td>
+                            <td class="px-2 py-1 font-bold text-emerald-900">{{ summary.case }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
 
             <div class="mt-3 flex flex-wrap gap-2">
                 <button

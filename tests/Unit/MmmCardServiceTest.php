@@ -1301,6 +1301,35 @@ class MmmCardServiceTest extends TestCase
             'values' => ['case' => 'SAS'],
         ]);
         $this->assertTrue($sas['all_ok'], $sas['message']);
+        $this->assertSame('SAS', $sas['summary']['case'] ?? null);
+        $this->assertCount(3, $sas['summary']['rows'] ?? []);
+    }
+
+    public function test_congruence_sss_needs_the_triangle_turned_to_qpr(): void
+    {
+        $card = MmmCard::query()->where('slug', 'congruence-sas')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 2)->firstOrFail();
+        $service = app(MmmCardService::class);
+
+        $copied = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => ['letters' => ['P', 'Q', 'R']],
+        ]);
+        $this->assertFalse($copied['ok']);
+
+        $turned = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => ['letters' => ['Q', 'P', 'R']],
+        ]);
+        $this->assertTrue($turned['ok'], $turned['message']);
+
+        $proved = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'case',
+            'values' => ['case' => 'SSS'],
+        ]);
+        $this->assertTrue($proved['all_ok'], $proved['message']);
+        $this->assertSame('△ABC ≅ △QPR', $proved['summary']['statement'] ?? null);
+        $this->assertSame('SSS', $proved['summary']['case'] ?? null);
     }
 
     private function marksVariableCountExercise(MmmCard $card): \App\Models\MmmCardExercise

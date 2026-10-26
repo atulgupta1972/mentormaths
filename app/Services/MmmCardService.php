@@ -659,7 +659,9 @@ class MmmCardService
                 ? (string) ($check['case']['ok'] ?? 'That is the case.')
                 : (string) ($wrong[$got] ?? $check['case']['miss'] ?? 'Read the table again and name the case.');
 
-            return $this->congruenceResult($ok, $ok && $isLast, $stepKey, $message, [$stepKey => $ok]);
+            $summary = ($ok && $isLast && is_array($check['summary'] ?? null)) ? $check['summary'] : null;
+
+            return $this->congruenceResult($ok, $ok && $isLast, $stepKey, $message, [$stepKey => $ok], $summary);
         }
 
         return $this->congruenceResult(false, false, $stepKey, 'That step is not on this figure.');
@@ -669,15 +671,20 @@ class MmmCardService
      * @param  array<string, bool>  $cells
      * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok: bool, step_key: string}
      */
-    private function congruenceResult(bool $ok, bool $finished, string $stepKey, string $message, array $cells = []): array
+    private function congruenceResult(bool $ok, bool $finished, string $stepKey, string $message, array $cells = [], ?array $summary = null): array
     {
-        return [
+        $result = [
             'ok' => $ok,
             'all_ok' => $finished,
             'cell_results' => $cells,
             'message' => $message,
             'step_key' => $stepKey,
         ];
+        if ($summary !== null) {
+            $result['summary'] = $summary;
+        }
+
+        return $result;
     }
 
     private function congruenceSame(mixed $got, mixed $want): bool
