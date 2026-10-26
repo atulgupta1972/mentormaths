@@ -25,6 +25,8 @@ class MmmCard extends Model
         'slug',
         'title',
         'heading',
+        'chapter_head_id',
+        'sub_heading',
         'kind',
         'status',
         'accent',
@@ -50,6 +52,16 @@ class MmmCard extends Model
     public function exercises(): HasMany
     {
         return $this->hasMany(MmmCardExercise::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function chapterHead(): BelongsTo
+    {
+        return $this->belongsTo(ChapterHead::class);
+    }
+
+    public function gradeLevels(): BelongsToMany
+    {
+        return $this->belongsToMany(GradeLevel::class, 'mmm_card_grade_level');
     }
 
     public function syllabusChapters(): BelongsToMany

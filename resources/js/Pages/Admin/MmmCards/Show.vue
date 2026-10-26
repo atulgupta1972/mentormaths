@@ -7,6 +7,7 @@ import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     card: { type: Object, required: true },
+    chapter_heads: { type: Array, default: () => [] },
     boards: { type: Array, default: () => [] },
     grades: { type: Array, default: () => [] },
     picker: { type: Object, required: true },
@@ -36,6 +37,35 @@ const reloadPicker = () => {
         },
         { preserveState: true, preserveScroll: true },
     );
+};
+
+const classify = useForm({
+    chapter_head_id: props.card.chapter_head_id ?? '',
+    sub_heading: props.card.sub_heading ?? '',
+    heading: props.card.heading ?? '',
+    method_blurb: props.card.method_blurb ?? '',
+    grade_level_ids: [...(props.card.grade_level_ids ?? [])],
+});
+
+const gradeChecked = (id) => classify.grade_level_ids.map(Number).includes(Number(id));
+
+const toggleGrade = (id) => {
+    const key = Number(id);
+    const ids = classify.grade_level_ids.map(Number);
+    classify.grade_level_ids = ids.includes(key) ? ids.filter((value) => value !== key) : [...ids, key];
+};
+
+const saveClassify = () => {
+    classify
+        .transform((data) => ({
+            ...data,
+            chapter_head_id: data.chapter_head_id === '' || data.chapter_head_id === null
+                ? null
+                : Number(data.chapter_head_id),
+        }))
+        .put(route('admin.mmm-cards.classify', props.card.id), {
+            preserveScroll: true,
+        });
 };
 
 const linkForm = useForm({
@@ -93,11 +123,78 @@ const unlink = (chapterId) => {
             </p>
 
             <section class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-teal-200">
-                <p class="text-sm text-slate-700">{{ card.method_blurb }}</p>
-                <p class="mt-2 text-xs text-slate-500">
+                <h3 class="text-sm font-semibold text-gray-900">Classify this method</h3>
+                <p class="mt-1 text-xs text-slate-500">
+                    Chapter head, the sub heading you type, the heading, and a short description. Tick every class that should see it in Learn Methods.
                     Status: <span class="font-semibold capitalize">{{ card.status }}</span>
                     · {{ card.exercises.length }} exercise(s)
                 </p>
+
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label class="block text-sm">
+                        <span class="font-medium text-slate-700">Chapter head</span>
+                        <select v-model="classify.chapter_head_id" class="mt-1 w-full rounded border-slate-300 text-sm">
+                            <option value="">Choose a chapter head</option>
+                            <option v-for="head in chapter_heads" :key="head.id" :value="head.id">
+                                {{ head.name }}
+                            </option>
+                        </select>
+                    </label>
+                    <label class="block text-sm">
+                        <span class="font-medium text-slate-700">Sub heading</span>
+                        <input
+                            v-model="classify.sub_heading"
+                            type="text"
+                            maxlength="120"
+                            placeholder="Equation solving"
+                            class="mt-1 w-full rounded border-slate-300 text-sm"
+                        >
+                    </label>
+                    <label class="block text-sm sm:col-span-2">
+                        <span class="font-medium text-slate-700">Heading</span>
+                        <input
+                            v-model="classify.heading"
+                            type="text"
+                            maxlength="120"
+                            class="mt-1 w-full rounded border-slate-300 text-sm"
+                        >
+                    </label>
+                    <label class="block text-sm sm:col-span-2">
+                        <span class="font-medium text-slate-700">Short description</span>
+                        <textarea
+                            v-model="classify.method_blurb"
+                            rows="3"
+                            maxlength="2000"
+                            class="mt-1 w-full rounded border-slate-300 text-sm"
+                        />
+                    </label>
+                </div>
+
+                <fieldset class="mt-3">
+                    <legend class="text-sm font-medium text-slate-700">Classes</legend>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <label
+                            v-for="grade in grades"
+                            :key="grade.id"
+                            class="inline-flex items-center gap-1.5 rounded border px-2 py-1 text-sm"
+                            :class="gradeChecked(grade.id) ? 'border-teal-600 bg-teal-50 text-teal-900' : 'border-slate-200 text-slate-700'"
+                        >
+                            <input
+                                type="checkbox"
+                                class="rounded border-slate-300 text-teal-700"
+                                :checked="gradeChecked(grade.id)"
+                                @change="toggleGrade(grade.id)"
+                            >
+                            {{ grade.name }}
+                        </label>
+                    </div>
+                </fieldset>
+
+                <div class="mt-3">
+                    <PrimaryButton type="button" :disabled="classify.processing" @click="saveClassify">
+                        Save classification
+                    </PrimaryButton>
+                </div>
             </section>
 
             <section class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200">

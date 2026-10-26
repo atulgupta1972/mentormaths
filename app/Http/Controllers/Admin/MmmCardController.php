@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Board;
+use App\Models\ChapterHead;
 use App\Models\GradeLevel;
 use App\Models\MmmCard;
 use App\Services\MmmCardService;
@@ -20,6 +21,8 @@ class MmmCardController extends Controller
     {
         $cards = MmmCard::query()
             ->with([
+                'chapterHead',
+                'gradeLevels',
                 'syllabusChapters.syllabusVersion.board',
                 'syllabusChapters.syllabusVersion.gradeLevel',
             ])
@@ -32,6 +35,9 @@ class MmmCardController extends Controller
                 'slug' => $card->slug,
                 'title' => $card->title,
                 'heading' => $card->heading,
+                'chapter_head' => $card->chapterHead?->name,
+                'sub_heading' => $card->sub_heading,
+                'classes' => $card->gradeLevels->sortBy('sort_order')->pluck('name')->values(),
                 'status' => $card->status,
                 'accent' => $card->accent,
                 'exercises_count' => $card->exercises_count,
@@ -76,7 +82,13 @@ class MmmCardController extends Controller
 
     public function show(Request $request, MmmCard $mmmCard): Response
     {
-        $mmmCard->load(['exercises', 'syllabusChapters.syllabusVersion.board', 'syllabusChapters.syllabusVersion.gradeLevel']);
+        $mmmCard->load([
+            'exercises',
+            'chapterHead',
+            'gradeLevels',
+            'syllabusChapters.syllabusVersion.board',
+            'syllabusChapters.syllabusVersion.gradeLevel',
+        ]);
 
         $boardId = $request->integer('board_id') ?: null;
         $gradeId = $request->integer('grade_level_id') ?: null;
@@ -87,6 +99,9 @@ class MmmCardController extends Controller
                 'slug' => $mmmCard->slug,
                 'title' => $mmmCard->title,
                 'heading' => $mmmCard->heading,
+                'chapter_head_id' => $mmmCard->chapter_head_id,
+                'sub_heading' => $mmmCard->sub_heading,
+                'grade_level_ids' => $mmmCard->gradeLevels->pluck('id')->values(),
                 'status' => $mmmCard->status,
                 'accent' => $mmmCard->accent,
                 'method_blurb' => $mmmCard->method_blurb,
@@ -105,6 +120,7 @@ class MmmCardController extends Controller
                     'class' => $ch->syllabusVersion?->gradeLevel?->name,
                 ])->values(),
             ],
+            'chapter_heads' => ChapterHead::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
             'boards' => Board::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name']),
             'grades' => GradeLevel::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name']),
             'picker' => [
@@ -114,6 +130,33 @@ class MmmCardController extends Controller
             ],
             'play_url' => route('admin.mmm-cards.play', $mmmCard),
         ]);
+    }
+
+    public function classify(Request $request, MmmCard $mmmCard): RedirectResponse
+    {
+        $validated = $request->validate([
+            'chapter_head_id' => ['nullable', 'integer', 'exists:chapter_heads,id'],
+            'sub_heading' => ['nullable', 'string', 'max:120'],
+            'heading' => ['required', 'string', 'max:120'],
+            'method_blurb' => ['nullable', 'string', 'max:2000'],
+            'grade_level_ids' => ['nullable', 'array'],
+            'grade_level_ids.*' => ['integer', 'exists:grade_levels,id'],
+        ]);
+
+        $heading = trim($validated['heading']);
+        $subHeading = trim((string) ($validated['sub_heading'] ?? ''));
+        $about = trim((string) ($validated['method_blurb'] ?? ''));
+
+        $mmmCard->update([
+            'chapter_head_id' => $validated['chapter_head_id'] ?? null,
+            'sub_heading' => $subHeading !== '' ? $subHeading : null,
+            'heading' => $heading,
+            'title' => $heading,
+            'method_blurb' => $about !== '' ? $about : null,
+        ]);
+        $mmmCard->gradeLevels()->sync($validated['grade_level_ids'] ?? []);
+
+        return back()->with('success', 'Method classification saved.');
     }
 
     public function syncChapters(Request $request, MmmCard $mmmCard): RedirectResponse

@@ -352,8 +352,22 @@ const resourcesGroup = computed(() => ({
     ],
 }));
 
+const learnGroup = computed(() => ({
+    label: 'Learn Methods',
+    active: route().current('learn-methods.*') || route().current('student.mmm-cards.*'),
+    items: [
+        {
+            label: 'All methods',
+            href: route().has('learn-methods.index') ? route('learn-methods.index') : '/learn-methods',
+            active: route().current('learn-methods.*') || route().current('student.mmm-cards.*'),
+            show: route().has('learn-methods.index'),
+        },
+    ],
+}));
+
 const navGroups = computed(() =>
     [
+        learnGroup.value,
         peopleGroup.value,
         teachingGroup.value,
         contentGroup.value,

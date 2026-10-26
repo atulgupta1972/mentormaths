@@ -11,6 +11,7 @@ const mapped = computed(() => props.cards.filter((card) => card.places?.length))
 const unmapped = computed(() => props.cards.filter((card) => ! card.places?.length));
 
 const placeLabel = (place) => [place.board, place.class].filter(Boolean).join(' · ');
+const topicLabel = (card) => [card.chapter_head, card.sub_heading].filter(Boolean).join(' · ');
 </script>
 
 <template>
@@ -23,7 +24,7 @@ const placeLabel = (place) => [place.board, place.class].filter(Boolean).join(' 
 
         <div class="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
             <p class="text-sm text-gray-600">
-                Method cards that sit beside book concept cards. Link each method to one or more board / class / chapters.
+                Open a method to set its chapter head, sub heading, short description, and the classes that should see it in Learn Methods.
             </p>
 
             <section class="space-y-2">
@@ -49,6 +50,12 @@ const placeLabel = (place) => [place.board, place.class].filter(Boolean).join(' 
                             >
                                 <td class="px-3 py-2">
                                     <p class="font-semibold text-slate-900">{{ card.heading }}</p>
+                                    <p v-if="topicLabel(card)" class="mt-0.5 text-[11px] font-medium text-indigo-800">
+                                        {{ topicLabel(card) }}
+                                    </p>
+                                    <p v-if="card.classes?.length" class="text-[11px] text-teal-800">
+                                        {{ card.classes.join(', ') }}
+                                    </p>
                                     <p
                                         v-for="(place, index) in card.places"
                                         :key="`${card.id}-${index}`"
@@ -100,7 +107,15 @@ const placeLabel = (place) => [place.board, place.class].filter(Boolean).join(' 
                                 :key="card.id"
                                 class="border-t border-slate-100"
                             >
-                                <td class="px-3 py-2 font-semibold text-slate-900">{{ card.heading }}</td>
+                                <td class="px-3 py-2">
+                                    <p class="font-semibold text-slate-900">{{ card.heading }}</p>
+                                    <p v-if="topicLabel(card)" class="mt-0.5 text-[11px] font-medium text-indigo-800">
+                                        {{ topicLabel(card) }}
+                                    </p>
+                                    <p v-if="card.classes?.length" class="text-[11px] text-teal-800">
+                                        {{ card.classes.join(', ') }}
+                                    </p>
+                                </td>
                                 <td class="px-3 py-2 capitalize text-slate-700">{{ card.status }}</td>
                                 <td class="px-3 py-2 tabular-nums">{{ card.exercises_count }}</td>
                                 <td class="px-3 py-2 text-right">

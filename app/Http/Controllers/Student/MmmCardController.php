@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicYear;
 use App\Models\MmmCard;
+use App\Models\StudentEnrollment;
+use App\Models\User;
 use App\Services\MmmCardService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -13,20 +17,38 @@ class MmmCardController extends Controller
 {
     public function __construct(private MmmCardService $mmmCards) {}
 
+    public function catalog(): Response
+    {
+        $user = auth()->user();
+        abort_unless($user, 403);
+
+        $enrollment = $user->isStudent() ? $this->activeEnrollment($user) : null;
+        $gradeId = $enrollment?->grade_level_id;
+
+        $query = MmmCard::query()
+            ->where('status', MmmCard::STATUS_PUBLISHED)
+            ->with(['chapterHead', 'gradeLevels'])
+            ->orderBy('sort_order')
+            ->orderBy('id');
+
+        if ($user->isStudent()) {
+            $cards = $gradeId
+                ? $query->whereHas('gradeLevels', fn ($grades) => $grades->where('grade_levels.id', $gradeId))->get()
+                : collect();
+        } else {
+            $cards = $query->get();
+        }
+
+        return Inertia::render('Student/MmmCards/Catalog', [
+            'class_name' => $enrollment?->gradeLevel?->name,
+            'show_classes' => ! $user->isStudent(),
+            'groups' => $this->catalogGroups($cards),
+        ]);
+    }
+
     public function show(Request $request, MmmCard $mmmCard): Response
     {
-        abort_unless($mmmCard->isPublished(), 404);
-
-        $user = auth()->user();
-        abort_unless($user?->isStudent(), 403);
-
-        // Student may open any published MMM linked to at least one syllabus chapter
-        // (access gated by being on study plan; card itself is method practice).
-        abort_unless(
-            $mmmCard->syllabusChapters()->exists(),
-            404,
-            'This MentorMaths method is not linked to a chapter yet.',
-        );
+        $user = $this->abortUnlessCanLearn($mmmCard);
 
         $exerciseIndex = $request->filled('exercise')
             ? max(0, $request->integer('exercise') - 1)
@@ -35,16 +57,14 @@ class MmmCardController extends Controller
         return Inertia::render('Student/MmmCards/Play', [
             ...$this->mmmCards->playPayload($mmmCard, $user, $exerciseIndex),
             'check_url' => route('student.mmm-cards.check', $mmmCard),
-            'back_url' => route('dashboard'),
+            'back_url' => route('learn-methods.index'),
             'is_staff_preview' => false,
         ]);
     }
 
     public function check(Request $request, MmmCard $mmmCard)
     {
-        abort_unless($mmmCard->isPublished(), 404);
-        $user = auth()->user();
-        abort_unless($user?->isStudent(), 403);
+        $user = $this->abortUnlessCanLearn($mmmCard);
 
         $validated = $request->validate([
             'exercise_id' => ['required', 'integer', 'exists:mmm_card_exercises,id'],
@@ -81,5 +101,85 @@ class MmmCardController extends Controller
             'next_exercise' => $hasNext ? (int) $index + 2 : null,
             'received_equation' => $validated['equation'] ?? null,
         ]);
+    }
+
+    private function abortUnlessCanLearn(MmmCard $card): User
+    {
+        $user = auth()->user();
+        abort_unless($user, 403);
+        abort_unless($card->isPublished(), 404);
+
+        if ($user->isStudent()) {
+            $gradeId = $this->activeEnrollment($user)?->grade_level_id;
+            abort_unless(
+                $gradeId && $card->gradeLevels()->where('grade_levels.id', $gradeId)->exists(),
+                404,
+            );
+        }
+
+        return $user;
+    }
+
+    private function activeEnrollment(User $user): ?StudentEnrollment
+    {
+        $year = AcademicYear::active();
+        if (! $year || ! $user->student) {
+            return null;
+        }
+
+        return $user->student->enrollments()
+            ->with('gradeLevel')
+            ->where('academic_year_id', $year->id)
+            ->where('status', StudentEnrollment::STATUS_ACTIVE)
+            ->first();
+    }
+
+    /**
+     * @param  Collection<int, MmmCard>  $cards
+     * @return list<array{head: string, subs: list<array{name: string, methods: list<array<string, mixed>>}>}>
+     */
+    private function catalogGroups(Collection $cards): array
+    {
+        $buckets = [];
+
+        foreach ($cards as $card) {
+            $head = $card->chapterHead;
+            $headKey = $head?->id ?: 0;
+            $sub = trim((string) $card->sub_heading) !== '' ? trim((string) $card->sub_heading) : 'General';
+
+            $buckets[$headKey] ??= [
+                'head' => $head?->name ?: 'Not classified',
+                'sort' => $head ? sprintf('%05d-%s', (int) $head->sort_order, $head->name) : '99999',
+                'subs' => [],
+            ];
+            $buckets[$headKey]['subs'][$sub] ??= [];
+            $buckets[$headKey]['subs'][$sub][] = [
+                'id' => $card->id,
+                'heading' => $card->heading,
+                'about' => $card->method_blurb,
+                'classes' => $card->gradeLevels->sortBy('sort_order')->pluck('name')->values(),
+                'open_url' => route('student.mmm-cards.show', $card),
+            ];
+        }
+
+        return collect($buckets)
+            ->sortBy('sort')
+            ->values()
+            ->map(function (array $bucket) {
+                $subs = collect($bucket['subs'])
+                    ->sortKeys()
+                    ->map(fn (array $methods, string $name) => [
+                        'name' => $name,
+                        'methods' => $methods,
+                    ])
+                    ->values()
+                    ->all();
+
+                return [
+                    'head' => $bucket['head'],
+                    'subs' => $subs,
+                ];
+            })
+            ->all();
     }
 }

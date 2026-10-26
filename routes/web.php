@@ -104,6 +104,15 @@ Route::get('/teachers/register/profile/{token}', [TeacherRegistrationRequestCont
 Route::post('/teachers/register/profile/{token}', [TeacherRegistrationRequestController::class, 'updateCompleteProfile'])
     ->name('teacher-registration.profile.update');
 
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/learn-methods', [\App\Http\Controllers\Student\MmmCardController::class, 'catalog'])
+        ->name('learn-methods.index');
+    Route::get('/student/mmm-cards/{mmmCard}', [\App\Http\Controllers\Student\MmmCardController::class, 'show'])
+        ->name('student.mmm-cards.show');
+    Route::post('/student/mmm-cards/{mmmCard}/check', [\App\Http\Controllers\Student\MmmCardController::class, 'check'])
+        ->name('student.mmm-cards.check');
+});
+
 Route::get('/dashboard', DashboardController::class)
     ->middleware(['auth', 'verified', 'exam.marks', 'chapter.terms', 'formula.drill', 'mensuration.drill', 'basics.drill'])
     ->name('dashboard');
@@ -416,6 +425,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/mmm-cards/{mmmCard}', [\App\Http\Controllers\Admin\MmmCardController::class, 'show'])->name('mmm-cards.show');
     Route::get('/mmm-cards/{mmmCard}/play', [\App\Http\Controllers\Admin\MmmCardController::class, 'play'])->name('mmm-cards.play');
     Route::post('/mmm-cards/{mmmCard}/check', [\App\Http\Controllers\Admin\MmmCardController::class, 'check'])->name('mmm-cards.check');
+    Route::put('/mmm-cards/{mmmCard}/classify', [\App\Http\Controllers\Admin\MmmCardController::class, 'classify'])->name('mmm-cards.classify');
     Route::post('/mmm-cards/{mmmCard}/sync-chapters', [\App\Http\Controllers\Admin\MmmCardController::class, 'syncChapters'])->name('mmm-cards.sync-chapters');
     Route::delete('/mmm-cards/{mmmCard}/chapters/{syllabusChapter}', [\App\Http\Controllers\Admin\MmmCardController::class, 'unlinkChapter'])->name('mmm-cards.unlink-chapter');
 
@@ -632,11 +642,6 @@ Route::middleware(['auth', 'verified', 'exam.marks', 'chapter.terms', 'formula.d
         ->name('concept-path.record-card');
     Route::post('/concept-path/{textbookChapter}/complete', [\App\Http\Controllers\Student\ConceptPathController::class, 'complete'])
         ->name('concept-path.complete');
-
-    Route::get('/mmm-cards/{mmmCard}', [\App\Http\Controllers\Student\MmmCardController::class, 'show'])
-        ->name('mmm-cards.show');
-    Route::post('/mmm-cards/{mmmCard}/check', [\App\Http\Controllers\Student\MmmCardController::class, 'check'])
-        ->name('mmm-cards.check');
 
     Route::post('/worksheets/{worksheet}/self-assign', [SelfAssignController::class, 'store'])->name('worksheets.self-assign');
     Route::post('/worksheets/{worksheet}/correction-practice', [PracticeCorrectionController::class, 'store'])->name('worksheets.correction-practice');
