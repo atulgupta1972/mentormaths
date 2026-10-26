@@ -194,6 +194,12 @@ const askTeacher = (key) => {
                             <EquationFraction :expr="item.right" />
                         </div>
                         <p
+                            v-else-if="item.prompt"
+                            class="text-sm font-medium leading-relaxed text-slate-900 sm:text-base"
+                        >
+                            {{ item.prompt }}
+                        </p>
+                        <p
                             v-else
                             class="overflow-x-auto font-mono text-base font-extrabold text-slate-900 sm:text-lg"
                         >

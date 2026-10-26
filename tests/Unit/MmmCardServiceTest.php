@@ -14,69 +14,31 @@ class MmmCardServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_marks_scoring_last_sums_cover_medium_and_hard_kinds(): void
+    public function test_marks_scoring_practice_is_a_fill_page_of_ten_sums(): void
     {
         $card = MmmCard::query()->where('slug', 'marks-scoring-table')->firstOrFail();
+        $page = $card->exercises()->where('sort_order', 2)->firstOrFail();
         $service = app(MmmCardService::class);
 
-        $score = $service->checkSubmission($card, $card->exercises()->where('sort_order', 2)->firstOrFail(), [
-            'rows' => [
-                'correct' => ['marks' => '5', 'count' => '9', 'total' => '45'],
-                'wrong' => ['marks' => '-3', 'count' => '4', 'total' => '-12'],
-            ],
-            'grand_total' => '33',
-        ]);
-        $this->assertTrue($score['ok'], json_encode($score['cell_results']));
+        $this->assertSame('fill_page', $page->answers['mode'] ?? null);
+        $this->assertCount(10, $page->answers['play']['items'] ?? []);
 
-        $derived = $service->checkSubmission($card, $card->exercises()->where('sort_order', 3)->firstOrFail(), [
-            'rows' => [
-                'correct' => ['marks' => '3', 'count' => '11', 'total' => '33'],
-                'wrong' => ['marks' => '-2', 'count' => '7', 'total' => '-14'],
+        $result = $service->checkSubmission($card, $page, [
+            'values' => [
+                'q1' => '33',
+                'q2' => '19',
+                'q3' => '-10',
+                'q4' => '8',
+                'q5' => '29',
+                'q6' => '15',
+                'q7' => '3',
+                'q8' => '4',
+                'q9' => '4',
+                'q10' => '3',
             ],
-            'grand_total' => '19',
         ]);
-        $this->assertTrue($derived['ok'], json_encode($derived['cell_results']));
 
-        $negative = $service->checkSubmission($card, $card->exercises()->where('sort_order', 4)->firstOrFail(), [
-            'rows' => [
-                'correct' => ['marks' => '2', 'count' => '4', 'total' => '8'],
-                'wrong' => ['marks' => '−3', 'count' => '6', 'total' => '-18'],
-            ],
-            'grand_total' => '-10',
-        ]);
-        $this->assertTrue($negative['ok'], json_encode($negative['cell_results']));
-
-        $blankRow = $card->exercises()->where('sort_order', 6)->firstOrFail();
-        $this->assertSame('Not attempted', $service->schemaForExercise($card, $blankRow)['rows'][2]['label'] ?? null);
-        $unattempted = $service->checkSubmission($card, $blankRow, [
-            'rows' => [
-                'correct' => ['marks' => '4', 'count' => '11', 'total' => '44'],
-                'wrong' => ['marks' => '-2', 'count' => '6', 'total' => '-12'],
-                'blank' => ['marks' => '-1', 'count' => '3', 'total' => '-3'],
-            ],
-            'grand_total' => '29',
-        ]);
-        $this->assertTrue($unattempted['ok'], json_encode($unattempted['cell_results']));
-
-        $wrongCount = $service->checkSubmission($card, $card->exercises()->where('sort_order', 10)->firstOrFail(), [
-            'rows' => [
-                'correct' => ['marks' => '3', 'count' => '16-x', 'total' => '48-3x'],
-                'wrong' => ['marks' => '-2', 'count' => 'x', 'total' => '-2x'],
-            ],
-            'grand_total' => '28',
-            'x_value' => '4',
-        ]);
-        $this->assertTrue($wrongCount['ok'], json_encode($wrongCount['cell_results']));
-
-        $penalty = $service->checkSubmission($card, $card->exercises()->where('sort_order', 11)->firstOrFail(), [
-            'rows' => [
-                'correct' => ['marks' => '5', 'count' => '8', 'total' => '40'],
-                'wrong' => ['marks' => '-x', 'count' => '5', 'total' => '-5x'],
-            ],
-            'grand_total' => '25',
-            'x_value' => '3',
-        ]);
-        $this->assertTrue($penalty['ok'], json_encode($penalty['cell_results']));
+        $this->assertTrue($result['all_ok'], json_encode($result['cell_results']));
     }
 
     public function test_marks_scoring_demo_is_seeded_published(): void
@@ -85,14 +47,26 @@ class MmmCardServiceTest extends TestCase
 
         $this->assertNotNull($card);
         $this->assertTrue($card->isPublished());
-        $this->assertSame(11, $card->exercises()->count());
+        $this->assertSame(2, $card->exercises()->count());
         $this->assertTrue((bool) $card->exercises()->orderBy('sort_order')->first()?->is_demo);
     }
 
     public function test_variable_twist_correct_marks_as_x(): void
     {
         $card = MmmCard::query()->where('slug', 'marks-scoring-table')->firstOrFail();
-        $exercise = $card->exercises()->where('sort_order', 8)->firstOrFail();
+        $exercise = $card->exercises()->create([
+            'sort_order' => 80,
+            'difficulty' => 'variable',
+            'is_demo' => false,
+            'question_text' => 'Fixture',
+            'answers' => [
+                'mode' => 'variable',
+                'correct' => ['marks' => ['x', 'X'], 'count' => '8', 'total' => ['8x', '8X']],
+                'wrong' => ['marks' => '-1', 'count' => '4', 'total' => '-4'],
+                'grand_total' => '20',
+                'x_value' => '3',
+            ],
+        ]);
         $service = app(MmmCardService::class);
 
         $result = $service->checkSubmission($card, $exercise, [
@@ -110,7 +84,19 @@ class MmmCardServiceTest extends TestCase
     public function test_variable_twist_correct_is_two_more_than_wrong(): void
     {
         $card = MmmCard::query()->where('slug', 'marks-scoring-table')->firstOrFail();
-        $exercise = $card->exercises()->where('sort_order', 9)->firstOrFail();
+        $exercise = $card->exercises()->create([
+            'sort_order' => 81,
+            'difficulty' => 'variable',
+            'is_demo' => false,
+            'question_text' => 'Fixture',
+            'answers' => [
+                'mode' => 'variable',
+                'correct' => ['marks' => ['x+2', '2+x'], 'count' => '6', 'total' => ['6(x+2)', '6x+12', '(x+2)*6']],
+                'wrong' => ['marks' => ['-x', '−x'], 'count' => '4', 'total' => ['-4x', '−4x']],
+                'grand_total' => '20',
+                'x_value' => '4',
+            ],
+        ]);
         $service = app(MmmCardService::class);
 
         $result = $service->checkSubmission($card, $exercise, [
@@ -128,7 +114,7 @@ class MmmCardServiceTest extends TestCase
     public function test_variable_sample_accepts_x_table_without_typed_equation(): void
     {
         $card = MmmCard::query()->where('slug', 'marks-scoring-table')->firstOrFail();
-        $exercise = $card->exercises()->where('sort_order', 7)->firstOrFail();
+        $exercise = $this->marksVariableCountExercise($card);
         $service = app(MmmCardService::class);
 
         $result = $service->checkSubmission($card, $exercise, [
@@ -147,7 +133,17 @@ class MmmCardServiceTest extends TestCase
     public function test_derived_wrong_count_exercise_checks_out(): void
     {
         $card = MmmCard::query()->where('slug', 'marks-scoring-table')->firstOrFail();
-        $exercise = $card->exercises()->where('sort_order', 5)->firstOrFail();
+        $exercise = $card->exercises()->create([
+            'sort_order' => 82,
+            'difficulty' => 'medium',
+            'is_demo' => false,
+            'question_text' => 'Fixture',
+            'answers' => [
+                'correct' => ['marks' => '2', 'count' => '5', 'total' => '10'],
+                'wrong' => ['marks' => '-1', 'count' => '2', 'total' => '-2'],
+                'grand_total' => '8',
+            ],
+        ]);
         $service = app(MmmCardService::class);
 
         // Kabir: 5 correct, attempted 7 → 2 wrong; +2 / −1 → total 8
@@ -1248,5 +1244,30 @@ class MmmCardServiceTest extends TestCase
         ]);
         $this->assertTrue($pageDone['all_ok'], json_encode($pageDone));
         $this->assertFalse($service->checkSubmission($card, $page, ['step_key' => 'q1', 'value' => '12'])['ok']);
+    }
+
+    private function marksVariableCountExercise(MmmCard $card): \App\Models\MmmCardExercise
+    {
+        return $card->exercises()->create([
+            'sort_order' => 83,
+            'difficulty' => 'variable',
+            'is_demo' => false,
+            'question_text' => 'Fixture',
+            'answers' => [
+                'mode' => 'variable',
+                'correct' => [
+                    'marks' => '2',
+                    'count' => ['x', 'X'],
+                    'total' => ['2x', '2X', '2*x'],
+                ],
+                'wrong' => [
+                    'marks' => '-1',
+                    'count' => ['20-x', '20 - x', '20-X'],
+                    'total' => ['-20+x', 'x-20', '-(20-x)', '-1*(20-x)', '-1(20-x)', '(-1)*(20-x)'],
+                ],
+                'grand_total' => '25',
+                'x_value' => '15',
+            ],
+        ]);
     }
 }

@@ -541,7 +541,10 @@ class MmmCardService
 
         $message = 'Right.';
         if (! $allOk) {
-            $message = 'Not yet. Work it in your copy — BODMAS on the numbers first, then keep the x-term together.';
+            $custom = $expected['wrong_message'] ?? null;
+            $message = is_string($custom) && $custom !== ''
+                ? $custom
+                : 'Not yet. Work it in your copy — BODMAS on the numbers first, then keep the x-term together.';
         } elseif ($finished) {
             $message = 'All of them are right. Well done.';
         }
