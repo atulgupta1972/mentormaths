@@ -383,12 +383,12 @@ const navGroups = computed(() =>
         <div class="min-h-screen bg-gray-100">
             <nav class="border-b border-gray-100 bg-white">
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    <div class="flex h-14 items-center justify-between gap-3">
+                    <div class="flex h-14 w-full min-w-0 items-center justify-between gap-3">
                         <Link :href="route('dashboard')" class="flex shrink-0 items-center">
                             <ApplicationLogo size-class="!h-10 !w-auto !max-w-[12rem] sm:!h-10 sm:!max-w-[12rem]" />
                         </Link>
 
-                        <div class="hidden min-w-0 items-center gap-3 sm:flex">
+                        <div class="ml-auto hidden min-w-0 shrink-0 items-center gap-3 sm:flex">
                             <AdminClassSelector v-if="isAdmin || isMentor || isContentUploader" />
                             <span class="hidden max-w-[8rem] truncate text-sm text-gray-500 xl:inline">
                                 {{ $page.props.auth.user.name }}
@@ -437,7 +437,7 @@ const navGroups = computed(() =>
                         </div>
                     </div>
 
-                    <div class="hidden items-center gap-x-1 overflow-x-auto border-t border-gray-100 sm:flex">
+                    <div class="hidden flex-wrap items-center gap-x-1 overflow-visible border-t border-gray-100 sm:flex">
                                 <NavLink
                                     :href="route('dashboard')"
                                     :active="route().current('dashboard')"

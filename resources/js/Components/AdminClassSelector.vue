@@ -28,7 +28,7 @@ const onChange = (event) => {
         <label for="admin-class-select" class="hidden text-xs font-medium text-gray-500 lg:inline">Class</label>
         <select
             id="admin-class-select"
-            class="max-w-[10.5rem] rounded-md border-gray-300 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:max-w-[14rem]"
+            class="w-36 rounded-md border-gray-300 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:w-44"
             :value="context.selected?.id ?? ''"
             @change="onChange"
         >
