@@ -716,7 +716,7 @@ class MmmCardService
             if ($wantSides !== []) {
                 $gotSides = is_array($values['sides'] ?? null) ? $values['sides'] : [];
                 foreach ($wantSides as $side => $mark) {
-                    $match = (string) ($gotSides[$side] ?? '') === (string) $mark;
+                    $match = $this->congruenceMeasure($gotSides[$side] ?? '', $mark);
                     $cells[(string) $side] = $match;
                     if (! $match) {
                         $ok = false;
@@ -779,22 +779,35 @@ class MmmCardService
             $ok = count($wantRows) > 0 && count($gotRows) === count($wantRows);
             foreach ($wantRows as $index => $row) {
                 $got = is_array($gotRows[$index] ?? null) ? $gotRows[$index] : [];
+                $needType = trim((string) ($row['type'] ?? '')) !== '';
                 $match = $this->congruenceSame($got['parts'] ?? '', $row['parts'] ?? '')
                     && $this->congruenceSame($got['reason'] ?? '', $row['reason'] ?? '')
-                    && $this->congruenceSame($got['type'] ?? '', $row['type'] ?? '');
+                    && (! $needType || $this->congruenceSame($got['type'] ?? '', $row['type'] ?? ''));
                 $cells['row'.$index] = $match;
                 if (! $match) {
                     $ok = false;
                 }
             }
 
-            return $this->congruenceResult(
-                $ok,
-                $ok && $isLast,
-                $stepKey,
-                $ok ? (string) ($check['table']['ok'] ?? 'The table is right.') : (string) ($check['table']['miss'] ?? 'Check the parts, the reason, and Side or Angle.'),
-                $cells,
-            );
+            $wantCase = strtoupper(trim((string) ($check['case']['value'] ?? '')));
+            $caseMessage = null;
+            if ($wantCase !== '') {
+                $gotCase = strtoupper(trim((string) ($values['case'] ?? '')));
+                $caseOk = $gotCase === $wantCase;
+                $cells['case'] = $caseOk;
+                if (! $caseOk) {
+                    $ok = false;
+                    $wrong = is_array($check['case']['wrong'] ?? null) ? $check['case']['wrong'] : [];
+                    $caseMessage = (string) ($wrong[$gotCase] ?? $check['case']['miss'] ?? 'Read the table again and name the case.');
+                }
+            }
+
+            $summary = ($ok && $isLast && is_array($check['summary'] ?? null)) ? $check['summary'] : null;
+            $message = $ok
+                ? (string) ($check['table']['ok'] ?? $check['case']['ok'] ?? 'The table is right.')
+                : (string) ($caseMessage ?? $check['table']['miss'] ?? 'Check the equal parts and the reasons.');
+
+            return $this->congruenceResult($ok, $ok && $isLast, $stepKey, $message, $cells, $summary);
         }
 
         if ($stepKey === 'case') {
@@ -844,6 +857,17 @@ class MmmCardService
         };
 
         return $clean($got) !== '' && $clean($got) === $clean($want);
+    }
+
+    private function congruenceMeasure(mixed $got, mixed $want): bool
+    {
+        $gotNumber = preg_replace('/[^0-9.]/', '', (string) $got) ?? '';
+        $wantNumber = preg_replace('/[^0-9.]/', '', (string) $want) ?? '';
+        if ($gotNumber !== '' && $wantNumber !== '' && $gotNumber === $wantNumber) {
+            return true;
+        }
+
+        return $this->congruenceSame($got, $want);
     }
 
     /**

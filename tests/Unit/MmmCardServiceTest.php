@@ -1284,71 +1284,64 @@ class MmmCardServiceTest extends TestCase
         $payload = $service->exercisePayload($exercise);
         $this->assertSame('congruence', $payload['play_kind']);
         $this->assertSame(['A'], $payload['congruence']['figures'][0]['shaded_angles'] ?? null);
-        $this->assertTrue($payload['congruence']['figures'][1]['rotated'] ?? false);
-        $this->assertSame(['P', 'Q', 'R'], $payload['congruence']['figures'][1]['rotated_order'] ?? null);
         $this->assertTrue($payload['congruence']['steps'][0]['shade_angle'] ?? false);
+        $this->assertSame(['Sketch', 'Table'], array_column($payload['congruence']['steps'], 'title'));
 
         $wrongOrder = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'R', 'Q'], 'angle' => 'A'],
+            'values' => ['letters' => ['P', 'R', 'Q'], 'angle' => 'A', 'sides' => ['AB' => '5', 'AC' => '6']],
         ]);
         $this->assertFalse($wrongOrder['ok']);
 
         $missingShade = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'Q', 'R']],
+            'values' => ['letters' => ['P', 'Q', 'R'], 'sides' => ['AB' => '5', 'AC' => '6']],
         ]);
         $this->assertFalse($missingShade['ok']);
         $this->assertFalse($missingShade['cell_results']['angle'] ?? true);
 
-        $wrongShade = $service->checkSubmission($card, $exercise, [
-            'step_key' => 'order',
-            'values' => ['letters' => ['P', 'Q', 'R'], 'angle' => 'B'],
-        ]);
-        $this->assertFalse($wrongShade['ok']);
-
-        $order = $service->checkSubmission($card, $exercise, [
+        $missingSides = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
             'values' => ['letters' => ['P', 'Q', 'R'], 'angle' => 'A'],
         ]);
+        $this->assertFalse($missingSides['ok']);
+
+        $order = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => ['letters' => ['P', 'Q', 'R'], 'angle' => 'A', 'sides' => ['AB' => '5 cm', 'AC' => '6']],
+        ]);
         $this->assertTrue($order['ok'], $order['message']);
 
-        $marks = $service->checkSubmission($card, $exercise, [
-            'step_key' => 'marks',
-            'values' => ['placed' => [
-                'AB' => '5',
-                'PQ' => '5',
-                'AC' => '6',
-                'PR' => '6',
-                'A' => 'angle',
-                'P' => 'angle',
-            ]],
-        ]);
-        $this->assertTrue($marks['ok'], json_encode($marks['cell_results']));
-
-        $table = $service->checkSubmission($card, $exercise, [
-            'step_key' => 'table',
-            'values' => ['rows' => [
-                ['parts' => 'AB = PQ', 'reason' => 'Given equal sides of 5 cm', 'type' => 'Side'],
-                ['parts' => 'AC = PR', 'reason' => 'Given equal sides of 6 cm', 'type' => 'Side'],
-                ['parts' => '∠BAC = ∠QPR', 'reason' => 'Given equal angles', 'type' => 'Angle'],
-            ]],
-        ]);
-        $this->assertTrue($table['ok'], json_encode($table['cell_results']));
-
         $sss = $service->checkSubmission($card, $exercise, [
-            'step_key' => 'case',
-            'values' => ['case' => 'SSS'],
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => 'AB = PQ', 'reason' => 'Given = 5 cm'],
+                    ['parts' => 'AC = PR', 'reason' => 'Given = 6 cm'],
+                    ['parts' => '∠BAC = ∠QPR', 'reason' => 'Given equal angles'],
+                ],
+                'case' => 'SSS',
+            ],
         ]);
         $this->assertFalse($sss['ok']);
         $this->assertStringContainsString('angle', strtolower($sss['message']));
 
         $sas = $service->checkSubmission($card, $exercise, [
-            'step_key' => 'case',
-            'values' => ['case' => 'SAS'],
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => 'AB = PQ', 'reason' => 'Given = 5 cm'],
+                    ['parts' => 'AC = PR', 'reason' => 'Given = 6 cm'],
+                    ['parts' => '∠BAC = ∠QPR', 'reason' => 'Given equal angles'],
+                ],
+                'case' => 'SAS',
+            ],
         ]);
         $this->assertTrue($sas['all_ok'], $sas['message']);
         $this->assertSame('SAS', $sas['summary']['case'] ?? null);
+        $this->assertSame(['P', 'Q', 'R'], $sas['summary']['copy_order'] ?? null);
+        $this->assertSame(1, $sas['summary']['ticks']['AB'] ?? null);
+        $this->assertStringContainsString('copy', strtolower($sas['summary']['advice'] ?? ''));
         $this->assertCount(3, $sas['summary']['rows'] ?? []);
     }
 
@@ -1363,23 +1356,31 @@ class MmmCardServiceTest extends TestCase
 
         $copied = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'Q', 'R']],
+            'values' => ['letters' => ['P', 'Q', 'R'], 'sides' => ['AB' => '5', 'BC' => '6', 'AC' => '7']],
         ]);
         $this->assertFalse($copied['ok']);
 
         $turned = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['Q', 'P', 'R']],
+            'values' => ['letters' => ['Q', 'P', 'R'], 'sides' => ['AB' => '5', 'BC' => '6', 'AC' => '7']],
         ]);
         $this->assertTrue($turned['ok'], $turned['message']);
 
         $proved = $service->checkSubmission($card, $exercise, [
-            'step_key' => 'case',
-            'values' => ['case' => 'SSS'],
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => 'AB = QP', 'reason' => 'Given = 5 cm'],
+                    ['parts' => 'BC = PR', 'reason' => 'Given = 6 cm'],
+                    ['parts' => 'AC = RQ', 'reason' => 'Given = 7 cm'],
+                ],
+                'case' => 'SSS',
+            ],
         ]);
         $this->assertTrue($proved['all_ok'], $proved['message']);
         $this->assertSame('△ABC ≅ △QPR', $proved['summary']['statement'] ?? null);
         $this->assertSame('SSS', $proved['summary']['case'] ?? null);
+        $this->assertSame(3, $proved['summary']['ticks']['AC'] ?? null);
     }
 
     private function marksVariableCountExercise(MmmCard $card): \App\Models\MmmCardExercise

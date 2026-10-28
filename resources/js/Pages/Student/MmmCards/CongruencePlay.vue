@@ -41,6 +41,7 @@ const letters = ref(['', '', '']);
 const tool = ref('');
 const placed = reactive({});
 const vertexSlots = reactive({});
+const sideSlots = reactive({});
 const copyShaded = ref('');
 const rows = ref([]);
 const caseChoice = ref('');
@@ -59,7 +60,6 @@ const majorFigure = computed(() => {
 const isAlignStep = computed(() => ['order', 'align'].includes(currentStep.value?.type));
 const needsAngleShade = computed(() => Boolean(currentStep.value?.shade_angle));
 const allowedLetters = computed(() => (currentStep.value?.choices || []).map((letter) => String(letter).toUpperCase()));
-const figureTitle = (figure) => (figure?.rotated_order || []).join('') || figure?.name || '';
 const drawnHome = computed(() => {
     const custom = (play.value.draw_figures || []).find((figure) => figure.locked !== false && figure.label !== true);
 
@@ -86,7 +86,9 @@ watch(
 
 watch(currentStep, (step) => {
     if (step?.type === 'table') {
-        rows.value = Array.from({ length: step.row_count || 3 }, () => ({ parts: '', reason: '', type: '' }));
+        rows.value = Array.from({ length: step.row_count || 3 }, () => (
+            step.type_choices?.length ? { parts: '', reason: '', type: '' } : { parts: '', reason: '' }
+        ));
     }
 }, { immediate: true });
 
@@ -98,6 +100,9 @@ function resetStep() {
     });
     Object.keys(vertexSlots).forEach((key) => {
         delete vertexSlots[key];
+    });
+    Object.keys(sideSlots).forEach((key) => {
+        delete sideSlots[key];
     });
     copyShaded.value = '';
     rows.value = [];
@@ -143,36 +148,98 @@ const typeVertex = (vertexId, raw) => {
     message.value = '';
 };
 
-const correspondingSide = (sideId) => {
-    const first = vertexSlots[sideId?.[0]] || '';
-    const second = vertexSlots[sideId?.[1]] || '';
-
-    return first && second ? `${first}${second}` : '';
+const typeSide = (sideId, raw) => {
+    if (stepOk.value || allCorrect.value || ! isAlignStep.value) {
+        return;
+    }
+    const text = String(raw || '').replace(/[^\d.]/g, '').slice(0, 4);
+    if (! text) {
+        delete sideSlots[sideId];
+    } else {
+        sideSlots[sideId] = text;
+    }
+    message.value = '';
 };
 
-const correspondenceRows = computed(() => {
-    const figure = drawnHome.value;
-    if (! figure?.sides) {
-        return [];
+const filledSides = () => {
+    const out = {};
+    Object.keys(sideSlots).forEach((side) => {
+        if (sideSlots[side]) {
+            out[side] = sideSlots[side];
+        }
+    });
+
+    return out;
+};
+
+const givenFigure = computed(() => figures.value[0] || drawnHome.value);
+
+const modelCopy = computed(() => {
+    const home = drawnHome.value;
+    const order = summary.value?.copy_order || [];
+    if (! home?.vertices?.length || order.length < home.vertices.length) {
+        return null;
     }
 
-    return figure.sides.map((side) => {
-        const other = correspondingSide(side);
-        const length = figure.lengths?.[side] || '';
+    return {
+        name: order.join(''),
+        vertices: home.vertices.map((vertex, index) => ({
+            id: order[index],
+            x: vertex.x,
+            y: vertex.y,
+        })),
+        sides: (home.sides || []).map((side) => {
+            const first = home.vertices.findIndex((vertex) => vertex.id === side[0]);
+            const second = home.vertices.findIndex((vertex) => vertex.id === side[1]);
 
-        return {
-            side,
-            other,
-            length,
-            label: other ? `${side} = ${other}` : `${side} = ?`,
-        };
-    });
+            return `${order[first] || ''}${order[second] || ''}`;
+        }),
+    };
 });
+
+const tickCountOf = (sideId) => {
+    const ticks = summary.value?.ticks || {};
+    const reverse = `${sideId?.[1] || ''}${sideId?.[0] || ''}`;
+
+    return Number(ticks[sideId] || ticks[reverse] || 0);
+};
+
+const modelTickLines = (figure) => {
+    const lines = [];
+    (figure?.sides || []).forEach((side) => {
+        const count = tickCountOf(side);
+        if (! count) {
+            return;
+        }
+        const spread = (count - 1) * 6;
+        for (let index = 0; index < count; index += 1) {
+            const line = tickLine(figure, side, -spread / 2 + index * 6);
+            if (line) {
+                lines.push({ key: `${figure.name}-${side}-${index}`, ...line });
+            }
+        }
+    });
+
+    return lines;
+};
+
+const summaryAngles = (figure) => (summary.value?.angles || []).filter((id) => (
+    (figure?.vertices || []).some((vertex) => vertex.id === id)
+));
 
 const slotStyle = (vertex) => ({
     left: `${(Number(vertex.x) / 200) * 100}%`,
     top: `${(Number(vertex.y) / 180) * 100}%`,
 });
+
+const sideSlotStyle = (figure, sideId) => {
+    const mid = sideMid(figure, sideId);
+
+    return {
+        left: `${(Number(mid.x) / 200) * 100}%`,
+        top: `${(Number(mid.y) / 180) * 100}%`,
+    };
+};
 
 const inwardSlot = (figure, vertex) => {
     const others = (figure?.vertices || []).filter((item) => item.id !== vertex.id);
@@ -422,6 +489,12 @@ const submit = async () => {
             return;
         }
         values.letters = mapped;
+        values.sides = filledSides();
+        const needSides = (drawnHome.value?.sides || []).filter((side) => drawnHome.value?.lengths?.[side]);
+        if (needSides.some((side) => ! sideSlots[side])) {
+            message.value = 'Write the side lengths on the second triangle.';
+            return;
+        }
         if (step.shade_angle) {
             if (! copyShaded.value) {
                 message.value = 'Shade the equal angle on the second triangle.';
@@ -432,11 +505,19 @@ const submit = async () => {
     } else if (step.type === 'marks') {
         values.placed = { ...placed };
     } else if (step.type === 'table') {
-        if (rows.value.some((row) => ! row.parts || ! row.reason || ! row.type)) {
+        const needType = Boolean(step.type_choices?.length);
+        if (rows.value.some((row) => ! row.parts || ! row.reason || (needType && ! row.type))) {
             message.value = 'Fill every cell in the table.';
             return;
         }
+        if (step.case_choices?.length && ! caseChoice.value) {
+            message.value = 'Choose the case.';
+            return;
+        }
         values.rows = rows.value.map((row) => ({ ...row }));
+        if (caseChoice.value) {
+            values.case = caseChoice.value;
+        }
     } else if (step.type === 'case') {
         if (! caseChoice.value) {
             message.value = 'Choose the case.';
@@ -503,100 +584,51 @@ const continueStep = () => {
             <span class="font-semibold text-slate-900">Given. </span>{{ givens.join(' · ') }}
         </p>
 
-        <div v-if="figures.length" class="grid gap-3 sm:grid-cols-2">
-            <div
-                v-for="figure in figures"
-                :key="figure.id"
-                class="rounded-lg border border-slate-200 bg-slate-50 p-2"
-            >
-                <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-500">
-                    △ {{ figureTitle(figure) }}
-                    <span v-if="figure.rotated" class="ml-1 font-medium normal-case text-indigo-700">(turned)</span>
-                </p>
-                <svg viewBox="0 0 200 180" class="mx-auto h-44 w-full max-w-xs">
-                    <line
-                        v-for="side in figure.sides"
-                        :key="side"
-                        :x1="sidePoint(figure, side, 0).x"
-                        :y1="sidePoint(figure, side, 0).y"
-                        :x2="sidePoint(figure, side, 1).x"
-                        :y2="sidePoint(figure, side, 1).y"
-                        stroke="#0f172a"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                    />
-                    <line
-                        v-for="side in figure.sides"
-                        :key="`${side}-hit`"
-                        :x1="sidePoint(figure, side, 0).x"
-                        :y1="sidePoint(figure, side, 0).y"
-                        :x2="sidePoint(figure, side, 1).x"
-                        :y2="sidePoint(figure, side, 1).y"
-                        stroke="transparent"
-                        stroke-width="16"
-                        class="cursor-pointer"
-                        @click="tapPart(side, 'side')"
-                    />
-                    <line
-                        v-for="tick in sideTicks(figure)"
-                        :key="tick.key"
-                        :x1="tick.x1"
-                        :y1="tick.y1"
-                        :x2="tick.x2"
-                        :y2="tick.y2"
-                        stroke="#0f766e"
-                        stroke-width="2"
-                    />
-                    <path
-                        v-for="vertex in figure.vertices.filter((item) => figureHasAngle(figure, item.id))"
-                        :key="`${vertex.id}-wedge`"
-                        :d="angleWedge(figure, vertex.id)"
-                        fill="#f59e0b"
-                        fill-opacity="0.45"
-                        stroke="#b45309"
-                        stroke-width="1.5"
-                    />
-                    <path
-                        v-for="vertex in figure.vertices"
-                        :key="`${vertex.id}-arc`"
-                        :d="partMark(vertex.id) === 'angle' && ! figureHasAngle(figure, vertex.id) ? anglePath(figure, vertex.id) : ''"
-                        fill="none"
-                        stroke="#b45309"
-                        stroke-width="2"
-                    />
-                    <circle
-                        v-for="vertex in figure.vertices"
-                        :key="`${vertex.id}-hit`"
-                        :cx="vertex.x"
-                        :cy="vertex.y"
-                        r="14"
-                        fill="transparent"
-                        class="cursor-pointer"
-                        @click="tapPart(vertex.id, 'angle')"
-                    />
-                    <text
-                        v-for="side in figure.sides.filter((id) => sideLabel(figure, id))"
-                        :key="`${side}-len`"
-                        :x="sideLabel(figure, side).x"
-                        :y="sideLabel(figure, side).y"
-                        text-anchor="middle"
-                        class="fill-teal-800 text-[11px] font-bold"
-                    >
-                        {{ sideLabel(figure, side).text }}
-                    </text>
-                    <text
-                        v-for="vertex in figure.vertices"
-                        :key="vertex.id"
-                        :x="labelPos(figure, vertex).x"
-                        :y="labelPos(figure, vertex).y"
-                        text-anchor="middle"
-                        dominant-baseline="middle"
-                        class="fill-slate-900 text-[13px] font-bold"
-                    >
-                        {{ vertex.id }}
-                    </text>
-                </svg>
-            </div>
+        <div v-if="givenFigure && !summary" class="max-w-sm rounded-lg border border-slate-200 bg-slate-50 p-2">
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-500">① Diagram · △ {{ givenFigure.name }}</p>
+            <svg viewBox="0 0 200 180" class="mx-auto h-36 w-full max-w-xs">
+                <path
+                    v-for="vertex in givenFigure.vertices.filter((item) => givenAngles(givenFigure).includes(item.id))"
+                    :key="`${vertex.id}-given-wedge`"
+                    :d="angleWedge(givenFigure, vertex.id)"
+                    fill="#f59e0b"
+                    fill-opacity="0.45"
+                    stroke="#b45309"
+                    stroke-width="1.5"
+                />
+                <line
+                    v-for="side in givenFigure.sides"
+                    :key="side"
+                    :x1="sidePoint(givenFigure, side, 0).x"
+                    :y1="sidePoint(givenFigure, side, 0).y"
+                    :x2="sidePoint(givenFigure, side, 1).x"
+                    :y2="sidePoint(givenFigure, side, 1).y"
+                    stroke="#0f172a"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                />
+                <text
+                    v-for="side in givenFigure.sides.filter((id) => sideLabel(givenFigure, id))"
+                    :key="`${side}-len`"
+                    :x="sideLabel(givenFigure, side).x"
+                    :y="sideLabel(givenFigure, side).y"
+                    text-anchor="middle"
+                    class="fill-teal-800 text-[11px] font-bold"
+                >
+                    {{ sideLabel(givenFigure, side).text }}
+                </text>
+                <text
+                    v-for="vertex in givenFigure.vertices"
+                    :key="vertex.id"
+                    :x="labelPos(givenFigure, vertex).x"
+                    :y="labelPos(givenFigure, vertex).y"
+                    text-anchor="middle"
+                    dominant-baseline="middle"
+                    class="fill-slate-900 text-[13px] font-bold"
+                >
+                    {{ vertex.id }}
+                </text>
+            </svg>
         </div>
 
         <div v-if="currentStep" class="rounded-xl border border-slate-200 bg-white p-3">
@@ -611,7 +643,7 @@ const continueStep = () => {
                 <div v-if="drawnHome" class="grid gap-3 sm:grid-cols-2">
                     <div class="rounded-lg border border-slate-200 bg-slate-50 p-2">
                         <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-500">
-                            Draw △ {{ drawnHome.name }} as given
+                            Sketch △ {{ drawnHome.name }} as given
                         </p>
                         <div class="mx-auto w-full max-w-sm overflow-visible px-8 py-8">
                             <div class="relative h-56 overflow-visible">
@@ -661,10 +693,7 @@ const continueStep = () => {
 
                     <div class="rounded-lg border border-indigo-200 bg-indigo-50/60 p-2">
                         <p class="text-center text-xs font-bold uppercase tracking-wide text-indigo-800">
-                            Draw the turned triangle — type {{ allowedLetters.join(', ') || 'the letters' }}
-                        </p>
-                        <p v-if="needsAngleShade" class="mt-1 text-center text-xs text-amber-800">
-                            Tap the matching corner to shade the equal given angle.
+                            Second figure — write {{ allowedLetters.join(', ') || 'the letters' }}, side lengths{{ needsAngleShade ? ', shade the angle' : '' }}
                         </p>
                         <div class="mx-auto w-full max-w-sm overflow-visible px-8 py-8">
                             <div class="relative h-56 overflow-visible">
@@ -689,17 +718,24 @@ const continueStep = () => {
                                     stroke-width="2.5"
                                     stroke-linecap="round"
                                 />
-                                <text
-                                    v-for="row in correspondenceRows"
-                                    :key="`copy-side-${row.side}`"
-                                    :x="sideMid(drawnCopy, row.side).x"
-                                    :y="sideMid(drawnCopy, row.side).y"
-                                    text-anchor="middle"
-                                    class="fill-indigo-800 text-[11px] font-bold"
-                                >
-                                    {{ row.other || '' }}
-                                </text>
                             </svg>
+                            <label
+                                v-for="side in drawnCopy.sides.filter((id) => drawnHome.lengths?.[id])"
+                                :key="`copy-len-${side}`"
+                                class="absolute z-10 flex h-8 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border-2 border-teal-600 bg-white"
+                                :style="sideSlotStyle(drawnCopy, side)"
+                            >
+                                <input
+                                    :value="sideSlots[side] || ''"
+                                    inputmode="decimal"
+                                    maxlength="4"
+                                    placeholder="cm"
+                                    class="h-full w-full rounded-md border-0 bg-transparent p-0 text-center text-sm font-bold text-teal-900 outline-none focus:ring-2 focus:ring-teal-400"
+                                    :disabled="stepOk"
+                                    :aria-label="`Length on ${side}`"
+                                    @input="typeSide(side, $event.target.value)"
+                                >
+                            </label>
                             <button
                                 v-for="vertex in drawnCopy.vertices"
                                 v-show="needsAngleShade"
@@ -743,75 +779,58 @@ const continueStep = () => {
                     </div>
                 </div>
 
-                <div v-if="correspondenceRows.length" class="overflow-x-auto rounded-md border border-slate-200">
+            </div>
+
+            <div v-else-if="currentStep.type === 'table'" class="mt-3 space-y-3">
+                <div class="overflow-x-auto">
                     <table class="min-w-full text-sm">
-                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <thead class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <tr>
-                                <th class="px-2 py-1">On △ {{ drawnHome?.name }}</th>
-                                <th class="px-2 py-1">Matching side</th>
-                                <th class="px-2 py-1">Length</th>
+                                <th class="px-1 py-1">No</th>
+                                <th class="px-1 py-1">Equal parts</th>
+                                <th class="px-1 py-1">Reason</th>
+                                <th v-if="currentStep.type_choices?.length" class="px-1 py-1">Type</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="row in correspondenceRows" :key="`corr-${row.side}`" class="border-t border-slate-100">
-                                <td class="px-2 py-1 font-semibold">{{ row.side }}</td>
-                                <td class="px-2 py-1 font-mono">{{ row.other || '?' }}</td>
-                                <td class="px-2 py-1 text-teal-800">{{ row.length || '—' }}</td>
+                            <tr v-for="(row, index) in rows" :key="index">
+                                <td class="px-1 py-1 font-semibold">{{ index + 1 }}</td>
+                                <td class="px-1 py-1">
+                                    <select v-model="row.parts" class="w-full rounded border-slate-300 text-sm" :disabled="stepOk">
+                                        <option value="">Choose</option>
+                                        <option v-for="choice in currentStep.part_choices" :key="choice" :value="choice">{{ choice }}</option>
+                                    </select>
+                                </td>
+                                <td class="px-1 py-1">
+                                    <select v-model="row.reason" class="w-full rounded border-slate-300 text-sm" :disabled="stepOk">
+                                        <option value="">Choose</option>
+                                        <option v-for="choice in currentStep.reason_choices" :key="choice" :value="choice">{{ choice }}</option>
+                                    </select>
+                                </td>
+                                <td v-if="currentStep.type_choices?.length" class="px-1 py-1">
+                                    <select v-model="row.type" class="w-full rounded border-slate-300 text-sm" :disabled="stepOk">
+                                        <option value="">Choose</option>
+                                        <option v-for="choice in currentStep.type_choices" :key="choice" :value="choice">{{ choice }}</option>
+                                    </select>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-            </div>
-
-            <div v-else-if="currentStep.type === 'marks'" class="mt-3 flex flex-wrap gap-2">
-                <button
-                    v-for="item in currentStep.tools"
-                    :key="item.id"
-                    type="button"
-                    class="rounded-md border px-3 py-1.5 text-sm font-semibold"
-                    :class="tool === item.id ? 'border-indigo-700 bg-indigo-700 text-white' : 'border-slate-300 text-slate-800'"
-                    :disabled="stepOk"
-                    @click="tool = item.id"
-                >
-                    {{ item.label }}
-                </button>
-                <p class="w-full text-xs text-slate-500">Choose a mark, then tap the side or corner. Tap again to remove it.</p>
-            </div>
-
-            <div v-else-if="currentStep.type === 'table'" class="mt-3 overflow-x-auto">
-                <table class="min-w-full text-sm">
-                    <thead class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <tr>
-                            <th class="px-1 py-1">No</th>
-                            <th class="px-1 py-1">Congruent parts</th>
-                            <th class="px-1 py-1">Reason</th>
-                            <th class="px-1 py-1">Type</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(row, index) in rows" :key="index">
-                            <td class="px-1 py-1 font-semibold">{{ index + 1 }}</td>
-                            <td class="px-1 py-1">
-                                <select v-model="row.parts" class="w-full rounded border-slate-300 text-sm" :disabled="stepOk">
-                                    <option value="">Choose</option>
-                                    <option v-for="choice in currentStep.part_choices" :key="choice" :value="choice">{{ choice }}</option>
-                                </select>
-                            </td>
-                            <td class="px-1 py-1">
-                                <select v-model="row.reason" class="w-full rounded border-slate-300 text-sm" :disabled="stepOk">
-                                    <option value="">Choose</option>
-                                    <option v-for="choice in currentStep.reason_choices" :key="choice" :value="choice">{{ choice }}</option>
-                                </select>
-                            </td>
-                            <td class="px-1 py-1">
-                                <select v-model="row.type" class="w-full rounded border-slate-300 text-sm" :disabled="stepOk">
-                                    <option value="">Choose</option>
-                                    <option v-for="choice in currentStep.type_choices" :key="choice" :value="choice">{{ choice }}</option>
-                                </select>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div v-if="currentStep.case_choices?.length" class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-semibold text-slate-800">△ {{ currentStep.left || drawnHome?.name }} ≅ △ {{ mappedLetters().join('') || '???' }} by</span>
+                    <button
+                        v-for="choice in currentStep.case_choices"
+                        :key="choice"
+                        type="button"
+                        class="rounded-md border px-3 py-1.5 text-sm font-bold"
+                        :class="caseChoice === choice ? 'border-indigo-700 bg-indigo-700 text-white' : 'border-slate-300 text-slate-800'"
+                        :disabled="stepOk"
+                        @click="caseChoice = choice"
+                    >
+                        {{ choice }}
+                    </button>
+                </div>
             </div>
 
             <div v-else-if="currentStep.type === 'case'" class="mt-3 flex flex-wrap gap-2">
@@ -840,16 +859,112 @@ const continueStep = () => {
                 v-if="summary"
                 class="mt-4 rounded-xl border-2 border-emerald-400 bg-emerald-50 p-3"
             >
-                <h3 class="text-sm font-extrabold uppercase tracking-wide text-emerald-900">How it is proved</h3>
-                <p class="mt-2 text-lg font-bold text-slate-900">{{ summary.statement }}</p>
+                <h3 class="text-sm font-extrabold uppercase tracking-wide text-emerald-900">Write this in your copy</h3>
+                <p class="mt-2 text-lg font-bold text-slate-900">{{ summary.statement }} by {{ summary.case }}</p>
+                <p v-if="summary.advice" class="mt-1 text-sm font-medium text-amber-950">{{ summary.advice }}</p>
                 <p class="mt-1 text-sm leading-relaxed text-slate-800">{{ summary.because }}</p>
+
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div v-if="drawnHome" class="rounded-lg border border-emerald-200 bg-white p-2">
+                        <p class="text-center text-xs font-bold uppercase tracking-wide text-emerald-800">△ {{ drawnHome.name }}</p>
+                        <svg viewBox="0 0 200 180" class="mx-auto h-40 w-full">
+                            <path
+                                v-for="id in summaryAngles(drawnHome)"
+                                :key="`sum-home-${id}`"
+                                :d="angleWedge(drawnHome, id)"
+                                fill="#f59e0b"
+                                fill-opacity="0.45"
+                                stroke="#b45309"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                v-for="side in drawnHome.sides"
+                                :key="`sum-home-${side}`"
+                                :x1="sidePoint(drawnHome, side, 0).x"
+                                :y1="sidePoint(drawnHome, side, 0).y"
+                                :x2="sidePoint(drawnHome, side, 1).x"
+                                :y2="sidePoint(drawnHome, side, 1).y"
+                                stroke="#0f172a"
+                                stroke-width="2.5"
+                                stroke-linecap="round"
+                            />
+                            <line
+                                v-for="tick in modelTickLines(drawnHome)"
+                                :key="tick.key"
+                                :x1="tick.x1"
+                                :y1="tick.y1"
+                                :x2="tick.x2"
+                                :y2="tick.y2"
+                                stroke="#0f766e"
+                                stroke-width="2"
+                            />
+                            <text
+                                v-for="vertex in drawnHome.vertices"
+                                :key="`sum-home-l-${vertex.id}`"
+                                :x="labelPos(drawnHome, vertex).x"
+                                :y="labelPos(drawnHome, vertex).y"
+                                text-anchor="middle"
+                                dominant-baseline="middle"
+                                class="fill-slate-900 text-[13px] font-bold"
+                            >
+                                {{ vertex.id }}
+                            </text>
+                        </svg>
+                    </div>
+                    <div v-if="modelCopy" class="rounded-lg border border-emerald-200 bg-white p-2">
+                        <p class="text-center text-xs font-bold uppercase tracking-wide text-emerald-800">△ {{ modelCopy.name }}</p>
+                        <svg viewBox="0 0 200 180" class="mx-auto h-40 w-full">
+                            <path
+                                v-for="id in summaryAngles(modelCopy)"
+                                :key="`sum-copy-${id}`"
+                                :d="angleWedge(modelCopy, id)"
+                                fill="#f59e0b"
+                                fill-opacity="0.45"
+                                stroke="#b45309"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                v-for="side in modelCopy.sides"
+                                :key="`sum-copy-${side}`"
+                                :x1="sidePoint(modelCopy, side, 0).x"
+                                :y1="sidePoint(modelCopy, side, 0).y"
+                                :x2="sidePoint(modelCopy, side, 1).x"
+                                :y2="sidePoint(modelCopy, side, 1).y"
+                                stroke="#0f172a"
+                                stroke-width="2.5"
+                                stroke-linecap="round"
+                            />
+                            <line
+                                v-for="tick in modelTickLines(modelCopy)"
+                                :key="tick.key"
+                                :x1="tick.x1"
+                                :y1="tick.y1"
+                                :x2="tick.x2"
+                                :y2="tick.y2"
+                                stroke="#0f766e"
+                                stroke-width="2"
+                            />
+                            <text
+                                v-for="vertex in modelCopy.vertices"
+                                :key="`sum-copy-l-${vertex.id}`"
+                                :x="labelPos(modelCopy, vertex).x"
+                                :y="labelPos(modelCopy, vertex).y"
+                                text-anchor="middle"
+                                dominant-baseline="middle"
+                                class="fill-slate-900 text-[13px] font-bold"
+                            >
+                                {{ vertex.id }}
+                            </text>
+                        </svg>
+                    </div>
+                </div>
+
                 <table class="mt-3 min-w-full text-sm">
                     <thead class="text-left text-xs font-semibold uppercase tracking-wide text-emerald-900">
                         <tr>
                             <th class="px-2 py-1">No</th>
-                            <th class="px-2 py-1">Congruent parts</th>
+                            <th class="px-2 py-1">Equal parts</th>
                             <th class="px-2 py-1">Reason</th>
-                            <th class="px-2 py-1">Type</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -857,10 +972,9 @@ const continueStep = () => {
                             <td class="px-2 py-1 font-semibold">{{ index + 1 }}</td>
                             <td class="px-2 py-1">{{ row.parts }}</td>
                             <td class="px-2 py-1">{{ row.reason }}</td>
-                            <td class="px-2 py-1">{{ row.type }}</td>
                         </tr>
                         <tr class="border-t border-emerald-300 bg-white/70">
-                            <td class="px-2 py-1 font-semibold" colspan="3">Conclusion</td>
+                            <td class="px-2 py-1 font-semibold" colspan="2">△ {{ drawnHome?.name }} ≅ △ {{ summary.copy_order?.join('') }} by</td>
                             <td class="px-2 py-1 font-bold text-emerald-900">{{ summary.case }}</td>
                         </tr>
                     </tbody>
