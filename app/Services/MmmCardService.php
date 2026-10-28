@@ -675,7 +675,7 @@ class MmmCardService
     }
 
     /**
-     * Congruence: order the triangles, mark the figure, fill the table, name the case.
+     * Congruence: align vertices (circles) and lengths (rectangles), mark, table, case.
      *
      * @param  array<string, mixed>  $expected
      * @param  array<string, mixed>  $submission
@@ -695,16 +695,42 @@ class MmmCardService
         }
         $isLast = $keys !== [] && $stepKey === $keys[array_key_last($keys)];
 
-        if ($stepKey === 'order') {
-            $want = array_map(fn ($letter) => strtoupper(trim((string) $letter)), $check['order']['letters'] ?? []);
+        if (in_array($stepKey, ['order', 'align'], true)) {
+            $orderCheck = is_array($check['order'] ?? null) ? $check['order'] : (is_array($check['align'] ?? null) ? $check['align'] : []);
+            $want = array_map(fn ($letter) => strtoupper(trim((string) $letter)), $orderCheck['letters'] ?? []);
             $got = array_map(fn ($letter) => strtoupper(trim((string) $letter)), is_array($values['letters'] ?? null) ? $values['letters'] : []);
             $ok = $want !== [] && $got === $want;
+            $cells = ['letters' => $ok];
+
+            $wantSides = is_array($orderCheck['sides'] ?? null) ? $orderCheck['sides'] : [];
+            if ($wantSides !== []) {
+                $gotSides = is_array($values['sides'] ?? null) ? $values['sides'] : [];
+                foreach ($wantSides as $side => $mark) {
+                    $match = (string) ($gotSides[$side] ?? '') === (string) $mark;
+                    $cells[(string) $side] = $match;
+                    if (! $match) {
+                        $ok = false;
+                    }
+                }
+                foreach ($gotSides as $side => $mark) {
+                    if ($mark === '' || $mark === null) {
+                        continue;
+                    }
+                    if (! array_key_exists($side, $wantSides)) {
+                        $cells[(string) $side] = false;
+                        $ok = false;
+                    }
+                }
+            }
 
             return $this->congruenceResult(
                 $ok,
                 $ok && $isLast,
                 $stepKey,
-                $ok ? (string) ($check['order']['ok'] ?? 'The corners are in order.') : (string) ($check['order']['miss'] ?? 'Those corners are not in matching order.'),
+                $ok
+                    ? (string) ($orderCheck['ok'] ?? 'The corners and lengths match.')
+                    : (string) ($orderCheck['miss'] ?? 'Put each letter in the matching vertex circle, and each length in the matching side rectangle.'),
+                $cells,
             );
         }
 
