@@ -24,11 +24,11 @@ const onChange = (event) => {
 </script>
 
 <template>
-    <div v-if="context?.levels?.length" class="flex items-center gap-2">
-        <label for="admin-class-select" class="hidden text-xs font-medium text-gray-500 sm:inline">Class</label>
+    <div v-if="context?.levels?.length" class="flex shrink-0 items-center gap-2">
+        <label for="admin-class-select" class="hidden text-xs font-medium text-gray-500 lg:inline">Class</label>
         <select
             id="admin-class-select"
-            class="rounded-md border-gray-300 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+            class="max-w-[10.5rem] rounded-md border-gray-300 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:max-w-[14rem]"
             :value="context.selected?.id ?? ''"
             @change="onChange"
         >

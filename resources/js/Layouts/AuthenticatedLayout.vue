@@ -382,15 +382,62 @@ const navGroups = computed(() =>
     <div>
         <div class="min-h-screen bg-gray-100">
             <nav class="border-b border-gray-100 bg-white">
-                <!-- Horizontal bar (desktop) -->
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    <div class="flex h-20 items-center justify-between gap-4 sm:h-24">
-                        <div class="flex min-w-0 flex-1 items-center gap-5 lg:gap-8">
-                            <Link :href="route('dashboard')" class="flex shrink-0 items-center py-1">
-                                <ApplicationLogo />
-                            </Link>
+                    <div class="flex h-14 items-center justify-between gap-3">
+                        <Link :href="route('dashboard')" class="flex shrink-0 items-center">
+                            <ApplicationLogo size-class="!h-10 !w-auto !max-w-[12rem] sm:!h-10 sm:!max-w-[12rem]" />
+                        </Link>
 
-                            <div class="hidden items-center gap-6 sm:flex lg:gap-8">
+                        <div class="hidden min-w-0 items-center gap-3 sm:flex">
+                            <AdminClassSelector v-if="isAdmin || isMentor || isContentUploader" />
+                            <span class="hidden max-w-[8rem] truncate text-sm text-gray-500 xl:inline">
+                                {{ $page.props.auth.user.name }}
+                            </span>
+                            <Link
+                                :href="route('profile.edit')"
+                                class="rounded-md px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                            >
+                                Profile
+                            </Link>
+                            <Link
+                                :href="route('logout')"
+                                method="post"
+                                as="button"
+                                class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                            >
+                                Log out
+                            </Link>
+                        </div>
+
+                        <div class="flex shrink-0 items-center gap-2 sm:hidden">
+                            <AdminClassSelector v-if="isAdmin || isMentor || isContentUploader" />
+                            <button
+                                type="button"
+                                class="inline-flex items-center justify-center rounded-md p-2 text-gray-500 hover:bg-gray-100"
+                                aria-label="Open menu"
+                                @click="showingNavigationDropdown = !showingNavigationDropdown"
+                            >
+                                <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                                    <path
+                                        v-if="!showingNavigationDropdown"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M4 6h16M4 12h16M4 18h16"
+                                    />
+                                    <path
+                                        v-else
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="hidden items-center gap-x-1 overflow-x-auto border-t border-gray-100 sm:flex">
                                 <NavLink
                                     :href="route('dashboard')"
                                     :active="route().current('dashboard')"
@@ -453,57 +500,6 @@ const navGroups = computed(() =>
                                     :active="group.active"
                                     :items="group.items"
                                 />
-                            </div>
-                        </div>
-
-                        <div class="hidden shrink-0 items-center gap-2 sm:flex sm:gap-3">
-                            <AdminClassSelector v-if="isAdmin || isMentor || isContentUploader" />
-                            <span class="hidden max-w-[7rem] truncate text-sm text-gray-500 lg:inline">
-                                {{ $page.props.auth.user.name }}
-                            </span>
-                            <Link
-                                :href="route('profile.edit')"
-                                class="hidden rounded-md px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 md:inline"
-                            >
-                                Profile
-                            </Link>
-                            <Link
-                                :href="route('logout')"
-                                method="post"
-                                as="button"
-                                class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                            >
-                                Log out
-                            </Link>
-                        </div>
-
-                        <!-- Mobile toggle -->
-                        <div class="flex shrink-0 items-center gap-2 sm:hidden">
-                            <AdminClassSelector v-if="isAdmin || isMentor || isContentUploader" />
-                            <button
-                                type="button"
-                                class="inline-flex items-center justify-center rounded-md p-2 text-gray-500 hover:bg-gray-100"
-                                aria-label="Open menu"
-                                @click="showingNavigationDropdown = !showingNavigationDropdown"
-                            >
-                                <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-                                    <path
-                                        v-if="!showingNavigationDropdown"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M4 6h16M4 12h16M4 18h16"
-                                    />
-                                    <path
-                                        v-else
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </div>
                     </div>
                 </div>
 
