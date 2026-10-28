@@ -23,8 +23,6 @@ const letters = ref(['', '', '']);
 const tool = ref('');
 const placed = reactive({});
 const vertexSlots = reactive({});
-const sideSlots = reactive({});
-const alignPick = ref(null);
 const rows = ref([]);
 const caseChoice = ref('');
 const message = ref('');
@@ -39,8 +37,14 @@ const majorFigure = computed(() => {
 
     return match || figures.value[0] || null;
 });
-const lengthChips = computed(() => currentStep.value?.length_chips || []);
 const isAlignStep = computed(() => ['order', 'align'].includes(currentStep.value?.type));
+const allowedLetters = computed(() => (currentStep.value?.choices || []).map((letter) => String(letter).toUpperCase()));
+const drawnHome = computed(() => {
+    const custom = (play.value.draw_figures || []).find((figure) => figure.locked !== false && figure.label !== true);
+
+    return custom || majorFigure.value;
+});
+const drawnCopy = computed(() => drawnHome.value);
 
 const canGoNext = computed(() => {
     const total = Number(props.card?.exercises_total ?? 0);
@@ -68,15 +72,11 @@ watch(currentStep, (step) => {
 function resetStep() {
     letters.value = ['', '', ''];
     tool.value = '';
-    alignPick.value = null;
     Object.keys(placed).forEach((key) => {
         delete placed[key];
     });
     Object.keys(vertexSlots).forEach((key) => {
         delete vertexSlots[key];
-    });
-    Object.keys(sideSlots).forEach((key) => {
-        delete sideSlots[key];
     });
     rows.value = [];
     caseChoice.value = '';
@@ -87,7 +87,7 @@ function resetStep() {
 }
 
 const mappedLetters = () => {
-    const figure = majorFigure.value;
+    const figure = drawnHome.value;
     if (! figure?.vertices?.length) {
         return [...letters.value];
     }
@@ -95,75 +95,64 @@ const mappedLetters = () => {
     return figure.vertices.map((vertex) => vertexSlots[vertex.id] || '');
 };
 
-const chipInUse = (kind, id) => {
-    if (kind === 'vertex') {
-        return Object.values(vertexSlots).includes(id);
-    }
-
-    return Object.values(sideSlots).includes(id);
-};
-
-const pickAlign = (kind, id) => {
+const typeVertex = (vertexId, raw) => {
     if (stepOk.value || allCorrect.value || ! isAlignStep.value) {
         return;
     }
-    if (alignPick.value?.kind === kind && alignPick.value?.id === id) {
-        alignPick.value = null;
-        return;
-    }
-    alignPick.value = { kind, id };
-    message.value = '';
-};
-
-const placeVertex = (vertexId) => {
-    if (stepOk.value || allCorrect.value || ! isAlignStep.value) {
-        return;
-    }
-    if (vertexSlots[vertexId] && ! alignPick.value) {
+    const letter = String(raw || '').replace(/[^a-zA-Z]/g, '').slice(-1).toUpperCase();
+    if (! letter) {
         delete vertexSlots[vertexId];
         letters.value = mappedLetters();
         return;
     }
-    if (alignPick.value?.kind !== 'vertex') {
-        message.value = 'Tap a round letter first, then tap a vertex circle.';
+    if (allowedLetters.value.length && ! allowedLetters.value.includes(letter)) {
+        message.value = `Type ${allowedLetters.value.join(', ')} only.`;
+        vertexSlots[vertexId] = vertexSlots[vertexId] || '';
+        letters.value = mappedLetters();
         return;
     }
-    const letter = alignPick.value.id;
     Object.keys(vertexSlots).forEach((key) => {
-        if (vertexSlots[key] === letter) {
+        if (key !== vertexId && vertexSlots[key] === letter) {
             delete vertexSlots[key];
         }
     });
     vertexSlots[vertexId] = letter;
-    alignPick.value = null;
     letters.value = mappedLetters();
     message.value = '';
 };
 
-const placeSide = (sideId) => {
-    if (stepOk.value || allCorrect.value || ! isAlignStep.value) {
-        return;
-    }
-    if (sideSlots[sideId] && ! alignPick.value) {
-        delete sideSlots[sideId];
-        return;
-    }
-    if (alignPick.value?.kind !== 'length') {
-        message.value = 'Tap a length rectangle first, then tap a side box.';
-        return;
-    }
-    const mark = alignPick.value.id;
-    Object.keys(sideSlots).forEach((key) => {
-        if (sideSlots[key] === mark) {
-            delete sideSlots[key];
-        }
-    });
-    sideSlots[sideId] = mark;
-    alignPick.value = null;
-    message.value = '';
+const correspondingSide = (sideId) => {
+    const first = vertexSlots[sideId?.[0]] || '';
+    const second = vertexSlots[sideId?.[1]] || '';
+
+    return first && second ? `${first}${second}` : '';
 };
 
-const sideSlotPos = (figure, sideId) => {
+const correspondenceRows = computed(() => {
+    const figure = drawnHome.value;
+    if (! figure?.sides) {
+        return [];
+    }
+
+    return figure.sides.map((side) => {
+        const other = correspondingSide(side);
+        const length = figure.lengths?.[side] || '';
+
+        return {
+            side,
+            other,
+            length,
+            label: other ? `${side} = ${other}` : `${side} = ?`,
+        };
+    });
+});
+
+const slotStyle = (vertex) => ({
+    left: `${(Number(vertex.x) / 200) * 100}%`,
+    top: `${(Number(vertex.y) / 180) * 100}%`,
+});
+
+const sideMid = (figure, sideId) => {
     const ends = sideEnds(figure, sideId);
     if (! ends) {
         return { x: 0, y: 0 };
@@ -174,12 +163,10 @@ const sideSlotPos = (figure, sideId) => {
     const len = Math.hypot(dx, dy) || 1;
 
     return {
-        x: (a.x + b.x) / 2 + (-dy / len) * 18,
-        y: (a.y + b.y) / 2 + (dx / len) * 18,
+        x: (a.x + b.x) / 2 + (-dy / len) * 16,
+        y: (a.y + b.y) / 2 + (dx / len) * 16,
     };
 };
-
-const lengthChipLabel = (id) => lengthChips.value.find((chip) => chip.id === id)?.label || id;
 
 const vertexMap = (figure) => {
     const map = {};
@@ -351,13 +338,6 @@ const submit = async () => {
             return;
         }
         values.letters = mapped;
-        if (lengthChips.value.length) {
-            if (Object.keys(sideSlots).length < lengthChips.value.length) {
-                message.value = 'Put every length into a side rectangle.';
-                return;
-            }
-            values.sides = { ...sideSlots };
-        }
     } else if (step.type === 'marks') {
         values.placed = { ...placed };
     } else if (step.type === 'table') {
@@ -521,121 +501,111 @@ const continueStep = () => {
 
             <div v-if="currentStep.type === 'order' || currentStep.type === 'align'" class="mt-3 space-y-3">
                 <p class="text-sm font-bold text-slate-900">
-                    △ {{ currentStep.left || majorFigure?.name }} ≅ △
+                    △ {{ currentStep.left || drawnHome?.name }} ≅ △
                     <span class="font-mono tracking-widest">{{ mappedLetters().join('') || '???' }}</span>
                 </p>
 
-                <div v-if="majorFigure" class="rounded-lg border border-indigo-200 bg-indigo-50/50 p-2">
-                    <p class="text-center text-xs font-bold uppercase tracking-wide text-indigo-800">
-                        Map onto △ {{ majorFigure.name }} — circles for corners, rectangles for lengths
-                    </p>
-                    <svg viewBox="0 0 200 180" class="mx-auto h-52 w-full max-w-sm">
-                        <line
-                            v-for="side in majorFigure.sides"
-                            :key="`align-${side}`"
-                            :x1="sidePoint(majorFigure, side, 0).x"
-                            :y1="sidePoint(majorFigure, side, 0).y"
-                            :x2="sidePoint(majorFigure, side, 1).x"
-                            :y2="sidePoint(majorFigure, side, 1).y"
-                            stroke="#0f172a"
-                            stroke-width="2.5"
-                            stroke-linecap="round"
-                        />
-                        <g
-                            v-for="side in majorFigure.sides"
-                            :key="`rect-${side}`"
-                            class="cursor-pointer"
-                            @click="placeSide(side)"
-                        >
-                            <rect
-                                :x="sideSlotPos(majorFigure, side).x - 22"
-                                :y="sideSlotPos(majorFigure, side).y - 11"
-                                width="44"
-                                height="22"
-                                rx="3"
-                                :fill="sideSlots[side] ? '#ecfdf5' : '#fff'"
-                                :stroke="sideSlots[side] ? '#0f766e' : '#94a3b8'"
-                                stroke-width="1.6"
-                            />
-                            <text
-                                :x="sideSlotPos(majorFigure, side).x"
-                                :y="sideSlotPos(majorFigure, side).y + 1"
-                                text-anchor="middle"
-                                dominant-baseline="middle"
-                                class="text-[10px] font-bold"
-                                :fill="sideSlots[side] ? '#0f766e' : '#94a3b8'"
+                <div v-if="drawnHome" class="grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                        <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Draw △ {{ drawnHome.name }} as given
+                        </p>
+                        <div class="relative mx-auto h-52 w-full max-w-sm">
+                            <svg viewBox="0 0 200 180" class="h-full w-full">
+                                <line
+                                    v-for="side in drawnHome.sides"
+                                    :key="`home-${side}`"
+                                    :x1="sidePoint(drawnHome, side, 0).x"
+                                    :y1="sidePoint(drawnHome, side, 0).y"
+                                    :x2="sidePoint(drawnHome, side, 1).x"
+                                    :y2="sidePoint(drawnHome, side, 1).y"
+                                    stroke="#0f172a"
+                                    stroke-width="2.5"
+                                    stroke-linecap="round"
+                                />
+                                <text
+                                    v-for="side in drawnHome.sides.filter((id) => sideLabel(drawnHome, id))"
+                                    :key="`home-len-${side}`"
+                                    :x="sideLabel(drawnHome, side).x"
+                                    :y="sideLabel(drawnHome, side).y"
+                                    text-anchor="middle"
+                                    class="fill-teal-800 text-[11px] font-bold"
+                                >
+                                    {{ sideLabel(drawnHome, side).text }}
+                                </text>
+                            </svg>
+                            <span
+                                v-for="vertex in drawnHome.vertices"
+                                :key="`home-${vertex.id}`"
+                                class="absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-slate-700 bg-white text-sm font-extrabold text-slate-900"
+                                :style="slotStyle(vertex)"
                             >
-                                {{ sideSlots[side] ? lengthChipLabel(sideSlots[side]) : side }}
-                            </text>
-                        </g>
-                        <g
-                            v-for="vertex in majorFigure.vertices"
-                            :key="`circ-${vertex.id}`"
-                            class="cursor-pointer"
-                            @click="placeVertex(vertex.id)"
-                        >
-                            <circle
-                                :cx="vertex.x"
-                                :cy="vertex.y"
-                                r="14"
-                                :fill="vertexSlots[vertex.id] ? '#eef2ff' : '#fff'"
-                                :stroke="vertexSlots[vertex.id] ? '#4338ca' : '#64748b'"
-                                stroke-width="2"
-                            />
-                            <text
-                                :x="vertex.x"
-                                :y="vertex.y + 1"
-                                text-anchor="middle"
-                                dominant-baseline="middle"
-                                class="text-[12px] font-extrabold"
-                                :fill="vertexSlots[vertex.id] ? '#312e81' : '#94a3b8'"
-                            >
-                                {{ vertexSlots[vertex.id] || vertex.id }}
-                            </text>
-                        </g>
-                    </svg>
-                </div>
+                                {{ vertex.id }}
+                            </span>
+                        </div>
+                    </div>
 
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Letters — tap a circle, then a vertex</p>
-                    <div class="mt-1 flex flex-wrap gap-2">
-                        <button
-                            v-for="choice in currentStep.choices"
-                            :key="`vchip-${choice}`"
-                            type="button"
-                            class="flex h-11 w-11 items-center justify-center rounded-full border-2 text-base font-extrabold"
-                            :class="alignPick?.kind === 'vertex' && alignPick.id === choice
-                                ? 'border-indigo-700 bg-indigo-700 text-white'
-                                : chipInUse('vertex', choice)
-                                    ? 'border-slate-200 bg-slate-100 text-slate-400'
-                                    : 'border-indigo-400 bg-white text-indigo-900'"
-                            :disabled="stepOk"
-                            @click="pickAlign('vertex', choice)"
-                        >
-                            {{ choice }}
-                        </button>
+                    <div class="rounded-lg border border-indigo-200 bg-indigo-50/60 p-2">
+                        <p class="text-center text-xs font-bold uppercase tracking-wide text-indigo-800">
+                            Draw the second triangle — type {{ allowedLetters.join(', ') || 'the letters' }}
+                        </p>
+                        <div class="relative mx-auto h-52 w-full max-w-sm">
+                            <svg viewBox="0 0 200 180" class="h-full w-full">
+                                <line
+                                    v-for="side in drawnCopy.sides"
+                                    :key="`copy-${side}`"
+                                    :x1="sidePoint(drawnCopy, side, 0).x"
+                                    :y1="sidePoint(drawnCopy, side, 0).y"
+                                    :x2="sidePoint(drawnCopy, side, 1).x"
+                                    :y2="sidePoint(drawnCopy, side, 1).y"
+                                    stroke="#312e81"
+                                    stroke-width="2.5"
+                                    stroke-linecap="round"
+                                />
+                                <text
+                                    v-for="row in correspondenceRows"
+                                    :key="`copy-side-${row.side}`"
+                                    :x="sideMid(drawnCopy, row.side).x"
+                                    :y="sideMid(drawnCopy, row.side).y"
+                                    text-anchor="middle"
+                                    class="fill-indigo-800 text-[11px] font-bold"
+                                >
+                                    {{ row.other || '' }}
+                                </text>
+                            </svg>
+                            <input
+                                v-for="vertex in drawnCopy.vertices"
+                                :key="`copy-${vertex.id}`"
+                                :value="vertexSlots[vertex.id] || ''"
+                                maxlength="1"
+                                autocomplete="off"
+                                class="absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-indigo-600 bg-white text-center text-sm font-extrabold uppercase text-indigo-900"
+                                :style="slotStyle(vertex)"
+                                :disabled="stepOk"
+                                :aria-label="`Letter matching ${vertex.id}`"
+                                @input="(event) => { typeVertex(vertex.id, event.target.value); event.target.value = vertexSlots[vertex.id] || ''; }"
+                            >
+                        </div>
                     </div>
                 </div>
 
-                <div v-if="lengthChips.length">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Lengths — tap a rectangle, then a side box</p>
-                    <div class="mt-1 flex flex-wrap gap-2">
-                        <button
-                            v-for="chip in lengthChips"
-                            :key="`lchip-${chip.id}`"
-                            type="button"
-                            class="rounded-md border-2 px-3 py-1.5 text-sm font-bold"
-                            :class="alignPick?.kind === 'length' && alignPick.id === chip.id
-                                ? 'border-teal-700 bg-teal-700 text-white'
-                                : chipInUse('length', chip.id)
-                                    ? 'border-slate-200 bg-slate-100 text-slate-400'
-                                    : 'border-teal-500 bg-white text-teal-900'"
-                            :disabled="stepOk"
-                            @click="pickAlign('length', chip.id)"
-                        >
-                            {{ chip.label }}
-                        </button>
-                    </div>
+                <div v-if="correspondenceRows.length" class="overflow-x-auto rounded-md border border-slate-200">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="px-2 py-1">On △ {{ drawnHome?.name }}</th>
+                                <th class="px-2 py-1">Matching side</th>
+                                <th class="px-2 py-1">Length</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in correspondenceRows" :key="`corr-${row.side}`" class="border-t border-slate-100">
+                                <td class="px-2 py-1 font-semibold">{{ row.side }}</td>
+                                <td class="px-2 py-1 font-mono">{{ row.other || '?' }}</td>
+                                <td class="px-2 py-1 text-teal-800">{{ row.length || '—' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

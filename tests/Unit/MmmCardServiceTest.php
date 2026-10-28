@@ -1285,19 +1285,13 @@ class MmmCardServiceTest extends TestCase
 
         $wrongOrder = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'R', 'Q'], 'sides' => ['AB' => '5', 'AC' => '6']],
+            'values' => ['letters' => ['P', 'R', 'Q']],
         ]);
         $this->assertFalse($wrongOrder['ok']);
 
-        $wrongSides = $service->checkSubmission($card, $exercise, [
-            'step_key' => 'order',
-            'values' => ['letters' => ['P', 'Q', 'R'], 'sides' => ['AB' => '6', 'AC' => '5']],
-        ]);
-        $this->assertFalse($wrongSides['ok']);
-
         $order = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'Q', 'R'], 'sides' => ['AB' => '5', 'AC' => '6']],
+            'values' => ['letters' => ['P', 'Q', 'R']],
         ]);
         $this->assertTrue($order['ok'], $order['message']);
 
@@ -1348,13 +1342,13 @@ class MmmCardServiceTest extends TestCase
 
         $copied = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'Q', 'R'], 'sides' => ['AB' => '5', 'BC' => '6', 'AC' => '7']],
+            'values' => ['letters' => ['P', 'Q', 'R']],
         ]);
         $this->assertFalse($copied['ok']);
 
         $turned = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['Q', 'P', 'R'], 'sides' => ['AB' => '5', 'BC' => '6', 'AC' => '7']],
+            'values' => ['letters' => ['Q', 'P', 'R']],
         ]);
         $this->assertTrue($turned['ok'], $turned['message']);
 

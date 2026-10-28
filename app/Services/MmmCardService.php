@@ -728,8 +728,8 @@ class MmmCardService
                 $ok && $isLast,
                 $stepKey,
                 $ok
-                    ? (string) ($orderCheck['ok'] ?? 'The corners and lengths match.')
-                    : (string) ($orderCheck['miss'] ?? 'Put each letter in the matching vertex circle, and each length in the matching side rectangle.'),
+                    ? (string) ($orderCheck['ok'] ?? 'The second triangle is labelled in matching order.')
+                    : (string) ($orderCheck['miss'] ?? 'Type the matching letter at each corner of the second triangle.'),
                 $cells,
             );
         }
