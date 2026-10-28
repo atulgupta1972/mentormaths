@@ -510,8 +510,9 @@ const continueStep = () => {
                         <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-500">
                             Draw △ {{ drawnHome.name }} as given
                         </p>
-                        <div class="relative mx-auto h-52 w-full max-w-sm">
-                            <svg viewBox="0 0 200 180" class="h-full w-full">
+                        <div class="mx-auto w-full max-w-sm overflow-visible px-8 py-8">
+                            <div class="relative h-56 overflow-visible">
+                            <svg viewBox="0 0 200 180" class="h-full w-full overflow-visible">
                                 <line
                                     v-for="side in drawnHome.sides"
                                     :key="`home-${side}`"
@@ -537,11 +538,12 @@ const continueStep = () => {
                             <span
                                 v-for="vertex in drawnHome.vertices"
                                 :key="`home-${vertex.id}`"
-                                class="absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-slate-700 bg-white text-sm font-extrabold text-slate-900"
+                                class="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-slate-700 bg-white text-lg font-extrabold leading-none text-slate-900"
                                 :style="slotStyle(vertex)"
                             >
                                 {{ vertex.id }}
                             </span>
+                            </div>
                         </div>
                     </div>
 
@@ -549,8 +551,9 @@ const continueStep = () => {
                         <p class="text-center text-xs font-bold uppercase tracking-wide text-indigo-800">
                             Draw the second triangle — type {{ allowedLetters.join(', ') || 'the letters' }}
                         </p>
-                        <div class="relative mx-auto h-52 w-full max-w-sm">
-                            <svg viewBox="0 0 200 180" class="h-full w-full">
+                        <div class="mx-auto w-full max-w-sm overflow-visible px-8 py-8">
+                            <div class="relative h-56 overflow-visible">
+                            <svg viewBox="0 0 200 180" class="h-full w-full overflow-visible">
                                 <line
                                     v-for="side in drawnCopy.sides"
                                     :key="`copy-${side}`"
@@ -573,18 +576,29 @@ const continueStep = () => {
                                     {{ row.other || '' }}
                                 </text>
                             </svg>
-                            <input
+                            <label
                                 v-for="vertex in drawnCopy.vertices"
                                 :key="`copy-${vertex.id}`"
-                                :value="vertexSlots[vertex.id] || ''"
-                                maxlength="1"
-                                autocomplete="off"
-                                class="absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-indigo-600 bg-white text-center text-sm font-extrabold uppercase text-indigo-900"
+                                class="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-visible rounded-full border-2 border-indigo-600 bg-white"
                                 :style="slotStyle(vertex)"
-                                :disabled="stepOk"
-                                :aria-label="`Letter matching ${vertex.id}`"
-                                @input="(event) => { typeVertex(vertex.id, event.target.value); event.target.value = vertexSlots[vertex.id] || ''; }"
                             >
+                                <span
+                                    class="pointer-events-none text-lg font-extrabold leading-none text-indigo-900"
+                                    aria-hidden="true"
+                                >
+                                    {{ vertexSlots[vertex.id] || '' }}
+                                </span>
+                                <input
+                                    :value="vertexSlots[vertex.id] || ''"
+                                    maxlength="1"
+                                    autocomplete="off"
+                                    class="absolute inset-0 h-full w-full cursor-text rounded-full border-0 bg-transparent p-0 text-center text-lg font-extrabold uppercase leading-none text-transparent caret-indigo-900 outline-none focus:ring-2 focus:ring-indigo-400"
+                                    :disabled="stepOk"
+                                    :aria-label="`Letter matching ${vertex.id}`"
+                                    @input="(event) => { typeVertex(vertex.id, event.target.value); event.target.value = vertexSlots[vertex.id] || ''; }"
+                                >
+                            </label>
+                            </div>
                         </div>
                     </div>
                 </div>
