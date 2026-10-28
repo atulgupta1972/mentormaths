@@ -702,6 +702,16 @@ class MmmCardService
             $ok = $want !== [] && $got === $want;
             $cells = ['letters' => $ok];
 
+            $wantAngle = strtoupper(trim((string) ($orderCheck['angle'] ?? '')));
+            if ($wantAngle !== '') {
+                $gotAngle = strtoupper(trim((string) ($values['angle'] ?? '')));
+                $angleOk = $gotAngle === $wantAngle;
+                $cells['angle'] = $angleOk;
+                if (! $angleOk) {
+                    $ok = false;
+                }
+            }
+
             $wantSides = is_array($orderCheck['sides'] ?? null) ? $orderCheck['sides'] : [];
             if ($wantSides !== []) {
                 $gotSides = is_array($values['sides'] ?? null) ? $values['sides'] : [];

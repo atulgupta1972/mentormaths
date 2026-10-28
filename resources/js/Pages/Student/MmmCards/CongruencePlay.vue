@@ -15,7 +15,25 @@ const emit = defineEmits(['next']);
 
 const play = computed(() => props.exercise?.congruence || {});
 const steps = computed(() => play.value.steps || []);
-const figures = computed(() => play.value.figures || []);
+const rawFigures = computed(() => play.value.figures || []);
+const figures = computed(() => rawFigures.value.map((figure) => alignedFigure(figure)));
+
+const alignedFigure = (figure) => {
+    const home = rawFigures.value[0];
+    if (! figure?.rotated || ! home?.vertices?.length) {
+        return figure;
+    }
+    const order = figure.rotated_order || (figure.vertices || []).map((vertex) => vertex.id);
+
+    return {
+        ...figure,
+        vertices: order.map((id, index) => ({
+            id,
+            x: home.vertices[index]?.x,
+            y: home.vertices[index]?.y,
+        })),
+    };
+};
 const givens = computed(() => play.value.givens || []);
 const currentIndex = ref(0);
 const currentStep = computed(() => steps.value[currentIndex.value] || null);
@@ -23,6 +41,7 @@ const letters = ref(['', '', '']);
 const tool = ref('');
 const placed = reactive({});
 const vertexSlots = reactive({});
+const copyShaded = ref('');
 const rows = ref([]);
 const caseChoice = ref('');
 const message = ref('');
@@ -38,7 +57,9 @@ const majorFigure = computed(() => {
     return match || figures.value[0] || null;
 });
 const isAlignStep = computed(() => ['order', 'align'].includes(currentStep.value?.type));
+const needsAngleShade = computed(() => Boolean(currentStep.value?.shade_angle));
 const allowedLetters = computed(() => (currentStep.value?.choices || []).map((letter) => String(letter).toUpperCase()));
+const figureTitle = (figure) => (figure?.rotated_order || []).join('') || figure?.name || '';
 const drawnHome = computed(() => {
     const custom = (play.value.draw_figures || []).find((figure) => figure.locked !== false && figure.label !== true);
 
@@ -78,6 +99,7 @@ function resetStep() {
     Object.keys(vertexSlots).forEach((key) => {
         delete vertexSlots[key];
     });
+    copyShaded.value = '';
     rows.value = [];
     caseChoice.value = '';
     message.value = '';
@@ -151,6 +173,17 @@ const slotStyle = (vertex) => ({
     left: `${(Number(vertex.x) / 200) * 100}%`,
     top: `${(Number(vertex.y) / 180) * 100}%`,
 });
+
+const inwardSlot = (figure, vertex) => {
+    const others = (figure?.vertices || []).filter((item) => item.id !== vertex.id);
+    const cx = others.reduce((sum, item) => sum + Number(item.x), 0) / (others.length || 1);
+    const cy = others.reduce((sum, item) => sum + Number(item.y), 0) / (others.length || 1);
+
+    return {
+        left: `${((Number(vertex.x) * 0.58 + cx * 0.42) / 200) * 100}%`,
+        top: `${((Number(vertex.y) * 0.58 + cy * 0.42) / 180) * 100}%`,
+    };
+};
 
 const sideMid = (figure, sideId) => {
     const ends = sideEnds(figure, sideId);
@@ -246,6 +279,57 @@ const anglePath = (figure, vertexId) => {
     return `M ${start[0]} ${start[1]} Q ${bend[0]} ${bend[1]} ${end[0]} ${end[1]}`;
 };
 
+const angleNeighbors = (figure, vertexId) => {
+    const map = vertexMap(figure);
+    const connected = (figure.sides || [])
+        .filter((side) => side.includes(vertexId))
+        .map((side) => (side[0] === vertexId ? side[1] : side[0]))
+        .map((id) => map[id])
+        .filter(Boolean);
+    if (connected.length >= 2) {
+        return connected.slice(0, 2);
+    }
+
+    return (figure.vertices || []).filter((item) => item.id !== vertexId).slice(0, 2);
+};
+
+const angleWedge = (figure, vertexId, radius = 26) => {
+    const map = vertexMap(figure);
+    const vertex = map[vertexId];
+    const neighbors = angleNeighbors(figure, vertexId);
+    if (! vertex || neighbors.length < 2) {
+        return '';
+    }
+    const units = neighbors.map((point) => {
+        const dx = point.x - vertex.x;
+        const dy = point.y - vertex.y;
+        const len = Math.hypot(dx, dy) || 1;
+
+        return [dx / len, dy / len];
+    });
+    const start = [vertex.x + units[0][0] * radius, vertex.y + units[0][1] * radius];
+    const end = [vertex.x + units[1][0] * radius, vertex.y + units[1][1] * radius];
+    const sweep = units[0][0] * units[1][1] - units[0][1] * units[1][0] < 0 ? 0 : 1;
+
+    return `M ${vertex.x} ${vertex.y} L ${start[0]} ${start[1]} A ${radius} ${radius} 0 0 ${sweep} ${end[0]} ${end[1]} Z`;
+};
+
+const givenAngles = (figure) => (figure?.shaded_angles || figure?.given_angles || []).map((id) => String(id));
+
+const figureHasAngle = (figure, vertexId, extra = '') => (
+    givenAngles(figure).includes(vertexId)
+    || extra === vertexId
+    || partMark(vertexId) === 'angle'
+);
+
+const shadeCopyAngle = (vertexId) => {
+    if (stepOk.value || allCorrect.value || ! isAlignStep.value) {
+        return;
+    }
+    copyShaded.value = copyShaded.value === vertexId ? '' : vertexId;
+    message.value = '';
+};
+
 const labelPos = (figure, vertex) => {
     const others = (figure.vertices || []).filter((item) => item.id !== vertex.id);
     const pullX = others.reduce((sum, item) => sum + item.x, 0) / (others.length || 1);
@@ -338,6 +422,13 @@ const submit = async () => {
             return;
         }
         values.letters = mapped;
+        if (step.shade_angle) {
+            if (! copyShaded.value) {
+                message.value = 'Shade the equal angle on the second triangle.';
+                return;
+            }
+            values.angle = copyShaded.value;
+        }
     } else if (step.type === 'marks') {
         values.placed = { ...placed };
     } else if (step.type === 'table') {
@@ -418,7 +509,10 @@ const continueStep = () => {
                 :key="figure.id"
                 class="rounded-lg border border-slate-200 bg-slate-50 p-2"
             >
-                <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-500">△ {{ figure.name }}</p>
+                <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-500">
+                    △ {{ figureTitle(figure) }}
+                    <span v-if="figure.rotated" class="ml-1 font-medium normal-case text-indigo-700">(turned)</span>
+                </p>
                 <svg viewBox="0 0 200 180" class="mx-auto h-44 w-full max-w-xs">
                     <line
                         v-for="side in figure.sides"
@@ -454,9 +548,18 @@ const continueStep = () => {
                         stroke-width="2"
                     />
                     <path
+                        v-for="vertex in figure.vertices.filter((item) => figureHasAngle(figure, item.id))"
+                        :key="`${vertex.id}-wedge`"
+                        :d="angleWedge(figure, vertex.id)"
+                        fill="#f59e0b"
+                        fill-opacity="0.45"
+                        stroke="#b45309"
+                        stroke-width="1.5"
+                    />
+                    <path
                         v-for="vertex in figure.vertices"
                         :key="`${vertex.id}-arc`"
-                        :d="partMark(vertex.id) === 'angle' ? anglePath(figure, vertex.id) : ''"
+                        :d="partMark(vertex.id) === 'angle' && ! figureHasAngle(figure, vertex.id) ? anglePath(figure, vertex.id) : ''"
                         fill="none"
                         stroke="#b45309"
                         stroke-width="2"
@@ -513,6 +616,15 @@ const continueStep = () => {
                         <div class="mx-auto w-full max-w-sm overflow-visible px-8 py-8">
                             <div class="relative h-56 overflow-visible">
                             <svg viewBox="0 0 200 180" class="h-full w-full overflow-visible">
+                                <path
+                                    v-for="vertex in drawnHome.vertices.filter((item) => givenAngles(drawnHome).includes(item.id))"
+                                    :key="`home-wedge-${vertex.id}`"
+                                    :d="angleWedge(drawnHome, vertex.id)"
+                                    fill="#f59e0b"
+                                    fill-opacity="0.5"
+                                    stroke="#b45309"
+                                    stroke-width="1.5"
+                                />
                                 <line
                                     v-for="side in drawnHome.sides"
                                     :key="`home-${side}`"
@@ -549,11 +661,23 @@ const continueStep = () => {
 
                     <div class="rounded-lg border border-indigo-200 bg-indigo-50/60 p-2">
                         <p class="text-center text-xs font-bold uppercase tracking-wide text-indigo-800">
-                            Draw the second triangle — type {{ allowedLetters.join(', ') || 'the letters' }}
+                            Draw the turned triangle — type {{ allowedLetters.join(', ') || 'the letters' }}
+                        </p>
+                        <p v-if="needsAngleShade" class="mt-1 text-center text-xs text-amber-800">
+                            Tap the matching corner to shade the equal given angle.
                         </p>
                         <div class="mx-auto w-full max-w-sm overflow-visible px-8 py-8">
                             <div class="relative h-56 overflow-visible">
                             <svg viewBox="0 0 200 180" class="h-full w-full overflow-visible">
+                                <path
+                                    v-for="vertex in drawnCopy.vertices.filter((item) => copyShaded === item.id)"
+                                    :key="`copy-wedge-${vertex.id}`"
+                                    :d="angleWedge(drawnCopy, vertex.id, 34)"
+                                    fill="#f59e0b"
+                                    fill-opacity="0.55"
+                                    stroke="#b45309"
+                                    stroke-width="1.5"
+                                />
                                 <line
                                     v-for="side in drawnCopy.sides"
                                     :key="`copy-${side}`"
@@ -576,10 +700,26 @@ const continueStep = () => {
                                     {{ row.other || '' }}
                                 </text>
                             </svg>
+                            <button
+                                v-for="vertex in drawnCopy.vertices"
+                                v-show="needsAngleShade"
+                                :key="`copy-shade-${vertex.id}`"
+                                type="button"
+                                class="absolute z-10 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[10px] font-bold leading-none"
+                                :class="copyShaded === vertex.id
+                                    ? 'border-amber-700 bg-amber-400 text-amber-950'
+                                    : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'"
+                                :style="inwardSlot(drawnCopy, vertex)"
+                                :disabled="stepOk"
+                                :aria-label="`Shade the angle at ${vertex.id}`"
+                                @click="shadeCopyAngle(vertex.id)"
+                            >
+                                ∠
+                            </button>
                             <label
                                 v-for="vertex in drawnCopy.vertices"
                                 :key="`copy-${vertex.id}`"
-                                class="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-visible rounded-full border-2 border-indigo-600 bg-white"
+                                class="absolute z-20 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-visible rounded-full border-2 border-indigo-600 bg-white"
                                 :style="slotStyle(vertex)"
                             >
                                 <span

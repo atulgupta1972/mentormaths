@@ -1281,17 +1281,35 @@ class MmmCardServiceTest extends TestCase
         $exercise = $card->exercises()->where('sort_order', 1)->firstOrFail();
         $service = app(MmmCardService::class);
 
-        $this->assertSame('congruence', $service->exercisePayload($exercise)['play_kind']);
+        $payload = $service->exercisePayload($exercise);
+        $this->assertSame('congruence', $payload['play_kind']);
+        $this->assertSame(['A'], $payload['congruence']['figures'][0]['shaded_angles'] ?? null);
+        $this->assertTrue($payload['congruence']['figures'][1]['rotated'] ?? false);
+        $this->assertSame(['P', 'Q', 'R'], $payload['congruence']['figures'][1]['rotated_order'] ?? null);
+        $this->assertTrue($payload['congruence']['steps'][0]['shade_angle'] ?? false);
 
         $wrongOrder = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'R', 'Q']],
+            'values' => ['letters' => ['P', 'R', 'Q'], 'angle' => 'A'],
         ]);
         $this->assertFalse($wrongOrder['ok']);
 
-        $order = $service->checkSubmission($card, $exercise, [
+        $missingShade = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
             'values' => ['letters' => ['P', 'Q', 'R']],
+        ]);
+        $this->assertFalse($missingShade['ok']);
+        $this->assertFalse($missingShade['cell_results']['angle'] ?? true);
+
+        $wrongShade = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => ['letters' => ['P', 'Q', 'R'], 'angle' => 'B'],
+        ]);
+        $this->assertFalse($wrongShade['ok']);
+
+        $order = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => ['letters' => ['P', 'Q', 'R'], 'angle' => 'A'],
         ]);
         $this->assertTrue($order['ok'], $order['message']);
 
@@ -1339,6 +1357,9 @@ class MmmCardServiceTest extends TestCase
         $card = MmmCard::query()->where('slug', 'congruence-sas')->firstOrFail();
         $exercise = $card->exercises()->where('sort_order', 2)->firstOrFail();
         $service = app(MmmCardService::class);
+        $payload = $service->exercisePayload($exercise);
+        $this->assertSame(['Q', 'P', 'R'], $payload['congruence']['figures'][1]['rotated_order'] ?? null);
+        $this->assertSame('QPR', implode('', $payload['congruence']['figures'][1]['rotated_order'] ?? []));
 
         $copied = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
