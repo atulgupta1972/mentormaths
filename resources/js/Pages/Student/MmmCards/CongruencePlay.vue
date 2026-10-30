@@ -385,6 +385,38 @@ const angleWedge = (figure, vertexId, radius = 26) => {
 
 const givenAngles = (figure) => (figure?.shaded_angles || figure?.given_angles || []).map((id) => String(id));
 
+const figureRightAngles = (figure) => {
+    const fromSummary = (summary.value?.right_angles || []).filter((id) => (
+        (figure?.vertices || []).some((vertex) => vertex.id === id)
+    ));
+    if (fromSummary.length) {
+        return fromSummary;
+    }
+
+    return (figure?.right_angles || []).map((id) => String(id));
+};
+
+const rightAnglePath = (figure, vertexId, size = 14) => {
+    const map = vertexMap(figure);
+    const vertex = map[vertexId];
+    const neighbors = angleNeighbors(figure, vertexId);
+    if (! vertex || neighbors.length < 2) {
+        return '';
+    }
+    const units = neighbors.map((point) => {
+        const dx = point.x - vertex.x;
+        const dy = point.y - vertex.y;
+        const len = Math.hypot(dx, dy) || 1;
+
+        return [dx / len, dy / len];
+    });
+    const first = [vertex.x + units[0][0] * size, vertex.y + units[0][1] * size];
+    const corner = [first[0] + units[1][0] * size, first[1] + units[1][1] * size];
+    const second = [vertex.x + units[1][0] * size, vertex.y + units[1][1] * size];
+
+    return `M ${first[0]} ${first[1]} L ${corner[0]} ${corner[1]} L ${second[0]} ${second[1]}`;
+};
+
 const figureHasAngle = (figure, vertexId, extra = '') => (
     givenAngles(figure).includes(vertexId)
     || extra === vertexId
@@ -682,6 +714,15 @@ const continueStep = () => {
                     stroke-width="2.5"
                     stroke-linecap="round"
                 />
+                <path
+                    v-for="id in figureRightAngles(givenFigure)"
+                    :key="`given-right-${id}`"
+                    :d="rightAnglePath(givenFigure, id)"
+                    fill="none"
+                    stroke="#0f172a"
+                    stroke-width="2"
+                    stroke-linecap="square"
+                />
                 <text
                     v-for="side in givenFigure.sides.filter((id) => sideLabel(givenFigure, id))"
                     :key="`${side}-len`"
@@ -746,6 +787,15 @@ const continueStep = () => {
                                     stroke-width="2.5"
                                     stroke-linecap="round"
                                 />
+                                <path
+                                    v-for="id in figureRightAngles(drawnHome)"
+                                    :key="`home-right-${id}`"
+                                    :d="rightAnglePath(drawnHome, id)"
+                                    fill="none"
+                                    stroke="#0f172a"
+                                    stroke-width="2"
+                                    stroke-linecap="square"
+                                />
                                 <text
                                     v-for="side in drawnHome.sides.filter((id) => sideLabel(drawnHome, id))"
                                     :key="`home-len-${side}`"
@@ -803,6 +853,15 @@ const continueStep = () => {
                                     stroke="#312e81"
                                     stroke-width="2.5"
                                     stroke-linecap="round"
+                                />
+                                <path
+                                    v-for="id in figureRightAngles(drawnCopy)"
+                                    :key="`copy-right-${id}`"
+                                    :d="rightAnglePath(drawnCopy, id)"
+                                    fill="none"
+                                    stroke="#312e81"
+                                    stroke-width="2"
+                                    stroke-linecap="square"
                                 />
                             </svg>
                             <label
@@ -960,6 +1019,15 @@ const continueStep = () => {
                                 stroke-width="2.5"
                                 stroke-linecap="round"
                             />
+                            <path
+                                v-for="id in figureRightAngles(drawnHome)"
+                                :key="`sum-home-right-${id}`"
+                                :d="rightAnglePath(drawnHome, id)"
+                                fill="none"
+                                stroke="#0f172a"
+                                stroke-width="2"
+                                stroke-linecap="square"
+                            />
                             <line
                                 v-for="tick in modelTickLines(drawnHome)"
                                 :key="tick.key"
@@ -1005,6 +1073,15 @@ const continueStep = () => {
                                 stroke="#0f172a"
                                 stroke-width="2.5"
                                 stroke-linecap="round"
+                            />
+                            <path
+                                v-for="id in figureRightAngles(modelCopy)"
+                                :key="`sum-copy-right-${id}`"
+                                :d="rightAnglePath(modelCopy, id)"
+                                fill="none"
+                                stroke="#0f172a"
+                                stroke-width="2"
+                                stroke-linecap="square"
                             />
                             <line
                                 v-for="tick in modelTickLines(modelCopy)"

@@ -1390,6 +1390,124 @@ class MmmCardServiceTest extends TestCase
         $this->assertSame(3, $proved['summary']['ticks']['AC'] ?? null);
     }
 
+    public function test_congruence_asa_matches_two_angles_and_the_included_side(): void
+    {
+        $card = MmmCard::query()->where('slug', 'congruence-sas')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 3)->firstOrFail();
+        $service = app(MmmCardService::class);
+        $payload = $service->exercisePayload($exercise);
+        $this->assertSame(['A', 'B'], $payload['congruence']['figures'][0]['shaded_angles'] ?? null);
+        $this->assertSame(['A' => 'P', 'B' => 'Q'], $exercise->answers['check']['order']['angle_pairs'] ?? null);
+
+        $oneAngle = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => [
+                'letters' => ['P', 'Q', 'R'],
+                'angle_pairs' => ['A' => 'P'],
+                'sides' => ['AB' => '5'],
+            ],
+        ]);
+        $this->assertFalse($oneAngle['ok']);
+
+        $order = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => [
+                'letters' => ['P', 'Q', 'R'],
+                'angle_pairs' => ['A' => 'P', 'B' => 'Q'],
+                'sides' => ['AB' => '5'],
+            ],
+        ]);
+        $this->assertTrue($order['ok'], $order['message']);
+
+        $sas = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => '∠BAC = ∠QPR', 'reason' => 'Given equal angles'],
+                    ['parts' => 'AB = PQ', 'reason' => 'Given = 5 cm'],
+                    ['parts' => '∠ABC = ∠PQR', 'reason' => 'Given equal angles'],
+                ],
+                'case' => 'SAS',
+            ],
+        ]);
+        $this->assertFalse($sas['ok']);
+        $this->assertStringContainsString('asa', strtolower($sas['message']));
+
+        $asa = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => '∠BAC = ∠QPR', 'reason' => 'Given equal angles'],
+                    ['parts' => 'AB = PQ', 'reason' => 'Given = 5 cm'],
+                    ['parts' => '∠ABC = ∠PQR', 'reason' => 'Given equal angles'],
+                ],
+                'case' => 'ASA',
+            ],
+        ]);
+        $this->assertTrue($asa['all_ok'], $asa['message']);
+        $this->assertSame('ASA', $asa['summary']['case'] ?? null);
+        $this->assertSame('△ABC ≅ △PQR', $asa['summary']['statement'] ?? null);
+    }
+
+    public function test_congruence_rhs_needs_the_right_angles_together(): void
+    {
+        $card = MmmCard::query()->where('slug', 'congruence-sas')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 4)->firstOrFail();
+        $service = app(MmmCardService::class);
+        $payload = $service->exercisePayload($exercise);
+        $this->assertSame(['C'], $payload['congruence']['figures'][0]['right_angles'] ?? null);
+        $this->assertSame(['P', 'R', 'Q'], $payload['congruence']['figures'][1]['rotated_order'] ?? null);
+
+        $copied = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => [
+                'letters' => ['P', 'Q', 'R'],
+                'angle_pairs' => ['C' => 'Q'],
+                'sides' => ['AB' => '5', 'AC' => '4'],
+            ],
+        ]);
+        $this->assertFalse($copied['ok']);
+
+        $turned = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => [
+                'letters' => ['P', 'R', 'Q'],
+                'angle_pairs' => ['C' => 'Q'],
+                'sides' => ['AB' => '5', 'AC' => '4'],
+            ],
+        ]);
+        $this->assertTrue($turned['ok'], $turned['message']);
+
+        $sss = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => '∠C = ∠Q = 90°', 'reason' => 'Given right angles'],
+                    ['parts' => 'AB = PR', 'reason' => 'Given hypotenuse = 5 cm'],
+                    ['parts' => 'AC = PQ', 'reason' => 'Given = 4 cm'],
+                ],
+                'case' => 'SSS',
+            ],
+        ]);
+        $this->assertFalse($sss['ok']);
+
+        $rhs = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => '∠C = ∠Q = 90°', 'reason' => 'Given right angles'],
+                    ['parts' => 'AB = PR', 'reason' => 'Given hypotenuse = 5 cm'],
+                    ['parts' => 'AC = PQ', 'reason' => 'Given = 4 cm'],
+                ],
+                'case' => 'RHS',
+            ],
+        ]);
+        $this->assertTrue($rhs['all_ok'], $rhs['message']);
+        $this->assertSame('RHS', $rhs['summary']['case'] ?? null);
+        $this->assertSame('△ABC ≅ △PRQ', $rhs['summary']['statement'] ?? null);
+        $this->assertSame(['C', 'Q'], $rhs['summary']['right_angles'] ?? null);
+    }
+
     private function marksVariableCountExercise(MmmCard $card): \App\Models\MmmCardExercise
     {
         return $card->exercises()->create([
