@@ -1591,8 +1591,8 @@ class MmmCardServiceTest extends TestCase
             'step_key' => 'table',
             'values' => [
                 'rows' => [
-                    ['parts' => '∠ADB = ∠ADC = 90°', 'reason' => 'Given right angles (AD ⊥ BC)'],
                     ['parts' => 'AB = AC', 'reason' => 'Given (isosceles, AB = AC)'],
+                    ['parts' => '∠ADB = ∠ADC = 90°', 'reason' => 'Given right angles (AD ⊥ BC)'],
                     ['parts' => 'AD = AD', 'reason' => 'Common side'],
                 ],
                 'case' => 'RHS',

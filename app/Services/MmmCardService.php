@@ -798,15 +798,24 @@ class MmmCardService
             $gotRows = is_array($values['rows'] ?? null) ? array_values($values['rows']) : [];
             $cells = [];
             $ok = count($wantRows) > 0 && count($gotRows) === count($wantRows);
-            foreach ($wantRows as $index => $row) {
-                $got = is_array($gotRows[$index] ?? null) ? $gotRows[$index] : [];
-                $needType = trim((string) ($row['type'] ?? '')) !== '';
-                $match = $this->congruenceSame($got['parts'] ?? '', $row['parts'] ?? '')
-                    && $this->congruenceSame($got['reason'] ?? '', $row['reason'] ?? '')
-                    && (! $needType || $this->congruenceSame($got['type'] ?? '', $row['type'] ?? ''));
-                $cells['row'.$index] = $match;
-                if (! $match) {
+            $used = [];
+            foreach ($gotRows as $index => $got) {
+                $got = is_array($got) ? $got : [];
+                $matchIndex = null;
+                foreach ($wantRows as $wantIndex => $row) {
+                    if (isset($used[$wantIndex])) {
+                        continue;
+                    }
+                    if ($this->congruenceTableRowMatches($got, is_array($row) ? $row : [])) {
+                        $matchIndex = $wantIndex;
+                        break;
+                    }
+                }
+                $cells['row'.$index] = $matchIndex !== null;
+                if ($matchIndex === null) {
                     $ok = false;
+                } else {
+                    $used[$matchIndex] = true;
                 }
             }
 
@@ -878,6 +887,19 @@ class MmmCardService
         };
 
         return $clean($got) !== '' && $clean($got) === $clean($want);
+    }
+
+    /**
+     * @param  array<string, mixed>  $got
+     * @param  array<string, mixed>  $want
+     */
+    private function congruenceTableRowMatches(array $got, array $want): bool
+    {
+        $needType = trim((string) ($want['type'] ?? '')) !== '';
+
+        return $this->congruenceSame($got['parts'] ?? '', $want['parts'] ?? '')
+            && $this->congruenceSame($got['reason'] ?? '', $want['reason'] ?? '')
+            && (! $needType || $this->congruenceSame($got['type'] ?? '', $want['type'] ?? ''));
     }
 
     private function congruenceMeasure(mixed $got, mixed $want): bool
