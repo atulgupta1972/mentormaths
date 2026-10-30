@@ -175,6 +175,18 @@ const filledSides = () => {
 };
 
 const givenFigure = computed(() => figures.value[0] || drawnHome.value);
+const givenCaption = computed(() => {
+    const figure = givenFigure.value;
+    if (! figure) {
+        return '';
+    }
+    if (figure.caption) {
+        return figure.caption;
+    }
+    const name = figure.name || '';
+
+    return name.length > 3 ? name : `△ ${name}`;
+});
 
 const modelCopy = computed(() => {
     const home = drawnHome.value;
@@ -199,17 +211,11 @@ const modelCopy = computed(() => {
     };
 });
 
-const tickCountOf = (sideId) => {
-    const ticks = summary.value?.ticks || {};
-    const reverse = `${sideId?.[1] || ''}${sideId?.[0] || ''}`;
-
-    return Number(ticks[sideId] || ticks[reverse] || 0);
-};
-
-const modelTickLines = (figure) => {
+const tickLinesFrom = (figure, counts, prefix = '') => {
     const lines = [];
     (figure?.sides || []).forEach((side) => {
-        const count = tickCountOf(side);
+        const reverse = `${side[1] || ''}${side[0] || ''}`;
+        const count = Number(counts?.[side] || counts?.[reverse] || 0);
         if (! count) {
             return;
         }
@@ -217,13 +223,17 @@ const modelTickLines = (figure) => {
         for (let index = 0; index < count; index += 1) {
             const line = tickLine(figure, side, -spread / 2 + index * 6);
             if (line) {
-                lines.push({ key: `${figure.name}-${side}-${index}`, ...line });
+                lines.push({ key: `${prefix}${figure.name}-${side}-${index}`, ...line });
             }
         }
     });
 
     return lines;
 };
+
+const figureTickLines = (figure, prefix = '') => tickLinesFrom(figure, figure?.ticks || {}, prefix);
+
+const modelTickLines = (figure) => tickLinesFrom(figure, summary.value?.ticks || {}, 'sum-');
 
 const summaryAngles = (figure) => (summary.value?.angles || []).filter((id) => (
     (figure?.vertices || []).some((vertex) => vertex.id === id)
@@ -692,7 +702,7 @@ const continueStep = () => {
         </p>
 
         <div v-if="givenFigure && !summary" class="max-w-sm rounded-lg border border-slate-200 bg-slate-50 p-2">
-            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-500">① Diagram · △ {{ givenFigure.name }}</p>
+            <p class="text-center text-xs font-bold uppercase tracking-wide text-slate-500">① Diagram · {{ givenCaption }}</p>
             <svg viewBox="0 0 200 180" class="mx-auto h-36 w-full max-w-xs">
                 <path
                     v-for="vertex in givenFigure.vertices.filter((item) => givenAngles(givenFigure).includes(item.id))"
@@ -722,6 +732,16 @@ const continueStep = () => {
                     stroke="#0f172a"
                     stroke-width="2"
                     stroke-linecap="square"
+                />
+                <line
+                    v-for="tick in figureTickLines(givenFigure, 'given-')"
+                    :key="tick.key"
+                    :x1="tick.x1"
+                    :y1="tick.y1"
+                    :x2="tick.x2"
+                    :y2="tick.y2"
+                    stroke="#0f766e"
+                    stroke-width="2"
                 />
                 <text
                     v-for="side in givenFigure.sides.filter((id) => sideLabel(givenFigure, id))"
@@ -796,6 +816,16 @@ const continueStep = () => {
                                     stroke-width="2"
                                     stroke-linecap="square"
                                 />
+                                <line
+                                    v-for="tick in figureTickLines(drawnHome, 'home-')"
+                                    :key="tick.key"
+                                    :x1="tick.x1"
+                                    :y1="tick.y1"
+                                    :x2="tick.x2"
+                                    :y2="tick.y2"
+                                    stroke="#0f766e"
+                                    stroke-width="2"
+                                />
                                 <text
                                     v-for="side in drawnHome.sides.filter((id) => sideLabel(drawnHome, id))"
                                     :key="`home-len-${side}`"
@@ -862,6 +892,16 @@ const continueStep = () => {
                                     stroke="#312e81"
                                     stroke-width="2"
                                     stroke-linecap="square"
+                                />
+                                <line
+                                    v-for="tick in figureTickLines(drawnCopy, 'copy-')"
+                                    :key="tick.key"
+                                    :x1="tick.x1"
+                                    :y1="tick.y1"
+                                    :x2="tick.x2"
+                                    :y2="tick.y2"
+                                    stroke="#0f766e"
+                                    stroke-width="2"
                                 />
                             </svg>
                             <label

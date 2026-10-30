@@ -1508,6 +1508,101 @@ class MmmCardServiceTest extends TestCase
         $this->assertSame(['C', 'Q'], $rhs['summary']['right_angles'] ?? null);
     }
 
+    public function test_congruence_parallelogram_uses_opposite_sides_and_sss(): void
+    {
+        $card = MmmCard::query()->where('slug', 'congruence-sas')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 5)->firstOrFail();
+        $service = app(MmmCardService::class);
+        $payload = $service->exercisePayload($exercise);
+        $this->assertSame('ABCD', $payload['congruence']['figures'][0]['name'] ?? null);
+
+        $wrongLetters = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => ['letters' => ['A', 'B', 'C']],
+        ]);
+        $this->assertFalse($wrongLetters['ok']);
+
+        $order = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => ['letters' => ['C', 'D', 'A']],
+        ]);
+        $this->assertTrue($order['ok'], $order['message']);
+
+        $sas = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => 'AB = CD', 'reason' => 'Opposite sides of parallelogram'],
+                    ['parts' => 'BC = DA', 'reason' => 'Opposite sides of parallelogram'],
+                    ['parts' => 'AC = CA', 'reason' => 'Common side'],
+                ],
+                'case' => 'SAS',
+            ],
+        ]);
+        $this->assertFalse($sas['ok']);
+
+        $sss = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => 'AB = CD', 'reason' => 'Opposite sides of parallelogram'],
+                    ['parts' => 'BC = DA', 'reason' => 'Opposite sides of parallelogram'],
+                    ['parts' => 'AC = CA', 'reason' => 'Common side'],
+                ],
+                'case' => 'SSS',
+            ],
+        ]);
+        $this->assertTrue($sss['all_ok'], $sss['message']);
+        $this->assertSame('SSS', $sss['summary']['case'] ?? null);
+        $this->assertSame('△ABC ≅ △CDA', $sss['summary']['statement'] ?? null);
+    }
+
+    public function test_congruence_isosceles_altitude_uses_rhs(): void
+    {
+        $card = MmmCard::query()->where('slug', 'congruence-sas')->firstOrFail();
+        $exercise = $card->exercises()->where('sort_order', 6)->firstOrFail();
+        $service = app(MmmCardService::class);
+        $payload = $service->exercisePayload($exercise);
+        $this->assertSame(['D'], $payload['congruence']['figures'][0]['right_angles'] ?? null);
+
+        $order = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => [
+                'letters' => ['A', 'D', 'C'],
+                'angle_pairs' => ['D' => 'D'],
+            ],
+        ]);
+        $this->assertTrue($order['ok'], $order['message']);
+
+        $sss = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => '∠ADB = ∠ADC = 90°', 'reason' => 'Given right angles (AD ⊥ BC)'],
+                    ['parts' => 'AB = AC', 'reason' => 'Given (isosceles, AB = AC)'],
+                    ['parts' => 'AD = AD', 'reason' => 'Common side'],
+                ],
+                'case' => 'SSS',
+            ],
+        ]);
+        $this->assertFalse($sss['ok']);
+
+        $rhs = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'table',
+            'values' => [
+                'rows' => [
+                    ['parts' => '∠ADB = ∠ADC = 90°', 'reason' => 'Given right angles (AD ⊥ BC)'],
+                    ['parts' => 'AB = AC', 'reason' => 'Given (isosceles, AB = AC)'],
+                    ['parts' => 'AD = AD', 'reason' => 'Common side'],
+                ],
+                'case' => 'RHS',
+            ],
+        ]);
+        $this->assertTrue($rhs['all_ok'], $rhs['message']);
+        $this->assertSame('RHS', $rhs['summary']['case'] ?? null);
+        $this->assertSame('△ADB ≅ △ADC', $rhs['summary']['statement'] ?? null);
+    }
+
     private function marksVariableCountExercise(MmmCard $card): \App\Models\MmmCardExercise
     {
         return $card->exercises()->create([
