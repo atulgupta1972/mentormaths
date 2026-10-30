@@ -42,7 +42,8 @@ const tool = ref('');
 const placed = reactive({});
 const vertexSlots = reactive({});
 const sideSlots = reactive({});
-const copyShaded = ref('');
+const pendingHomeAngle = ref('');
+const anglePairs = ref([]);
 const rows = ref([]);
 const caseChoice = ref('');
 const message = ref('');
@@ -104,7 +105,8 @@ function resetStep() {
     Object.keys(sideSlots).forEach((key) => {
         delete sideSlots[key];
     });
-    copyShaded.value = '';
+    pendingHomeAngle.value = '';
+    anglePairs.value = [];
     rows.value = [];
     caseChoice.value = '';
     message.value = '';
@@ -389,11 +391,84 @@ const figureHasAngle = (figure, vertexId, extra = '') => (
     || partMark(vertexId) === 'angle'
 );
 
-const shadeCopyAngle = (vertexId) => {
-    if (stepOk.value || allCorrect.value || ! isAlignStep.value) {
+const ANGLE_PALETTE = [
+    { fill: '#f59e0b', stroke: '#b45309' },
+    { fill: '#22c55e', stroke: '#15803d' },
+    { fill: '#0ea5e9', stroke: '#0369a1' },
+];
+
+const pairFor = (which, vertexId) => anglePairs.value.find((pair) => pair[which] === vertexId);
+
+const angleLook = (which, vertexId) => {
+    const pair = pairFor(which, vertexId);
+    if (pair) {
+        return { ...ANGLE_PALETTE[pair.color % ANGLE_PALETTE.length], pending: false };
+    }
+    if (which === 'home' && pendingHomeAngle.value === vertexId) {
+        return { ...ANGLE_PALETTE[anglePairs.value.length % ANGLE_PALETTE.length], pending: true };
+    }
+
+    return null;
+};
+
+const wedgeFill = (which, vertexId) => angleLook(which, vertexId)?.fill || '#cbd5e1';
+const wedgeOpacity = (which, vertexId) => {
+    const look = angleLook(which, vertexId);
+    if (! look) {
+        return 0.22;
+    }
+
+    return look.pending ? 0.3 : 0.55;
+};
+const wedgeStroke = (which, vertexId) => angleLook(which, vertexId)?.stroke || 'transparent';
+
+const pairedAngles = () => {
+    const out = {};
+    anglePairs.value.forEach((pair) => {
+        out[pair.home] = vertexSlots[pair.copy] || pair.copy;
+    });
+
+    return out;
+};
+
+const tapHomeAngle = (vertexId) => {
+    if (stepOk.value || allCorrect.value || ! needsAngleShade.value) {
         return;
     }
-    copyShaded.value = copyShaded.value === vertexId ? '' : vertexId;
+    if (pairFor('home', vertexId)) {
+        anglePairs.value = anglePairs.value.filter((pair) => pair.home !== vertexId);
+        pendingHomeAngle.value = '';
+        message.value = '';
+        return;
+    }
+    pendingHomeAngle.value = pendingHomeAngle.value === vertexId ? '' : vertexId;
+    message.value = pendingHomeAngle.value
+        ? 'Now click the matching corner on the second triangle.'
+        : '';
+};
+
+const tapCopyAngle = (vertexId) => {
+    if (stepOk.value || allCorrect.value || ! needsAngleShade.value) {
+        return;
+    }
+    if (pairFor('copy', vertexId)) {
+        anglePairs.value = anglePairs.value.filter((pair) => pair.copy !== vertexId);
+        message.value = '';
+        return;
+    }
+    if (! pendingHomeAngle.value) {
+        message.value = 'Click an angle on △ABC first, then the matching corner here.';
+        return;
+    }
+    anglePairs.value = [
+        ...anglePairs.value,
+        {
+            home: pendingHomeAngle.value,
+            copy: vertexId,
+            color: anglePairs.value.length,
+        },
+    ];
+    pendingHomeAngle.value = '';
     message.value = '';
 };
 
@@ -496,11 +571,11 @@ const submit = async () => {
             return;
         }
         if (step.shade_angle) {
-            if (! copyShaded.value) {
-                message.value = 'Shade the equal angle on the second triangle.';
+            if (! anglePairs.value.length) {
+                message.value = 'Click the equal angle on △ABC, then the matching corner on the second triangle.';
                 return;
             }
-            values.angle = copyShaded.value;
+            values.angle_pairs = pairedAngles();
         }
     } else if (step.type === 'marks') {
         values.placed = { ...placed };
@@ -649,13 +724,16 @@ const continueStep = () => {
                             <div class="relative h-56 overflow-visible">
                             <svg viewBox="0 0 200 180" class="h-full w-full overflow-visible">
                                 <path
-                                    v-for="vertex in drawnHome.vertices.filter((item) => givenAngles(drawnHome).includes(item.id))"
+                                    v-for="vertex in drawnHome.vertices"
+                                    v-show="needsAngleShade"
                                     :key="`home-wedge-${vertex.id}`"
-                                    :d="angleWedge(drawnHome, vertex.id)"
-                                    fill="#f59e0b"
-                                    fill-opacity="0.5"
-                                    stroke="#b45309"
+                                    :d="angleWedge(drawnHome, vertex.id, 36)"
+                                    :fill="wedgeFill('home', vertex.id)"
+                                    :fill-opacity="wedgeOpacity('home', vertex.id)"
+                                    :stroke="wedgeStroke('home', vertex.id)"
                                     stroke-width="1.5"
+                                    class="cursor-pointer"
+                                    @click.stop="tapHomeAngle(vertex.id)"
                                 />
                                 <line
                                     v-for="side in drawnHome.sides"
@@ -682,8 +760,10 @@ const continueStep = () => {
                             <span
                                 v-for="vertex in drawnHome.vertices"
                                 :key="`home-${vertex.id}`"
-                                class="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-slate-700 bg-white text-lg font-extrabold leading-none text-slate-900"
+                                class="absolute z-20 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-slate-700 bg-white text-lg font-extrabold leading-none text-slate-900"
+                                :class="needsAngleShade ? 'cursor-pointer' : ''"
                                 :style="slotStyle(vertex)"
+                                @click="tapHomeAngle(vertex.id)"
                             >
                                 {{ vertex.id }}
                             </span>
@@ -693,19 +773,25 @@ const continueStep = () => {
 
                     <div class="rounded-lg border border-indigo-200 bg-indigo-50/60 p-2">
                         <p class="text-center text-xs font-bold uppercase tracking-wide text-indigo-800">
-                            Second figure — write {{ allowedLetters.join(', ') || 'the letters' }}, side lengths{{ needsAngleShade ? ', shade the angle' : '' }}
+                            Second figure — write {{ allowedLetters.join(', ') || 'the letters' }} and the side lengths
+                        </p>
+                        <p v-if="needsAngleShade" class="mt-1 text-center text-xs text-amber-800">
+                            Click an angle on △ABC, then the matching corner here. Same colour means equal. Next pair is green.
                         </p>
                         <div class="mx-auto w-full max-w-sm overflow-visible px-8 py-8">
                             <div class="relative h-56 overflow-visible">
                             <svg viewBox="0 0 200 180" class="h-full w-full overflow-visible">
                                 <path
-                                    v-for="vertex in drawnCopy.vertices.filter((item) => copyShaded === item.id)"
+                                    v-for="vertex in drawnCopy.vertices"
+                                    v-show="needsAngleShade"
                                     :key="`copy-wedge-${vertex.id}`"
-                                    :d="angleWedge(drawnCopy, vertex.id, 34)"
-                                    fill="#f59e0b"
-                                    fill-opacity="0.55"
-                                    stroke="#b45309"
+                                    :d="angleWedge(drawnCopy, vertex.id, 36)"
+                                    :fill="wedgeFill('copy', vertex.id)"
+                                    :fill-opacity="wedgeOpacity('copy', vertex.id)"
+                                    :stroke="wedgeStroke('copy', vertex.id)"
                                     stroke-width="1.5"
+                                    class="cursor-pointer"
+                                    @click.stop="tapCopyAngle(vertex.id)"
                                 />
                                 <line
                                     v-for="side in drawnCopy.sides"
@@ -736,27 +822,13 @@ const continueStep = () => {
                                     @input="typeSide(side, $event.target.value)"
                                 >
                             </label>
-                            <button
-                                v-for="vertex in drawnCopy.vertices"
-                                v-show="needsAngleShade"
-                                :key="`copy-shade-${vertex.id}`"
-                                type="button"
-                                class="absolute z-10 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border text-[10px] font-bold leading-none"
-                                :class="copyShaded === vertex.id
-                                    ? 'border-amber-700 bg-amber-400 text-amber-950'
-                                    : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'"
-                                :style="inwardSlot(drawnCopy, vertex)"
-                                :disabled="stepOk"
-                                :aria-label="`Shade the angle at ${vertex.id}`"
-                                @click="shadeCopyAngle(vertex.id)"
-                            >
-                                ∠
-                            </button>
                             <label
                                 v-for="vertex in drawnCopy.vertices"
                                 :key="`copy-${vertex.id}`"
                                 class="absolute z-20 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-visible rounded-full border-2 border-indigo-600 bg-white"
+                                :class="needsAngleShade && pendingHomeAngle ? 'cursor-pointer' : ''"
                                 :style="slotStyle(vertex)"
+                                @click="pendingHomeAngle ? tapCopyAngle(vertex.id) : null"
                             >
                                 <span
                                     class="pointer-events-none text-lg font-extrabold leading-none text-indigo-900"

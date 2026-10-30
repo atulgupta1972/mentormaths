@@ -1286,10 +1286,11 @@ class MmmCardServiceTest extends TestCase
         $this->assertSame(['A'], $payload['congruence']['figures'][0]['shaded_angles'] ?? null);
         $this->assertTrue($payload['congruence']['steps'][0]['shade_angle'] ?? false);
         $this->assertSame(['Sketch', 'Table'], array_column($payload['congruence']['steps'], 'title'));
+        $this->assertSame(['A' => 'P'], $exercise->answers['check']['order']['angle_pairs'] ?? null);
 
         $wrongOrder = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'R', 'Q'], 'angle' => 'A', 'sides' => ['AB' => '5', 'AC' => '6']],
+            'values' => ['letters' => ['P', 'R', 'Q'], 'angle_pairs' => ['A' => 'P'], 'sides' => ['AB' => '5', 'AC' => '6']],
         ]);
         $this->assertFalse($wrongOrder['ok']);
 
@@ -1300,15 +1301,21 @@ class MmmCardServiceTest extends TestCase
         $this->assertFalse($missingShade['ok']);
         $this->assertFalse($missingShade['cell_results']['angle'] ?? true);
 
+        $wrongPair = $service->checkSubmission($card, $exercise, [
+            'step_key' => 'order',
+            'values' => ['letters' => ['P', 'Q', 'R'], 'angle_pairs' => ['A' => 'Q'], 'sides' => ['AB' => '5', 'AC' => '6']],
+        ]);
+        $this->assertFalse($wrongPair['ok']);
+
         $missingSides = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'Q', 'R'], 'angle' => 'A'],
+            'values' => ['letters' => ['P', 'Q', 'R'], 'angle_pairs' => ['A' => 'P']],
         ]);
         $this->assertFalse($missingSides['ok']);
 
         $order = $service->checkSubmission($card, $exercise, [
             'step_key' => 'order',
-            'values' => ['letters' => ['P', 'Q', 'R'], 'angle' => 'A', 'sides' => ['AB' => '5 cm', 'AC' => '6']],
+            'values' => ['letters' => ['P', 'Q', 'R'], 'angle_pairs' => ['A' => 'P'], 'sides' => ['AB' => '5 cm', 'AC' => '6']],
         ]);
         $this->assertTrue($order['ok'], $order['message']);
 

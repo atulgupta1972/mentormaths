@@ -702,8 +702,29 @@ class MmmCardService
             $ok = $want !== [] && $got === $want;
             $cells = ['letters' => $ok];
 
+            $wantPairs = is_array($orderCheck['angle_pairs'] ?? null) ? $orderCheck['angle_pairs'] : [];
             $wantAngle = strtoupper(trim((string) ($orderCheck['angle'] ?? '')));
-            if ($wantAngle !== '') {
+            if ($wantPairs !== []) {
+                $gotPairs = is_array($values['angle_pairs'] ?? null) ? $values['angle_pairs'] : [];
+                $normalizePairs = static function (array $map): array {
+                    $out = [];
+                    foreach ($map as $from => $to) {
+                        $from = strtoupper(trim((string) $from));
+                        $to = strtoupper(trim((string) $to));
+                        if ($from !== '' && $to !== '') {
+                            $out[$from] = $to;
+                        }
+                    }
+                    ksort($out);
+
+                    return $out;
+                };
+                $angleOk = $normalizePairs($wantPairs) === $normalizePairs($gotPairs);
+                $cells['angle'] = $angleOk;
+                if (! $angleOk) {
+                    $ok = false;
+                }
+            } elseif ($wantAngle !== '') {
                 $gotAngle = strtoupper(trim((string) ($values['angle'] ?? '')));
                 $angleOk = $gotAngle === $wantAngle;
                 $cells['angle'] = $angleOk;
