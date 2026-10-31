@@ -85,9 +85,7 @@ const onPdfChange = (event) => {
     }
 
     if (file.size > 50 * 1024 * 1024) {
-        uploadError.value = 'PDF must be under 50 MB.';
-    } else if (file.size > 2 * 1024 * 1024) {
-        uploadError.value = `Selected file is ${formatMb(file.size)}. If upload fails, the server PHP limit may still be 2 MB — ask hosting to set upload_max_filesize to 20M or higher.`;
+        uploadError.value = `PDF is ${formatMb(file.size)}. Each chapter PDF must be under 50 MB.`;
     }
 };
 
@@ -268,7 +266,7 @@ const submit = () => {
                             @change="onPdfChange"
                         >
                         <p v-if="selectedChapter" class="mt-1 text-xs text-gray-500">
-                            Selected syllabus chapter: {{ selectedChapter.name }}
+                            Selected syllabus chapter: {{ selectedChapter.name }}. PDFs up to 50 MB are allowed.
                         </p>
                         <InputError :message="uploadError" class="mt-1" />
                         <InputError :message="form.errors.pdf" class="mt-1" />
