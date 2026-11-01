@@ -15,6 +15,7 @@ use App\Services\AdminGradeContext;
 use App\Services\ConceptPathService;
 use App\Services\ConceptPathJobService;
 use App\Services\GeminiFillBlankConversionService;
+use App\Services\PracticeSetSplitService;
 use App\Services\SetAssignmentService;
 use App\Services\TextbookChapterAnswerClassificationService;
 use App\Services\TextbookChapterBookService;
@@ -26,12 +27,15 @@ use App\Services\TextbookChapterPublishService;
 use App\Services\TextbookChapterStagingGeminiService;
 use App\Services\TextbookMcqSetPlanService;
 use App\Services\TextbookSetCodeService;
+use App\Services\WrittenSheetService;
 use App\Support\MentorMathsSourceRef;
 use App\Support\UploadedFileDiagnostics;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -53,6 +57,8 @@ class TextbookController extends Controller
         private TextbookChapterAnswerClassificationService $answerClassification,
         private ConceptPathService $conceptPath,
         private ConceptPathJobService $conceptPathJobs,
+        private PracticeSetSplitService $splitService,
+        private WrittenSheetService $writtenSheets,
     ) {}
 
     public function index(Request $request): Response
@@ -448,6 +454,7 @@ class TextbookController extends Controller
                         ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
                         ContentUploadTask::STATUS_PUBLISHED,
                     ], true) && $textbookChapter->mcqWorksheetIds() !== [],
+                    'can_return_to_uploader' => $this->canReturnChapterToUploader($task),
                     'can_change_book' => true,
                     'has_pdf' => $hasPdf,
                 ];
@@ -519,6 +526,7 @@ class TextbookController extends Controller
                 'total_count' => $itemCount,
             ],
             'publishedSets' => $publishedSets,
+            'publishedPracticeSets' => $uploaderMode ? [] : $this->publishedPracticeSets($textbookChapter),
             'students' => $uploaderMode
                 ? []
                 : $this->assignmentService
@@ -1017,6 +1025,94 @@ class TextbookController extends Controller
                     ? "Published MentorMaths fill-blank {$codes['fill_blank']} and written {$codes['written']} (no MCQ sets).{$overrideNote}"
                     : "Published online fill-blank {$codes['fill_blank']} and written {$codes['written']}. MCQ sets unchanged.",
             );
+    }
+
+    public function splitPublishedEqually(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $validated = $request->validate([
+            'parts' => ['required', 'integer', 'min:2', 'max:10'],
+        ]);
+        $parts = (int) $validated['parts'];
+
+        $targets = [];
+        $skipped = [];
+
+        foreach ($this->publishedPracticeSets($textbookChapter) as $row) {
+            $count = (int) $row['questions_count'];
+            if ($count < $parts) {
+                continue;
+            }
+
+            if (! $row['can_split']) {
+                $reason = trim((string) ($row['block_reason'] ?? ''));
+                $skipped[] = $row['set_code'].' left as one set'.($reason !== '' ? ' — '.$reason : '.');
+
+                continue;
+            }
+
+            $worksheet = Worksheet::query()->find($row['id']);
+            if (! $worksheet) {
+                continue;
+            }
+
+            $count = $worksheet->questions()->count();
+            if ($count < $parts) {
+                continue;
+            }
+
+            $sizes = $this->splitService->equalPartSizes($count, $parts);
+            $plan = $this->splitService->buildPlanFromSizes($count, (string) $worksheet->set_code, $sizes);
+            $conflicts = Worksheet::query()
+                ->whereIn('set_code', array_column($plan, 'set_code'))
+                ->where('id', '!=', $worksheet->id)
+                ->pluck('set_code');
+
+            if ($conflicts->isNotEmpty()) {
+                $skipped[] = $row['set_code'].' left as one set — '.$conflicts->implode(', ').' already exist.';
+
+                continue;
+            }
+
+            $targets[] = [
+                'worksheet' => $worksheet,
+                'sizes' => $sizes,
+            ];
+        }
+
+        if ($targets === []) {
+            $why = $skipped !== [] ? ' '.implode(' ', $skipped) : '';
+
+            return back()->with('error', "No set on this chapter can be broken into {$parts} equal parts.{$why}");
+        }
+
+        try {
+            $summaries = DB::transaction(function () use ($targets, $request) {
+                $summaries = [];
+
+                foreach ($targets as $target) {
+                    $worksheet = $target['worksheet'];
+                    $sizes = $target['sizes'];
+                    $result = $worksheet->isWritten()
+                        ? $this->writtenSheets->split($worksheet, $request->user(), $sizes)
+                        : $this->splitService->splitWithSizes($worksheet, $request->user(), $sizes);
+
+                    $summaries[] = collect($result['plan'])->map(
+                        fn (array $planRow) => $planRow['set_code'].' ('.$planRow['count'].')',
+                    )->implode(', ');
+                }
+
+                return $summaries;
+            });
+        } catch (InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $message = 'Broke into equal parts: '.implode(' · ', $summaries).'.';
+        if ($skipped !== []) {
+            $message .= ' '.implode(' ', $skipped);
+        }
+
+        return back()->with('success', $message);
     }
 
     public function conceptPath(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
@@ -1810,6 +1906,80 @@ class TextbookController extends Controller
         $number = ltrim($number, '0') ?: $number;
 
         return "Ch {$number} — {$name}";
+    }
+
+    /**
+     * Published fill-blank, written, and MCQ sets on this chapter, in part order.
+     *
+     * @return list<array{id: int, set_code: string, kind: string, kind_label: string, questions_count: int, can_split: bool, block_reason: ?string}>
+     */
+    private function publishedPracticeSets(TextbookChapter $chapter): array
+    {
+        $groups = [
+            ['fill_blank', 'Fill-blank', $chapter->fillBlankWorksheetIds()],
+            ['written', 'Written', $chapter->writtenWorksheetIds()],
+            ['mcq', 'MCQ', $chapter->mcqWorksheetIds()],
+        ];
+
+        $rows = [];
+
+        foreach ($groups as [$kind, $label, $ids]) {
+            if ($ids === []) {
+                continue;
+            }
+
+            $sheets = Worksheet::query()
+                ->whereIn('id', $ids)
+                ->withCount('questions')
+                ->get()
+                ->keyBy('id');
+
+            foreach ($ids as $id) {
+                $sheet = $sheets->get($id);
+                if (! $sheet) {
+                    continue;
+                }
+
+                $count = (int) $sheet->questions_count;
+                $block = null;
+
+                if ($sheet->isWritten()) {
+                    if ($this->writtenSheets->hasStudentSubmissions($sheet)) {
+                        $block = 'students have already uploaded written work';
+                    } elseif ($this->writtenSheets->usesUploadedPdf($sheet)) {
+                        $block = 'this sheet uses an uploaded PDF';
+                    } elseif ($count < 4) {
+                        $block = 'written sheets need at least 4 sums to split';
+                    }
+                }
+
+                $rows[] = [
+                    'id' => $sheet->id,
+                    'set_code' => (string) $sheet->set_code,
+                    'kind' => $kind,
+                    'kind_label' => $label,
+                    'questions_count' => $count,
+                    'can_split' => $block === null && $count >= 2,
+                    'block_reason' => $block,
+                ];
+            }
+        }
+
+        return $rows;
+    }
+
+    private function canReturnChapterToUploader(ContentUploadTask $task): bool
+    {
+        if (! $task->assigned_to_user_id) {
+            return false;
+        }
+
+        return in_array($task->status, [
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_PUBLISHED,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+        ], true);
     }
 
     /**

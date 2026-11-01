@@ -128,6 +128,35 @@ class PracticeSetSplitService
         return $sizes;
     }
 
+    /**
+     * Divide $count questions into $parts as evenly as possible.
+     * Earlier parts receive one extra sum when the total does not divide evenly.
+     *
+     * @return list<int>
+     */
+    public function equalPartSizes(int $count, int $parts): array
+    {
+        if ($parts < 2) {
+            throw new InvalidArgumentException('Choose at least 2 parts.');
+        }
+
+        if ($count < $parts) {
+            throw new InvalidArgumentException(
+                "This set has {$count} sum(s) — that is fewer than {$parts} parts."
+            );
+        }
+
+        $base = intdiv($count, $parts);
+        $extra = $count % $parts;
+        $sizes = [];
+
+        for ($i = 0; $i < $parts; $i++) {
+            $sizes[] = $base + ($i < $extra ? 1 : 0);
+        }
+
+        return $sizes;
+    }
+
     public function canSplit(Worksheet $worksheet, int $batchSize = self::DEFAULT_BATCH_SIZE): bool
     {
         $count = $worksheet->questions_count ?? $worksheet->questions()->count();

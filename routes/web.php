@@ -493,6 +493,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/return-card', [TextbookController::class, 'returnConceptPathCard'])->name('textbooks.concept-path.return-card');
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/return-path', [TextbookController::class, 'returnConceptPath'])->name('textbooks.concept-path.return-path');
     Route::post('/textbooks/chapters/{textbookChapter}/publish-fill-blank-written', [TextbookController::class, 'publishFillBlankAndWritten'])->name('textbooks.publish-fill-blank-written');
+    Route::post('/textbooks/chapters/{textbookChapter}/split-equally', [TextbookController::class, 'splitPublishedEqually'])->name('textbooks.split-equally');
     Route::get('/textbooks/chapters/{textbookChapter}/mcq-reference', [TextbookController::class, 'downloadMcqReference'])->name('textbooks.mcq-reference');
     Route::post('/textbooks/chapters/{textbookChapter}/reset-import', [TextbookController::class, 'resetImport'])->name('textbooks.reset-import');
     Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');

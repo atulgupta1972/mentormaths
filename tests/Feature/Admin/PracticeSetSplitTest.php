@@ -16,11 +16,13 @@ use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Models\Worksheet;
 use App\Services\PracticeSetSplitService;
+use App\Services\WrittenSheetPdfService;
 use App\Support\PracticeSetScope;
 use App\Support\PracticeSetTier;
 use App\Support\QuestionBankPurpose;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WorksheetPurpose;
+use App\Support\WrittenSheetStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -178,6 +180,129 @@ class PracticeSetSplitTest extends TestCase
                 ->component('Admin/Questions/SetQuestions')
                 ->where('splitRelatedSets.0.id', $conflict->id)
                 ->where('splitRelatedSets.0.set_code', 'C8-GP-CH02-M1'));
+    }
+
+    public function test_equal_part_sizes_spread_the_remainder_across_the_first_parts(): void
+    {
+        $sizes = app(PracticeSetSplitService::class)->equalPartSizes(10, 3);
+
+        $this->assertSame([4, 3, 3], $sizes);
+    }
+
+    public function test_admin_can_break_chapter_fill_blank_and_written_into_equal_parts(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        [$fill, $textbookChapter] = $this->seedChapterSetWithQuestions(10, 'C10-MM2-CH08-F1', true);
+        $written = $this->seedSiblingSheet($fill, 10, 'C10-MM2-CH08-W1', WorksheetDeliveryMode::WRITTEN);
+
+        $textbookChapter->update([
+            'mcq_worksheet_id' => null,
+            'mcq_worksheet_ids' => null,
+            'fill_blank_worksheet_id' => $fill->id,
+            'fill_blank_worksheet_ids' => [$fill->id],
+            'written_worksheet_id' => $written->id,
+            'written_worksheet_ids' => [$written->id],
+        ]);
+
+        $this->mock(WrittenSheetPdfService::class, function ($mock) {
+            $mock->shouldReceive('generate')->andReturn('written-sheets/test.pdf');
+        });
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.split-equally', $textbookChapter), ['parts' => 3])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $fill->refresh();
+        $written->refresh();
+        $textbookChapter->refresh();
+
+        $this->assertSame('C10-MM2-CH08-F1', $fill->set_code);
+        $this->assertSame(4, $fill->questions()->count());
+        $this->assertSame(3, Worksheet::query()->where('set_code', 'C10-MM2-CH08-F2')->first()?->questions()->count());
+        $this->assertSame(3, Worksheet::query()->where('set_code', 'C10-MM2-CH08-F3')->first()?->questions()->count());
+
+        $this->assertSame('C10-MM2-CH08-W1', $written->set_code);
+        $this->assertSame(4, $written->questions()->count());
+        $this->assertSame(3, Worksheet::query()->where('set_code', 'C10-MM2-CH08-W2')->first()?->questions()->count());
+        $this->assertSame(3, Worksheet::query()->where('set_code', 'C10-MM2-CH08-W3')->first()?->questions()->count());
+
+        $this->assertCount(3, $textbookChapter->fillBlankWorksheetIds());
+        $this->assertCount(3, $textbookChapter->writtenWorksheetIds());
+        $this->assertSame($fill->id, $textbookChapter->fillBlankWorksheetIds()[0]);
+        $this->assertSame($written->id, $textbookChapter->writtenWorksheetIds()[0]);
+    }
+
+    public function test_equal_split_leaves_the_set_intact_when_the_next_part_code_exists(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        [$fill, $textbookChapter] = $this->seedChapterSetWithQuestions(10, 'C10-MM2-CH08-F1', true);
+
+        Worksheet::query()->create([
+            'title' => 'Existing part',
+            'set_number' => 2,
+            'set_code' => 'C10-MM2-CH08-F2',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $fill->syllabus_chapter_id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'purpose' => WorksheetPurpose::STANDARD,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+            'created_by' => $fill->created_by,
+        ]);
+
+        $textbookChapter->update([
+            'mcq_worksheet_id' => null,
+            'mcq_worksheet_ids' => null,
+            'fill_blank_worksheet_id' => $fill->id,
+            'fill_blank_worksheet_ids' => [$fill->id],
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.split-equally', $textbookChapter), ['parts' => 2])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame(10, $fill->fresh()->questions()->count());
+        $this->assertSame([$fill->id], $textbookChapter->fresh()->fillBlankWorksheetIds());
+    }
+
+    private function seedSiblingSheet(Worksheet $source, int $count, string $setCode, string $deliveryMode): Worksheet
+    {
+        $topicId = $source->questions()->value('questions.syllabus_topic_id');
+
+        $worksheet = Worksheet::query()->create([
+            'title' => 'Sibling sheet',
+            'set_number' => 1,
+            'set_code' => $setCode,
+            'tier' => $source->tier,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $source->syllabus_chapter_id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'purpose' => WorksheetPurpose::STANDARD,
+            'delivery_mode' => $deliveryMode,
+            'written_status' => $deliveryMode === WorksheetDeliveryMode::WRITTEN
+                ? WrittenSheetStatus::VERIFIED
+                : null,
+            'written_pdf_path' => $deliveryMode === WorksheetDeliveryMode::WRITTEN
+                ? 'written-sheets/old.pdf'
+                : null,
+            'created_by' => $source->created_by,
+        ]);
+
+        for ($i = 1; $i <= $count; $i++) {
+            $question = Question::query()->create([
+                'syllabus_topic_id' => $topicId,
+                'question_text' => "Written sum {$i}",
+                'type' => Question::TYPE_FILL_IN_BLANK,
+                'difficulty' => 'easy',
+                'bank_purpose' => QuestionBankPurpose::PRACTICE_SET,
+                'created_by' => $source->created_by,
+            ]);
+            $worksheet->questions()->attach($question->id, ['sort_order' => $i]);
+        }
+
+        return $worksheet;
     }
 
     /**

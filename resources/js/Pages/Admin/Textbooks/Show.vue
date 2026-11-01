@@ -17,6 +17,7 @@ const props = defineProps({
     mcqImport: { type: Object, required: true },
     fillBlankConversion: { type: Object, default: null },
     publishedSets: { type: Array, default: () => [] },
+    publishedPracticeSets: { type: Array, default: () => [] },
     students: { type: Array, default: () => [] },
     gradeLevels: { type: Array, default: () => [] },
     defaultGradeLevelId: { type: [Number, null], default: null },
@@ -385,6 +386,112 @@ const canPublishFillBlank = computed(() => fillBlankReadyCount.value > 0);
 const isMentorMaths = computed(() => Boolean(props.chapter.book?.is_mentormaths));
 const canPublishMcq = computed(() => !isMentorMaths.value);
 
+const equalParts = ref(2);
+const splitEquallyForm = useForm({ parts: 2 });
+const returnUploaderForm = useForm({
+    reason: 'Please break this chapter into smaller equal parts and send it back.',
+});
+
+const publishedFillBlankLabel = computed(() => {
+    const codes = (props.publishedPracticeSets || [])
+        .filter((set) => set.kind === 'fill_blank' && set.set_code)
+        .map((set) => set.set_code);
+
+    if (codes.length) {
+        return codes.join(', ');
+    }
+
+    return props.chapter.fill_blank_set_code || 'pending';
+});
+
+const equalPartSizes = (count, parts) => {
+    const total = Number(count) || 0;
+    const n = Number(parts) || 0;
+    if (n < 2 || total < n) {
+        return [];
+    }
+    const base = Math.floor(total / n);
+    const extra = total % n;
+
+    return Array.from({ length: n }, (_, index) => base + (index < extra ? 1 : 0));
+};
+
+const baseSetCode = (setCode) => {
+    const trimmed = String(setCode || '').trim();
+    const base = trimmed.replace(/\d+$/, '');
+
+    return base || trimmed || 'SET';
+};
+
+const maxEqualParts = computed(() => {
+    const counts = (props.publishedPracticeSets || [])
+        .filter((set) => set.can_split)
+        .map((set) => Number(set.questions_count) || 0);
+
+    if (!counts.length) {
+        return 2;
+    }
+
+    return Math.min(10, Math.max(...counts));
+});
+
+const equalSplitPreview = computed(() => {
+    const parts = Math.min(maxEqualParts.value, Math.max(2, Number(equalParts.value) || 2));
+    const existing = new Set((props.publishedPracticeSets || []).map((set) => set.set_code));
+
+    return (props.publishedPracticeSets || []).map((set) => {
+        const sizes = set.can_split ? equalPartSizes(set.questions_count, parts) : [];
+        const planned = sizes.length
+            ? Array.from({ length: sizes.length }, (_, index) => `${baseSetCode(set.set_code)}${index + 1}`)
+            : [];
+        const conflicts = planned.filter((code) => code !== set.set_code && existing.has(code));
+
+        return {
+            ...set,
+            sizes,
+            conflicts,
+            willSplit: sizes.length >= 2 && conflicts.length === 0,
+        };
+    });
+});
+
+const setsToSplit = computed(() => equalSplitPreview.value.filter((set) => set.willSplit));
+
+const showBreakPanel = computed(() =>
+    !props.uploaderMode && (
+        (props.publishedPracticeSets || []).length > 0
+        || Boolean(props.contentUploadTask?.can_return_to_uploader)
+    ),
+);
+
+const runEqualSplit = () => {
+    const parts = Math.min(maxEqualParts.value, Math.max(2, Number(equalParts.value) || 2));
+    const lines = setsToSplit.value.map((set) => `${set.set_code}: ${set.sizes.join('+')}`);
+    if (!lines.length) {
+        return;
+    }
+    if (!window.confirm(`Break into ${parts} equal parts?\n\n${lines.join('\n')}\n\nQuestion order stays the same.`)) {
+        return;
+    }
+    splitEquallyForm.parts = parts;
+    splitEquallyForm.post(
+        safeRoute('admin.textbooks.split-equally', props.chapter.id, `/admin/textbooks/chapters/${props.chapter.id}/split-equally`),
+        { preserveScroll: true },
+    );
+};
+
+const sendBackToUploader = () => {
+    const name = props.contentUploadTask?.assignee_name || 'the uploader';
+    if (!window.confirm(`Send this chapter back to ${name}? They will get an email.`)) {
+        return;
+    }
+    const taskId = props.contentUploadTask?.id;
+    returnUploaderForm.post(
+        safeRoute('admin.content-tasks.return-for-reverification', taskId, `/admin/content-tasks/${taskId}/return-for-reverification`),
+        { preserveScroll: true },
+    );
+};
+
 const importMcq = () => {
     importForm.json = jsonInput.value;
     importForm.post(chapterRoute('import-mcq'), {
@@ -675,7 +782,7 @@ const canChangeBook = computed(() => {
                             <span v-if="chapter.concept_path_status_label"> · {{ chapter.concept_path_status_label }}</span>
                         </template>
                         <template v-else-if="isMentorMaths">
-                            · Fill-blank {{ chapter.fill_blank_set_code || 'pending' }}
+                            · Fill-blank {{ publishedFillBlankLabel }}
                         </template>
                         <template v-else>
                             · MCQ {{ mcqPublishSummary }}
@@ -735,6 +842,81 @@ const canChangeBook = computed(() => {
                     <span v-if="chapter.book?.source_ref" class="mt-1 block text-xs text-teal-800">
                         Internal source ref: {{ chapter.book.source_ref }} (admin only)
                     </span>
+                </div>
+
+                <div
+                    v-if="showBreakPanel"
+                    class="rounded-lg border border-violet-200 bg-white p-4 shadow-sm"
+                >
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-semibold text-violet-950">Break into equal parts</p>
+                            <p class="mt-1 text-xs text-violet-900">
+                                Split the published sets here, or send the chapter back so the uploader breaks it up.
+                                Question order stays the same.
+                            </p>
+                        </div>
+                    </div>
+
+                    <ul v-if="publishedPracticeSets.length" class="mt-3 space-y-1 text-sm text-gray-800">
+                        <li v-for="set in equalSplitPreview" :key="set.id" class="flex flex-wrap items-baseline gap-x-2">
+                            <span class="font-mono font-semibold text-violet-950">{{ set.set_code }}</span>
+                            <span class="text-gray-600">{{ set.kind_label }} · {{ set.questions_count }} sums</span>
+                            <span v-if="set.willSplit" class="text-violet-800">→ {{ set.sizes.join(' + ') }}</span>
+                            <span v-else-if="set.conflicts.length" class="text-amber-800">
+                                {{ set.conflicts.join(', ') }} already exist, so this set stays as it is
+                            </span>
+                            <span v-else-if="set.block_reason" class="text-amber-800">{{ set.block_reason }}</span>
+                        </li>
+                    </ul>
+
+                    <div v-if="setsToSplit.length" class="mt-3 flex flex-wrap items-end gap-3">
+                        <div>
+                            <InputLabel value="Equal parts" class="!text-xs" />
+                            <input
+                                v-model.number="equalParts"
+                                type="number"
+                                min="2"
+                                :max="maxEqualParts"
+                                class="mt-1 w-24 rounded-md border-violet-300 text-sm"
+                            >
+                        </div>
+                        <PrimaryButton
+                            type="button"
+                            class="!bg-violet-800 hover:!bg-violet-900"
+                            :disabled="splitEquallyForm.processing"
+                            @click="runEqualSplit"
+                        >
+                            {{ splitEquallyForm.processing ? 'Breaking…' : 'Break equally' }}
+                        </PrimaryButton>
+                    </div>
+
+                    <form
+                        v-if="contentUploadTask?.can_return_to_uploader"
+                        class="mt-4 border-t border-violet-100 pt-4"
+                        @submit.prevent="sendBackToUploader"
+                    >
+                        <p class="text-sm font-medium text-gray-900">
+                            Send back to {{ contentUploadTask.assignee_name || 'the uploader' }}
+                        </p>
+                        <p class="mt-1 text-xs text-gray-600">
+                            They get an email and the chapter returns to their queue to break into parts.
+                        </p>
+                        <textarea
+                            v-model="returnUploaderForm.reason"
+                            rows="2"
+                            class="mt-2 w-full rounded-md border-gray-300 text-sm"
+                            required
+                        />
+                        <InputError class="mt-1" :message="returnUploaderForm.errors.reason" />
+                        <SecondaryButton
+                            type="submit"
+                            class="mt-2"
+                            :disabled="returnUploaderForm.processing || !returnUploaderForm.reason.trim()"
+                        >
+                            {{ returnUploaderForm.processing ? 'Sending…' : 'Send back to uploader' }}
+                        </SecondaryButton>
+                    </form>
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
