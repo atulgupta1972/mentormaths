@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\TextbookChapter;
+use App\Models\Worksheet;
 use InvalidArgumentException;
 
 class TextbookMcqSetPlanService
@@ -85,6 +86,106 @@ class TextbookMcqSetPlanService
             'q_to' => $questionCount,
             'description' => '',
         ]];
+    }
+
+    /**
+     * When a published chapter was split into more worksheets than the saved plan,
+     * rewrite the plan from those worksheets so the publish page shows each part.
+     *
+     * @return list<array{set_code: string, q_from: int, q_to: int, description: string}>
+     */
+    public function alignStoredPlanWithWorksheets(TextbookChapter $chapter): array
+    {
+        $stored = $this->storedPlanRows($chapter);
+        $fromWorksheets = $this->planFromMcqWorksheets($chapter, $stored);
+
+        if ($fromWorksheets === [] || count($fromWorksheets) <= count($stored)) {
+            return $stored;
+        }
+
+        $chapter->update(['mcq_set_plan' => $fromWorksheets]);
+
+        return $fromWorksheets;
+    }
+
+    /**
+     * @param  list<array{set_code: string, q_from: int, q_to: int, description: string}>  $stored
+     * @return list<array{set_code: string, q_from: int, q_to: int, description: string}>
+     */
+    public function planFromMcqWorksheets(TextbookChapter $chapter, array $stored = []): array
+    {
+        $ids = $chapter->mcqWorksheetIds();
+        if ($ids === []) {
+            return [];
+        }
+
+        $sheets = Worksheet::query()
+            ->whereIn('id', $ids)
+            ->withCount('questions')
+            ->get()
+            ->keyBy('id');
+
+        $descriptions = [];
+        foreach ($stored as $row) {
+            $code = trim((string) ($row['set_code'] ?? ''));
+            if ($code !== '') {
+                $descriptions[$code] = trim((string) ($row['description'] ?? ''));
+            }
+        }
+
+        $plan = [];
+        $from = 1;
+
+        foreach ($ids as $id) {
+            $sheet = $sheets->get($id);
+            if (! $sheet) {
+                continue;
+            }
+
+            $count = (int) $sheet->questions_count;
+            if ($count < 1) {
+                continue;
+            }
+
+            $code = trim((string) $sheet->set_code);
+            $to = $from + $count - 1;
+            $plan[] = [
+                'set_code' => $code,
+                'q_from' => $from,
+                'q_to' => $to,
+                'description' => $descriptions[$code] ?? '',
+            ];
+            $from = $to + 1;
+        }
+
+        return $plan;
+    }
+
+    /**
+     * @return list<array{set_code: string, q_from: int, q_to: int, description: string}>
+     */
+    private function storedPlanRows(TextbookChapter $chapter): array
+    {
+        $stored = $chapter->mcq_set_plan;
+        if (! is_array($stored)) {
+            return [];
+        }
+
+        $rows = [];
+        foreach ($stored as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $rows[] = [
+                'set_code' => trim((string) ($row['set_code'] ?? '')),
+                'q_from' => (int) ($row['q_from'] ?? 0),
+                'q_to' => (int) ($row['q_to'] ?? 0),
+                'description' => trim((string) ($row['description'] ?? '')),
+            ];
+        }
+
+        return $rows;
     }
 
     /**

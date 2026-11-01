@@ -26,6 +26,82 @@ class ContentTaskVerificationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_publish_page_lists_each_part_when_the_saved_plan_is_still_one_set(): void
+    {
+        $this->withoutVite();
+
+        $questions = [];
+        for ($i = 1; $i <= 4; $i++) {
+            $questions[] = [
+                'topic' => 'Data',
+                'question' => "Sum {$i}?",
+                'options' => ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'],
+                'correct_index' => 0,
+                'hint' => 'Add',
+                'explanation' => 'A',
+                'difficulty' => 'Easy',
+            ];
+        }
+
+        [$uploader, $chapter, $task] = $this->seedPublishedTaskWithJson(json_encode([
+            'questions' => $questions,
+        ], JSON_THROW_ON_ERROR));
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $task->update([
+            'status' => ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            'submitted_at' => now(),
+        ]);
+
+        $first = Worksheet::query()->findOrFail($chapter->mcqWorksheetIds()[0]);
+        $ordered = $first->questions()->orderBy('worksheet_question.sort_order')->pluck('questions.id')->all();
+        $move = array_slice($ordered, 2);
+        $first->questions()->detach($move);
+
+        $base = preg_replace('/\d+$/', '', (string) $first->set_code) ?: (string) $first->set_code;
+        $first->update(['set_code' => $base.'1']);
+
+        $second = $first->replicate();
+        $second->set_code = $base.'2';
+        $second->set_number = ((int) $first->set_number) + 1;
+        $second->title = $first->title.' — Part 2';
+        $second->save();
+
+        foreach ($move as $index => $questionId) {
+            $second->questions()->attach($questionId, ['sort_order' => $index + 1]);
+        }
+
+        $chapter->update([
+            'mcq_worksheet_id' => $first->id,
+            'mcq_worksheet_ids' => [$first->id, $second->id],
+            'mcq_set_plan' => [[
+                'set_code' => $base,
+                'q_from' => 1,
+                'q_to' => 4,
+                'description' => '',
+            ]],
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.content-tasks.show', $task))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('verification.set_plan_parts', 2)
+                ->where('verification.set_plan.0.set_code', $base.'1')
+                ->where('verification.set_plan.0.question_count', 2)
+                ->where('verification.set_plan.0.q_from', 1)
+                ->where('verification.set_plan.0.q_to', 2)
+                ->where('verification.set_plan.1.set_code', $base.'2')
+                ->where('verification.set_plan.1.question_count', 2)
+                ->where('verification.set_plan.1.q_from', 3)
+                ->where('verification.set_plan.1.q_to', 4)
+                ->where('verification.set_plan_summary', '2 sets (2+2): '.$base.'1, '.$base.'2'));
+
+        $plan = $chapter->fresh()->mcq_set_plan;
+        $this->assertCount(2, $plan);
+        $this->assertSame($base.'1', $plan[0]['set_code']);
+        $this->assertSame($base.'2', $plan[1]['set_code']);
+    }
+
     public function test_admin_can_edit_mcq_options_during_verification(): void
     {
         $this->withoutVite();

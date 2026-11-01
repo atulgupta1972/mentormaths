@@ -17,6 +17,7 @@ class PracticeSetSplitService
 
     public function __construct(
         private ClassCoverageService $coverageService,
+        private TextbookMcqSetPlanService $setPlanService,
     ) {}
 
     /**
@@ -432,6 +433,10 @@ class PracticeSetSplitService
 
             if ($updates !== []) {
                 $chapter->update($updates);
+
+                if (array_key_exists('mcq_worksheet_ids', $updates)) {
+                    $this->setPlanService->alignStoredPlanWithWorksheets($chapter->fresh());
+                }
             }
         }
     }

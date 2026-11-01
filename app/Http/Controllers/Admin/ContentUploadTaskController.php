@@ -1397,15 +1397,16 @@ class ContentUploadTaskController extends Controller
             return null;
         }
 
-        if ($task->textbookChapter?->mcqWorksheetIds() === []) {
+        $chapter = $task->textbookChapter;
+        if (! $chapter || $chapter->mcqWorksheetIds() === []) {
             return null;
         }
 
+        $setPlan = $this->setPlanService->alignStoredPlanWithWorksheets($chapter);
+        $task->setRelation('textbookChapter', $chapter->fresh());
+
         $verification = $this->verificationService->forTask($task, $user);
         $this->verificationService->maybeCompleteRunIfAllVerified($verification['run']);
-
-        $chapter = $task->textbookChapter;
-        $setPlan = is_array($chapter?->mcq_set_plan) ? $chapter->mcq_set_plan : [];
 
         $pendingQuestions = collect($verification['questions'])
             ->filter(fn (array $row) => ! $this->verificationService->isGeminiDoneRow($row))

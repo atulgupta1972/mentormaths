@@ -56,6 +56,14 @@ class PracticeSetSplitTest extends TestCase
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
         [$worksheet, $textbookChapter] = $this->seedChapterSetWithQuestions(25, 'C7-GP-CH01-M', true);
+        $textbookChapter->update([
+            'mcq_set_plan' => [[
+                'set_code' => 'C7-GP-CH01-M',
+                'q_from' => 1,
+                'q_to' => 25,
+                'description' => '',
+            ]],
+        ]);
 
         $this->actingAs($admin)
             ->post(route('admin.practice-sets.split', $worksheet), ['batch_size' => 20])
@@ -66,6 +74,13 @@ class PracticeSetSplitTest extends TestCase
         $this->assertCount(2, $ids);
         $this->assertSame($worksheet->id, $ids[0]);
         $this->assertNotNull(Worksheet::query()->find($ids[1]));
+        $this->assertCount(2, $textbookChapter->mcq_set_plan);
+        $this->assertSame('C7-GP-CH01-M1', $textbookChapter->mcq_set_plan[0]['set_code']);
+        $this->assertSame(1, $textbookChapter->mcq_set_plan[0]['q_from']);
+        $this->assertSame(20, $textbookChapter->mcq_set_plan[0]['q_to']);
+        $this->assertSame('C7-GP-CH01-M2', $textbookChapter->mcq_set_plan[1]['set_code']);
+        $this->assertSame(21, $textbookChapter->mcq_set_plan[1]['q_from']);
+        $this->assertSame(25, $textbookChapter->mcq_set_plan[1]['q_to']);
     }
 
     public function test_split_plan_helper_matches_batch_size(): void
