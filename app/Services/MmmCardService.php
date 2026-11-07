@@ -278,6 +278,7 @@ class MmmCardService
         $isFillPage = ($answers['mode'] ?? '') === 'fill_page';
         $isBodmas = ($answers['mode'] ?? '') === 'bodmas';
         $isCongruence = ($answers['mode'] ?? '') === 'congruence';
+        $isMakeEquation = ($answers['mode'] ?? '') === 'make_equation';
 
         return [
             'id' => $exercise->id,
@@ -285,11 +286,12 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table'))),
+            'play_kind' => $isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table')))),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
             'bodmas' => $isBodmas ? ($answers['play'] ?? []) : null,
             'congruence' => $isCongruence ? ($answers['play'] ?? []) : null,
             'fill_page' => $isFillPage ? ($answers['play'] ?? []) : null,
+            'make_equation' => $isMakeEquation ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
             // Marks: auto from Total column. Money ratio/conditions: student types the equation.
@@ -324,6 +326,9 @@ class MmmCardService
         }
         if (($expected['mode'] ?? '') === 'congruence') {
             return $this->checkCongruenceSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'make_equation') {
+            return $this->checkMakeEquationSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -672,6 +677,116 @@ class MmmCardService
             'message' => $message,
             'step_key' => $stepKey,
         ];
+    }
+
+    /**
+     * Word statement → amount in terms of x, then the equation for the total.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkMakeEquationSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $stepKey = (string) ($submission['step_key'] ?? '');
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        if ($stepKey !== '' && ! array_key_exists($stepKey, $values)) {
+            $values[$stepKey] = $submission['value'] ?? null;
+        }
+
+        $keys = ['define', 'equation'];
+        $keysToCheck = in_array($stepKey, $keys, true) ? [$stepKey] : $keys;
+        $cellResults = [];
+        $allOk = true;
+        $message = 'Right.';
+
+        foreach ($keysToCheck as $key) {
+            $got = $values[$key] ?? null;
+            if ($key === 'define') {
+                $ok = $this->expressionsMatch($check['define'] ?? null, $got);
+                if (! $ok && $this->normalizeExpression($got) !== null && str_contains((string) $this->normalizeExpression($got), '=')) {
+                    $message = 'The equals sign comes in the next line. Here write only the other amount, with x in place of the number.';
+                } elseif (! $ok) {
+                    $message = (string) ($check['define_wrong'] ?? 'Put x where the number was, and keep the same more, less, times, or half.');
+                } else {
+                    $message = 'Right. That amount is in terms of x.';
+                }
+            } else {
+                $ok = $this->statementEquationsMatch($check['equation'] ?? null, $got);
+                if (! $ok) {
+                    $message = (string) ($check['equation_wrong'] ?? 'Add what I have and the other amount, and set that equal to the total.');
+                } else {
+                    $message = 'Right. That equation says what the statement says.';
+                }
+            }
+            $cellResults[$key] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        $defineOk = $this->expressionsMatch($check['define'] ?? null, $values['define'] ?? null);
+        $equationOk = $this->statementEquationsMatch($check['equation'] ?? null, $values['equation'] ?? null);
+        $finished = $defineOk && $equationOk;
+        if ($finished) {
+            $message = 'Right. The amount is in terms of x, and the equation matches the statement.';
+        }
+
+        return [
+            'ok' => $allOk,
+            'all_ok' => $finished,
+            'cell_results' => $cellResults,
+            'message' => $message,
+            'step_key' => $stepKey !== '' ? $stepKey : null,
+        ];
+    }
+
+    private function expressionsMatch(mixed $expected, mixed $got): bool
+    {
+        $want = $this->expressionCanon($expected);
+        $have = $this->expressionCanon($got);
+
+        return $want !== null && $want === $have;
+    }
+
+    /**
+     * Same written equation, including x + (x + 2) = 10 and 2x + 2 = 10.
+     * A solved line such as x = 4 is a different equation.
+     */
+    private function statementEquationsMatch(mixed $expected, mixed $got): bool
+    {
+        $want = $this->equationCanonical($expected);
+        $have = $this->equationCanonical($got);
+
+        return $want !== null && $want === $have;
+    }
+
+    /**
+     * @return array{0: int, 1: int}|null
+     */
+    private function expressionCanon(mixed $value): ?array
+    {
+        $text = $this->normalizeExpression($value);
+        if ($text === null || str_contains($text, '=')) {
+            return null;
+        }
+
+        if (str_contains($text, '/')) {
+            $coeffs = $this->linearCoeffsRational($text);
+            if ($coeffs === null) {
+                return null;
+            }
+
+            return $this->canonicalIntsFromFloats($coeffs[0], $coeffs[1]);
+        }
+
+        $coeffs = $this->linearCoeffs($text);
+        if ($coeffs === null) {
+            return null;
+        }
+
+        return $this->canonicalIntsFromFloats((float) $coeffs[0], (float) $coeffs[1]);
     }
 
     /**

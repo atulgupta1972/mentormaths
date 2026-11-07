@@ -23,6 +23,8 @@ class MmmCard extends Model
 
     public const KIND_FILL_PAGE = 'fill_page';
 
+    public const KIND_MAKE_EQUATION = 'make_equation';
+
     protected $fillable = [
         'slug',
         'title',

@@ -6,6 +6,7 @@ import BodmasPlay from '@/Pages/Student/MmmCards/BodmasPlay.vue';
 import CongruencePlay from '@/Pages/Student/MmmCards/CongruencePlay.vue';
 import EquationBalancePlay from '@/Pages/Student/MmmCards/EquationBalancePlay.vue';
 import EquationFillPagePlay from '@/Pages/Student/MmmCards/EquationFillPagePlay.vue';
+import MakeEquationPlay from '@/Pages/Student/MmmCards/MakeEquationPlay.vue';
 import SeriesFinished from '@/Pages/Student/MmmCards/SeriesFinished.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import axios from 'axios';
@@ -90,6 +91,7 @@ const isBalance = computed(() => props.exercise?.play_kind === 'balance');
 const isBodmas = computed(() => props.exercise?.play_kind === 'bodmas');
 const isCongruence = computed(() => props.exercise?.play_kind === 'congruence');
 const isFillPage = computed(() => props.exercise?.play_kind === 'fill_page');
+const isMakeEquation = computed(() => props.exercise?.play_kind === 'make_equation');
 const fillCount = computed(() => props.exercise?.fill_page?.items?.length || 0);
 const fillPageBlurb = computed(() => props.exercise?.fill_page?.page_blurb || props.card?.method_blurb);
 
@@ -276,7 +278,7 @@ const footerColspan = computed(() => {
             </div>
         </template>
 
-        <div class="mx-auto space-y-4 p-4 sm:p-6" :class="isFillPage || isCongruence ? 'max-w-4xl' : 'max-w-3xl'">
+        <div class="mx-auto space-y-4 p-4 sm:p-6" :class="isFillPage || isCongruence || isMakeEquation ? 'max-w-4xl' : 'max-w-3xl'">
             <p v-if="is_staff_preview" class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
                 Staff preview — checking does not save student progress.
             </p>
@@ -327,6 +329,19 @@ const footerColspan = computed(() => {
             >
                 <h3 class="text-sm font-extrabold uppercase tracking-wide text-amber-900">
                     Brackets first
+                </h3>
+                <p class="mt-2 text-sm leading-relaxed text-slate-700">
+                    {{ card.method_blurb }}
+                </p>
+            </section>
+
+            <section
+                v-else-if="showMethodSketch && isMakeEquation"
+                class="rounded-xl bg-white p-4 shadow-sm ring-2"
+                :class="accentRing"
+            >
+                <h3 class="text-sm font-extrabold uppercase tracking-wide text-amber-900">
+                    Number first, then x, then the equation
                 </h3>
                 <p class="mt-2 text-sm leading-relaxed text-slate-700">
                     {{ card.method_blurb }}
@@ -461,13 +476,23 @@ const footerColspan = computed(() => {
                     :next-part="next_part"
                     @next="goNext"
                 />
+                <MakeEquationPlay
+                    v-else-if="isMakeEquation"
+                    :key="exercise.id"
+                    :exercise="exercise"
+                    :check_url="check_url"
+                    :can-go-next="canGoNext"
+                    :next-part="next_part"
+                    :series-label="card.series_label"
+                    @next="goNext"
+                />
                 <p
                     v-else-if="exercise.variable_tip"
                     class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950"
                 >
                     {{ exercise.variable_tip }}
                 </p>
-                <template v-if="!isBalance && !isBodmas && !isFillPage && !isCongruence">
+                <template v-if="!isBalance && !isBodmas && !isFillPage && !isCongruence && !isMakeEquation">
                 <p v-if="fillsDenomination" class="mt-2 text-xs text-slate-500">
                     Write each denomination in ₹ (number only, e.g. 2, 5, 10), then counts and totals. Wrong cells will be highlighted.
                 </p>
