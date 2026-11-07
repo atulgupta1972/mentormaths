@@ -495,6 +495,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/publish-fill-blank-written', [TextbookController::class, 'publishFillBlankAndWritten'])->name('textbooks.publish-fill-blank-written');
     Route::post('/textbooks/chapters/{textbookChapter}/split-equally', [TextbookController::class, 'splitPublishedEqually'])->name('textbooks.split-equally');
     Route::post('/textbooks/chapters/{textbookChapter}/clear-published-practice', [TextbookController::class, 'clearPublishedPractice'])->name('textbooks.clear-published-practice');
+    Route::get('/textbooks/chapters/{textbookChapter}/try-student', [\App\Http\Controllers\Admin\TextbookStudentTryController::class, 'show'])->name('textbooks.try-student');
+    Route::post('/textbooks/chapters/{textbookChapter}/try-student', [\App\Http\Controllers\Admin\TextbookStudentTryController::class, 'answer'])->name('textbooks.try-student.answer');
     Route::get('/textbooks/chapters/{textbookChapter}/mcq-reference', [TextbookController::class, 'downloadMcqReference'])->name('textbooks.mcq-reference');
     Route::post('/textbooks/chapters/{textbookChapter}/reset-import', [TextbookController::class, 'resetImport'])->name('textbooks.reset-import');
     Route::get('/textbooks/chapters/{textbookChapter}/download', [TextbookController::class, 'download'])->name('textbooks.download');

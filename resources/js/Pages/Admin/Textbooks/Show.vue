@@ -466,6 +466,20 @@ const showBreakPanel = computed(() =>
     ),
 );
 
+const tryStudentHref = (row = null) => {
+    const total = (items.value || []).length;
+    const from = Math.max(1, Number(row?.q_from) || 1);
+    const to = Math.max(from, Number(row?.q_to) || total || from);
+    const set = encodeURIComponent(row?.set_code || '');
+    const base = safeRoute(
+        'admin.textbooks.try-student',
+        props.chapter.id,
+        `/admin/textbooks/chapters/${props.chapter.id}/try-student`,
+    );
+    const join = base.includes('?') ? '&' : '?';
+    return `${base}${join}from=${from}&to=${to}&set=${set}&restart=1`;
+};
+
 const runEqualSplit = () => {
     const parts = Math.min(maxEqualParts.value, Math.max(2, Number(equalParts.value) || 2));
     const lines = setsToSplit.value.map((set) => `${set.set_code}: ${set.sizes.join('+')}`);
@@ -1222,6 +1236,13 @@ const canChangeBook = computed(() => {
                                 </p>
                             </div>
                             <div class="flex flex-wrap gap-2">
+                                <Link
+                                    v-if="!uploaderMode"
+                                    :href="tryStudentHref()"
+                                    class="inline-flex items-center rounded-md bg-indigo-700 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-800"
+                                >
+                                    Try all as student
+                                </Link>
                                 <SecondaryButton type="button" class="!py-1 !text-xs" @click="resetToSingleSet">
                                     One set (all)
                                 </SecondaryButton>
@@ -1271,11 +1292,18 @@ const canChangeBook = computed(() => {
                                 <td class="px-3 py-2 text-right text-gray-500">
                                     {{ Math.max(0, Number(row.q_to) - Number(row.q_from) + 1) }}
                                 </td>
-                                <td class="px-3 py-2 text-right">
+                                <td class="px-3 py-2 text-right whitespace-nowrap">
+                                    <Link
+                                        v-if="!uploaderMode"
+                                        :href="tryStudentHref(row)"
+                                        class="text-xs font-semibold text-indigo-700 hover:underline"
+                                    >
+                                        Try as student
+                                    </Link>
                                     <button
                                         v-if="setPlan.length > 1"
                                         type="button"
-                                        class="text-xs text-rose-600 hover:underline"
+                                        class="ml-3 text-xs text-rose-600 hover:underline"
                                         @click="removeSetPlanRow(index)"
                                     >
                                         Remove
