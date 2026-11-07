@@ -529,6 +529,7 @@ class TextbookController extends Controller
             ],
             'publishedSets' => $publishedSets,
             'publishedPracticeSets' => $uploaderMode ? [] : $this->publishedPracticeSets($textbookChapter),
+            'joinablePartGroups' => $uploaderMode ? [] : $this->splitService->joinableGroups($textbookChapter),
             'publishedAttemptCount' => $uploaderMode ? 0 : $this->practiceReset->attemptCount($textbookChapter),
             'students' => $uploaderMode
                 ? []
@@ -1116,6 +1117,20 @@ class TextbookController extends Controller
         }
 
         return back()->with('success', $message);
+    }
+
+    public function joinPublishedParts(TextbookChapter $textbookChapter): RedirectResponse
+    {
+        try {
+            $summaries = $this->splitService->joinConsecutiveParts($textbookChapter);
+        } catch (InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with(
+            'success',
+            'Joined the small parts back into '.implode(', ', $summaries).'. You can break them again.',
+        );
     }
 
     public function clearPublishedPractice(Request $request, TextbookChapter $textbookChapter): RedirectResponse

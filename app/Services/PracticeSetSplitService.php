@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\SetAssignment;
+use App\Models\StudentEnrollment;
 use App\Models\TextbookChapter;
 use App\Models\User;
 use App\Models\Worksheet;
@@ -9,6 +11,7 @@ use App\Support\PracticeSetScope;
 use App\Support\WorksheetDeliveryMode;
 use App\Support\WrittenSheetStatus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
 class PracticeSetSplitService
@@ -18,6 +21,7 @@ class PracticeSetSplitService
     public function __construct(
         private ClassCoverageService $coverageService,
         private TextbookMcqSetPlanService $setPlanService,
+        private StudyPlanMetricsCacheService $metrics,
     ) {}
 
     /**
@@ -381,6 +385,244 @@ class PracticeSetSplitService
             ->max('set_number');
 
         return max($max + 1, (int) $worksheet->set_number + 1);
+    }
+
+    /**
+     * Groups of consecutive part codes (M1S1, M1S2, M1S3) that can be joined
+     * back into the first set.
+     *
+     * @return list<array{ids: list<int>, codes: list<string>, counts: list<int>}>
+     */
+    public function joinableGroups(TextbookChapter $chapter): array
+    {
+        $groups = [];
+
+        foreach ([
+            $chapter->fillBlankWorksheetIds(),
+            $chapter->writtenWorksheetIds(),
+            $chapter->mcqWorksheetIds(),
+        ] as $ids) {
+            if ($ids === []) {
+                continue;
+            }
+
+            $sheets = Worksheet::query()
+                ->whereIn('id', $ids)
+                ->withCount('questions')
+                ->get()
+                ->keyBy('id');
+
+            $current = [];
+            $base = null;
+            $expect = null;
+
+            $flush = function () use (&$groups, &$current): void {
+                if (count($current) >= 2) {
+                    $groups[] = [
+                        'ids' => array_column($current, 'id'),
+                        'codes' => array_column($current, 'code'),
+                        'counts' => array_column($current, 'count'),
+                    ];
+                }
+                $current = [];
+            };
+
+            foreach ($ids as $id) {
+                $sheet = $sheets->get($id);
+                if (! $sheet) {
+                    $flush();
+                    $base = null;
+                    $expect = null;
+
+                    continue;
+                }
+
+                $code = (string) $sheet->set_code;
+                $sheetBase = $this->baseCode($code);
+                $suffix = $this->partSuffix($code);
+                $continues = $current !== []
+                    && $sheetBase === $base
+                    && $suffix !== null
+                    && $expect !== null
+                    && $suffix === $expect;
+
+                if ($continues) {
+                    $current[] = [
+                        'id' => (int) $sheet->id,
+                        'code' => $code,
+                        'count' => (int) $sheet->questions_count,
+                    ];
+                    $expect = $suffix + 1;
+
+                    continue;
+                }
+
+                $flush();
+                $current = [[
+                    'id' => (int) $sheet->id,
+                    'code' => $code,
+                    'count' => (int) $sheet->questions_count,
+                ]];
+                $base = $sheetBase;
+                $expect = $suffix === null ? null : $suffix + 1;
+            }
+
+            $flush();
+        }
+
+        return $groups;
+    }
+
+    /**
+     * Put each run of split parts back on the first set and delete the extra sets.
+     * Attempts that were only on the extra parts are removed from the scorecard.
+     *
+     * @return list<string>
+     */
+    public function joinConsecutiveParts(TextbookChapter $chapter): array
+    {
+        $groups = $this->joinableGroups($chapter);
+
+        if ($groups === []) {
+            throw new InvalidArgumentException('There are no split parts to join back.');
+        }
+
+        return DB::transaction(function () use ($chapter, $groups) {
+            $summaries = [];
+            $metricPairs = [];
+            $removeIds = [];
+
+            foreach ($groups as $group) {
+                $ids = $group['ids'];
+                $sheets = Worksheet::query()
+                    ->whereIn('id', $ids)
+                    ->get()
+                    ->keyBy('id');
+                $ordered = collect($ids)
+                    ->map(fn (int $id) => $sheets->get($id))
+                    ->filter();
+
+                if ($ordered->count() < 2) {
+                    continue;
+                }
+
+                $first = $ordered->first();
+                $siblings = $ordered->slice(1)->values();
+                $siblingIds = $siblings->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+                $questionIds = [];
+                foreach ($ordered as $sheet) {
+                    $sheetQuestionIds = $sheet->questions()
+                        ->orderBy('worksheet_question.sort_order')
+                        ->orderBy('questions.id')
+                        ->pluck('questions.id');
+                    foreach ($sheetQuestionIds as $questionId) {
+                        $questionIds[] = (int) $questionId;
+                    }
+                }
+
+                $assignments = SetAssignment::query()
+                    ->whereIn('worksheet_id', $siblingIds)
+                    ->with([
+                        'practiceSet.topic:id,syllabus_chapter_id',
+                        'practiceSet.chapter:id',
+                    ])
+                    ->get();
+
+                foreach ($assignments as $assignment) {
+                    $chapterIds = $this->metrics->syllabusChapterIdsForAssignment($assignment);
+                    if ($chapterIds === [] && $first->syllabus_chapter_id) {
+                        $chapterIds = [(int) $first->syllabus_chapter_id];
+                    }
+                    foreach ($chapterIds as $syllabusChapterId) {
+                        $metricPairs[$assignment->student_enrollment_id.'-'.$syllabusChapterId] = [
+                            (int) $assignment->student_enrollment_id,
+                            (int) $syllabusChapterId,
+                        ];
+                    }
+                }
+
+                foreach ($siblings as $sheet) {
+                    if ($sheet->written_pdf_path) {
+                        Storage::disk('public')->delete($sheet->written_pdf_path);
+                    }
+                }
+
+                foreach ($ordered as $sheet) {
+                    $sheet->questions()->detach();
+                }
+
+                foreach ($questionIds as $index => $questionId) {
+                    $first->questions()->attach($questionId, ['sort_order' => $index + 1]);
+                }
+
+                $first->update([
+                    'title' => $this->untitledPart((string) $first->title),
+                ]);
+
+                Worksheet::query()->whereIn('id', $siblingIds)->delete();
+                $removeIds = array_merge($removeIds, $siblingIds);
+                $summaries[] = $first->set_code.' ('.count($questionIds).')';
+            }
+
+            $this->dropWorksheetIds($chapter, $removeIds);
+
+            $fresh = $chapter->fresh();
+            $stored = is_array($fresh->mcq_set_plan) ? $fresh->mcq_set_plan : [];
+            $plan = $this->setPlanService->planFromMcqWorksheets($fresh, $stored);
+            if ($plan !== []) {
+                $fresh->update(['mcq_set_plan' => $plan]);
+            }
+
+            foreach ($metricPairs as [$enrollmentId, $syllabusChapterId]) {
+                $enrollment = StudentEnrollment::query()->find($enrollmentId);
+                if ($enrollment) {
+                    $this->metrics->refreshChapterMetrics($enrollment, $syllabusChapterId);
+                }
+            }
+
+            return $summaries;
+        });
+    }
+
+    private function partSuffix(string $setCode): ?int
+    {
+        if (preg_match('/(\d+)$/', trim($setCode), $match)) {
+            return (int) $match[1];
+        }
+
+        return null;
+    }
+
+    private function untitledPart(string $title): string
+    {
+        $clean = preg_replace('/\s*—\s*Part\s+\d+\s*$/u', '', $title) ?? $title;
+
+        return trim($clean);
+    }
+
+    /**
+     * @param  list<int>  $removeIds
+     */
+    private function dropWorksheetIds(TextbookChapter $chapter, array $removeIds): void
+    {
+        $removeIds = array_map('intval', $removeIds);
+        $updates = [];
+
+        foreach ([
+            ['mcq_worksheet_id', 'mcqWorksheetIds', 'mcq_worksheet_ids'],
+            ['fill_blank_worksheet_id', 'fillBlankWorksheetIds', 'fill_blank_worksheet_ids'],
+            ['written_worksheet_id', 'writtenWorksheetIds', 'written_worksheet_ids'],
+        ] as [$single, $getter, $list]) {
+            $ids = array_values(array_filter(
+                $chapter->{$getter}(),
+                fn (int $id) => ! in_array($id, $removeIds, true),
+            ));
+            $updates[$list] = $ids;
+            $updates[$single] = $ids[0] ?? null;
+        }
+
+        $chapter->update($updates);
     }
 
     /**

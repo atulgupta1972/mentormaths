@@ -7,6 +7,10 @@ use App\Models\Board;
 use App\Models\GradeLevel;
 use App\Models\Question;
 use App\Models\QuestionOption;
+use App\Models\SetAssignment;
+use App\Models\SetAttempt;
+use App\Models\Student;
+use App\Models\StudentEnrollment;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
@@ -81,6 +85,154 @@ class PracticeSetSplitTest extends TestCase
         $this->assertSame('C7-GP-CH01-M2', $textbookChapter->mcq_set_plan[1]['set_code']);
         $this->assertSame(21, $textbookChapter->mcq_set_plan[1]['q_from']);
         $this->assertSame(25, $textbookChapter->mcq_set_plan[1]['q_to']);
+    }
+
+    public function test_admin_can_join_split_parts_back_and_break_again(): void
+    {
+        $this->withoutVite();
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        [$worksheet, $chapter] = $this->seedChapterSetWithQuestions(10, 'C9-GM2-CH02-M1S1', true);
+        $topicId = $worksheet->questions()->first()->syllabus_topic_id;
+
+        $second = Worksheet::query()->create([
+            'title' => 'Second MCQ',
+            'set_number' => 2,
+            'set_code' => 'C9-GM2-CH02-M2S2',
+            'tier' => PracticeSetTier::STARTER,
+            'scope' => PracticeSetScope::CHAPTER,
+            'syllabus_chapter_id' => $worksheet->syllabus_chapter_id,
+            'status' => Worksheet::STATUS_PUBLISHED,
+            'purpose' => WorksheetPurpose::STANDARD,
+            'delivery_mode' => WorksheetDeliveryMode::ONLINE,
+            'created_by' => $admin->id,
+        ]);
+
+        for ($i = 1; $i <= 8; $i++) {
+            $question = Question::query()->create([
+                'syllabus_topic_id' => $topicId,
+                'question_text' => "Second {$i}",
+                'type' => Question::TYPE_MCQ,
+                'difficulty' => 'easy',
+                'bank_purpose' => QuestionBankPurpose::PRACTICE_SET,
+                'created_by' => $admin->id,
+            ]);
+            QuestionOption::query()->create([
+                'question_id' => $question->id,
+                'option_text' => 'A',
+                'is_correct' => true,
+                'sort_order' => 1,
+            ]);
+            $second->questions()->attach($question->id, ['sort_order' => $i]);
+        }
+
+        $chapter->update([
+            'mcq_worksheet_ids' => [$worksheet->id, $second->id],
+            'mcq_set_plan' => [
+                ['set_code' => 'C9-GM2-CH02-M1S1', 'q_from' => 1, 'q_to' => 10, 'description' => ''],
+                ['set_code' => 'C9-GM2-CH02-M2S2', 'q_from' => 11, 'q_to' => 18, 'description' => ''],
+            ],
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.split-equally', $chapter), ['parts' => 4])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $chapter->refresh();
+        $this->assertCount(8, $chapter->mcqWorksheetIds());
+
+        $this->actingAs($admin)
+            ->get(route('admin.textbooks.show', $chapter))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Textbooks/Show')
+                ->has('joinablePartGroups', 2)
+                ->where('joinablePartGroups.0.codes', [
+                    'C9-GM2-CH02-M1S1',
+                    'C9-GM2-CH02-M1S2',
+                    'C9-GM2-CH02-M1S3',
+                    'C9-GM2-CH02-M1S4',
+                ])
+            );
+
+        $year = AcademicYear::query()->first();
+        $version = SyllabusVersion::query()->first();
+        $student = Student::query()->create([
+            'name' => 'Attempted student',
+            'parent1_name' => 'Parent',
+            'parent1_mobile' => '9876543210',
+            'school_name' => 'School',
+        ]);
+        $enrollment = StudentEnrollment::query()->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $year->id,
+            'board_id' => $version->board_id,
+            'grade_level_id' => $version->grade_level_id,
+            'school_name' => 'School',
+            'status' => StudentEnrollment::STATUS_ACTIVE,
+        ]);
+        $keptAssignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $worksheet->id,
+            'assigned_by' => $admin->id,
+            'assigned_at' => now(),
+            'status' => SetAssignment::STATUS_COMPLETED,
+        ]);
+        $sibling = Worksheet::query()->where('set_code', 'C9-GM2-CH02-M1S2')->firstOrFail();
+        $siblingAssignment = SetAssignment::query()->create([
+            'student_enrollment_id' => $enrollment->id,
+            'worksheet_id' => $sibling->id,
+            'assigned_by' => $admin->id,
+            'assigned_at' => now(),
+            'status' => SetAssignment::STATUS_COMPLETED,
+        ]);
+        $siblingAttempt = SetAttempt::query()->create([
+            'set_assignment_id' => $siblingAssignment->id,
+            'attempt_number' => 1,
+            'started_at' => now()->subHour(),
+            'completed_at' => now(),
+            'score' => 2,
+            'max_score' => 3,
+            'status' => SetAttempt::STATUS_SUBMITTED,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.join-parts', $chapter))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $chapter->refresh();
+        $worksheet->refresh();
+        $second->refresh();
+
+        $this->assertSame([$worksheet->id, $second->id], $chapter->mcqWorksheetIds());
+        $this->assertSame('C9-GM2-CH02-M1S1', $worksheet->set_code);
+        $this->assertSame('Chapter MCQ', $worksheet->title);
+        $this->assertSame(
+            array_map(fn (int $i) => "Q{$i} secret {$i}", range(1, 10)),
+            $worksheet->questions()->orderBy('worksheet_question.sort_order')->pluck('question_text')->all(),
+        );
+        $this->assertSame('C9-GM2-CH02-M2S1', $second->set_code);
+        $this->assertSame('Second MCQ', $second->title);
+        $this->assertSame(8, $second->questions()->count());
+        $this->assertNull(Worksheet::query()->where('set_code', 'C9-GM2-CH02-M1S2')->first());
+        $this->assertDatabaseMissing('set_attempts', ['id' => $siblingAttempt->id]);
+        $this->assertDatabaseMissing('set_assignments', ['id' => $siblingAssignment->id]);
+        $this->assertDatabaseHas('set_assignments', ['id' => $keptAssignment->id, 'worksheet_id' => $worksheet->id]);
+        $this->assertCount(2, $chapter->mcq_set_plan);
+        $this->assertSame('C9-GM2-CH02-M1S1', $chapter->mcq_set_plan[0]['set_code']);
+        $this->assertSame(1, $chapter->mcq_set_plan[0]['q_from']);
+        $this->assertSame(10, $chapter->mcq_set_plan[0]['q_to']);
+        $this->assertSame('C9-GM2-CH02-M2S1', $chapter->mcq_set_plan[1]['set_code']);
+        $this->assertSame(11, $chapter->mcq_set_plan[1]['q_from']);
+        $this->assertSame(18, $chapter->mcq_set_plan[1]['q_to']);
+
+        $this->actingAs($admin)
+            ->post(route('admin.textbooks.split-equally', $chapter), ['parts' => 2])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertNotNull(Worksheet::query()->where('set_code', 'C9-GM2-CH02-M1S2')->first());
     }
 
     public function test_split_plan_helper_matches_batch_size(): void

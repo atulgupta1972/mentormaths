@@ -494,6 +494,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/textbooks/chapters/{textbookChapter}/concept-path/return-path', [TextbookController::class, 'returnConceptPath'])->name('textbooks.concept-path.return-path');
     Route::post('/textbooks/chapters/{textbookChapter}/publish-fill-blank-written', [TextbookController::class, 'publishFillBlankAndWritten'])->name('textbooks.publish-fill-blank-written');
     Route::post('/textbooks/chapters/{textbookChapter}/split-equally', [TextbookController::class, 'splitPublishedEqually'])->name('textbooks.split-equally');
+    Route::post('/textbooks/chapters/{textbookChapter}/join-parts', [TextbookController::class, 'joinPublishedParts'])->name('textbooks.join-parts');
     Route::post('/textbooks/chapters/{textbookChapter}/clear-published-practice', [TextbookController::class, 'clearPublishedPractice'])->name('textbooks.clear-published-practice');
     Route::get('/textbooks/chapters/{textbookChapter}/try-student', [\App\Http\Controllers\Admin\TextbookStudentTryController::class, 'show'])->name('textbooks.try-student');
     Route::post('/textbooks/chapters/{textbookChapter}/try-student', [\App\Http\Controllers\Admin\TextbookStudentTryController::class, 'answer'])->name('textbooks.try-student.answer');

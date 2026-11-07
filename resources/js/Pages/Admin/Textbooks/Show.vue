@@ -18,6 +18,7 @@ const props = defineProps({
     fillBlankConversion: { type: Object, default: null },
     publishedSets: { type: Array, default: () => [] },
     publishedPracticeSets: { type: Array, default: () => [] },
+    joinablePartGroups: { type: Array, default: () => [] },
     publishedAttemptCount: { type: Number, default: 0 },
     students: { type: Array, default: () => [] },
     gradeLevels: { type: Array, default: () => [] },
@@ -389,6 +390,7 @@ const canPublishMcq = computed(() => !isMentorMaths.value);
 
 const equalParts = ref(2);
 const splitEquallyForm = useForm({ parts: 2 });
+const joinPartsForm = useForm({});
 const clearPracticeForm = useForm({ confirm: '' });
 const returnUploaderForm = useForm({
     reason: 'Please break this chapter into smaller equal parts and send it back.',
@@ -478,6 +480,20 @@ const tryStudentHref = (row = null) => {
     );
     const join = base.includes('?') ? '&' : '?';
     return `${base}${join}from=${from}&to=${to}&set=${set}&restart=1`;
+};
+
+const joinParts = () => {
+    const lines = (props.joinablePartGroups || []).map((group) => (group.codes || []).join(' + '));
+    if (!lines.length) {
+        return;
+    }
+    if (!window.confirm(`Join these parts back into one set each?\n\n${lines.join('\n')}\n\nThe extra parts are removed. Attempts on those extra parts come off the scorecard. You can break the sets again.`)) {
+        return;
+    }
+    joinPartsForm.post(
+        safeRoute('admin.textbooks.join-parts', props.chapter.id, `/admin/textbooks/chapters/${props.chapter.id}/join-parts`),
+        { preserveScroll: true },
+    );
 };
 
 const runEqualSplit = () => {
@@ -903,6 +919,30 @@ const canChangeBook = computed(() => {
                             <span v-else-if="set.block_reason" class="text-amber-800">{{ set.block_reason }}</span>
                         </li>
                     </ul>
+
+                    <div
+                        v-if="joinablePartGroups.length"
+                        class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
+                    >
+                        <p class="text-sm font-medium text-amber-950">Join the small parts back</p>
+                        <p class="mt-1 text-xs text-amber-900">
+                            Puts each group back into one set, so you can break it again.
+                            Attempts on the extra parts come off the scorecard. The first set of each group stays.
+                        </p>
+                        <ul class="mt-2 space-y-1 text-sm text-amber-950">
+                            <li v-for="(group, index) in joinablePartGroups" :key="`join-${index}`">
+                                {{ (group.codes || []).join(' + ') }} → one set
+                            </li>
+                        </ul>
+                        <SecondaryButton
+                            type="button"
+                            class="mt-3"
+                            :disabled="joinPartsForm.processing"
+                            @click="joinParts"
+                        >
+                            {{ joinPartsForm.processing ? 'Joining…' : 'Join parts back' }}
+                        </SecondaryButton>
+                    </div>
 
                     <div v-if="setsToSplit.length" class="mt-3 flex flex-wrap items-end gap-3">
                         <div>
