@@ -18,6 +18,7 @@ const props = defineProps({
     fillBlankConversion: { type: Object, default: null },
     publishedSets: { type: Array, default: () => [] },
     publishedPracticeSets: { type: Array, default: () => [] },
+    publishedAttemptCount: { type: Number, default: 0 },
     students: { type: Array, default: () => [] },
     gradeLevels: { type: Array, default: () => [] },
     defaultGradeLevelId: { type: [Number, null], default: null },
@@ -388,6 +389,7 @@ const canPublishMcq = computed(() => !isMentorMaths.value);
 
 const equalParts = ref(2);
 const splitEquallyForm = useForm({ parts: 2 });
+const clearPracticeForm = useForm({ confirm: '' });
 const returnUploaderForm = useForm({
     reason: 'Please break this chapter into smaller equal parts and send it back.',
 });
@@ -476,6 +478,24 @@ const runEqualSplit = () => {
     splitEquallyForm.parts = parts;
     splitEquallyForm.post(
         safeRoute('admin.textbooks.split-equally', props.chapter.id, `/admin/textbooks/chapters/${props.chapter.id}/split-equally`),
+        { preserveScroll: true },
+    );
+};
+
+const clearPublishedPractice = () => {
+    const codes = (props.publishedPracticeSets || []).map((set) => set.set_code).join(', ');
+    if (clearPracticeForm.confirm !== 'REMOVE') {
+        return;
+    }
+    if (!window.confirm(`Remove ${codes || 'the published sets'} and every student score for them? This cannot be undone.`)) {
+        return;
+    }
+    clearPracticeForm.post(
+        safeRoute(
+            'admin.textbooks.clear-published-practice',
+            props.chapter.id,
+            `/admin/textbooks/chapters/${props.chapter.id}/clear-published-practice`,
+        ),
         { preserveScroll: true },
     );
 };
@@ -917,6 +937,46 @@ const canChangeBook = computed(() => {
                             {{ returnUploaderForm.processing ? 'Sending…' : 'Send back to uploader' }}
                         </SecondaryButton>
                     </form>
+                </div>
+
+                <div
+                    v-if="!uploaderMode && publishedPracticeSets.length"
+                    class="rounded-lg border border-rose-200 bg-rose-50 p-4 shadow-sm"
+                >
+                    <p class="text-sm font-semibold text-rose-950">Remove published sets and upload again</p>
+                    <p class="mt-1 text-xs text-rose-900">
+                        Use this when the chapter went up without figures, or the questions need to be replaced.
+                        It deletes the published sets
+                        <span v-if="publishedAttemptCount">
+                            and {{ publishedAttemptCount }} student attempt{{ publishedAttemptCount === 1 ? '' : 's' }}
+                        </span>
+                        from the scorecard. The chapter PDF stays. After this, upload the zip on this page.
+                    </p>
+                    <ul class="mt-2 space-y-0.5 text-sm text-rose-950">
+                        <li v-for="set in publishedPracticeSets" :key="`wipe-${set.id}`">
+                            <span class="font-mono font-semibold">{{ set.set_code }}</span>
+                            <span class="text-rose-800"> · {{ set.kind_label }} · {{ set.questions_count }} sums</span>
+                        </li>
+                    </ul>
+                    <form class="mt-3 flex flex-wrap items-end gap-3" @submit.prevent="clearPublishedPractice">
+                        <div>
+                            <InputLabel value="Type REMOVE to confirm" class="!text-xs" />
+                            <input
+                                v-model="clearPracticeForm.confirm"
+                                type="text"
+                                class="mt-1 w-40 rounded-md border-rose-300 text-sm uppercase"
+                                autocomplete="off"
+                            >
+                        </div>
+                        <button
+                            type="submit"
+                            class="rounded-md bg-rose-700 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
+                            :disabled="clearPracticeForm.processing || clearPracticeForm.confirm !== 'REMOVE'"
+                        >
+                            {{ clearPracticeForm.processing ? 'Removing…' : 'Remove sets and scores' }}
+                        </button>
+                    </form>
+                    <InputError class="mt-1" :message="clearPracticeForm.errors.confirm" />
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

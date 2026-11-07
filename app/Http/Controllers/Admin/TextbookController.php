@@ -23,6 +23,7 @@ use App\Services\TextbookChapterConversionPromptService;
 use App\Services\TextbookChapterFillBlankImportService;
 use App\Services\TextbookChapterMcqImportService;
 use App\Services\TextbookChapterMcqPromptService;
+use App\Services\TextbookChapterPracticeResetService;
 use App\Services\TextbookChapterPublishService;
 use App\Services\TextbookChapterStagingGeminiService;
 use App\Services\TextbookMcqSetPlanService;
@@ -59,6 +60,7 @@ class TextbookController extends Controller
         private ConceptPathJobService $conceptPathJobs,
         private PracticeSetSplitService $splitService,
         private WrittenSheetService $writtenSheets,
+        private TextbookChapterPracticeResetService $practiceReset,
     ) {}
 
     public function index(Request $request): Response
@@ -527,6 +529,7 @@ class TextbookController extends Controller
             ],
             'publishedSets' => $publishedSets,
             'publishedPracticeSets' => $uploaderMode ? [] : $this->publishedPracticeSets($textbookChapter),
+            'publishedAttemptCount' => $uploaderMode ? 0 : $this->practiceReset->attemptCount($textbookChapter),
             'students' => $uploaderMode
                 ? []
                 : $this->assignmentService
@@ -1113,6 +1116,32 @@ class TextbookController extends Controller
         }
 
         return back()->with('success', $message);
+    }
+
+    public function clearPublishedPractice(Request $request, TextbookChapter $textbookChapter): RedirectResponse
+    {
+        $request->validate([
+            'confirm' => ['required', 'in:REMOVE'],
+        ], [
+            'confirm.in' => 'Type REMOVE to delete the published sets and student scores.',
+        ]);
+
+        try {
+            $result = $this->practiceReset->reset($textbookChapter);
+        } catch (InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        $codes = $result['codes'] !== [] ? implode(', ', $result['codes']) : $result['set_count'].' sets';
+        $attempts = $result['attempt_count'];
+        $scoreNote = $attempts === 1
+            ? '1 student attempt and its score were removed.'
+            : "{$attempts} student attempts and their scores were removed.";
+
+        return back()->with(
+            'success',
+            "Removed {$codes}. {$scoreNote} Upload the zip again below.",
+        );
     }
 
     public function conceptPath(Request $request, TextbookChapter $textbookChapter): Response|RedirectResponse
