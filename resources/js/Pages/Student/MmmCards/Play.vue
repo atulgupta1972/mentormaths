@@ -6,6 +6,7 @@ import BodmasPlay from '@/Pages/Student/MmmCards/BodmasPlay.vue';
 import CongruencePlay from '@/Pages/Student/MmmCards/CongruencePlay.vue';
 import EquationBalancePlay from '@/Pages/Student/MmmCards/EquationBalancePlay.vue';
 import EquationFillPagePlay from '@/Pages/Student/MmmCards/EquationFillPagePlay.vue';
+import AgeAnswerPage from '@/Pages/Student/MmmCards/AgeAnswerPage.vue';
 import AgeTablePlay from '@/Pages/Student/MmmCards/AgeTablePlay.vue';
 import MakeEquationPlay from '@/Pages/Student/MmmCards/MakeEquationPlay.vue';
 import SeriesFinished from '@/Pages/Student/MmmCards/SeriesFinished.vue';
@@ -94,6 +95,7 @@ const isCongruence = computed(() => props.exercise?.play_kind === 'congruence');
 const isFillPage = computed(() => props.exercise?.play_kind === 'fill_page');
 const isMakeEquation = computed(() => props.exercise?.play_kind === 'make_equation');
 const isAgeTable = computed(() => props.exercise?.play_kind === 'age_table');
+const isAgeAnswers = computed(() => props.exercise?.play_kind === 'age_answers');
 const fillCount = computed(() => props.exercise?.fill_page?.items?.length || 0);
 const fillPageBlurb = computed(() => props.exercise?.fill_page?.page_blurb || props.card?.method_blurb);
 
@@ -280,7 +282,7 @@ const footerColspan = computed(() => {
             </div>
         </template>
 
-        <div class="mx-auto space-y-4 p-4 sm:p-6" :class="isFillPage || isCongruence || isMakeEquation || isAgeTable ? 'max-w-4xl' : 'max-w-3xl'">
+        <div class="mx-auto space-y-4 p-4 sm:p-6" :class="isFillPage || isCongruence || isMakeEquation || isAgeTable || isAgeAnswers ? 'max-w-4xl' : 'max-w-3xl'">
             <p v-if="is_staff_preview" class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
                 Staff preview — checking does not save student progress.
             </p>
@@ -511,13 +513,23 @@ const footerColspan = computed(() => {
                     :series-label="card.series_label"
                     @next="goNext"
                 />
+                <AgeAnswerPage
+                    v-else-if="isAgeAnswers"
+                    :key="exercise.id"
+                    :exercise="exercise"
+                    :check_url="check_url"
+                    :can-go-next="canGoNext"
+                    :next-part="next_part"
+                    :series-label="card.series_label"
+                    @next="goNext"
+                />
                 <p
                     v-else-if="exercise.variable_tip"
                     class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950"
                 >
                     {{ exercise.variable_tip }}
                 </p>
-                <template v-if="!isBalance && !isBodmas && !isFillPage && !isCongruence && !isMakeEquation && !isAgeTable">
+                <template v-if="!isBalance && !isBodmas && !isFillPage && !isCongruence && !isMakeEquation && !isAgeTable && !isAgeAnswers">
                 <p v-if="fillsDenomination" class="mt-2 text-xs text-slate-500">
                     Write each denomination in ₹ (number only, e.g. 2, 5, 10), then counts and totals. Wrong cells will be highlighted.
                 </p>

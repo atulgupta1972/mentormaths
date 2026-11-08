@@ -21,7 +21,7 @@ class MmmCardAgeTableTest extends TestCase
 
         $this->assertSame(MmmCard::KIND_AGE_TABLE, $card->kind);
         $this->assertSame('Making an equation', $card->sub_heading);
-        $this->assertCount(6, $card->exercises);
+        $this->assertCount(7, $card->exercises);
         $this->assertSame($card->id, app(MmmCardService::class)->nextPartCard($part1)?->id);
 
         $words = $card->exercises()->where('sort_order', 1)->firstOrFail();
@@ -89,5 +89,58 @@ class MmmCardAgeTableTest extends TestCase
                 ->where('exercise.play_kind', 'age_table')
                 ->where('exercise.age_table.rows.1.name', 'Rakesh')
                 ->where('card.heading', 'Making an equation — age problems'));
+    }
+
+    public function test_the_page_after_the_tables_asks_only_for_present_ages(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $card = MmmCard::query()->where('slug', 'making-an-equation-age')->firstOrFail();
+        $page = $card->exercises()->where('sort_order', 7)->firstOrFail();
+        $payload = app(MmmCardService::class)->exercisePayload($page);
+
+        $this->assertSame('age_answers', $payload['play_kind']);
+        $this->assertCount(10, $payload['age_answers']['items']);
+        $this->assertSame(
+            ['Name', 'Current age', 'Age after 5 years'],
+            $payload['age_answers']['items'][0]['columns'],
+        );
+        $this->assertArrayNotHasKey('age', $payload['age_answers']['items'][0]['people'][0]);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.mmm-cards.check', $card), [
+                'exercise_id' => $page->id,
+                'step_key' => 's1.sanjay',
+                'value' => '15',
+                'values' => ['s1.sanjay' => '15'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', false);
+
+        $values = [];
+        foreach ($page->answers['check'] as $key => $age) {
+            $values[$key] = (string) $age;
+        }
+        $values['s1.rakesh'] = '20';
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.mmm-cards.check', $card), [
+                'exercise_id' => $page->id,
+                'step_key' => 's1.sanjay',
+                'value' => '10',
+                'values' => ['s1.sanjay' => '10', 's1.rakesh' => '20'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('all_ok', false);
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.mmm-cards.check', $card), [
+                'exercise_id' => $page->id,
+                'step_key' => 's10.grandfather',
+                'value' => '50',
+                'values' => $values,
+            ])
+            ->assertOk()
+            ->assertJsonPath('all_ok', true);
     }
 }

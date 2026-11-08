@@ -280,6 +280,7 @@ class MmmCardService
         $isCongruence = ($answers['mode'] ?? '') === 'congruence';
         $isMakeEquation = ($answers['mode'] ?? '') === 'make_equation';
         $isAgeTable = ($answers['mode'] ?? '') === 'age_table';
+        $isAgeAnswers = ($answers['mode'] ?? '') === 'age_answers';
 
         return [
             'id' => $exercise->id,
@@ -287,13 +288,14 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table'))))),
+            'play_kind' => $isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table')))))),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
             'bodmas' => $isBodmas ? ($answers['play'] ?? []) : null,
             'congruence' => $isCongruence ? ($answers['play'] ?? []) : null,
             'fill_page' => $isFillPage ? ($answers['play'] ?? []) : null,
             'make_equation' => $isMakeEquation ? ($answers['play'] ?? []) : null,
             'age_table' => $isAgeTable ? ($answers['play'] ?? []) : null,
+            'age_answers' => $isAgeAnswers ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
             // Marks: auto from Total column. Money ratio/conditions: student types the equation.
@@ -334,6 +336,9 @@ class MmmCardService
         }
         if (($expected['mode'] ?? '') === 'age_table') {
             return $this->checkAgeTableSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'age_answers') {
+            return $this->checkAgeAnswersSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -816,6 +821,56 @@ class MmmCardService
                 ? 'Right. The table is complete, and the equation matches the condition.'
                 : 'Right. Now, after, and ago are in the table.';
         }
+
+        return [
+            'ok' => $allOk,
+            'all_ok' => $finished,
+            'cell_results' => $cellResults,
+            'message' => $message,
+            'step_key' => $stepKey !== '' ? $stepKey : null,
+        ];
+    }
+
+    /**
+     * Ten age sums: the table is made on paper. Each box is a present age.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkAgeAnswersSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $stepKey = (string) ($submission['step_key'] ?? '');
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        if ($stepKey !== '' && ! array_key_exists($stepKey, $values)) {
+            $values[$stepKey] = $submission['value'] ?? null;
+        }
+
+        $keys = array_map('strval', array_keys($check));
+        $keysToCheck = in_array($stepKey, $keys, true) ? [$stepKey] : $keys;
+        $cellResults = [];
+        $allOk = true;
+
+        foreach ($keysToCheck as $key) {
+            $ok = $this->integerTokenMatches($check[$key] ?? null, $values[$key] ?? null);
+            $cellResults[$key] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        $finished = $keys !== [];
+        foreach ($keys as $key) {
+            if (! $this->integerTokenMatches($check[$key] ?? null, $values[$key] ?? null)) {
+                $finished = false;
+                break;
+            }
+        }
+
+        $message = $allOk
+            ? ($finished ? 'Right. Every present age is correct.' : 'Right.')
+            : 'That age does not match the story. Finish the table in your copy, then read the present-age column.';
 
         return [
             'ok' => $allOk,
