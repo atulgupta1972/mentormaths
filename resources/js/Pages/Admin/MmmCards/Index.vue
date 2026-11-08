@@ -15,22 +15,20 @@ const groups = computed(() => {
 
     props.cards.forEach((card) => {
         const head = card.chapter_head || 'Not classified';
-        if (!indexByKey.has(head)) {
-            indexByKey.set(head, buckets.length);
+        const sub = card.sub_heading || '';
+        const key = `${head}\0${sub}`;
+        if (!indexByKey.has(key)) {
+            indexByKey.set(key, buckets.length);
             buckets.push({
-                key: head,
+                key,
                 head,
-                subs: [],
+                sub,
                 methods: [],
                 classes: [],
             });
         }
-        const group = buckets[indexByKey.get(head)];
+        const group = buckets[indexByKey.get(key)];
         group.methods.push(card);
-        const sub = card.sub_heading || '';
-        if (sub && !group.subs.includes(sub)) {
-            group.subs.push(sub);
-        }
         (card.classes || []).forEach((name) => {
             if (!group.classes.includes(name)) {
                 group.classes.push(name);
@@ -62,7 +60,7 @@ const toggle = (group) => {
 
         <div class="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
             <p class="text-sm text-gray-600">
-                Methods that share a chapter head sit on one row. Open that row to see each part.
+                Parts that share a sub heading sit on one row. Open that row to see each part.
             </p>
 
             <div class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
@@ -85,7 +83,7 @@ const toggle = (group) => {
                                 @click="toggle(group)"
                             >
                                 <td class="px-3 py-1.5 font-semibold text-slate-900">{{ group.head }}</td>
-                                <td class="px-3 py-1.5 font-medium text-indigo-800">{{ group.subs.join(', ') || 'General' }}</td>
+                                <td class="px-3 py-1.5 font-medium text-indigo-800">{{ group.sub || 'General' }}</td>
                                 <td class="px-3 py-1.5 text-slate-700">{{ group.methods.length }} parts</td>
                                 <td class="px-3 py-1.5 text-xs text-teal-800">{{ group.classes.join(', ') }}</td>
                                 <td class="px-3 py-1.5 tabular-nums text-slate-600">
@@ -101,7 +99,7 @@ const toggle = (group) => {
                                 class="border-t border-slate-100"
                             >
                                 <td class="px-3 py-1.5 text-slate-500">{{ isBundle(group) ? '' : group.head }}</td>
-                                <td class="px-3 py-1.5 text-xs text-indigo-800">{{ isBundle(group) && group.subs.length < 2 ? '' : (card.sub_heading || 'General') }}</td>
+                                <td class="px-3 py-1.5 text-xs text-indigo-800">{{ isBundle(group) ? '' : group.sub }}</td>
                                 <td class="px-3 py-1.5 font-medium text-slate-900" :class="isBundle(group) ? 'pl-6' : ''">
                                     {{ card.heading }}
                                 </td>
