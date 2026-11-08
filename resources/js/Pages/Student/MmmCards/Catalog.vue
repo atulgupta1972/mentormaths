@@ -11,19 +11,19 @@ defineProps({
 
 const openKeys = ref({});
 
-const keyFor = (head, sub) => `${head}\0${sub}`;
-const isOpen = (head, sub) => Boolean(openKeys.value[keyFor(head, sub)]);
-const toggle = (head, sub) => {
-    const key = keyFor(head, sub);
+const manySubs = (group) => group.subs.length > 1;
+const headKey = (group) => `head\0${group.head}`;
+const subKey = (group, sub) => `sub\0${group.head}\0${sub.name}`;
+const isOpen = (key) => Boolean(openKeys.value[key]);
+const toggle = (key) => {
     openKeys.value = {
         ...openKeys.value,
         [key]: !openKeys.value[key],
     };
 };
-
-const visibleMethods = (head, sub) => (
-    sub.methods.length > 1 ? (isOpen(head, sub.name) ? sub.methods : []) : sub.methods
-);
+const showSub = (group) => !manySubs(group) || isOpen(headKey(group));
+const showCards = (group, sub) => showSub(group) && (sub.methods.length < 2 || isOpen(subKey(group, sub)));
+const headParts = (group) => group.subs.reduce((total, sub) => total + sub.methods.length, 0);
 
 const classList = (methods) => {
     const names = [];
@@ -36,6 +36,8 @@ const classList = (methods) => {
     });
     return names.join(', ');
 };
+
+const headClasses = (group) => classList(group.subs.flatMap((sub) => sub.methods));
 </script>
 
 <template>
@@ -48,8 +50,8 @@ const classList = (methods) => {
 
         <div class="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
             <p class="text-sm text-gray-600">
-                <template v-if="class_name">Methods for {{ class_name }}. Open a sub heading to see its parts.</template>
-                <template v-else-if="show_classes">Every published method, grouped by sub heading.</template>
+                <template v-if="class_name">Methods for {{ class_name }}. Open a chapter head, then a sub heading, to see each part.</template>
+                <template v-else-if="show_classes">Every published method. Open a chapter head, then a sub heading.</template>
                 <template v-else>Your class is not set yet, so no methods are listed.</template>
             </p>
 
@@ -73,35 +75,60 @@ const classList = (methods) => {
                     </thead>
                     <tbody>
                         <template v-for="group in groups" :key="group.head">
+                            <tr
+                                v-if="manySubs(group)"
+                                class="cursor-pointer border-t border-slate-200 bg-slate-50 hover:bg-slate-100"
+                                @click="toggle(headKey(group))"
+                            >
+                                <td class="px-3 py-1.5 font-semibold text-slate-900">{{ group.head }}</td>
+                                <td class="px-3 py-1.5 text-slate-500">{{ group.subs.length }} sub headings</td>
+                                <td class="px-3 py-1.5 text-slate-700">{{ headParts(group) }} parts</td>
+                                <td v-if="show_classes" class="px-3 py-1.5 text-xs text-teal-800">{{ headClasses(group) }}</td>
+                                <td class="px-3 py-1.5 text-right text-xs font-semibold text-slate-500">
+                                    {{ isOpen(headKey(group)) ? 'Hide' : 'Show' }}
+                                </td>
+                            </tr>
                             <template v-for="sub in group.subs" :key="`${group.head}-${sub.name}`">
                                 <tr
-                                    v-if="sub.methods.length > 1"
-                                    class="cursor-pointer border-t border-slate-200 bg-slate-50 hover:bg-slate-100"
-                                    @click="toggle(group.head, sub.name)"
+                                    v-if="showSub(group) && sub.methods.length > 1"
+                                    class="cursor-pointer border-t border-slate-200 hover:bg-slate-100"
+                                    :class="manySubs(group) ? 'bg-white' : 'bg-slate-50'"
+                                    @click.stop="toggle(subKey(group, sub))"
                                 >
-                                    <td class="px-3 py-1.5 font-semibold text-slate-900">{{ group.head }}</td>
-                                    <td class="px-3 py-1.5 font-medium text-indigo-800">{{ sub.name }}</td>
+                                    <td class="px-3 py-1.5" :class="manySubs(group) ? 'pl-6 text-slate-400' : 'font-semibold text-slate-900'">
+                                        {{ manySubs(group) ? '' : group.head }}
+                                    </td>
+                                    <td class="px-3 py-1.5 font-medium text-indigo-800" :class="manySubs(group) ? 'pl-6' : ''">
+                                        {{ sub.name }}
+                                    </td>
                                     <td class="px-3 py-1.5 text-slate-700">{{ sub.methods.length }} parts</td>
                                     <td v-if="show_classes" class="px-3 py-1.5 text-xs text-teal-800">
-                                        {{ classList(sub.methods) }}
+                                        {{ manySubs(group) ? '' : classList(sub.methods) }}
                                     </td>
                                     <td class="px-3 py-1.5 text-right text-xs font-semibold text-slate-500">
-                                        {{ isOpen(group.head, sub.name) ? 'Hide' : 'Show' }}
+                                        {{ isOpen(subKey(group, sub)) ? 'Hide' : 'Show' }}
                                     </td>
                                 </tr>
                                 <tr
-                                    v-for="method in visibleMethods(group.head, sub)"
+                                    v-for="method in (showCards(group, sub) ? sub.methods : [])"
                                     :key="method.id"
                                     class="border-t border-slate-100"
                                 >
-                                    <td class="px-3 py-1.5 text-slate-500">{{ sub.methods.length > 1 ? '' : group.head }}</td>
-                                    <td class="px-3 py-1.5 text-xs text-indigo-800">{{ sub.methods.length > 1 ? '' : sub.name }}</td>
-                                    <td class="px-3 py-1.5" :class="sub.methods.length > 1 ? 'pl-6' : ''">
+                                    <td class="px-3 py-1.5 text-slate-500">
+                                        {{ manySubs(group) || sub.methods.length > 1 ? '' : group.head }}
+                                    </td>
+                                    <td class="px-3 py-1.5 text-xs text-indigo-800" :class="manySubs(group) && sub.methods.length === 1 ? 'pl-6' : ''">
+                                        {{ sub.methods.length > 1 ? '' : sub.name }}
+                                    </td>
+                                    <td
+                                        class="px-3 py-1.5"
+                                        :class="sub.methods.length > 1 ? (manySubs(group) ? 'pl-10' : 'pl-6') : (manySubs(group) ? 'pl-6' : '')"
+                                    >
                                         <p class="font-medium text-slate-900">{{ method.heading }}</p>
                                         <p v-if="method.about" class="text-xs text-slate-500">{{ method.about }}</p>
                                     </td>
                                     <td v-if="show_classes" class="px-3 py-1.5 text-xs text-teal-800">
-                                        {{ sub.methods.length > 1 ? '' : (method.classes?.join(', ') || 'None yet') }}
+                                        {{ manySubs(group) || sub.methods.length > 1 ? '' : (method.classes?.join(', ') || 'None yet') }}
                                     </td>
                                     <td class="px-3 py-1.5 text-right">
                                         <Link :href="method.open_url" class="text-sm font-semibold text-teal-700 hover:underline">
