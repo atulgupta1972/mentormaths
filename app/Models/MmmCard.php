@@ -25,6 +25,8 @@ class MmmCard extends Model
 
     public const KIND_MAKE_EQUATION = 'make_equation';
 
+    public const KIND_AGE_TABLE = 'age_table';
+
     protected $fillable = [
         'slug',
         'title',
