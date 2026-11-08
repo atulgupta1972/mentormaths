@@ -27,6 +27,8 @@ class MmmCard extends Model
 
     public const KIND_AGE_TABLE = 'age_table';
 
+    public const KIND_RATIO = 'ratio';
+
     protected $fillable = [
         'slug',
         'title',

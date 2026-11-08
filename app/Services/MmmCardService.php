@@ -281,6 +281,7 @@ class MmmCardService
         $isMakeEquation = ($answers['mode'] ?? '') === 'make_equation';
         $isAgeTable = ($answers['mode'] ?? '') === 'age_table';
         $isAgeAnswers = ($answers['mode'] ?? '') === 'age_answers';
+        $isRatio = ($answers['mode'] ?? '') === 'ratio';
 
         return [
             'id' => $exercise->id,
@@ -288,7 +289,7 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table')))))),
+            'play_kind' => $isRatio ? 'ratio' : ($isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table'))))))),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
             'bodmas' => $isBodmas ? ($answers['play'] ?? []) : null,
             'congruence' => $isCongruence ? ($answers['play'] ?? []) : null,
@@ -296,6 +297,7 @@ class MmmCardService
             'make_equation' => $isMakeEquation ? ($answers['play'] ?? []) : null,
             'age_table' => $isAgeTable ? ($answers['play'] ?? []) : null,
             'age_answers' => $isAgeAnswers ? ($answers['play'] ?? []) : null,
+            'ratio' => $isRatio ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
             // Marks: auto from Total column. Money ratio/conditions: student types the equation.
@@ -339,6 +341,9 @@ class MmmCardService
         }
         if (($expected['mode'] ?? '') === 'age_answers') {
             return $this->checkAgeAnswersSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'ratio') {
+            return $this->checkRatioSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -879,6 +884,131 @@ class MmmCardService
             'message' => $message,
             'step_key' => $stepKey !== '' ? $stepKey : null,
         ];
+    }
+
+    /**
+     * A ratio is two numbers in the asked order, same unit, simplest form.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkRatioSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $items = is_array($check['items'] ?? null) ? $check['items'] : null;
+        $answers = $items ?? (array_key_exists('ratio', $check) ? ['ratio' => $check['ratio']] : []);
+        $sameUnit = is_array($check['same_unit'] ?? null) ? $check['same_unit'] : [];
+
+        $stepKey = (string) ($submission['step_key'] ?? '');
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        if ($stepKey !== '' && ! array_key_exists($stepKey, $values)) {
+            $values[$stepKey] = $submission['value'] ?? null;
+        }
+
+        $keys = array_map('strval', array_keys($answers));
+        $keysToCheck = in_array($stepKey, $keys, true) ? [$stepKey] : $keys;
+        $cellResults = [];
+        $allOk = true;
+        $message = 'Right.';
+
+        foreach ($keysToCheck as $key) {
+            $traps = $sameUnit[$key] ?? ($key === 'ratio' ? $sameUnit : []);
+            if (! is_array($traps)) {
+                $traps = [];
+            }
+            [$ok, $message] = $this->ratioVerdict((string) $answers[$key], $values[$key] ?? null, $traps);
+            $cellResults[$key] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        $finished = $keys !== [];
+        foreach ($keys as $key) {
+            $traps = $sameUnit[$key] ?? [];
+            if (! is_array($traps)) {
+                $traps = [];
+            }
+            [$ok] = $this->ratioVerdict((string) $answers[$key], $values[$key] ?? null, $traps);
+            if (! $ok) {
+                $finished = false;
+                break;
+            }
+        }
+        if ($finished) {
+            $message = count($keys) > 1
+                ? 'Right. Every ratio is in the same unit and in the simplest form.'
+                : 'Right.';
+        }
+
+        return [
+            'ok' => $allOk,
+            'all_ok' => $finished,
+            'cell_results' => $cellResults,
+            'message' => $message,
+            'step_key' => $stepKey !== '' ? $stepKey : null,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $sameUnit
+     * @return array{0: bool, 1: string}
+     */
+    private function ratioVerdict(string $expected, mixed $got, array $sameUnit): array
+    {
+        $want = $this->ratioPair($expected);
+        $have = $this->ratioPair($got);
+        if ($want === null || $have === null) {
+            return [false, 'Write the ratio as two numbers, like 2:3.'];
+        }
+
+        foreach ($sameUnit as $trap) {
+            $trapPair = $this->ratioPair($trap);
+            if ($trapPair !== null && $trapPair === $have) {
+                return [false, 'Change both quantities to the same unit first. Then write the ratio.'];
+            }
+        }
+
+        $wantSimple = $this->simplifyRatio($want);
+        $haveSimple = $this->simplifyRatio($have);
+        if ($haveSimple === [$wantSimple[1], $wantSimple[0]] && $wantSimple[0] !== $wantSimple[1]) {
+            return [false, 'Keep the order of the words. The first quantity is written first.'];
+        }
+        if ($haveSimple !== $wantSimple) {
+            return [false, 'Write the two quantities in the order asked, using the same unit.'];
+        }
+        if ($this->gcd($have[0], $have[1]) !== 1) {
+            return [false, 'The order is right. Divide both numbers by the same number until you cannot.'];
+        }
+
+        return [true, 'Right.'];
+    }
+
+    /**
+     * @return array{0: int, 1: int}|null
+     */
+    private function ratioPair(mixed $value): ?array
+    {
+        $text = strtolower(trim((string) $value));
+        $text = str_replace(['∶', '：', ' '], [':', ':', ''], $text);
+        $text = str_replace(['to', '/'], ':', $text);
+        if (! preg_match('/^(\d+):(\d+)$/', $text, $match)) {
+            return null;
+        }
+
+        return [(int) $match[1], (int) $match[2]];
+    }
+
+    /**
+     * @param  array{0: int, 1: int}  $pair
+     * @return array{0: int, 1: int}
+     */
+    private function simplifyRatio(array $pair): array
+    {
+        $divisor = $this->gcd($pair[0], $pair[1]);
+
+        return [intdiv($pair[0], $divisor), intdiv($pair[1], $divisor)];
     }
 
     private function expressionsMatch(mixed $expected, mixed $got): bool

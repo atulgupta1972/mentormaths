@@ -169,7 +169,7 @@ class MmmCardPlayTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/MmmCards/Show')
-                ->where('sub_headings', ['Equation solving']));
+                ->where('sub_headings', ['Equation solving', 'Making an equation', 'Ratios']));
     }
 
     private function makeChapter(): SyllabusChapter
