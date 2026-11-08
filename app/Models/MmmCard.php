@@ -29,6 +29,8 @@ class MmmCard extends Model
 
     public const KIND_RATIO = 'ratio';
 
+    public const KIND_RATIO_EQUATION = 'ratio_equation';
+
     protected $fillable = [
         'slug',
         'title',

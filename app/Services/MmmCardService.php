@@ -282,6 +282,7 @@ class MmmCardService
         $isAgeTable = ($answers['mode'] ?? '') === 'age_table';
         $isAgeAnswers = ($answers['mode'] ?? '') === 'age_answers';
         $isRatio = ($answers['mode'] ?? '') === 'ratio';
+        $isRatioEquation = ($answers['mode'] ?? '') === 'ratio_equation';
 
         return [
             'id' => $exercise->id,
@@ -289,7 +290,7 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isRatio ? 'ratio' : ($isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table'))))))),
+            'play_kind' => $isRatioEquation ? 'ratio_equation' : ($isRatio ? 'ratio' : ($isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table')))))))),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
             'bodmas' => $isBodmas ? ($answers['play'] ?? []) : null,
             'congruence' => $isCongruence ? ($answers['play'] ?? []) : null,
@@ -298,6 +299,7 @@ class MmmCardService
             'age_table' => $isAgeTable ? ($answers['play'] ?? []) : null,
             'age_answers' => $isAgeAnswers ? ($answers['play'] ?? []) : null,
             'ratio' => $isRatio ? ($answers['play'] ?? []) : null,
+            'ratio_equation' => $isRatioEquation ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
             // Marks: auto from Total column. Money ratio/conditions: student types the equation.
@@ -344,6 +346,9 @@ class MmmCardService
         }
         if (($expected['mode'] ?? '') === 'ratio') {
             return $this->checkRatioSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'ratio_equation') {
+            return $this->checkRatioEquationSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -1009,6 +1014,226 @@ class MmmCardService
         $divisor = $this->gcd($pair[0], $pair[1]);
 
         return [intdiv($pair[0], $divisor), intdiv($pair[1], $divisor)];
+    }
+
+    /**
+     * A given ratio a:b is written a x : b x. x is the common factor, not a quantity.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkRatioEquationSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $shares = is_array($check['shares'] ?? null) ? $check['shares'] : [];
+        $equation = (string) ($check['equation'] ?? '');
+        $factor = (int) ($check['factor'] ?? 0);
+        $quantities = is_array($check['values'] ?? null) ? $check['values'] : [];
+
+        $stepKey = (string) ($submission['step_key'] ?? '');
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        if ($stepKey !== '' && ! array_key_exists($stepKey, $values)) {
+            $values[$stepKey] = $submission['value'] ?? null;
+        }
+
+        $keys = array_map('strval', array_keys($shares));
+        if ($equation !== '') {
+            $keys[] = 'equation';
+        }
+        $keys[] = 'factor';
+        foreach (array_keys($quantities) as $key) {
+            $keys[] = (string) $key;
+        }
+        $keysToCheck = in_array($stepKey, $keys, true) ? [$stepKey] : $keys;
+
+        $cellResults = [];
+        $allOk = true;
+        $message = 'Right.';
+
+        foreach ($keysToCheck as $key) {
+            if (array_key_exists($key, $shares)) {
+                [$ok, $message] = $this->ratioShareVerdict((string) $shares[$key], $values[$key] ?? null, $factor, $quantities);
+            } elseif ($key === 'equation') {
+                $ok = $this->statementEquationsMatch($equation, $values[$key] ?? null);
+                $message = $ok
+                    ? 'Right. Add the two amounts and set that sum equal to the total.'
+                    : $this->ratioEquationMiss($values[$key] ?? null);
+            } elseif ($key === 'factor') {
+                [$ok, $message] = $this->ratioFactorVerdict($factor, $values[$key] ?? null, $quantities);
+            } else {
+                $spec = is_array($quantities[$key] ?? null) ? $quantities[$key] : [];
+                [$ok, $message] = $this->ratioQuantityVerdict((int) ($spec['part'] ?? 0), (int) ($spec['factor'] ?? $factor), $values[$key] ?? null);
+            }
+            $cellResults[$key] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        $finished = $shares !== [] && $factor !== 0;
+        foreach ($shares as $key => $want) {
+            [$ok] = $this->ratioShareVerdict((string) $want, $values[$key] ?? null, $factor, $quantities);
+            if (! $ok) {
+                $finished = false;
+                break;
+            }
+        }
+        if ($finished && $equation !== '' && ! $this->statementEquationsMatch($equation, $values['equation'] ?? null)) {
+            $finished = false;
+        }
+        if ($finished) {
+            [$factorOk] = $this->ratioFactorVerdict($factor, $values['factor'] ?? null, $quantities);
+            $finished = $factorOk;
+        }
+        if ($finished) {
+            foreach ($quantities as $key => $spec) {
+                $spec = is_array($spec) ? $spec : [];
+                [$ok] = $this->ratioQuantityVerdict((int) ($spec['part'] ?? 0), (int) ($spec['factor'] ?? $factor), $values[$key] ?? null);
+                if (! $ok) {
+                    $finished = false;
+                    break;
+                }
+            }
+        }
+        if ($finished) {
+            $message = 'Right. x was only the common factor. Each quantity is its ratio part times x.';
+        }
+
+        return [
+            'ok' => $allOk,
+            'all_ok' => $finished,
+            'cell_results' => $cellResults,
+            'message' => $message,
+            'step_key' => $stepKey !== '' ? $stepKey : null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $quantities
+     * @return array{0: bool, 1: string}
+     */
+    private function ratioShareVerdict(string $want, mixed $got, int $factor, array $quantities): array
+    {
+        $written = $this->asShareExpression($got);
+        $wantPart = $this->shareCoefficient($want);
+        $gotPart = $this->shareCoefficient($written);
+        if ($wantPart !== null && $gotPart === $wantPart) {
+            return [true, 'Right. That amount is the ratio part times the common factor x.'];
+        }
+
+        $text = str_replace('*', '', $written);
+        if (preg_match('/^(\d+)x$/', $this->asShareExpression($want), $partMatch) === 1) {
+            $part = $partMatch[1];
+            if ($text === $part) {
+                return [false, $part.' is the ratio part. Multiply it by the common factor, so write it with x.'];
+            }
+        }
+        if ($text === 'x' || $text === '1x') {
+            return [false, 'x is the common factor, not this quantity. Multiply the ratio part by x.'];
+        }
+        if ($factor !== 0 && $text === (string) $factor) {
+            return [false, 'We have not found x yet. First write the amount as the ratio part times x.'];
+        }
+        foreach ($quantities as $spec) {
+            if (! is_array($spec)) {
+                continue;
+            }
+            $product = (int) ($spec['part'] ?? 0) * (int) ($spec['factor'] ?? $factor);
+            if ($product !== 0 && $text === (string) $product) {
+                return [false, 'That number comes after x is found. First write the amount with x.'];
+            }
+        }
+
+        return [false, 'Write the ratio part times the common factor x.'];
+    }
+
+    private function ratioEquationMiss(mixed $got): string
+    {
+        $text = strtolower(trim((string) $got));
+        $text = preg_replace('/\s+/', '', $text) ?? $text;
+        if (preg_match('/^x=\d+$/', $text) === 1) {
+            return 'That line is the factor after solving. First add the two amounts and set the sum equal to the total.';
+        }
+
+        return 'Add the two amounts in the table and set that sum equal to the total.';
+    }
+
+    /**
+     * @param  array<string, mixed>  $quantities
+     * @return array{0: bool, 1: string}
+     */
+    private function ratioFactorVerdict(int $factor, mixed $got, array $quantities): array
+    {
+        $text = strtolower(trim((string) $got));
+        $text = preg_replace('/^x\s*=\s*/', '', $text) ?? $text;
+        if ($this->integerTokenMatches($factor, $text)) {
+            return [true, 'Right. That is the common factor. It is not a quantity yet.'];
+        }
+
+        $plain = str_replace([' ', '×', '⋅', '·'], ['', '*', '*', '*'], strtolower(trim((string) $got)));
+        foreach ($quantities as $spec) {
+            if (! is_array($spec)) {
+                continue;
+            }
+            $part = (int) ($spec['part'] ?? 0);
+            $product = $part * (int) ($spec['factor'] ?? $factor);
+            if ($product !== 0 && ($plain === (string) $product || $plain === $part.'*'.$factor || $plain === $factor.'*'.$part)) {
+                return [false, 'That is a quantity: the ratio part times x. Solve the equation for the factor x.'];
+            }
+        }
+
+        return [false, 'Solve the equation for x. x is only the common factor.'];
+    }
+
+    /**
+     * @return array{0: bool, 1: string}
+     */
+    private function ratioQuantityVerdict(int $part, int $factor, mixed $got): array
+    {
+        $text = strtolower(trim((string) $got));
+        $text = str_replace(['×', '⋅', '·', ' '], ['*', '*', '*', ''], $text);
+        $text = preg_replace('/(\d)\(/', '$1*(', $text) ?? $text;
+        $text = str_replace(['(', ')'], '', $text);
+        $product = $part * $factor;
+        $forms = [$part.'*'.$factor, $factor.'*'.$part, (string) $product];
+        if ($part > 0 && $factor > 0 && in_array($text, $forms, true)) {
+            return [true, 'Right. That quantity is the ratio part times the factor.'];
+        }
+
+        $bare = str_replace('*', '', $text);
+        if ($bare === (string) $factor || $bare === 'x') {
+            return [false, $factor.' is only the common factor. Multiply the ratio part by that factor.'];
+        }
+        if ($bare === $part.'x' || $text === $part.'*x' || $text === 'x*'.$part) {
+            return [false, 'x is already found. Multiply the ratio part by that factor.'];
+        }
+
+        return [false, 'Write the ratio part times the factor.'];
+    }
+
+    private function asShareExpression(mixed $value): string
+    {
+        $text = strtolower(trim((string) $value));
+        $text = str_replace(['×', '⋅', '·', ' '], ['*', '*', '*', ''], $text);
+        $text = preg_replace('/(\d+)\*x/', '$1x', $text) ?? $text;
+        $text = preg_replace('/x\*(\d+)/', '$1x', $text) ?? $text;
+        $text = preg_replace('/(\d+)\*$/', '$1x', $text) ?? $text;
+
+        return $text;
+    }
+
+    private function shareCoefficient(string $text): ?int
+    {
+        $text = $this->asShareExpression($text);
+        if ($text === 'x') {
+            return 1;
+        }
+        if (preg_match('/^(\d+)x$/', $text, $match) === 1) {
+            return (int) $match[1];
+        }
+
+        return null;
     }
 
     private function expressionsMatch(mixed $expected, mixed $got): bool
