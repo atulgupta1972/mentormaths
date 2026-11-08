@@ -157,12 +157,21 @@ const onInput = (key, event) => {
                                     <th
                                         v-for="column in item.columns"
                                         :key="`${item.key}-${column}`"
-                                        class="border border-amber-200 px-3 py-2 text-left text-xs font-extrabold uppercase tracking-wide text-amber-950"
+                                        class="border border-amber-300 px-3 py-2 text-left text-xs font-extrabold uppercase tracking-wide text-amber-950"
                                     >
                                         {{ column }}
                                     </th>
                                 </tr>
                             </thead>
+                            <tbody>
+                                <tr v-for="person in item.people" :key="`${item.key}-row-${person.key}`">
+                                    <td
+                                        v-for="column in item.columns"
+                                        :key="`${item.key}-${person.key}-${column}`"
+                                        class="h-10 border border-slate-300 bg-white"
+                                    />
+                                </tr>
+                            </tbody>
                         </table>
                     </div>
                     <p class="text-xs text-slate-600">
