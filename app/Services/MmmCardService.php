@@ -283,6 +283,7 @@ class MmmCardService
         $isAgeAnswers = ($answers['mode'] ?? '') === 'age_answers';
         $isRatio = ($answers['mode'] ?? '') === 'ratio';
         $isRatioEquation = ($answers['mode'] ?? '') === 'ratio_equation';
+        $isRatioQuantities = ($answers['mode'] ?? '') === 'ratio_quantities';
 
         return [
             'id' => $exercise->id,
@@ -290,7 +291,7 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isRatioEquation ? 'ratio_equation' : ($isRatio ? 'ratio' : ($isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table')))))))),
+            'play_kind' => $isRatioQuantities ? 'ratio_quantities' : ($isRatioEquation ? 'ratio_equation' : ($isRatio ? 'ratio' : ($isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table'))))))))),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
             'bodmas' => $isBodmas ? ($answers['play'] ?? []) : null,
             'congruence' => $isCongruence ? ($answers['play'] ?? []) : null,
@@ -300,6 +301,7 @@ class MmmCardService
             'age_answers' => $isAgeAnswers ? ($answers['play'] ?? []) : null,
             'ratio' => $isRatio ? ($answers['play'] ?? []) : null,
             'ratio_equation' => $isRatioEquation ? ($answers['play'] ?? []) : null,
+            'ratio_quantities' => $isRatioQuantities ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
             // Marks: auto from Total column. Money ratio/conditions: student types the equation.
@@ -349,6 +351,9 @@ class MmmCardService
         }
         if (($expected['mode'] ?? '') === 'ratio_equation') {
             return $this->checkRatioEquationSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'ratio_quantities') {
+            return $this->checkRatioQuantityPageSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -1014,6 +1019,119 @@ class MmmCardService
         $divisor = $this->gcd($pair[0], $pair[1]);
 
         return [intdiv($pair[0], $divisor), intdiv($pair[1], $divisor)];
+    }
+
+    /**
+     * Ten ratio sums. The student converts to one unit, then writes each quantity.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkRatioQuantityPageSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $items = is_array($check['items'] ?? null) ? $check['items'] : [];
+
+        $stepKey = (string) ($submission['step_key'] ?? '');
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        if ($stepKey !== '' && ! array_key_exists($stepKey, $values)) {
+            $values[$stepKey] = $submission['value'] ?? null;
+        }
+
+        $keys = array_map('strval', array_keys($items));
+        $keysToCheck = in_array($stepKey, $keys, true) ? [$stepKey] : $keys;
+        $cellResults = [];
+        $allOk = true;
+        $message = 'Right.';
+
+        foreach ($keysToCheck as $key) {
+            $spec = is_array($items[$key] ?? null) ? $items[$key] : [];
+            [$ok, $message] = $this->ratioQuantityPageVerdict($spec, $values[$key] ?? null);
+            $cellResults[$key] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        $finished = $keys !== [];
+        foreach ($keys as $key) {
+            $spec = is_array($items[$key] ?? null) ? $items[$key] : [];
+            [$ok] = $this->ratioQuantityPageVerdict($spec, $values[$key] ?? null);
+            if (! $ok) {
+                $finished = false;
+                break;
+            }
+        }
+        if ($finished) {
+            $message = 'Right. Every quantity is in the same unit.';
+        }
+
+        return [
+            'ok' => $allOk,
+            'all_ok' => $finished,
+            'cell_results' => $cellResults,
+            'message' => $message,
+            'step_key' => $stepKey !== '' ? $stepKey : null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $spec
+     * @return array{0: bool, 1: string}
+     */
+    private function ratioQuantityPageVerdict(array $spec, mixed $got): array
+    {
+        $unit = (string) ($spec['unit'] ?? 'the same unit');
+        $number = $this->quantityNumber($got);
+        if ($this->integerTokenMatches($spec['value'] ?? null, $number)) {
+            return [true, 'Right. That quantity is in '.$unit.'.'];
+        }
+
+        $raw = strtolower(trim((string) $got));
+        if (preg_match('/\d/', $raw) === 1 && preg_match('/kg|kilogram|metre|meter|hour|₹|rupee|\brs\b|litre|liter/', $raw) === 1) {
+            return [false, 'Change both measures to '.$unit.' first, then write this quantity in '.$unit.'.'];
+        }
+
+        $gotNum = $this->normalizeNumber($number);
+        foreach (is_array($spec['traps'] ?? null) ? $spec['traps'] : [] as $trap) {
+            if (! is_array($trap)) {
+                continue;
+            }
+            $trapNum = $this->normalizeNumber($trap['n'] ?? null);
+            if ($gotNum === null || $trapNum === null || $gotNum !== $trapNum) {
+                continue;
+            }
+            if ($this->integerTokenMatches($spec['value'] ?? null, $trapNum)) {
+                continue;
+            }
+            $why = (string) ($trap['why'] ?? '');
+            if ($why === 'unit') {
+                return [false, 'Change both measures to '.$unit.' first, then write this quantity in '.$unit.'.'];
+            }
+            if ($why === 'factor') {
+                return [false, 'That is the common factor x. Multiply the ratio part by x and write the quantity in '.$unit.'.'];
+            }
+
+            return [false, 'Write the quantity in '.$unit.': the ratio part times the common factor.'];
+        }
+
+        return [false, 'Make the units the same, finish the small table, and write this quantity in '.$unit.'.'];
+    }
+
+    private function quantityNumber(mixed $got): string
+    {
+        $text = strtolower(trim((string) $got));
+        $text = str_replace([',', ' '], '', $text);
+        $suffixes = ['grams', 'gram', 'students', 'student', 'minutes', 'minute', 'paise', 'centimetres', 'centimeters', 'cm', 'ml', 'min', 'g', 'p'];
+        foreach ($suffixes as $suffix) {
+            if (str_ends_with($text, $suffix) && strlen($text) > strlen($suffix)) {
+                $text = substr($text, 0, -strlen($suffix));
+                break;
+            }
+        }
+
+        return $text;
     }
 
     /**
