@@ -1112,6 +1112,15 @@ class MmmCardService
             if ($why === 'factor') {
                 return [false, 'That is the common factor x. Multiply the ratio part by x and write the quantity in '.$unit.'.'];
             }
+            if ($why === 'given') {
+                return [false, 'That amount is already given. Set its ratio part times x equal to it, find x, then write this quantity in '.$unit.'.'];
+            }
+            if ($why === 'scale') {
+                return [false, 'Divide the given amount by its ratio part to find x, then multiply the other part by x.'];
+            }
+            if ($why === 'swap') {
+                return [false, 'That is the other quantity. This box is the given amount, written in '.$unit.'.'];
+            }
 
             return [false, 'Write the quantity in '.$unit.': the ratio part times the common factor.'];
         }
@@ -1123,7 +1132,7 @@ class MmmCardService
     {
         $text = strtolower(trim((string) $got));
         $text = str_replace([',', ' '], '', $text);
-        $suffixes = ['grams', 'gram', 'students', 'student', 'minutes', 'minute', 'paise', 'centimetres', 'centimeters', 'cm', 'ml', 'min', 'g', 'p'];
+        $suffixes = ['grams', 'gram', 'students', 'student', 'fruits', 'fruit', 'minutes', 'minute', 'paise', 'centimetres', 'centimeters', 'kilometres', 'kilometers', 'km', 'cm', 'ml', 'min', 'g', 'p'];
         foreach ($suffixes as $suffix) {
             if (str_ends_with($text, $suffix) && strlen($text) > strlen($suffix)) {
                 $text = substr($text, 0, -strlen($suffix));

@@ -175,7 +175,7 @@ const onInput = (key, event) => {
                         </table>
                     </div>
                     <p class="text-xs text-slate-600">
-                        Make this table in your copy. Change both measures to {{ item.unit }} first. x is only the common factor. Write each quantity in {{ item.unit }}.
+                        {{ item.cue || `Make this table in your copy. Change both measures to ${item.unit} first. x is only the common factor. Write each quantity in ${item.unit}.` }}
                     </p>
                     <div class="flex flex-wrap gap-3">
                         <label

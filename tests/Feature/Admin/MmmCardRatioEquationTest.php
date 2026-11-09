@@ -23,7 +23,7 @@ class MmmCardRatioEquationTest extends TestCase
         $this->assertSame('Ratios', $card->sub_heading);
         $this->assertSame('Ratios — ratio equation', $card->heading);
         $this->assertSame($basics->chapter_head_id, $card->chapter_head_id);
-        $this->assertCount(6, $card->exercises);
+        $this->assertCount(7, $card->exercises);
 
         $boys = $card->exercises()->where('sort_order', 1)->firstOrFail();
         $payload = app(MmmCardService::class)->exercisePayload($boys);
@@ -141,6 +141,62 @@ class MmmCardRatioEquationTest extends TestCase
                 'exercise_id' => $page->id,
                 'step_key' => 's10.second',
                 'value' => '1600',
+                'values' => $values,
+            ])
+            ->assertOk()
+            ->assertJsonPath('all_ok', true);
+    }
+
+    public function test_the_given_part_page_finds_the_other_quantity_from_that_part(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+        $card = MmmCard::query()->where('slug', 'ratios-equation')->firstOrFail();
+        $page = $card->exercises()->where('sort_order', 7)->firstOrFail();
+        $payload = app(MmmCardService::class)->exercisePayload($page);
+
+        $this->assertSame('ratio_quantities', $payload['play_kind']);
+        $this->assertCount(10, $payload['ratio_quantities']['items']);
+        $this->assertArrayNotHasKey('value', $payload['ratio_quantities']['items'][0]['quantities'][0]);
+
+        $check = function (string $key, string $value, bool $expect) use ($admin, $card, $page) {
+            $response = $this->actingAs($admin)
+                ->postJson(route('admin.mmm-cards.check', $card), [
+                    'exercise_id' => $page->id,
+                    'step_key' => $key,
+                    'value' => $value,
+                    'values' => [$key => $value],
+                ])
+                ->assertOk();
+            $this->assertSame($expect, $response->json('ok'), $key.' ['.$value.'] '.$response->json('message'));
+        };
+
+        $check('s1.second', '24', false);
+        $check('s1.second', '8', false);
+        $check('s1.second', '120', false);
+        $check('s1.second', '40', true);
+        $check('s1.first', '24', true);
+        $check('s2.first', '35', false);
+        $check('s2.first', '10', true);
+        $check('s4.first', '3', false);
+        $check('s4.first', '600', true);
+
+        $values = [
+            's1.first' => '24', 's1.second' => '40',
+            's2.first' => '10', 's2.second' => '35',
+            's3.first' => '6000', 's3.second' => '1500',
+            's4.first' => '600', 's4.second' => '80',
+            's5.first' => '1500', 's5.second' => '250',
+            's6.first' => '8', 's6.second' => '18',
+            's7.first' => '2250', 's7.second' => '3000',
+            's8.first' => '500', 's8.second' => '1250',
+            's9.first' => '240', 's9.second' => '90',
+            's10.first' => '2100', 's10.second' => '900',
+        ];
+        $this->actingAs($admin)
+            ->postJson(route('admin.mmm-cards.check', $card), [
+                'exercise_id' => $page->id,
+                'step_key' => 's10.second',
+                'value' => '900',
                 'values' => $values,
             ])
             ->assertOk()
