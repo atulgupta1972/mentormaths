@@ -21,7 +21,7 @@ class MmmCardSimpleInterestPracticeTest extends TestCase
 
         $this->assertSame(MmmCard::KIND_SIMPLE_INTEREST, $card->kind);
         $this->assertSame('Simple Interest', $card->sub_heading);
-        $this->assertCount(10, $card->exercises);
+        $this->assertCount(15, $card->exercises);
         $this->assertSame($card->id, app(MmmCardService::class)->nextPartCard($guided)?->id);
 
         $first = $card->exercises()->where('sort_order', 1)->firstOrFail();
@@ -61,6 +61,28 @@ class MmmCardSimpleInterestPracticeTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('ok', false);
+
+        $doubles = $card->exercises()->where('sort_order', 11)->firstOrFail();
+        $this->actingAs($admin)
+            ->postJson(route('admin.mmm-cards.check', $card), [
+                'exercise_id' => $doubles->id,
+                'step_key' => 'answer',
+                'value' => '20',
+                'values' => ['answer' => '20'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('all_ok', true);
+
+        $triples = $card->exercises()->where('sort_order', 14)->firstOrFail();
+        $this->actingAs($admin)
+            ->postJson(route('admin.mmm-cards.check', $card), [
+                'exercise_id' => $triples->id,
+                'step_key' => 'answer',
+                'value' => '25',
+                'values' => ['answer' => '25'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
 
         $this->actingAs($admin)
             ->get(route('admin.mmm-cards.play', ['mmmCard' => $card, 'exercise' => 1]))
