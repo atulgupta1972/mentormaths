@@ -285,6 +285,7 @@ class MmmCardService
         $isRatioEquation = ($answers['mode'] ?? '') === 'ratio_equation';
         $isRatioQuantities = ($answers['mode'] ?? '') === 'ratio_quantities';
         $isSimpleInterest = ($answers['mode'] ?? '') === 'simple_interest';
+        $isSimpleInterestPractice = ($answers['mode'] ?? '') === 'simple_interest_practice';
 
         return [
             'id' => $exercise->id,
@@ -292,7 +293,7 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isSimpleInterest ? 'simple_interest' : ($isRatioQuantities ? 'ratio_quantities' : ($isRatioEquation ? 'ratio_equation' : ($isRatio ? 'ratio' : ($isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table')))))))))),
+            'play_kind' => $isSimpleInterestPractice ? 'simple_interest_practice' : ($isSimpleInterest ? 'simple_interest' : ($isRatioQuantities ? 'ratio_quantities' : ($isRatioEquation ? 'ratio_equation' : ($isRatio ? 'ratio' : ($isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table'))))))))))),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
             'bodmas' => $isBodmas ? ($answers['play'] ?? []) : null,
             'congruence' => $isCongruence ? ($answers['play'] ?? []) : null,
@@ -304,6 +305,7 @@ class MmmCardService
             'ratio_equation' => $isRatioEquation ? ($answers['play'] ?? []) : null,
             'ratio_quantities' => $isRatioQuantities ? ($answers['play'] ?? []) : null,
             'simple_interest' => $isSimpleInterest ? ($answers['play'] ?? []) : null,
+            'simple_interest_practice' => $isSimpleInterestPractice ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
             // Marks: auto from Total column. Money ratio/conditions: student types the equation.
@@ -359,6 +361,9 @@ class MmmCardService
         }
         if (($expected['mode'] ?? '') === 'simple_interest') {
             return $this->checkSimpleInterestSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'simple_interest_practice') {
+            return $this->checkSimpleInterestPracticeSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -1005,6 +1010,36 @@ class MmmCardService
             'cell_results' => $cellResults,
             'message' => $message,
             'step_key' => $stepKey !== '' ? $stepKey : null,
+        ];
+    }
+
+    /**
+     * Practice card: outline in the copy, punch only the final answer.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkSimpleInterestPracticeSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $want = $check['answer'] ?? null;
+        $wrong = (string) ($check['wrong'] ?? 'Finish the Given table and formula in your copy, then calculate again.');
+
+        $stepKey = (string) ($submission['step_key'] ?? 'answer');
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        if (! array_key_exists('answer', $values)) {
+            $values['answer'] = $submission['value'] ?? null;
+        }
+
+        $ok = $this->simpleInterestValueMatches($want, $values['answer'] ?? null);
+
+        return [
+            'ok' => $ok,
+            'all_ok' => $ok,
+            'cell_results' => ['answer' => $ok],
+            'message' => $ok ? 'Right.' : $wrong,
+            'step_key' => $stepKey !== '' ? $stepKey : 'answer',
         ];
     }
 

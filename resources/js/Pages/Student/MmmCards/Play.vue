@@ -12,6 +12,7 @@ import RatioEquationPlay from '@/Pages/Student/MmmCards/RatioEquationPlay.vue';
 import RatioQuantityPage from '@/Pages/Student/MmmCards/RatioQuantityPage.vue';
 import AgeTablePlay from '@/Pages/Student/MmmCards/AgeTablePlay.vue';
 import SimpleInterestPlay from '@/Pages/Student/MmmCards/SimpleInterestPlay.vue';
+import SimpleInterestPracticePlay from '@/Pages/Student/MmmCards/SimpleInterestPracticePlay.vue';
 import MakeEquationPlay from '@/Pages/Student/MmmCards/MakeEquationPlay.vue';
 import SeriesFinished from '@/Pages/Student/MmmCards/SeriesFinished.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -104,6 +105,7 @@ const isRatio = computed(() => props.exercise?.play_kind === 'ratio');
 const isRatioEquation = computed(() => props.exercise?.play_kind === 'ratio_equation');
 const isRatioQuantities = computed(() => props.exercise?.play_kind === 'ratio_quantities');
 const isSimpleInterest = computed(() => props.exercise?.play_kind === 'simple_interest');
+const isSimpleInterestPractice = computed(() => props.exercise?.play_kind === 'simple_interest_practice');
 const fillCount = computed(() => props.exercise?.fill_page?.items?.length || 0);
 const fillPageBlurb = computed(() => props.exercise?.fill_page?.page_blurb || props.card?.method_blurb);
 
@@ -290,7 +292,7 @@ const footerColspan = computed(() => {
             </div>
         </template>
 
-        <div class="mx-auto space-y-4 p-4 sm:p-6" :class="isFillPage || isCongruence || isMakeEquation || isAgeTable || isSimpleInterest || isAgeAnswers || isRatio || isRatioEquation || isRatioQuantities ? 'max-w-4xl' : 'max-w-3xl'">
+        <div class="mx-auto space-y-4 p-4 sm:p-6" :class="isFillPage || isCongruence || isMakeEquation || isAgeTable || isSimpleInterest || isSimpleInterestPractice || isAgeAnswers || isRatio || isRatioEquation || isRatioQuantities ? 'max-w-4xl' : 'max-w-3xl'">
             <p v-if="is_staff_preview" class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
                 Staff preview — checking does not save student progress.
             </p>
@@ -374,7 +376,7 @@ const footerColspan = computed(() => {
             </section>
 
             <section
-                v-else-if="showMethodSketch && isSimpleInterest"
+                v-else-if="showMethodSketch && (isSimpleInterest || isSimpleInterestPractice)"
                 class="rounded-xl bg-white p-4 shadow-sm ring-2"
                 :class="accentRing"
             >
@@ -570,6 +572,16 @@ const footerColspan = computed(() => {
                     :series-label="card.series_label"
                     @next="goNext"
                 />
+                <SimpleInterestPracticePlay
+                    v-else-if="isSimpleInterestPractice"
+                    :key="exercise.id"
+                    :exercise="exercise"
+                    :check_url="check_url"
+                    :can-go-next="canGoNext"
+                    :next-part="next_part"
+                    :series-label="card.series_label"
+                    @next="goNext"
+                />
                 <RatioQuantityPage
                     v-else-if="isRatioQuantities"
                     :key="exercise.id"
@@ -616,7 +628,7 @@ const footerColspan = computed(() => {
                 >
                     {{ exercise.variable_tip }}
                 </p>
-                <template v-if="!isBalance && !isBodmas && !isFillPage && !isCongruence && !isMakeEquation && !isAgeTable && !isSimpleInterest && !isAgeAnswers && !isRatio && !isRatioEquation && !isRatioQuantities">
+                <template v-if="!isBalance && !isBodmas && !isFillPage && !isCongruence && !isMakeEquation && !isAgeTable && !isSimpleInterest && !isSimpleInterestPractice && !isAgeAnswers && !isRatio && !isRatioEquation && !isRatioQuantities">
                 <p v-if="fillsDenomination" class="mt-2 text-xs text-slate-500">
                     Write each denomination in ₹ (number only, e.g. 2, 5, 10), then counts and totals. Wrong cells will be highlighted.
                 </p>
