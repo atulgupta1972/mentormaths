@@ -284,6 +284,7 @@ class MmmCardService
         $isRatio = ($answers['mode'] ?? '') === 'ratio';
         $isRatioEquation = ($answers['mode'] ?? '') === 'ratio_equation';
         $isRatioQuantities = ($answers['mode'] ?? '') === 'ratio_quantities';
+        $isSimpleInterest = ($answers['mode'] ?? '') === 'simple_interest';
 
         return [
             'id' => $exercise->id,
@@ -291,7 +292,7 @@ class MmmCardService
             'is_demo' => (bool) $exercise->is_demo,
             'question_text' => $exercise->question_text,
             'sort_order' => $exercise->sort_order,
-            'play_kind' => $isRatioQuantities ? 'ratio_quantities' : ($isRatioEquation ? 'ratio_equation' : ($isRatio ? 'ratio' : ($isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table'))))))))),
+            'play_kind' => $isSimpleInterest ? 'simple_interest' : ($isRatioQuantities ? 'ratio_quantities' : ($isRatioEquation ? 'ratio_equation' : ($isRatio ? 'ratio' : ($isAgeAnswers ? 'age_answers' : ($isAgeTable ? 'age_table' : ($isMakeEquation ? 'make_equation' : ($isFillPage ? 'fill_page' : ($isBalance ? 'balance' : ($isBodmas ? 'bodmas' : ($isCongruence ? 'congruence' : 'table')))))))))),
             'balance' => $isBalance ? ($answers['play'] ?? []) : null,
             'bodmas' => $isBodmas ? ($answers['play'] ?? []) : null,
             'congruence' => $isCongruence ? ($answers['play'] ?? []) : null,
@@ -302,6 +303,7 @@ class MmmCardService
             'ratio' => $isRatio ? ($answers['play'] ?? []) : null,
             'ratio_equation' => $isRatioEquation ? ($answers['play'] ?? []) : null,
             'ratio_quantities' => $isRatioQuantities ? ($answers['play'] ?? []) : null,
+            'simple_interest' => $isSimpleInterest ? ($answers['play'] ?? []) : null,
             'uses_variable' => $usesVariable,
             'variable_tip' => $tip,
             // Marks: auto from Total column. Money ratio/conditions: student types the equation.
@@ -354,6 +356,9 @@ class MmmCardService
         }
         if (($expected['mode'] ?? '') === 'ratio_quantities') {
             return $this->checkRatioQuantityPageSubmission($expected, $submission);
+        }
+        if (($expected['mode'] ?? '') === 'simple_interest') {
+            return $this->checkSimpleInterestSubmission($expected, $submission);
         }
 
         $schema = $this->schemaForExercise($card, $exercise);
@@ -894,6 +899,202 @@ class MmmCardService
             'message' => $message,
             'step_key' => $stepKey !== '' ? $stepKey : null,
         ];
+    }
+
+    /**
+     * Banking notebook method: Given table → To find → Formula → Calculate.
+     *
+     * @param  array<string, mixed>  $expected
+     * @param  array<string, mixed>  $submission
+     * @return array{ok: bool, cell_results: array<string, bool>, message: string, all_ok?: bool, step_key?: string}
+     */
+    private function checkSimpleInterestSubmission(array $expected, array $submission): array
+    {
+        $check = is_array($expected['check'] ?? null) ? $expected['check'] : [];
+        $given = is_array($check['given'] ?? null) ? $check['given'] : [];
+        $steps = is_array($check['steps'] ?? null) ? $check['steps'] : [];
+        $wrong = is_array($check['wrong'] ?? null) ? $check['wrong'] : [];
+        $toFind = (string) ($check['to_find'] ?? '');
+        $formulas = $check['formula'] ?? [];
+        if (is_string($formulas)) {
+            $formulas = [$formulas];
+        }
+        if (! is_array($formulas)) {
+            $formulas = [];
+        }
+
+        $stepKey = (string) ($submission['step_key'] ?? '');
+        $values = is_array($submission['values'] ?? null) ? $submission['values'] : [];
+        if ($stepKey !== '' && ! array_key_exists($stepKey, $values)) {
+            $values[$stepKey] = $submission['value'] ?? null;
+        }
+
+        $keys = [];
+        foreach (array_keys($given) as $key) {
+            $keys[] = 'given.'.$key;
+        }
+        $keys[] = 'to_find';
+        $keys[] = 'formula';
+        foreach (array_keys($steps) as $key) {
+            $keys[] = 'step.'.$key;
+        }
+        $keysToCheck = in_array($stepKey, $keys, true) ? [$stepKey] : $keys;
+
+        $cellResults = [];
+        $allOk = true;
+        $message = 'Right.';
+
+        foreach ($keysToCheck as $key) {
+            $got = $values[$key] ?? null;
+            if (str_starts_with($key, 'given.')) {
+                $field = substr($key, 6);
+                $ok = $this->simpleInterestValueMatches($given[$field] ?? null, $got);
+                $message = $ok
+                    ? 'Right.'
+                    : (string) ($wrong[$key] ?? 'Read the sum again and write that given value.');
+            } elseif ($key === 'to_find') {
+                $ok = $this->simpleInterestFindMatches($toFind, $got);
+                $message = $ok
+                    ? 'Right. That is what we must find.'
+                    : (string) ($wrong['to_find'] ?? 'Look at the last line of the question — SI, Amount (A), R, or T?');
+            } elseif ($key === 'formula') {
+                $ok = $this->simpleInterestFormulaMatches($formulas, $got);
+                $message = $ok
+                    ? 'Right. Keep that formula in your notebook.'
+                    : (string) ($wrong['formula'] ?? 'Write the matching SI formula for what you are finding.');
+            } else {
+                $field = substr($key, 5);
+                $ok = $this->simpleInterestValueMatches($steps[$field] ?? null, $got);
+                $message = $ok
+                    ? 'Right.'
+                    : (string) ($wrong[$key] ?? 'Substitute the given values carefully and calculate again.');
+            }
+            $cellResults[$key] = $ok;
+            if (! $ok) {
+                $allOk = false;
+            }
+        }
+
+        $finished = $given !== [] && $toFind !== '' && $formulas !== [] && $steps !== [];
+        foreach ($given as $field => $want) {
+            if (! $this->simpleInterestValueMatches($want, $values['given.'.$field] ?? null)) {
+                $finished = false;
+                break;
+            }
+        }
+        if ($finished && ! $this->simpleInterestFindMatches($toFind, $values['to_find'] ?? null)) {
+            $finished = false;
+        }
+        if ($finished && ! $this->simpleInterestFormulaMatches($formulas, $values['formula'] ?? null)) {
+            $finished = false;
+        }
+        foreach ($steps as $field => $want) {
+            if (! $this->simpleInterestValueMatches($want, $values['step.'.$field] ?? null)) {
+                $finished = false;
+                break;
+            }
+        }
+
+        if ($finished) {
+            $message = 'Right. Given → To find → Formula → Calculate is complete.';
+        }
+
+        return [
+            'ok' => $allOk,
+            'all_ok' => $finished,
+            'cell_results' => $cellResults,
+            'message' => $message,
+            'step_key' => $stepKey !== '' ? $stepKey : null,
+        ];
+    }
+
+    private function simpleInterestValueMatches(mixed $expected, mixed $got): bool
+    {
+        if ($this->integerTokenMatches($expected, $got)) {
+            return true;
+        }
+
+        $gotText = strtolower(trim((string) $got));
+        $gotText = preg_replace('/^(₹|rs\.?)\s*/iu', '', $gotText) ?? $gotText;
+        $gotText = preg_replace('/\s*(%|years?|yrs?|per\s*annum|p\.?\s*a\.?)\s*$/iu', '', $gotText) ?? $gotText;
+        $gotText = str_replace([',', ' '], '', $gotText);
+
+        return $this->integerTokenMatches($expected, $gotText);
+    }
+
+    private function simpleInterestFindMatches(mixed $expected, mixed $got): bool
+    {
+        $want = $this->simpleInterestFindCanon($expected);
+        $have = $this->simpleInterestFindCanon($got);
+
+        return $want !== null && $want === $have;
+    }
+
+    private function simpleInterestFindCanon(mixed $value): ?string
+    {
+        $text = strtolower(trim((string) $value));
+        $text = preg_replace('/[\s._-]+/', '', $text) ?? $text;
+        $text = str_replace(['amount', 'simpleinterest', 'interest', 'rate', 'time', 'principal'], ['a', 'si', 'si', 'r', 't', 'p'], $text);
+
+        return match ($text) {
+            'a', 'amount' => 'a',
+            'si', 's', 'simpleinterest', 'interest' => 'si',
+            'r', 'rate' => 'r',
+            't', 'time' => 't',
+            'p', 'principal' => 'p',
+            default => $text !== '' ? $text : null,
+        };
+    }
+
+    /**
+     * @param  list<string|mixed>  $allowed
+     */
+    private function simpleInterestFormulaMatches(array $allowed, mixed $got): bool
+    {
+        $have = $this->simpleInterestFormulaCanon($got);
+        if ($have === null) {
+            return false;
+        }
+
+        foreach ($allowed as $formula) {
+            $want = $this->simpleInterestFormulaCanon($formula);
+            if ($want !== null && $want === $have) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function simpleInterestFormulaCanon(mixed $value): ?string
+    {
+        $text = strtolower(trim((string) $value));
+        if ($text === '') {
+            return null;
+        }
+
+        $text = preg_replace('/[\x{00A0}\x{2000}-\x{200D}\x{202F}\x{205F}\x{3000}\x{FEFF}]/u', '', $text) ?? $text;
+        $text = str_replace(['−', '–', '—', '﹣', '－', '＝', '﹦', '＋', '﹢', '×', '⋅', '÷'], ['-', '-', '-', '-', '-', '=', '=', '+', '+', '*', '*', '/'], $text);
+        $text = preg_replace('/\s+/u', '', $text) ?? $text;
+        $text = str_replace(
+            ['simpleinterest', 'interest', 'amount', 'principal', 'rateoftheinterest', 'rateofinterest', 'rate', 'time'],
+            ['si', 'si', 'a', 'p', 'r', 'r', 'r', 't'],
+            $text
+        );
+        // Keep only banking letters and arithmetic.
+        $text = preg_replace('/[^a-z0-9+\-\*\/=()]/', '', $text) ?? $text;
+        $text = str_replace('*', '', $text);
+        // Drop trivial parentheses: (prt)/100 → prt/100, (si100)/(pt) → si100/pt
+        for ($i = 0; $i < 4; $i++) {
+            $next = preg_replace('/\(([a-z0-9]+)\)/', '$1', $text) ?? $text;
+            if ($next === $text) {
+                break;
+            }
+            $text = $next;
+        }
+        $text = preg_replace('/\++/', '+', $text) ?? $text;
+
+        return $text !== '' ? $text : null;
     }
 
     /**
