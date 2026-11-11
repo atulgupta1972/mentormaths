@@ -80,7 +80,7 @@ return new class extends Migration
                 story: 'Ram deposits ₹1000 in a bank at 5% per annum for 2 years. Find the simple interest.',
                 given: [
                     ['key' => 'P', 'label' => 'Principal', 'notation' => 'P', 'value' => '1000', 'hint' => 'The money deposited is ₹1000.'],
-                    ['key' => 'R', 'label' => 'Rate of interest per annum', 'notation' => 'R', 'value' => '5', 'hint' => 'Rate is 5% per year. Write 5.', 'placeholder' => '5'],
+                    ['key' => 'R', 'label' => 'Rate of interest per annum', 'notation' => 'R', 'value' => '5', 'hint' => 'Rate is 5% per year. Write 5.'],
                     ['key' => 'T', 'label' => 'Time', 'notation' => 'T', 'value' => '2', 'hint' => 'Time is 2 years. Write 2.'],
                 ],
                 find: 'SI',

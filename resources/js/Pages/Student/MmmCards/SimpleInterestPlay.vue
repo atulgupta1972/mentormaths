@@ -49,6 +49,9 @@ const findReady = computed(() => givenReady.value && status.to_find === true);
 const formulaReady = computed(() => findReady.value && status.formula === true);
 const allReady = computed(() => formulaReady.value && stepKeys.value.every((key) => status[key] === true));
 
+const pendingGiven = computed(() => givenRows.value.filter((row) => status[`given.${row.key}`] !== true));
+const givenFilled = computed(() => givenKeys.value.every((key) => cleanMath(answers[key]) !== ''));
+
 const cleanMath = (value) => String(value ?? '')
     .replace(/[−–—﹣－]/g, '-')
     .replace(/[＝﹦]/g, '=')
@@ -117,9 +120,19 @@ const checkStep = async (key) => {
         }
     } catch (e) {
         status[key] = false;
-        messages[key] = e?.response?.data?.message || 'Could not check. Try again.';
+        const errors = e?.response?.data?.errors;
+        const firstError = errors ? Object.values(errors).flat()?.[0] : null;
+        messages[key] = firstError || e?.response?.data?.message || 'Could not check. Try again.';
     } finally {
         checking[key] = false;
+    }
+};
+
+const checkAllGiven = async () => {
+    for (const key of givenKeys.value) {
+        if (status[key] !== true) {
+            await checkStep(key);
+        }
     }
 };
 
@@ -130,15 +143,13 @@ const scheduleCheck = (key) => {
     if (status[key] === true) {
         return;
     }
-    timers[key] = window.setTimeout(() => checkStep(key), 700);
+    timers[key] = window.setTimeout(() => checkStep(key), 500);
 };
 
 const onInput = (key, event) => {
     answers[key] = event.target.value;
-    if (status[key] !== true) {
-        status[key] = null;
-        messages[key] = '';
-    }
+    status[key] = null;
+    messages[key] = '';
     scheduleCheck(key);
 };
 
@@ -194,7 +205,7 @@ const hintFor = (key) => (play.value.hints || {})[key] || '';
                                 inputmode="decimal"
                                 class="w-28 rounded-md border px-2 py-1 text-center font-mono text-base font-extrabold focus:border-teal-500 focus:ring-teal-200 sm:w-36"
                                 :class="cellClass(`given.${row.key}`)"
-                                :placeholder="row.placeholder || ''"
+                                placeholder="type number"
                                 autocomplete="off"
                                 :aria-label="`${row.label} value`"
                                 :disabled="status[`given.${row.key}`] === true"
@@ -206,7 +217,24 @@ const hintFor = (key) => (play.value.hints || {})[key] || '';
                     </tr>
                 </tbody>
             </table>
-            <div class="space-y-1 px-3 py-2">
+            <div class="space-y-2 px-3 py-3">
+                <p v-if="!givenReady && pendingGiven.length" class="text-sm text-slate-700">
+                    Still to check:
+                    <span class="font-extrabold text-teal-900">{{ pendingGiven.map((row) => row.notation).join(', ') }}</span>
+                    — type the number (not the grey hint text).
+                </p>
+                <button
+                    v-if="!givenReady"
+                    type="button"
+                    class="rounded-md bg-teal-800 px-3 py-1.5 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-teal-900 disabled:opacity-50"
+                    :disabled="!givenFilled"
+                    @click="checkAllGiven"
+                >
+                    Check given table
+                </button>
+                <p v-else class="text-sm font-semibold text-emerald-800">
+                    Given table is right. Now write what to find.
+                </p>
                 <template v-for="row in givenRows" :key="`note-given-${row.key}`">
                     <p v-if="messages[`given.${row.key}`] && status[`given.${row.key}`] === false" class="text-sm text-rose-900">
                         {{ messages[`given.${row.key}`] }}
@@ -251,6 +279,7 @@ const hintFor = (key) => (play.value.hints || {})[key] || '';
                         type="text"
                         class="w-40 rounded-md border px-2 py-1 text-center font-mono text-lg font-extrabold focus:border-violet-500 focus:ring-violet-200 sm:w-48"
                         :class="cellClass('to_find')"
+                        placeholder="SI or A or R or T"
                         autocomplete="off"
                         aria-label="What to find"
                         :disabled="status.to_find === true"
@@ -258,6 +287,14 @@ const hintFor = (key) => (play.value.hints || {})[key] || '';
                         @blur="checkStep('to_find')"
                         @keyup.enter="checkStep('to_find')"
                     >
+                    <button
+                        v-if="status.to_find !== true"
+                        type="button"
+                        class="rounded-md bg-violet-800 px-3 py-1.5 text-sm font-extrabold text-white hover:bg-violet-900"
+                        @click="checkStep('to_find')"
+                    >
+                        Check
+                    </button>
                 </div>
                 <p v-if="messages.to_find && status.to_find === false" class="mt-2 text-sm text-rose-900">
                     {{ messages.to_find }}
@@ -312,6 +349,14 @@ const hintFor = (key) => (play.value.hints || {})[key] || '';
                         @blur="checkStep('formula')"
                         @keyup.enter="checkStep('formula')"
                     >
+                    <button
+                        v-if="status.formula !== true"
+                        type="button"
+                        class="rounded-md bg-amber-800 px-3 py-1.5 text-sm font-extrabold text-white hover:bg-amber-900"
+                        @click="checkStep('formula')"
+                    >
+                        Check
+                    </button>
                 </div>
                 <p v-if="messages.formula && status.formula === false" class="mt-2 text-sm text-rose-900">
                     {{ messages.formula }}
@@ -374,6 +419,14 @@ const hintFor = (key) => (play.value.hints || {})[key] || '';
                             @keyup.enter="checkStep(`step.${step.key}`)"
                         >
                         <span v-if="step.unit" class="text-sm text-slate-600">{{ step.unit }}</span>
+                        <button
+                            v-if="status[`step.${step.key}`] !== true"
+                            type="button"
+                            class="rounded-md bg-sky-800 px-3 py-1.5 text-sm font-extrabold text-white hover:bg-sky-900"
+                            @click="checkStep(`step.${step.key}`)"
+                        >
+                            Check
+                        </button>
                     </div>
                     <p v-if="messages[`step.${step.key}`] && status[`step.${step.key}`] === false" class="mt-1 text-sm text-rose-900">
                         {{ messages[`step.${step.key}`] }}

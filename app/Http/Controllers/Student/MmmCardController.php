@@ -82,8 +82,8 @@ class MmmCardController extends Controller
             'coin_equation' => ['nullable', 'string', 'max:200'],
             'eq' => ['nullable', 'string', 'max:200'],
             'x_value' => ['nullable', 'string', 'max:40'],
-            'step_key' => ['nullable', 'string', 'max:40'],
-            'value' => ['nullable', 'string', 'max:40'],
+            'step_key' => ['nullable', 'string', 'max:80'],
+            'value' => ['nullable', 'string', 'max:200'],
             'values' => ['nullable', 'array'],
         ]);
 
