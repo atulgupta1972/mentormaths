@@ -271,6 +271,7 @@ const setupGroup = computed(() => ({
     label: 'Setup',
     active: route().current('admin.academic-years.*')
         || route().current('admin.notifications.*')
+        || route().current('admin.whatsapp-inbox.*')
         || route().current('admin.coaching-classes.*')
         || route().current('admin.coaching-class-teachers.*'),
     items: [
@@ -292,6 +293,12 @@ const setupGroup = computed(() => ({
             label: 'Email & notifications',
             href: safeRoute('admin.notifications.index', undefined, '/admin/notifications'),
             active: route().current('admin.notifications.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'WhatsApp inbox',
+            href: safeRoute('admin.whatsapp-inbox.index', undefined, '/admin/whatsapp-inbox'),
+            active: route().current('admin.whatsapp-inbox.*'),
             show: isAdmin.value,
         },
     ],

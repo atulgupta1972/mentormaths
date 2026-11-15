@@ -85,8 +85,9 @@ class WhatsAppSender
 
         $usedTemplate = false;
         $templateName = null;
+        $sessionReply = (bool) ($context['session_reply'] ?? false);
 
-        if (WhatsAppTemplateBuilder::shouldUseTemplate()) {
+        if (! $sessionReply && WhatsAppTemplateBuilder::shouldUseTemplate()) {
             $template = WhatsAppTemplateBuilder::forChannel(
                 $channel,
                 $message,

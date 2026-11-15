@@ -18,6 +18,7 @@ return [
         'assignment_assigned' => env('WHATSAPP_ASSIGNMENT_ASSIGNED', true),
         'pending_work' => env('WHATSAPP_PENDING_WORK', true),
         'study_plan_status' => env('WHATSAPP_STUDY_PLAN_STATUS', true),
+        'inbox_reply' => env('WHATSAPP_INBOX_REPLY', true),
     ],
 
     'schedule' => [
@@ -50,6 +51,11 @@ return [
         'phone_number_id' => env('WHATSAPP_META_PHONE_NUMBER_ID'),
         'access_token' => env('WHATSAPP_META_ACCESS_TOKEN'),
         'business_account_id' => env('WHATSAPP_META_BUSINESS_ACCOUNT_ID'),
+        'app_secret' => env('WHATSAPP_META_APP_SECRET'),
+    ],
+
+    'webhook' => [
+        'verify_token' => env('WHATSAPP_WEBHOOK_VERIFY_TOKEN'),
     ],
 
     'log_messages' => env('WHATSAPP_LOG_MESSAGES', true),

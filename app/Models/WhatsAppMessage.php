@@ -42,6 +42,7 @@ class WhatsAppMessage extends Model
             'assignment_assigned' => 'Assignment',
             'pending_work' => 'Pending work',
             'study_plan_status' => 'Study plan status',
+            'inbox_reply' => 'Inbox reply',
             default => str_replace('_', ' ', $this->channel),
         };
     }

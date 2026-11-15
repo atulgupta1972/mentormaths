@@ -40,7 +40,9 @@ use App\Http\Controllers\Admin\ConceptBuilderController;
 use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\PackUploadController;
+use App\Http\Controllers\Admin\WhatsAppInboxController;
 use App\Http\Controllers\Admin\WrittenSheetController;
+use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\Admin\WrittenReviewController;
 use App\Http\Controllers\ContentUploader\ChapterLibraryController;
 use App\Http\Controllers\ContentUploader\ContentTaskController;
@@ -73,6 +75,9 @@ Route::get('/', function () {
 Route::get('/privacy', function () {
     return Inertia::render('Privacy');
 })->name('privacy');
+
+Route::match(['get', 'post'], '/webhooks/whatsapp', WhatsAppWebhookController::class)
+    ->name('webhooks.whatsapp');
 
 Route::get('/register/request', [RegistrationRequestController::class, 'create'])
     ->name('registration.create');
@@ -270,6 +275,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     Route::get('/notifications', [NotificationSettingsController::class, 'index'])
         ->name('notifications.index');
+    Route::get('/whatsapp-inbox', [WhatsAppInboxController::class, 'index'])
+        ->name('whatsapp-inbox.index');
+    Route::post('/whatsapp-inbox/{mobile}', [WhatsAppInboxController::class, 'reply'])
+        ->where('mobile', '[0-9]+')
+        ->name('whatsapp-inbox.reply');
     Route::post('/notifications/send-pending-work', [NotificationSettingsController::class, 'sendPendingWorkAll'])
         ->name('notifications.send-pending-work');
 
