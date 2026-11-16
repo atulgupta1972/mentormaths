@@ -262,6 +262,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('students.progress-summary-preview');
     Route::post('/students/{student}/send-progress-summary', [StudentController::class, 'sendProgressSummary'])
         ->name('students.send-progress-summary');
+    Route::post('/students/{student}/send-month-report', [StudentController::class, 'sendMonthReport'])
+        ->name('students.send-month-report');
     Route::get('/students/{student}/progress-summary-pdf', [StudentController::class, 'progressSummaryPdf'])
         ->name('students.progress-summary-pdf');
     Route::patch('/students/{student}/emails', [StudentController::class, 'updateEmails'])

@@ -168,6 +168,62 @@ class StudentProgressWhatsAppService
     /**
      * @param  array<string, mixed>  $summary
      */
+    public function buildMonthReportMessage(array $summary): string
+    {
+        $engagement = $summary['engagement'] ?? [];
+        $stats = $summary['stats'] ?? [];
+        $completed = (int) ($stats['completed_count'] ?? 0);
+        $score = $completed > 0
+            ? (string) ($stats['overall_score_label'] ?? 'scored')
+            : 'no tests completed';
+
+        $lines = [
+            'Hello, this is Mentor Maths.',
+            '',
+            'Monthly report for '.($summary['student_name'] ?? 'the student'),
+            'Period: '.($summary['period_label'] ?? ''),
+        ];
+
+        if ($summary['class_name'] ?? null) {
+            $lines[] = 'Class: '.$summary['class_name'];
+        }
+
+        $lines[] = '';
+        $lines[] = 'Time on Mentor Maths: '.($engagement['time_spent_label'] ?? '0 sec');
+        $lines[] = 'Days logged in: '.(int) ($engagement['days_logged_in'] ?? 0)
+            .' of '.(int) ($engagement['total_days'] ?? 0);
+        $lines[] = 'Tests completed: '.$completed;
+        $lines[] = 'Score: '.$score;
+        $lines[] = '';
+        $lines[] = 'View details:';
+        $lines[] = (string) ($summary['dashboard_url'] ?? '');
+        $lines[] = '';
+        $lines[] = 'Thank you.';
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     * @return list<array{mobile: string, label: string, message: string, student_id: int, dashboard_url: ?string}>
+     */
+    public function notificationsForMonthReport(Student $student, array $summary): array
+    {
+        $message = $this->buildMonthReportMessage($summary);
+        $recipients = $this->contactService->recipientsForStudent($student);
+
+        return array_map(fn (array $recipient) => [
+            'mobile' => $recipient['mobile'],
+            'label' => $recipient['label'],
+            'message' => $message,
+            'student_id' => $student->id,
+            'dashboard_url' => $summary['dashboard_url'] ?? null,
+        ], $recipients);
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     */
     public function buildMessage(array $summary): string
     {
         $lines = [

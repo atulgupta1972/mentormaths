@@ -493,6 +493,37 @@ class StudentController extends Controller
         return $redirect;
     }
 
+    public function sendMonthReport(Student $student): RedirectResponse
+    {
+        $enrollment = $student->currentEnrollment();
+
+        if (! $enrollment) {
+            return back()->with('error', 'Student has no active enrollment for the current year.');
+        }
+
+        $summary = $this->progressSummaryService->build(
+            $enrollment,
+            now(),
+            now()->startOfMonth(),
+        );
+
+        if (! WhatsAppSender::canAutoSend()) {
+            return back()->with('warning', 'WhatsApp is not ready to send. Check the server WhatsApp settings.');
+        }
+
+        $waResult = StudentProgressWhatsAppMailer::sendMonth($student, $summary);
+
+        if ($waResult['error'] === 'no_recipients') {
+            return back()->with('warning', 'No WhatsApp recipients — tick Notify on at least one mobile number and save.');
+        }
+
+        if ($waResult['sent_count'] > 0) {
+            return back()->with('success', "This month's report was sent on WhatsApp to {$waResult['sent_count']} recipient(s).");
+        }
+
+        return back()->with('warning', 'WhatsApp could not send this month\'s report. Try again in a moment.');
+    }
+
     public function sendPendingWork(Student $student): RedirectResponse
     {
         $result = $this->pendingWorkEmailService->sendToStudent($student);

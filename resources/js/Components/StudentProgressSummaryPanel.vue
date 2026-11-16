@@ -45,6 +45,12 @@ const daysAgo = (n) => {
     return d.toISOString().slice(0, 10);
 };
 
+const monthStart = () => {
+    const d = new Date();
+
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+};
+
 const form = useForm({
     date_from: daysAgo(6),
     date_to: today(),
@@ -53,6 +59,10 @@ const form = useForm({
     send_whatsapp: false,
     email: '',
 });
+
+const monthForm = useForm({});
+const monthSummary = ref(null);
+const monthLoading = ref(false);
 
 const flashSuccess = computed(() => page.props.flash?.success);
 const flashWarning = computed(() => page.props.flash?.warning);
@@ -163,6 +173,38 @@ const submit = (options = {}) => {
     });
 };
 
+const loadMonth = async () => {
+    monthLoading.value = true;
+
+    try {
+        const url = route('admin.students.progress-summary-preview', {
+            student: props.student.id,
+            date_from: monthStart(),
+            date_to: today(),
+        });
+        const response = await fetch(url, {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const payload = await response.json();
+        monthSummary.value = response.ok ? payload.summary : null;
+    } catch {
+        monthSummary.value = null;
+    } finally {
+        monthLoading.value = false;
+    }
+};
+
+loadMonth();
+
+const sendMonthReport = () => {
+    monthForm.post(route('admin.students.send-month-report', props.student.id), {
+        preserveScroll: true,
+    });
+};
+
 const sendEmailNow = () => {
     submit({ sendEmail: true, sendWhatsapp: false });
 };
@@ -214,6 +256,46 @@ const downloadPdf = () => {
                 class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
             >
                 {{ flashWarning }}
+            </div>
+
+            <div class="rounded-lg border border-teal-200 bg-teal-50/60 p-4">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="font-medium text-teal-950">This month</p>
+                        <p class="mt-1 text-sm text-teal-900">
+                            Login time, tests finished, and score from the 1st of this month through today.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
+                        :disabled="monthForm.processing || whatsappRecipientCount === 0"
+                        @click="sendMonthReport"
+                    >
+                        {{ monthForm.processing ? 'Sending…' : 'Send to parent on WhatsApp' }}
+                    </button>
+                </div>
+                <p v-if="monthLoading" class="mt-3 text-sm text-teal-800">Loading this month…</p>
+                <dl v-else-if="monthSummary" class="mt-4 grid gap-3 sm:grid-cols-4">
+                    <div>
+                        <dt class="text-xs font-medium uppercase tracking-wide text-teal-800">Time logged in</dt>
+                        <dd class="mt-1 text-lg font-semibold text-gray-900">{{ monthSummary.stats?.time_spent_label || '0 sec' }}</dd>
+                        <dd class="text-xs text-gray-600">{{ monthSummary.engagement?.days_logged_in || 0 }} of {{ monthSummary.engagement?.total_days || 0 }} days</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium uppercase tracking-wide text-teal-800">Tests completed</dt>
+                        <dd class="mt-1 text-lg font-semibold text-gray-900">{{ monthSummary.stats?.completed_count || 0 }}</dd>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <dt class="text-xs font-medium uppercase tracking-wide text-teal-800">Score</dt>
+                        <dd class="mt-1 text-lg font-semibold text-gray-900">
+                            {{ monthSummary.stats?.completed_count > 0 ? (monthSummary.stats?.overall_score_label || '—') : 'No tests completed' }}
+                        </dd>
+                    </div>
+                </dl>
+                <p v-if="whatsappRecipientCount === 0" class="mt-3 text-sm text-amber-800">
+                    Tick Notify on a parent mobile above before sending.
+                </p>
             </div>
 
             <div class="grid gap-4 sm:grid-cols-2">
@@ -325,8 +407,7 @@ const downloadPdf = () => {
             >
                 <p class="font-medium text-green-900">Send progress summary on WhatsApp</p>
                 <p class="mt-1 text-sm text-green-800">
-                    Click <strong>Copy message</strong> or <strong>Download PDF</strong> above, open WhatsApp on your phone, paste/send to each contact.
-                    Fully automatic WhatsApp needs a Business API provider (Interakt/Twilio) — not configured yet.
+                    These are the longer date-range messages. Use the button above when a parent should receive this month only.
                 </p>
 
                 <ul class="mt-4 space-y-3">
