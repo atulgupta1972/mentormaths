@@ -87,7 +87,14 @@ class WhatsAppSender
         $templateName = null;
         $sessionReply = (bool) ($context['session_reply'] ?? false);
 
-        if (! $sessionReply && WhatsAppTemplateBuilder::shouldUseTemplate()) {
+        $reportParameters = $context['progress_report_parameters'] ?? null;
+
+        if (! $sessionReply && is_array($reportParameters) && WhatsAppTemplateBuilder::shouldUseTemplate()) {
+            $template = WhatsAppTemplateBuilder::forProgressReport($reportParameters);
+            $templateName = $template['name'];
+            $sendResult = self::driver()->sendTemplate($to, $template);
+            $usedTemplate = true;
+        } elseif (! $sessionReply && WhatsAppTemplateBuilder::shouldUseTemplate()) {
             $template = WhatsAppTemplateBuilder::forChannel(
                 $channel,
                 $message,
@@ -135,6 +142,7 @@ class WhatsAppSender
                     'recipient_label' => $notification['label'] ?? null,
                     'student_id' => $notification['student_id'] ?? null,
                     'dashboard_url' => $notification['dashboard_url'] ?? null,
+                    'progress_report_parameters' => $notification['progress_report_parameters'] ?? null,
                 ],
             );
 

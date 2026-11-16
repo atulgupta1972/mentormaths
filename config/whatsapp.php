@@ -37,6 +37,9 @@ return [
         'default_name' => env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update'),
         'language' => env('WHATSAPP_TEMPLATE_LANGUAGE', 'en'),
         'body_max_length' => 900,
+        // Utility template whose body already contains the paragraph breaks.
+        // Each of the 10 variables is one line. See mentor_maths_progress.
+        'progress_report_name' => env('WHATSAPP_TEMPLATE_PROGRESS_REPORT', 'mentor_maths_progress'),
         'names' => [
             'progress_summary' => env('WHATSAPP_TEMPLATE_PROGRESS_SUMMARY', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
             'daily_balance' => env('WHATSAPP_TEMPLATE_DAILY_BALANCE', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),

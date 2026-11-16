@@ -33,6 +33,37 @@ class WhatsAppTemplateBuilder
         ];
     }
 
+    /**
+     * Ten single-line values for mentor_maths_progress. The line breaks live in that template.
+     *
+     * @param  list<string>  $parameters
+     * @return array{name: string, language: string, components: list<array<string, mixed>>}
+     */
+    public static function forProgressReport(array $parameters): array
+    {
+        $language = (string) config('whatsapp.templates.language', 'en');
+        $values = array_slice(array_pad(array_values($parameters), 10, '—'), 0, 10);
+        $bodyParameters = [];
+
+        foreach ($values as $value) {
+            $bodyParameters[] = [
+                'type' => 'text',
+                'text' => self::singleLine((string) $value),
+            ];
+        }
+
+        return [
+            'name' => (string) config('whatsapp.templates.progress_report_name', 'mentor_maths_progress'),
+            'language' => $language,
+            'components' => [
+                [
+                    'type' => 'body',
+                    'parameters' => $bodyParameters,
+                ],
+            ],
+        ];
+    }
+
     public static function shouldUseTemplate(): bool
     {
         if (! config('whatsapp.templates.enabled', true)) {
@@ -65,17 +96,22 @@ class WhatsAppTemplateBuilder
             $filtered[] = $line;
         }
 
-        $body = trim(implode("\n", $filtered));
-        // Meta rejects a template variable that contains a new line, a tab, or a long run of spaces.
-        $body = str_replace(["\r\n", "\r", "\n", "\t"], ' ', $body);
-        $body = preg_replace('/ {2,}/', ' ', $body) ?? $body;
-        $body = trim($body);
+        $body = self::singleLine(implode(' ', $filtered));
         $maxLen = (int) config('whatsapp.templates.body_max_length', 900);
 
         if (strlen($body) <= $maxLen) {
             return $body;
         }
 
-        return substr($body, 0, $maxLen - 20)."\n\n… (truncated)";
+        return substr($body, 0, $maxLen - 20).' … (truncated)';
+    }
+
+    public static function singleLine(string $value): string
+    {
+        $value = str_replace(["\r\n", "\r", "\n", "\t"], ' ', $value);
+        $value = preg_replace('/ {2,}/', ' ', $value) ?? $value;
+        $value = trim($value);
+
+        return $value !== '' ? $value : '—';
     }
 }

@@ -46,6 +46,36 @@ class WhatsAppTemplateBuilderTest extends TestCase
         $this->assertStringNotContainsString('View details', $body);
     }
 
+    public function test_progress_report_template_has_one_parameter_per_line(): void
+    {
+        config([
+            'whatsapp.templates.progress_report_name' => 'mentor_maths_progress',
+            'whatsapp.templates.language' => 'en',
+        ]);
+
+        $template = WhatsAppTemplateBuilder::forProgressReport([
+            "Vishvesh",
+            "1 Nov 2026 – 16 Nov 2026, Class 7",
+            "8 days",
+            "4",
+            "Fractions: 2 worksheets, score 90%",
+            "Integers: 1 worksheet, score 60%",
+            '—',
+            '75% (30/40)',
+            "Integers I1 60%",
+            '—',
+        ]);
+
+        $parameters = $template['components'][0]['parameters'];
+
+        $this->assertSame('mentor_maths_progress', $template['name']);
+        $this->assertCount(10, $parameters);
+        $this->assertSame('Fractions: 2 worksheets, score 90%', $parameters[4]['text']);
+        foreach ($parameters as $parameter) {
+            $this->assertStringNotContainsString("\n", $parameter['text']);
+        }
+    }
+
     public function test_should_use_template_only_for_meta_driver(): void
     {
         config([

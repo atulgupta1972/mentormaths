@@ -166,51 +166,42 @@ class StudentProgressWhatsAppService
     }
 
     /**
+     * Ten single-line values, in the order of the mentor_maths_progress template.
+     *
      * @param  array<string, mixed>  $summary
+     * @return list<string>
      */
-    public function buildMonthReportMessage(array $summary): string
+    public function progressReportParameters(array $summary): array
     {
         $engagement = $summary['engagement'] ?? [];
         $stats = $summary['stats'] ?? [];
         $completedRows = $summary['completed'] ?? [];
-        $chapters = $summary['chapter_performance'] ?? [];
         $loggedIn = (int) ($engagement['days_logged_in'] ?? 0);
         $worksheetCount = (int) ($stats['completed_count'] ?? count($completedRows));
         $score = $worksheetCount > 0
             ? (string) ($stats['overall_score_label'] ?? 'not scored')
             : 'no worksheets completed';
 
-        $lines = [
-            'Hello, this is Mentor Maths.',
-            '',
-            'Progress report for '.($summary['student_name'] ?? 'the student'),
-            'Period: '.($summary['period_label'] ?? ''),
-        ];
-
-        if ($summary['class_name'] ?? null) {
-            $lines[] = 'Class: '.$summary['class_name'];
+        $period = trim((string) ($summary['period_label'] ?? ''));
+        if ($period === '') {
+            $period = 'This period';
+        }
+        if (filled($summary['class_name'] ?? null)) {
+            $period .= ', '.$summary['class_name'];
         }
 
-        $lines[] = '';
-        $lines[] = 'Logged in: '.$loggedIn.' '.($loggedIn === 1 ? 'day' : 'days');
-        $lines[] = 'Worksheets done: '.$worksheetCount;
-
-        if ($chapters === []) {
-            $lines[] = 'Chapter wise: none';
-        } else {
-            $lines[] = 'Chapter wise:';
-            foreach ($chapters as $chapter) {
-                $count = (int) ($chapter['sets_count'] ?? 0);
-                $chapterScore = $chapter['label'] ?? 'not scored';
-                $lines[] = ($chapter['chapter_name'] ?? 'Chapter').': '.$count
-                    .' '.($count === 1 ? 'worksheet' : 'worksheets').', score '.$chapterScore;
-            }
+        $chapterLines = [];
+        foreach ($summary['chapter_performance'] ?? [] as $chapter) {
+            $count = (int) ($chapter['sets_count'] ?? 0);
+            $chapterScore = $chapter['label'] ?? 'not scored';
+            $chapterLines[] = ($chapter['chapter_name'] ?? 'Chapter').': '.$count
+                .' '.($count === 1 ? 'worksheet' : 'worksheets').', score '.$chapterScore;
+        }
+        if ($chapterLines === []) {
+            $chapterLines = ['None this period'];
         }
 
-        $lines[] = '';
-        $lines[] = 'Performance score: '.$score;
-
-        $weak = [];
+        $weakLines = [];
         foreach ($completedRows as $row) {
             $percent = $row['latest_score_percent'] ?? null;
             if ($percent === null || (int) $percent >= 80) {
@@ -220,39 +211,61 @@ class StudentProgressWhatsAppService
             $chapter = $row['chapter_name'] ?? 'Worksheet';
             $set = trim((string) ($row['set_code'] ?? ''));
             $label = $row['latest_score_label'] ?? ($percent.'%');
-            $weak[] = trim($chapter.($set !== '' ? ' '.$set : '').' '.$label);
+            $weakLines[] = trim($chapter.($set !== '' ? ' '.$set : '').' '.$label);
+        }
+        if ($weakLines === []) {
+            $weakLines = [$worksheetCount > 0 ? 'None below 80 percent' : 'No worksheets to review'];
         }
 
-        $lines[] = '';
-        if ($weak === []) {
-            $lines[] = $worksheetCount > 0
-                ? 'Improvement area: none below 80%'
-                : 'Improvement area: no worksheets to review';
-        } else {
-            $lines[] = 'Improvement area (below 80%):';
-            foreach (array_slice($weak, 0, 8) as $item) {
-                $lines[] = $item;
-            }
-            if (count($weak) > 8) {
-                $lines[] = 'and '.(count($weak) - 8).' more';
-            }
-        }
-
-        $lines[] = '';
-        $lines[] = 'View details:';
-        $lines[] = (string) ($summary['dashboard_url'] ?? '');
-        $lines[] = '';
-        $lines[] = 'Thank you.';
-
-        return implode("\n", $lines);
+        return [
+            $this->templateLine((string) ($summary['student_name'] ?? 'the student')),
+            $this->templateLine($period),
+            $this->templateLine($loggedIn.' '.($loggedIn === 1 ? 'day' : 'days')),
+            $this->templateLine((string) $worksheetCount),
+            ...$this->fitLines($chapterLines, 3),
+            $this->templateLine($score),
+            ...$this->fitLines($weakLines, 2),
+        ];
     }
 
     /**
      * @param  array<string, mixed>  $summary
-     * @return list<array{mobile: string, label: string, message: string, student_id: int, dashboard_url: ?string}>
+     */
+    public function buildMonthReportMessage(array $summary): string
+    {
+        $params = $this->progressReportParameters($summary);
+
+        return implode("\n", [
+            'Hello, this is Mentor Maths.',
+            '',
+            'Progress report for '.$params[0],
+            'Period: '.$params[1],
+            '',
+            'Logged in: '.$params[2],
+            'Worksheets done: '.$params[3],
+            '',
+            'Chapter wise:',
+            $params[4],
+            $params[5],
+            $params[6],
+            '',
+            'Performance score: '.$params[7],
+            '',
+            'Improvement area, marks below 80 percent:',
+            $params[8],
+            $params[9],
+            '',
+            'Thank you.',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     * @return list<array{mobile: string, label: string, message: string, student_id: int, dashboard_url: ?string, progress_report_parameters: list<string>}>
      */
     public function notificationsForMonthReport(Student $student, array $summary): array
     {
+        $parameters = $this->progressReportParameters($summary);
         $message = $this->buildMonthReportMessage($summary);
         $recipients = $this->contactService->recipientsForStudent($student);
 
@@ -262,7 +275,41 @@ class StudentProgressWhatsAppService
             'message' => $message,
             'student_id' => $student->id,
             'dashboard_url' => $summary['dashboard_url'] ?? null,
+            'progress_report_parameters' => $parameters,
         ], $recipients);
+    }
+
+    private function templateLine(string $value): string
+    {
+        $value = str_replace(["\r\n", "\r", "\n", "\t"], ' ', $value);
+        $value = preg_replace('/ {2,}/', ' ', $value) ?? $value;
+        $value = trim($value);
+
+        return $value !== '' ? $value : '—';
+    }
+
+    /**
+     * @param  list<string>  $lines
+     * @return list<string>
+     */
+    private function fitLines(array $lines, int $size): array
+    {
+        $lines = array_values(array_map(fn ($line) => $this->templateLine((string) $line), $lines));
+
+        if (count($lines) > $size) {
+            $head = array_slice($lines, 0, $size - 1);
+            $extra = count($lines) - $size;
+            $last = $lines[$size - 1].($extra > 0 ? ' and '.$extra.' more' : '');
+            $head[] = $this->templateLine($last);
+
+            return $head;
+        }
+
+        while (count($lines) < $size) {
+            $lines[] = '—';
+        }
+
+        return $lines;
     }
 
     /**
