@@ -390,7 +390,10 @@ class StudentController extends Controller
             $validated['mentor_remark'] ?? null,
         );
 
-        return response()->json(['summary' => $summary]);
+        return response()->json([
+            'summary' => $summary,
+            'whatsapp_message' => app(StudentProgressWhatsAppService::class)->buildMonthReportMessage($summary),
+        ]);
     }
 
     public function sendProgressSummary(Request $request, Student $student): RedirectResponse
@@ -446,7 +449,7 @@ class StudentController extends Controller
 
         if ($request->boolean('send_whatsapp')) {
             if (WhatsAppSender::canAutoSend()) {
-                $waResult = StudentProgressWhatsAppMailer::send($student, $summary);
+                $waResult = StudentProgressWhatsAppMailer::sendMonth($student, $summary);
 
                 if ($waResult['sent_count'] > 0) {
                     $messages[] = "WhatsApp sent to {$waResult['sent_count']} recipient(s).";
@@ -462,7 +465,7 @@ class StudentController extends Controller
                         ->all();
                 }
             } else {
-                $whatsappNotifications = $this->progressWhatsAppService->notificationsForSummary($student, $summary);
+                $whatsappNotifications = $this->progressWhatsAppService->notificationsForMonthReport($student, $summary);
 
                 if ($whatsappNotifications === []) {
                     $warnings[] = 'No WhatsApp recipients — tick Notify on at least one mobile number above and click Save notification settings.';
@@ -493,8 +496,13 @@ class StudentController extends Controller
         return $redirect;
     }
 
-    public function sendMonthReport(Student $student): RedirectResponse
+    public function sendMonthReport(Request $request, Student $student): RedirectResponse
     {
+        $validated = $request->validate([
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+        ]);
+
         $enrollment = $student->currentEnrollment();
 
         if (! $enrollment) {
@@ -503,8 +511,8 @@ class StudentController extends Controller
 
         $summary = $this->progressSummaryService->build(
             $enrollment,
-            now(),
-            now()->startOfMonth(),
+            isset($validated['date_to']) ? \Carbon\Carbon::parse($validated['date_to']) : now(),
+            isset($validated['date_from']) ? \Carbon\Carbon::parse($validated['date_from']) : now()->startOfMonth(),
         );
 
         if (! WhatsAppSender::canAutoSend()) {
@@ -518,7 +526,7 @@ class StudentController extends Controller
         }
 
         if ($waResult['sent_count'] > 0) {
-            return back()->with('success', "This month's report was sent on WhatsApp to {$waResult['sent_count']} recipient(s).");
+            return back()->with('success', "Report for {$summary['period_label']} was sent on WhatsApp to {$waResult['sent_count']} recipient(s).");
         }
 
         $detail = collect($waResult['results'] ?? [])

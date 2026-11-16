@@ -172,15 +172,18 @@ class StudentProgressWhatsAppService
     {
         $engagement = $summary['engagement'] ?? [];
         $stats = $summary['stats'] ?? [];
-        $completed = (int) ($stats['completed_count'] ?? 0);
-        $score = $completed > 0
-            ? (string) ($stats['overall_score_label'] ?? 'scored')
-            : 'no tests completed';
+        $completedRows = $summary['completed'] ?? [];
+        $chapters = $summary['chapter_performance'] ?? [];
+        $loggedIn = (int) ($engagement['days_logged_in'] ?? 0);
+        $worksheetCount = (int) ($stats['completed_count'] ?? count($completedRows));
+        $score = $worksheetCount > 0
+            ? (string) ($stats['overall_score_label'] ?? 'not scored')
+            : 'no worksheets completed';
 
         $lines = [
             'Hello, this is Mentor Maths.',
             '',
-            'Monthly report for '.($summary['student_name'] ?? 'the student'),
+            'Progress report for '.($summary['student_name'] ?? 'the student'),
             'Period: '.($summary['period_label'] ?? ''),
         ];
 
@@ -189,11 +192,52 @@ class StudentProgressWhatsAppService
         }
 
         $lines[] = '';
-        $lines[] = 'Time on Mentor Maths: '.($engagement['time_spent_label'] ?? '0 sec');
-        $lines[] = 'Days logged in: '.(int) ($engagement['days_logged_in'] ?? 0)
-            .' of '.(int) ($engagement['total_days'] ?? 0);
-        $lines[] = 'Tests completed: '.$completed;
-        $lines[] = 'Score: '.$score;
+        $lines[] = 'Logged in: '.$loggedIn.' '.($loggedIn === 1 ? 'day' : 'days');
+        $lines[] = 'Worksheets done: '.$worksheetCount;
+
+        if ($chapters === []) {
+            $lines[] = 'Chapter wise: none';
+        } else {
+            $lines[] = 'Chapter wise:';
+            foreach ($chapters as $chapter) {
+                $count = (int) ($chapter['sets_count'] ?? 0);
+                $chapterScore = $chapter['label'] ?? 'not scored';
+                $lines[] = ($chapter['chapter_name'] ?? 'Chapter').': '.$count
+                    .' '.($count === 1 ? 'worksheet' : 'worksheets').', score '.$chapterScore;
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = 'Performance score: '.$score;
+
+        $weak = [];
+        foreach ($completedRows as $row) {
+            $percent = $row['latest_score_percent'] ?? null;
+            if ($percent === null || (int) $percent >= 80) {
+                continue;
+            }
+
+            $chapter = $row['chapter_name'] ?? 'Worksheet';
+            $set = trim((string) ($row['set_code'] ?? ''));
+            $label = $row['latest_score_label'] ?? ($percent.'%');
+            $weak[] = trim($chapter.($set !== '' ? ' '.$set : '').' '.$label);
+        }
+
+        $lines[] = '';
+        if ($weak === []) {
+            $lines[] = $worksheetCount > 0
+                ? 'Improvement area: none below 80%'
+                : 'Improvement area: no worksheets to review';
+        } else {
+            $lines[] = 'Improvement area (below 80%):';
+            foreach (array_slice($weak, 0, 8) as $item) {
+                $lines[] = $item;
+            }
+            if (count($weak) > 8) {
+                $lines[] = 'and '.(count($weak) - 8).' more';
+            }
+        }
+
         $lines[] = '';
         $lines[] = 'View details:';
         $lines[] = (string) ($summary['dashboard_url'] ?? '');
