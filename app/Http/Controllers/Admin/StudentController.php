@@ -521,7 +521,15 @@ class StudentController extends Controller
             return back()->with('success', "This month's report was sent on WhatsApp to {$waResult['sent_count']} recipient(s).");
         }
 
-        return back()->with('warning', 'WhatsApp could not send this month\'s report. Try again in a moment.');
+        $detail = collect($waResult['results'] ?? [])
+            ->pluck('error')
+            ->filter(fn ($error) => is_string($error) && $error !== '')
+            ->unique()
+            ->implode(' ');
+
+        $detail = $detail !== '' ? ' '.$detail : '';
+
+        return back()->with('warning', 'WhatsApp could not send this month\'s report.'.$detail);
     }
 
     public function sendPendingWork(Student $student): RedirectResponse

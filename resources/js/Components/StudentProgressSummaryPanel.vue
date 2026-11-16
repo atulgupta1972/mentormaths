@@ -37,12 +37,18 @@ const previewSummary = ref(null);
 const previewLoading = ref(false);
 const previewError = ref('');
 
-const today = () => new Date().toISOString().slice(0, 10);
+const localDate = (date) => {
+    const d = date ?? new Date();
+
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const today = () => localDate();
 const daysAgo = (n) => {
     const d = new Date();
     d.setDate(d.getDate() - n);
 
-    return d.toISOString().slice(0, 10);
+    return localDate(d);
 };
 
 const monthStart = () => {

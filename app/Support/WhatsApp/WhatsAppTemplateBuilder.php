@@ -66,6 +66,10 @@ class WhatsAppTemplateBuilder
         }
 
         $body = trim(implode("\n", $filtered));
+        // Meta rejects a template variable that contains a new line, a tab, or a long run of spaces.
+        $body = str_replace(["\r\n", "\r", "\n", "\t"], ' ', $body);
+        $body = preg_replace('/ {2,}/', ' ', $body) ?? $body;
+        $body = trim($body);
         $maxLen = (int) config('whatsapp.templates.body_max_length', 900);
 
         if (strlen($body) <= $maxLen) {
