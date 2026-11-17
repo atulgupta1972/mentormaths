@@ -487,8 +487,9 @@ PROMPT;
 
         $name = trim((string) ($row['topic'] ?? $row['topic_name'] ?? ''));
         if ($name !== '') {
+            $needle = \App\Support\TopicName::normalize($name);
             $topic = $chapter->topics->first(
-                fn (SyllabusTopic $chapterTopic) => mb_strtolower($chapterTopic->name) === mb_strtolower($name),
+                fn (SyllabusTopic $chapterTopic) => \App\Support\TopicName::normalize($chapterTopic->name) === $needle,
             );
 
             if ($topic) {

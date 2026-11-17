@@ -1,0 +1,225 @@
+{
+  "questions": [
+    {
+      "topic": "Right-angled triangles",
+      "question": "In right △ABC with ∠B = 90°, AB = 9 cm and BC = 12 cm. The length of hypotenuse AC (in cm) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q1.jpg",
+      "answer_format": "integer",
+      "correct_answer": "15",
+      "method_hint": "In a right-angled triangle, the hypotenuse is opposite the right angle. Use a² + b² = c² where c is the hypotenuse.",
+      "explanation": "AC² = AB² + BC² = 9² + 12² = 81 + 144 = 225. So AC = √225 = 15",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "Right-angled triangles",
+      "question": "In right △PQR with ∠Q = 90°, PQ = 5 cm and PR = 13 cm. The length of QR (in cm) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q2.jpg",
+      "answer_format": "integer",
+      "correct_answer": "12",
+      "method_hint": "If the hypotenuse and one leg are known, rearrange a² + b² = c² to find the other leg: b² = c² − a².",
+      "explanation": "QR² = PR² − PQ² = 13² − 5² = 169 − 25 = 144. So QR = √144 = 12",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "Right-angled triangles",
+      "question": "In right △XYZ with ∠Y = 90°, XY = 8 cm and YZ = 15 cm. The length of XZ (in cm) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q3.jpg",
+      "answer_format": "integer",
+      "correct_answer": "17",
+      "method_hint": "Square both legs, add the squares, then take the positive square root to get the hypotenuse.",
+      "explanation": "XZ² = XY² + YZ² = 8² + 15² = 64 + 225 = 289. So XZ = √289 = 17",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "Right-angled triangles",
+      "question": "In right △DEF with ∠E = 90°, DE = 7 cm and DF = 25 cm. The length of EF (in cm) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q4.jpg",
+      "answer_format": "integer",
+      "correct_answer": "24",
+      "method_hint": "Hypotenuse is DF. Find the other leg using leg² = hypotenuse² − known leg².",
+      "explanation": "EF² = DF² − DE² = 25² − 7² = 625 − 49 = 576. So EF = √576 = 24",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "Right-angled triangles",
+      "question": "In right △LMN with ∠M = 90°, LM = 20 cm and MN = 21 cm. The length of LN (in cm) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q5.jpg",
+      "answer_format": "integer",
+      "correct_answer": "29",
+      "method_hint": "Apply a² + b² = c² with the two legs LM and MN; LN is the hypotenuse.",
+      "explanation": "LN² = LM² + MN² = 20² + 21² = 400 + 441 = 841. So LN = √841 = 29",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "Right-angled triangles",
+      "question": "In right △ABC with ∠C = 90°, AC = 9 cm and BC = 40 cm. The length of AB (in cm) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q6.jpg",
+      "answer_format": "integer",
+      "correct_answer": "41",
+      "method_hint": "With right angle at C, AB is the hypotenuse. Compute √(AC² + BC²).",
+      "explanation": "AB² = AC² + BC² = 9² + 40² = 81 + 1600 = 1681. So AB = √1681 = 41",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "Right-angled triangles",
+      "question": "In right △RST with ∠S = 90°, RS = 11 cm and ST = 60 cm. The length of RT (in cm) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q7.jpg",
+      "answer_format": "integer",
+      "correct_answer": "61",
+      "method_hint": "Add the squares of the two legs, then take the square root for the hypotenuse.",
+      "explanation": "RT² = RS² + ST² = 11² + 60² = 121 + 3600 = 3721. So RT = √3721 = 61",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "relationship between sides ($a^2 + b^2 = c^2$),",
+      "question": "If the sides of a triangle are 6 cm, 8 cm and 10 cm, then a² + b² − c² (taking c as the longest side) equals ____.",
+      "needs_diagram": false,
+      "diagram_file": null,
+      "answer_format": "integer",
+      "correct_answer": "0",
+      "method_hint": "For sides satisfying the Baudhayana–Pythagoras relation, a² + b² = c², so a² + b² − c² = 0 when c is the longest side.",
+      "explanation": "6² + 8² − 10² = 36 + 64 − 100 = 0",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "relationship between sides ($a^2 + b^2 = c^2$),",
+      "question": "The sides of a right triangle are in the ratio 5 : 12 : 13. If the shortest side is 15 cm, the hypotenuse (in cm) is ____.",
+      "needs_diagram": false,
+      "diagram_file": null,
+      "answer_format": "integer",
+      "correct_answer": "39",
+      "method_hint": "Scale the Pythagorean triple by the same factor so the shortest side matches the given length; the hypotenuse scales by that factor.",
+      "explanation": "Shortest part of 5 : 12 : 13 is 5. Scale factor = 15/5 = 3. Hypotenuse = 13 × 3 = 39",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "relationship between sides ($a^2 + b^2 = c^2$),",
+      "question": "One leg of a right triangle is 16 cm and the hypotenuse is 34 cm. The other leg (in cm) is ____.",
+      "needs_diagram": false,
+      "diagram_file": null,
+      "answer_format": "integer",
+      "correct_answer": "30",
+      "method_hint": "Use b² = c² − a², then take the positive square root.",
+      "explanation": "Other leg² = 34² − 16² = 1156 − 256 = 900. Other leg = √900 = 30",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "relationship between sides ($a^2 + b^2 = c^2$),",
+      "question": "If a² + b² = c² with a = 9 and c = 15, then b equals ____.",
+      "needs_diagram": false,
+      "diagram_file": null,
+      "answer_format": "integer",
+      "correct_answer": "12",
+      "method_hint": "Rearrange to b² = c² − a² and solve for the positive value of b.",
+      "explanation": "b² = 15² − 9² = 225 − 81 = 144. So b = √144 = 12",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "relationship between sides ($a^2 + b^2 = c^2$),",
+      "question": "For legs 14 cm and 48 cm of a right triangle, the hypotenuse (in cm) is ____.",
+      "needs_diagram": false,
+      "diagram_file": null,
+      "answer_format": "integer",
+      "correct_answer": "50",
+      "method_hint": "Compute √(a² + b²) using the two given legs.",
+      "explanation": "Hypotenuse² = 14² + 48² = 196 + 2304 = 2500. Hypotenuse = √2500 = 50",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "REAL WORLD APPLICATIONS",
+      "question": "A ladder leans against a wall. The foot of the ladder is 9 m from the wall and the top reaches 12 m up the wall. The length of the ladder (in m) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q13.jpg",
+      "answer_format": "integer",
+      "correct_answer": "15",
+      "method_hint": "The wall, ground and ladder form a right triangle. The ladder is the hypotenuse.",
+      "explanation": "Ladder² = 9² + 12² = 81 + 144 = 225. Ladder = √225 = 15",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "REAL WORLD APPLICATIONS",
+      "question": "A vertical pole is 8 m high. A wire from the top of the pole to a point on the ground 15 m from the foot of the pole is stretched tight. The length of the wire (in m) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q14.jpg",
+      "answer_format": "integer",
+      "correct_answer": "17",
+      "method_hint": "Pole and ground meet at right angles; the wire is the hypotenuse of that right triangle.",
+      "explanation": "Wire² = 8² + 15² = 64 + 225 = 289. Wire = √289 = 17",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "REAL WORLD APPLICATIONS",
+      "question": "A rectangular park is 40 m long and 9 m wide. The length of a straight path joining opposite corners (in m) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q15.jpg",
+      "answer_format": "integer",
+      "correct_answer": "41",
+      "method_hint": "The diagonal of a rectangle is the hypotenuse of a right triangle formed by length and breadth.",
+      "explanation": "Diagonal² = 40² + 9² = 1600 + 81 = 1681. Diagonal = √1681 = 41",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "REAL WORLD APPLICATIONS",
+      "question": "From a point on the ground 24 m away from the base of a tower, the distance to the top of the tower is 25 m. The height of the tower (in m) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q16.jpg",
+      "answer_format": "integer",
+      "correct_answer": "7",
+      "method_hint": "Height, base distance and slant distance form a right triangle; height² = slant² − base².",
+      "explanation": "Height² = 25² − 24² = 625 − 576 = 49. Height = √49 = 7",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "REAL WORLD APPLICATIONS",
+      "question": "A ship sails 20 km due east and then 21 km due north. Its straight-line distance from the starting point (in km) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q17.jpg",
+      "answer_format": "integer",
+      "correct_answer": "29",
+      "method_hint": "East and north displacements are perpendicular. Use a² + b² = c² for the straight-line distance.",
+      "explanation": "Distance² = 20² + 21² = 400 + 441 = 841. Distance = √841 = 29",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "Textbook",
+      "question": "In a right triangle, one leg is 12 cm and the hypotenuse is 37 cm. The other leg (in cm) is ____.",
+      "needs_diagram": false,
+      "diagram_file": null,
+      "answer_format": "integer",
+      "correct_answer": "35",
+      "method_hint": "Apply the Baudhayana–Pythagoras theorem: other leg² = hypotenuse² − known leg².",
+      "explanation": "Other leg² = 37² − 12² = 1369 − 144 = 1225. Other leg = √1225 = 35",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "Textbook",
+      "question": "The sides of a triangle are 9 cm, 40 cm and 41 cm. The value of a² + b² when a and b are the two shorter sides is ____.",
+      "needs_diagram": false,
+      "diagram_file": null,
+      "answer_format": "integer",
+      "correct_answer": "1681",
+      "method_hint": "Square each of the two shorter sides and add. For a right triangle this equals the square of the longest side.",
+      "explanation": "9² + 40² = 81 + 1600 = 1681",
+      "difficulty": "Hard"
+    },
+    {
+      "topic": "Textbook",
+      "question": "A square has side 15 cm. The length of one diagonal of the square (in cm) is ____.",
+      "needs_diagram": true,
+      "diagram_file": "q20.jpg",
+      "answer_format": "decimal",
+      "correct_answer": "21.21",
+      "decimal_places": 2,
+      "method_hint": "A diagonal of a square of side s satisfies d² = s² + s² = 2s², so d = s√2. Use √2 ≈ 1.414.",
+      "explanation": "d = 15√2 ≈ 15 × 1.414 = 21.21",
+      "difficulty": "Hard"
+    }
+  ]
+}

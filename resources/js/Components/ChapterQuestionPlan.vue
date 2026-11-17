@@ -1,6 +1,7 @@
 <script setup>
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { displayTopicName } from '@/utils/topicName';
 import { computed } from 'vue';
 
 const props = defineProps({
@@ -73,10 +74,12 @@ const activeProfile = computed(() =>
 
 const topicLabel = (row) => {
     if (row.topic_name) {
-        return row.topic_name;
+        return displayTopicName(row.topic_name);
     }
 
-    return props.topics.find((topic) => String(topic.id) === String(row.topic_id))?.name ?? '';
+    const raw = props.topics.find((topic) => String(topic.id) === String(row.topic_id))?.name ?? '';
+
+    return displayTopicName(raw);
 };
 
 const onProfileChange = () => {

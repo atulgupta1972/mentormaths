@@ -15,6 +15,7 @@ import {
     parseFillBlankJson,
     rowsFromImportData,
 } from '@/utils/fillBlankImport';
+import { displayTopicName, normalizeTopicName } from '@/utils/topicName';
 
 const props = defineProps({
     chapters: Array,
@@ -345,12 +346,12 @@ const resolveTopicIdForRow = (row) => {
         return row.syllabus_topic_id;
     }
 
-    const name = String(row.topic_name || '').trim().toLowerCase();
+    const name = normalizeTopicName(row.topic_name);
     if (!name) {
         return null;
     }
 
-    const match = (props.chapterTopics || []).find((topic) => topic.name.toLowerCase() === name);
+    const match = (props.chapterTopics || []).find((topic) => normalizeTopicName(topic.name) === name);
     return match?.id ?? null;
 };
 
@@ -653,7 +654,7 @@ onMounted(() => {
                         <select v-model="selectedTopic" class="mt-1 block w-full max-w-3xl rounded-md border-gray-300 text-sm" required>
                             <option value="">Select topic</option>
                             <option v-for="t in chapterTopics" :key="t.id" :value="t.id">
-                                {{ t.name }} ({{ t.questions_count }} in bank)
+                                {{ displayTopicName(t.name) }} ({{ t.questions_count }} in bank)
                             </option>
                         </select>
                         <p v-if="chapterTopics.length === 0" class="mt-1 text-xs text-amber-700">No topics in this chapter.</p>
@@ -738,7 +739,7 @@ onMounted(() => {
                                 </p>
                                 <div class="flex flex-wrap items-center gap-2 text-xs">
                                     <span v-if="q.difficulty" class="rounded bg-slate-100 px-2 py-0.5 text-slate-700">{{ q.difficulty }}</span>
-                                    <span v-if="q.topic_name" class="rounded bg-indigo-50 px-2 py-0.5 text-indigo-800">{{ q.topic_name }}</span>
+                                    <span v-if="q.topic_name" class="rounded bg-indigo-50 px-2 py-0.5 text-indigo-800">{{ displayTopicName(q.topic_name) }}</span>
                                     <span
                                         v-if="q.has_diagram"
                                         class="rounded bg-emerald-50 px-2 py-0.5 text-emerald-800"

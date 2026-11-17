@@ -12,6 +12,7 @@ import Modal from '@/Components/Modal.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { parseMcqJson, rowsFromImportData } from '@/utils/mcqImport';
+import { normalizeTopicName } from '@/utils/topicName';
 
 const props = defineProps({
     chapters: Array,
@@ -504,12 +505,12 @@ const resolveTopicIdForRow = (row) => {
         return row.syllabus_topic_id;
     }
 
-    const name = String(row.topic_name || '').trim().toLowerCase();
+    const name = normalizeTopicName(row.topic_name);
     if (!name) {
         return null;
     }
 
-    const match = (props.chapterTopics || []).find((topic) => topic.name.toLowerCase() === name);
+    const match = (props.chapterTopics || []).find((topic) => normalizeTopicName(topic.name) === name);
     return match?.id ?? null;
 };
 
