@@ -44,6 +44,17 @@ class TopicNameTest extends TestCase
         $this->assertSame($chapter->topics->first()->id, $id);
     }
 
+    public function test_fill_blank_chapter_import_keeps_an_unknown_pack_topic_on_the_chapter(): void
+    {
+        $chapter = $this->seedChapterWithTopic('Linear equations');
+
+        $id = app(FillBlankImportService::class)->resolveTopicIdForChapterRow($chapter, [
+            'topic' => 'Solving Equations',
+        ]);
+
+        $this->assertSame($chapter->topics->first()->id, $id);
+    }
+
     private function seedChapterWithTopic(string $topicName): SyllabusChapter
     {
         $board = Board::query()->create(['code' => 'CBSE', 'name' => 'CBSE', 'is_active' => true]);

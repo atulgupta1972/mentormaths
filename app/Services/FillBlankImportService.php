@@ -495,17 +495,20 @@ PROMPT;
             if ($topic) {
                 return $topic->id;
             }
-
-            throw new InvalidArgumentException("Unknown topic \"{$name}\" for this chapter.");
         }
 
-        // Written PDF answer keys / multi-topic sheets often omit per-row topics.
+        // Whole-chapter packs use labels such as "Solving Equations" that are not
+        // syllabus topics. Keep the questions on this chapter instead of rejecting the zip.
         $fallback = $chapter->topics->sortBy('sort_order')->first();
         if ($fallback) {
             return $fallback->id;
         }
 
-        throw new InvalidArgumentException('This chapter has no topics. Add topics before importing.');
+        throw new InvalidArgumentException(
+            $name !== ''
+                ? "Unknown topic \"{$name}\" for this chapter, and this chapter has no topics to place the questions on."
+                : 'This chapter has no topics. Add topics before importing.',
+        );
     }
 
     /**
