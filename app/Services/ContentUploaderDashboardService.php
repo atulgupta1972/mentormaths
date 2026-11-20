@@ -34,7 +34,11 @@ class ContentUploaderDashboardService
         $taskModels = ContentUploadTask::query()
             ->where('assigned_to_user_id', $user->id)
             ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
-            ->with(['textbookChapter.textbook.gradeLevel', 'textbookChapter.syllabusChapter.chapterHead'])
+            ->with([
+                'textbookChapter.textbook.gradeLevel',
+                'textbookChapter.syllabusChapter.chapterHead',
+                'additionalBookTask',
+            ])
             ->latest()
             ->get();
 

@@ -398,10 +398,18 @@ class ContentUploadTaskService
 
     public function publish(ContentUploadTask $task, User $admin): ContentUploadTask
     {
-        if (! in_array($task->status, [
+        $allowed = [
             ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
             ContentUploadTask::STATUS_VERIFIED,
-        ], true)) {
+        ];
+
+        if ($task->needsAdditionalBook()) {
+            $allowed[] = ContentUploadTask::STATUS_IN_PROGRESS;
+            $allowed[] = ContentUploadTask::STATUS_UPLOADED;
+            $allowed[] = ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS;
+        }
+
+        if (! in_array($task->status, $allowed, true)) {
             throw new \InvalidArgumentException(
                 'Verify all questions first (or wait for uploader submit) before publishing.',
             );
@@ -953,6 +961,226 @@ class ContentUploadTaskService
                 'status' => ContentQuestionCorrection::STATUS_COMPLETED,
                 'completed_at' => now(),
             ]);
+    }
+
+    /**
+     * Keep the uploaded chapter and ask the same uploader to add a second book.
+     * Payment stays on this task (one chapter rate) when both are published together.
+     *
+     * @return array{task: ContentUploadTask, email_sent: bool}
+     */
+    public function requestAdditionalBook(
+        ContentUploadTask $task,
+        User $admin,
+        string $decision,
+        string $note,
+    ): array {
+        if ($task->parent_task_id) {
+            throw new \InvalidArgumentException('This upload is already the additional book for a chapter.');
+        }
+
+        if ($task->isFillBlankConversion() || $task->isConceptPathBuild()) {
+            throw new \InvalidArgumentException('Additional book applies to an MCQ chapter upload.');
+        }
+
+        if (! in_array($decision, [
+            ContentUploadTask::DECISION_PARTIAL,
+            ContentUploadTask::DECISION_NOT_OK_BOOK,
+        ], true)) {
+            throw new \InvalidArgumentException('Choose partial chapter or not OK book.');
+        }
+
+        if (! in_array($task->status, [
+            ContentUploadTask::STATUS_UPLOADED,
+            ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+        ], true)) {
+            throw new \InvalidArgumentException('Send this back after the uploader has submitted the chapter.');
+        }
+
+        $openChild = ContentUploadTask::query()
+            ->where('parent_task_id', $task->id)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->exists();
+
+        if ($openChild) {
+            throw new \InvalidArgumentException('An additional book is already open for this chapter.');
+        }
+
+        $note = trim($note);
+        $label = $decision === ContentUploadTask::DECISION_NOT_OK_BOOK
+            ? 'Not OK book'
+            : 'Partial chapter';
+        $stamp = now()->format('Y-m-d H:i');
+        $block = "[{$label} {$stamp} by {$admin->name}] Current upload stays. Uploader to add another book. Paid once for the chapter. {$note}";
+        $notes = trim((string) ($task->admin_notes ?? ''));
+        $notes = trim($notes."\n\n".$block);
+
+        $task->update([
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'submitted_at' => null,
+            'review_decision' => $decision,
+            'review_decision_note' => $note,
+            'admin_notes' => $notes !== '' ? $notes : null,
+        ]);
+
+        $fresh = $task->fresh([
+            'assignee',
+            'textbookChapter.textbook.gradeLevel',
+        ]);
+
+        return [
+            'task' => $fresh,
+            'email_sent' => ContentOperationsMailer::notifyAdditionalBookRequested($fresh),
+        ];
+    }
+
+    /**
+     * Uploader adds a second book. Existing questions stay on the original chapter.
+     */
+    public function addAdditionalBook(
+        ContentUploadTask $task,
+        User $uploader,
+        ?int $textbookId,
+        ?string $bookName,
+        ?string $bookCode,
+    ): ContentUploadTask {
+        if ($task->assigned_to_user_id !== $uploader->id) {
+            throw new \InvalidArgumentException('You are not assigned to this task.');
+        }
+
+        if (! $task->needsAdditionalBook() || ! $task->additionalBookStillOpen()) {
+            throw new \InvalidArgumentException('This chapter is not waiting for another book.');
+        }
+
+        $existing = ContentUploadTask::query()
+            ->where('parent_task_id', $task->id)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->first();
+
+        if ($existing) {
+            throw new \InvalidArgumentException('The additional book is already on your task list.');
+        }
+
+        $task->loadMissing('textbookChapter.textbook', 'textbookChapter.syllabusChapter.syllabusVersion');
+        $chapter = $task->textbookChapter;
+        $syllabusChapter = $chapter?->syllabusChapter;
+        $gradeLevelId = (int) ($chapter?->textbook?->grade_level_id ?? 0);
+        $boardId = (int) ($syllabusChapter?->syllabusVersion?->board_id ?? $chapter?->textbook?->board_id ?? 0);
+
+        if (! $chapter || ! $syllabusChapter || $gradeLevelId <= 0 || $boardId <= 0) {
+            throw new \InvalidArgumentException('This chapter is missing its class, board, or syllabus link.');
+        }
+
+        $books = app(TextbookChapterBookService::class);
+
+        if ($textbookId) {
+            $textbook = Textbook::query()->findOrFail($textbookId);
+
+            if ((int) $textbook->grade_level_id !== $gradeLevelId) {
+                throw new \InvalidArgumentException('Selected book is not for this class.');
+            }
+
+            if ($textbook->board_id && (int) $textbook->board_id !== $boardId) {
+                $textbook = $books->resolveTextbookForBoard(
+                    $gradeLevelId,
+                    $boardId,
+                    (string) $textbook->name,
+                    (string) $textbook->code,
+                    $uploader->id,
+                );
+            }
+        } else {
+            $textbook = $books->resolveTextbookForBoard(
+                $gradeLevelId,
+                $boardId,
+                (string) $bookName,
+                (string) $bookCode,
+                $uploader->id,
+            );
+        }
+
+        if ((int) $textbook->id === (int) $chapter->textbook_id) {
+            throw new \InvalidArgumentException('Pick a different book. This upload stays on the current book.');
+        }
+
+        $newChapter = TextbookChapter::query()->firstOrCreate(
+            [
+                'textbook_id' => $textbook->id,
+                'syllabus_chapter_id' => $syllabusChapter->id,
+            ],
+            [
+                'chapter_number' => $syllabusChapter->numericChapterNumber(),
+                'title' => $syllabusChapter->name,
+                'pdf_path' => null,
+                'status' => TextbookChapter::STATUS_DRAFT,
+                'created_by' => $uploader->id,
+            ],
+        );
+
+        $taken = ContentUploadTask::query()
+            ->where('textbook_chapter_id', $newChapter->id)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->exists();
+
+        if ($taken) {
+            throw new \InvalidArgumentException('That book already has this chapter assigned. Pick another book.');
+        }
+
+        return ContentUploadTask::query()->create([
+            'textbook_chapter_id' => $newChapter->id,
+            'work_type' => ContentUploadTask::WORK_TYPE_MCQ_UPLOAD,
+            'assigned_to_user_id' => $uploader->id,
+            'assigned_by_user_id' => $uploader->id,
+            'status' => ContentUploadTask::STATUS_IN_PROGRESS,
+            'rate_basis' => $task->rate_basis,
+            'offered_amount_inr' => 0,
+            'agreed_amount_inr' => 0,
+            'agreed_at' => now(),
+            'parent_task_id' => $task->id,
+            'admin_notes' => 'Additional book for the same chapter. Paid once on the original chapter, not again.',
+        ]);
+    }
+
+    /**
+     * Publish the original chapter and the additional book. Pay the original chapter rate once.
+     */
+    public function publishTogether(ContentUploadTask $task, User $admin): ContentUploadTask
+    {
+        if ($task->parent_task_id || ! $task->needsAdditionalBook()) {
+            throw new \InvalidArgumentException('Publish together is for a chapter that is waiting on a second book.');
+        }
+
+        $child = ContentUploadTask::query()
+            ->where('parent_task_id', $task->id)
+            ->where('status', '!=', ContentUploadTask::STATUS_CANCELLED)
+            ->latest('id')
+            ->first();
+
+        if (! $child) {
+            throw new \InvalidArgumentException('The uploader has not added the other book yet.');
+        }
+
+        if (! in_array($child->status, [
+            ContentUploadTask::STATUS_VERIFIED,
+            ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ContentUploadTask::STATUS_PUBLISHED,
+        ], true)) {
+            throw new \InvalidArgumentException('The additional book is not submitted yet. Publish together after the uploader submits it.');
+        }
+
+        DB::transaction(function () use ($task, $child, $admin) {
+            if ($task->status !== ContentUploadTask::STATUS_PUBLISHED) {
+                $this->publish($task, $admin);
+            }
+
+            if ($child->status !== ContentUploadTask::STATUS_PUBLISHED) {
+                $this->publish($child->fresh(), $admin);
+            }
+        });
+
+        return $task->fresh();
     }
 
     private function assertChapterHasPdf(?TextbookChapter $chapter): void

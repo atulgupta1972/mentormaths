@@ -6,6 +6,7 @@ use App\Mail\ContentConceptPathReturnedUploader;
 use App\Mail\ContentTaskGeminiPendingUploader;
 use App\Mail\ContentTaskAgreementAdmin;
 use App\Mail\ContentTaskAssignedUploader;
+use App\Mail\ContentTaskAdditionalBookUploader;
 use App\Mail\ContentTaskReturnedUploader;
 use App\Mail\ContentTaskSubmittedForPublishAdmin;
 use App\Mail\ContentUploaderBatchPaymentMail;
@@ -160,6 +161,36 @@ class ContentOperationsMailer
             return true;
         } catch (\Throwable $e) {
             Log::error('Failed to send content task returned uploader email.', [
+                'content_upload_task_id' => $task->id,
+                'uploader_id' => $uploader->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    public static function notifyAdditionalBookRequested(ContentUploadTask $task): bool
+    {
+        $uploader = $task->assignee;
+
+        if (! $uploader || ! str_contains($uploader->email, '@')) {
+            return false;
+        }
+
+        try {
+            Mail::to($uploader->email)->send(new ContentTaskAdditionalBookUploader(
+                $task->fresh([
+                    'assignee',
+                    'textbookChapter.textbook.gradeLevel',
+                ]),
+                $task->reviewDecisionLabel(),
+                $task->review_decision_note,
+            ));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Failed to send additional-book request email.', [
                 'content_upload_task_id' => $task->id,
                 'uploader_id' => $uploader->id,
                 'error' => $e->getMessage(),

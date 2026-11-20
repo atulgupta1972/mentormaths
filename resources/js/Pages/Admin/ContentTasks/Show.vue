@@ -30,6 +30,11 @@ const changeBookForm = useForm({
     book_name: '',
     book_code: '',
 });
+const additionalBookForm = useForm({
+    decision: 'partial',
+    note: '',
+});
+const publishTogetherForm = useForm({});
 const selectedConversionIndexes = ref([]);
 const showSkippedConversions = ref(false);
 const conversionDeleteBusy = ref(false);
@@ -244,6 +249,25 @@ const setPlanWithProgress = computed(() => {
 
 const adminTaskPath = (suffix = '') => `/admin/content-tasks/${props.task.id}${suffix}`;
 
+const showChapterDecision = computed(() =>
+    !props.task.is_concept_path_build
+    && !props.task.is_fill_blank_conversion
+    && !props.task.parent_task_id
+    && !['published', 'cancelled'].includes(props.task.status)
+    && (
+        ['uploaded', 'verification_in_progress', 'verified', 'submitted_for_publish'].includes(props.task.status)
+        || !!props.task.review_decision
+    ),
+);
+
+const requestAdditionalBook = (decision) => {
+    additionalBookForm.decision = decision;
+    additionalBookForm.post(
+        safeRoute('admin.content-tasks.request-additional-book', props.task.id, adminTaskPath('/request-additional-book')),
+        { preserveScroll: true },
+    );
+};
+
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
 const formatDuration = (seconds) => {
     const m = Math.floor(seconds / 60);
@@ -319,7 +343,7 @@ const formatDuration = (seconds) => {
                 >
                     <p class="font-semibold text-indigo-950">Change book / author</p>
                     <p class="mt-1 text-sm text-indigo-900">
-                        Use when the uploader picked the wrong book. After publish, only admin can fix this.
+                        This moves the questions already here onto a different book. To keep this upload and ask for a second book, use Chapter decision below.
                     </p>
                     <div class="mt-3 flex flex-wrap gap-4 text-sm">
                         <label class="inline-flex items-center gap-1.5">
@@ -356,6 +380,107 @@ const formatDuration = (seconds) => {
                             Open chapter (PDF) →
                         </Link>
                     </div>
+                </form>
+
+                <div v-if="task.parent_task_id" class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                    <p class="font-semibold">Additional book for the same chapter</p>
+                    <p class="mt-1">
+                        The first upload on {{ task.parent_task?.book_name || 'the original book' }} stays.
+                        This book is not paid again. The chapter rate is on the original task.
+                    </p>
+                    <Link
+                        :href="safeRoute('admin.content-tasks.show', task.parent_task_id, `/admin/content-tasks/${task.parent_task_id}`)"
+                        class="mt-2 inline-block font-medium text-amber-900 underline"
+                    >
+                        Open the original chapter →
+                    </Link>
+                </div>
+
+                <form
+                    v-if="showChapterDecision"
+                    class="rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-sm"
+                    @submit.prevent
+                >
+                    <p class="font-semibold text-amber-950">Chapter decision</p>
+                    <p class="mt-1 text-sm text-amber-950">
+                        The upload already here stays. A second book is extra content for this same chapter.
+                        You pay {{ task.rate_description || 'the chapter rate' }} once when you publish, not again for the second book.
+                    </p>
+
+                    <div v-if="task.review_decision" class="mt-3 rounded-md border border-amber-200 bg-white p-3 text-sm text-amber-950">
+                        <p class="font-semibold">{{ task.review_decision_label }}</p>
+                        <p v-if="task.review_decision_note" class="mt-1 whitespace-pre-wrap">{{ task.review_decision_note }}</p>
+                        <p v-if="task.additional_book" class="mt-2">
+                            Additional book: {{ task.additional_book.book_name || 'added' }} · {{ task.additional_book.status_label }}
+                        </p>
+                        <p v-else class="mt-2">Waiting for the uploader to add the other book.</p>
+                        <Link
+                            v-if="task.additional_book?.id"
+                            :href="safeRoute('admin.content-tasks.show', task.additional_book.id, `/admin/content-tasks/${task.additional_book.id}`)"
+                            class="mt-2 inline-block font-medium text-amber-900 underline"
+                        >
+                            Open the additional book →
+                        </Link>
+                    </div>
+
+                    <label v-if="task.can_request_additional_book" class="mt-3 block text-sm font-medium text-amber-950">
+                        Note to the uploader
+                        <textarea
+                            v-model="additionalBookForm.note"
+                            required
+                            minlength="5"
+                            maxlength="1000"
+                            rows="3"
+                            placeholder="This book is short / wrong. Add another book for the same chapter. What you already uploaded stays."
+                            class="mt-1 w-full rounded-md border-gray-300 text-sm"
+                        />
+                    </label>
+                    <p v-if="additionalBookForm.errors.note" class="mt-1 text-sm text-rose-700">{{ additionalBookForm.errors.note }}</p>
+
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <PrimaryButton
+                            type="button"
+                            class="!bg-emerald-700 hover:!bg-emerald-800"
+                            :disabled="publishForm.processing || !task.can_publish"
+                            @click="publishForm.post(safeRoute('admin.content-tasks.publish', task.id, adminTaskPath('/publish')))"
+                        >
+                            {{ publishForm.processing ? 'Publishing…' : 'Publish this' }}
+                        </PrimaryButton>
+                        <button
+                            v-if="task.can_request_additional_book"
+                            type="button"
+                            class="rounded-md bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+                            :disabled="additionalBookForm.processing || additionalBookForm.note.trim().length < 5"
+                            @click="requestAdditionalBook('partial')"
+                        >
+                            Partial chapter
+                        </button>
+                        <button
+                            v-if="task.can_request_additional_book"
+                            type="button"
+                            class="rounded-md bg-rose-700 px-3 py-2 text-sm font-medium text-white hover:bg-rose-800 disabled:opacity-50"
+                            :disabled="additionalBookForm.processing || additionalBookForm.note.trim().length < 5"
+                            @click="requestAdditionalBook('not_ok_book')"
+                        >
+                            Not OK book
+                        </button>
+                        <button
+                            v-if="task.review_decision"
+                            type="button"
+                            class="rounded-md bg-indigo-700 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-800 disabled:opacity-50"
+                            :disabled="publishTogetherForm.processing || !task.can_publish_together"
+                            @click="publishTogetherForm.post(safeRoute('admin.content-tasks.publish-together', task.id, adminTaskPath('/publish-together')))"
+                        >
+                            {{ publishTogetherForm.processing ? 'Publishing…' : 'Publish together' }}
+                        </button>
+                    </div>
+                    <p v-if="task.can_request_additional_book" class="mt-2 text-xs text-amber-900">
+                        Partial chapter: content is short. Not OK book: this book is the wrong one.
+                        Both keep what is already uploaded and ask for another book.
+                    </p>
+                    <p v-else-if="task.review_decision && !task.can_publish_together" class="mt-2 text-xs text-amber-900">
+                        Publish together unlocks after the uploader submits the second book. Publish this accepts only the upload already here, still at the one chapter rate.
+                    </p>
                 </form>
 
                 <form
@@ -750,7 +875,7 @@ const formatDuration = (seconds) => {
                 </div>
 
                 <div
-                    v-if="task.can_publish && !task.is_concept_path_build"
+                    v-if="task.can_publish && !task.is_concept_path_build && !showChapterDecision"
                     class="rounded-lg border border-emerald-300 bg-emerald-50 p-4"
                 >
                     <p class="text-sm font-semibold text-emerald-950">Ready to publish</p>
@@ -769,7 +894,7 @@ const formatDuration = (seconds) => {
                     </PrimaryButton>
                 </div>
 
-                <div v-else-if="task.status === 'submitted_for_publish' && !task.is_concept_path_build" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <div v-else-if="task.status === 'submitted_for_publish' && !task.is_concept_path_build && !showChapterDecision" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                     <p class="text-sm text-emerald-900">Uploader submitted this chapter for publish.</p>
                     <div class="mt-3 flex flex-wrap gap-3">
                         <PrimaryButton type="button" :disabled="publishForm.processing" @click="publishForm.post(route('admin.content-tasks.publish', task.id))">

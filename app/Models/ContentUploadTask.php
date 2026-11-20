@@ -26,6 +26,10 @@ class ContentUploadTask extends Model
 
     public const STATUS_CANCELLED = 'cancelled';
 
+    public const DECISION_PARTIAL = 'partial';
+
+    public const DECISION_NOT_OK_BOOK = 'not_ok_book';
+
     public const WORK_TYPE_MCQ_UPLOAD = 'mcq_upload';
 
     public const WORK_TYPE_FILL_BLANK_CONVERSION = 'fill_blank_conversion';
@@ -48,6 +52,9 @@ class ContentUploadTask extends Model
         'published_at',
         'published_by',
         'admin_notes',
+        'review_decision',
+        'review_decision_note',
+        'parent_task_id',
     ];
 
     protected function casts(): array
@@ -111,6 +118,55 @@ class ContentUploadTask extends Model
         return $this->hasMany(ContentQuestionCorrection::class);
     }
 
+    public function parentTask(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_task_id');
+    }
+
+    public function additionalBookTask(): HasOne
+    {
+        return $this->hasOne(self::class, 'parent_task_id')->latestOfMany();
+    }
+
+    public function needsAdditionalBook(): bool
+    {
+        return in_array($this->review_decision, [self::DECISION_PARTIAL, self::DECISION_NOT_OK_BOOK], true)
+            && ! in_array($this->status, [self::STATUS_PUBLISHED, self::STATUS_CANCELLED], true);
+    }
+
+    public function reviewDecisionLabel(): string
+    {
+        return match ($this->review_decision) {
+            self::DECISION_PARTIAL => 'Partial chapter',
+            self::DECISION_NOT_OK_BOOK => 'Not OK book',
+            default => '',
+        };
+    }
+
+    /**
+     * Uploader still has to add, or finish, the second book.
+     */
+    public function additionalBookStillOpen(): bool
+    {
+        if (! $this->needsAdditionalBook()) {
+            return false;
+        }
+
+        $child = $this->relationLoaded('additionalBookTask')
+            ? $this->getRelation('additionalBookTask')
+            : $this->additionalBookTask()->first();
+
+        if (! $child || $child->status === self::STATUS_CANCELLED) {
+            return true;
+        }
+
+        return ! in_array($child->status, [
+            self::STATUS_VERIFIED,
+            self::STATUS_SUBMITTED_FOR_PUBLISH,
+            self::STATUS_PUBLISHED,
+        ], true);
+    }
+
     public function isLockedForUploaderDelete(): bool
     {
         return $this->published_at !== null
@@ -122,6 +178,10 @@ class ContentUploadTask extends Model
 
     public function payableAmountInr(): int
     {
+        if ($this->parent_task_id) {
+            return 0;
+        }
+
         $unit = $this->rateUnitInr();
 
         if ($unit <= 0) {
@@ -247,6 +307,10 @@ class ContentUploadTask extends Model
 
     public function rateDescription(): string
     {
+        if ($this->parent_task_id) {
+            return 'Included in the original chapter rate — not paid separately';
+        }
+
         if ($this->rate_basis === ContentRateCard::BASIS_PER_QUESTION) {
             $payable = $this->payableQuestionCount();
             $skipped = $this->skippedQuestionCount();
@@ -336,6 +400,10 @@ class ContentUploadTask extends Model
      */
     public function uploaderBucket(): string
     {
+        if ($this->needsAdditionalBook()) {
+            return $this->additionalBookStillOpen() ? 'upload_pending' : 'done';
+        }
+
         if ($this->isConceptPathBuild()) {
             if (in_array($this->status, [
                 self::STATUS_SUBMITTED_FOR_PUBLISH,
@@ -413,6 +481,12 @@ class ContentUploadTask extends Model
 
     public function statusLabel(): string
     {
+        if ($this->needsAdditionalBook()) {
+            return $this->review_decision === self::DECISION_NOT_OK_BOOK
+                ? 'Book not accepted — add another book'
+                : 'Partial chapter — add another book';
+        }
+
         if ($this->isConceptPathBuild()) {
             return match ($this->status) {
                 self::STATUS_PENDING_AGREEMENT => 'Awaiting rate agreement',

@@ -79,7 +79,12 @@ class ContentTaskController extends Controller
                 ->with('success', 'Upload the chapter PDF first, then Build concepts → Approve → Run (₹'.$contentTask->payableAmountInr().').');
         }
 
-        $contentTask->load(['textbookChapter.textbook.gradeLevel']);
+        $contentTask->load([
+            'textbookChapter.textbook.gradeLevel',
+            'textbookChapter.syllabusChapter.syllabusVersion',
+            'additionalBookTask.textbookChapter.textbook',
+            'parentTask.textbookChapter.textbook',
+        ]);
 
         $verification = null;
         $progress = null;
@@ -125,6 +130,8 @@ class ContentTaskController extends Controller
             ] : null,
             'activeSeconds' => $this->sessionService->totalActiveSeconds($contentTask),
             'textbookChapterUrl' => route('content.textbooks.show', $contentTask->textbook_chapter_id),
+            'textbooks' => $this->textbooksForAdditionalBook($contentTask),
+            'additionalBook' => $this->additionalBookPayload($contentTask),
         ]);
     }
 
@@ -162,6 +169,33 @@ class ContentTaskController extends Controller
         return redirect()
             ->route('content.tasks.show', $contentTask)
             ->with('success', 'Rate agreed. You can start work on this chapter.');
+    }
+
+    public function addAdditionalBook(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $this->authorizeTask($contentTask, $request);
+
+        $validated = $request->validate([
+            'textbook_id' => ['nullable', 'integer', 'exists:textbooks,id'],
+            'book_name' => ['required_without:textbook_id', 'nullable', 'string', 'max:255'],
+            'book_code' => ['required_without:textbook_id', 'nullable', 'string', 'max:32', 'alpha_dash'],
+        ]);
+
+        try {
+            $child = $this->taskService->addAdditionalBook(
+                $contentTask,
+                $request->user(),
+                isset($validated['textbook_id']) ? (int) $validated['textbook_id'] : null,
+                $validated['book_name'] ?? null,
+                $validated['book_code'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('content.textbooks.show', $child->textbook_chapter_id)
+            ->with('success', 'Second book added. Upload its PDF and questions here. The first book stays, and this chapter is paid once.');
     }
 
     public function markUploaded(Request $request, ContentUploadTask $contentTask): RedirectResponse
@@ -722,6 +756,76 @@ class ContentTaskController extends Controller
         $this->sessionService->recordActivity($session);
 
         return back();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function textbooksForAdditionalBook(ContentUploadTask $task): array
+    {
+        if (! $task->needsAdditionalBook()) {
+            return [];
+        }
+
+        $chapter = $task->textbookChapter;
+        $gradeId = (int) ($chapter?->textbook?->grade_level_id ?? 0);
+        if ($gradeId <= 0) {
+            return [];
+        }
+
+        $boardId = (int) ($chapter?->syllabusChapter?->syllabusVersion?->board_id ?? $chapter?->textbook?->board_id ?? 0);
+
+        $books = app(\App\Services\TextbookChapterBookService::class)
+            ->textbooksForGrade($gradeId, $boardId > 0 ? $boardId : null);
+
+        $currentId = (int) ($chapter?->textbook_id ?? 0);
+
+        return array_values(array_filter(
+            $books,
+            fn (array $book) => (int) ($book['id'] ?? 0) !== $currentId,
+        ));
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function additionalBookPayload(ContentUploadTask $task): ?array
+    {
+        if ($task->parent_task_id) {
+            $parent = $task->parentTask;
+
+            return [
+                'is_child' => true,
+                'open' => false,
+                'decision_label' => $parent?->reviewDecisionLabel() ?: 'Additional book',
+                'note' => $parent?->review_decision_note,
+                'parent_id' => $task->parent_task_id,
+                'parent_book' => $parent?->textbookChapter?->textbook?->name,
+                'child' => null,
+            ];
+        }
+
+        if (! $task->needsAdditionalBook()) {
+            return null;
+        }
+
+        $child = $task->additionalBookTask;
+
+        return [
+            'is_child' => false,
+            'open' => $task->additionalBookStillOpen(),
+            'decision' => $task->review_decision,
+            'decision_label' => $task->reviewDecisionLabel(),
+            'note' => $task->review_decision_note,
+            'parent_id' => null,
+            'parent_book' => null,
+            'child' => $child && $child->status !== ContentUploadTask::STATUS_CANCELLED ? [
+                'id' => $child->id,
+                'status_label' => $child->statusLabel(),
+                'book_name' => $child->textbookChapter?->textbook?->name,
+                'chapter_id' => $child->textbook_chapter_id,
+            ] : null,
+        ];
     }
 
     private function authorizeTask(ContentUploadTask $contentTask, Request $request): void

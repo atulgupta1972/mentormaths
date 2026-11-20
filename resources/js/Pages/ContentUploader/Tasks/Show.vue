@@ -13,11 +13,19 @@ const props = defineProps({
     verification: { type: Object, default: null },
     activeSeconds: { type: Number, default: 0 },
     textbookChapterUrl: { type: String, default: '' },
+    textbooks: { type: Array, default: () => [] },
+    additionalBook: { type: Object, default: null },
 });
 
 const page = usePage();
 const agreeForm = useForm({});
 const startReviewForm = useForm({});
+const additionalBookForm = useForm({
+    mode: props.textbooks.length ? 'existing' : 'new',
+    textbook_id: '',
+    book_name: '',
+    book_code: '',
+});
 
 const verificationPendingCount = computed(() =>
     Number(
@@ -35,6 +43,14 @@ const showGeminiGuide = computed(() =>
 );
 
 const taskPath = (suffix = '') => `/content/tasks/${props.task.id}${suffix}`;
+
+const submitAdditionalBook = () => {
+    additionalBookForm.transform((data) => ({
+        textbook_id: data.mode === 'existing' ? data.textbook_id : null,
+        book_name: data.mode === 'new' ? data.book_name : null,
+        book_code: data.mode === 'new' ? data.book_code : null,
+    })).post(safeRoute('content.tasks.additional-book', props.task.id, taskPath('/additional-book')));
+};
 
 const formatInr = (amount) => `₹${Number(amount).toLocaleString('en-IN')}`;
 const formatDuration = (seconds) => {
@@ -97,6 +113,69 @@ onUnmounted(() => clearInterval(pingTimer));
                 </div>
                 <div v-if="page.props.flash?.error" class="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950">
                     {{ page.props.flash.error }}
+                </div>
+
+                <div v-if="additionalBook?.is_child" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                    <p class="font-semibold">Additional book for the same chapter</p>
+                    <p class="mt-1">
+                        The first upload on {{ additionalBook.parent_book || 'the original book' }} stays.
+                        Upload this book's PDF and questions here. You are paid once on the original chapter, not again for this book.
+                    </p>
+                    <p v-if="additionalBook.note" class="mt-2 whitespace-pre-wrap"><strong>Admin note:</strong> {{ additionalBook.note }}</p>
+                </div>
+
+                <div v-else-if="additionalBook" class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                    <p class="font-semibold">{{ additionalBook.decision_label }} — add another book</p>
+                    <p class="mt-1">
+                        What you already uploaded stays. Add a second book for this same chapter.
+                        You are paid once for the whole chapter, not again for the second book.
+                        Admin publishes both together.
+                    </p>
+                    <p v-if="additionalBook.note" class="mt-2 whitespace-pre-wrap"><strong>Admin note:</strong> {{ additionalBook.note }}</p>
+
+                    <div v-if="additionalBook.child" class="mt-3">
+                        <p>Additional book: {{ additionalBook.child.book_name || 'added' }} · {{ additionalBook.child.status_label }}</p>
+                        <Link
+                            :href="safeRoute('content.tasks.show', additionalBook.child.id, `/content/tasks/${additionalBook.child.id}`)"
+                            class="mt-2 inline-block font-medium text-amber-900 underline"
+                        >
+                            Open the additional book →
+                        </Link>
+                    </div>
+
+                    <form v-else-if="additionalBook.open" class="mt-3 space-y-2" @submit.prevent="submitAdditionalBook">
+                        <div class="flex flex-wrap gap-4">
+                            <label class="inline-flex items-center gap-1.5">
+                                <input v-model="additionalBookForm.mode" type="radio" value="existing">
+                                Existing book
+                            </label>
+                            <label class="inline-flex items-center gap-1.5">
+                                <input v-model="additionalBookForm.mode" type="radio" value="new">
+                                New name + code
+                            </label>
+                        </div>
+                        <div class="flex flex-wrap items-end gap-2">
+                            <select
+                                v-if="additionalBookForm.mode === 'existing'"
+                                v-model="additionalBookForm.textbook_id"
+                                class="min-w-[220px] rounded-md border-gray-300 text-sm"
+                                required
+                            >
+                                <option value="" disabled>Select book</option>
+                                <option v-for="book in textbooks" :key="book.id" :value="book.id">{{ book.label }}</option>
+                            </select>
+                            <template v-else>
+                                <input v-model="additionalBookForm.book_name" type="text" placeholder="Book name" class="rounded-md border-gray-300 text-sm" required>
+                                <input v-model="additionalBookForm.book_code" type="text" placeholder="Code" class="w-32 rounded-md border-gray-300 text-sm" required>
+                            </template>
+                            <PrimaryButton type="submit" :disabled="additionalBookForm.processing">
+                                {{ additionalBookForm.processing ? 'Adding…' : 'Add this book' }}
+                            </PrimaryButton>
+                        </div>
+                        <p v-if="additionalBookForm.errors.book_name || additionalBookForm.errors.book_code || additionalBookForm.errors.textbook_id" class="text-sm text-rose-700">
+                            {{ additionalBookForm.errors.book_name || additionalBookForm.errors.book_code || additionalBookForm.errors.textbook_id }}
+                        </p>
+                    </form>
                 </div>
 
                 <div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">

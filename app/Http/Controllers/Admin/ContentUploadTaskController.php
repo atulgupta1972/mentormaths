@@ -680,6 +680,8 @@ class ContentUploadTaskController extends Controller
             'textbookChapter.textbook.gradeLevel',
             'textbookChapter.syllabusChapter.chapterHead',
             'textbookChapter.syllabusChapter.syllabusVersion.board',
+            'additionalBookTask.textbookChapter.textbook',
+            'parentTask.textbookChapter.textbook',
         ]);
 
         $verification = $this->verificationPayload($contentTask, $request->user());
@@ -689,11 +691,14 @@ class ContentUploadTaskController extends Controller
             'textbookChapter.textbook.gradeLevel',
             'textbookChapter.syllabusChapter.chapterHead',
             'textbookChapter.syllabusChapter.syllabusVersion.board',
+            'additionalBookTask.textbookChapter.textbook',
+            'parentTask.textbookChapter.textbook',
         ]);
         $taskPayload = $this->serializeTask($contentTask, detailed: true);
         $geminiPending = (int) ($verification['gemini_pending_count'] ?? 0);
         if ($geminiPending > 0 && ! $contentTask->isFillBlankConversion() && ! $contentTask->isConceptPathBuild()) {
             $taskPayload['can_publish'] = false;
+            $taskPayload['can_publish_together'] = false;
             $taskPayload['gemini_blocks_publish'] = true;
         }
 
@@ -1053,6 +1058,44 @@ class ContentUploadTaskController extends Controller
         return back()->with('success', $message);
     }
 
+    public function requestAdditionalBook(Request $request, ContentUploadTask $contentTask): RedirectResponse
+    {
+        $validated = $request->validate([
+            'decision' => ['required', 'in:partial,not_ok_book'],
+            'note' => ['required', 'string', 'min:5', 'max:1000'],
+        ]);
+
+        try {
+            $result = $this->taskService->requestAdditionalBook(
+                $contentTask,
+                $request->user(),
+                $validated['decision'],
+                $validated['note'],
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $name = $result['task']->assignee?->name ?? 'the uploader';
+        $message = "Sent back to {$name}. The current upload stays. They were asked to add another book, paid once for this chapter.";
+        $message .= $result['email_sent']
+            ? ' Email sent.'
+            : ' Warning: email could not be sent — check mail settings.';
+
+        return back()->with('success', $message);
+    }
+
+    public function publishTogether(ContentUploadTask $contentTask, Request $request): RedirectResponse
+    {
+        try {
+            $this->taskService->publishTogether($contentTask, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Both books published. Payment stays the one chapter rate on this task.');
+    }
+
     public function returnHelpRequestQuestion(Request $request, QuestionResolutionItem $item): RedirectResponse
     {
         abort_unless($item->status === QuestionResolutionItem::STATUS_PENDING, 404);
@@ -1360,12 +1403,52 @@ class ContentUploadTaskController extends Controller
                 ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
                 ContentUploadTask::STATUS_PUBLISHED,
             ], true);
+            $publishable = [
+                ContentUploadTask::STATUS_VERIFIED,
+                ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+            ];
+            if ($task->needsAdditionalBook()) {
+                $publishable[] = ContentUploadTask::STATUS_IN_PROGRESS;
+                $publishable[] = ContentUploadTask::STATUS_UPLOADED;
+                $publishable[] = ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS;
+            }
             $data['can_publish'] = $task->isFillBlankConversion()
                 ? $task->status === ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH
-                : in_array($task->status, [
+                : in_array($task->status, $publishable, true);
+            $data['review_decision'] = $task->review_decision;
+            $data['review_decision_label'] = $task->reviewDecisionLabel();
+            $data['review_decision_note'] = $task->review_decision_note;
+            $data['parent_task_id'] = $task->parent_task_id;
+            $data['included_in_chapter_rate'] = $task->parent_task_id !== null;
+            $data['can_request_additional_book'] = ! $task->parent_task_id
+                && ! $task->isFillBlankConversion()
+                && ! $task->isConceptPathBuild()
+                && ! $task->needsAdditionalBook()
+                && in_array($task->status, [
+                    ContentUploadTask::STATUS_UPLOADED,
+                    ContentUploadTask::STATUS_VERIFICATION_IN_PROGRESS,
                     ContentUploadTask::STATUS_VERIFIED,
                     ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
                 ], true);
+            $child = $task->additionalBookTask;
+            $data['additional_book'] = $child ? [
+                'id' => $child->id,
+                'status' => $child->status,
+                'status_label' => $child->statusLabel(),
+                'book_name' => $child->textbookChapter?->textbook?->name,
+                'ready' => in_array($child->status, [
+                    ContentUploadTask::STATUS_VERIFIED,
+                    ContentUploadTask::STATUS_SUBMITTED_FOR_PUBLISH,
+                    ContentUploadTask::STATUS_PUBLISHED,
+                ], true),
+            ] : null;
+            $data['can_publish_together'] = $task->needsAdditionalBook()
+                && ($data['additional_book']['ready'] ?? false);
+            $parent = $task->parentTask;
+            $data['parent_task'] = $parent ? [
+                'id' => $parent->id,
+                'book_name' => $parent->textbookChapter?->textbook?->name,
+            ] : null;
         }
 
         return $data;

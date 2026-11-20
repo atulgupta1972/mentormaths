@@ -569,6 +569,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/content-tasks/{contentTask}/verification-diagram', [ContentUploadTaskController::class, 'uploadVerificationDiagram'])->name('content-tasks.verification-diagram');
     Route::post('/content-tasks/{contentTask}/verification-diagram/remove', [ContentUploadTaskController::class, 'removeVerificationDiagram'])->name('content-tasks.verification-diagram.remove');
     Route::post('/content-tasks/{contentTask}/return-for-reverification', [ContentUploadTaskController::class, 'returnForReverification'])->name('content-tasks.return-for-reverification');
+    Route::post('/content-tasks/{contentTask}/request-additional-book', [ContentUploadTaskController::class, 'requestAdditionalBook'])->name('content-tasks.request-additional-book');
+    Route::post('/content-tasks/{contentTask}/publish-together', [ContentUploadTaskController::class, 'publishTogether'])->name('content-tasks.publish-together');
     Route::post('/help-requests/{item}/return-to-uploader', [ContentUploadTaskController::class, 'returnHelpRequestQuestion'])->name('help-requests.return-to-uploader');
     Route::post('/help-requests/{item}/mark-corrected', [ContentUploadTaskController::class, 'markHelpRequestCorrected'])->name('help-requests.mark-corrected');
     Route::post('/question-issue-reports/{report}/mark-fixed', [QuestionIssueReportController::class, 'markFixed'])->name('question-issue-reports.mark-fixed');
@@ -723,6 +725,7 @@ Route::middleware(['auth', 'verified', 'content.uploader', 'content.uploader.gem
     Route::post('/tasks/{contentTask}/verification-diagram/remove', [ContentTaskController::class, 'removeVerificationDiagram'])->name('tasks.verification-diagram.remove');
     Route::post('/tasks/{contentTask}/complete-verification', [ContentTaskController::class, 'completeVerification'])->name('tasks.complete-verification');
     Route::post('/tasks/{contentTask}/submit-for-publish', [ContentTaskController::class, 'submitForPublish'])->name('tasks.submit-for-publish');
+    Route::post('/tasks/{contentTask}/additional-book', [ContentTaskController::class, 'addAdditionalBook'])->name('tasks.additional-book');
     Route::post('/tasks/{contentTask}/convert-save', [ContentTaskController::class, 'saveConversionRow'])->name('tasks.convert-save');
     Route::post('/tasks/{contentTask}/convert-check', [ContentTaskController::class, 'checkConversionRow'])->name('tasks.convert-check');
     Route::post('/tasks/{contentTask}/convert-skip', [ContentTaskController::class, 'skipConversionRow'])->name('tasks.convert-skip');
