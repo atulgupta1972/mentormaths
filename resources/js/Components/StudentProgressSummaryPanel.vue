@@ -267,7 +267,7 @@ const downloadPdf = () => {
                     <div>
                         <p class="font-medium text-teal-950">WhatsApp report for these dates</p>
                         <p class="mt-1 text-sm text-teal-900">
-                            Logins, worksheets by chapter, score, and anything below 80%.
+                            Logins, worksheets by chapter, score, and anything below 80%. Sent to notify mobiles and the coaching teacher.
                         </p>
                     </div>
                     <button
@@ -276,7 +276,7 @@ const downloadPdf = () => {
                         :disabled="form.processing || whatsappRecipientCount === 0 || !form.date_from || !form.date_to"
                         @click="sendMonthReport"
                     >
-                        {{ form.processing ? 'Sending…' : 'Send to parent on WhatsApp' }}
+                        {{ form.processing ? 'Sending…' : 'Send on WhatsApp' }}
                     </button>
                 </div>
                 <p v-if="previewLoading" class="mt-3 text-sm text-teal-800">Updating for these dates…</p>
@@ -305,7 +305,7 @@ const downloadPdf = () => {
                     class="mt-4 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-white p-3 text-xs text-gray-700"
                 >{{ whatsappPreview }}</pre>
                 <p v-if="whatsappRecipientCount === 0" class="mt-3 text-sm text-amber-800">
-                    Tick Notify on a parent mobile above before sending.
+                    Tick Notify on a parent mobile, or assign a coaching teacher with a mobile, before sending.
                 </p>
             </div>
 
@@ -379,10 +379,10 @@ const downloadPdf = () => {
             </div>
 
             <p v-if="whatsappRecipientCount === 0" class="text-sm text-gray-500">
-                For WhatsApp: tick <strong>Notify</strong> on mobile numbers in contact settings above, then click Prepare WhatsApp.
+                For WhatsApp: tick <strong>Notify</strong> on mobile numbers above, or assign a coaching teacher with a mobile.
             </p>
             <p v-else class="text-sm text-gray-600">
-                {{ whatsappRecipientCount }} WhatsApp recipient{{ whatsappRecipientCount === 1 ? '' : 's' }} saved for notify.
+                {{ whatsappRecipientCount }} WhatsApp recipient{{ whatsappRecipientCount === 1 ? '' : 's' }} (notify mobiles + coaching teacher).
             </p>
 
             <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

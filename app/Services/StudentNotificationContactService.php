@@ -4,15 +4,16 @@ namespace App\Services;
 
 use App\Models\RegistrationRequest;
 use App\Models\Student;
+use App\Support\StudentIdentity;
 
 class StudentNotificationContactService
 {
     /**
      * @return list<array{label: string, mobile: string, key: string}>
      */
-    public function recipientsForStudent(Student $student): array
+    public function recipientsForStudent(Student $student, bool $includeTeacher = false): array
     {
-        return $this->buildList(
+        $recipients = $this->buildList(
             $student->student_mobile,
             $student->parent1_mobile,
             $student->parent2_mobile,
@@ -22,6 +23,22 @@ class StudentNotificationContactService
             (bool) $student->notify_parent1_mobile,
             (bool) $student->notify_parent2_mobile,
         );
+
+        if ($includeTeacher) {
+            return $this->appendCoachingTeacher($student, $recipients);
+        }
+
+        return $recipients;
+    }
+
+    /**
+     * Parents (notify) plus coaching teacher — used for progress / month reports.
+     *
+     * @return list<array{label: string, mobile: string, key: string}>
+     */
+    public function recipientsForProgressReport(Student $student): array
+    {
+        return $this->recipientsForStudent($student, includeTeacher: true);
     }
 
     /**
@@ -79,6 +96,41 @@ class StudentNotificationContactService
                 'mobile' => $parent2Mobile,
             ];
         }
+
+        return $recipients;
+    }
+
+    /**
+     * @param  list<array{label: string, mobile: string, key: string}>  $recipients
+     * @return list<array{label: string, mobile: string, key: string}>
+     */
+    private function appendCoachingTeacher(Student $student, array $recipients): array
+    {
+        $teacher = $student->relationLoaded('coachingClassTeacher')
+            ? $student->coachingClassTeacher
+            : $student->coachingClassTeacher()->first();
+
+        if (! $teacher || ! $teacher->is_active || ! filled($teacher->mobile)) {
+            return $recipients;
+        }
+
+        $teacherMobile = StudentIdentity::normalizeMobile($teacher->mobile);
+
+        if ($teacherMobile === null) {
+            return $recipients;
+        }
+
+        foreach ($recipients as $recipient) {
+            if (StudentIdentity::normalizeMobile($recipient['mobile']) === $teacherMobile) {
+                return $recipients;
+            }
+        }
+
+        $recipients[] = [
+            'key' => 'teacher',
+            'label' => filled($teacher->name) ? "Teacher ({$teacher->name})" : 'Teacher',
+            'mobile' => $teacher->mobile,
+        ];
 
         return $recipients;
     }

@@ -267,7 +267,7 @@ class StudentProgressWhatsAppService
     {
         $parameters = $this->progressReportParameters($summary);
         $message = $this->buildMonthReportMessage($summary);
-        $recipients = $this->contactService->recipientsForStudent($student);
+        $recipients = $this->contactService->recipientsForProgressReport($student);
 
         return array_map(fn (array $recipient) => [
             'mobile' => $recipient['mobile'],

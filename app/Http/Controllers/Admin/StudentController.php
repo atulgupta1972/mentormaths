@@ -184,7 +184,7 @@ class StudentController extends Controller
             'questionIssueReportsSentToUploader' => $this->issueReports->sentToUploaderForStudent($student->id),
             'defaultSummaryEmail' => AssignmentMailer::resolveStudentEmail($student),
             'summaryEmailRecipients' => $this->notificationEmailService->recipientsForStudent($student),
-            'whatsappRecipientCount' => count($this->notificationContactService->recipientsForStudent($student)),
+            'whatsappRecipientCount' => count($this->notificationContactService->recipientsForProgressReport($student)),
             'formulaDrillSummary' => $this->formulaDrillReport->summaryForStudent($student),
             'enrollmentOptions' => EnrollmentSource::optionsForUi(),
             'coachingClasses' => $coachingClasses,
@@ -522,7 +522,7 @@ class StudentController extends Controller
         $waResult = StudentProgressWhatsAppMailer::sendMonth($student, $summary);
 
         if ($waResult['error'] === 'no_recipients') {
-            return back()->with('warning', 'No WhatsApp recipients — tick Notify on at least one mobile number and save.');
+            return back()->with('warning', 'No WhatsApp recipients — tick Notify on a mobile, or assign a coaching teacher with a mobile.');
         }
 
         if ($waResult['sent_count'] > 0) {
