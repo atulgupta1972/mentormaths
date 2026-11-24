@@ -341,6 +341,12 @@ function statusClass(status) {
                                 Last 50 sends logged by the app. “Sent” means Meta accepted the message; delivery to the phone is handled by WhatsApp.
                             </p>
                         </div>
+                        <Link
+                            :href="route('admin.whatsapp-outbox.index')"
+                            class="text-sm font-medium text-teal-700 hover:underline"
+                        >
+                            Open full outbox
+                        </Link>
                     </div>
 
                     <div v-if="recentWhatsAppMessages.length === 0" class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">

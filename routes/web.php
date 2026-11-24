@@ -41,6 +41,7 @@ use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\PackUploadController;
 use App\Http\Controllers\Admin\WhatsAppInboxController;
+use App\Http\Controllers\Admin\WhatsAppOutboxController;
 use App\Http\Controllers\Admin\WrittenSheetController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\Admin\WrittenReviewController;
@@ -282,6 +283,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/whatsapp-inbox/{mobile}', [WhatsAppInboxController::class, 'reply'])
         ->where('mobile', '[0-9]+')
         ->name('whatsapp-inbox.reply');
+    Route::get('/whatsapp-outbox', [WhatsAppOutboxController::class, 'index'])
+        ->name('whatsapp-outbox.index');
     Route::post('/notifications/send-pending-work', [NotificationSettingsController::class, 'sendPendingWorkAll'])
         ->name('notifications.send-pending-work');
 
