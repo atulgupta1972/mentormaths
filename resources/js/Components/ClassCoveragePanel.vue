@@ -4,7 +4,7 @@ import ChapterPerformanceSummary from '@/Components/ChapterPerformanceSummary.vu
 import CoverageItemsWithRevisionRail from '@/Components/CoverageItemsWithRevisionRail.vue';
 import CoverageSetItemCard from '@/Components/CoverageSetItemCard.vue';
 import { Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
     classCoverage: {
@@ -137,10 +137,34 @@ const visibleChapters = computed(() => {
         return chapters.value;
     }
 
+    if (termFilter.value === 'unset') {
+        return chapters.value.filter((chapter) => chapter.term !== 1 && chapter.term !== 2);
+    }
+
     const term = Number(termFilter.value);
 
     return chapters.value.filter((chapter) => Number(chapter.term) === term);
 });
+
+const focusUntaggedChapters = () => {
+    setTermFilter('unset');
+    nextTick(() => {
+        const row = document.querySelector('[data-term-unset="1"]');
+        (row || document.getElementById('study-plan-term-tags'))?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+        });
+    });
+};
+
+const onLearningBlockerFocus = (event) => {
+    if (event.detail?.key === 'chapter_terms') {
+        focusUntaggedChapters();
+    }
+};
+
+onMounted(() => window.addEventListener('learning-blocker-focus', onLearningBlockerFocus));
+onUnmounted(() => window.removeEventListener('learning-blocker-focus', onLearningBlockerFocus));
 
 const setTermFilter = (value) => {
     termFilterTouched.value = true;
@@ -1156,7 +1180,7 @@ const startRevision = (item) => {
             No syllabus chapters for your class / board yet.
         </div>
 
-        <div v-else class="mb-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+        <div v-else id="study-plan-term-tags" class="mb-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
             <div class="flex flex-wrap items-center gap-2">
                 <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Show</span>
                 <button
@@ -1183,7 +1207,15 @@ const startRevision = (item) => {
                 >
                     2nd term ({{ termCounts[2] }})
                 </button>
-                <span v-if="termCounts.unset" class="text-[11px] text-slate-500">{{ termCounts.unset }} not tagged</span>
+                <button
+                    v-if="termCounts.unset"
+                    type="button"
+                    class="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                    :class="termFilter === 'unset' ? 'bg-amber-700 text-white' : 'bg-amber-50 text-amber-950 ring-1 ring-amber-400'"
+                    @click="setTermFilter('unset')"
+                >
+                    Not tagged ({{ termCounts.unset }})
+                </button>
             </div>
             <div class="flex flex-wrap items-end gap-2">
                 <label class="text-[11px] text-slate-600">
@@ -1251,11 +1283,13 @@ const startRevision = (item) => {
                 <tbody>
                     <template v-for="({ chapter, stats }, index) in chaptersWithStats" :key="chapter.id">
                         <tr
+                            :data-term-unset="chapter.term !== 1 && chapter.term !== 2 ? '1' : null"
                             :class="[
                                 upcomingExamForChapter(chapter.id)
                                     ? chapterExamRowClass(chapter.id)
                                     : (index % 2 === 0 ? 'bg-white' : 'bg-slate-100'),
                                 isExpanded(chapter.id) && !upcomingExamForChapter(chapter.id) ? 'bg-sky-50' : '',
+                                chapter.term !== 1 && chapter.term !== 2 ? 'ring-2 ring-inset ring-amber-400' : '',
                                 savingId === chapter.id ? 'opacity-60' : '',
                             ]"
                         >
@@ -1440,6 +1474,7 @@ const startRevision = (item) => {
                                     <Link
                                         v-if="isStudentView && chapter.concept_learn?.learn_url"
                                         :href="chapter.concept_learn.learn_url"
+                                        data-learning-guard="learn"
                                         class="inline-flex min-w-[240px] flex-col items-center justify-center rounded-xl bg-indigo-700 px-6 py-4 text-center shadow-md ring-2 ring-indigo-300 transition hover:bg-indigo-800"
                                     >
                                         <span class="text-sm font-extrabold uppercase tracking-[0.14em] text-white">
