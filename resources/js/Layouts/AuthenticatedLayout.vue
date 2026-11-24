@@ -8,6 +8,7 @@ import ResponsiveNavGroup from '@/Components/ResponsiveNavGroup.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import AssignmentWhatsAppPrompt from '@/Components/AssignmentWhatsAppPrompt.vue';
+import LearningBlockerPrompt from '@/Components/LearningBlockerPrompt.vue';
 import { assignToClassPath, hasRoute, safeRoute } from '@/utils/routes';
 
 const showingNavigationDropdown = ref(false);
@@ -598,6 +599,7 @@ const navGroups = computed(() =>
             </nav>
 
             <AssignmentWhatsAppPrompt />
+            <LearningBlockerPrompt />
 
             <header v-if="$slots.header" class="bg-white shadow">
                 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">

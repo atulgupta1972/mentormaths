@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\FirstTermMarksGate;
+use App\Services\StudentLearningBlocker;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -36,7 +37,8 @@ class EnsureFirstTermMarksEntered
 
         return redirect()
             ->route('student.exams.index')
-            ->with('error', $this->gate->blockingMessage($student));
+            ->with('error', $this->gate->blockingMessage($student))
+            ->with(StudentLearningBlocker::PROMPT_FLASH, true);
     }
 
     private function isExemptRoute(Request $request): bool

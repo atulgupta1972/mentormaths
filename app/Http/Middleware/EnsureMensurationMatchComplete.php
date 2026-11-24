@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\StudentSeriesActivityDay;
 use App\Services\FormulaDrillSessionService;
 use App\Services\SeriesActivityService;
+use App\Services\StudentLearningBlocker;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -56,14 +57,18 @@ class EnsureMensurationMatchComplete
                 return $next($request);
             }
 
-            return redirect()->route('student.algebra-cards.show');
+            return redirect()
+                ->route('student.algebra-cards.show')
+                ->with(StudentLearningBlocker::PROMPT_FLASH, true);
         }
 
         if ($request->routeIs('student.mensuration-match.*')) {
             return $next($request);
         }
 
-        return redirect()->route('student.mensuration-match.show');
+        return redirect()
+            ->route('student.mensuration-match.show')
+            ->with(StudentLearningBlocker::PROMPT_FLASH, true);
     }
 
     private function isExemptRoute(Request $request): bool

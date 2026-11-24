@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Services\BasicsDrillSessionService;
 use App\Services\FormulaDrillSessionService;
 use App\Services\SeriesActivityService;
+use App\Services\StudentLearningBlocker;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -56,7 +57,9 @@ class EnsureBasicsDrillComplete
             return $next($request);
         }
 
-        return redirect()->route('student.basics-drill.show');
+        return redirect()
+            ->route('student.basics-drill.show')
+            ->with(StudentLearningBlocker::PROMPT_FLASH, true);
     }
 
     private function isExemptRoute(Request $request): bool

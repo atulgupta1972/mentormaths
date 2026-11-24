@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\AdminGradeContext;
+use App\Services\StudentLearningBlocker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Middleware;
@@ -59,9 +60,23 @@ class HandleInertiaRequests extends Middleware
                     ];
                 }
             },
+            'learningBlocker' => function () use ($user) {
+                if (! $user || $user->isAdmin() || ! $user->isStudent()) {
+                    return null;
+                }
+
+                try {
+                    return app(StudentLearningBlocker::class)->forUser($user);
+                } catch (Throwable $e) {
+                    Log::warning('Failed to load the student learning blocker.', ['message' => $e->getMessage()]);
+
+                    return null;
+                }
+            },
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
+                'learning_blocker_prompt' => fn () => $request->session()->get(StudentLearningBlocker::PROMPT_FLASH),
                 'warning' => fn () => $request->session()->get('warning'),
                 'generated_login' => fn () => $request->session()->get('generated_login'),
                 'email_sent' => fn () => $request->session()->get('email_sent'),

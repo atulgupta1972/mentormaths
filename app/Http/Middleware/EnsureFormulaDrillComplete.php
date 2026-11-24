@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\FormulaDrillSessionService;
+use App\Services\StudentLearningBlocker;
 use App\Support\FormulaDrillSchema;
 use Closure;
 use Illuminate\Http\Request;
@@ -44,7 +45,9 @@ class EnsureFormulaDrillComplete
             return $next($request);
         }
 
-        return redirect()->route('student.formula-drill.show');
+        return redirect()
+            ->route('student.formula-drill.show')
+            ->with(StudentLearningBlocker::PROMPT_FLASH, true);
     }
 
     private function isExemptRoute(Request $request): bool

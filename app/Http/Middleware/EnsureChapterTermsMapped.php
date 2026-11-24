@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\ChapterTermMapGate;
+use App\Services\StudentLearningBlocker;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -39,7 +40,8 @@ class EnsureChapterTermsMapped
 
         return redirect()
             ->route('student.school-study-plan.show')
-            ->with('error', $status['message'] ?? $this->gate->blockingMessage());
+            ->with('error', $status['message'] ?? $this->gate->blockingMessage())
+            ->with(StudentLearningBlocker::PROMPT_FLASH, true);
     }
 
     private function isExemptRoute(Request $request): bool

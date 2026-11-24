@@ -153,6 +153,7 @@ const staffAssignLabel = computed(() => {
             <button
                 v-if="item.can_redo_wrong"
                 type="button"
+                data-learning-guard="assign"
                 class="rounded bg-orange-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-orange-800 disabled:opacity-50"
                 :disabled="assigningWorksheetId === item.worksheet_id"
                 @click.stop="emit('start-correction', item)"
@@ -162,6 +163,7 @@ const staffAssignLabel = computed(() => {
             <button
                 v-if="item.can_start_revision || (item.is_revision && item.can_assign)"
                 type="button"
+                data-learning-guard="assign"
                 class="rounded bg-indigo-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
                 :disabled="assigningWorksheetId === item.worksheet_id"
                 @click.stop="emit('start-revision', item)"
@@ -171,6 +173,7 @@ const staffAssignLabel = computed(() => {
             <button
                 v-else-if="item.can_assign && !item.is_revision"
                 type="button"
+                data-learning-guard="assign"
                 class="rounded bg-sky-700 px-1.5 py-px text-[9px] font-bold text-white hover:bg-sky-800 disabled:opacity-50"
                 :disabled="assigningWorksheetId === item.worksheet_id"
                 @click.stop="emit('self-assign', item)"
