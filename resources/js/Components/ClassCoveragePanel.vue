@@ -190,7 +190,7 @@ const saveTerms = (items) => {
     router.put(route(termRouteName.value, params), { items }, {
         preserveScroll: true,
         preserveState: true,
-        only: ['classCoverage', 'flash'],
+        only: ['classCoverage', 'flash', 'chapterTermMapGate', 'learningBlocker'],
         onError: (errors) => {
             const first = Object.values(errors ?? {})[0];
             saveError.value = Array.isArray(first) ? first[0] : (first || 'Could not save terms.');
