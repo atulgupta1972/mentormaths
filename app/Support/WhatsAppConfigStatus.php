@@ -81,6 +81,12 @@ class WhatsAppConfigStatus
                 'trigger' => 'Immediately when you assign work',
             ],
             [
+                'key' => 'assignment_completed',
+                'label' => 'Test / practice completed',
+                'enabled' => WhatsAppSender::channelEnabled('assignment_completed'),
+                'trigger' => 'Immediately to the student mentor — score and wrong sums',
+            ],
+            [
                 'key' => 'pending_work',
                 'label' => 'Pending work reminder',
                 'enabled' => WhatsAppSender::channelEnabled('pending_work'),
@@ -119,12 +125,18 @@ Create one Utility template in WhatsApp Manager → Message templates:
 Name: {$name}
 Language: English (match WHATSAPP_TEMPLATE_LANGUAGE, default: en)
 Category: Utility
-Body:
+Header (optional): Progress Report
+Body (variables must not start or end the body):
 Hello from Mentor Maths.
 
 {{1}}
 
 View details: {{2}}
+
+Thank you.
+Variable samples (required for review):
+{{1}} = Daily work reminder for Rahul — 2 pending sets.
+{{2}} = https://mentormaths.in/dashboard
 TXT;
     }
 

@@ -40,6 +40,7 @@ class WhatsAppMessage extends Model
             'progress_summary' => 'Weekly summary',
             'daily_balance' => 'Daily balance',
             'assignment_assigned' => 'Assignment',
+            'assignment_completed' => 'Test completed',
             'pending_work' => 'Pending work',
             'study_plan_status' => 'Study plan status',
             'inbox_reply' => 'Inbox reply',

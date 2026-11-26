@@ -106,6 +106,7 @@ const whatsappEnvHints = computed(() => [
     'WHATSAPP_DAILY_BALANCE=true',
     'WHATSAPP_STUDY_PLAN_STATUS=true',
     'WHATSAPP_ASSIGNMENT_ASSIGNED=true',
+    'WHATSAPP_ASSIGNMENT_COMPLETED=true',
     'WHATSAPP_PENDING_WORK=true',
     '',
     '# Test: php artisan whatsapp:test 9876543210',

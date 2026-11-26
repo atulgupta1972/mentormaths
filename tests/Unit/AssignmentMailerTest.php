@@ -137,7 +137,7 @@ class AssignmentMailerTest extends TestCase
             return $mail->hasTo('student@example.com')
                 && $mail->hasCc('admin@mentormaths.in')
                 && $mail->summary['attempt_number'] === 1
-                && $mail->summary['score_label'] === '3/5';
+                && $mail->summary['score_label'] === '60% (3/5)';
         });
         Mail::assertSentCount(1);
     }
@@ -158,7 +158,7 @@ class AssignmentMailerTest extends TestCase
         Mail::assertSent(AssignmentCompleted::class, function (AssignmentCompleted $mail) {
             return $mail->hasTo('admin@mentormaths.in')
                 && $mail->summary['attempt_number'] === 1
-                && $mail->summary['score_label'] === '3/5';
+                && $mail->summary['score_label'] === '60% (3/5)';
         });
         Mail::assertSentCount(1);
     }

@@ -23,15 +23,7 @@ class AssignmentMailer
         $student = $attempt->assignment->enrollment->student;
 
         if (! $student) {
-            return ['sent' => false, 'email' => null, 'error' => 'no_student'];
-        }
-
-        $studentEmail = self::resolveStudentEmail($student);
-        $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
-        $mentorEmail = AccessCodeMailer::resolveMentorEmail($student);
-
-        if (! $studentEmail && ! $adminEmail && ! $mentorEmail) {
-            return ['sent' => false, 'email' => null, 'error' => 'no_email'];
+            return ['sent' => false, 'email' => null, 'error' => 'no_student', 'whatsapp' => null];
         }
 
         $relations = [
@@ -44,6 +36,32 @@ class AssignmentMailer
         ];
 
         $summary = AttemptResultSummary::forAdmin($attempt->fresh($relations));
+
+        try {
+            $whatsapp = AttemptCompletionWhatsAppMailer::sendCompleted($student, $summary);
+        } catch (\Throwable $e) {
+            Log::error('Failed to send completion WhatsApp.', [
+                'attempt_id' => $attempt->id,
+                'student_id' => $student->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $whatsapp = [
+                'sent_count' => 0,
+                'failed_count' => 1,
+                'skipped_count' => 0,
+                'results' => [],
+                'error' => 'send_failed',
+            ];
+        }
+
+        $studentEmail = self::resolveStudentEmail($student);
+        $adminEmail = RegistrationMailer::resolveAdminNotifyEmail();
+        $mentorEmail = AccessCodeMailer::resolveMentorEmail($student);
+
+        if (! $studentEmail && ! $adminEmail && ! $mentorEmail) {
+            return ['sent' => false, 'email' => null, 'error' => 'no_email', 'whatsapp' => $whatsapp];
+        }
 
         // Mentor/teacher primary when available; always CC admin; include student when mentor is To.
         if ($mentorEmail) {
@@ -62,7 +80,7 @@ class AssignmentMailer
         }
 
         if (! $to) {
-            return ['sent' => false, 'email' => null, 'error' => 'no_email'];
+            return ['sent' => false, 'email' => null, 'error' => 'no_email', 'whatsapp' => $whatsapp];
         }
 
         try {
@@ -74,7 +92,7 @@ class AssignmentMailer
 
             $pending->send(new AssignmentCompleted($student, $summary));
 
-            return ['sent' => true, 'email' => $to, 'error' => null];
+            return ['sent' => true, 'email' => $to, 'error' => null, 'whatsapp' => $whatsapp];
         } catch (\Throwable $e) {
             Log::error('Failed to send completion email.', [
                 'attempt_id' => $attempt->id,
@@ -84,7 +102,7 @@ class AssignmentMailer
                 'error' => $e->getMessage(),
             ]);
 
-            return ['sent' => false, 'email' => $to, 'error' => 'send_failed'];
+            return ['sent' => false, 'email' => $to, 'error' => 'send_failed', 'whatsapp' => $whatsapp];
         }
     }
 
