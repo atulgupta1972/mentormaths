@@ -124,7 +124,18 @@ const submitBlank = async (variant) => {
         </p>
 
         <p v-if="loading" class="mt-4 text-sm text-sky-800">Building similar sums…</p>
-        <p v-else-if="error" class="mt-4 text-sm text-rose-800">{{ error }}</p>
+        <div v-else-if="error" class="mt-4 space-y-2">
+            <p class="text-sm text-rose-800">{{ error }}</p>
+            <button
+                v-if="canGenerate"
+                type="button"
+                class="rounded-md border border-sky-300 bg-white px-3 py-1.5 text-sm font-medium text-sky-900 hover:bg-sky-50 disabled:opacity-60"
+                :disabled="loading"
+                @click="load"
+            >
+                Try again
+            </button>
+        </div>
         <p v-else-if="!canGenerate && !hasVariants" class="mt-4 text-sm text-sky-800">
             Similar practice is not available on this server yet.
         </p>

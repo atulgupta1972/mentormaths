@@ -302,36 +302,51 @@ class SimilarPracticeService
      */
     private function normalizeVariants(array $payload, array $sources): array
     {
-        $raw = $payload['variants'] ?? $payload['questions'] ?? [];
+        $raw = $payload['variants'] ?? $payload['questions'] ?? $payload['items'] ?? [];
 
         if (! is_array($raw) || $raw === []) {
+            Log::warning('Similar practice AI payload missing variants.', [
+                'keys' => array_keys($payload),
+            ]);
+
             throw new InvalidArgumentException('AI did not return any similar practice questions.');
         }
 
         $bySourceId = collect($sources)->keyBy('question_id');
+        $bySourceNumber = collect($sources)->keyBy('number');
         $normalized = [];
+        $usedSourceIds = [];
 
-        foreach ($raw as $variant) {
+        foreach (array_values($raw) as $index => $variant) {
             if (! is_array($variant)) {
                 continue;
             }
 
-            $sourceId = (int) ($variant['source_question_id'] ?? 0);
-            $source = $bySourceId->get($sourceId);
+            $source = $this->resolveSourceForVariant($variant, $index, $bySourceId, $bySourceNumber, $sources, $usedSourceIds);
 
             if (! $source) {
                 continue;
             }
 
+            $sourceId = (int) $source['question_id'];
+            $usedSourceIds[$sourceId] = true;
+
             $type = strtolower((string) ($variant['type'] ?? ''));
 
             if ($type === '') {
-                $type = ! empty($variant['options']) || isset($variant['correct_index'])
+                $type = ! empty($variant['options']) || isset($variant['correct_index']) || isset($variant['correct_option'])
                     ? Question::TYPE_MCQ
                     : Question::TYPE_FILL_IN_BLANK;
-            } elseif ($type === 'fill_in_blank') {
+            } elseif (in_array($type, ['fill_in_blank', 'fill-in-blank', 'fib', 'blank'], true)) {
                 $type = Question::TYPE_FILL_IN_BLANK;
             } else {
+                $type = Question::TYPE_MCQ;
+            }
+
+            // Prefer the source type when the model drifts.
+            if (($source['type'] ?? null) === Question::TYPE_FILL_IN_BLANK) {
+                $type = Question::TYPE_FILL_IN_BLANK;
+            } elseif (($source['type'] ?? null) === Question::TYPE_MCQ) {
                 $type = Question::TYPE_MCQ;
             }
 
@@ -339,8 +354,8 @@ class SimilarPracticeService
                 'source_question_id' => $sourceId,
                 'source_number' => (int) ($variant['source_number'] ?? $source['number']),
                 'type' => $type,
-                'question' => trim((string) ($variant['question'] ?? $variant['question_text'] ?? '')),
-                'method_hint' => trim((string) ($variant['method_hint'] ?? '')),
+                'question' => trim((string) ($variant['question'] ?? $variant['question_text'] ?? $variant['prompt'] ?? '')),
+                'method_hint' => trim((string) ($variant['method_hint'] ?? $variant['hint'] ?? '')),
                 'student_correct' => false,
             ];
 
@@ -350,16 +365,27 @@ class SimilarPracticeService
 
             if ($type === Question::TYPE_FILL_IN_BLANK) {
                 $row['answer_format'] = (string) ($variant['answer_format'] ?? $source['answer_format'] ?? 'text');
-                $row['correct_answer'] = trim((string) ($variant['correct_answer'] ?? ''));
+                $row['correct_answer'] = trim((string) (
+                    $variant['correct_answer']
+                    ?? $variant['answer']
+                    ?? $variant['expected_answer']
+                    ?? ''
+                ));
                 $row['decimal_places'] = $variant['decimal_places'] ?? null;
 
                 if ($row['correct_answer'] === '') {
                     continue;
                 }
             } else {
-                $options = collect($variant['options'] ?? [])
+                $options = collect($variant['options'] ?? $variant['choices'] ?? [])
                     ->values()
-                    ->map(fn ($option) => is_array($option) ? trim((string) ($option['text'] ?? $option['option_text'] ?? '')) : trim((string) $option))
+                    ->map(function ($option) {
+                        if (is_array($option)) {
+                            return trim((string) ($option['text'] ?? $option['option_text'] ?? $option['label'] ?? $option['value'] ?? ''));
+                        }
+
+                        return trim((string) $option);
+                    })
                     ->filter()
                     ->values()
                     ->all();
@@ -369,17 +395,105 @@ class SimilarPracticeService
                 }
 
                 $row['options'] = $options;
-                $row['correct_index'] = max(0, min(count($options) - 1, (int) ($variant['correct_index'] ?? 0)));
+                $row['correct_index'] = $this->resolveCorrectIndex($variant, $options);
             }
 
             $normalized[] = $row;
         }
 
         if ($normalized === []) {
+            Log::warning('Similar practice AI variants could not be parsed.', [
+                'source_ids' => collect($sources)->pluck('question_id')->all(),
+                'raw_count' => count($raw),
+                'sample' => array_slice($raw, 0, 2),
+            ]);
+
             throw new InvalidArgumentException('Could not parse similar practice questions from AI response.');
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param  array<string, mixed>  $variant
+     * @param  \Illuminate\Support\Collection<int|string, array<string, mixed>>  $bySourceId
+     * @param  \Illuminate\Support\Collection<int|string, array<string, mixed>>  $bySourceNumber
+     * @param  list<array<string, mixed>>  $sources
+     * @param  array<int, bool>  $usedSourceIds
+     * @return array<string, mixed>|null
+     */
+    private function resolveSourceForVariant(
+        array $variant,
+        int $index,
+        $bySourceId,
+        $bySourceNumber,
+        array $sources,
+        array $usedSourceIds,
+    ): ?array {
+        $sourceId = (int) ($variant['source_question_id'] ?? $variant['question_id'] ?? 0);
+
+        if ($sourceId > 0 && $bySourceId->has($sourceId) && ! isset($usedSourceIds[$sourceId])) {
+            return $bySourceId->get($sourceId);
+        }
+
+        $sourceNumber = (int) ($variant['source_number'] ?? $variant['number'] ?? 0);
+
+        if ($sourceNumber > 0 && $bySourceNumber->has($sourceNumber)) {
+            $source = $bySourceNumber->get($sourceNumber);
+            $id = (int) ($source['question_id'] ?? 0);
+
+            if ($id > 0 && ! isset($usedSourceIds[$id])) {
+                return $source;
+            }
+        }
+
+        if (isset($sources[$index])) {
+            $source = $sources[$index];
+            $id = (int) ($source['question_id'] ?? 0);
+
+            if ($id > 0 && ! isset($usedSourceIds[$id])) {
+                return $source;
+            }
+        }
+
+        foreach ($sources as $source) {
+            $id = (int) ($source['question_id'] ?? 0);
+
+            if ($id > 0 && ! isset($usedSourceIds[$id])) {
+                return $source;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $variant
+     * @param  list<string>  $options
+     */
+    private function resolveCorrectIndex(array $variant, array $options): int
+    {
+        if (isset($variant['correct_index'])) {
+            return max(0, min(count($options) - 1, (int) $variant['correct_index']));
+        }
+
+        $letter = strtoupper(trim((string) ($variant['correct_option'] ?? $variant['correct_letter'] ?? '')));
+
+        if (strlen($letter) === 1 && $letter >= 'A' && $letter <= 'Z') {
+            return max(0, min(count($options) - 1, ord($letter) - 65));
+        }
+
+        $answer = trim((string) ($variant['correct_answer'] ?? $variant['answer'] ?? ''));
+
+        if ($answer !== '') {
+            foreach ($options as $index => $option) {
+                if (strcasecmp($option, $answer) === 0) {
+                    return $index;
+                }
+            }
+        }
+
+        return 0;
     }
 
     /**

@@ -38,6 +38,42 @@ class SimilarPracticeServiceTest extends TestCase
         $this->assertSame(2, $variants[0]['correct_index']);
     }
 
+    public function test_normalize_variants_falls_back_to_source_number_and_letter(): void
+    {
+        $service = app(SimilarPracticeService::class);
+        $sources = [[
+            'question_id' => 55,
+            'number' => 3,
+            'type' => 'mcq',
+            'question_text' => 'What is 2 x 3?',
+            'options' => ['5', '6', '7', '8'],
+        ]];
+
+        $payload = [
+            'questions' => [[
+                'source_number' => 3,
+                'type' => 'mcq',
+                'question_text' => 'What is 4 x 5?',
+                'options' => [
+                    ['text' => '18'],
+                    ['text' => '20'],
+                    ['text' => '22'],
+                    ['text' => '24'],
+                ],
+                'correct_option' => 'B',
+                'method_hint' => 'Multiply.',
+            ]],
+        ];
+
+        $method = new \ReflectionMethod($service, 'normalizeVariants');
+        $variants = $method->invoke($service, $payload, $sources);
+
+        $this->assertCount(1, $variants);
+        $this->assertSame(55, $variants[0]['source_question_id']);
+        $this->assertSame('What is 4 x 5?', $variants[0]['question']);
+        $this->assertSame(1, $variants[0]['correct_index']);
+    }
+
     public function test_public_variants_hide_answers(): void
     {
         $service = app(SimilarPracticeService::class);
