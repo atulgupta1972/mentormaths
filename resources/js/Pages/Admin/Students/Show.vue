@@ -43,35 +43,57 @@ const props = defineProps({
     mentor: { type: Object, default: null },
 });
 
-const contactFields = computed(() => [
-    {
-        key: 'student',
-        field: 'student_mobile',
-        notifyField: 'notify_student_mobile',
-        label: 'Student mobile',
-        mobile: props.student.student_mobile,
-        notify: props.student.notify_student_mobile,
-    },
-    {
-        key: 'parent1',
-        field: 'parent1_mobile',
-        notifyField: 'notify_parent1_mobile',
-        label: 'Parent 1 mobile',
-        name: props.student.parent1_name,
-        mobile: props.student.parent1_mobile,
-        notify: props.student.notify_parent1_mobile ?? true,
-        required: true,
-    },
-    {
-        key: 'parent2',
-        field: 'parent2_mobile',
-        notifyField: 'notify_parent2_mobile',
-        label: 'Parent 2 mobile',
-        name: props.student.parent2_name || null,
-        mobile: props.student.parent2_mobile,
-        notify: props.student.notify_parent2_mobile,
-    },
-]);
+const contactFields = computed(() => {
+    const rows = [
+        {
+            key: 'student',
+            field: 'student_mobile',
+            notifyField: 'notify_student_mobile',
+            label: 'Student mobile',
+            mobile: props.student.student_mobile,
+            notify: props.student.notify_student_mobile,
+        },
+        {
+            key: 'parent1',
+            field: 'parent1_mobile',
+            notifyField: 'notify_parent1_mobile',
+            label: 'Parent 1 mobile',
+            name: props.student.parent1_name,
+            mobile: props.student.parent1_mobile,
+            notify: props.student.notify_parent1_mobile ?? true,
+            required: true,
+            badge: props.mentor?.type === 'parent1' ? 'Mentor for test WhatsApp' : null,
+        },
+        {
+            key: 'parent2',
+            field: 'parent2_mobile',
+            notifyField: 'notify_parent2_mobile',
+            label: 'Parent 2 mobile',
+            name: props.student.parent2_name || null,
+            mobile: props.student.parent2_mobile,
+            notify: props.student.notify_parent2_mobile,
+            badge: props.mentor?.type === 'parent2' ? 'Mentor for test WhatsApp' : null,
+        },
+    ];
+
+    if (props.student.enrollment_source === 'coaching' || props.mentor?.type === 'coaching_teacher') {
+        rows.push({
+            key: 'mentor',
+            field: 'mentor_mobile',
+            nameField: 'mentor_name',
+            label: 'Mentor mobile (test completion WhatsApp)',
+            name: props.mentor?.name || props.student.coaching_class_teacher?.name || null,
+            mobile: props.mentor?.mobile || props.student.coaching_class_teacher?.mobile || '',
+            notify: true,
+            notifyLocked: true,
+            required: true,
+            badge: 'Coaching mentor — do not use business WhatsApp number',
+            hint: 'Changing this updates the coaching teacher for every student mapped to them.',
+        });
+    }
+
+    return rows;
+});
 
 const defaultYear = computed(() => props.academicYears.find((y) => !y.is_active) || props.academicYears[0]);
 

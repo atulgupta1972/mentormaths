@@ -329,15 +329,50 @@ class StudentController extends Controller
             'notify_student_mobile' => ['sometimes', 'boolean'],
             'notify_parent1_mobile' => ['sometimes', 'boolean'],
             'notify_parent2_mobile' => ['sometimes', 'boolean'],
+            'mentor_mobile' => ['nullable', 'string', 'max:20'],
+            'mentor_name' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $student->update($validated);
+        $contactFields = collect($validated)->except(['mentor_mobile', 'mentor_name'])->all();
+        $student->update($contactFields);
 
         if ($student->user && array_key_exists('student_mobile', $validated)) {
             $student->user->update(['mobile' => $validated['student_mobile']]);
         }
 
-        if (($student->enrollment_source ?: EnrollmentSource::INDIVIDUAL) === EnrollmentSource::INDIVIDUAL) {
+        $source = $student->enrollment_source ?: EnrollmentSource::INDIVIDUAL;
+
+        if ($source === EnrollmentSource::COACHING && array_key_exists('mentor_mobile', $validated) && filled($validated['mentor_mobile'])) {
+            $student->loadMissing('coachingClassTeacher');
+            $teacher = $student->coachingClassTeacher;
+
+            if ($teacher) {
+                $teacher->update([
+                    'mobile' => $validated['mentor_mobile'],
+                    'name' => filled($validated['mentor_name'] ?? null)
+                        ? $validated['mentor_name']
+                        : $teacher->name,
+                ]);
+
+                if (! $teacher->user_id) {
+                    $this->mentorService->linkTeacherToMentorUser($teacher->fresh());
+                } elseif ($teacher->user_id) {
+                    $teacher->loadMissing('user');
+                    $teacher->user?->update(['mobile' => $validated['mentor_mobile']]);
+                }
+
+                Student::query()
+                    ->where('coaching_class_teacher_id', $teacher->id)
+                    ->where('enrollment_source', EnrollmentSource::COACHING)
+                    ->update([
+                        'parent1_name' => $teacher->fresh()->name,
+                        'parent1_mobile' => $validated['mentor_mobile'],
+                        'notify_parent1_mobile' => true,
+                    ]);
+            }
+        }
+
+        if ($source === EnrollmentSource::INDIVIDUAL) {
             $this->mentorService->map($student->fresh(), [
                 'enrollment_source' => EnrollmentSource::INDIVIDUAL,
             ]);

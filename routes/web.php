@@ -40,6 +40,7 @@ use App\Http\Controllers\Admin\ConceptBuilderController;
 use App\Http\Controllers\Admin\TextbookController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\PackUploadController;
+use App\Http\Controllers\Admin\MentorDirectoryController;
 use App\Http\Controllers\Admin\WhatsAppInboxController;
 use App\Http\Controllers\Admin\WhatsAppOutboxController;
 use App\Http\Controllers\Admin\WrittenSheetController;
@@ -285,6 +286,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('whatsapp-inbox.reply');
     Route::get('/whatsapp-outbox', [WhatsAppOutboxController::class, 'index'])
         ->name('whatsapp-outbox.index');
+    Route::get('/mentors', [MentorDirectoryController::class, 'index'])
+        ->name('mentors.index');
+    Route::patch('/mentors/teachers/{teacher}', [MentorDirectoryController::class, 'updateTeacher'])
+        ->name('mentors.teachers.update');
     Route::post('/notifications/send-pending-work', [NotificationSettingsController::class, 'sendPendingWorkAll'])
         ->name('notifications.send-pending-work');
 

@@ -30,6 +30,8 @@ const form = useForm({
     student_mobile: '',
     parent1_mobile: '',
     parent2_mobile: '',
+    mentor_mobile: '',
+    mentor_name: '',
     notify_student_mobile: false,
     notify_parent1_mobile: true,
     notify_parent2_mobile: false,
@@ -39,6 +41,9 @@ const resetFormFromContacts = () => {
     for (const contact of props.contacts) {
         if (contact.field) {
             form[contact.field] = contact.mobile || '';
+        }
+        if (contact.nameField) {
+            form[contact.nameField] = contact.name || '';
         }
         if (contact.notifyField) {
             form[contact.notifyField] = !!contact.notify;
@@ -54,13 +59,14 @@ const contactRows = computed(() =>
         .map((c) => ({
             ...c,
             mobile: editing.value ? form[c.field] : c.mobile,
-            notify: form[c.notifyField],
+            name: editing.value && c.nameField ? form[c.nameField] : c.name,
+            notify: c.notifyLocked ? true : form[c.notifyField],
             whatsappReady: normalizeWhatsAppNumber(editing.value ? form[c.field] : c.mobile),
         })),
 );
 
 const notifyEnabledRows = computed(() =>
-    contactRows.value.filter((c) => c.notify && c.whatsappReady),
+    contactRows.value.filter((c) => c.notify && c.whatsappReady && ! c.notifyLocked),
 );
 
 const allNotifySelected = computed(
@@ -196,13 +202,22 @@ const saveSettings = () => {
                         <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Notify</span>
                         <Checkbox
                             :checked="contact.notify"
-                            :disabled="!contact.whatsappReady"
+                            :disabled="contact.notifyLocked || !contact.whatsappReady || !contact.notifyField"
                             @update:checked="toggleNotify(contact.notifyField, $event, contact.mobile)"
                         />
+                        <span v-if="contact.notifyLocked" class="text-[10px] text-teal-700">Always</span>
                     </div>
                     <div class="min-w-[7rem] flex-1">
                         <p class="text-sm font-medium text-gray-900">{{ contact.label }}</p>
-                        <p v-if="contact.name" class="text-xs text-gray-500">{{ contact.name }}</p>
+                        <TextInput
+                            v-if="editing && contact.nameField"
+                            v-model="form[contact.nameField]"
+                            class="mt-1 block w-full max-w-xs text-sm"
+                            placeholder="Mentor name"
+                        />
+                        <p v-else-if="contact.name" class="text-xs text-gray-500">{{ contact.name }}</p>
+                        <p v-if="contact.badge" class="mt-1 text-xs font-medium text-amber-800">{{ contact.badge }}</p>
+                        <p v-if="contact.hint" class="mt-0.5 text-xs text-gray-500">{{ contact.hint }}</p>
                     </div>
                     <div class="w-full sm:w-48">
                         <TextInput
@@ -239,7 +254,7 @@ const saveSettings = () => {
                 </div>
             </div>
 
-            <InputError :message="form.errors.student_mobile || form.errors.parent1_mobile || form.errors.parent2_mobile" />
+            <InputError :message="form.errors.student_mobile || form.errors.parent1_mobile || form.errors.parent2_mobile || form.errors.mentor_mobile || form.errors.mentor_name" />
             <InputError :message="form.errors.notify_student_mobile || form.errors.notify_parent1_mobile || form.errors.notify_parent2_mobile" />
 
             <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4">

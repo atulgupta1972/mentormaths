@@ -274,6 +274,7 @@ const setupGroup = computed(() => ({
         || route().current('admin.notifications.*')
         || route().current('admin.whatsapp-inbox.*')
         || route().current('admin.whatsapp-outbox.*')
+        || route().current('admin.mentors.*')
         || route().current('admin.coaching-classes.*')
         || route().current('admin.coaching-class-teachers.*'),
     items: [
@@ -289,6 +290,12 @@ const setupGroup = computed(() => ({
                 ? route('admin.coaching-classes.index')
                 : '/admin/coaching-classes',
             active: route().current('admin.coaching-classes.*') || route().current('admin.coaching-class-teachers.*'),
+            show: isAdmin.value,
+        },
+        {
+            label: 'Mentors',
+            href: safeRoute('admin.mentors.index', undefined, '/admin/mentors'),
+            active: route().current('admin.mentors.*'),
             show: isAdmin.value,
         },
         {
