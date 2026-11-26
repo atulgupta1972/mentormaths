@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -16,7 +16,15 @@ const props = defineProps({
         type: Object,
         default: () => ({ status: '', channel: '', q: '' }),
     },
+    can_auto_send: {
+        type: Boolean,
+        default: false,
+    },
 });
+
+const page = usePage();
+const flashSuccess = computed(() => page.props.flash?.success || '');
+const flashWarning = computed(() => page.props.flash?.warning || '');
 
 const status = ref(props.filters.status || '');
 const channel = ref(props.filters.channel || '');
@@ -25,6 +33,11 @@ const selectedId = ref(props.messages?.data?.[0]?.id ?? null);
 
 const rows = computed(() => props.messages?.data ?? []);
 const selected = computed(() => rows.value.find((row) => row.id === selectedId.value) ?? null);
+
+const resendForm = useForm({
+    mobile: '',
+    use_current_mentor: true,
+});
 
 watch(
     () => props.messages?.data,
@@ -40,6 +53,18 @@ watch(
         }
     },
 );
+
+watch(selected, (row) => {
+    if (! row) {
+        resendForm.mobile = '';
+        resendForm.use_current_mentor = true;
+
+        return;
+    }
+
+    resendForm.mobile = row.resend_mobile || row.to_mobile || '';
+    resendForm.use_current_mentor = true;
+}, { immediate: true });
 
 function applyFilters() {
     router.get(route('admin.whatsapp-outbox.index'), {
@@ -62,6 +87,16 @@ function statusClass(value) {
     }
 
     return 'bg-amber-100 text-amber-800';
+}
+
+function resendSelected() {
+    if (! selected.value?.can_resend) {
+        return;
+    }
+
+    resendForm.post(route('admin.whatsapp-outbox.resend', selected.value.id), {
+        preserveScroll: true,
+    });
 }
 </script>
 
@@ -88,6 +123,9 @@ function statusClass(value) {
                         <Link :href="route('admin.whatsapp-inbox.index')" class="font-medium text-teal-700 hover:underline">Open inbox</Link>
                     </p>
                 </div>
+
+                <p v-if="flashSuccess" class="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-800">{{ flashSuccess }}</p>
+                <p v-if="flashWarning" class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{{ flashWarning }}</p>
 
                 <form class="grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-4" @submit.prevent="applyFilters">
                     <div>
@@ -181,6 +219,46 @@ function statusClass(value) {
                                 <p v-if="selected.error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                                     {{ selected.error }}
                                 </p>
+
+                                <div
+                                    v-if="selected.can_resend"
+                                    class="rounded-lg border border-teal-200 bg-teal-50/70 p-3"
+                                >
+                                    <p class="text-sm font-medium text-teal-950">Send again</p>
+                                    <p v-if="selected.resend_uses_current_mentor" class="mt-1 text-xs text-teal-900">
+                                        Mentor mobile was updated — resend will use the current mentor number below.
+                                    </p>
+                                    <p v-else-if="!can_auto_send" class="mt-1 text-xs text-amber-800">
+                                        WhatsApp auto-send is not ready on the server.
+                                    </p>
+                                    <label class="mt-3 block text-xs font-medium uppercase tracking-wide text-teal-800">Mobile</label>
+                                    <input
+                                        v-model="resendForm.mobile"
+                                        type="tel"
+                                        class="mt-1 w-full max-w-xs rounded-md border-gray-300 font-mono text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500"
+                                    />
+                                    <label
+                                        v-if="selected.channel === 'assignment_completed' && selected.student_id"
+                                        class="mt-2 flex items-center gap-2 text-xs text-teal-900"
+                                    >
+                                        <input
+                                            v-model="resendForm.use_current_mentor"
+                                            type="checkbox"
+                                            class="rounded border-gray-300 text-teal-700"
+                                        />
+                                        Prefer current mentor mobile from student profile
+                                    </label>
+                                    <button
+                                        type="button"
+                                        class="mt-3 rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
+                                        :disabled="resendForm.processing || !can_auto_send || !resendForm.mobile"
+                                        @click="resendSelected"
+                                    >
+                                        {{ resendForm.processing ? 'Sending…' : 'Resend WhatsApp' }}
+                                    </button>
+                                    <p v-if="resendForm.errors.mobile" class="mt-2 text-sm text-red-600">{{ resendForm.errors.mobile }}</p>
+                                </div>
+
                                 <pre class="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm text-gray-800">{{ selected.message_body }}</pre>
                                 <p v-if="selected.meta_message_id" class="font-mono text-xs text-gray-500">
                                     Meta id: {{ selected.meta_message_id }}

@@ -286,6 +286,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         ->name('whatsapp-inbox.reply');
     Route::get('/whatsapp-outbox', [WhatsAppOutboxController::class, 'index'])
         ->name('whatsapp-outbox.index');
+    Route::post('/whatsapp-outbox/{message}/resend', [WhatsAppOutboxController::class, 'resend'])
+        ->name('whatsapp-outbox.resend');
     Route::get('/mentors', [MentorDirectoryController::class, 'index'])
         ->name('mentors.index');
     Route::patch('/mentors/teachers/{teacher}', [MentorDirectoryController::class, 'updateTeacher'])

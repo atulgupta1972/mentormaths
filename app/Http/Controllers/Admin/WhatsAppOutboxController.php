@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Student;
 use App\Models\WhatsAppMessage;
+use App\Services\StudentMentorService;
+use App\Support\WhatsApp\WhatsAppSender;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
@@ -11,6 +15,10 @@ use Inertia\Response;
 
 class WhatsAppOutboxController extends Controller
 {
+    public function __construct(
+        private StudentMentorService $mentorService,
+    ) {}
+
     public function index(Request $request): Response
     {
         $validated = $request->validate([
@@ -49,22 +57,33 @@ class WhatsAppOutboxController extends Controller
             $messages = $query
                 ->paginate(40)
                 ->withQueryString()
-                ->through(fn (WhatsAppMessage $message) => [
-                    'id' => $message->id,
-                    'channel' => $message->channel,
-                    'channel_label' => $message->channelLabel(),
-                    'to_mobile' => $message->to_mobile,
-                    'recipient_label' => $message->recipient_label,
-                    'student_id' => $message->student_id,
-                    'student_name' => $message->student?->name,
-                    'message_body' => $message->message_body,
-                    'template_name' => $message->template_name,
-                    'meta_message_id' => $message->meta_message_id,
-                    'status' => $message->status,
-                    'error' => $message->error,
-                    'driver' => $message->driver,
-                    'sent_at' => $message->created_at?->timezone('Asia/Kolkata')->format('d M Y, h:i A'),
-                ]);
+                ->through(function (WhatsAppMessage $message) {
+                    $resendMobile = $this->suggestedResendMobile($message);
+
+                    return [
+                        'id' => $message->id,
+                        'channel' => $message->channel,
+                        'channel_label' => $message->channelLabel(),
+                        'to_mobile' => $message->to_mobile,
+                        'recipient_label' => $message->recipient_label,
+                        'student_id' => $message->student_id,
+                        'student_name' => $message->student?->name,
+                        'message_body' => $message->message_body,
+                        'template_name' => $message->template_name,
+                        'meta_message_id' => $message->meta_message_id,
+                        'status' => $message->status,
+                        'error' => $message->error,
+                        'driver' => $message->driver,
+                        'sent_at' => $message->created_at?->timezone('Asia/Kolkata')->format('d M Y, h:i A'),
+                        'can_resend' => in_array($message->status, [WhatsAppMessage::STATUS_FAILED, WhatsAppMessage::STATUS_SKIPPED], true)
+                            && filled($message->message_body),
+                        'resend_mobile' => $resendMobile,
+                        'resend_uses_current_mentor' => $resendMobile !== null
+                            && $resendMobile !== $message->to_mobile
+                            && $message->channel === 'assignment_completed'
+                            && $message->student_id,
+                    ];
+                });
 
             $channels = WhatsAppMessage::query()
                 ->select('channel')
@@ -87,6 +106,91 @@ class WhatsAppOutboxController extends Controller
                 'channel' => $validated['channel'] ?? '',
                 'q' => $validated['q'] ?? '',
             ],
+            'can_auto_send' => WhatsAppSender::canAutoSend(),
         ]);
+    }
+
+    public function resend(Request $request, WhatsAppMessage $message): RedirectResponse
+    {
+        if (! filled($message->message_body)) {
+            return back()->with('warning', 'This outbox row has no message body to resend.');
+        }
+
+        $validated = $request->validate([
+            'mobile' => ['nullable', 'string', 'max:20'],
+            'use_current_mentor' => ['sometimes', 'boolean'],
+        ]);
+
+        $mobile = filled($validated['mobile'] ?? null)
+            ? $validated['mobile']
+            : null;
+
+        if (! $mobile && $request->boolean('use_current_mentor', true)) {
+            $mobile = $this->suggestedResendMobile($message);
+        }
+
+        $mobile = $mobile ?: $message->to_mobile;
+
+        if (! filled($mobile)) {
+            return back()->with('warning', 'No WhatsApp mobile available to resend.');
+        }
+
+        if (! WhatsAppSender::canAutoSend()) {
+            return back()->with('warning', 'WhatsApp auto-send is not ready on the server.');
+        }
+
+        $label = $message->recipient_label;
+        if (
+            $message->channel === 'assignment_completed'
+            && $message->student_id
+            && $request->boolean('use_current_mentor', true)
+        ) {
+            $student = Student::query()->find($message->student_id);
+            if ($student) {
+                $mentor = $this->mentorService->resolve($student);
+                if (filled($mentor['name'] ?? null)) {
+                    $label = 'Mentor ('.$mentor['name'].')';
+                }
+            }
+        }
+
+        $result = WhatsAppSender::sendText(
+            (string) $message->channel,
+            $mobile,
+            (string) $message->message_body,
+            [
+                'recipient_label' => $label,
+                'student_id' => $message->student_id,
+                'dashboard_url' => config('app.url'),
+            ],
+        );
+
+        if ($result['sent'] ?? false) {
+            return back()->with('success', 'WhatsApp resent to '.$mobile.'.');
+        }
+
+        $error = is_string($result['error'] ?? null) && $result['error'] !== ''
+            ? ' '.$result['error']
+            : '';
+
+        return back()->with('warning', 'WhatsApp resend failed.'.$error);
+    }
+
+    private function suggestedResendMobile(WhatsAppMessage $message): ?string
+    {
+        if ($message->channel === 'assignment_completed' && $message->student_id) {
+            $student = $message->relationLoaded('student')
+                ? $message->student
+                : Student::query()->find($message->student_id);
+
+            if ($student) {
+                $mentorMobile = $this->mentorService->resolve($student)['mobile'] ?? null;
+                if (filled($mentorMobile)) {
+                    return (string) $mentorMobile;
+                }
+            }
+        }
+
+        return filled($message->to_mobile) ? (string) $message->to_mobile : null;
     }
 }
