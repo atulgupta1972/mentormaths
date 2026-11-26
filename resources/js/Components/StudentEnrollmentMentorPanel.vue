@@ -1,7 +1,8 @@
 <script setup>
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import { useForm } from '@inertiajs/vue3';
+import TextInput from '@/Components/TextInput.vue';
+import { Link, useForm } from '@inertiajs/vue3';
 import { computed, watch } from 'vue';
 
 const props = defineProps({
@@ -15,6 +16,8 @@ const form = useForm({
     enrollment_source: props.student.enrollment_source || 'individual',
     coaching_class_id: props.student.coaching_class_id || '',
     coaching_class_teacher_id: props.student.coaching_class_teacher_id || '',
+    mentor_name: props.mentor?.name || '',
+    mentor_mobile: props.mentor?.mobile || '',
 });
 
 const teachersForClass = computed(() => {
@@ -23,17 +26,40 @@ const teachersForClass = computed(() => {
     return (row?.teachers || []).filter((t) => t.is_active || Number(t.id) === Number(form.coaching_class_teacher_id));
 });
 
+const selectedTeacher = computed(() =>
+    teachersForClass.value.find((t) => Number(t.id) === Number(form.coaching_class_teacher_id)) || null,
+);
+
+const syncTeacherFields = (teacher) => {
+    form.mentor_name = teacher?.name || '';
+    form.mentor_mobile = teacher?.mobile || '';
+};
+
 watch(() => form.coaching_class_id, () => {
     const stillValid = teachersForClass.value.some((t) => Number(t.id) === Number(form.coaching_class_teacher_id));
     if (!stillValid) {
         form.coaching_class_teacher_id = '';
+        syncTeacherFields(null);
     }
+});
+
+watch(() => form.coaching_class_teacher_id, (teacherId) => {
+    if (! teacherId) {
+        syncTeacherFields(null);
+
+        return;
+    }
+
+    const teacher = teachersForClass.value.find((t) => Number(t.id) === Number(teacherId));
+    syncTeacherFields(teacher);
 });
 
 watch(() => form.enrollment_source, (source) => {
     if (source !== 'coaching') {
         form.coaching_class_id = '';
         form.coaching_class_teacher_id = '';
+        form.mentor_name = '';
+        form.mentor_mobile = '';
     }
 });
 
@@ -46,11 +72,21 @@ const submit = () => {
 
 <template>
     <div class="overflow-hidden rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
-        <h3 class="font-medium text-gray-900">Enrollment & mentor</h3>
-        <p class="mt-1 text-sm text-gray-600">
-            Individual → parent with Notify tick is the mentor.
-            Coaching → pick class and teacher (mentor). School mapping comes later.
-        </p>
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h3 class="font-medium text-gray-900">Enrollment & mentor</h3>
+                <p class="mt-1 text-sm text-gray-600">
+                    Individual → parent with Notify tick is the mentor.
+                    Coaching → pick class and teacher, then edit their WhatsApp number below.
+                </p>
+            </div>
+            <Link
+                :href="route('admin.mentors.index')"
+                class="text-sm font-medium text-teal-700 hover:underline"
+            >
+                Edit all mentors →
+            </Link>
+        </div>
 
         <div
             v-if="mentor"
@@ -129,12 +165,36 @@ const submit = () => {
                         </option>
                     </select>
                 </div>
+
+                <div
+                    v-if="selectedTeacher"
+                    class="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50/70 p-4"
+                >
+                    <p class="text-sm font-medium text-amber-950">Edit this teacher’s WhatsApp number</p>
+                    <p class="mt-1 text-xs text-amber-900">
+                        Use their personal WhatsApp — not the Mentor Maths business number.
+                        Saving updates this teacher for every student mapped to them.
+                    </p>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <InputLabel value="Teacher name" />
+                            <TextInput v-model="form.mentor_name" class="mt-1 block w-full" required />
+                        </div>
+                        <div>
+                            <InputLabel value="Teacher WhatsApp mobile *" />
+                            <TextInput v-model="form.mentor_mobile" type="tel" class="mt-1 block w-full font-mono" required />
+                        </div>
+                    </div>
+                </div>
             </template>
 
             <div class="sm:col-span-2">
                 <PrimaryButton :disabled="form.processing">Save enrollment & mentor</PrimaryButton>
-                <p v-if="form.errors.enrollment_source || form.errors.coaching_class_id || form.errors.coaching_class_teacher_id" class="mt-2 text-sm text-rose-700">
-                    {{ form.errors.enrollment_source || form.errors.coaching_class_id || form.errors.coaching_class_teacher_id }}
+                <p
+                    v-if="form.errors.enrollment_source || form.errors.coaching_class_id || form.errors.coaching_class_teacher_id || form.errors.mentor_mobile || form.errors.mentor_name"
+                    class="mt-2 text-sm text-rose-700"
+                >
+                    {{ form.errors.enrollment_source || form.errors.coaching_class_id || form.errors.coaching_class_teacher_id || form.errors.mentor_mobile || form.errors.mentor_name }}
                 </p>
             </div>
         </form>

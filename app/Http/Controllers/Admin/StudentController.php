@@ -208,11 +208,49 @@ class StudentController extends Controller
                 'integer',
                 Rule::exists('coaching_class_teachers', 'id'),
             ],
+            'mentor_name' => ['nullable', 'string', 'max:120'],
+            'mentor_mobile' => [
+                Rule::requiredIf(fn () => $request->input('enrollment_source') === EnrollmentSource::COACHING),
+                'nullable',
+                'string',
+                'max:20',
+            ],
         ]);
 
         $check = $this->mentorService->validateMappingPayload($validated, $student);
         if (! $check['ok']) {
             return back()->withErrors(['enrollment_source' => $check['message']]);
+        }
+
+        if (
+            ($validated['enrollment_source'] ?? null) === EnrollmentSource::COACHING
+            && filled($validated['coaching_class_teacher_id'] ?? null)
+            && filled($validated['mentor_mobile'] ?? null)
+        ) {
+            $teacher = \App\Models\CoachingClassTeacher::query()->find($validated['coaching_class_teacher_id']);
+
+            if ($teacher) {
+                $teacher->update([
+                    'name' => filled($validated['mentor_name'] ?? null) ? $validated['mentor_name'] : $teacher->name,
+                    'mobile' => $validated['mentor_mobile'],
+                ]);
+
+                if (! $teacher->user_id) {
+                    $this->mentorService->linkTeacherToMentorUser($teacher->fresh());
+                } elseif ($teacher->user_id) {
+                    $teacher->loadMissing('user');
+                    $teacher->user?->update(['mobile' => $validated['mentor_mobile']]);
+                }
+
+                Student::query()
+                    ->where('coaching_class_teacher_id', $teacher->id)
+                    ->where('enrollment_source', EnrollmentSource::COACHING)
+                    ->update([
+                        'parent1_name' => $teacher->fresh()->name,
+                        'parent1_mobile' => $validated['mentor_mobile'],
+                        'notify_parent1_mobile' => true,
+                    ]);
+            }
         }
 
         $this->mentorService->map($student, $validated);
