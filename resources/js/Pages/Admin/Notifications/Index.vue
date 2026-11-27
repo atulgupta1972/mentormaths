@@ -90,6 +90,7 @@ const whatsappEnvHints = computed(() => [
     'WHATSAPP_TEMPLATES_ENABLED=true',
     'WHATSAPP_TEMPLATE_NAME=mentor_maths_update',
     'WHATSAPP_TEMPLATE_LANGUAGE=en',
+    'WHATSAPP_TEMPLATE_ASSIGNMENT_COMPLETED=mentor_maths_completed',
     '',
     '# Schedule (IST, server cron required)',
     'WHATSAPP_WEEKLY_SUMMARY_ENABLED=true',

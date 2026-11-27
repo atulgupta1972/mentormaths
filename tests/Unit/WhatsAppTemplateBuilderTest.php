@@ -89,4 +89,28 @@ class WhatsAppTemplateBuilderTest extends TestCase
 
         $this->assertFalse(WhatsAppTemplateBuilder::shouldUseTemplate());
     }
+
+    public function test_attempt_completion_template_uses_nine_body_parameters(): void
+    {
+        config([
+            'whatsapp.templates.names.assignment_completed' => 'mentor_maths_completed',
+            'whatsapp.templates.language' => 'en',
+        ]);
+
+        $template = WhatsAppTemplateBuilder::forAttemptCompletion([
+            'VISHVESH finished Test BF7223.',
+            'Achiever',
+            'Chapter: Operations with Integers',
+            '80% (12/15)',
+            'First try correct: 12 · After help: 0 · Gave up: 2',
+            'Q2 · Rules of signs — Not correct on first try',
+            'Q9 · Word problems — Gave up',
+            'Q11 · Word problems — Gave up',
+            'https://mentormaths.in/dashboard',
+        ]);
+
+        $this->assertSame('mentor_maths_completed', $template['name']);
+        $this->assertCount(9, $template['components'][0]['parameters']);
+        $this->assertSame('Achiever', $template['components'][0]['parameters'][1]['text']);
+    }
 }

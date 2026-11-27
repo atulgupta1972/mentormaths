@@ -41,11 +41,14 @@ return [
         // Utility template whose body already contains the paragraph breaks.
         // Each of the 10 variables is one line. See mentor_maths_progress.
         'progress_report_name' => env('WHATSAPP_TEMPLATE_PROGRESS_REPORT', 'mentor_maths_progress'),
+        // Test/practice completion — 9 body variables; line breaks live in the template.
+        'completion_name' => env('WHATSAPP_TEMPLATE_ASSIGNMENT_COMPLETED', 'mentor_maths_completed'),
         'names' => [
             'progress_summary' => env('WHATSAPP_TEMPLATE_PROGRESS_SUMMARY', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
             'daily_balance' => env('WHATSAPP_TEMPLATE_DAILY_BALANCE', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
             'assignment_assigned' => env('WHATSAPP_TEMPLATE_ASSIGNMENT', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
-            'assignment_completed' => env('WHATSAPP_TEMPLATE_ASSIGNMENT_COMPLETED', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
+            // Do not fall back to mentor_maths_work / assignment template — that flattens the score report.
+            'assignment_completed' => env('WHATSAPP_TEMPLATE_ASSIGNMENT_COMPLETED', 'mentor_maths_completed'),
             'pending_work' => env('WHATSAPP_TEMPLATE_PENDING_WORK', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
             'study_plan_status' => env('WHATSAPP_TEMPLATE_STUDY_PLAN_STATUS', env('WHATSAPP_TEMPLATE_NAME', 'mentor_maths_update')),
         ],

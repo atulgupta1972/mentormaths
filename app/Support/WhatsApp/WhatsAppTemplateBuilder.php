@@ -41,8 +41,39 @@ class WhatsAppTemplateBuilder
      */
     public static function forProgressReport(array $parameters): array
     {
+        return self::namedBodyParameters(
+            (string) config('whatsapp.templates.progress_report_name', 'mentor_maths_progress'),
+            $parameters,
+            10,
+        );
+    }
+
+    /**
+     * Nine single-line values for mentor_maths_completed. Line breaks live in that template.
+     *
+     * @param  list<string>  $parameters
+     * @return array{name: string, language: string, components: list<array<string, mixed>>}
+     */
+    public static function forAttemptCompletion(array $parameters): array
+    {
+        return self::namedBodyParameters(
+            (string) config(
+                'whatsapp.templates.names.assignment_completed',
+                config('whatsapp.templates.completion_name', 'mentor_maths_completed'),
+            ),
+            $parameters,
+            9,
+        );
+    }
+
+    /**
+     * @param  list<string>  $parameters
+     * @return array{name: string, language: string, components: list<array<string, mixed>>}
+     */
+    private static function namedBodyParameters(string $name, array $parameters, int $count): array
+    {
         $language = (string) config('whatsapp.templates.language', 'en');
-        $values = array_slice(array_pad(array_values($parameters), 10, '—'), 0, 10);
+        $values = array_slice(array_pad(array_values($parameters), $count, '—'), 0, $count);
         $bodyParameters = [];
 
         foreach ($values as $value) {
@@ -53,7 +84,7 @@ class WhatsAppTemplateBuilder
         }
 
         return [
-            'name' => (string) config('whatsapp.templates.progress_report_name', 'mentor_maths_progress'),
+            'name' => $name,
             'language' => $language,
             'components' => [
                 [
