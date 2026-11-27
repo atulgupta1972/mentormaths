@@ -12,7 +12,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import {
     defaultFillBlankRow,
     fillBlankFormats,
-    parseFillBlankJson,
+    parseQuestionPack,
     rowsFromImportData,
 } from '@/utils/fillBlankImport';
 import { displayTopicName, normalizeTopicName } from '@/utils/topicName';
@@ -35,6 +35,10 @@ const props = defineProps({
     bookOptions: { type: Array, default: () => [] },
     selectedTextbookChapterId: { type: [Number, String, null], default: null },
     selectedMasterProfile: { type: String, default: null },
+    pdfExtracted: { type: Boolean, default: false },
+    pdfFileName: { type: String, default: '' },
+    extractedPreview: { type: String, default: '' },
+    extractedQuestionCount: { type: Number, default: 0 },
 });
 
 const page = usePage();
@@ -129,6 +133,16 @@ const zipImportForm = useForm({
     syllabus_chapter_id: '',
     syllabus_topic_id: '',
     keep_indices: [],
+});
+
+const pdfInput = ref(null);
+const pdfResultBox = ref(null);
+const selectedPdfName = ref('');
+const pdfForm = useForm({
+    syllabus_chapter_id: '',
+    syllabus_topic_id: '',
+    scope: 'chapter',
+    pdf: null,
 });
 
 const refreshZipPreviewCounts = () => {
@@ -351,8 +365,85 @@ const resolveTopicIdForRow = (row) => {
         return null;
     }
 
-    const match = (props.chapterTopics || []).find((topic) => normalizeTopicName(topic.name) === name);
-    return match?.id ?? null;
+    const topics = props.chapterTopics || [];
+    const exact = topics.find((topic) => normalizeTopicName(topic.name) === name);
+    if (exact) {
+        return exact.id;
+    }
+
+    const partial = topics.find((topic) => {
+        const hay = normalizeTopicName(topic.name);
+
+        return hay.length > 3 && (hay.includes(name) || name.includes(hay));
+    });
+
+    return partial?.id ?? null;
+};
+
+const onRowTopicChange = (row) => {
+    const topic = (props.chapterTopics || []).find((item) => String(item.id) === String(row.syllabus_topic_id));
+    if (topic) {
+        row.topic_name = topic.name;
+    }
+};
+
+const markCorrectOption = (row, optIndex) => {
+    row.options = (row.options || []).map((option, index) => ({
+        ...option,
+        is_correct: index === optIndex,
+    }));
+};
+
+const onKindChange = (row) => {
+    if (row.kind === 'mcq' && (!row.options || row.options.filter((option) => option.option_text).length < 2)) {
+        row.options = [
+            { option_text: '', is_correct: true },
+            { option_text: '', is_correct: false },
+            { option_text: '', is_correct: false },
+            { option_text: '', is_correct: false },
+        ];
+    }
+
+    if (row.kind === 'fill_in_blank' && !String(row.question_text || '').includes('____')) {
+        row.question_text = `${String(row.question_text || '').replace(/[?.\s]+$/u, '')} ____`;
+    }
+};
+
+const onPdfSelected = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    pdfForm.pdf = file;
+    selectedPdfName.value = file?.name ?? '';
+    pdfForm.clearErrors();
+};
+
+const extractPdf = () => {
+    if (!chapterFilter.value) {
+        pdfForm.setError('syllabus_chapter_id', 'Select a chapter first.');
+        return;
+    }
+
+    if (isTopicScope.value && !selectedTopic.value) {
+        pdfForm.setError('syllabus_topic_id', 'Select a topic first, or switch to Whole chapter.');
+        return;
+    }
+
+    if (!pdfForm.pdf) {
+        pdfForm.setError('pdf', 'Choose a PDF file first.');
+        return;
+    }
+
+    pdfForm.syllabus_chapter_id = chapterFilter.value;
+    pdfForm.syllabus_topic_id = isTopicScope.value ? selectedTopic.value : '';
+    pdfForm.scope = scopeMode.value;
+    pdfForm.post(route('admin.questions.extract-pdf-fill-blank'), {
+        forceFormData: true,
+        preserveScroll: false,
+        onSuccess: () => {
+            nextTick(() => {
+                pdfResultBox.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        },
+    });
 };
 
 const assignTopicsToRows = (parsedRows) => parsedRows.map((row) => ({
@@ -453,7 +544,7 @@ const loadPreview = () => {
     }
 
     try {
-        const parsed = parseFillBlankJson(jsonInput.value);
+        const parsed = parseQuestionPack(jsonInput.value);
         rows.value = isChapterScope.value
             ? rowsFromImportData(assignTopicsToRows(parsed))
             : rowsFromImportData(parsed);
@@ -533,6 +624,52 @@ const saveQuestions = () => {
 
     if (!rows.value.length) {
         saveForm.setError('rows', 'Add at least one question.');
+        return;
+    }
+
+    const hasMcq = rows.value.some((row) => row.kind === 'mcq');
+
+    if (hasMcq) {
+        if (!chapterFilter.value) {
+            saveForm.setError('syllabus_chapter_id', 'Select a chapter before saving.');
+            return;
+        }
+
+        if (isTopicScope.value && !selectedTopic.value) {
+            saveForm.setError('syllabus_topic_id', 'Select a topic before saving.');
+            return;
+        }
+
+        if (isChapterScope.value) {
+            const missingTopic = rows.value.some((row) => !resolveTopicIdForRow(row));
+            if (missingTopic) {
+                saveTopicError.value = 'Each question must have a topic that matches this chapter.';
+                return;
+            }
+        }
+
+        saveForm.syllabus_chapter_id = chapterFilter.value;
+        saveForm.syllabus_topic_id = isTopicScope.value ? selectedTopic.value : '';
+        saveForm.rows = rows.value.map((row) => ({
+            kind: row.kind === 'mcq' ? 'mcq' : 'fill_in_blank',
+            question_text: row.question_text,
+            topic_name: row.topic_name,
+            syllabus_topic_id: isChapterScope.value ? resolveTopicIdForRow(row) : '',
+            answer_format: row.answer_format,
+            correct_answer: row.correct_answer,
+            decimal_places: row.decimal_places,
+            explanation: row.explanation,
+            method_hint: row.method_hint,
+            difficulty: row.difficulty,
+            options: row.kind === 'mcq' ? (row.options || []) : [],
+        }));
+        saveForm.post(route('admin.questions.bulk-store-extracted'), {
+            preserveScroll: true,
+            onError: () => {
+                step3Ref.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            },
+        });
+
         return;
     }
 
@@ -659,6 +796,67 @@ onMounted(() => {
                         </select>
                         <p v-if="chapterTopics.length === 0" class="mt-1 text-xs text-amber-700">No topics in this chapter.</p>
                     </div>
+                </div>
+
+                <div v-if="chapterFilter" class="rounded-lg border-2 border-emerald-400 bg-white p-6 shadow-sm">
+                    <h3 class="font-semibold text-emerald-950">Upload a chapter PDF</h3>
+                    <p class="mt-1 text-sm text-gray-700">
+                        Use this for any chapter worksheet. Every question is extracted as a fill-in-the-blank.
+                        A question becomes an MCQ only when one blank cannot carry it (a graph with nothing to check, a reason for each statement, or a classification).
+                    </p>
+                    <p v-if="isTopicScope" class="mt-2 text-xs text-emerald-800">
+                        These questions will be saved on the topic selected above. Switch to Whole chapter to place each question on its own topic.
+                    </p>
+                    <input
+                        ref="pdfInput"
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        class="mt-4 block w-full max-w-lg text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-emerald-800"
+                        @change="onPdfSelected"
+                    />
+                    <p v-if="selectedPdfName" class="mt-2 text-sm font-medium text-gray-700">Selected: {{ selectedPdfName }}</p>
+                    <InputError class="mt-2" :message="pdfForm.errors.pdf" />
+                    <InputError class="mt-1" :message="pdfForm.errors.syllabus_chapter_id" />
+                    <InputError class="mt-1" :message="pdfForm.errors.syllabus_topic_id" />
+                    <p class="mt-2 text-xs text-gray-500">Text-based PDF (not a photo scan). Max 20 MB.</p>
+                    <PrimaryButton
+                        type="button"
+                        class="mt-4"
+                        :disabled="pdfForm.processing || !pdfForm.pdf"
+                        @click="extractPdf"
+                    >
+                        {{ pdfForm.processing ? 'Reading PDF…' : 'Extract as fill in the blanks' }}
+                    </PrimaryButton>
+                </div>
+
+                <div
+                    v-if="pdfExtracted"
+                    ref="pdfResultBox"
+                    class="rounded-lg border border-indigo-200 bg-indigo-50 p-6 shadow-sm"
+                >
+                    <h3 class="font-medium text-indigo-950">PDF read — copy this prompt to Cursor</h3>
+                    <p class="mt-1 text-sm text-indigo-950">
+                        <span v-if="pdfFileName">{{ pdfFileName }}. </span>
+                        <span v-if="extractedQuestionCount">{{ extractedQuestionCount }} question(s) found. </span>
+                        Paste the prompt into Cursor chat. When the JSON comes back, paste it in Step 2. The preview should contain the same number of questions.
+                    </p>
+                    <div class="mt-4 flex flex-wrap items-center gap-3">
+                        <SecondaryButton type="button" @click="copyPrompt">
+                            {{ copied ? 'Copied!' : 'Copy prompt' }}
+                        </SecondaryButton>
+                    </div>
+                    <p v-if="copyError" class="mt-2 text-sm text-red-700">{{ copyError }}</p>
+                    <textarea
+                        ref="promptBox"
+                        readonly
+                        rows="14"
+                        class="mt-3 block w-full rounded-md border-indigo-200 bg-white font-mono text-xs text-gray-800"
+                        :value="activePrompt"
+                        @focus="selectPrompt"
+                    />
+                    <p v-if="extractedPreview" class="mt-3 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md bg-white p-3 font-mono text-xs text-gray-600">
+                        {{ extractedPreview }}
+                    </p>
                 </div>
 
                 <div v-if="chapterFilter" class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
@@ -816,7 +1014,7 @@ onMounted(() => {
                     No topics in this chapter — add topics in syllabus setup first.
                 </p>
 
-                <div v-if="hasChapterPrompt" class="rounded-lg border border-indigo-100 bg-indigo-50 p-6">
+                <div v-if="hasChapterPrompt && !pdfExtracted" class="rounded-lg border border-indigo-100 bg-indigo-50 p-6">
                     <h3 class="font-medium text-indigo-900">Step 1 — Chapter prompt → Cursor</h3>
                     <p class="mt-1 text-sm text-indigo-950">
                         Copy this prompt to Cursor. Each question in the JSON must include a <strong>topic</strong> field.
@@ -841,7 +1039,7 @@ onMounted(() => {
                     />
                 </div>
 
-                <div v-if="isTopicScope && topic" class="rounded-lg border border-indigo-100 bg-indigo-50 p-6">
+                <div v-if="isTopicScope && topic && !pdfExtracted" class="rounded-lg border border-indigo-100 bg-indigo-50 p-6">
                     <h3 class="font-medium text-indigo-900">Step 1 — Cursor prompt</h3>
                     <p class="mt-1 text-sm text-indigo-950">
                         Pick Learner / Achiever / Expert to auto-fill counts, then copy the prompt to Cursor.
@@ -913,10 +1111,11 @@ onMounted(() => {
                     </div>
                 </div>
 
-                <div v-if="isChapterScope && hasChapterPrompt" class="rounded-lg bg-white p-6 shadow-sm">
+                <div v-if="isChapterScope && (hasChapterPrompt || pdfExtracted)" class="rounded-lg bg-white p-6 shadow-sm">
                     <h3 class="font-medium text-gray-900">Step 2 — Paste JSON from Cursor</h3>
                     <p class="mt-1 text-sm text-gray-600">
-                        Paste JSON from Cursor — each question needs a <strong>topic</strong> name matching this chapter.
+                        Paste the JSON. Fill-in-the-blank items stay blanks. Items marked MCQ are saved as MCQs.
+                        <span v-if="extractedQuestionCount"> Expect {{ extractedQuestionCount }} question(s).</span>
                     </p>
                     <textarea
                         v-model="jsonInput"
@@ -935,6 +1134,10 @@ onMounted(() => {
 
                 <div v-if="isTopicScope && topic" class="rounded-lg bg-white p-6 shadow-sm">
                     <h3 class="font-medium text-gray-900">Step 2 — Paste JSON from Cursor</h3>
+                    <p v-if="pdfExtracted" class="mt-1 text-sm text-gray-600">
+                        Paste the JSON from the PDF prompt. Fill-in-the-blank items stay blanks. Items marked MCQ are saved as MCQs.
+                        <span v-if="extractedQuestionCount"> Expect {{ extractedQuestionCount }} question(s).</span>
+                    </p>
                     <textarea
                         v-model="jsonInput"
                         rows="8"
@@ -961,23 +1164,65 @@ onMounted(() => {
                             :key="index"
                             class="rounded-lg border border-gray-200 p-4"
                         >
-                            <div class="flex items-start justify-between gap-3">
-                                <p class="text-sm font-medium text-gray-700">Question {{ index + 1 }}</p>
-                                <DangerButton type="button" class="!px-2 !py-1 text-xs" @click="removeRow(index)">
-                                    Remove
-                                </DangerButton>
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <p class="text-sm font-medium text-gray-700">
+                                    Question {{ index + 1 }}
+                                    <span v-if="row.source_label" class="font-normal text-gray-400">· {{ row.source_label }}</span>
+                                </p>
+                                <div class="flex items-center gap-2">
+                                    <select v-model="row.kind" class="rounded-md border-gray-300 text-xs" @change="onKindChange(row)">
+                                        <option value="fill_in_blank">Fill in the blank</option>
+                                        <option value="mcq">MCQ</option>
+                                    </select>
+                                    <DangerButton type="button" class="!px-2 !py-1 text-xs" @click="removeRow(index)">
+                                        Remove
+                                    </DangerButton>
+                                </div>
                             </div>
 
                             <div class="mt-3 grid gap-3 lg:grid-cols-2">
                                 <div v-if="isChapterScope" class="lg:col-span-2">
                                     <InputLabel value="Topic" />
-                                    <input v-model="row.topic_name" type="text" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
+                                    <select
+                                        v-model="row.syllabus_topic_id"
+                                        class="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                                        @change="onRowTopicChange(row)"
+                                    >
+                                        <option value="">Select topic</option>
+                                        <option v-for="topicOption in chapterTopics" :key="topicOption.id" :value="topicOption.id">
+                                            {{ displayTopicName(topicOption.name) }}
+                                        </option>
+                                    </select>
+                                    <p v-if="row.topic_name && !row.syllabus_topic_id" class="mt-1 text-xs text-amber-700">
+                                        PDF topic “{{ row.topic_name }}” did not match. Pick a topic above.
+                                    </p>
                                 </div>
                                 <div class="lg:col-span-2">
-                                    <InputLabel value="Question (use ____ for the blank)" />
+                                    <InputLabel :value="row.kind === 'mcq' ? 'Question' : 'Question (use ____ for the blank)'" />
                                     <textarea v-model="row.question_text" rows="2" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
                                 </div>
-                                <div>
+                                <div v-if="row.kind === 'mcq'" class="lg:col-span-2 space-y-2">
+                                    <InputLabel value="Options (mark the correct one)" />
+                                    <div
+                                        v-for="(option, optIndex) in row.options"
+                                        :key="optIndex"
+                                        class="flex items-center gap-2"
+                                    >
+                                        <input
+                                            type="radio"
+                                            :name="`correct-${index}`"
+                                            :checked="option.is_correct"
+                                            @change="markCorrectOption(row, optIndex)"
+                                        />
+                                        <input
+                                            v-model="option.option_text"
+                                            type="text"
+                                            class="block w-full rounded-md border-gray-300 text-sm"
+                                            :placeholder="`Option ${optIndex + 1}`"
+                                        />
+                                    </div>
+                                </div>
+                                <div v-if="row.kind !== 'mcq'">
                                     <InputLabel value="Answer format" />
                                     <select v-model="row.answer_format" class="mt-1 block w-full rounded-md border-gray-300 text-sm">
                                         <option v-for="format in fillBlankFormats" :key="format" :value="format">
@@ -985,11 +1230,11 @@ onMounted(() => {
                                         </option>
                                     </select>
                                 </div>
-                                <div>
+                                <div v-if="row.kind !== 'mcq'">
                                     <InputLabel value="Correct answer" />
                                     <input v-model="row.correct_answer" type="text" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
                                 </div>
-                                <div v-if="row.answer_format === 'decimal'">
+                                <div v-if="row.kind !== 'mcq' && row.answer_format === 'decimal'">
                                     <InputLabel value="Decimal places (optional)" />
                                     <input v-model.number="row.decimal_places" type="number" min="0" max="6" class="mt-1 block w-full rounded-md border-gray-300 text-sm" />
                                 </div>

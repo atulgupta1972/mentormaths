@@ -362,7 +362,9 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/questions/preview-zip-pack', [QuestionController::class, 'previewZipPack'])->name('questions.preview-zip-pack');
     Route::post('/questions/import-zip-pack', [QuestionController::class, 'importZipPack'])->name('questions.import-zip-pack');
     Route::post('/questions/extract-pdf', [QuestionController::class, 'extractPdf'])->name('questions.extract-pdf');
+    Route::post('/questions/extract-pdf-fill-blank', [QuestionController::class, 'extractPdfFillBlank'])->name('questions.extract-pdf-fill-blank');
     Route::post('/questions/extract-pdf-worksheet', [QuestionController::class, 'extractPdfWorksheet'])->name('questions.extract-pdf-worksheet');
+    Route::post('/questions/bulk-store-extracted', [QuestionController::class, 'storeExtractedQuestions'])->name('questions.bulk-store-extracted');
     Route::post('/questions/bulk-store', [QuestionController::class, 'storeBulk'])->name('questions.bulk-store');
     Route::post('/questions/bulk-store-chapter', [QuestionController::class, 'storeBulkChapter'])->name('questions.bulk-store-chapter');
     Route::post('/questions/chapter-fill-blank-prompt', [QuestionController::class, 'chapterFillBlankPrompt'])->name('questions.chapter-fill-blank-prompt');

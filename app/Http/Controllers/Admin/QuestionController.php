@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\Question;
+use App\Models\QuestionBlankAnswer;
 use App\Models\Subject;
 use App\Models\SyllabusChapter;
 use App\Models\SyllabusTopic;
@@ -14,6 +15,7 @@ use App\Services\FillBlankImportService;
 use App\Services\McqImportService;
 use App\Services\MmpImportService;
 use App\Services\PdfPageImageService;
+use App\Services\PdfFillBlankExtractService;
 use App\Services\PdfTextExtractionService;
 use App\Services\PdfWorksheetImportService;
 use App\Services\QuestionDiagramService;
@@ -21,6 +23,7 @@ use App\Services\QuestionMethodHintService;
 use App\Services\QuestionIssueReportService;
 use App\Services\QuestionSaveConfirmation;
 use App\Services\QuestionZipImportService;
+use App\Support\FillBlankStem;
 use App\Support\PracticeSetMasterProfile;
 use App\Support\QuestionBankPurpose;
 use Illuminate\Http\JsonResponse;
@@ -857,6 +860,161 @@ class QuestionController extends Controller
             ->with('save_confirmation', $confirmation);
     }
 
+    public function storeExtractedQuestions(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'syllabus_topic_id' => ['nullable', 'exists:syllabus_topics,id'],
+            'rows' => ['required', 'array', 'min:1'],
+            'rows.*.kind' => ['required', 'in:fill_in_blank,mcq'],
+            'rows.*.question_text' => ['required', 'string'],
+            'rows.*.topic_name' => ['nullable', 'string'],
+            'rows.*.syllabus_topic_id' => ['nullable', 'integer'],
+            'rows.*.answer_format' => ['nullable', 'string'],
+            'rows.*.correct_answer' => ['nullable', 'string', 'max:64'],
+            'rows.*.decimal_places' => ['nullable', 'integer', 'min:0', 'max:6'],
+            'rows.*.explanation' => ['nullable', 'string'],
+            'rows.*.method_hint' => ['nullable', 'string'],
+            'rows.*.difficulty' => ['nullable', 'string', 'max:20'],
+            'rows.*.options' => ['nullable', 'array'],
+            'rows.*.options.*.option_text' => ['nullable', 'string'],
+            'rows.*.options.*.is_correct' => ['nullable', 'boolean'],
+        ]);
+
+        $chapter = SyllabusChapter::query()
+            ->with('topics')
+            ->findOrFail($validated['syllabus_chapter_id']);
+
+        $forcedTopicId = (int) ($validated['syllabus_topic_id'] ?? 0);
+        if ($forcedTopicId > 0 && ! $chapter->topics->contains('id', $forcedTopicId)) {
+            return back()->with('error', 'That topic is not in this chapter.');
+        }
+
+        $fillRows = [];
+        $mcqRows = [];
+
+        foreach ($validated['rows'] as $index => $row) {
+            $row['syllabus_topic_id'] = $forcedTopicId > 0
+                ? $forcedTopicId
+                : ($row['syllabus_topic_id'] ?? null);
+
+            $matchedTopic = $chapter->topics->firstWhere('id', (int) ($row['syllabus_topic_id'] ?? 0));
+            if ($matchedTopic) {
+                $row['topic_name'] = $matchedTopic->name;
+                $row['topic'] = $matchedTopic->name;
+            }
+
+            if ($row['kind'] === 'mcq') {
+                $options = collect($row['options'] ?? [])
+                    ->map(function ($option, $optIndex) {
+                        return [
+                            'option_text' => trim((string) ($option['option_text'] ?? '')),
+                            'is_correct' => (bool) ($option['is_correct'] ?? false),
+                            'sort_order' => $optIndex + 1,
+                        ];
+                    })
+                    ->filter(fn (array $option) => $option['option_text'] !== '')
+                    ->values()
+                    ->all();
+
+                if (count($options) < 2) {
+                    return back()->with('error', 'Question '.($index + 1).' is an MCQ and needs at least 2 options.');
+                }
+
+                if (! collect($options)->contains('is_correct', true)) {
+                    $options[0]['is_correct'] = true;
+                }
+
+                $row['options'] = $options;
+                $mcqRows[] = $row;
+
+                continue;
+            }
+
+            $answer = trim((string) ($row['correct_answer'] ?? ''));
+            if ($answer === '') {
+                return back()->with('error', 'Question '.($index + 1).' is missing a correct answer.');
+            }
+
+            $format = strtolower(trim((string) ($row['answer_format'] ?? 'integer')));
+            if (! in_array($format, QuestionBlankAnswer::formats(), true)) {
+                return back()->with('error', 'Question '.($index + 1).' has an invalid answer format.');
+            }
+
+            $row['answer_format'] = $format;
+            $row['correct_answer'] = $answer;
+            $row['question_text'] = FillBlankStem::ensureBlank((string) $row['question_text'], $answer);
+            $fillRows[] = $row;
+        }
+
+        try {
+            $saved = DB::transaction(function () use ($chapter, $fillRows, $mcqRows, $request, $forcedTopicId) {
+                $saved = [];
+
+                if ($fillRows !== []) {
+                    $saved = array_merge($saved, $forcedTopicId > 0
+                        ? $this->fillBlankImportService->saveRows(
+                            SyllabusTopic::query()->findOrFail($forcedTopicId),
+                            $fillRows,
+                            $request->user()->id,
+                            Question::SOURCE_AI,
+                            QuestionBankPurpose::PRACTICE_SET,
+                        )
+                        : $this->fillBlankImportService->saveChapterRows(
+                            $chapter,
+                            $fillRows,
+                            $request->user()->id,
+                            Question::SOURCE_AI,
+                            QuestionBankPurpose::PRACTICE_SET,
+                        ));
+                }
+
+                if ($mcqRows !== []) {
+                    $saved = array_merge($saved, $forcedTopicId > 0
+                        ? $this->importService->saveRows(
+                            SyllabusTopic::query()->findOrFail($forcedTopicId),
+                            $mcqRows,
+                            $request->user()->id,
+                            Question::SOURCE_AI,
+                            QuestionBankPurpose::PRACTICE_SET,
+                        )
+                        : $this->importService->saveChapterRows(
+                            $chapter,
+                            $mcqRows,
+                            $request->user()->id,
+                            Question::SOURCE_AI,
+                            QuestionBankPurpose::PRACTICE_SET,
+                        ));
+                }
+
+                return $saved;
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $fillCount = count($fillRows);
+        $mcqCount = count($mcqRows);
+        $parts = [];
+        if ($fillCount > 0) {
+            $parts[] = $fillCount.' fill-in-the-blank';
+        }
+        if ($mcqCount > 0) {
+            $parts[] = $mcqCount.' MCQ';
+        }
+
+        $confirmation = $this->saveConfirmation->build(
+            $saved,
+            QuestionBankPurpose::PRACTICE_SET,
+            $chapter,
+        );
+
+        return redirect()
+            ->route('admin.questions.chapters.show', $chapter->id)
+            ->with('success', implode(' and ', $parts).' question(s) saved from the PDF.')
+            ->with('save_confirmation', $confirmation);
+    }
+
     public function extractPdf(Request $request): Response
     {
         $validated = $request->validate([
@@ -973,6 +1131,69 @@ class QuestionController extends Controller
         ]);
     }
 
+    public function extractPdfFillBlank(Request $request): Response
+    {
+        $validated = $request->validate([
+            'syllabus_chapter_id' => ['required', 'exists:syllabus_chapters,id'],
+            'syllabus_topic_id' => ['nullable', 'exists:syllabus_topics,id'],
+            'scope' => ['nullable', 'in:topic,chapter'],
+            'pdf' => ['required', 'file', 'max:20480'],
+        ], [
+            'pdf.required' => 'Choose a PDF file first.',
+            'pdf.max' => 'PDF must be smaller than 20 MB.',
+            'syllabus_chapter_id.required' => 'Select a chapter before uploading.',
+        ]);
+
+        $scope = ($validated['scope'] ?? 'chapter') === 'topic' ? 'topic' : 'chapter';
+        $chapter = SyllabusChapter::query()
+            ->with(['topics', 'syllabusVersion.board', 'syllabusVersion.gradeLevel', 'syllabusVersion.academicYear'])
+            ->findOrFail($validated['syllabus_chapter_id']);
+
+        $topic = null;
+        if ($scope === 'topic') {
+            $topicId = (int) ($validated['syllabus_topic_id'] ?? 0);
+            $topic = $chapter->topics->firstWhere('id', $topicId);
+            if (! $topic) {
+                return $this->renderFillInBlankCreate($request, [
+                    'error' => 'Select a topic before uploading, or switch to Whole chapter.',
+                    'selectedTopicId' => $topicId ?: null,
+                ]);
+            }
+        }
+
+        if (! $this->isPdfUpload($request->file('pdf'))) {
+            return $this->renderFillInBlankCreate($request, [
+                'error' => 'Please upload a valid PDF file (.pdf).',
+                'selectedTopicId' => $topic?->id,
+            ]);
+        }
+
+        try {
+            $text = $this->pdfService->extract($request->file('pdf'));
+            $extractor = app(PdfFillBlankExtractService::class);
+            $questions = $extractor->splitSourceQuestions($text);
+            $prompt = $extractor->cursorPrompt($chapter, $text, $topic);
+        } catch (\InvalidArgumentException $e) {
+            return $this->renderFillInBlankCreate($request, [
+                'error' => $e->getMessage(),
+                'selectedTopicId' => $topic?->id,
+            ]);
+        }
+
+        $preview = $questions !== []
+            ? collect($questions)->map(fn (array $question) => $question['label'].' '.$question['text'])->implode("\n")
+            : $text;
+
+        return $this->renderFillInBlankCreate($request, [
+            'cursorPrompt' => $prompt,
+            'extractedPreview' => mb_substr($preview, 0, 4000),
+            'pdfFileName' => $request->file('pdf')->getClientOriginalName(),
+            'pdfExtracted' => true,
+            'extractedQuestionCount' => count($questions),
+            'selectedTopicId' => $topic?->id,
+        ]);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
@@ -1014,8 +1235,14 @@ class QuestionController extends Controller
             'chapterPlan' => session('chapter_plan', []),
             'topic' => $topic,
             'selectedGrade' => $grade?->only(['id', 'name']),
-            'cursorPrompt' => session('chapter_fill_blank_cursor_prompt') ?? ($scope === 'topic' ? $activePrompt : null),
+            'cursorPrompt' => $overrides['cursorPrompt']
+                ?? session('chapter_fill_blank_cursor_prompt')
+                ?? ($scope === 'topic' ? $activePrompt : null),
             'promptOptions' => $promptOptions,
+            'pdfExtracted' => (bool) ($overrides['pdfExtracted'] ?? false),
+            'pdfFileName' => $overrides['pdfFileName'] ?? null,
+            'extractedPreview' => $overrides['extractedPreview'] ?? null,
+            'extractedQuestionCount' => (int) ($overrides['extractedQuestionCount'] ?? 0),
             'masterProfiles' => PracticeSetMasterProfile::options(),
             'difficultyMarks' => PracticeSetMasterProfile::marks(),
             'bookOptions' => $this->bookBasisPromptService->optionsForSyllabusChapter($chapterId ? (int) $chapterId : null),

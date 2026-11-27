@@ -244,6 +244,13 @@ const clearBank = (card) => {
                 </Link>
                 <Link
                     v-if="isAdmin"
+                    :href="route('admin.questions.create-fill-in-blank', { syllabus_chapter_id: chapter.id, scope: 'chapter' })"
+                    class="rounded-md border border-emerald-400 bg-white px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-50"
+                >
+                    Upload PDF
+                </Link>
+                <Link
+                    v-if="isAdmin"
                     :href="route('admin.questions.create-fill-in-blank', { syllabus_chapter_id: chapter.id })"
                     class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
                 >
